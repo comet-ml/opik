@@ -122,7 +122,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    (reference SQL [`000002_delta_and_deletion_replay.sql`](scripts/db-app-analytics/000002_delta_and_deletion_replay.sql))
    — delta-insert (anchored at `backfill_start`), then **deletion replay**. The replay runs with
    `lightweight_deletes_sync = 2`, so it returns only once the delete mutation has applied on **every** replica.
-   clickhouse-client prints each statement's wall time; record the replay's.
+   clickhouse-client prints each statement's wall time; record the replay's wall time.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts>'
    ```
@@ -134,10 +134,11 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    on `traces_local_v2`, across all replicas via `clusterAllReplicas`) so no replica swaps in an incomplete table
    (`--force` overrides); then records and
    prints `cutover_start`, runs `EXCHANGE TABLES ... ON CLUSTER` and renames the displaced old data to
-   `traces_pre_cutover_backup` (see "Naming and the parked backup"), then (unless `--skip-wrap`) the `RENAME` +
-   `Distributed` wrap. Restore the buffer ceiling and verify.
+   `traces_pre_cutover_backup` (see "Naming and the parked backup"). It **stops there by default** (EXCHANGE only,
+   leaving `traces` a `MergeTree` where deletes still work); the `RENAME` + `Distributed` wrap runs only with
+   `--with-wrap`. Restore the buffer ceiling and verify.
    ```bash
-   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik --skip-wrap
+   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik
    ```
 
 > **HARD PREREQUISITE for the wrap (step 4, part 2): the delete/mutation DAO must target `traces_local` first.** A
@@ -148,9 +149,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > So the moment the wrap is applied, **both** the product's delete-by-id (`TraceDAO.DELETE_BY_ID`) **and** the retention
 > sweep (`DELETE_FOR_RETENTION`) start returning 500 against `traces`. This is prep work that must ship **before** the
 > wrap: point those DAO paths at `traces_local` (reads and inserts can stay on the Distributed `traces`). The `EXCHANGE`
-> alone is the data cutover and leaves `traces` a `MergeTree` where deletes still work — so use `exchange_and_wrap.sh
-> --skip-wrap` and defer the wrap until the sharding-aware DAO ships. The wrap is the sharding-readiness layer, not the
-> cutover.
+> alone is the data cutover and leaves `traces` a `MergeTree` where deletes still work — which is why the wrap is
+> **opt-in** (`--with-wrap`) and the default stops after the EXCHANGE. Defer the wrap until the sharding-aware DAO
+> ships. The wrap is the sharding-readiness layer, not the cutover.
 >
 > **Applying the deferred wrap later:** once the sharding-aware DAO has shipped, run
 > `exchange_and_wrap.sh --database opik --wrap-only` — it runs the settle gate and applies **only** the `RENAME` +

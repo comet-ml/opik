@@ -89,6 +89,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
+# --database is interpolated into the reference SQL; require a plain ClickHouse identifier so it cannot alter the query.
+[[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
+# --state-file is an operator-owned path read with cat and written with > (both quoted); reject a blank or multi-line
+# value so the single-line anchor round-trips cleanly.
+[[ -n "$STATE_FILE" && "$STATE_FILE" != *$'\n'* ]] || { echo "ERROR: --state-file must be a non-empty single-line path." >&2; exit 2; }
 [[ -f "$BACKFILL_SQL" ]] || { echo "ERROR: cannot find backfill SQL at $BACKFILL_SQL" >&2; exit 2; }
 
 # Every query runs against the analytics database; --query keeps output scriptable (TSV, no formatting).

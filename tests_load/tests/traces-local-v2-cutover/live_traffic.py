@@ -48,9 +48,10 @@ def main(project, tps, duration, update_ratio):
     while not _stop and (duration == 0 or time.time() - started < duration):
         tick = time.time()
         if recent_ids and random.random() < update_ratio:
-            # Update an existing trace: a new version with a fresh server-side last_updated_at.
+            # Update an existing trace: a new version with a fresh server-side last_updated_at. end() finalizes the
+            # update so it flushes as completed traffic, not just a create-attempt.
             trace_id = random.choice(recent_ids)
-            client.trace(id=trace_id, project_name=project, output={"update": _text(120)})
+            client.trace(id=trace_id, project_name=project, output={"update": _text(120)}).end()
             updated += 1
         else:
             trace = client.trace(

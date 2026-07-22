@@ -26,13 +26,13 @@ def _handle_sigint(_signum, _frame):
     LOGGER.info("stopping after the current batch...")
 
 
-def _fetch_ids(client, project, want, seen):
+def _fetch_ids(client, project, want, exclude):
     try:
         traces = client.search_traces(project_name=project, max_results=want, truncate=True)
     except Exception as exc:  # search is best-effort; keep the loop alive
         LOGGER.warning("search_traces failed: %s", exc)
         return []
-    return [t.id for t in traces if t.id not in seen]
+    return [t.id for t in traces if t.id not in exclude]
 
 
 @click.command()
@@ -55,7 +55,8 @@ def main(project, tps, duration, batch):
     while not _stop and (duration == 0 or time.time() - started < duration):
         tick = time.time()
         if len(pool) < batch:
-            pool.extend(_fetch_ids(client, project, want=500, seen=seen))
+            # Exclude both already-deleted ids and those still queued in `pool`, so a refill can't requeue an in-flight id.
+            pool.extend(_fetch_ids(client, project, want=500, exclude=seen | set(pool)))
             if not pool:
                 LOGGER.info("no more traces to delete; stopping")
                 break

@@ -2,9 +2,14 @@
 #
 # Driver for step 3 of the buffered traces cutover: EXCHANGE + Distributed wrap (runbook: ../README.md).
 #
-# Captures and prints cutover_start (needed by rollback.sh if you roll back after this), runs the `exchange` block of
-# db-app-analytics/000003_exchange_and_wrap.sql, then the `wrap` block unless --skip-wrap. Run it right after the delta +
-# replay + verify, while the async-insert buffer is still holding writes.
+# Captures and prints cutover_start (needed by rollback.sh if you roll back after this), then runs the `exchange` block
+# of db-app-analytics/000003_exchange_and_wrap.sql. By default it stops there (EXCHANGE only) — the Distributed `wrap`
+# block runs only with --with-wrap. Run it right after the delta + replay + verify, while the async-insert buffer is
+# still holding writes.
+#
+# The wrap is OPT-IN on purpose: a lightweight DELETE against a Distributed table is unsupported, so wrapping `traces`
+# breaks the product's trace-delete / retention paths until those DAOs target `traces_local`. The safe default is to
+# leave `traces` a MergeTree (deletes keep working) and apply the wrap later, once the DAOs are sharding-aware.
 #
 # Guarded like rollback.sh: it asserts the live `traces` topology matches the requested action before touching anything,
 # so a re-run cannot silently swap the tables back, and a partial EXCHANGE (swap done, post-swap RENAME not) is detected
@@ -14,13 +19,13 @@
 #
 # Options:
 #   --database NAME   analytics database (e.g. opik). Required.
-#   --skip-wrap       stop after the EXCHANGE (the data cutover); do not create the Distributed wrapper. Use this until
-#                     the delete/read DAOs are sharding-aware — a lightweight DELETE against a Distributed table is
-#                     unsupported.
-#   --wrap-only       run ONLY the Distributed wrap on the already-EXCHANGEd `traces`, skipping the EXCHANGE (and the
-#                     cutover_start capture — the data cutover already happened). This is the deferred second half of a
-#                     prior `--skip-wrap` run: apply it once the delete/read DAOs are sharding-aware. Mutually exclusive
-#                     with --skip-wrap. The replication-settle gate still runs first.
+#   (default)         run ONLY the EXCHANGE (the data cutover), then stop — leaves `traces` a MergeTree where deletes
+#                     still work. The Distributed wrap is deferred (see above).
+#   --with-wrap       also apply the Distributed wrap in the same run (EXCHANGE + wrap). Use only once the delete/read
+#                     DAOs are sharding-aware. Mutually exclusive with --skip-wrap / --wrap-only.
+#   --skip-wrap       explicit alias for the default (EXCHANGE only); accepted for clarity and back-compat.
+#   --wrap-only       run ONLY the Distributed wrap on the already-EXCHANGEd `traces` (no EXCHANGE, no new cutover_start)
+#                     — the deferred second half of a prior EXCHANGE-only run. Mutually exclusive with the above.
 #   --force           skip the replication-settle gate. By default the swap aborts while any replica still
 #                     has replication-queue backlog or an unfinished mutation on traces / traces_local_v2, since a
 #                     behind replica would swap in an incomplete table. Use only if settlement is confirmed out of band.
@@ -32,6 +37,7 @@ SQL_FILE="$SCRIPT_DIR/db-app-analytics/000003_exchange_and_wrap.sql"
 
 DATABASE=""
 SKIP_WRAP=0
+WITH_WRAP=0
 WRAP_ONLY=0
 FORCE=0
 
@@ -39,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="$2"; shift 2 ;;
         --skip-wrap) SKIP_WRAP=1; shift ;;
+        --with-wrap) WITH_WRAP=1; shift ;;
         --wrap-only) WRAP_ONLY=1; shift ;;
         --force) FORCE=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -46,8 +53,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
+# --database is interpolated into the reference SQL; require a plain ClickHouse identifier so it cannot alter the query.
+[[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
-[[ "$SKIP_WRAP" == "1" && "$WRAP_ONLY" == "1" ]] && { echo "ERROR: --skip-wrap and --wrap-only are mutually exclusive" >&2; exit 2; }
+# At most one wrap mode. Default (none set) is EXCHANGE only.
+if (( SKIP_WRAP + WITH_WRAP + WRAP_ONLY > 1 )); then
+    echo "ERROR: --skip-wrap, --with-wrap and --wrap-only are mutually exclusive" >&2; exit 2
+fi
 
 ch() {
     clickhouse-client --database "$DATABASE" --query "$1"
@@ -174,11 +186,12 @@ echo "RECORD cutover_start=$CUTOVER_START  (pass to rollback.sh --cutover-start 
 run_block exchange
 echo "EXCHANGE done: 'traces' is now the partitioned data; the old data is parked as 'traces_pre_cutover_backup'."
 
-if [[ "$SKIP_WRAP" == "1" ]]; then
-    echo "Skipping the Distributed wrap (--skip-wrap). The data cutover is complete."
-else
+if [[ "$WITH_WRAP" == "1" ]]; then
     run_block wrap
     echo "Distributed wrap done: 'traces' fronts 'traces_local' via sipHash64(project_id)."
+else
+    echo "Distributed wrap deferred (default). Deletes still work on the MergeTree 'traces'. Apply the wrap later with"
+    echo "--wrap-only once the delete/read DAOs target traces_local."
 fi
 
 echo "Restore databaseAnalytics.asyncInsertBusyTimeoutMaxMs to default, verify, and keep traces_pre_cutover_backup for the soak."

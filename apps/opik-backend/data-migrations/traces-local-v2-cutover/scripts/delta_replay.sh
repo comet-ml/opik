@@ -31,7 +31,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
+# --database and --backfill-start are interpolated into the reference SQL; validate their shapes so neither can alter it.
+[[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -n "$BACKFILL_START" ]] || { echo "ERROR: --backfill-start is required (printed by backfill.sh)" >&2; exit 2; }
+[[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --backfill-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 
 echo "Reminder: raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs before this step (backend config, not SQL) and"

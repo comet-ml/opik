@@ -132,10 +132,14 @@ def main(project, weeks, per_week, bad_ids, batch, workspace_id, project_id):
     ch = make_ch_client()
 
     if workspace_id is None or project_id is None:
-        workspace_id, project_id = discover_workspace_and_project(make_opik_client(), ch, project)
+        # Fill only the value(s) not supplied, so a single --workspace-id or --project-id override is honored.
+        discovered_workspace_id, discovered_project_id = discover_workspace_and_project(make_opik_client(), ch, project)
+        workspace_id = workspace_id or discovered_workspace_id
+        project_id = project_id or discovered_project_id
 
     now = utcnow()
-    # Rows land uniformly within each week, oldest week first; the newest week ends at "now".
+    # Each week's rows land uniformly within the week. week 0 is the current week (ending at "now"); the loop walks
+    # backward to older weeks. Generation order doesn't matter — rows are shuffled before insert (below).
     rows: list[tuple] = []
     per_week_counts: dict[str, int] = {}
     for week in range(weeks):
