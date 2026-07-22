@@ -41,17 +41,19 @@ public interface AutomationRuleDAO {
 
     /**
      * Returns all rule names within the given projects, used to auto-suffix colliding names on create
-     * (OPIK-7371). Project-scoped via the junction table to match {@code findCount}'s filtering. Collision
-     * matching is done in Java (case-insensitive), so no name filter is applied here - this avoids LIKE
-     * metacharacter/escape pitfalls and keeps comparison consistent with the DB collation. Rules per
-     * project are few, so fetching the full set is cheap.
+     * (OPIK-7371). Project-scoped through the junction table AND the legacy {@code project_id} column, so
+     * pre-junction rules (created before migration 000041 and never lazy-migrated) are also considered -
+     * these still exist on older SaaS/enterprise installs. Collision matching is done in Java
+     * (case-insensitive), so no name filter is applied here - this avoids LIKE metacharacter/escape
+     * pitfalls and keeps comparison consistent with the DB collation. Rules per project are few, so
+     * fetching the full set is cheap.
      */
     @SqlQuery("""
             SELECT DISTINCT rule.name
             FROM automation_rules rule
-            JOIN automation_rule_projects arp ON rule.id = arp.rule_id
+            LEFT JOIN automation_rule_projects arp ON rule.id = arp.rule_id
             WHERE rule.workspace_id = :workspaceId
-            AND arp.project_id IN (<projectIds>)
+            AND (arp.project_id IN (<projectIds>) OR rule.project_id IN (<projectIds>))
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings

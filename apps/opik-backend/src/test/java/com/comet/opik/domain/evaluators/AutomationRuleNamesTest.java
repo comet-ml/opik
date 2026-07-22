@@ -109,6 +109,15 @@ class AutomationRuleNamesTest {
     }
 
     @Test
+    @DisplayName("treats trailing-space variants as collisions (matches PAD SPACE collation)")
+    void trailingSpaceCollision() {
+        assertThat(AutomationRuleNames.generateUniqueName("Quality ", Set.of("Quality")))
+                .isEqualTo("Quality -1");
+        assertThat(AutomationRuleNames.generateUniqueName("Quality", Set.of("Quality ")))
+                .isEqualTo("Quality-1");
+    }
+
+    @Test
     @DisplayName("truncates to fit the 150-char column when suffixing")
     void truncatesLongNames() {
         String base = "a".repeat(150);

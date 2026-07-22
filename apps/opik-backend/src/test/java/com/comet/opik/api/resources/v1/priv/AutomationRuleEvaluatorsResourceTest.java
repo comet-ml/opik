@@ -799,6 +799,57 @@ class AutomationRuleEvaluatorsResourceTest {
             assertThat(createRuleAndGetName(name, projectId1)).isEqualTo(name);
             assertThat(createRuleAndGetName(name, projectId2)).isEqualTo(name);
         }
+
+        private String createLlmRuleAndGetName(String name, Set<UUID> projectIds, UUID readProjectId) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(projectIds)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+            try (var response = evaluatorsResourceClient.getEvaluator(id, readProjectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                return response.readEntity(AutomationRuleEvaluator.class).getName();
+            }
+        }
+
+        @Test
+        @DisplayName("when a multi-project rule shares a project with an existing same-named rule, then suffix")
+        void whenNameCollidesViaSharedProject__thenSuffixIsAppended() {
+            var p1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var p2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var p3 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Coherence " + UUID.randomUUID();
+
+            // Rule on {p1, p2}
+            assertThat(createLlmRuleAndGetName(name, Set.of(p1, p2), p1)).isEqualTo(name);
+            // Rule on {p2, p3} collides through the shared project p2
+            assertThat(createLlmRuleAndGetName(name, Set.of(p2, p3), p3)).isEqualTo(name + "-1");
+            // Rule on {p3} only: the base name is still free on p3 (only "name-1" lives there), so no suffix
+            assertThat(createLlmRuleAndGetName(name, Set.of(p3), p3)).isEqualTo(name);
+        }
+
+        @Test
+        @DisplayName("collision is detected across different evaluator types in the same project")
+        void whenNameCollidesAcrossTypes__thenSuffixIsAppended() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Toxicity " + UUID.randomUUID();
+
+            var llmJudge = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            evaluatorsResourceClient.createEvaluator(llmJudge, WORKSPACE_NAME, API_KEY);
+
+            var spanJudge = factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(spanJudge, WORKSPACE_NAME, API_KEY);
+            try (var response = evaluatorsResourceClient.getEvaluator(id, projectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                assertThat(response.readEntity(AutomationRuleEvaluator.class).getName()).isEqualTo(name + "-1");
+            }
+        }
     }
 
     @Nested

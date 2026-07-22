@@ -62,12 +62,16 @@ class AutomationRuleNames {
     }
 
     /**
-     * Normalizes a name for collision comparison: strips diacritics and lower-cases, approximating the
-     * accent- and case-insensitive folding of MySQL's {@code utf8mb4_unicode_ci} collation. Mirrors the
-     * normalization used by {@link com.comet.opik.domain.SlugUtils}.
+     * Normalizes a name for collision comparison, approximating the folding of MySQL's
+     * {@code utf8mb4_unicode_ci} collation: strips trailing spaces (PAD SPACE comparison ignores them),
+     * strips diacritics, and lower-cases. Mirrors the normalization used by
+     * {@link com.comet.opik.domain.SlugUtils}. Note: exotic expansions ({@code ß}->{@code ss}) and
+     * install-specific collations (e.g. {@code utf8mb4_0900_ai_ci}) are not replicated exactly.
      */
     private static String canonicalKey(String name) {
-        String withoutDiacritics = Normalizer.normalize(name, Normalizer.Form.NFD)
+        // MySQL PAD SPACE collation treats trailing spaces as insignificant.
+        String trimmed = StringUtils.stripEnd(name, " ");
+        String withoutDiacritics = Normalizer.normalize(trimmed, Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "");
         return withoutDiacritics.toLowerCase(Locale.ROOT);
     }
