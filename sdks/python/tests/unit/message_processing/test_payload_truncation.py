@@ -168,6 +168,7 @@ def _processor(max_payload_size_mb):
         file_upload_manager=mock.MagicMock(),
         fallback_replay_manager=mock.MagicMock(),
         unauthorized_message_types_registry=mock.MagicMock(),
+        data_loss_tracker=mock.MagicMock(),
         max_payload_size_mb=max_payload_size_mb,
     )
 
