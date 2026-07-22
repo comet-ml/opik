@@ -1,4 +1,4 @@
-export { test, expect } from './annotation-queue.fixture';
+export { test, expect } from './explain-traces.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -45,4 +45,5 @@ export type {
   AnnotationQueueTraceRef,
   AnnotationQueueFixtures,
 } from './annotation-queue.fixture';
+export type { ExplainTraceRef, ExplainTracesFixtures } from './explain-traces.fixture';
 export type { ProjectRef } from '../core/backend';

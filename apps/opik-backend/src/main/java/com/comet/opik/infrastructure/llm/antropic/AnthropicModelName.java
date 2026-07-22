@@ -3,6 +3,10 @@ package com.comet.opik.infrastructure.llm.antropic;
 import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.RequiredArgsConstructor;
 
+import java.util.Arrays;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 /**
  * This information is taken from <a href="https://docs.anthropic.com/en/docs/about-claude/models">Anthropic docs</a>
  */
@@ -15,15 +19,33 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_OPUS_4("claude-opus-4-20250514"),
     CLAUDE_OPUS_4_5("claude-opus-4-5-20251101"),
     CLAUDE_OPUS_4_6("claude-opus-4-6"),
-    CLAUDE_OPUS_4_7("claude-opus-4-7"),
-    CLAUDE_OPUS_4_8("claude-opus-4-8"),
+    // Adaptive-thinking models reject sampling params (temperature/top_p/top_k) with a 400.
+    CLAUDE_OPUS_4_7("claude-opus-4-7", false),
+    CLAUDE_OPUS_4_8("claude-opus-4-8", false),
     CLAUDE_SONNET_4("claude-sonnet-4-20250514"),
     CLAUDE_SONNET_4_5("claude-sonnet-4-5"),
     CLAUDE_SONNET_4_5_20250929("claude-sonnet-4-5-20250929"),
     CLAUDE_SONNET_4_6("claude-sonnet-4-6"),
-    CLAUDE_SONNET_5("claude-sonnet-5");
+    CLAUDE_SONNET_5("claude-sonnet-5", false);
 
     private final String value;
+    private final boolean supportsSamplingParams;
+
+    private static final Map<String, Boolean> SAMPLING_PARAMS_SUPPORT = Arrays.stream(values())
+            .collect(Collectors.toUnmodifiableMap(model -> model.value, model -> model.supportsSamplingParams));
+
+    AnthropicModelName(String value) {
+        this(value, true);
+    }
+
+    /**
+     * Whether the model accepts sampling params (temperature/top_p/top_k). Adaptive-thinking models
+     * reject them with a 400 and are opted out explicitly. Unknown model names default to {@code true}
+     * so registry-only Anthropic models (not enumerated here) keep temperature support.
+     */
+    public static boolean supportsSamplingParams(String modelName) {
+        return SAMPLING_PARAMS_SUPPORT.getOrDefault(modelName, true);
+    }
 
     @Override
     public String toString() {
