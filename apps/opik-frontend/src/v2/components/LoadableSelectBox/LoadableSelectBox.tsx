@@ -8,7 +8,7 @@ import React, {
 import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
 import isArray from "lodash/isArray";
-import { Check, ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
@@ -369,17 +369,8 @@ export const LoadableSelectBox = ({
                       }
                     }}
                   >
-                    {multiselect ? (
+                    {multiselect && (
                       <Checkbox checked={selected} className="shrink-0" />
-                    ) : (
-                      <div className="min-w-4">
-                        {selected && (
-                          <Check
-                            className="size-3.5 shrink-0"
-                            strokeWidth="3"
-                          />
-                        )}
-                      </div>
                     )}
 
                     {option.icon && (
