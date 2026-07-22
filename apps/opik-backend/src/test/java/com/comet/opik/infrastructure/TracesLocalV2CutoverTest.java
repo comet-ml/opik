@@ -208,30 +208,49 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * Each rollback stage ends in the canonical state (traces = original schema, traces_local_v2 = successor), which is
-     * also the pre-EXCHANGE baseline — so truncating the three tables (and dropping any stray wrap/rename artifacts) is a
-     * clean reset that keeps the tests independent of each other and of run order. The stray artifacts are the
-     * post-wrap {@code traces_local} shard and the post-EXCHANGE {@code traces_pre_cutover_backup} — a test that fails
-     * mid-cutover (after the swap/wrap, before its rollback) would otherwise leak one of them into the next test.
+     * Restore the canonical baseline (traces = original schema, traces_local_v2 = successor schema, both empty; no stray
+     * wrap/rename artifacts) before every test, independent of what the previous test left behind. A green run always
+     * ends canonical, but a test that fails mid-cutover can leak any intermediate topology, so rather than assume a clean
+     * hand-off this normalizes whatever is present back to canonical. The cutover only ever produces these shapes: the
+     * completed EXCHANGE (traces = successor, original parked as traces_pre_cutover_backup) and wrap (traces =
+     * Distributed over traces_local), plus the partial states where only the first of a two-statement swap/wrap ran.
+     * Every DDL below is guarded on the tables it touches, so no leaked state can make the reset itself throw and
+     * cascade into later tests. {@code end_time} being Nullable is the original schema, non-Nullable the successor.
      */
     @BeforeEach
     void resetTables() {
-        // Self-heal a topology leaked by a test that failed mid-cutover (after a swap/wrap, before its rollback): a green
-        // run always leaves the canonical layout, but a failure in between would otherwise leave `traces` a Distributed
-        // wrapper (or the successor) over dropped/renamed tables and cascade into every later test. The tests only ever
-        // hold two completed non-canonical topologies across a boundary; reverse whichever is present, then truncate.
-        if (isDistributed("traces")) { // post-wrap: traces = Distributed over traces_local; original parked as backup
+        // 1. Wrap: `traces` is a Distributed wrapper holding no data of its own — drop it, leaving the successor under
+        //    traces_local and the original under traces_pre_cutover_backup (the same shape as a partial wrap).
+        if (isDistributed("traces")) {
             execute("DROP TABLE traces ON CLUSTER '{cluster}' SYNC", _ -> {
             });
-            execute("RENAME TABLE traces_pre_cutover_backup TO traces, traces_local TO traces_local_v2 ON CLUSTER '{cluster}'",
-                    _ -> {
-                    });
-        } else if (tableExists("traces_pre_cutover_backup")) { // post-EXCHANGE: traces = successor; original parked as backup
-            execute("EXCHANGE TABLES traces AND traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
-            });
-            execute("RENAME TABLE traces_pre_cutover_backup TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+        }
+        // 2. Wrap (completed or partial): successor parked as traces_local, original as traces_pre_cutover_backup, with
+        //    `traces` absent. Restore both names.
+        if (!tableExists("traces_local_v2") && tableExists("traces_local")) {
+            execute("RENAME TABLE traces_local TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
             });
         }
+        if (!tableExists("traces") && tableExists("traces_pre_cutover_backup")) {
+            execute("RENAME TABLE traces_pre_cutover_backup TO traces ON CLUSTER '{cluster}'", _ -> {
+            });
+        }
+        // 3. EXCHANGE (completed or partial): `traces` exists but holds the SUCCESSOR schema. Un-swap it with the parked
+        //    original — under traces_pre_cutover_backup once the EXCHANGE completed, or still under traces_local_v2 if
+        //    only the EXCHANGE ran and its follow-up RENAME did not.
+        if (tableExists("traces") && !columnType("traces", "end_time").startsWith("Nullable")) {
+            if (tableExists("traces_pre_cutover_backup")) {
+                execute("EXCHANGE TABLES traces AND traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
+                });
+                execute("RENAME TABLE traces_pre_cutover_backup TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+                });
+            } else if (tableExists("traces_local_v2")) {
+                execute("EXCHANGE TABLES traces AND traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+                });
+            }
+        }
+        // 4. Canonical now; truncate the two tables and clear any residual artifacts (IF EXISTS so a genuinely
+        //    unrecoverable partial state still cannot throw here).
         execute("DROP TABLE IF EXISTS traces_local ON CLUSTER '{cluster}' SYNC", _ -> {
         });
         execute("DROP TABLE IF EXISTS traces_pre_cutover_backup ON CLUSTER '{cluster}' SYNC", _ -> {
