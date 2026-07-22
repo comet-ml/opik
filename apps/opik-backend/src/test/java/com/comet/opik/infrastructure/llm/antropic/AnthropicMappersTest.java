@@ -141,7 +141,7 @@ public class AnthropicMappersTest {
     class SamplingParamsGating {
 
         @ParameterizedTest
-        @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-8"})
+        @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-7", "claude-opus-4-8"})
         void dropsTemperatureAndTopPForAdaptiveThinkingModels(String model) {
             var request = ChatCompletionRequest.builder()
                     .model(model)
@@ -181,6 +181,21 @@ public class AnthropicMappersTest {
 
             assertThat(actual.temperature).isNull();
             assertThat(actual.topP).isEqualTo(0.9);
+        }
+
+        @Test
+        void temperatureWinsOverTopPWhenBothSetOnSamplingCapableModel() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-3-7-sonnet-20250219")
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(actual.temperature).isEqualTo(0.7);
+            assertThat(actual.topP).isNull();
         }
 
         @ParameterizedTest
