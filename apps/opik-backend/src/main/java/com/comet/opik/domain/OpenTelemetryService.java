@@ -149,11 +149,17 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                                         : span)
                         .toList();
 
-        // check if there spans without parentId: we will use them as a Trace too
-        // Skip spans with opik.trace_id override as they connect to existing traces
-        return Flux.fromStream(dedupedSpans.stream()
+        // Use spans without parentId as Trace roots. Skip opik.trace_id overrides (they attach to
+        // existing traces). Multiple roots can share one traceId (e.g. when parent_span_id==trace_id
+        // is nulled in the mapper), so dedup by traceId to create only one trace per id. First
+        // root in encounter order wins.
+        var seenTraceIds = new HashSet<UUID>();
+        var rootSpansByTraceId = dedupedSpans.stream()
                 .filter(span -> span.parentSpanId() == null)
-                .filter(span -> !overriddenTraceIds.contains(span.traceId())))
+                .filter(span -> !overriddenTraceIds.contains(span.traceId()))
+                .filter(span -> seenTraceIds.add(span.traceId()))
+                .toList();
+        return Flux.fromStream(rootSpansByTraceId.stream())
                 .flatMap(rootSpan -> {
                     // Extract thread_id from root span metadata if present
                     String threadId = null;
@@ -171,6 +177,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .input(rootSpan.input())
                             .output(rootSpan.output())
                             .metadata(rootSpan.metadata())
+                            .tags(rootSpan.tags())
                             .errorInfo(rootSpan.errorInfo())
                             .source(Source.SDK);
 

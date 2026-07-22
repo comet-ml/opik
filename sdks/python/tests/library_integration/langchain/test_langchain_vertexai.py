@@ -15,7 +15,12 @@ from ...testlib import (
 )
 
 
-pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
+pytestmark = [
+    pytest.mark.usefixtures("ensure_vertexai_configured"),
+    pytest.mark.skip(
+        reason="Temporarily disabled: Vertex AI 429 RESOURCE_EXHAUSTED quota failures in CI"
+    ),
+]
 
 
 @pytest.mark.parametrize(

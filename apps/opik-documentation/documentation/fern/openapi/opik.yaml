@@ -5515,23 +5515,6 @@ paths:
           description: default response
           content:
             '*/*': {}
-  /v1/private/optimizations/studio/{id}/cancel:
-    get:
-      tags:
-      - Optimizations
-      summary: Cancel Studio optimizations
-      description: Cancel Studio optimizations by id
-      operationId: cancelStudioOptimizations
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "501":
-          description: Not Implemented
   /v1/private/optimizations:
     get:
       tags:
@@ -18741,6 +18724,8 @@ components:
           $ref: "#/components/schemas/JsonListString"
         studio_config:
           $ref: "#/components/schemas/OptimizationStudioConfig"
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
         dataset_id:
           type: string
           format: uuid
@@ -18875,6 +18860,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StudioMessage"
+    ErrorInfo_Write:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          minLength: 1
+          type: string
+        message:
+          type: string
+        traceback:
+          minLength: 1
+          type: string
     OptimizationStudioConfig_Write:
       required:
       - dataset_name
@@ -18935,6 +18934,8 @@ components:
           $ref: "#/components/schemas/JsonListString_Write"
         studio_config:
           $ref: "#/components/schemas/OptimizationStudioConfig_Write"
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Write"
         last_updated_at:
           type: string
           format: date-time
@@ -19000,6 +19001,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StudioMessage_Write"
+    ErrorInfo_Public:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          minLength: 1
+          type: string
+        message:
+          type: string
+        traceback:
+          minLength: 1
+          type: string
     OptimizationPage_Public:
       type: object
       properties:
@@ -19075,6 +19090,8 @@ components:
           $ref: "#/components/schemas/JsonListString_Public"
         studio_config:
           $ref: "#/components/schemas/OptimizationStudioConfig_Public"
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Public"
         dataset_id:
           type: string
           format: uuid
@@ -19213,6 +19230,10 @@ components:
           - cancelled
           - initialized
           - error
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
+        metadata:
+          $ref: "#/components/schemas/JsonListString"
     ActivateRequest:
       required:
       - hmac
@@ -21037,20 +21058,6 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-    ErrorInfo_Write:
-      required:
-      - exception_type
-      - traceback
-      type: object
-      properties:
-        exception_type:
-          minLength: 1
-          type: string
-        message:
-          type: string
-        traceback:
-          minLength: 1
-          type: string
     Span_Write:
       required:
       - start_time
@@ -21166,20 +21173,6 @@ components:
         source_queue_id:
           type: string
           format: uuid
-    ErrorInfo_Public:
-      required:
-      - exception_type
-      - traceback
-      type: object
-      properties:
-        exception_type:
-          minLength: 1
-          type: string
-        message:
-          type: string
-        traceback:
-          minLength: 1
-          type: string
     FeedbackScore_Public:
       required:
       - name

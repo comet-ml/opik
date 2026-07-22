@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -1483,11 +1484,28 @@ class ThreadDAOImpl implements ThreadDAO {
 
             InstrumentAsyncUtils.Segment segment = startSegment("threads", "Clickhouse", "findThreadById");
 
-            return Mono.from(statement.execute())
-                    .flatMapMany(this::mapThreadToDto)
-                    .singleOrEmpty()
+            return firstThreadOrEmpty(Mono.from(statement.execute())
+                    .flatMapMany(this::mapThreadToDto))
                     .doFinally(signalType -> endSegment(segment));
         }));
+    }
+
+    /**
+     * Collapses the by-id thread stream to the first matching thread, or empty when none is found.
+     * Using {@code reduce} rather than {@code single()}/{@code singleOrEmpty()} is deliberate:
+     * SELECT_TRACES_THREAD_BY_ID can legitimately return more than one row for a single
+     * {@code (workspace_id, project_id, thread_id)}. The trace_threads table's dedup/sort key includes
+     * the internal thread_model_id ({@code id}), so several thread_model_ids may coexist for one
+     * user-facing thread_id; trace_threads_final keeps one row per id ({@code LIMIT 1 BY id}), and the
+     * final {@code LEFT JOIN ... ON (workspace_id, project_id, thread_id)} (not on id) fans the single
+     * aggregated trace row out to one row per thread_model_id. Each row maps to one TraceThread, so
+     * {@code singleOrEmpty()} would throw {@code IndexOutOfBoundsException} ("Source emitted more than
+     * one item") and surface as an unmapped HTTP 500. Folding to the first emission tolerates the
+     * multi-row result while preserving the not-found (empty) contract.
+     */
+    @VisibleForTesting
+    static Mono<TraceThread> firstThreadOrEmpty(Flux<TraceThread> threads) {
+        return threads.reduce((existingThread, ignored) -> existingThread);
     }
 
     @Override

@@ -688,6 +688,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3.5-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_5_FLASH_LITE,
+      label: "google/gemini-3.5-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
+      label: "google/gemini-3.6-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
       label: "google/gemma-2-27b-it",
     },
@@ -812,12 +820,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inflection/inflection-3-productivity",
     },
     {
+      value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_AIR_V2_5,
+      label: "kwaipilot/kat-coder-air-v2.5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_PRO,
       label: "kwaipilot/kat-coder-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_PRO_V2,
       label: "kwaipilot/kat-coder-pro-v2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_PRO_V2_5,
+      label: "kwaipilot/kat-coder-pro-v2.5",
     },
     {
       value: PROVIDER_MODEL_TYPE.KWAIPILOT_KAT_CODER_PRO_FREE,
@@ -846,6 +862,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MANCER_WEAVER,
       label: "mancer/weaver",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MEITUAN_LONGCAT_2_0,
+      label: "meituan/longcat-2.0",
     },
     {
       value: PROVIDER_MODEL_TYPE.MEITUAN_LONGCAT_FLASH_CHAT,
@@ -930,6 +950,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B_FREE,
       label: "meta-llama/llama-guard-4-12b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_1,
+      label: "meta/muse-spark-1.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
@@ -1222,6 +1246,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
       label: "moonshotai/kimi-k2:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K3,
+      label: "moonshotai/kimi-k3",
     },
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT,
@@ -1661,6 +1689,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/auto",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO_BETA,
+      label: "openrouter/auto-beta",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_BODYBUILDER,
       label: "openrouter/bodybuilder",
     },
@@ -1727,6 +1759,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1_FREE,
       label: "poolside/laguna-m.1:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1,
+      label: "poolside/laguna-s-2.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1_FREE,
+      label: "poolside/laguna-s-2.1:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
@@ -2125,6 +2165,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "thedrummer/unslopnemo-12b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING,
+      label: "thinkingmachines/inkling",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
       label: "thudm/glm-4.1v-9b-thinking",
     },
@@ -2344,8 +2388,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.GEMINI]: [
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
+      label: "Gemini 3.6 Flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
       label: "Gemini 3.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+      label: "Gemini 3.5 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,

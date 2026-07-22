@@ -8,6 +8,7 @@ import threading
 import weakref
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
@@ -234,12 +235,36 @@ class Opik:
             )
             self._project_name_most_recent_trace = project_name
 
-    def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
-        dataset_url = url_helpers.get_dataset_url_by_id(
-            dataset_id, self._config.url_override
-        )
+    def _log_created_resource_url(
+        self,
+        *,
+        kind: str,
+        name: str,
+        project_name: str,
+        build_url: Callable[[str, str], str],
+    ) -> None:
+        """Log the direct, project-scoped URL of a just-created resource.
 
-        LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
+        Best-effort: the resource is already persisted by the time this runs,
+        so a failure to resolve the project or workspace must not turn a
+        successful creation into an error. ``build_url`` receives the resolved
+        ``(workspace, project_id)``.
+        """
+        try:
+            project_id = rest_helpers.resolve_project_id_by_name(
+                self._rest_client, project_name
+            )
+            url = build_url(self._dereferenced_workspace(), project_id)
+        except Exception:
+            LOGGER.debug(
+                "Could not resolve the URL for the created %s %r",
+                kind,
+                name,
+                exc_info=True,
+            )
+            return
+
+        LOGGER.info(f'Created a "{name}" {kind} at {url}.')
 
     def auth_check(self) -> None:
         """
@@ -1270,7 +1295,17 @@ class Opik:
             client=self,
         )
 
-        self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
+        self._log_created_resource_url(
+            kind="dataset",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: url_helpers.get_dataset_url_by_id(
+                base_url=self._config.url_override,
+                workspace=workspace,
+                project_id=project_id,
+                dataset_id=result.id,
+            ),
+        )
 
         return result
 
@@ -1489,7 +1524,7 @@ class Opik:
         )
 
         project_name = self._resolve_project_name(project_name)
-        rest_operations.create_test_suite_dataset(
+        suite_id = rest_operations.create_test_suite_dataset(
             rest_client=self._rest_client,
             dataset_name=name,
             project_name=project_name,
@@ -1505,6 +1540,20 @@ class Opik:
             rest_client=self._rest_client,
             dataset_items_count=0,
             client=self,
+        )
+
+        self._log_created_resource_url(
+            kind="test suite",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: (
+                url_helpers.get_test_suite_url_by_id(
+                    base_url=self._config.url_override,
+                    workspace=workspace,
+                    project_id=project_id,
+                    test_suite_id=suite_id,
+                )
+            ),
         )
 
         return test_suite.TestSuite(
@@ -2297,17 +2346,22 @@ class Opik:
             str: URL
         """
 
-        dereferenced_workspace = self._workspace
-        if dereferenced_workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
-            dereferenced_workspace = (
-                self._rest_client.check.get_workspace_name().workspace_name
-            )
-
         project_name = self._resolve_project_name(project_name)
 
         return url_helpers.get_project_url_by_workspace(
-            workspace=dereferenced_workspace, project_name=project_name
+            workspace=self._dereferenced_workspace(), project_name=project_name
         )
+
+    def _dereferenced_workspace(self) -> str:
+        """Resolve the configured workspace to the concrete workspace name.
+
+        The self-hosted default ``"default"`` placeholder is looked up against
+        the backend so URLs point at the actual workspace.
+        """
+        if self._workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
+            return self._rest_client.check.get_workspace_name().workspace_name
+
+        return self._workspace
 
     def get_threads_client(self) -> threads_client.ThreadsClient:
         """

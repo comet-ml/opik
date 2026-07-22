@@ -18,6 +18,8 @@ import OptimizationTrialsControls from "./OptimizationTrialsControls";
 import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
 import RunErrorPanel from "./RunErrorPanel";
+import EmptyRunWarningPanel from "./EmptyRunWarningPanel";
+import { computeEmptyRunWarning } from "./optimizationOverviewHelpers";
 import TrialSidebar from "./TrialSidebar/TrialSidebar";
 import TrialSidebarContent from "./TrialSidebar/TrialSidebarContent";
 import { computeCandidateStatuses } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
@@ -131,6 +133,13 @@ const OptimizationPage: React.FC = () => {
     ? baselineCandidate ?? bestCandidate
     : bestCandidate;
 
+  // Heuristic: a COMPLETED run that produced no usable scores (OPIK-7029). Drives
+  // both the amber warning panel and the KPI score-card caption below.
+  const isEmptyCompletedRun = useMemo(
+    () => computeEmptyRunWarning(candidates, optimization?.status),
+    [candidates, optimization?.status],
+  );
+
   // Single status source for the chart, the trials table, and the sidebar's
   // status card.
   const statusMap = useMemo(
@@ -231,6 +240,14 @@ const OptimizationPage: React.FC = () => {
                   <RunErrorPanel optimization={optimization} />
                 </div>
               )}
+            {optimization && isEmptyCompletedRun && (
+              <div className="shrink-0">
+                <EmptyRunWarningPanel
+                  optimization={optimization}
+                  scoringHealth={optimization.metadata?.scoring_health}
+                />
+              </div>
+            )}
             <div className="shrink-0">
               <OptimizationKPICards
                 experiments={experiments}
@@ -240,6 +257,8 @@ const OptimizationPage: React.FC = () => {
                 objectiveName={optimization?.objective_name}
                 optimizationCreatedAt={optimization?.created_at}
                 optimizationLastUpdatedAt={optimization?.last_updated_at}
+                scoringFailed={isEmptyCompletedRun}
+                scoringHealth={optimization?.metadata?.scoring_health}
                 isInProgress={
                   !!optimization?.status &&
                   IN_PROGRESS_OPTIMIZATION_STATUSES.includes(
