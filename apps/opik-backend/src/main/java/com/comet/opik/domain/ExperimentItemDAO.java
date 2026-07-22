@@ -436,7 +436,7 @@ class ExperimentItemDAO {
                       FROM (
                           SELECT
                               id,
-                              duration,
+                              if(isNaN(duration), NULL, duration) AS duration,
                               <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
                               <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                               visibility_mode
@@ -510,6 +510,7 @@ class ExperimentItemDAO {
                 AND ea.workspace_id = ei.workspace_id
             WHERE ei.workspace_id = :workspace_id
             AND ei.trace_id IN :trace_ids
+            <if(project_id)> AND ei.project_id = :project_id <endif>
             AND ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -544,9 +545,11 @@ class ExperimentItemDAO {
                 ON ea.id = ei.experiment_id
                 AND ea.workspace_id = ei.workspace_id
             WHERE ei.workspace_id = :workspace_id
+            <if(project_id)> AND ei.project_id = :project_id <endif>
             AND ei.trace_id IN (
-                SELECT DISTINCT trace_id FROM spans FINAL
+                SELECT DISTINCT trace_id FROM spans
                 WHERE id IN :span_ids AND workspace_id = :workspace_id
+                <if(project_id)> AND project_id = :project_id <endif>
             )
             AND ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
@@ -795,14 +798,16 @@ class ExperimentItemDAO {
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
-            @NonNull Set<ExperimentStatus> statuses) {
-        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "trace_ids", traceIds, statuses);
+            @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "get_experiment_refs_by_trace_ids",
+                "trace_ids", traceIds, statuses, projectId);
     }
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
             @NonNull Set<ExperimentStatus> statuses) {
-        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "item_ids", itemIds, statuses);
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "get_experiment_refs_by_item_ids",
+                "item_ids", itemIds, statuses, null);
     }
 
     @WithSpan
@@ -825,24 +830,38 @@ class ExperimentItemDAO {
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
-            @NonNull Set<ExperimentStatus> statuses) {
-        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "span_ids", spanIds, statuses);
+            @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "get_experiment_refs_by_span_ids",
+                "span_ids", spanIds, statuses, projectId);
     }
 
-    private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String idParamName,
-            @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses) {
+    private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String queryName,
+            @NonNull String idParamName, @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses,
+            UUID projectId) {
         if (ids.isEmpty() || statuses.isEmpty()) {
             return Flux.empty();
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    Statement statement = connection.createStatement(sql)
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(sql, queryName, workspaceId, userName, ids.size());
+
+                    if (projectId != null) {
+                        template.add("project_id", projectId.toString());
+                    }
+
+                    Statement statement = connection.createStatement(template.render())
                             .bind(idParamName, ids.stream().map(UUID::toString).toArray(String[]::new))
                             .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    if (projectId != null) {
+                        statement.bind("project_id", projectId.toString());
+                    }
+
+                    statement.bind("workspace_id", workspaceId);
+
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentTraceRef(
                         row.get("experiment_id", UUID.class),
                         row.get("trace_id", UUID.class))));

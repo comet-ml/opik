@@ -66,7 +66,10 @@ class DatabaseAnalyticsFactoryTest {
                 + "wait_for_async_insert=1,"
                 + "async_insert_use_adaptive_busy_timeout=1,"
                 + "async_insert_deduplicate=1,"
-                + "use_skip_indexes_if_final=1";
+                + "use_skip_indexes_if_final=1,"
+                + "optimize_skip_unused_shards=1,"
+                + "do_not_merge_across_partitions_select_final=1,"
+                + "distributed_product_mode=local";
 
         ParsedQueryParameters parsed = DatabaseAnalyticsFactory.parseQueryParameters(qp);
 
@@ -75,15 +78,18 @@ class DatabaseAnalyticsFactoryTest {
                 "compress", "1",
                 "auto_discovery", "true",
                 "failover", "3"));
-        assertThat(parsed.serverSettings()).containsExactlyInAnyOrderEntriesOf(Map.of(
-                "max_query_size", "100000000",
-                "async_insert_busy_timeout_max_ms", "250",
-                "async_insert_busy_timeout_min_ms", "100",
-                "async_insert", "1",
-                "wait_for_async_insert", "1",
-                "async_insert_use_adaptive_busy_timeout", "1",
-                "async_insert_deduplicate", "1",
-                "use_skip_indexes_if_final", "1"));
+        assertThat(parsed.serverSettings()).containsExactlyInAnyOrderEntriesOf(Map.ofEntries(
+                Map.entry("max_query_size", "100000000"),
+                Map.entry("async_insert_busy_timeout_max_ms", "250"),
+                Map.entry("async_insert_busy_timeout_min_ms", "100"),
+                Map.entry("async_insert", "1"),
+                Map.entry("wait_for_async_insert", "1"),
+                Map.entry("async_insert_use_adaptive_busy_timeout", "1"),
+                Map.entry("async_insert_deduplicate", "1"),
+                Map.entry("use_skip_indexes_if_final", "1"),
+                Map.entry("optimize_skip_unused_shards", "1"),
+                Map.entry("do_not_merge_across_partitions_select_final", "1"),
+                Map.entry("distributed_product_mode", "local")));
     }
 
     @Test

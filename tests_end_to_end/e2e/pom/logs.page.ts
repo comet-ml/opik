@@ -101,9 +101,15 @@ export class LogsPage {
     });
   }
 
-  /** Breadcrumb link for the current project, shown when navigated to /logs. */
+  /**
+   * The current project's item in the breadcrumb, shown when navigated to /logs.
+   * Matched by text rather than role: older UIs render it as a link, newer ones
+   * (project menu redesign) as a dropdown button — the name is present in both.
+   */
   breadcrumbProjectLink(projectName: string): Locator {
-    return this.page.getByRole('navigation', { name: 'breadcrumb' }).getByRole('link', { name: projectName });
+    return this.page
+      .getByRole('navigation', { name: 'breadcrumb' })
+      .getByText(projectName, { exact: true });
   }
 
   get traceRows(): Locator {
@@ -117,10 +123,17 @@ export class LogsPage {
     return this.page.getByRole('radio', { name: 'Threads' });
   }
 
-  /** Wait for the Threads table to have rendered at least one row. */
-  async waitForThreadsReady(): Promise<void> {
+  /**
+   * Wait for the Threads table to be ready. When a threadId is given, wait for
+   * that specific row — threads are eventually consistent, so gating on "any
+   * row" can pass before the seeded thread has been aggregated into the list.
+   */
+  async waitForThreadsReady(threadId?: string): Promise<void> {
     return test.step('Wait for Threads table ready', async () => {
-      await this.page.locator('tr[data-row-id]').first().waitFor({ state: 'visible' });
+      const target = threadId
+        ? this.threadRow(threadId)
+        : this.page.locator('tr[data-row-id]').first();
+      await target.waitFor({ state: 'visible' });
     });
   }
 

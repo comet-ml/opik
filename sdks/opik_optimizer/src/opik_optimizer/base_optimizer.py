@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast, overload, Literal
 from collections.abc import Iterator
 import logging
+import traceback
 import warnings
 import time
 from abc import ABC
@@ -22,6 +23,7 @@ from opik.evaluation.evaluation_result import (
 
 from .core import evaluation as task_evaluator
 from .core import runtime
+from .core.evaluation import compute_scoring_health
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
 from .utils.reporting import convert_tqdm_to_rich
 from .api_objects import chat_prompt
@@ -46,6 +48,7 @@ from .core.state import (
     prepare_experiment_config,
 )
 from .utils.logging import debug_log
+from .utils.scoring import improves_over
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
 from .utils import rng as rng_utils
@@ -55,6 +58,24 @@ from .utils.prompt_roles import normalize_optimizable_roles
 
 # Don't use unsupported params:
 litellm.drop_params = True
+
+
+def _compute_scoring_health_from_result(
+    evaluation_result: EvaluationResult | EvaluationResultOnDictItems,
+    *,
+    metric_name: str,
+) -> dict[str, int]:
+    """Extract scoring health counts from an EvaluationResult.
+
+    Returns ``{"failed_count": N, "total_count": M}`` for the objective metric
+    scores in the given result.  Always returns a valid dict; falls back to
+    ``{"failed_count": 0, "total_count": 0}`` when no objective scores are found.
+    """
+    objective_scores = task_evaluator._extract_objective_scores(
+        evaluation_result, metric_name
+    )
+    return compute_scoring_health(objective_scores)
+
 
 # Set up logging:
 logger = logging.getLogger(__name__)
@@ -585,6 +606,29 @@ class BaseOptimizer(ABC):
 
         return resolve_prompt_tools(prompt_or_prompts, optimize_tools=optimize_tools)
 
+    def _resolve_baseline_score_and_health(
+        self,
+        context: OptimizationContext,
+        baseline_eval: float | EvaluationResult | EvaluationResultOnDictItems,
+    ) -> float:
+        """Derive the baseline score and seed context.scoring_health from it (OPIK-7029).
+
+        Shared by the base _calculate_baseline and by optimizers with a custom baseline
+        path (e.g. ParameterOptimizer) that score via evaluate_prompt directly rather than
+        evaluate()/evaluate_with_result(). Seeding here arms the empty-run guard for those
+        optimizers too: a systematic judge/model failure fails the baseline, so the
+        all-items-failed case becomes detectable. Tolerates a plain float
+        (mocked/legacy evaluate_prompt) by returning it as-is and leaving health unset.
+        """
+        if isinstance(baseline_eval, (EvaluationResult, EvaluationResultOnDictItems)):
+            context.scoring_health = _compute_scoring_health_from_result(
+                baseline_eval, metric_name=context.metric.__name__
+            )
+            return self._score_from_evaluation_result(
+                baseline_eval, metric_name=context.metric.__name__
+            )
+        return baseline_eval
+
     def _calculate_baseline(self, context: OptimizationContext) -> float:
         """
         Calculate and display the baseline score for the initial prompt.
@@ -602,7 +646,7 @@ class BaseOptimizer(ABC):
         self.pre_baseline(context)
 
         def _evaluate_baseline() -> float:
-            baseline_score = self.evaluate_prompt(
+            baseline_eval = self.evaluate_prompt(
                 prompt=context.prompts,
                 dataset=context.evaluation_dataset,
                 metric=context.metric,
@@ -611,6 +655,7 @@ class BaseOptimizer(ABC):
                 n_threads=getattr(self, "n_threads", None),
                 verbose=self.verbose,
                 allow_tool_use=context.allow_tool_use,
+                return_evaluation_result=True,
                 experiment_config=prepare_experiment_config(
                     optimizer=self,
                     prompt=context.prompts,
@@ -624,6 +669,19 @@ class BaseOptimizer(ABC):
                     validation_dataset=context.validation_dataset,
                     build_optimizer_version=_OPTIMIZER_VERSION,
                 ),
+            )
+            # Seed scoring health from the baseline evaluation so the OPIK-7029
+            # "all items failed to score" guard is armed for EVERY optimizer.
+            # Evolutionary and GEPA's search phase score candidates outside
+            # evaluate()/evaluate_with_result(), so they never set
+            # context.scoring_health on their own — without this, a run where
+            # every item fails to score would slip through as a silent COMPLETED.
+            # A systematic judge/model failure fails the baseline too, so capturing
+            # it here catches the empty-run case universally. Optimizers that DO
+            # improve via evaluate() overwrite this with the winning candidate's
+            # health. Tolerate a plain float (mocked/legacy evaluate_prompt).
+            baseline_score = self._resolve_baseline_score_and_health(
+                context, baseline_eval
             )
             coerced_score = self._coerce_score(baseline_score)
             self.post_baseline(context, coerced_score)
@@ -687,7 +745,7 @@ class BaseOptimizer(ABC):
                 else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
             )
             with progress_ctx:
-                score = self.evaluate_prompt(
+                raw_result = self.evaluate_prompt(
                     prompt=prompts,
                     dataset=context.evaluation_dataset,
                     metric=context.metric,
@@ -699,15 +757,35 @@ class BaseOptimizer(ABC):
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
                     sampling_tag=sampling_tag,
+                    return_evaluation_result=True,
                 )
         except Exception:
             context.finish_reason = "error"
             context.should_stop = True
             logger.exception("Evaluation failed; stopping optimization.")
             raise
+        # raw_result is EvaluationResult (normal path) or float (mocked/legacy path).
+        if isinstance(raw_result, (EvaluationResult, EvaluationResultOnDictItems)):
+            score = self._score_from_evaluation_result(
+                raw_result, metric_name=context.metric.__name__
+            )
+            eval_result_for_health: (
+                EvaluationResult | EvaluationResultOnDictItems | None
+            ) = raw_result
+        else:
+            score = raw_result
+            eval_result_for_health = None
         coerced_score = self._coerce_score(score)
         prev_best_score = context.current_best_score
         self.on_trial(context, prompts, coerced_score, prev_best_score)
+
+        # Update scoring health whenever a new best is recorded.
+        if (
+            prev_best_score is None or coerced_score > prev_best_score
+        ) and eval_result_for_health is not None:
+            context.scoring_health = _compute_scoring_health_from_result(
+                eval_result_for_health, metric_name=context.metric.__name__
+            )
 
         # Check early stop conditions - SET FLAG, don't raise
         self._should_stop_context(context)
@@ -786,6 +864,13 @@ class BaseOptimizer(ABC):
         coerced_score = self._coerce_score(score)
         prev_best_score = context.current_best_score
         self.on_trial(context, prompts, coerced_score, prev_best_score)
+
+        # Update scoring health whenever a new best is recorded.
+        if prev_best_score is None or coerced_score > prev_best_score:
+            context.scoring_health = _compute_scoring_health_from_result(
+                evaluation_result, metric_name=context.metric.__name__
+            )
+
         self._should_stop_context(context)
         return coerced_score, evaluation_result
 
@@ -802,7 +887,9 @@ class BaseOptimizer(ABC):
     ) -> None:
         """Common evaluation-complete logic (shared by legacy/new hooks)."""
         context.trials_completed += 1
-        if prev_best_score is None or score > prev_best_score:
+        # Tie policy (OPIK-7038): only a STRICT improvement replaces the running
+        # best; a tie keeps the incumbent (seeded from the baseline).
+        if prev_best_score is None or improves_over(score, prev_best_score):
             context.current_best_score = score
             context.current_best_prompt = prompts
         runtime.evaluation_progress(
@@ -1444,7 +1531,28 @@ class BaseOptimizer(ABC):
                     best_score=result.score,
                     prompt=result_prompt,
                 )
-                self._finalize_optimization(context, status="error")
+                # Graceful failure: run_optimization caught the error and
+                # returned instead of raising, so there is no exception for
+                # status_manager to turn into a reason. Persist an explicit
+                # error_info anyway (consistent with P3's mark_error threading)
+                # so the run doesn't surface as "error" with a blank reason.
+                graceful_reason = (
+                    "Optimization stopped early with an error "
+                    "(finish_reason='error'); the failing step's traceback is "
+                    "in the run logs."
+                )
+                self._finalize_optimization(
+                    context,
+                    status="error",
+                    error_info={
+                        "exception_type": "OptimizationError",
+                        "message": graceful_reason,
+                        # ErrorInfo.traceback is @NotBlank on write; there is no
+                        # exception here (run_optimization caught it), so reuse
+                        # the reason to keep the field non-blank.
+                        "traceback": graceful_reason,
+                    },
+                )
                 debug_log(
                     "optimize_end",
                     optimizer=self.__class__.__name__,
@@ -1487,7 +1595,15 @@ class BaseOptimizer(ABC):
                 f"Optimization object exists: {context.optimization is not None}"
             )
             try:
-                self._finalize_optimization(context, status="error")
+                self._finalize_optimization(
+                    context,
+                    status="error",
+                    error_info={
+                        "exception_type": type(e).__name__,
+                        "message": str(e),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
             except Exception as finalize_error:
                 logger.error(
                     f"Failed to finalize optimization status: {finalize_error}",
@@ -1761,14 +1877,17 @@ class BaseOptimizer(ABC):
         )
 
     def _update_optimization(
-        self, optimization: optimization.Optimization, status: str
+        self,
+        optimization: optimization.Optimization,
+        status: str,
+        error_info: dict | None = None,
     ) -> bool:
         # FIXME: remove when a solution is added to opik's optimization.update method
         count = 0
         last_error = None
         while count < 3:
             try:
-                optimization.update(status=status)
+                optimization.update(status=status, error_info=error_info)
                 logger.debug(f"Successfully updated optimization status to {status}")
                 return True
             except ApiError as e:
@@ -1801,9 +1920,12 @@ class BaseOptimizer(ABC):
         self,
         context: OptimizationContext,
         status: str = "completed",
+        error_info: dict | None = None,
     ) -> None:
         if context.optimization is not None:
-            updated = self._update_optimization(context.optimization, status)
+            updated = self._update_optimization(
+                context.optimization, status, error_info=error_info
+            )
             if updated:
                 logger.debug(
                     f"Optimization {context.optimization_id} status updated to {status}."

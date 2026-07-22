@@ -92,7 +92,7 @@ const SliderInputControl = ({
           </Label>
           {tooltip && (
             <TooltipWrapper content={tooltip}>
-              <Info className="ml-1 size-4 text-light-slate" />
+              <Info className="ml-1 size-3.5 text-light-slate" />
             </TooltipWrapper>
           )}
         </div>
@@ -114,7 +114,7 @@ const SliderInputControl = ({
             onChange={(event) => setLocalValue(event.target.value)}
             onBlur={(event) => validateAndHandleChange(event.target.value)}
             value={localValue || ""}
-            dimension="sm"
+            dimension="xs"
             variant="ghost"
             max={max}
           />

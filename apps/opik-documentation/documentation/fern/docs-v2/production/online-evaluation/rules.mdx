@@ -156,6 +156,37 @@ For the LLM as a Judge metrics, keep in mind the only variable available is the 
 ]
 ```
 
+By default, `{{context}}` contains only the messages exchanged in the conversation, as shown above. When your evaluation logic needs to reason about *how* the agent produced its final answer — which tools it called, in what order, and what each tool or LLM call returned — Opik can enrich `{{context}}` with the full thread structure instead: every trace in the thread and every span within it (LLM calls, tool calls, retrieval steps, or any other span type), including that span's type, input, output, metadata, and its position in the conversation.
+
+This makes it possible to write rules that evaluate an agent's full execution path, not just its final response. For example:
+
+- **Tool call order** — verify tools were called in the expected sequence before the agent responded (e.g. a retrieval step must run before synthesis).
+- **Grounding** — verify every claim in the final answer is backed by a tool result seen earlier in the conversation, to catch hallucinations not grounded in retrieved data.
+- **Escalation logic** — verify an agent invoked the correct tool (e.g. a human hand-off tool) when the conversation showed signals that warranted it.
+
+Because a full thread can contain many spans, Opik truncates long field values before injecting them into the prompt, and gives the judge model tools to fetch anything beyond the truncated preview:
+
+```json
+{
+  "name": "answer_question",
+  "type": "llm",
+  "input": "What is the capital of France?",
+  "output": "The capital of France i[TRUNCATED 800 chars — use read(...) to see full]"
+}
+```
+
+The judge model can call:
+
+- **`read`** — fetch a specific trace or span by ID, with an optional truncation tier, to see more (or all) of its content.
+- **`jq`** — evaluate a `jq` expression against previously fetched data, useful for pulling a specific nested field (e.g. a value in span metadata).
+- **`search`** — run a regex search across a cached entity's string fields, useful for locating a term inside a very long input or output.
+
+This keeps evaluation prompts token-efficient even for long-running threads or deeply nested traces, since the judge model only pulls in the extra detail it actually needs.
+
+<Note>
+  Full trace and span context is available when the model selected for the rule supports tool calling.
+</Note>
+
 Similarly, for the Python metrics, you have the `Conversation` object available to you. This object is a `List[Dict]` where each dict represents a message in the conversation.
 
 ```python

@@ -1,0 +1,67 @@
+suite: clickhouse tiered storage (conf.d/storage.xml + cache PVC)
+
+# tieredStorage renders the hot -> cold storage policy and a per-node S3 cache
+# PVC, gated by clickhouse.tieredStorage.enabled. It stays inert by default and
+# fails fast on invalid config (empty endpoint, non-DNS-label cache volumeName).
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: renders no tiered-storage config by default (disabled)
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "conf.d/storage.xml"
+      - notMatchRegexRaw:
+          pattern: "cold_s3"
+      - notMatchRegexRaw:
+          pattern: "s3-cache-vc-template"
+
+  - it: renders the storage policy, disks and cache PVC when enabled with an endpoint
+    set:
+      clickhouse.tieredStorage.enabled: true
+      clickhouse.tieredStorage.cold.s3.endpoint: https://opik-ch-cold.s3.us-east-1.amazonaws.com
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<tiered_replicated>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<endpoint>https://opik-ch-cold\\.s3\\.us-east-1\\.amazonaws\\.com/clickhouse-cold/</endpoint>"
+      - equal:
+          path: spec.templates.volumeClaimTemplates[1].name
+          value: s3-cache-vc-template
+
+  - it: omits <read_only> by default so the cold tier is writable
+    set:
+      clickhouse.tieredStorage.enabled: true
+      clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
+    asserts:
+      - notMatchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<read_only>"
+
+  - it: emits <read_only> only when explicitly opted in
+    set:
+      clickhouse.tieredStorage.enabled: true
+      clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
+      clickhouse.tieredStorage.cold.s3.readOnly: true
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<read_only>true</read_only>"
+
+  - it: fails the render when enabled without a cold S3 endpoint
+    set:
+      clickhouse.tieredStorage.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: clickhouse.tieredStorage.cold.s3.endpoint must be set to the cold bucket's S3 URL when tiered storage is enabled
+
+  - it: fails the render when the cache volumeName is not a DNS label
+    set:
+      clickhouse.tieredStorage.enabled: true
+      clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
+      clickhouse.tieredStorage.cold.cache.volumeName: S3_cache
+    asserts:
+      - failedTemplate: {}

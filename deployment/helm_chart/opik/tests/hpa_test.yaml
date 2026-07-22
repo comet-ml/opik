@@ -1,0 +1,108 @@
+suite: horizontal pod autoscaler
+
+# Render assertions for the per-component HPA (templates/hpa.yaml). It renders
+# only when both the component and its autoscaling are enabled, and each metric
+# block (CPU / memory utilization / memory averageValue / pod metrics) appears
+# only when its corresponding value is set.
+templates:
+  - templates/hpa.yaml
+
+documentSelector: &backendHpa
+  path: metadata.name
+  value: opik-backend-hpa
+
+tests:
+  - it: is not rendered by default (autoscaling disabled)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders scale target and replica bounds when enabled
+    set:
+      component.backend.autoscaling.enabled: true
+      component.backend.autoscaling.minReplicas: 2
+      component.backend.autoscaling.maxReplicas: 5
+    documentSelector: *backendHpa
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: opik-backend
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 5
+
+  - it: emits a CPU metric only when targetCPUUtilizationPercentage is set
+    set:
+      component.backend.autoscaling.enabled: true
+      component.backend.autoscaling.targetCPUUtilizationPercentage: 70
+    documentSelector: *backendHpa
+    asserts:
+      - equal:
+          path: spec.metrics[0].resource.name
+          value: cpu
+      - equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 70
+
+  - it: emits a memory utilization metric when targetMemoryUtilizationPercentage is set
+    set:
+      component.backend.autoscaling.enabled: true
+      component.backend.autoscaling.targetMemoryUtilizationPercentage: 80
+    documentSelector: *backendHpa
+    asserts:
+      - equal:
+          path: spec.metrics[0].resource.name
+          value: memory
+      - equal:
+          path: spec.metrics[0].resource.target.type
+          value: Utilization
+      - equal:
+          path: spec.metrics[0].resource.target.averageUtilization
+          value: 80
+
+  - it: emits a memory AverageValue metric when targetMemoryAverageValue is set
+    set:
+      component.backend.autoscaling.enabled: true
+      component.backend.autoscaling.targetMemoryAverageValue: 500Mi
+    documentSelector: *backendHpa
+    asserts:
+      - equal:
+          path: spec.metrics[0].resource.target.type
+          value: AverageValue
+      - equal:
+          path: spec.metrics[0].resource.target.averageValue
+          value: 500Mi
+
+  - it: emits pod metrics from autoscaling.podMetrics
+    set:
+      component.backend.autoscaling.enabled: true
+      component.backend.autoscaling.podMetrics:
+        - name: http_requests_per_second
+          averageValue: 100
+    documentSelector: *backendHpa
+    asserts:
+      - equal:
+          path: spec.metrics[0].type
+          value: Pods
+      - equal:
+          path: spec.metrics[0].pods.metric.name
+          value: http_requests_per_second
+      - equal:
+          path: spec.metrics[0].pods.target.averageValue
+          value: "100"
+
+  - it: emits the behavior block when set
+    set:
+      component.backend.autoscaling.enabled: true
+    documentSelector: *backendHpa
+    asserts:
+      # backend ships a default scaleDown/scaleUp behavior in values.yaml.
+      - exists:
+          path: spec.behavior.scaleDown
+      - exists:
+          path: spec.behavior.scaleUp

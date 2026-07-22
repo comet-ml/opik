@@ -1,4 +1,4 @@
-export { test, expect } from './conversation.fixture';
+export { test, expect } from './annotation-queue.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -15,6 +15,12 @@ export type {
   ExperimentItemSeed,
   ExperimentItemScore,
 } from './experiment.fixture';
+export type {
+  ComparisonRef,
+  ComparisonFixtures,
+  ComparisonItemSeed,
+  ComparisonExperimentRef,
+} from './comparison-experiment.fixture';
 export type {
   TestSuiteRef,
   TestSuiteFixtures,
@@ -34,4 +40,9 @@ export type {
   ConversationTurnRef,
   ConversationFixtures,
 } from './conversation.fixture';
+export type {
+  AnnotationQueueRef,
+  AnnotationQueueTraceRef,
+  AnnotationQueueFixtures,
+} from './annotation-queue.fixture';
 export type { ProjectRef } from '../core/backend';

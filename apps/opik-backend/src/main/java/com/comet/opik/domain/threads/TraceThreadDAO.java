@@ -69,7 +69,8 @@ public interface TraceThreadDAO {
 
     Mono<Void> updateThread(UUID threadModelId, UUID projectId, TraceThreadUpdate threadUpdate);
 
-    Flux<List<TraceThreadModel>> streamPendingClosureThreads(UUID projectId, Instant lastUpdatedAt);
+    Flux<List<TraceThreadModel>> streamPendingClosureThreads(UUID projectId, Instant lastUpdatedAt,
+            Instant lookbackBound);
 
     Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags);
 }
@@ -275,14 +276,49 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             ;
             """;
 
+    /**
+     * Uses the same aggregation form as {@link #FIND_PENDING_CLOSURE_THREADS_SQL} instead of FINAL:
+     * without a lower bound on {@code last_updated_at} (not part of the sorting key), FINAL has to
+     * merge-read every version row of the project on every call, which dominates read volume on hot
+     * projects. The {@code :lookback_bound} pre-dedup filter is safe for the same monotonicity
+     * reason documented there, and lets the minmax skip index on {@code last_updated_at} prune
+     * granules. The bound must cover the widest window used by the enqueuing scan (see
+     * {@code TraceThreadService}'s lookback computation), otherwise a thread flagged by the global
+     * scan could be invisible here and be re-enqueued forever.
+     */
     public static final String GET_RECENT_CLOSED_THREADS_PER_PROJECT = """
             SELECT
-                workspace_id, project_id, thread_id, id, status, created_by, last_updated_by, created_at, last_updated_at, tags, sampling_per_rule, source, environment
-            FROM trace_threads final
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            AND status = :status
-            AND last_updated_at < parseDateTime64BestEffort(:last_updated_at, 6)
+                workspace_id, project_id, thread_id, id,
+                latest_status AS status,
+                latest_created_by AS created_by,
+                latest_last_updated_by AS last_updated_by,
+                first_created_at AS created_at,
+                latest_updated_at AS last_updated_at,
+                latest_tags AS tags,
+                latest_sampling_per_rule AS sampling_per_rule,
+                latest_source AS source,
+                latest_environment AS environment
+            FROM (
+                SELECT
+                    workspace_id, project_id, thread_id, id,
+                    argMax(status, last_updated_at)            AS latest_status,
+                    argMax(created_by, last_updated_at)        AS latest_created_by,
+                    argMax(last_updated_by, last_updated_at)   AS latest_last_updated_by,
+                    min(created_at)                            AS first_created_at,
+                    max(last_updated_at)                       AS latest_updated_at,
+                    argMax(tags, last_updated_at)              AS latest_tags,
+                    argMax(sampling_per_rule, last_updated_at) AS latest_sampling_per_rule,
+                    argMax(source, last_updated_at)            AS latest_source,
+                    argMax(environment, last_updated_at)       AS latest_environment
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND last_updated_at > parseDateTime64BestEffort(:lookback_bound, 6)
+                GROUP BY workspace_id, project_id, thread_id, id
+            )
+            WHERE latest_status = :status
+            AND latest_updated_at \\< parseDateTime64BestEffort(:last_updated_at, 6)
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -548,17 +584,21 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     @Override
     public Flux<List<TraceThreadModel>> streamPendingClosureThreads(@NonNull UUID projectId,
-            @NonNull Instant lastUpdatedAt) {
-        return asyncTemplate.stream(connection -> {
+            @NonNull Instant lastUpdatedAt, @NonNull Instant lookbackBound) {
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
 
-            var statement = connection.createStatement(GET_RECENT_CLOSED_THREADS_PER_PROJECT)
+            var template = getSTWithLogComment(GET_RECENT_CLOSED_THREADS_PER_PROJECT,
+                    "stream_pending_closure_threads", workspaceId, userName, projectId);
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
                     .bind("project_id", projectId)
                     .bind("last_updated_at", lastUpdatedAt.truncatedTo(ChronoUnit.MICROS).toString())
+                    .bind("lookback_bound", lookbackBound.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("status", TraceThreadStatus.ACTIVE.getValue());
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+            return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
-        }).buffer(1000);
+        })).buffer(1000);
     }
 
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {

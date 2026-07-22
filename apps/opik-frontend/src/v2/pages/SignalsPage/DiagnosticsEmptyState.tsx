@@ -7,8 +7,7 @@ import TurnOnDiagnosticDialog from "@/v2/pages/SignalsPage/TurnOnDiagnosticDialo
 import RobotLamp from "@/icons/robot-lamp.svg?react";
 import RobotLampDark from "@/icons/robot-lamp-dark.svg?react";
 
-// TODO: point at the dedicated Diagnostics docs page once it ships.
-const DIAGNOSTICS_DOCS_URL = buildDocsUrl();
+const DIAGNOSTICS_DOCS_URL = buildDocsUrl("/tracing/diagnostics");
 
 const CARD_CLASS =
   "flex h-[88px] w-full items-center rounded-lg border border-border bg-background px-4 text-left transition-colors hover:border-primary hover:bg-toggle-outline-active";

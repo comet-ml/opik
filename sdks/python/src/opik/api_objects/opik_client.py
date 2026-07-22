@@ -8,6 +8,7 @@ import threading
 import weakref
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
@@ -28,6 +29,7 @@ from . import (
     helpers,
     opik_query_language,
     rest_helpers,
+    rest_stream_parser,
     search_helpers,
     span as span_module,
     trace as trace_module,
@@ -230,12 +232,36 @@ class Opik:
             )
             self._project_name_most_recent_trace = project_name
 
-    def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
-        dataset_url = url_helpers.get_dataset_url_by_id(
-            dataset_id, self._config.url_override
-        )
+    def _log_created_resource_url(
+        self,
+        *,
+        kind: str,
+        name: str,
+        project_name: str,
+        build_url: Callable[[str, str], str],
+    ) -> None:
+        """Log the direct, project-scoped URL of a just-created resource.
 
-        LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
+        Best-effort: the resource is already persisted by the time this runs,
+        so a failure to resolve the project or workspace must not turn a
+        successful creation into an error. ``build_url`` receives the resolved
+        ``(workspace, project_id)``.
+        """
+        try:
+            project_id = rest_helpers.resolve_project_id_by_name(
+                self._rest_client, project_name
+            )
+            url = build_url(self._dereferenced_workspace(), project_id)
+        except Exception:
+            LOGGER.debug(
+                "Could not resolve the URL for the created %s %r",
+                kind,
+                name,
+                exc_info=True,
+            )
+            return
+
+        LOGGER.info(f'Created a "{name}" {kind} at {url}.')
 
     def auth_check(self) -> None:
         """
@@ -1266,7 +1292,17 @@ class Opik:
             client=self,
         )
 
-        self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
+        self._log_created_resource_url(
+            kind="dataset",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: url_helpers.get_dataset_url_by_id(
+                base_url=self._config.url_override,
+                workspace=workspace,
+                project_id=project_id,
+                dataset_id=result.id,
+            ),
+        )
 
         return result
 
@@ -1485,7 +1521,7 @@ class Opik:
         )
 
         project_name = self._resolve_project_name(project_name)
-        rest_operations.create_test_suite_dataset(
+        suite_id = rest_operations.create_test_suite_dataset(
             rest_client=self._rest_client,
             dataset_name=name,
             project_name=project_name,
@@ -1501,6 +1537,20 @@ class Opik:
             rest_client=self._rest_client,
             dataset_items_count=0,
             client=self,
+        )
+
+        self._log_created_resource_url(
+            kind="test suite",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: (
+                url_helpers.get_test_suite_url_by_id(
+                    base_url=self._config.url_override,
+                    workspace=workspace,
+                    project_id=project_id,
+                    test_suite_id=suite_id,
+                )
+            ),
         )
 
         return test_suite.TestSuite(
@@ -1676,6 +1726,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         dataset_version_id: Optional[str] = None,
         project_name: Optional[str] = None,
+        experiment_id: Optional[str] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -1692,11 +1743,14 @@ class Opik:
             tags: Optional list of tags to associate with the experiment.
             dataset_version_id: Optional ID of the dataset version to associate with the experiment.
             project_name: Optional name of the project to associate the experiment with.
+            experiment_id: Optional explicit id for the experiment. When None a fresh id is
+                generated. Callers that must know the id before creation (e.g. the migrate
+                cascade, which records it for crash-safe cleanup) can supply their own.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
-        id = id_helpers.generate_id()
+        id = experiment_id or id_helpers.generate_id()
 
         checked_prompts = experiment_helpers.handle_prompt_args(
             prompt=prompt,
@@ -1954,6 +2008,7 @@ class Opik:
         exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
+        max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
@@ -2008,6 +2063,11 @@ class Opik:
             exclude: Fields to exclude from the response. For example, ["feedback_scores"]
             wait_for_at_least: The minimum number of traces to wait for before returning.
             wait_for_timeout: The timeout for waiting for traces.
+            max_batch_size: The maximum number of traces requested per page from the backend
+                (default 2000). The backend buffers a page in memory before streaming it, so a
+                large page of heavy traces (e.g. with inline attachments) can spike server memory;
+                lower this to bound per-request memory. On a connection/timeout error the page size
+                is automatically halved and the page retried.
 
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
@@ -2028,6 +2088,7 @@ class Opik:
             max_results=max_results,
             truncate=truncate,
             exclude=exclude,
+            max_batch_size=max_batch_size,
         )
 
         if wait_for_at_least is None:
@@ -2057,6 +2118,7 @@ class Opik:
         exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
+        max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
@@ -2113,6 +2175,11 @@ class Opik:
             exclude: List of fields to exclude from the response (e.g., ["feedback_scores", "input", "output"])
             wait_for_at_least: The minimum number of spans to wait for before returning.
             wait_for_timeout: The timeout for waiting for spans.
+            max_batch_size: The maximum number of spans requested per page from the backend
+                (default 2000). The backend buffers a page in memory before streaming it, so a
+                large page of heavy spans (e.g. with inline attachments) can spike server memory;
+                lower this to bound per-request memory. On a connection/timeout error the page size
+                is automatically halved and the page retried.
 
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
@@ -2133,6 +2200,7 @@ class Opik:
             max_results=max_results,
             truncate=truncate,
             exclude=exclude,
+            max_batch_size=max_batch_size,
         )
 
         if wait_for_at_least is None:
@@ -2199,17 +2267,22 @@ class Opik:
             str: URL
         """
 
-        dereferenced_workspace = self._workspace
-        if dereferenced_workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
-            dereferenced_workspace = (
-                self._rest_client.check.get_workspace_name().workspace_name
-            )
-
         project_name = self._resolve_project_name(project_name)
 
         return url_helpers.get_project_url_by_workspace(
-            workspace=dereferenced_workspace, project_name=project_name
+            workspace=self._dereferenced_workspace(), project_name=project_name
         )
+
+    def _dereferenced_workspace(self) -> str:
+        """Resolve the configured workspace to the concrete workspace name.
+
+        The self-hosted default ``"default"`` placeholder is looked up against
+        the backend so URLs point at the actual workspace.
+        """
+        if self._workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
+            return self._rest_client.check.get_workspace_name().workspace_name
+
+        return self._workspace
 
     def get_threads_client(self) -> threads_client.ThreadsClient:
         """

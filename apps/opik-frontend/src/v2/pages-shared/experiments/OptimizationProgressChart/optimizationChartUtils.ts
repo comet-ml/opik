@@ -2,8 +2,15 @@
  * Utility functions for optimization chart data processing
  */
 
+import isNumber from "lodash/isNumber";
+
 import { AggregatedCandidate } from "@/types/optimizations";
 import { TagProps } from "@/ui/tag";
+import {
+  formatAsPercentage,
+  formatAsDuration,
+  formatAsCurrency,
+} from "@/lib/optimization-formatters";
 
 export type FeedbackScore = {
   name: string;
@@ -15,7 +22,11 @@ export type TrialStatus =
   | "passed"
   | "evaluating"
   | "pruned"
-  | "running";
+  | "running"
+  // A trial that ran but produced no score — the metric/judge failed on it.
+  // Distinct from "running" (which means "not scored *yet*"): a "failed" trial
+  // is terminal. See computeCandidateStatuses for how this is derived.
+  | "failed";
 
 export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   baseline: "gray",
@@ -23,22 +34,162 @@ export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   evaluating: "orange",
   pruned: "pink",
   running: "yellow",
+  failed: "red",
 };
 
+// A fuchsia scale encodes trial status on the progress chart: baseline and
+// passed share fuchsia-500, discarded is the lighter fuchsia-300, and the
+// best trial is the darkest fuchsia-900. In-progress states (evaluating /
+// running) stay orange / yellow so active work reads as distinct.
 export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
-  baseline: "var(--color-gray)",
-  passed: "var(--color-blue)",
+  baseline: "var(--color-fuchsia)",
+  passed: "var(--color-fuchsia)",
   evaluating: "var(--color-orange)",
-  pruned: "var(--color-pink)",
+  pruned: "var(--trial-pruned)",
   running: "var(--color-yellow)",
+  failed: "var(--color-red)",
+};
+
+/** Best-trial dot colour — darkest in the fuchsia scale (theme-aware, see main.scss). */
+export const TRIAL_BEST_COLOR = "var(--trial-best)";
+
+/** Ring around the best-trial dot — the two-tone best marker (theme-aware, see main.scss). */
+export const TRIAL_BEST_RING_COLOR = "var(--trial-best-ring)";
+
+/**
+ * Fill colour for a trial dot on the progress chart:
+ * - the best trial always wins, in its own darkest fuchsia;
+ * - test-suite runs colour every status (their legend distinguishes all states);
+ * - dataset runs only distinguish passed vs discarded, so every non-pruned
+ *   status collapses to the solid "passed" colour.
+ */
+export const getTrialDotColor = ({
+  status,
+  isBest,
+  isTestSuite,
+}: {
+  status: TrialStatus;
+  isBest: boolean;
+  isTestSuite?: boolean;
+}): string => {
+  if (isBest) return TRIAL_BEST_COLOR;
+  if (isTestSuite) return TRIAL_STATUS_COLORS[status];
+  // Dataset runs collapse most statuses to passed, but a failed trial must stay
+  // red (it scored nothing — it is not a passing trial) and pruned stays faded.
+  if (status === "pruned") return TRIAL_STATUS_COLORS.pruned;
+  if (status === "failed") return TRIAL_STATUS_COLORS.failed;
+  return TRIAL_STATUS_COLORS.passed;
 };
 
 export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   baseline: "Baseline",
   passed: "Passed",
   evaluating: "Evaluating",
-  pruned: "Pruned",
+  // Internal status key stays "pruned"; user-facing label is "Discarded".
+  pruned: "Discarded",
   running: "Running",
+  failed: "Failed",
+};
+
+/**
+ * Full status label for the trial tooltip header, including the step it
+ * happened at (e.g. "Passed step 1", "Discarded in step 2"). The baseline has
+ * no step suffix, and the best trial is labelled separately by the caller.
+ */
+export const getTrialStatusLabel = (
+  status: TrialStatus,
+  stepIndex: number,
+): string => {
+  switch (status) {
+    case "baseline":
+      return "Baseline";
+    case "passed":
+      return `Passed step ${stepIndex}`;
+    case "pruned":
+      return `Discarded in step ${stepIndex}`;
+    case "evaluating":
+      return `Evaluating step ${stepIndex}`;
+    case "running":
+      return `Running step ${stepIndex}`;
+    case "failed":
+      return `Failed step ${stepIndex}`;
+    default:
+      return TRIAL_STATUS_LABELS[status];
+  }
+};
+
+export type TrialCardRow = { label: string; value: string };
+
+export type TrialCardModel = {
+  /** Header title, e.g. "Trial #20". */
+  title: string;
+  /** Header status label, e.g. "Passed step 1" or "Best trial". */
+  statusLabel: string;
+  /** Fill colour of the header status dot. */
+  dotColor: string;
+  /** Ring colour around the dot for the best trial; undefined otherwise. */
+  dotRingColor?: string;
+  /** Metric rows (Score/Pass rate, then Latency and Runtime cost when present). */
+  rows: TrialCardRow[];
+};
+
+/**
+ * Builds the view model for a trial card (see {@link ./TrialCard}) from a
+ * candidate + its computed status. Keeps all the label/colour/metric derivation
+ * out of the component so it renders straight from this model and can be
+ * unit-tested without the DOM.
+ *
+ * The score row shows a percentage; test-suite runs relabel it "Pass rate" and
+ * append the passed/total fraction. Latency and cost rows are omitted when the
+ * candidate has no value for them.
+ */
+export const buildTrialCardModel = ({
+  candidate,
+  status,
+  stepIndex,
+  isTestSuite,
+  isBest,
+}: {
+  candidate: AggregatedCandidate;
+  status: TrialStatus;
+  stepIndex: number;
+  isTestSuite?: boolean;
+  isBest?: boolean;
+}): TrialCardModel => {
+  const percentage = isNumber(candidate.score)
+    ? formatAsPercentage(candidate.score)
+    : "-";
+  const fraction =
+    isTestSuite && isNumber(candidate.score) && candidate.totalCount > 0
+      ? ` (${candidate.passedCount}/${candidate.totalCount})`
+      : "";
+
+  const rows: TrialCardRow[] = [
+    {
+      label: isTestSuite ? "Pass rate" : "Score",
+      value: `${percentage}${fraction}`,
+    },
+  ];
+  if (candidate.latencyP50 != null) {
+    rows.push({
+      label: "Latency",
+      value: formatAsDuration(candidate.latencyP50),
+    });
+  }
+  if (candidate.runtimeCost != null) {
+    rows.push({
+      label: "Runtime cost",
+      value: formatAsCurrency(candidate.runtimeCost),
+    });
+  }
+
+  return {
+    title: `Trial #${candidate.trialNumber}`,
+    statusLabel: isBest ? "Best trial" : getTrialStatusLabel(status, stepIndex),
+    dotColor: isBest ? TRIAL_BEST_COLOR : TRIAL_STATUS_COLORS[status],
+    dotRingColor: isBest ? TRIAL_BEST_RING_COLOR : undefined,
+    rows,
+  };
 };
 
 export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
@@ -47,6 +198,7 @@ export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
   "evaluating",
   "pruned",
   "running",
+  "failed",
 ] as const;
 
 export type CandidateDataPoint = {
@@ -176,10 +328,14 @@ const buildAncestorSet = (
  *
  * During optimization: baseline → running → evaluating → passed/pruned
  * After completion: baseline, passed (has descendants or best), pruned (rest)
- * Non-test-suite: all scored = passed (no pruning)
+ * Applies to both test-suite and dataset runs so discarded trials render as the
+ * faded "pruned" dots (matching the legend).
  */
 export const computeCandidateStatuses = (
   candidates: AggregatedCandidate[],
+  // Status no longer depends on the run type — pruning applies to dataset runs
+  // too — but the arg is kept so existing call sites stay unchanged.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isTestSuite = true,
   isInProgress = false,
   inProgressInfo?: InProgressInfo,
@@ -195,10 +351,11 @@ export const computeCandidateStatuses = (
   for (const c of candidates) {
     if (c.stepIndex === 0) {
       statusMap.set(c.candidateId, "baseline");
-    } else if (!isTestSuite) {
-      statusMap.set(c.candidateId, c.score == null ? "running" : "passed");
     } else if (c.score == null) {
-      statusMap.set(c.candidateId, "running");
+      // An unscored trial is "running" only while the run is still active. Once
+      // the run is terminal an unscored trial never will be scored — the metric
+      // failed on it — so it is "failed", not perpetually "running" (OPIK-7029).
+      statusMap.set(c.candidateId, isInProgress ? "running" : "failed");
     } else if (isInProgress) {
       statusMap.set(c.candidateId, computeInProgressStatus(c, lookups));
     } else {
@@ -245,35 +402,93 @@ export const buildCandidateChartData = (
     }));
 };
 
+/** Statuses the trend line may pass through — the winning progression. */
+const TREND_LINE_STATUSES: ReadonlySet<TrialStatus> = new Set([
+  "baseline",
+  "passed",
+]);
+
 /**
- * Build parent-child edges from chart data.
+ * Edges of the trend line: ONE continuous path connecting the best-scoring
+ * baseline/passed trial of each step — baseline → step 1 winner → … .
+ * Everything else (discarded, still-evaluating, non-winning passed
+ * trials) renders as loose dots off the line, so the line never forks even
+ * when a step has several passed trials. Steps without a scored winner are
+ * skipped — the line bridges straight to the next step that has one.
  */
-export const buildParentChildEdges = (
+export const buildTrendLineEdges = (
   data: CandidateDataPoint[],
 ): ParentChildEdge[] => {
-  const candidateIds = new Set(data.map((d) => d.candidateId));
-  const edges: ParentChildEdge[] = [];
-
+  const bestPerStep = new Map<number, CandidateDataPoint>();
   for (const point of data) {
-    for (const parentId of point.parentCandidateIds) {
-      if (candidateIds.has(parentId)) {
-        edges.push({
-          parentCandidateId: parentId,
-          childCandidateId: point.candidateId,
-        });
-      }
+    if (!TREND_LINE_STATUSES.has(point.status) || point.value == null) {
+      continue;
+    }
+    const current = bestPerStep.get(point.stepIndex);
+    if (!current || point.value > current.value!) {
+      bestPerStep.set(point.stepIndex, point);
     }
   }
 
-  return edges;
+  const path = Array.from(bestPerStep.entries())
+    .sort(([stepA], [stepB]) => stepA - stepB)
+    .map(([, point]) => point);
+
+  return path.slice(1).map((point, index) => ({
+    parentCandidateId: path[index].candidateId,
+    childCandidateId: point.candidateId,
+  }));
 };
 
 /**
- * Get unique step indices from candidates, sorted.
+ * Unique step indices, sorted ascending. Accepts anything carrying a
+ * `stepIndex` — both `AggregatedCandidate[]` and chart `CandidateDataPoint[]`.
  */
-export const getUniqueSteps = (candidates: AggregatedCandidate[]): number[] => {
-  const steps = new Set(candidates.map((c) => c.stepIndex));
+export const getUniqueSteps = (items: { stepIndex: number }[]): number[] => {
+  const steps = new Set(items.map((item) => item.stepIndex));
   return Array.from(steps).sort((a, b) => a - b);
+};
+
+export type DotHit = { candidateId: string; cx: number; cy: number };
+
+/**
+ * Nearest dot to (x, y) within `maxDistance` px, or null when none is close
+ * enough. Powers the chart's single hover/click handler instead of overlapping
+ * per-dot hit areas: proximity is unambiguous, so clustered dots can't fight
+ * over the pointer. Ties resolve to the last match in iteration order, i.e. the
+ * dot drawn on top.
+ */
+export const findNearestDot = (
+  positions: Iterable<[string, { cx: number; cy: number }]>,
+  x: number,
+  y: number,
+  maxDistance: number,
+): DotHit | null => {
+  let nearest: DotHit | null = null;
+  let nearestDistSq = maxDistance * maxDistance;
+  for (const [candidateId, pos] of positions) {
+    const dx = pos.cx - x;
+    const dy = pos.cy - y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq <= nearestDistSq) {
+      nearestDistSq = distSq;
+      nearest = { candidateId, cx: pos.cx, cy: pos.cy };
+    }
+  }
+  return nearest;
+};
+
+/** A dot position on the chart, in pixel space. */
+export type ChartPoint = { cx: number; cy: number };
+
+/**
+ * SVG path for a connector between two dots: a cubic bezier with horizontal
+ * control points, giving the smooth S-curve used for both the solid parent→child
+ * edges and the dashed ghost edges.
+ */
+export const buildEdgePath = (from: ChartPoint, to: ChartPoint): string => {
+  const midX = (from.cx + to.cx) / 2;
+  return `M ${from.cx},${from.cy} C ${midX},${from.cy} ${midX},${to.cy} ${to.cx},${to.cy}`;
 };
 
 const MAIN_OBJECTIVE_COLOR = "var(--color-blue)";

@@ -69,6 +69,30 @@ export interface PythonSdkClient {
       score_value: number;
     }>;
   }>;
+  compareSeed(args: {
+    project_name: string;
+    dataset_name: string;
+    items: Array<{ input: string; expected_output: string }>;
+    experiments: Array<{ experiment_name: string; task_outputs: string[] }>;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    dataset_id: string;
+    dataset_name: string;
+    item_count: number;
+    experiments: Array<{
+      experiment_id: string;
+      experiment_name: string;
+      scores: Array<{
+        dataset_item_id: string;
+        input: string;
+        expected_output: string;
+        task_output: string;
+        score_name: string;
+        score_value: number;
+      }>;
+    }>;
+  }>;
   createTextPrompt(args: {
     name: string;
     prompt: string;
@@ -122,6 +146,13 @@ export interface PythonSdkClient {
     items_failed: number;
     items_total: number;
   }>;
+  createAnnotationQueue(args: {
+    project_name: string;
+    name: string;
+    trace_ids: string[];
+    feedback_definition_names?: string[];
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -226,6 +257,25 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     async createDataset(args) {
       return request<{ id: string; name: string }>('POST', '/datasets', args);
     },
+    async compareSeed(args) {
+      return request<{
+        dataset_id: string;
+        dataset_name: string;
+        item_count: number;
+        experiments: Array<{
+          experiment_id: string;
+          experiment_name: string;
+          scores: Array<{
+            dataset_item_id: string;
+            input: string;
+            expected_output: string;
+            task_output: string;
+            score_name: string;
+            score_value: number;
+          }>;
+        }>;
+      }>('POST', '/experiments/compare-seed', args);
+    },
     async createTextPrompt(args) {
       return request<{ id: string; name: string }>('POST', '/prompts/text', args);
     },
@@ -268,6 +318,9 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         items_failed: number;
         items_total: number;
       }>('POST', '/test-suites/run', args);
+    },
+    async createAnnotationQueue(args) {
+      return request<{ id: string; name: string }>('POST', '/annotation-queues', args);
     },
   };
 }

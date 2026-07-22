@@ -69,6 +69,12 @@ OLLIE_CONSOLE_PORT="${OLLIE_CONSOLE_PORT:-3333}"
 # unique across worktrees. cost-api's own standalone default is still 8000.
 AI_COST_BACKEND_PORT="${AI_COST_BACKEND_PORT:-$((8400 + PORT_OFFSET))}"
 
+# Comet EM stack (comet-backend + comet-react + single-origin proxy).
+# All EM logic lives in dev-runner-platform.sh to keep this script focused; it is inert
+# unless PLATFORM_ENABLED=true. Sourced here so its EM_* vars and em_* functions
+# are in scope for the thin hooks below (start_platform_stack, platform_print_status, …).
+source "$SCRIPT_DIR/dev-runner-platform.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -151,7 +157,7 @@ find_jar_files() {
     while IFS= read -r -d '' jar; do
         jar_files+=("$jar")
     done < <(find target -maxdepth 1 -type f -name 'opik-backend-*.jar' ! -name '*original*' ! -name '*sources*' ! -name '*javadoc*' -print0)
-    
+
     if [ "${#jar_files[@]}" -eq 0 ]; then
         return 1  # No JAR files found
     elif [ "${#jar_files[@]}" -eq 1 ]; then
@@ -162,13 +168,13 @@ find_jar_files() {
         for jar in "${jar_files[@]}"; do
             log_warning "  - $jar"
         done
-        
+
         # Sort JAR files by version (assuming semantic versioning in filename)
         JAR_FILE=$(printf '%s\n' "${jar_files[@]}" | sort -V | tail -n 1)
         log_warning "Automatically selected JAR with highest version: $JAR_FILE"
         log_warning "To use a different JAR, clean up target/ directory and rebuild"
     fi
-    
+
     return 0  # JAR file found and selected
 }
 
@@ -176,10 +182,10 @@ find_jar_files() {
 # Args: $1 = mode (--infra or --local-be or etc.)
 start_docker_services() {
     local mode="$1"
-    
+
     log_info "Starting Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
-    
+
     if ./opik.sh "$mode"; then
         log_success "Docker services started successfully"
     else
@@ -192,10 +198,10 @@ start_docker_services() {
 # Args: $1 = mode (--infra or --local-be or etc.)
 stop_docker_services() {
     local mode="$1"
-    
+
     log_info "Stopping Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
-    
+
     if ./opik.sh "$mode" --stop; then
         log_success "Docker services stopped"
     else
@@ -207,7 +213,7 @@ stop_docker_services() {
 # Args: $1 = mode (--infra or --local-be or etc.)
 verify_docker_services() {
     local mode="$1"
-    
+
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
     ./opik.sh "$mode" --verify >/dev/null 2>&1
     return $?
@@ -736,11 +742,18 @@ start_cost_api_local() {
 
     # Reuse a healthy cost-api started outside this dev-runner. Avoids a port
     # conflict and lets devs share one instance across opik worktrees.
+    # Skip reuse in EM mode: /cost-api/ping is a bare liveness probe and can't
+    # tell whether the running instance has AUTH_ENABLED=true, so a reused
+    # OSS-mode instance would fail org-scoped /ai-spend/* requests. Start our own.
     if cost_api_healthy; then
-        log_success "cost-api is already healthy on port ${AI_COST_BACKEND_PORT} — reusing existing instance"
-        # Clear stale state so a later --stop won't kill the reused instance.
-        rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
-        return 0
+        if platform_stack_enabled; then
+            log_warning "cost-api already healthy on port ${AI_COST_BACKEND_PORT}, but EM mode needs AUTH_ENABLED=true — not reusing it (start our own; will warn if the port is taken)"
+        else
+            log_success "cost-api is already healthy on port ${AI_COST_BACKEND_PORT} — reusing existing instance"
+            # Clear stale state so a later --stop won't kill the reused instance.
+            rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
+            return 0
+        fi
     fi
 
     if [ -f "$COST_API_PID_FILE" ]; then
@@ -754,15 +767,25 @@ start_cost_api_local() {
         rm -f "$COST_API_PID_FILE"
     fi
 
-    # No Platform locally, so disable auth (pins to the default workspace). Point at
-    # the dev-runner's own ClickHouse + MySQL (host-published ports, opik/opik).
+    # Point cost-api at the dev-runner's ClickHouse + MySQL (host-published
+    # ports, opik/opik). In platform (EM) mode, cost-api targets local comet-backend
+    # (the React service on PLATFORM_BACKEND_PORT) and delegates auth to it (cookie /
+    # API-key), so org-scoped endpoints resolve the real org. In OSS mode there is
+    # no platform to delegate to, so keep auth off and pin to the default workspace.
+    local cost_api_auth="false"
+    if platform_stack_enabled; then
+        export PLATFORM_BASE_URL="http://localhost:${PLATFORM_BACKEND_PORT}"
+        cost_api_auth="true"
+    fi
     (
         cd "$AI_COST_BACKEND_PATH" || exit 1
-        AUTH_ENABLED=false \
+        AUTH_ENABLED="$cost_api_auth" \
         CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT="$CLICKHOUSE_HTTP_PORT" \
         CLICKHOUSE_DATABASE=opik CLICKHOUSE_USER=opik CLICKHOUSE_PASSWORD=opik \
-        MYSQL_HOST=localhost MYSQL_PORT="$MYSQL_PORT" \
-        MYSQL_DATABASE=opik MYSQL_USER=opik MYSQL_PASSWORD=opik \
+        OPIK_DB_HOST=localhost OPIK_DB_PORT="$MYSQL_PORT" \
+        OPIK_DB_NAME=opik OPIK_DB_USERNAME=opik OPIK_DB_PASSWORD=opik \
+        AI_COST_DB_HOST=localhost AI_COST_DB_PORT="$MYSQL_PORT" \
+        AI_COST_DB_NAME=opik AI_COST_DB_USERNAME=opik AI_COST_DB_PASSWORD=opik \
         PORT="$AI_COST_BACKEND_PORT" \
         nohup uv run uvicorn cost_api.main:app --host 0.0.0.0 --port "$AI_COST_BACKEND_PORT" \
             > "$COST_API_LOG_FILE" 2>&1 &
@@ -941,8 +964,9 @@ start_backend() {
 }
 
 # Symlink the sibling private ai-spend plugin's source into the FE plugins
-# folder (gitignored) so it compiles as part of opik. Removes the link when no
-# sibling is present, so toggling the checkout is clean.
+# folder (gitignored) so it compiles as part of opik. Links whenever a sibling
+# checkout is present; removes the link when it is not, so toggling the checkout
+# is clean.
 sync_ai_spend_plugin_link() {
     if [ -n "${AI_SPEND_PLUGIN_PATH:-}" ] && [ -d "${AI_SPEND_PLUGIN_PATH}/src" ]; then
         ln -sfn "${AI_SPEND_PLUGIN_PATH}/src" "$AI_SPEND_PLUGIN_LINK"
@@ -1008,8 +1032,10 @@ start_frontend() {
         log_warning "OLLIE_REPO_PATH is set but ollie healthz is not responding; sidebar disabled"
     fi
 
-    # Link the private ai-spend plugin (if checked out) and activate it
-    # alongside the local development plugin.
+    # Link + activate the private ai-spend plugin whenever a sibling checkout is
+    # present (sync_ai_spend_plugin_link only creates the link then). This sets
+    # the OSS-mode plugin list; comet mode overrides it in
+    # platform_prepare_opik_comet_env below (same present-link condition).
     sync_ai_spend_plugin_link
     if [ -L "$AI_SPEND_PLUGIN_LINK" ]; then
         export VITE_FE_PLUGINS="development,ai-spend"
@@ -1026,10 +1052,12 @@ start_frontend() {
         log_info "  VITE_AI_COST_BACKEND_PORT=$VITE_AI_COST_BACKEND_PORT"
     fi
 
+    # Opik FE runs in comet mode when the platform stack is enabled; see
+    # platform_prepare_opik_comet_env / platform_opik_vite_args in dev-runner-platform.sh
+    # (platform_opik_vite_args is empty when the platform stack is off).
     log_debug "Starting frontend with: npm run start"
-
-    # Start frontend in background with interactive mode disabled
-    CI=true nohup npm run start > "$FRONTEND_LOG_FILE" 2>&1 &
+    platform_prepare_opik_comet_env
+    CI=true nohup npm run start $(platform_opik_vite_args) > "$FRONTEND_LOG_FILE" 2>&1 &
     FRONTEND_PID=$!
     echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"
 
@@ -1063,7 +1091,7 @@ stop_backend() {
                 fi
                 sleep 1
             done
-            
+
             # Force kill if still running
             if kill -0 "$BACKEND_PID" 2>/dev/null; then
                 log_warning "Force killing backend..."
@@ -1097,7 +1125,7 @@ stop_frontend() {
                 fi
                 sleep 1
             done
-            
+
             # Force kill if still running (kill main process and find children)
             if kill -0 "$FRONTEND_PID" 2>/dev/null; then
                 log_warning "Force killing frontend..."
@@ -1125,13 +1153,13 @@ stop_frontend() {
     # Clean up any orphaned processes by looking for processes with our frontend directory path
     # This is safe and compatible across Unix systems
     ORPHANED_PIDS=$(pgrep -f "$FRONTEND_DIR" 2>/dev/null || true)
-    
+
     if [ -n "$ORPHANED_PIDS" ]; then
         for PID in $ORPHANED_PIDS; do
             if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
                 # Get process info to verify it's actually our frontend process
                 PROCESS_INFO=$(ps -p "$PID" -o comm,args --no-headers 2>/dev/null || true)
-                
+
                 # Only kill if it's an npm/node/vite process AND contains our directory path
                 if [[ "$PROCESS_INFO" =~ (npm|node|vite) ]] && [[ "$PROCESS_INFO" =~ $FRONTEND_DIR ]]; then
                     log_warning "Cleaning up orphaned process: PID $PID - $PROCESS_INFO"
@@ -1224,7 +1252,7 @@ show_access_information() {
 
 create_demo_data() {
     local mode="$1"
-    
+
     log_info "Creating demo data..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
 
@@ -1277,6 +1305,7 @@ verify_services() {
     if cost_api_enabled || [ -f "$COST_API_PID_FILE" ]; then
         display_cost_api_process_status || true
     fi
+    platform_print_status
 
     # Show access information if all services are running
     if [ "$docker_services_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
@@ -1293,6 +1322,7 @@ verify_services() {
     if cost_api_enabled || [ -f "$COST_API_LOG_FILE" ]; then
         echo "  cost-api Process: tail -f $COST_API_LOG_FILE"
     fi
+    platform_print_logs
 }
 
 # Function to verify BE-only services
@@ -1340,6 +1370,9 @@ start_services() {
     log_info "Step 2/6: Running DB migrations..."
     run_db_migrations
     log_info "Step 3/6: Starting backend process..."
+    # Platform auth for the Opik backend — full FE+BE flows only (BE-only can't host
+    # the EM stack). Set before start_backend so its JVM inherits it. See dev-runner-platform.sh.
+    platform_prepare_opik_backend_auth_env
     start_backend
     log_info "Step 4/6: Starting ollie-assist (optional)..."
     start_ollie_local || log_warning "ollie-assist startup failed; continuing without sidebar"
@@ -1347,6 +1380,8 @@ start_services() {
     start_frontend
     log_info "Step 6/6: Creating demo data..."
     create_demo_data "--local-be-fe"
+    # Comet EM stack (comet-backend + comet-react), gated on PLATFORM_ENABLED.
+    start_platform_stack
     log_success "=== Start Complete ==="
     verify_services
 }
@@ -1356,6 +1391,8 @@ stop_services() {
     log_info "=== Stopping Opik Development Environment ==="
     log_info "Step 1/4: Stopping frontend..."
     stop_frontend
+    # Comet EM stack first — it depends on Opik's infra (MySQL/Redis/MinIO).
+    stop_platform_stack
     log_info "Step 2/4: Stopping ollie-assist (if running)..."
     stop_ollie_local
     stop_cost_api_local
@@ -1383,6 +1420,8 @@ restart_services() {
     log_info "=== Restarting Opik Development Environment (Worktree: ${WORKTREE_ID}) ==="
     log_info "Step 1/12: Stopping frontend process..."
     stop_frontend
+    # Comet EM stack first — it depends on Opik's infra (MySQL/Redis/MinIO).
+    stop_platform_stack
     log_info "Step 2/12: Stopping ollie-assist (if running)..."
     stop_ollie_local
     stop_cost_api_local
@@ -1396,9 +1435,11 @@ restart_services() {
     build_backend
     log_info "Step 7/12: Building frontend..."
     build_frontend
+    platform_restart_build
     log_info "Step 8/12: Running DB migrations..."
     run_db_migrations
     log_info "Step 9/12: Starting backend process..."
+    platform_prepare_opik_backend_auth_env
     start_backend
     log_info "Step 10/12: Starting ollie-assist (optional)..."
     start_ollie_local || log_warning "ollie-assist startup failed; continuing without sidebar"
@@ -1406,6 +1447,8 @@ restart_services() {
     start_frontend
     log_info "Step 12/12: Creating demo data..."
     create_demo_data "--local-be-fe"
+    # Comet EM stack (comet-backend + comet-react), gated on PLATFORM_ENABLED.
+    start_platform_stack
     log_success "=== Restart Complete ==="
     verify_services
 }
@@ -1413,7 +1456,7 @@ restart_services() {
 # Function for quick restart (only rebuild backend, keep infrastructure running)
 quick_restart_services() {
     log_info "=== Quick Restart (Backend Only) ==="
-    
+
     # Check if infrastructure is running, start it if not
     log_info "Step 1/7: Checking Docker infrastructure..."
     if verify_local_be_fe; then
@@ -1424,7 +1467,7 @@ quick_restart_services() {
         log_info "Running DB migrations..."
         run_db_migrations
     fi
-    
+
     log_info "Step 2/8: Stopping frontend..."
     stop_frontend
     log_info "Step 3/8: Stopping backend..."
@@ -1432,6 +1475,7 @@ quick_restart_services() {
     log_info "Step 4/8: Building backend..."
     build_backend
     log_info "Step 5/8: Starting backend..."
+    platform_prepare_opik_backend_auth_env
     start_backend
 
     log_info "Step 6/8: Ensuring ollie-assist is running (optional)..."
@@ -1448,9 +1492,9 @@ quick_restart_services() {
     local package_json="$FRONTEND_DIR/package.json"
     local package_lock="$FRONTEND_DIR/package-lock.json"
     local node_modules="$FRONTEND_DIR/node_modules"
-    
+
     local needs_install=false
-    
+
     if [ ! -d "$node_modules" ]; then
         log_info "node_modules not found, will install dependencies"
         needs_install=true
@@ -1463,13 +1507,16 @@ quick_restart_services() {
     else
         log_info "Frontend dependencies are up to date, skipping npm install"
     fi
-    
+
     if [ "$needs_install" = true ]; then
         build_frontend
     fi
 
     log_info "Step 8/8: Starting frontend..."
     start_frontend
+    # Ensure the Comet EM stack is up (gated). Builds the jar only if missing;
+    # use --restart or --platform-build to force a comet-backend rebuild.
+    start_platform_stack
     log_success "=== Quick Restart Complete ==="
     verify_services
 }
@@ -1547,10 +1594,14 @@ show_usage() {
     echo "Other options:"
     echo "  --build-be       - Build backend"
     echo "  --build-fe       - Build frontend"
+    echo "  --platform-build - Build the Comet EM stack (comet-backend jar + comet-react deps)"
     echo "  --migrate        - Run database migrations"
     echo "  --lint-be        - Lint backend code"
     echo "  --lint-fe        - Lint frontend code"
     echo "  --debug          - Enable debug mode (meant to be combined with other flags)"
+    echo "  --platform-enabled - Opik-team only: also run the Comet Platform stack (combine"
+    echo "                     with an action, e.g. '--platform-enabled --restart'; alone it"
+    echo "                     implies the default restart). Same as PLATFORM_ENABLED=true."
     echo "  --logs           - Show logs for backend and frontend services"
     echo "  --help           - Show this help message"
     echo ""
@@ -1574,6 +1625,11 @@ show_usage() {
     echo "                          cost-api (uv, auth disabled) against the dev ClickHouse+MySQL"
     echo "                          and serves the AI Spend pages. Opt out: AI_COST_BACKEND_PATH="
     echo "  AI_COST_BACKEND_PORT=<n> - Override cost-api port (default: 8400 + worktree offset)"
+    echo "  AI_SPEND_PLUGIN_PATH=<p> - Opik-team only: path to a local opik-plugin-ai-spend"
+    echo "                          checkout. Auto-detected as a sibling; when present the"
+    echo "                          ai-spend FE plugin (Cost Intelligence pages) is compiled"
+    echo "                          in. Opt out with AI_SPEND_PLUGIN_PATH= (empty string)."
+    platform_print_usage
 }
 
 # Function to handle unknown options
@@ -1642,6 +1698,11 @@ check_port_collisions() {
         ports_to_check+=("$AI_COST_BACKEND_PORT:cost-api")
     fi
 
+    # EM stack ports (empty unless PLATFORM_ENABLED); see platform_collision_ports.
+    while IFS= read -r _em_port; do
+        [ -n "$_em_port" ] && ports_to_check+=("$_em_port")
+    done < <(platform_collision_ports)
+
     log_info "Checking for port collisions..."
 
     for port_info in "${ports_to_check[@]}"; do
@@ -1681,6 +1742,13 @@ while [[ $# -gt 0 ]]; do
       DEBUG_MODE=true
       shift # Remove --debug from arguments
       ;;
+    --platform-enabled|--platform_enabled)
+      # Modifier flag (like --debug): opt into the Comet Platform stack, then
+      # fall through to whatever action follows (default: restart). Equivalent to
+      # the PLATFORM_ENABLED=true env var; platform_stack_enabled reads this at runtime.
+      PLATFORM_ENABLED=true
+      shift
+      ;;
     *)
       ARGS+=("$1") # Keep other arguments
       shift
@@ -1707,6 +1775,9 @@ case "${1:-}" in
         ;;
     "--build-fe")
         build_frontend
+        ;;
+    "--platform-build")
+        platform_build || exit 1
         ;;
     "--migrate")
         migrate_services

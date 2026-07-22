@@ -26,6 +26,7 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -50,6 +51,7 @@ import org.apache.http.HttpStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -92,6 +94,8 @@ public interface TraceService {
 
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
+    Mono<Boolean> existsByProjectId(TraceSearchCriteria criteria, boolean threadScoped);
+
     Mono<Boolean> validateTraceWorkspace(String workspaceId, Set<UUID> traceIds);
 
     Mono<TraceCountResponse> countTracesPerWorkspace();
@@ -122,6 +126,7 @@ class TraceServiceImpl implements TraceService {
     public static final String TRACE_KEY = "Trace";
 
     private final @NonNull TraceDAO dao;
+    private final @NonNull DeletionEventDAO deletionEventDAO;
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
@@ -131,6 +136,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
+    private final @NonNull @Config OpikConfiguration config;
 
     @Override
     @WithSpan
@@ -333,7 +339,8 @@ class TraceServiceImpl implements TraceService {
                                                 ctx.get(RequestContext.WORKSPACE_ID),
                                                 ctx.get(RequestContext.USER_NAME),
                                                 traceUpdate,
-                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""))))
+                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""),
+                                                Map.of(id, project.id()))))
                                         .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
                                                 Map.of(id, project.id()), traceUpdate,
                                                 ctx.get(RequestContext.WORKSPACE_ID),
@@ -359,7 +366,7 @@ class TraceServiceImpl implements TraceService {
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName, batchUpdate.update(), workspaceName));
+                                            userName, batchUpdate.update(), workspaceName, traceToProjectMap));
                                     eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
                                             batchUpdate.update(), workspaceId, userName));
                                 });
@@ -471,27 +478,92 @@ class TraceServiceImpl implements TraceService {
     public Mono<Void> delete(@NonNull Set<UUID> ids, UUID projectId) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
         log.info("Deleting traces, count '{}'", ids.size());
-        return template.nonTransaction(connection -> delete(ids, projectId, connection));
+
+        if (projectId != null) {
+            return template.nonTransaction(connection -> delete(ids, projectId, connection));
+        }
+
+        // No project provided (e.g. delete-by-id, or a batch spanning projects): resolve each trace's owning
+        // project and delete per project group, so every delete - and its async span/feedback cascade carried
+        // by the TracesDeleted event - filters by project_id and prunes on the (workspace_id, project_id)
+        // sorting-key prefix instead of scanning the whole workspace. Trace ids with no resolvable project
+        // (the trace row is already gone) fall back to a workspace-scoped delete to still clean up orphan rows.
+        log.info("Resolving owning projects for trace ids to delete per project group (count={})", ids.size());
+        return dao.getProjectIdsByTraceIdsBounded(ids)
+                .flatMap(traceToProject -> {
+                    var idsByProject = ids.stream()
+                            .filter(traceToProject::containsKey)
+                            .collect(Collectors.groupingBy(traceToProject::get, Collectors.toSet()));
+                    var unresolvedIds = ids.stream()
+                            .filter(id -> !traceToProject.containsKey(id))
+                            .collect(Collectors.toSet());
+
+                    return template.nonTransaction(connection -> Flux.fromIterable(idsByProject.entrySet())
+                            .concatMap(group -> delete(group.getValue(), group.getKey(), connection))
+                            .then(Mono.defer(() -> unresolvedIds.isEmpty()
+                                    ? Mono.empty()
+                                    : delete(unresolvedIds, null, connection)))
+                            .then());
+                });
     }
 
     private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
-        return Mono.deferContextual(
-                ctx -> Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
-                        .flatMap(batch -> dao.delete(Set.copyOf(batch), projectId, connection)
-                                .doOnSuccess(__ -> {
-                                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                                    String userName = ctx.get(RequestContext.USER_NAME);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
+                    .flatMap(batch -> {
+                        var batchIds = Set.copyOf(batch);
+                        return dao.delete(batchIds, projectId, connection)
+                                .doOnSuccess(_ -> {
                                     eventBus.post(TracesDeleted.builder()
-                                            .traceIds(Set.copyOf(batch))
+                                            .traceIds(batchIds)
                                             .projectId(projectId)
                                             .workspaceId(workspaceId)
                                             .userName(userName)
                                             .build());
                                     log.info(
                                             "Published TracesDeleted event for trace ids count '{}' for project_id '{}' on workspace '{}'",
-                                            batch.size(), projectId, workspaceId);
-                                }))
-                        .then());
+                                            batchIds.size(), projectId, workspaceId);
+                                })
+                                .then(captureDeletions(batchIds, projectId, workspaceId, userName));
+                    })
+                    .then();
+        });
+    }
+
+    /**
+     * Records the deleted ids in the deletion-events bridge so deletes issued while the table is being migrated
+     * survive the copy. Runs after the delete and is best-effort: capture is auxiliary and must never disrupt
+     * the delete, so failures are logged and swallowed. Running after the delete also avoids recording a delete
+     * that did not happen. No-op unless capture is enabled. Deferred so that nothing is built or run until
+     * subscribed, i.e. only after the delete succeeds.
+     */
+    private Mono<Void> captureDeletions(Set<UUID> ids, UUID projectId, String workspaceId, String userName) {
+        return Mono.defer(() -> {
+            if (!config.getDatabaseAnalyticsDataModel().traceDeletionEventsCaptureEnabled()) {
+                return Mono.empty();
+            }
+            var events = ids.stream()
+                    .map(id -> DeletionEvent.builder()
+                            .sourceTable(SourceTable.TRACES)
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .deletedId(id.toString())
+                            .deletionReason(DeletionReason.USER_REQUEST)
+                            .build())
+                    .collect(Collectors.toUnmodifiableSet());
+            return deletionEventDAO.insert(events, userName)
+                    .doOnSuccess(_ -> log.info(
+                            "Captured trace deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
+                            ids.size(), projectId, workspaceId))
+                    .onErrorResume(throwable -> {
+                        log.warn(
+                                "Failed to capture trace deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
+                                ids.size(), projectId, workspaceId, throwable);
+                        return Mono.empty();
+                    });
+        });
     }
 
     @Override
@@ -515,6 +587,16 @@ class TraceServiceImpl implements TraceService {
                             return Mono.just(tracePage);
                         }))
                 .switchIfEmpty(Mono.just(TracePage.empty(page, traceSortingFactory.getSortableFields())));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Boolean> existsByProjectId(@NonNull TraceSearchCriteria criteria, boolean threadScoped) {
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(resolvedCriteria -> template
+                        .nonTransaction(
+                                connection -> dao.existsByProjectId(resolvedCriteria, threadScoped, connection)))
+                .switchIfEmpty(Mono.just(false));
     }
 
     @Override

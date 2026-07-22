@@ -45,7 +45,7 @@ navigation:
             path: ../docs-v2/faq.mdx
             slug: faq
             icon: fa-regular fa-question
-          - changelog: ../docs/changelog
+          - changelog: ../docs-v2/changelog
             title: Changelog
             slug: changelog
             icon: fa-regular fa-calendar
@@ -65,9 +65,12 @@ navigation:
           - page: Concepts
             path: ../docs-v2/tracing/concepts.mdx
             slug: concepts
-          - page: Debugging agents with Ollie and Opik Connect
+          - page: Debugging agents with Ollie
             path: ../docs-v2/observability/debug_agents.mdx
             slug: debug-agents
+          - page: Diagnostics
+            path: ../docs-v2/observability/diagnostics.mdx
+            slug: diagnostics
           - section: Advanced
             slug: /advanced
             contents:
@@ -779,9 +782,6 @@ navigation:
               - page: AISuite
                 path: ../docs-v2/integrations/aisuite.mdx
                 slug: aisuite
-              - page: Anannas AI
-                path: ../docs-v2/integrations/anannas.mdx
-                slug: anannas
               - page: Helicone
                 path: ../docs-v2/integrations/helicone.mdx
                 slug: helicone
@@ -852,6 +852,9 @@ navigation:
           - page: Flowise
             path: ../docs-v2/integrations/flowise.mdx
             slug: flowise
+          - page: Hermes
+            path: ../docs-v2/integrations/hermes.mdx
+            slug: hermes
           - page: Langflow
             path: ../docs-v2/integrations/langflow.mdx
             slug: langflow
@@ -990,6 +993,9 @@ navigation:
               - page: Experiments
                 path: ../docs-v2/reference/typescript-sdk/evaluation/experiments.mdx
                 slug: experiments
+              - page: Test Suites
+                path: ../docs-v2/reference/typescript-sdk/evaluation/test_suites.mdx
+                slug: test_suites
 
       - section: Rest API
         slug: rest-api

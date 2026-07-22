@@ -122,7 +122,10 @@ module.exports = {
         "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
         "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
 
-        "library-loaded": "hsl(var(--library-loaded))",
+        /* Recoverable-waste callout colors (AI Spend) */
+        "waste-bg": "var(--waste-bg)",
+        "waste-border": "var(--waste-border)",
+        "waste-text": "var(--waste-text)",
 
         /* Chart colors (Figma Design System) */
         "chart-blue": "var(--chart-blue)",
@@ -136,6 +139,14 @@ module.exports = {
         "chart-teal": "var(--chart-teal)",
         "chart-gray-light": "var(--chart-gray-light)",
         "chart-gray-dark": "var(--chart-gray-dark)",
+
+        /* Accent colors */
+        "accent-green": "var(--accent-green)",
+        "accent-blue": "var(--accent-blue)",
+        "accent-purple": "var(--accent-purple)",
+        "accent-magenta": "var(--accent-magenta)",
+        "accent-red": "var(--accent-red)",
+        "accent-indigo": "var(--accent-indigo)",
 
         /* Template icon colors */
         "template-icon-metrics": "var(--template-icon-metrics)",

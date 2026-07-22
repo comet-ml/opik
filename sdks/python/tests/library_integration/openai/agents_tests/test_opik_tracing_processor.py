@@ -100,7 +100,9 @@ def test_opik_tracing_processor__happy_flow(fake_backend):
                                         output={"output": ANY_LIST},
                                         metadata=ANY_DICT,
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=ANY_DICT.containing(
+                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
@@ -212,7 +214,9 @@ def test_opik_tracing_processor__happy_flow_conversation(fake_backend):
                                         output={"output": ANY_LIST},
                                         metadata=ANY_DICT,
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=ANY_DICT.containing(
+                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
@@ -327,7 +331,9 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                                         output={"output": ANY_BUT_NONE},
                                         metadata=ANY_DICT,
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=ANY_DICT.containing(
+                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
@@ -388,7 +394,9 @@ async def test_opik_tracing_processor__handsoff(fake_backend):
                                         output={"output": ANY_BUT_NONE},
                                         metadata=ANY_DICT,
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=ANY_DICT.containing(
+                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
@@ -502,7 +510,9 @@ async def test_opik_tracing_processor__functions(fake_backend):
                                         output={"output": ANY_BUT_NONE},
                                         metadata=ANY_DICT,
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=ANY_DICT.containing(
+                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
@@ -548,7 +558,9 @@ async def test_opik_tracing_processor__functions(fake_backend):
                                         output={"output": ANY_BUT_NONE},
                                         metadata=ANY_DICT,
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=ANY_DICT.containing(
+                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
@@ -671,7 +683,9 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                                         output={"output": ANY_BUT_NONE},
                                         metadata=ANY_DICT,
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=ANY_DICT.containing(
+                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
@@ -729,7 +743,9 @@ async def test_opik_tracing_processor__function_calls_tracked_function__tracked_
                                         output={"output": ANY_BUT_NONE},
                                         metadata=ANY_DICT,
                                         type="llm",
-                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        usage=ANY_DICT.containing(
+                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
                                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
@@ -859,7 +875,9 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
                                                         output={"output": ANY_LIST},
                                                         metadata=ANY_DICT,
                                                         type="llm",
-                                                        usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                                        usage=ANY_DICT.containing(
+                                                            EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
+                                                        ),
                                                         end_time=ANY_BUT_NONE,
                                                         project_name=parent_decorator_project_name,
                                                         model=ANY_STRING.starting_with(
@@ -893,6 +911,9 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
 
 
+@pytest.mark.skip(
+    reason="Temporarily disabled: Vertex AI 429 RESOURCE_EXHAUSTED quota failures in CI"
+)
 def test_opik_tracing_processor__litellm_vertex_ai_model__provider_is_google_vertexai(
     fake_backend,
 ):

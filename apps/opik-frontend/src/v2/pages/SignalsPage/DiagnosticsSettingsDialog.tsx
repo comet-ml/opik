@@ -11,6 +11,8 @@ import { Switch } from "@/ui/switch";
 import { Separator } from "@/ui/separator";
 import { AGENT_INSIGHTS_JOB_STATUS } from "@/types/signals";
 import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import usePluginsStore from "@/store/PluginsStore";
 
 type DiagnosticsSettingsDialogProps = {
   open: boolean;
@@ -27,12 +29,21 @@ const DiagnosticsSettingsDialog: React.FC<DiagnosticsSettingsDialogProps> = ({
 }) => {
   const [on, setOn] = useState(enabled);
   const updateMutation = useUpdateAgentInsightsJobMutation();
+  const BillingLink = usePluginsStore((state) => state.BillingLink);
 
   useEffect(() => {
     if (open) setOn(enabled);
   }, [open, enabled]);
 
   const handleSave = () => {
+    if (on !== enabled) {
+      trackEvent(
+        on
+          ? OpikEvent.DIAGNOSTICS_AUTO_ENABLED
+          : OpikEvent.DIAGNOSTICS_AUTO_DISABLED,
+        { project_id: projectId, source: "settings" },
+      );
+    }
     updateMutation.mutate(
       {
         projectId,
@@ -69,14 +80,7 @@ const DiagnosticsSettingsDialog: React.FC<DiagnosticsSettingsDialogProps> = ({
         <div className="flex flex-col gap-1 py-2">
           <span className="comet-body-s-accented text-foreground">Billing</span>
           <span className="comet-body-s text-muted-slate">
-            Runs on your Ollie tokens.{" "}
-            {/* TODO: wire to the Ollie/Comet billing page */}
-            <button
-              type="button"
-              className="text-foreground underline underline-offset-2 hover:text-primary"
-            >
-              View billing
-            </button>
+            Runs on your Ollie tokens. {BillingLink && <BillingLink />}
           </span>
         </div>
 

@@ -255,6 +255,27 @@ component:
       enabled: true
     podDisruptionBudget:
       enabled: false
+    # Init container that blocks startup until Redis is reachable. Rendered only
+    # when the RQ worker is enabled (RQ_WORKER_ENABLED unset or != "false") AND
+    # bundled Redis is deployed (redis.enabled: true). Skipped automatically for
+    # managed/external Redis (redis.enabled: false) — no StatefulSet boot race
+    # there, and the default host below would not resolve.
+    waitForRedis:
+      # Explicit opt-out for bundled-Redis installs. Has no effect when
+      # redis.enabled is false (the wait is already skipped in that case).
+      enabled: true
+      redis:
+        # Empty by default so the template falls back to redis.fullnameOverride
+        # (then "opik-redis-master"). Set explicitly to target a different host.
+        host: ""
+        port: 6379
+      image:
+        registry: docker.io
+        repository: busybox
+        tag: "1.36"
+      # Resource requests/limits for the `wait-for-redis-service` init container.
+      # Empty ({}) by default — no resources set.
+      resources: {}
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
@@ -292,8 +313,8 @@ component:
       # OPTSTUDIO_DATASET_SAMPLES: "1000"
       # Terminal width for Rich log output formatting (default: 80)
       # OPTSTUDIO_LOG_TERM_WIDTH: "150"
-      # Execution timeout for optimization jobs in seconds (default: 86400 = 24 hours)
-      # OPTSTUDIO_EXECUTION_TIMEOUT: "86400"
+      # Execution timeout for optimization jobs in seconds (default: 21600 = 6 hours)
+      # OPTSTUDIO_EXECUTION_TIMEOUT: "21600"
       # Log level for the opik-optimizer SDK (default: DEBUG)
       # OPIK_OPTIMIZER_LOG_LEVEL: "DEBUG"
       # TTL for optimization logs in Redis in seconds (default: 86400 = 24 hours)
@@ -443,6 +464,13 @@ component:
     maps: []
     # use internal aws resolvr on vpc
     awsResolver: false
+    # nginx -> opik-backend upstream keepalive connection recycling (OPIK-7327).
+    # Recycling re-spreads long-lived keepalive connections across backend pods; without it a
+    # few pods absorb ingestion while the rest idle and HPA (average CPU) never scales out.
+    # Tune low enough to rebalance under sustained load, but not so low that connection reuse
+    # races on non-idempotent POSTs (keep >= ~50; nginx's own default is 1000).
+    keepaliveRequests: 100    # max requests per upstream keepalive connection before recycle (count)
+    keepaliveTimeout: 60s     # idle timeout for upstream keepalive connections (duration, e.g. 30s/60s)
     # Enable HSTS header (only enable when running behind HTTPS termination)
     # DEPRECATED: Use extraServerHeaders instead for more flexibility
     hstsEnabled: false
@@ -656,8 +684,12 @@ altinity-clickhouse-operator:
 clickhouse:
   enabled: true
   shardsCount: 1
+  # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
+  # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
+  # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
+  # migrations from completing on a fresh cluster. See the self-host/scaling docs.
   replicasCount: 1
-  image: altinity/clickhouse-server:25.8.16.10002.altinitystable
+  image: altinity/clickhouse-server:26.3.16.10001.altinitystable
   storage: 50Gi
   logsLevel: information
   # Custom health checks with longer timeouts for major version upgrades
@@ -774,6 +806,44 @@ clickhouse:
   # via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in
   # `extraVolumeMounts` above.
   extraVolumes: []
+  # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
+  # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
+  # disks) and provisions a per-node EBS cache volume for the S3 cache. This is
+  # pure server-side infrastructure: it stays inert until a migration attaches
+  # the `tiered_replicated` policy to a table, so `enabled: false` (default) is
+  # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
+  # ({shard}/{replica}) cannot be used because the S3 disk is read at server
+  # start, before macros bind.
+  tieredStorage:
+    enabled: false
+    hot:
+      # keep_free_space_bytes on the hot disk (headroom before TTL MOVE to cold).
+      keepFreeSpaceBytes: "10737418240" # 10 GiB
+    cold:
+      s3:
+        # Base S3 URL for the cold disk, e.g. https://<bucket>.s3.<region>.amazonaws.com
+        endpoint: ""
+        # Per-replica bucket prefix. Rendered concretely by Helm (no CH macros).
+        prefix: "clickhouse-cold/"
+        region: ""
+        # Use the pod's IAM role (IRSA) instead of static keys.
+        useEnvironmentCredentials: true
+        # Keep false: the tiered_replicated policy writes parts to cold on TTL
+        # MOVE, so the disk must be writable. Set true only for a pre-populated /
+        # externally-managed bucket that ClickHouse should never write to.
+        readOnly: false
+        maxGetRps: 1000
+        maxPutRps: 500
+      cache:
+        # Read-through LRU cache wrapping cold_s3, on a local EBS volume.
+        # Must be a DNS label (<=63 chars, lowercase alphanumeric or '-', start
+        # with a letter) — used verbatim as the K8s volume / PVC name.
+        volumeName: s3-cache-vc-template
+        path: /var/cache/clickhouse_s3
+        storage: 200Gi
+        maxSize: "214748364800" # 200 GiB
+        # Falls back to clickhouse.storageClassName when empty.
+        storageClassName: ""
   adminUser:
     useSecret:
       enabled: false

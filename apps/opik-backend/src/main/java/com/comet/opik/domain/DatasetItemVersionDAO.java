@@ -788,6 +788,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(dataset_item_filters)>
                 AND eia.dataset_item_id IN (SELECT lookup_id FROM lookup_for_count)
                 <endif>
+                -- all duplicated rows share the same stable_dataset_item_id, so arbitrary pick is safe
+                LIMIT 1 BY eia.id
             )
             SELECT COUNT(DISTINCT di_id) AS count
             FROM (
@@ -994,7 +996,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ), trace_data AS (
                 SELECT
                     id,
-                    duration,
+                    if(isNaN(duration), NULL, duration) AS duration,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                     output as full_output,
@@ -1449,6 +1451,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         IN (SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
                     <endif>
                     <endif>
+                    -- all duplicated rows share the same stable_dataset_item_id, so arbitrary pick is safe
+                    LIMIT 1 BY eia.id
                 ) ei
                 LEFT JOIN dataset_items_aggr_resolved AS di ON di.id = ei.stable_dataset_item_id
                 GROUP BY

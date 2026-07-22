@@ -143,19 +143,40 @@ Opik.
 Additionally, there's another data ingestion limit of `5,000` events/minute per workspace and per
 user.
 
-Finally, there's a rate limit of `250` requests/minute per user for the `Get span by id` endpoint:
+There's a rate limit of `250` requests/minute per user for the `Get span by id` endpoint:
 `GET /api/v1/private/spans/:id`.
+
+Finally, the search and listing endpoints used to read/export traces and spans are limited to `30`
+requests/minute per workspace, each with its own bucket: `search_traces` and `search_spans` (used by
+the SDK `Opik.search_traces` / `Opik.search_spans` methods), and the paginated `GET /traces` and
+`GET /spans` endpoints. This is the limit you are most likely to hit when exporting data at scale;
+see [Exporting at scale](/tracing/advanced/export-data#exporting-at-scale) for how to stay within it.
 
 <Note>
 The Python SDK has implemented some logic to slow down the logging to avoid data loss when
 encountering rate limits. You will see the message: `OPIK: Ingestion rate limited, retrying in 55 seconds, remaining queue size: 1, ...`.
 
-If you are using other logging methods, you will need to implement your own "backoff and retry"
-strategy
+The SDK also automatically backs off and retries on the read/search endpoints, so the
+`Opik.search_traces`, `Opik.search_spans`, and `Opik.search_threads` methods respect these limits
+for you. If you are using other methods, you will need to implement your own "backoff and retry"
+strategy.
 
 </Note>
 
 For questions about rate limits, reach out to us on [Slack](https://chat.comet.com).
+
+### Is there a limit on how large a trace or span can be?
+
+Yes. Opik caps both the per-field size of `input`/`output` (recent SDKs truncate a larger
+`input`/`output` client-side, replacing it with a truncation marker and logging a warning) and the
+per-request payload size (oversized requests are rejected with `413`). `metadata` is not
+truncated and embedded base64 content (images, audio, video, PDFs, or JSON) is handled separately as
+an attachment.
+
+See [**Size limits**](/tracing/advanced/log_multimodal_traces#size-limits) for the exact numbers and
+the full behavior. If you need to keep large content - documents, full retrieval results, images, or
+audio - log it as an [attachment](/tracing/advanced/log_multimodal_traces) instead of inline. As a
+rule of thumb, log the top-K results, IDs, or a summary rather than an entire result set or corpus.
 
 ## Integrations
 
@@ -231,6 +252,22 @@ You can find your current configuration in the Opik configuration file (`~/.opik
 checking your environment variables (`OPIK_API_KEY`, `OPIK_WORKSPACE`, `OPIK_URL_OVERRIDE`,
 `OPIK_PROJECT_NAME`). For more details on configuration, see our
 [SDK Configuration guide](/tracing/advanced/sdk_configuration).
+
+### Why am I getting a 413 ("payload too large") error?
+
+Your request exceeded Opik's ingestion
+[size limit](/tracing/advanced/log_multimodal_traces#size-limits) - the per-request payload cap, or an
+oversized single document. This usually means a span or trace is logging a very large
+`input`/`output`, such as an entire retrieval result set or document inline. To fix it:
+
+- Log only what you need to observe - top-K results, IDs, or a summary - instead of full result sets
+  or documents.
+- Move large content to [attachments](/tracing/advanced/log_multimodal_traces#size-limits) instead
+  of inline `input`/`output`.
+- Upgrade to the latest Opik SDK, which truncates an oversized `input`/`output` field client-side
+  before sending so individual spans and traces stay within the per-field limit. This addresses
+  oversized single spans and traces; a very large batch (many or large spans/traces in one request)
+  can still be rejected, so reduce the payload or use attachments in that case.
 
 ## How can I diagnose issues with Opik?
 

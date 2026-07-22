@@ -64,6 +64,18 @@ def import_datasets_from_directory(
                     else None
                 )
 
+                # Dataset-level tags live at the top level (export_single_dataset)
+                # or nested under "dataset" (export_experiment_datasets). Check
+                # key presence rather than truthiness so an explicit empty list
+                # ([]) survives and can clear the destination's tags; only fall
+                # back to the nested field when the flat key is missing/null.
+                if dataset_data.get("tags") is not None:
+                    dataset_tags = dataset_data.get("tags")
+                elif dataset_data.get("dataset"):
+                    dataset_tags = dataset_data.get("dataset", {}).get("tags")
+                else:
+                    dataset_tags = None
+
                 # Check if name is missing or empty
                 if not dataset_name or (
                     isinstance(dataset_name, str) and not dataset_name.strip()
@@ -113,6 +125,35 @@ def import_datasets_from_directory(
                     if debug:
                         console.print(
                             f"[blue]Created new dataset: {dataset_name}[/blue]"
+                        )
+
+                # Apply dataset-level tags. create_dataset() doesn't expose a
+                # tags argument, so set them via the REST update endpoint after
+                # the dataset exists. An explicit empty list clears existing
+                # tags, so distinguish None (no tags field -> skip) from [].
+                if dataset_tags is not None:
+                    try:
+                        # description is silently nulled by the backend when
+                        # omitted from this PUT (unlike tags/visibility, it
+                        # isn't COALESCEd against the existing row), so it
+                        # must be re-passed here to avoid wiping it.
+                        existing = client.rest_client.datasets.get_dataset_by_id(
+                            dataset.id
+                        )
+                        client.rest_client.datasets.update_dataset(
+                            dataset.id,
+                            name=dataset_name,
+                            description=existing.description,
+                            visibility=existing.visibility,
+                            tags=dataset_tags,
+                        )
+                        if debug:
+                            console.print(
+                                f"[blue]Applied tags to dataset '{dataset_name}': {dataset_tags}[/blue]"
+                            )
+                    except Exception as tag_error:
+                        console.print(
+                            f"[yellow]Warning: Could not apply tags to dataset '{dataset_name}': {tag_error}[/yellow]"
                         )
 
                 # Import dataset items

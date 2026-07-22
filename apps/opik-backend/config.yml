@@ -85,7 +85,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1,optimize_skip_unused_shards=1,do_not_merge_across_partitions_select_final=1,distributed_product_mode=local}
   #  Default: unset (inherits the async_insert_busy_timeout_max_ms=250 carried by queryParameters above)
   #  Description: Optional override (ms) for async_insert_busy_timeout_max_ms in the custom_http_params chain of
   #   queryParameters above; only applied when that setting is already present there, otherwise it is not injected.
@@ -95,6 +95,48 @@ databaseAnalytics:
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
+  #  Default: false
+  #  Description: Gates the 'clickhouse-cluster' health check, which fails readiness when the Distributed cluster
+  #   definition ('cluster') isn't visible from the node. Leave false for single-shard / non-Distributed deployments;
+  #   turn true only for the Distributed (Hyperscale) topology.
+  clusterHealthCheckEnabled: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}
+  #  Default: false
+  #  Description: Gates the 'clickhouse-cold-storage-disk' health check, which fails readiness when the 'cold_s3'
+  #   tiered-storage disk isn't reachable from the node. Leave false for deployments without tier storage (OSS Docker);
+  #   turn true only once the S3 disk is activated.
+  coldStorageDiskHealthCheckEnabled: ${ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED:-false}
+
+# Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
+databaseAnalyticsDataModel:
+  #  Default: false
+  #  Description: Leave false while the traces table still has Nullable end_time/duration/ttft columns; trace writes
+  #   bind null for absent end_time/ttft. Set true once replaced with sentinel-defaulted
+  #   non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates reads too, so
+  #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
+  #   Flip in lockstep with the cutover EXCHANGE.
+  traceColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
+  #  Default: false
+  #  Description: Spans sibling of traceColumnsNonNullable. Leave false while the spans table still has Nullable
+  #   end_time/duration/ttft columns; span writes bind null for absent end_time/ttft. Set true once replaced with
+  #   sentinel-defaulted non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates
+  #   reads too. Flip in lockstep with the Slice 3 cutover EXCHANGE, independently of the trace flag.
+  spanColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
+  #  Default: false
+  #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
+  #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
+  #   copy. Scope capture to the backfill-to-cutover window.
+  traceDeletionEventsCaptureEnabled: ${ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+  #  Default: false
+  #  Description: Spans sibling of traceDeletionEventsCaptureEnabled. Spans have no standalone delete, so this captures
+  #   the span ids removed by the trace-delete cascade into the deletion_events_local bridge (source_table=spans) so they
+  #   survive the spans table copy. Leave false at deploy time; turn true once the span backfill starts, independently of
+  #   the trace flag.
+  spanDeletionEventsCaptureEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+  #  Default: 1000
+  #  Description: Rows per INSERT into the deletion_events_local bridge. A single delete batch can carry more ids
+  #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
+  #   chunks of this size.
+  deletionEventsInsertBatchSize: ${ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE:-1000}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -156,6 +198,17 @@ health:
     # the whole backend out of readiness/traffic.
     - name: clickhouse-readonly-freeform-sql
       critical: false
+      type: ready
+    # Toggle-gated (databaseAnalytics.clusterHealthCheckEnabled). When the toggle is off the probe reports healthy
+    # without querying ClickHouse, so single-shard / OSS environments are unaffected. When on, a node that can't see
+    # the Distributed cluster definition can't serve distributed queries and must be pulled from rotation.
+    - name: clickhouse-cluster
+      critical: true
+      type: ready
+    # Toggle-gated (databaseAnalytics.coldStorageDiskHealthCheckEnabled). Off by default so deployments without tier
+    # storage are unaffected. When on, a node that can't reach the cold_s3 S3 disk must be pulled from rotation.
+    - name: clickhouse-cold-storage-disk
+      critical: true
       type: ready
     - name: mysql
       critical: true
@@ -379,6 +432,31 @@ experimentDenormalization:
   # Description: Number of entries to trim in a single operation when streamMaxLen is exceeded.
   streamTrimLimit: ${OPIK_REDIS_EXPERIMENT_DENORM_STREAM_TRIM_LIMIT:-100}
 
+# Configuration for buffering projects.last_updated_trace_at updates in Redis and flushing them to MySQL
+# periodically, instead of writing MySQL synchronously on every trace-created/updated event. Keeps the
+# high-frequency ingestion path off the contended `projects` row (avoids lock contention / connection churn).
+projectLastUpdatedFlush:
+  # Default: false
+  # Description: When enabled, trace events buffer the per-project last-updated timestamp in Redis and a job
+  #   flushes it to MySQL; when disabled, the timestamp is written to MySQL synchronously per event (legacy).
+  enabled: ${PROJECT_LAST_UPDATED_FLUSH_ENABLED:-false}
+  # Default: true
+  # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer in
+  #   Redis without a scheduler (e.g. tests that invoke the job manually).
+  jobEnabled: ${PROJECT_LAST_UPDATED_FLUSH_JOB_ENABLED:-true}
+  # Default: 30s
+  # Description: Interval at which the flush job drains the Redis buffer into MySQL (min 1s)
+  jobInterval: ${PROJECT_LAST_UPDATED_FLUSH_JOB_INTERVAL:-30s}
+  # Default: 25s
+  # Description: Time the flush job holds the distributed lock (kept below jobInterval so it releases each cycle)
+  jobLockTime: ${PROJECT_LAST_UPDATED_FLUSH_JOB_LOCK_TIME:-25s}
+  # Default: 500ms
+  # Description: Time the flush job waits to acquire the lock before giving up (100ms-5s)
+  jobLockWaitTime: ${PROJECT_LAST_UPDATED_FLUSH_JOB_LOCK_WAIT_TIME:-500ms}
+  # Default: 500
+  # Description: Maximum number of ZSET entries to read per page when flushing pending projects (10-5000)
+  jobBatchSize: ${PROJECT_LAST_UPDATED_FLUSH_JOB_BATCH_SIZE:-500}
+
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
 # prompts, feedback definitions, experiments, datasets and dataset items
@@ -533,6 +611,32 @@ rateLimit:
       userFacingBucketName: get_trace_stats
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    tracesExist:
+      # Default: 30
+      # Description: how many tracesExist empty-state probes are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_TRACES_EXIST_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Traces-Exist
+      # Description: User facing bucket name
+      userFacingBucketName: traces_exist
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    spansExist:
+      # Default: 30
+      # Description: how many spansExist empty-state probes are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_SPANS_EXIST_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Spans-Exist
+      # Description: User facing bucket name
+      userFacingBucketName: spans_exist
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
     mcpOAuthRegister:
       # Default: 20
       # Description: Max dynamic client registrations (RFC 7591) accepted per source IP in the specified time bucket
@@ -651,6 +755,20 @@ onlineScoring:
   #   tool. The URL is consumed within a single tool-call round; 120 s is ample for most providers.
   #   Capped at 3600 s — longer-lived URLs are a security risk if the URL leaks.
   agenticToolsS3PresignTtlSeconds: ${ONLINE_SCORING_AGENTIC_TOOLS_S3_PRESIGN_TTL_SECONDS:-120}
+  # Default: 4000
+  # Description: Per-variable substitution cap (in characters) for the {{trace}}/{{span}} structure-injection
+  #   and agentic-tools paths. Large enough that small entity input/output renders inline, small enough that a
+  #   huge entity doesn't blow context (the agent fetches the rest via the read tool). 500-100000.
+  maxPromptFieldChars: ${ONLINE_SCORING_MAX_PROMPT_FIELD_CHARS:-4000}
+  # Default: 5
+  # Description: Attachment-upload race tolerance for the {{trace}}/{{span}} structures — how many times the
+  #   attachment lookup is retried when the entity references an attachment that isn't persisted yet. Interim
+  #   guard (0-20; 0 disables retrying) pending the pre-evaluation dispatch delay (OPIK-7224).
+  attachmentFetchMaxRetries: ${ONLINE_SCORING_ATTACHMENT_FETCH_MAX_RETRIES:-5}
+  # Default: 300ms
+  # Description: Delay between attachment-lookup retries (see attachmentFetchMaxRetries). Worst-case added
+  #   latency ≈ attachmentFetchMaxRetries × this, and only for entities that expect an attachment. 50ms-5s.
+  attachmentFetchRetryDelay: ${ONLINE_SCORING_ATTACHMENT_FETCH_RETRY_DELAY:-300ms}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -907,6 +1025,45 @@ optimizationLogs:
   # Description: Maximum number of concurrent S3 uploads during sync
   syncConcurrency: ${OPTIMIZATION_LOGS_SYNC_CONCURRENCY:-5}
 
+# Safety net for Optimization Studio runs that never reach a terminal status (OPIK-7159).
+# A run's status is only advanced by the Python optimizer worker calling back; if the worker never
+# runs or dies before reporting, the run stays INITIALIZED/RUNNING forever. This reaper transitions
+# such runs to ERROR with a reason so they can never stay stuck indefinitely.
+optimizationStalledReaper:
+  # Default: true
+  # Description: Whether the stalled-run reaper job is enabled
+  enabled: ${OPTIMIZATION_STALLED_REAPER_ENABLED:-true}
+  # Default: 5m
+  # Description: Delay before the first reaper run after startup, to avoid false positives during warm-up
+  startupDelay: ${OPTIMIZATION_STALLED_REAPER_STARTUP_DELAY:-5m}
+  # Default: 5m
+  # Description: Interval between reaper job executions
+  jobInterval: ${OPTIMIZATION_STALLED_REAPER_JOB_INTERVAL:-5m}
+  # Default: 5m
+  # Description: A run stuck in INITIALIZED longer than this is marked ERROR (the worker should call
+  #   mark_running within seconds; kept above normal queue latency to tolerate a backlog)
+  initializedTimeout: ${OPTIMIZATION_STALLED_REAPER_INITIALIZED_TIMEOUT:-5m}
+  # Default: 8h
+  # Description: A run stuck in RUNNING longer than this is marked ERROR. MUST exceed the worker's max
+  #   execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, default 6h = 21600s) plus a buffer, since the row
+  #   has no per-progress heartbeat and last_updated_at only advances on a status change. If you raise
+  #   the worker timeout, raise this too or healthy long runs will be reaped.
+  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-8h}
+  # Default: 7d
+  # Description: Added to max(initializedTimeout, runningTimeout) to size the last_updated_at floor of the
+  #   reaper's scan. Pure reaper-downtime insurance (a run that stalled just before the reaper went down is
+  #   still caught on recovery if it was down less than this); not needed to find fresh stalls. Keep it only
+  #   as large as the longest expected reaper outage — a shorter margin also tightens skip-index pruning.
+  lookbackMargin: ${OPTIMIZATION_STALLED_REAPER_LOOKBACK_MARGIN:-7d}
+  # Default: 4m
+  # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent
+  #   fleet-wide runs. MUST stay below jobInterval — the lock is held until expiry, so a value >=
+  #   jobInterval would make every other scheduled tick a no-op and halve the effective cadence.
+  lockDuration: ${OPTIMIZATION_STALLED_REAPER_LOCK_DURATION:-4m}
+  # Default: 100
+  # Description: Maximum number of stalled runs reconciled per cycle (a large backlog drains over several cycles)
+  batchSize: ${OPTIMIZATION_STALLED_REAPER_BATCH_SIZE:-100}
+
 # Environment CRUD configuration
 environment:
   # Maximum number of environments allowed per workspace.
@@ -944,6 +1101,15 @@ retention:
     estimationIntervalMinutes: ${RETENTION_CATCH_UP_ESTIMATION_INTERVAL_MINUTES:-5}
     # Earliest date for catch-up cursor start (service launch date)
     serviceStartDate: ${RETENTION_CATCH_UP_SERVICE_START_DATE:-2024-09-01}
+
+# ClickHouse partition-health observability (OPIK-6904). Polls system.parts + the LWD mask and
+# publishes opik.clickhouse.partition.* gauges. A distributed lock keeps a single instance polling.
+partitionMetrics:
+  enabled: ${PARTITION_METRICS_ENABLED:-false}
+  # Poll interval (default 5 min). Min 30s, max 1h.
+  interval: ${PARTITION_METRICS_INTERVAL:-5m}
+  # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
+  lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
 
 # LLM providers client configuration
 llmProviderClient:
@@ -1011,7 +1177,11 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
-    workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+    # Default: PT1H
+    # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.
+    # The estimate scans all of the project's spans, so cache misses are expensive by design.
+    # Renamed from the orphaned workspace_metadata entry, which no code referenced.
+    project_metadata: ${CACHE_MANAGER_PROJECT_METADATA_DURATION:-PT1H}
     # Default: PT5M
     # Description: Cache TTL for workspace version determination results, applied per workspace
     # Scope: Per workspace (cache key includes workspace ID)

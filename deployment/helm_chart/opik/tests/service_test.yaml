@@ -1,0 +1,59 @@
+suite: service ports
+
+# Baseline render assertions for the per-component Service (templates/service.yaml).
+# service.yaml renders one Service per enabled component from
+# `.Values.component.<name>.service`; we select each by name.
+templates:
+  - templates/service.yaml
+
+tests:
+  - it: backend service exposes its configured port from values.yaml
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 8080
+      - equal:
+          path: spec.ports[0].protocol
+          value: TCP
+
+  - it: frontend service exposes the 5173 http port
+    documentSelector:
+      path: metadata.name
+      value: opik-frontend
+    asserts:
+      - equal:
+          path: spec.ports[0].name
+          value: http
+      - equal:
+          path: spec.ports[0].port
+          value: 5173
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 5173
+
+  - it: service ports follow overrides from values
+    set:
+      component.frontend.service.ports:
+        - name: http
+          port: 8088
+          targetPort: 5173
+          protocol: TCP
+    documentSelector:
+      path: metadata.name
+      value: opik-frontend
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8088
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 5173

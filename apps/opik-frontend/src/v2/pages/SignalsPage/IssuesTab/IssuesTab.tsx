@@ -41,6 +41,7 @@ import IssueDetail from "@/v2/pages/SignalsPage/IssuesTab/IssueDetail";
 import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBadge";
 import IssuesSkeleton from "@/v2/pages/SignalsPage/IssuesTab/IssuesSkeleton";
 import { getRunFailureCopy } from "@/v2/pages/SignalsPage/runFailureCopy";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const SORT_OPTIONS: { value: string; label: string; sorting: Sorting }[] = [
   {
@@ -305,6 +306,13 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   const status = showResolved
     ? AGENT_INSIGHTS_ISSUE_STATUS.resolved
     : AGENT_INSIGHTS_ISSUE_STATUS.open;
+  const handleTryAgain = () => {
+    trackEvent(OpikEvent.DIAGNOSTICS_TRY_AGAIN_CLICKED, {
+      project_id: projectId,
+      reason: failedReason,
+    });
+    onRunDiagnostic?.();
+  };
   const [sortValue, setSortValue] = useState<string>(SORT_OPTIONS[0].value);
   const [activeIssueId, setActiveIssueId] = useQueryParam(
     "issue",
@@ -398,7 +406,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
             <FailedBanner
               reason={failedReason}
               detail={failedDetail}
-              onRetry={onRunDiagnostic}
+              onRetry={handleTryAgain}
             />
           )}
           {stale && (
@@ -553,7 +561,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
             <FailedBanner
               reason={failedReason}
               detail={failedDetail}
-              onRetry={onRunDiagnostic}
+              onRetry={handleTryAgain}
             />
           </div>
         )}

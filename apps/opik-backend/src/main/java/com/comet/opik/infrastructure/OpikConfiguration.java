@@ -24,6 +24,10 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModel = DatabaseAnalyticsDataModelConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
@@ -133,7 +137,14 @@ public class OpikConfiguration extends JobConfiguration {
     private OptimizationLogsConfig optimizationLogs = new OptimizationLogsConfig();
 
     @Valid @NotNull @JsonProperty
+    private OptimizationStalledReaperConfig optimizationStalledReaper = OptimizationStalledReaperConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private RetentionConfig retention = new RetentionConfig();
+
+    @Valid @NotNull @JsonProperty
+    private PartitionMetricsConfig partitionMetrics = new PartitionMetricsConfig();
 
     @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
@@ -180,6 +191,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private ExperimentDenormalizationConfig experimentDenormalization = new ExperimentDenormalizationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ProjectLastUpdatedFlushConfig projectLastUpdatedFlush = new ProjectLastUpdatedFlushConfig();
 
     @Valid @NotNull @JsonProperty
     private LlmModelRegistryConfig llmModelRegistry = new LlmModelRegistryConfig();
