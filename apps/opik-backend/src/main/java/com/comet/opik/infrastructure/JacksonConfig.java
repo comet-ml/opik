@@ -39,7 +39,7 @@ public class JacksonConfig {
      * {@link #isMaxDocumentLengthValid()} instead of {@code @Min}/{@code @Max}).
      */
     @JsonProperty
-    private long maxDocumentLength = 536_870_912L; // 512MB
+    private long maxDocumentLength;
 
     /**
      * Maximum request body size (compressed {@code Content-Length}), rejected 413 pre-parse by
@@ -47,7 +47,7 @@ public class JacksonConfig {
      * {@link #maxDocumentLength} (decompressed), so a lower value is legitimate.
      */
     @JsonProperty
-    @Min(value = 1048576, message = "maxRequestSizeBytes must be at least 1MB") @Max(value = MAX_CONFIGURABLE_BYTES, message = "maxRequestSizeBytes must be at most 2GB") private long maxRequestSizeBytes = 536_870_912L; // 512MB
+    @Min(value = 1048576, message = "maxRequestSizeBytes must be at least 1MB") @Max(value = MAX_CONFIGURABLE_BYTES, message = "maxRequestSizeBytes must be at most 2GB") private long maxRequestSizeBytes;
 
     @JsonIgnore
     @AssertTrue(message = "maxDocumentLength must be <= 0 (unlimited) or between maxStringLength and 2GB")
