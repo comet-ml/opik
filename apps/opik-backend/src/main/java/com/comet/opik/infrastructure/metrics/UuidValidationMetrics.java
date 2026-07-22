@@ -23,9 +23,10 @@ import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPA
  * <p>
  * It shares the counter name and description with {@link
  * com.comet.opik.api.error.InvalidUUIDExceptionMapper}, which records the same counter on the reject
- * path. The {@code mode} label distinguishes the two: {@code audit} here vs {@code reject} on the
- * enforced path. Only the audit path carries {@code workspace_id}, because the reject path runs in the
- * exception mapper where the request-scoped workspace is not threaded (a Story-2 follow-up).
+ * path. Both paths carry the {@code mode} label ({@link #MODE_AUDIT} here vs {@link #MODE_REJECT} on
+ * the enforced path), so a query can always split audit from reject. Only the audit path carries
+ * {@code workspace_id}: the reject path runs in the exception mapper where the request-scoped workspace
+ * is not threaded (tagging it there is a follow-up), and instead carries {@code http_route}.
  * <p>
  * The {@code workspace_id} label is bounded by the set of clients actually emitting out-of-window ids
  * (a small cohort), so it does not inflate metric cardinality the way an unconditional per-workspace
@@ -38,6 +39,7 @@ public class UuidValidationMetrics {
     private static final String COUNTER_DESCRIPTION = "Number of writes rejected because the id failed UUIDv7 ingestion validation";
 
     public static final String MODE_AUDIT = "audit";
+    public static final String MODE_REJECT = "reject";
 
     public static final AttributeKey<String> MODE_KEY = AttributeKey.stringKey("mode");
     public static final AttributeKey<String> REASON_KEY = AttributeKey.stringKey("reason");

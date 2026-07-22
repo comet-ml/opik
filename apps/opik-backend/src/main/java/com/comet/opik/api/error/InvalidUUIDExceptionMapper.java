@@ -1,5 +1,6 @@
 package com.comet.opik.api.error;
 
+import com.comet.opik.infrastructure.metrics.UuidValidationMetrics;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -22,7 +23,8 @@ import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 
 /**
  * Maps {@link InvalidUUIDException} to HTTP 400 and records the reject-rate metric.
- * Tags each rejection with the matched route.
+ * Tags each rejection with the matched route and {@code mode=reject} (see {@link UuidValidationMetrics}
+ * for the shared {@code opik.ingestion.uuid_v7.rejected} counter contract).
  *
  * <p>{@link ResourceInfo} is request-scoped, so it is obtained lazily through a {@link Provider}
  * (injecting it directly would fail to construct this singleton outside a request). The lookup resolves
@@ -50,8 +52,11 @@ public class InvalidUUIDExceptionMapper implements ExceptionMapper<InvalidUUIDEx
         var httpRoute = getHttpRoute();
         log.info("Rejected ingestion id, httpRoute: '{}', reason: '{}', error message: '{}'",
                 httpRoute, exception.getReason().getValue(), exception.getMessage());
-        REJECTED_COUNTER.add(1,
-                Attributes.of(HTTP_ROUTE_KEY, httpRoute, REASON_KEY, exception.getReason().getValue()));
+        REJECTED_COUNTER.add(1, Attributes.builder()
+                .put(UuidValidationMetrics.MODE_KEY, UuidValidationMetrics.MODE_REJECT)
+                .put(HTTP_ROUTE_KEY, httpRoute)
+                .put(REASON_KEY, exception.getReason().getValue())
+                .build());
         // Force JSON: ingestion endpoints negotiate other content types (e.g. the OTel endpoint uses protobuf),
         // which have no writer for the error entity — without this the 400 fails to serialize and surfaces as a 500
         return Response.status(BAD_REQUEST)
