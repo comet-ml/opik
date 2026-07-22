@@ -7,6 +7,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TracesCreated;
@@ -209,15 +210,14 @@ public class OnlineScoringSampler {
 
         // fetch automation rules per project
         tracesByProject.forEach((projectId, projectTraces) -> {
-            // Only score traces from SDK logging source, by all applicable evaluators.
-            // We deliberately do not read selected_rule_ids from SDK traces.
-            // Non-SDK traces (playground, experiment, optimization) are only scored when
+            // SDK and experiment traces are scorable by evaluators whose trigger scope matches.
+            // We deliberately do not read selected_rule_ids from SDK or experiment traces.
+            // Other non-SDK traces (playground, optimization) are only scored when
             // they carry selected_rule_ids metadata (explicit user selection from the playground).
             var scorableTraces = new ArrayList<Trace>();
             var selectedRuleIdsByTrace = new HashMap<UUID, Set<UUID>>();
             for (var trace : projectTraces) {
-                if (Source.isLoggingSource(trace.source())) {
-                    // For SDK traces all evaluators apply
+                if (Source.isLoggingSource(trace.source()) || trace.source() == Source.EXPERIMENT) {
                     scorableTraces.add(trace);
                 } else {
                     var ruleIds = extractSelectedRuleIds(trace);
@@ -246,6 +246,7 @@ public class OnlineScoringSampler {
                 // If any trace carries explicit rule selections, filter evaluators to that set.
                 // If no selection found, use all evaluators (default behavior for backward compatibility).
                 var samples = scorableTraces.stream()
+                        .filter(trace -> matchesTriggerScope(evaluator, trace))
                         .filter(trace -> isEvaluatorSelectedForTrace(evaluator, trace, selectedRuleIdsByTrace))
                         .filter(trace -> shouldSampleTrace(evaluator, workspaceId, workspaceName, trace));
                 switch (evaluator.getType()) {
@@ -322,6 +323,19 @@ public class OnlineScoringSampler {
                     return trace.toBuilder().projectName(resolved).build();
                 })
                 .toList();
+    }
+
+    private boolean matchesTriggerScope(AutomationRuleEvaluator<?, ?> evaluator, Trace trace) {
+        EvalTriggerScope scope = evaluator.getTriggerScope() != null
+                ? evaluator.getTriggerScope()
+                : EvalTriggerScope.PRODUCTION;
+        if (Source.isLoggingSource(trace.source())) {
+            return scope == EvalTriggerScope.PRODUCTION || scope == EvalTriggerScope.BOTH;
+        }
+        if (trace.source() == Source.EXPERIMENT) {
+            return scope == EvalTriggerScope.EXPERIMENT || scope == EvalTriggerScope.BOTH;
+        }
+        return true;
     }
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId,

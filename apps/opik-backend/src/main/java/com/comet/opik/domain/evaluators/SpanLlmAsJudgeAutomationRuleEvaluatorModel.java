@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import lombok.Builder;
 import org.jdbi.v3.json.Json;
@@ -24,6 +25,7 @@ public record SpanLlmAsJudgeAutomationRuleEvaluatorModel(
         String name,
         Float samplingRate,
         boolean enabled,
+        EvalTriggerScope triggerScope,
         String filters,
         @Json SpanLlmAsJudgeCode code,
         Instant createdAt,
@@ -41,6 +43,11 @@ public record SpanLlmAsJudgeAutomationRuleEvaluatorModel(
     @Override
     public AutomationRuleEvaluatorModel<?> withProjectIds(Set<UUID> projectIds) {
         return toBuilder().projectIds(projectIds).build();
+    }
+
+    @Override
+    public AutomationRuleEvaluatorModel<?> withTriggerScope(EvalTriggerScope triggerScope) {
+        return toBuilder().triggerScope(triggerScope).build();
     }
 
     @Override
