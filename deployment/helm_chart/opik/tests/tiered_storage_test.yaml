@@ -31,6 +31,16 @@ tests:
       - equal:
           path: spec.templates.volumeClaimTemplates[1].name
           value: s3-cache-vc-template
+      # Hot tier is ClickHouse's built-in `default` disk. Defining a custom local
+      # disk at the server data path is rejected by CH 26.x at startup ("Disk path
+      # cannot be equal to <path>. Use <default> disk instead."), so the hot volume
+      # must reference `default` and there must be no custom <hot> disk under <disks>.
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<hot>\\s*<disk>default</disk>\\s*</hot>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<default>\\s*<keep_free_space_bytes>"
 
   - it: omits <read_only> by default so the cold tier is writable
     set:
