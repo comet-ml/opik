@@ -47,7 +47,7 @@ public class CipxSpendBlockDAO {
 
     /** Tier names ordered by the residual block_idx ordinal. The cache_creation entry (ordinal 2) is a
      * placeholder: its written label is the per-span TTL variant (cache_creation_5m / cache_creation_1h),
-     * resolved by {@link BlockRow#tierName}. */
+     * resolved by {@link BlockRow#tierName(int, String)}. */
     private static final String[] TIER_NAMES = {"input", "cache_read", "cache_creation", "output"};
     private static final int RESIDUAL_IDX_BASE = 65531;
     private static final int CACHE_CREATION_TIER = 2;

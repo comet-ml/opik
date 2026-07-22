@@ -14,3 +14,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_spends ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS u_cache_creation_1h Int64 DEFAULT 0;
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_spends ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS u_cache_creation_5m, DROP COLUMN IF EXISTS u_cache_creation_1h;
+
