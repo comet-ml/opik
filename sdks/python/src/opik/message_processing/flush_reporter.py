@@ -47,7 +47,7 @@ class FlushReporter:
             remaining_queue_size=self._streamer.queue_size(),
             dropped_messages=dropped_messages,
             dropped_items=dropped_items,
-            failures=failures,
+            failures=tuple(failures),
         )
         if not result.success:
             LOGGER.error(
@@ -65,6 +65,6 @@ class FlushReporter:
         return data_loss.ErrorsReport(
             total_dropped_messages=total_messages,
             total_dropped_items=total_items,
-            failures=failures,
+            failures=tuple(failures),
             generated_at=time.time(),
         )

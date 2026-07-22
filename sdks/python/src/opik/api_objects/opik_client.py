@@ -1949,11 +1949,13 @@ class Opik:
         """
         Flush the streamer to ensure all messages are sent.
 
-        Covers delivery of trace/span/feedback messages; attachment/file uploads
-        are not reflected in the outcome. Never raises and never blocks beyond
-        ``timeout``: an observability SDK must not disrupt the app it instruments.
-        Detailed outcome — including any data that was dropped — is available via
-        :attr:`last_flush_result`.
+        Attachment/file upload *failures* are not counted in the data-loss
+        detail (``dropped_*`` / ``failures``), but an incomplete upload still
+        makes the flush report as not fully flushed — so ``flushed`` (and hence
+        the returned bool) does reflect uploads. Never raises and never blocks
+        beyond ``timeout``: an observability SDK must not disrupt the app it
+        instruments. Detailed outcome — including any data that was dropped — is
+        available via :attr:`last_flush_result`.
 
         Args:
             timeout (Optional[int]): The timeout for flushing the streamer. Once the timeout is reached, the flush method will return regardless of whether all messages have been sent.
@@ -1982,7 +1984,7 @@ class Opik:
                 remaining_queue_size=0,
                 dropped_messages=0,
                 dropped_items=0,
-                failures=[],
+                failures=(),
             )
             return False
 

@@ -1278,7 +1278,7 @@ def _flush_result(*, flushed: bool, dropped_messages: int = 0) -> data_loss.Flus
         remaining_queue_size=0,
         dropped_messages=dropped_messages,
         dropped_items=0,
-        failures=[],
+        failures=(),
     )
 
 

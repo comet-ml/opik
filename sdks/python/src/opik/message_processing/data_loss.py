@@ -67,7 +67,7 @@ class FlushResult:
     remaining_queue_size: int
     dropped_messages: int
     dropped_items: int
-    failures: List[FailedMessageInfo]
+    failures: Tuple[FailedMessageInfo, ...]
 
     @property
     def success(self) -> bool:
@@ -84,11 +84,10 @@ class ErrorsReport:
     .. note::
         The report is **capped**. ``total_dropped_messages`` /
         ``total_dropped_items`` are always exact (kept as running totals), but
-        ``failures`` holds only the **most recent** drops — up to the tracker's
-        configured capacity (default 1000). Once that limit is reached, the
-        oldest per-drop details are discarded, so ``failures`` can
-        contain fewer entries than ``total_dropped_messages``, and
-        ``first_failure_at`` reflects the oldest *retained* detail, not
+        ``failures`` holds only a bounded, most-recent window of the per-drop
+        details. Once that limit is reached the oldest details are discarded, so
+        ``failures`` can contain fewer entries than ``total_dropped_messages``,
+        and ``first_failure_at`` reflects the oldest *retained* detail, not
         necessarily the first-ever drop.
 
     Attributes:
@@ -102,7 +101,7 @@ class ErrorsReport:
 
     total_dropped_messages: int
     total_dropped_items: int
-    failures: List[FailedMessageInfo]
+    failures: Tuple[FailedMessageInfo, ...]
     generated_at: float
 
     @property

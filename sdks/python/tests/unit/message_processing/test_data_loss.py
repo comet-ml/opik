@@ -41,7 +41,7 @@ class TestFlushResultSuccess:
             remaining_queue_size=0,
             dropped_messages=0,
             dropped_items=0,
-            failures=[],
+            failures=(),
         )
         assert result.success is True
 
@@ -51,7 +51,7 @@ class TestFlushResultSuccess:
             remaining_queue_size=0,
             dropped_messages=1,
             dropped_items=5,
-            failures=[_failure(item_count=5)],
+            failures=(_failure(item_count=5),),
         )
         assert result.success is False
 
@@ -61,7 +61,7 @@ class TestFlushResultSuccess:
             remaining_queue_size=3,
             dropped_messages=0,
             dropped_items=0,
-            failures=[],
+            failures=(),
         )
         assert result.success is False
 
@@ -114,12 +114,22 @@ class TestDataLossTracker:
 
     def test_total_drops__details_bounded_but_counts_exact(self):
         tracker = data_loss.DataLossTracker(max_entries=2)
-        for _ in range(5):
-            tracker.record(_failure())
+        recorded = [
+            data_loss.FailedMessageInfo(
+                message_type="CreateSpansBatchMessage",
+                reason=data_loss.FailureReason.HTTP_CLIENT_ERROR,
+                item_count=1,
+                detail=str(index),
+            )
+            for index in range(5)
+        ]
+        for failure in recorded:
+            tracker.record(failure)
 
         count, _items, failures = tracker.total_drops()
         assert count == 5
-        assert len(failures) == 2
+        # Only the two most recent details are retained, in order.
+        assert [failure.detail for failure in failures] == ["3", "4"]
 
 
 class TestFlushReporter:
@@ -191,7 +201,7 @@ class TestFlushReporter:
         report = reporter.build_errors_report()
 
         assert report.total_dropped_messages == 0
-        assert report.failures == []
+        assert report.failures == ()
         assert report.first_failure_at is None
 
 
