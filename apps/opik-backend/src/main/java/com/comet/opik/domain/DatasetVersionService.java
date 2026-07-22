@@ -10,7 +10,9 @@ import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -26,8 +28,10 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -44,12 +48,17 @@ public interface DatasetVersionService {
 
     String LATEST_TAG = "latest";
 
+    // Distributed-lock name serializing all version-creating writers on a dataset (OPIK-7264).
+    // Shared by DatasetItemService (save/patch/delete/applyDeltaChanges) and the restore path here.
+    String DATASET_VERSION_LOCK = "DatasetVersion";
+
     // Error message templates
     String ERROR_VERSION_HASH_EXISTS = "Version hash collision detected for dataset '%s'";
     String ERROR_TAG_EXISTS = "Tag already exists for this dataset, tag='%s'";
     String ERROR_CANNOT_DELETE_LATEST_TAG = "Cannot delete '%s' tag - it is automatically managed";
     String ERROR_VERSION_HASH_NOT_FOUND = "Version with hash not found hash='%s' datasetId='%s'";
     String ERROR_VERSION_NOT_FOUND = "Version not found for dataset hash='%s' datasetId='%s'";
+    String ERROR_LATEST_MOVED = "Concurrent modification detected for dataset '%s'; the latest version changed during this operation. Please retry.";
 
     /**
      * Retrieves a paginated list of versions for the specified dataset, ordered by creation time (newest first).
@@ -185,13 +194,14 @@ public interface DatasetVersionService {
     boolean hasVersions(String workspaceId, UUID datasetId);
 
     /**
-     * Finds a version by its batch ID.
+     * Finds the most recent version for a batch group. When more than one version shares a
+     * batch_group_id (possible under concurrent writes), the newest one is returned.
      * Used to support SDK batch operations where multiple API calls share the same batch_group_id.
      *
      * @param batchGroupId the batch group ID to search for
      * @param datasetId the dataset ID
      * @param workspaceId the workspace ID
-     * @return Optional containing the version if found, empty otherwise
+     * @return Optional containing the latest version for the batch group if found, empty otherwise
      */
     Optional<DatasetVersion> findByBatchGroupId(UUID batchGroupId, UUID datasetId, String workspaceId);
 
@@ -208,6 +218,11 @@ public interface DatasetVersionService {
      * @param evaluators optional default evaluators for the version
      * @param executionPolicy optional default execution policy for the version
      * @param batchGroupId optional batch group ID for SDK batch operations
+     * @param enforceLatestCas when {@code true} and {@code baseVersionId} is non-null, the 'latest'
+     *        tag is compare-and-swapped against {@code baseVersionId}: if a concurrent writer already
+     *        moved 'latest', this throws a retryable 409 instead of clobbering it. Pass {@code false}
+     *        to flip unconditionally — for the first version, or a caller that deliberately branches
+     *        off a non-latest base (e.g. applyDeltaChanges with override=true).
      * @param workspaceId the workspace ID (required when called from reactive context)
      * @param userName the user name (required when called from reactive context)
      * @return the created version
@@ -216,7 +231,7 @@ public interface DatasetVersionService {
             UUID baseVersionId, List<String> tags, String changeDescription,
             List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
             boolean clearExecutionPolicy,
-            UUID batchGroupId, String workspaceId, String userName);
+            UUID batchGroupId, boolean enforceLatestCas, String workspaceId, String userName);
 
     /**
      * Restores a dataset to a previous version state by creating a new version.
@@ -247,6 +262,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull DatasetItemDAO datasetItemDAO;
     private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
+    private final @NonNull LockService lockService;
+    private final @NonNull @Config OpikConfiguration config;
 
     @Override
     public DatasetVersionPage getVersions(@NonNull UUID datasetId, int page, int size) {
@@ -296,7 +313,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findByBatchGroupId(batchGroupId, datasetId, workspaceId);
+            return dao.findLatestByBatchGroupId(batchGroupId, datasetId, workspaceId);
         });
     }
 
@@ -361,7 +378,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             int itemsTotal, UUID baseVersionId, List<String> tags, String changeDescription,
             List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
             boolean clearExecutionPolicy,
-            UUID batchGroupId, @NonNull String workspaceId, @NonNull String userName) {
+            UUID batchGroupId, boolean enforceLatestCas, @NonNull String workspaceId, @NonNull String userName) {
 
         log.info(
                 "Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}', baseVersionId '{}', batchGroupId '{}'",
@@ -420,11 +437,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                         batchGroupId, versionHash, datasetId);
             }
 
-            // Remove 'latest' tag from previous version (if exists)
-            datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);
-
-            // Always add 'latest' tag to the new version
-            datasetVersionDAO.insertTag(datasetId, LATEST_TAG, newVersionId, userName, workspaceId);
+            // Flip the 'latest' tag to the new version. Callers that branch off the current latest under
+            // a lock pass enforceLatestCas=true so the flip is compare-and-swapped against that base;
+            // callers intentionally branching off a non-latest base (applyDeltaChanges with override)
+            // pass false to opt out.
+            UUID casBase = enforceLatestCas ? baseVersionId : null;
+            flipLatestTag(datasetVersionDAO, datasetId, newVersionId, casBase, userName, workspaceId);
             log.info("Added '{}' tag to version '{}' for dataset '{}'", LATEST_TAG, versionHash, datasetId);
 
             // Add custom tags from the request
@@ -696,7 +714,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        return Mono.fromCallable(() -> buildRestoreContext(datasetId, versionRef, workspaceId, userName))
+        // Serialize restore under the same per-dataset lock as the other version-creating writers so a
+        // concurrent item write can't move 'latest' mid-restore and race the flip (OPIK-7264).
+        Mono<DatasetVersion> restore = Mono
+                .fromCallable(() -> buildRestoreContext(datasetId, versionRef, workspaceId, userName))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(context -> {
                     if (context.isLatestVersion) {
@@ -706,6 +727,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     }
                     return createRestoredVersion(datasetId, versionRef, context);
                 });
+
+        Duration lockLease = config.getDatasetVersioning().lockLease().toJavaDuration();
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(datasetId, DATASET_VERSION_LOCK), restore, lockLease);
     }
 
     private RestoreContext buildRestoreContext(UUID datasetId, String versionRef,
@@ -797,8 +822,33 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         }).withError(() -> new EntityAlreadyExistsException(
                 new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
 
-        dao.deleteTag(datasetId, LATEST_TAG, context.workspaceId);
-        dao.insertTag(datasetId, LATEST_TAG, newVersionId, context.userName, context.workspaceId);
+        UUID casBase = context.previousLatestVersion != null ? context.previousLatestVersion.id() : null;
+        flipLatestTag(dao, datasetId, newVersionId, casBase, context.userName, context.workspaceId);
+    }
+
+    /**
+     * Moves the 'latest' tag to {@code newVersionId}. When {@code casBase} is non-null, the flip is
+     * compare-and-swapped against it: the old tag is removed only if it still points at {@code casBase},
+     * otherwise a concurrent writer already moved 'latest' and we abort with a retryable 409 rather than
+     * silently clobbering their version (OPIK-7264 backstop). A null {@code casBase} flips unconditionally
+     * (first version, or a caller managing its own concurrency).
+     */
+    private void flipLatestTag(DatasetVersionDAO dao, UUID datasetId, UUID newVersionId, UUID casBase,
+            String userName, String workspaceId) {
+        if (casBase != null) {
+            int swapped = dao.deleteTagIfVersion(datasetId, LATEST_TAG, casBase, workspaceId);
+            if (swapped != 1) {
+                log.warn(
+                        "Concurrent 'latest' move detected: CAS failed. workspaceId='{}', datasetId='{}', casBase='{}', newVersionId='{}'",
+                        workspaceId, datasetId, casBase, newVersionId);
+                throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
+                        .entity(new ErrorMessage(List.of(ERROR_LATEST_MOVED.formatted(datasetId))))
+                        .build());
+            }
+        } else {
+            dao.deleteTag(datasetId, LATEST_TAG, workspaceId);
+        }
+        dao.insertTag(datasetId, LATEST_TAG, newVersionId, userName, workspaceId);
     }
 
     private record RestoreContext(UUID sourceVersionId, DatasetVersion sourceVersion,

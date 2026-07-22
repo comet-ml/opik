@@ -1758,6 +1758,12 @@ datasetVersioning:
     # Description: Maximum backoff between retries. Caps the exponential growth of
     # the per-attempt delay.
     maxBackoff: ${DATASET_VERSIONING_ZERO_ROWS_RETRY_MAX_BACKOFF:-1s}
+  # Default: 60s
+  # Description: Per-dataset distributed-lock lease that serializes the
+  # read-latest -> create-version -> flip-latest sequence so parallel uploads can't race
+  # on the mutable 'latest' pointer (OPIK-7264). Raise for slower/busier deployments where
+  # the critical section may exceed the lease.
+  lockLease: ${DATASET_VERSIONING_LOCK_LEASE:-60s}
 
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).
