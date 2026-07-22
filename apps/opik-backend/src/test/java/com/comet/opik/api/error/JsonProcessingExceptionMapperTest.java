@@ -15,7 +15,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.Closeable;
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -128,6 +132,23 @@ class JsonProcessingExceptionMapperTest {
         };
 
         var response = mapper().toResponse(selfReferencing);
+
+        verifyNoInteractions(sizeGuardMetrics);
+        assertBadRequest(response);
+    }
+
+    @Test
+    @DisplayName("does not loop on a multi-node cause CYCLE (A -> B -> A) — bounded walk (400)")
+    void doesNotLoopOnMultiNodeCauseCycle() {
+        // Throwable.initCause only rejects a DIRECT self-cause, so a 2-node cycle A -> B -> A is
+        // constructible and would spin the cause-chain walk forever, pinning the request thread. The
+        // walk must be bounded (depth cap), terminate, and fall through to the malformed-JSON 400.
+        var a = new JsonMappingException((Closeable) null, "a");
+        var b = new RuntimeException("b");
+        a.initCause(b); // a -> b
+        b.initCause(a); // b -> a (cycle)
+
+        var response = assertTimeoutPreemptively(Duration.ofSeconds(2), () -> mapper().toResponse(a));
 
         verifyNoInteractions(sizeGuardMetrics);
         assertBadRequest(response);
