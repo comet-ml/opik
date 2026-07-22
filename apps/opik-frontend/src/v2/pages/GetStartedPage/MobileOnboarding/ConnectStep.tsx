@@ -161,11 +161,20 @@ const ConnectStep: React.FC<ConnectStepProps> = ({ userEmail = "" }) => {
               ) : (
                 <Mail className="size-3.5" />
               )}
-              {isPending
-                ? "Sending..."
-                : emailSent
-                  ? "Instructions sent!"
-                  : "Email setup instructions"}
+              {/* Wrap the state-dependent label in a <span> so React swaps a
+                  stable wrapper element instead of a bare text node. Under
+                  browser translation Google Translate re-parents text nodes
+                  into <font> elements; reconciling this label (icon + text swap
+                  on submit) against a re-parented bare text node throws
+                  "NotFoundError: removeChild". The wrapper keeps the label fully
+                  translatable (unlike translate="no"). See facebook/react#11538. */}
+              <span>
+                {isPending
+                  ? "Sending..."
+                  : emailSent
+                    ? "Instructions sent!"
+                    : "Email setup instructions"}
+              </span>
             </Button>
           </form>
 
