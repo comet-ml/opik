@@ -62,6 +62,8 @@ public class SpanService {
     public static final String PARENT_SPAN_IS_MISMATCH = "parent_span_id does not match the existing span";
     public static final String TRACE_ID_MISMATCH = "trace_id does not match the existing span";
     public static final String SPAN_KEY = "Span";
+    public static final String SPAN_TRACE_KEY = "Span trace";
+    public static final String SPAN_PARENT_KEY = "Span parent";
     public static final String PROJECT_AND_WORKSPACE_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
 
     private final @NonNull SpanDAO spanDAO;
@@ -159,6 +161,7 @@ public class SpanService {
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return idGenerator
                 .validateIdAsync(id, SPAN_KEY)
+                .then(Mono.fromRunnable(() -> validateSpanReferences(span.traceId(), span.parentSpanId())))
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -220,7 +223,9 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return idGenerator
-                    .validateIdForUpdateAsync(id, SPAN_KEY)
+                    .validateIdNotInFutureAsync(id, SPAN_KEY)
+                    .then(Mono.fromRunnable(
+                            () -> validateSpanReferences(spanUpdate.traceId(), spanUpdate.parentSpanId())))
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -247,7 +252,10 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+            return Mono
+                    .fromRunnable(() -> validateSpanReferences(batchUpdate.update().traceId(),
+                            batchUpdate.update().parentSpanId()))
+                    .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
@@ -367,6 +375,15 @@ public class SpanService {
 
         List<Span> dedupedSpans = dedupSpans(batch.spans());
 
+        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
+        // creation), so a rejected batch never mutates state.
+        dedupedSpans.forEach(span -> {
+            if (span.id() != null) {
+                idGenerator.validateId(span.id(), SPAN_KEY);
+            }
+            validateSpanReferences(span.traceId(), span.parentSpanId());
+        });
+
         List<String> projectNames = dedupedSpans
                 .stream()
                 .map(Span::projectName)
@@ -438,6 +455,13 @@ public class SpanService {
         return result;
     }
 
+    // Shared span reference-id policy: the trace (required) and parent (optional) must be time-ordered
+    // UUIDv7, past allowed. Used by every span write path so the rules can't drift between them.
+    private void validateSpanReferences(UUID traceId, UUID parentSpanId) {
+        idGenerator.validateIdNotInFuture(traceId, SPAN_TRACE_KEY);
+        idGenerator.validateIdNotInFutureIfPresent(parentSpanId, SPAN_PARENT_KEY);
+    }
+
     private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
@@ -460,6 +484,7 @@ public class SpanService {
 
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
                     idGenerator.validateId(id, SPAN_KEY);
+                    // trace/parent references are validated up front in create(SpanBatch) before side effects.
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })

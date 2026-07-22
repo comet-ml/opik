@@ -368,7 +368,7 @@ class DatasetsResourceCreateFromSpansTest {
         UUID nonExistentDatasetId = UUID.randomUUID();
 
         var request = CreateDatasetItemsFromSpansRequest.builder()
-                .spanIds(Set.of(UUID.randomUUID()))
+                .spanIds(Set.of(GENERATOR.generate()))
                 .enrichmentOptions(
                         SpanEnrichmentOptions.builder().build())
                 .build();

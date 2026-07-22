@@ -344,6 +344,33 @@ class SpansResourceTest {
                         "UUID after window"));
     }
 
+    // Referenced ids (traceId, parentSpanId) use the not-in-future policy: non-v7 and future-dated are
+    // rejected, but past ids are allowed (spans are commonly attached to older traces), so unlike
+    // invalidIds() there is no TOO_OLD case here. Each argument sets exactly one referenced id to an
+    // invalid value on the span builder and pairs it with the expected validation message, so trace and
+    // parent cases share a single test body.
+    static Stream<Arguments> invalidReferencedIds() {
+        var future = Instant.now().plus(Duration.ofHours(25)).toEpochMilli();
+        var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'";
+        var expectedWindow = Duration.ofHours(24);
+        return Stream.of(
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder.traceId(UUID.randomUUID()),
+                        "Span trace id must be a version 7 UUID",
+                        "traceId not v7"),
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder
+                                .traceId(generator.construct(future)),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(future), expectedWindow, Reason.TOO_FAR_FUTURE.getValue()),
+                        "traceId after window"),
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder
+                                .parentSpanId(UUID.randomUUID()),
+                        "Span parent id must be a version 7 UUID",
+                        "parentSpanId not v7"));
+    }
+
     @Nested
     @DisplayName("Spans existence probe")
     class SpansExistence {
@@ -1800,6 +1827,40 @@ class SpansResourceTest {
             }
         }
 
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidReferencedIds")
+        @ParameterizedTest(name = "Create span with invalid referenced id throws bad request: {2}")
+        void createWithInvalidReferencedIdThrowsBadRequest(
+                Function<Span.SpanBuilder, Span.SpanBuilder> spanCustomizer, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var span = spanCustomizer.apply(podamFactory.manufacturePojo(Span.class).toBuilder()).build();
+            try (var response = spanResourceClient.createSpan(
+                    span, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
+        @Test
+        @DisplayName("Create span with an old (past) v7 traceId succeeds — late spans on old traces are valid")
+        void createWithOldTraceIdSucceeds() {
+            var old = Instant.now().minus(Duration.ofDays(30)).toEpochMilli();
+            var oldTraceId = generator.construct(old);
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(oldTraceId)
+                    .parentSpanId(null)
+                    .build();
+
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            assertThat(id).isNotNull();
+
+            // Round-trip: the old traceId must be persisted verbatim (not rewritten) and parentSpanId stays null.
+            var retrievedSpan = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedSpan.traceId()).isEqualTo(oldTraceId);
+            assertThat(retrievedSpan.parentSpanId()).isNull();
+        }
+
         @Test
         @DisplayName("when span is fetched with different truncate and strip_attachments flags, then response varies accordingly")
         void getByList__whenFetchedWithDifferentFlags__thenResponseVariesAccordingly() throws Exception {
@@ -2284,6 +2345,21 @@ class SpansResourceTest {
             var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
                     HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
             var span = podamFactory.manufacturePojo(Span.class).toBuilder().id(id).build();
+            try (var response = spanResourceClient.callBatchCreateSpans(
+                    List.of(span), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidReferencedIds")
+        @ParameterizedTest(name = "Batch create span with invalid referenced id throws bad request: {2}")
+        void batchCreateWithInvalidReferencedIdThrowsBadRequest(
+                Function<Span.SpanBuilder, Span.SpanBuilder> spanCustomizer, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var span = spanCustomizer.apply(podamFactory.manufacturePojo(Span.class).toBuilder()).build();
             try (var response = spanResourceClient.callBatchCreateSpans(
                     List.of(span), API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);

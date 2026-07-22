@@ -48,7 +48,9 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -131,7 +133,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.averagingDouble;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
@@ -184,6 +185,7 @@ class ProjectsResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private String baseURI;
     private ClientSupport client;
@@ -1857,7 +1859,7 @@ class ProjectsResourceTest {
 
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
-                        trace.id(), randomUUID(), trace.projectName())));
+                        trace.id(), idGenerator.generateId(), trace.projectName())));
         guardrailsByTraceId.values().forEach(guardrail -> guardrailsResourceClient.addBatch(
                 guardrail, apiKey, workspaceName));
 
