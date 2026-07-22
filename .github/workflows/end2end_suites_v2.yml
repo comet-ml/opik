@@ -62,13 +62,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: tests_end_to_end/e2e/package-lock.json
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup uv & Python
+        uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: '3.12'
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v5
 
       - name: Install E2E test dependencies
         working-directory: ${{ github.workspace }}/tests_end_to_end/e2e

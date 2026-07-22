@@ -10,6 +10,7 @@ import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
 import io.opentelemetry.proto.trace.v1.Status;
@@ -19,6 +20,7 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,6 +37,7 @@ import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractCos
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.storageKey;
 
 @UtilityClass
 @Slf4j
@@ -133,6 +136,9 @@ public class OpenTelemetryMapper {
     private static final String CLAUDE_CODE_LLM_SPAN = "claude_code.llm_request";
     private static final String NEW_CONTEXT_ATTR = "new_context";
 
+    // Reserved metadata keys that must not be overwritten by user-supplied JSON merged from opik.metadata.
+    private static final Set<String> RESERVED_METADATA_KEYS = Set.of("thread_id", "integration", "server.address");
+
     /**
      * Same as {@link #enrichSpanWithAttributes(SpanBuilder, List, String, List)} but with the OTEL
      * span name, used for span-name-aware routing (e.g. Claude Code's {@code new_context} maps to
@@ -216,7 +222,16 @@ public class OpenTelemetryMapper {
                         default -> metadata;
                     };
 
-                    extractToJsonColumn(node, key, value);
+                    String jsonKey = storageKey(rule, key);
+                    // If the suffix is empty then try merging as a JSON object,
+                    // otherwise nest under the stripped key or the rule key.
+                    if (jsonKey.isEmpty() && value.getValueCase() == AnyValue.ValueCase.STRING_VALUE) {
+                        mergeJsonObjectOrFallback(node, rule.getRule(), key, value);
+                    } else if (jsonKey.isEmpty()) {
+                        extractToJsonColumn(node, rule.getRule(), value);
+                    } else {
+                        extractToJsonColumn(node, jsonKey, value);
+                    }
                     break;
 
                 case TAGS :
@@ -295,6 +310,39 @@ public class OpenTelemetryMapper {
         }
         if (!tags.isEmpty()) {
             spanBuilder.tags(tags);
+        }
+    }
+
+    /**
+     * When the storage key is empty and the value is a string, try parsing it as a JSON object
+     * and merge its fields into {@code node}, skipping {@link #RESERVED_METADATA_KEYS}. On a
+     * non-object JSON value or a parse failure, fall back to storing the raw value under the
+     * rule's key via {@link #extractToJsonColumn}.
+     */
+    private static void mergeJsonObjectOrFallback(ObjectNode node, String ruleKey, String key, AnyValue value) {
+        String stringValue = value.getStringValue();
+
+        // Only try to parse JSON-looking strings
+        String trimmed = StringUtils.trimToEmpty(stringValue);
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            extractToJsonColumn(node, ruleKey, value);
+            return;
+        }
+        try {
+            var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
+            if (jsonNode.isObject()) {
+                jsonNode.fields()
+                        .forEachRemaining(entry -> {
+                            if (!RESERVED_METADATA_KEYS.contains(entry.getKey())) {
+                                node.set(entry.getKey(), entry.getValue());
+                            }
+                        });
+            } else {
+                extractToJsonColumn(node, ruleKey, value);
+            }
+        } catch (UncheckedIOException e) {
+            log.warn("Failed to parse JSON, falling back to text for key '{}'", key, e);
+            extractToJsonColumn(node, ruleKey, value);
         }
     }
 

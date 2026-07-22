@@ -406,12 +406,12 @@ class OpenTelemetryResourceTest {
             assertThat(span.provider()).isEqualTo("openai");
             assertThat(span.type()).isEqualTo(SpanType.llm);
 
-            assertThat(span.metadata().get("code.line").asInt()).isEqualTo(11);
-            assertThat(span.metadata().get("smolagents.single").asText()).isEqualTo("value");
-            assertThat(span.metadata().get("smolagents.node").get("key").asText()).isEqualTo("value");
-            assertThat(span.metadata().get("smolagents.array").isArray()).isTrue();
+            assertThat(span.metadata().get("line").asInt()).isEqualTo(11);
+            assertThat(span.metadata().get("single").asText()).isEqualTo("value");
+            assertThat(span.metadata().get("node").get("key").asText()).isEqualTo("value");
+            assertThat(span.metadata().get("array").isArray()).isTrue();
 
-            assertThat(span.input().get("input").get("key").asText()).isEqualTo("value");
+            assertThat(span.input().get("key").asText()).isEqualTo("value");
             assertThat(span.input().get("tools").isArray()).isEqualTo(Boolean.TRUE);
             assertThat(span.input().get("all_messages").isArray()).isEqualTo(Boolean.TRUE);
 
@@ -423,8 +423,8 @@ class OpenTelemetryResourceTest {
 
             // check metadata
             assertThat(span.metadata()).isNotEmpty();
-            assertThat(span.metadata().get("opik.metadata").get("foo").asText()).isEqualTo("bar");
-            assertThat(span.metadata().get("opik.metadata.inline").asText()).isEqualTo("inline_value");
+            assertThat(span.metadata().get("foo").asText()).isEqualTo("bar");
+            assertThat(span.metadata().get("inline").asText()).isEqualTo("inline_value");
         }
 
         @Test

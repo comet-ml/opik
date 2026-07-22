@@ -19,6 +19,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlm
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -941,6 +942,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .name(updatedEvaluator.getName())
                     .samplingRate(updatedEvaluator.getSamplingRate())
                     .enabled(updatedEvaluator.isEnabled())
+                    .triggerScope(updatedEvaluator.getTriggerScope())
                     .filters((List) updatedEvaluator.getFilters())
                     .code(updatedEvaluator.getCode())
                     .build();
@@ -1512,6 +1514,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(0f) // Low sampling rate to avoid actual processing
                     .enabled(true)
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .filters(List.of())
                     .projectIds(Set.of(projectId))
                     .build();
@@ -1522,6 +1525,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // High sampling rate, but rule is disabled
                     .enabled(false)
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .filters(List.of())
                     .projectIds(Set.of(projectId))
                     .build();
@@ -1558,6 +1562,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // 100% sampling rate
                     .enabled(false) // But disabled
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(Set.of(projectId))
                     .build();
             var disabledId = evaluatorsResourceClient.createEvaluator(disabledRule, WORKSPACE_NAME, API_KEY);

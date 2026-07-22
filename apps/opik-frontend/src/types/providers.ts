@@ -246,6 +246,8 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = "google/gemini-3.1-pro-preview-customtools",
   GOOGLE_GEMINI_3_5_FLASH = "google/gemini-3.5-flash",
+  GOOGLE_GEMINI_3_5_FLASH_LITE = "google/gemini-3.5-flash-lite",
+  GOOGLE_GEMINI_3_6_FLASH = "google/gemini-3.6-flash",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_3_12B_IT = "google/gemma-3-12b-it",
@@ -512,6 +514,8 @@ export enum PROVIDER_MODEL_TYPE {
   PERPLEXITY_SONAR_REASONING_PRO = "perplexity/sonar-reasoning-pro",
   POOLSIDE_LAGUNA_M_1 = "poolside/laguna-m.1",
   POOLSIDE_LAGUNA_M_1_FREE = "poolside/laguna-m.1:free",
+  POOLSIDE_LAGUNA_S_2_1 = "poolside/laguna-s-2.1",
+  POOLSIDE_LAGUNA_S_2_1_FREE = "poolside/laguna-s-2.1:free",
   POOLSIDE_LAGUNA_XS_2_1 = "poolside/laguna-xs-2.1",
   POOLSIDE_LAGUNA_XS_2_1_FREE = "poolside/laguna-xs-2.1:free",
   POOLSIDE_LAGUNA_XS_2 = "poolside/laguna-xs.2",
@@ -698,6 +702,8 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite",
+  GEMINI_3_6_FLASH = "gemini-3.6-flash",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

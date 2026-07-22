@@ -1,0 +1,48 @@
+## Prompt Library Now Available in Opik 2.0
+
+The Prompt Library is now part of the Opik 2.0 UI, accessible from the project sidebar under **Prompt library**. Alongside that, prompt versions have gained first-class environment support — you can tag a version as `production` or `staging` and retrieve it by name from the SDK, without tracking version numbers in application code.
+
+**What's new:**
+
+- **Prompt Library in the sidebar** — the Prompt Library is now a top-level section in every project in the new Opik 2.0 interface
+- **Fetch by environment** — `client.get_prompt(name, environment="production")` returns the version currently tagged as production; `version` and `environment` are mutually exclusive and passing both raises a clear error
+- **Assign environments** — `client.set_prompt_environments(name, ["production", "staging"])` replaces the full environment set on a version; the same environment is automatically moved away from whatever version previously held it
+- **Tag at creation** — `client.create_prompt(name, content="...", environments=["staging"])` and `client.create_chat_prompt(...)` accept `environments` directly
+- **TypeScript parity** — `setPromptEnvironments`, `getPrompt({ environment })`, and `createPrompt({ environments })` mirror the Python API
+- **Sequential version numbers** — prompt versions now show as `v1`, `v2`, `v3` in the UI and API instead of raw commit hashes
+- **Environment badges everywhere** — assigned environments appear next to every version reference in the prompt library, history timeline, diff view, and Playground
+- **Terminology update** — "commit" has been replaced with "version" throughout the prompt UI
+
+```python
+# Tag a version at creation time
+prompt = client.create_prompt("system-prompt", content="...", environments=["staging"])
+
+# Retrieve by environment — no hard-coded version number needed
+production_prompt = client.get_prompt("system-prompt", environment="production")
+
+# Promote a specific version to production
+client.set_prompt_environments("system-prompt", ["production"], version="v3")
+```
+
+## Simplified Filters in the Logs View
+
+The Traces, Spans, and Threads tabs now have a redesigned filter bar that makes it faster to narrow down what you're looking at. Filters appear as chips directly in the toolbar — pick a field, set a value, and the table updates instantly. Frequently-used filters can be **pinned** to the bar so they're always one click away, and filter state is preserved in the URL so you can share an exact filtered view with a teammate.
+
+## Bug Fixes & Improvements
+
+- **Test suite assertions: sub-span inspection** — the evaluator LLM can now issue `get_trace_spans` and `read` tool calls to inspect intermediate spans during evaluation, enabling correctness checks about tool usage, model selection, and per-span errors inside complex agents
+- **Google ADK integration: images render in trace attachments** — URL-safe base64 image data sent by ADK is automatically normalized to standard base64; PNG, JPEG, GIF, and WebP attachments all render correctly
+- **Optimization trials page: all constituent experiments shown** — experiments belonging to multi-project optimizations are now visible from the trials page regardless of which project the user is currently viewing the optimization from
+- **Error rate KPI: now shows a percentage** — the error rate dashboard card was displaying a raw event count; it now shows the rate as a percentage
+- **Annotation queue: trace logs shown inline** — trace log entries are rendered inline on the annotation queue page instead of requiring navigation away
+- **Online evaluation rules: ClassCastException resolved** — thread-level rules that include filters no longer throw a `ClassCastException` under certain configurations
+- **Attachments: data URI prefix handled** — base64 attachment payloads that include a `data:<type>;base64,` prefix are now stripped correctly in both the SDK and the frontend
+- **SDK: built-in environment colors preserved** — workspace environments with reserved names retain their designated color after updates or syncs
+- **`opik migrate`: skipped items reported clearly** — the migration command now reports each skipped item with its reason, count, and sample source IDs, and exits with code 1 so CI pipelines detect incomplete migrations
+- **Qianfan integration documentation** — the Qianfan LLM provider integration now has a dedicated documentation page
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.47...2.0.52)
+
+_Releases_: `2.0.48`, `2.0.49`, `2.0.50`, `2.0.51`, `2.0.52`

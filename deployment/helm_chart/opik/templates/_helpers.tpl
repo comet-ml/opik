@@ -57,6 +57,71 @@ component: clickhouse
 {{- end }}
 
 {{/*
+ClickHouse tiered-storage server config (conf.d/storage.xml).
+
+Renders the hot -> cold storage policy per Section 5.3 of the Hyperscale plan.
+Helm renders a concrete <endpoint>; ClickHouse macros ({shard}/{replica})
+cannot be used here because the S3 disk is read at server start, before macros
+bind. Inert until a later, environment-gated migration attaches the
+`tiered_replicated` policy to a table.
+*/}}
+{{- define "opik.clickhouse.storageXml" -}}
+{{- $ts := .Values.clickhouse.tieredStorage -}}
+{{- $s3 := $ts.cold.s3 -}}
+{{- $vn := $ts.cold.cache.volumeName -}}
+{{- if not (regexMatch "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$" $vn) -}}
+{{- fail (printf "clickhouse.tieredStorage.cold.cache.volumeName %q must be a DNS label (<=63 chars, lowercase alphanumeric or '-', start with a letter, end alphanumeric)" $vn) -}}
+{{- end -}}
+{{- if not $s3.endpoint -}}
+{{- fail "clickhouse.tieredStorage.cold.s3.endpoint must be set to the cold bucket's S3 URL when tiered storage is enabled" -}}
+{{- end -}}
+{{- $endpoint := printf "%s/%s/" (trimSuffix "/" $s3.endpoint) (trimSuffix "/" (trimPrefix "/" $s3.prefix)) -}}
+<clickhouse>
+  <storage_configuration>
+    <disks>
+      <hot>
+        <keep_free_space_bytes>{{ $ts.hot.keepFreeSpaceBytes }}</keep_free_space_bytes>
+      </hot>
+      <cold_s3>
+        <type>s3</type>
+        <endpoint>{{ $endpoint }}</endpoint>
+        {{- if $s3.readOnly }}
+        <read_only>true</read_only>
+        {{- end }}
+        {{- if $s3.useEnvironmentCredentials }}
+        <use_environment_credentials>true</use_environment_credentials>
+        {{- end }}
+        {{- if $s3.region }}
+        <region>{{ $s3.region }}</region>
+        {{- end }}
+        <s3_max_get_rps>{{ $s3.maxGetRps }}</s3_max_get_rps>
+        <s3_max_put_rps>{{ $s3.maxPutRps }}</s3_max_put_rps>
+      </cold_s3>
+      <cold>
+        <type>cache</type>
+        <disk>cold_s3</disk>
+        <path>{{ $ts.cold.cache.path }}/</path>
+        <max_size>{{ $ts.cold.cache.maxSize }}</max_size>
+        <cache_on_write_operations>0</cache_on_write_operations>
+      </cold>
+    </disks>
+    <policies>
+      <tiered_replicated>
+        <volumes>
+          <hot>
+            <disk>hot</disk>
+          </hot>
+          <cold>
+            <disk>cold</disk>
+          </cold>
+        </volumes>
+      </tiered_replicated>
+    </policies>
+  </storage_configuration>
+</clickhouse>
+{{- end }}
+
+{{/*
 {{- end }}
 {{/*
 Create the name of the service account to use
