@@ -28,11 +28,10 @@ public interface IdGenerator {
     UUID getTimeOrderedEpoch(long epochMilli);
 
     /**
-     * Validates an ingested {@code id}: it must be a version 7 UUID ({@link #validateVersion(UUID, String)})
-     * whose embedded timestamp is within the configured ingestion window.
-     * Rejects with HTTP 400 (or, in audit mode, counts + logs without rejecting). Encapsulates both
-     * data-quality checks behind one call. {@code workspaceId} tags the audit metric so offenders are
-     * attributable per workspace; pass {@link ErrorMetricsResolver#UNKNOWN} when it is not available.
+     * Validates an ingested {@code id}: it must be a version 7 UUID
+     * ({@link #validateVersion(UUID, String)}) whose embedded timestamp is within the configured
+     * ingestion window, throwing {@link InvalidUUIDException} otherwise. {@code workspaceId} attributes
+     * the source workspace for observability; pass {@link ErrorMetricsResolver#UNKNOWN} when unavailable.
      */
     void validateId(UUID id, String resource, String workspaceId);
 

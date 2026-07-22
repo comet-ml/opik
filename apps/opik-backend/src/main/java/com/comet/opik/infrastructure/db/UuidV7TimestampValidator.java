@@ -107,9 +107,11 @@ public class UuidV7TimestampValidator {
         var timestamp = rejection.getRight();
         if (auditOnly) {
             metrics.recordAudit(reason.getValue(), resource, workspaceId);
+            // Keep a fixed, searchable prefix ("UUIDv7 audit: would-reject id ...") and append the
+            // variable fields at the end, so log searches match on the message rather than the values.
             log.info(
-                    "UUIDv7 audit: would-reject {} id with embedded timestamp '{}' outside window '{}', reason '{}', workspace '{}'",
-                    resource, timestamp, window, reason.getValue(), workspaceId);
+                    "UUIDv7 audit: would-reject id, embedded timestamp '{}' outside window '{}', reason '{}', resource '{}', workspace '{}'",
+                    timestamp, window, reason.getValue(), resource, workspaceId);
             return;
         }
         throw new InvalidUUIDException(reason,
