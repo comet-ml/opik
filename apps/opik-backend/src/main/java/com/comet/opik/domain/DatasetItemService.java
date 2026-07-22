@@ -581,7 +581,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private Mono<Void> batchUpdateByIdsWithVersioning(UUID datasetId, DatasetItemBatchUpdate batchUpdate,
             String workspaceId, String userName) {
         int updateSize = batchUpdate.ids().size();
-        log.info("Batch updating '{}' items by IDs with versioning for dataset '{}'", updateSize, datasetId);
+        log.info("Batch updating items by IDs with versioning for dataset '{}' (count='{}')", datasetId, updateSize);
 
         return runVersionedBatchUpdate(datasetId, workspaceId, userName, latestVersion -> {
             UUID baseVersionId = latestVersion.id();
@@ -600,8 +600,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             return Mono.empty();
                         }
 
-                        log.info("Batch updated '{}' items by IDs for dataset '{}', baseVersion='{}'",
-                                updatedCount, datasetId, baseVersionId);
+                        log.info("Batch updated items by IDs for dataset '{}' (count='{}', baseVersion='{}')",
+                                datasetId, updatedCount, baseVersionId);
 
                         // OPIK-6390: pass the just-updated IDs as the "deleted" slot of
                         // applyDelta so they're excluded from the unchanged-items copy.
@@ -672,8 +672,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         return Mono.empty();
                                     }
 
-                                    log.info("Batch updated '{}' items by filters for dataset '{}', baseVersion='{}'",
-                                            updatedCount, datasetId, baseVersionId);
+                                    log.info(
+                                            "Batch updated items by filters for dataset '{}' (count='{}', baseVersion='{}')",
+                                            datasetId, updatedCount, baseVersionId);
 
                                     // Copy unchanged items (those NOT matching the filters)
                                     // Special case: empty filters list means "select all" - no unchanged items to copy
