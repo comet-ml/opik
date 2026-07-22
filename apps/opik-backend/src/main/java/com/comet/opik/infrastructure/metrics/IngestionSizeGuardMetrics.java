@@ -34,7 +34,7 @@ public class IngestionSizeGuardMetrics {
     public static final String GUARD_REQUEST_SIZE = "request_size";
     public static final String GUARD_DOCUMENT_LENGTH = "document_length";
     public static final String GUARD_STRING_LENGTH = "string_length";
-    public static final String GUARD_STREAM_CONSTRAINT = "stream_constraint"; // unclassified fallback
+    public static final String GUARD_UNCLASSIFIED = "unclassified"; // unclassified fallback
 
     public static final String COMPONENT_REQUEST_FILTER = "request_filter";
     public static final String COMPONENT_JSON_PARSER = "json_parser";
@@ -68,7 +68,7 @@ public class IngestionSizeGuardMetrics {
         var resolvedWorkspaceId = StringUtils.defaultIfBlank(workspaceId, UNKNOWN);
         rejectionCounter.add(1, Attributes.builder()
                 .put(COMPONENT_KEY, StringUtils.defaultIfBlank(component, UNKNOWN))
-                .put(GUARD_KEY, StringUtils.defaultIfBlank(guard, GUARD_STREAM_CONSTRAINT))
+                .put(GUARD_KEY, StringUtils.defaultIfBlank(guard, GUARD_UNCLASSIFIED))
                 .put(ENDPOINT_KEY, StringUtils.defaultIfBlank(endpoint, UNKNOWN))
                 .put(WORKSPACE_ID_KEY, resolvedWorkspaceId)
                 .put(WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(workspaceName, resolvedWorkspaceId))
@@ -76,11 +76,11 @@ public class IngestionSizeGuardMetrics {
     }
 
     // Classifies via Jackson's message text (the only signal it exposes): version-dependent, guarded by
-    // IngestionSizeGuardMetricsTest; re-check on a Jackson bump. Unrecognized -> stream_constraint.
+    // IngestionSizeGuardMetricsTest; re-check on a Jackson bump. Unrecognized -> unclassified.
     public static String classifyStreamConstraint(StreamConstraintsException exception) {
         String message = exception.getMessage();
         if (message == null) {
-            return GUARD_STREAM_CONSTRAINT;
+            return GUARD_UNCLASSIFIED;
         }
         if (message.contains("getMaxDocumentLength") || message.contains("Document length")) {
             return GUARD_DOCUMENT_LENGTH;
@@ -88,6 +88,6 @@ public class IngestionSizeGuardMetrics {
         if (message.contains("getMaxStringLength") || message.contains("String value length")) {
             return GUARD_STRING_LENGTH;
         }
-        return GUARD_STREAM_CONSTRAINT;
+        return GUARD_UNCLASSIFIED;
     }
 }

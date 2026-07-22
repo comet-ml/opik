@@ -10,8 +10,8 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
 import static com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics.GUARD_DOCUMENT_LENGTH;
-import static com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics.GUARD_STREAM_CONSTRAINT;
 import static com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics.GUARD_STRING_LENGTH;
+import static com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics.GUARD_UNCLASSIFIED;
 import static com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics.classifyStreamConstraint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -40,21 +40,21 @@ class IngestionSizeGuardMetricsTest {
     }
 
     @Test
-    @DisplayName("an unrecognized constraint message falls back to stream_constraint rather than guessing")
+    @DisplayName("an unrecognized constraint message falls back to unclassified rather than guessing")
     void unknownMessage() {
         assertThat(classifyStreamConstraint(new StreamConstraintsException("Number value length exceeds limit")))
-                .isEqualTo(GUARD_STREAM_CONSTRAINT);
+                .isEqualTo(GUARD_UNCLASSIFIED);
     }
 
     @Test
-    @DisplayName("a null message falls back to stream_constraint")
+    @DisplayName("a null message falls back to unclassified")
     void nullMessage() {
         assertThat(classifyStreamConstraint(new StreamConstraintsException(null)))
-                .isEqualTo(GUARD_STREAM_CONSTRAINT);
+                .isEqualTo(GUARD_UNCLASSIFIED);
     }
 
     // Real-parse tests: drive actual Jackson past the caps so a future Jackson message reword breaks
-    // these instead of silently collapsing the dashboard breakdown to stream_constraint (see the note
+    // these instead of silently collapsing the dashboard breakdown to unclassified (see the note
     // on classifyStreamConstraint).
 
     @Test
