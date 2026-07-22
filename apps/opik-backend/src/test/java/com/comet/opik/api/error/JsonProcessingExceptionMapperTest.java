@@ -51,11 +51,12 @@ class JsonProcessingExceptionMapperTest {
                 .isEqualTo("Request payload exceeds the maximum allowed size.");
     }
 
-    // Genuine malformed JSON stays 400.
+    // Genuine malformed JSON stays 400, with the informative "Unable to process JSON. <detail>" message
+    // (the detail is the caller's own payload, not size-guard internals — those are redacted on the 413 path).
     private void assertBadRequest(Response response) {
         assertThat(response.getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
         assertThat(((ErrorMessage) response.getEntity()).getMessage())
-                .isEqualTo("Unable to process the request body: it is not valid JSON.");
+                .startsWith("Unable to process JSON.");
     }
 
     @Test

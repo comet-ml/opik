@@ -40,16 +40,18 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
             log.debug("Ingestion size guard rejected a request", exception); // expected; already on the metric
             sizeGuardMetrics.recordStreamConstraintRejection(streamConstraintsException, uriInfo.get(), requestContext);
             status = Response.Status.REQUEST_ENTITY_TOO_LARGE;
+            // Redact: the size-guard message exposes internal limits + Jackson internals (StreamReadConstraints,
+            // the configured max). Full detail stays in the server log above, not the HTTP response.
             clientMessage = "Request payload exceeds the maximum allowed size.";
         } else {
             log.info("Deserialization exception for workspace {}",
                     ErrorMetricsResolver.workspaceId(requestContext), exception);
             status = Response.Status.BAD_REQUEST;
-            clientMessage = "Unable to process the request body: it is not valid JSON.";
+            // Ordinary malformed/invalid JSON: echo the parser detail (the caller's own payload + our own
+            // field names, not internal limits) - useful for the client and the long-standing contract.
+            clientMessage = "Unable to process JSON. " + exception.getMessage();
         }
 
-        // Stable, generic message: exception.getMessage() can carry parser internals and fragments of the
-        // client's payload, so the detail stays in the server log above, not the HTTP response.
         return Response.status(status)
                 .entity(new ErrorMessage(status.getStatusCode(), clientMessage))
                 .build();
