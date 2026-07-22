@@ -238,6 +238,12 @@ class OpikTracer(BaseTracer):
         if not self._opik_context_read_only_mode:
             self._ensure_no_hanging_opik_tracer_spans()
 
+        # LangChain calls _persist_run once per tree, only for the root run, so
+        # this finalizes each trace exactly once. We finalize only traces we own:
+        # `span_data is None` is a trace-only root (a skipped LangGraph root, no
+        # span), and owns_trace() covers the normal case. A root run running under
+        # an external trace (an @track function or distributed headers) is left for
+        # its real owner to finalize - we only contributed spans to it.
         span_data = self._run_state.get_span_data(run.id)
         if span_data is None or self._run_state.owns_trace(span_data.trace_id):
             self._finalize_trace(

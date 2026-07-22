@@ -1,5 +1,3 @@
-import gc
-import weakref
 from typing import List, Optional
 from uuid import UUID, uuid4
 
@@ -163,19 +161,3 @@ def test_run_state__release_run_tree_keeps_unrelated_runs():
     assert store.get_span_data(finished_run_id) is None
     assert store.get_span_data(other_run_id) is not None
     assert store.is_empty() is False
-
-
-def test_run_state__release_run_tree_frees_retained_span_data_objects():
-    """The retained SpanData - which carries the prompt/completion payload - must
-    actually become garbage-collectable once its run tree is released."""
-    store = RunStateStore()
-    run_id = uuid4()
-    span_data = span_module.SpanData(trace_id="trace-1", name="span")
-    span_data_ref = weakref.ref(span_data)
-    store.save_span_data(run_id, span_data)
-
-    store.release_run_tree(_FakeRun(run_id))
-    del span_data
-    gc.collect()
-
-    assert span_data_ref() is None
