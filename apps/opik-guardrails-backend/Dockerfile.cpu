@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir -U "pip>=24.0" && \
     pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
 COPY entrypoint.sh .
-RUN chmod u+x entrypoint.sh
+RUN chmod 755 entrypoint.sh
 
 # Download the cache with the final user to ensure that files are in the right
 # place and readable by the user

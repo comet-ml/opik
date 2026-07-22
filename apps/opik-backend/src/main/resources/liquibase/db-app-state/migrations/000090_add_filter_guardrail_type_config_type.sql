@@ -16,3 +16,4 @@ ALTER TABLE alert_trigger_configs
 -- uses 'filter:guardrail_type', since MODIFY-ing the enum back would truncate those values. Recovery
 -- means restoring the previous enum only after deleting/migrating such rows.
 --rollback empty
+
