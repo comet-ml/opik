@@ -179,7 +179,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .stream()
                 .map(score -> {
                     idGenerator.validateIdNotInFuture(score.id(), entityType.getType()); // validate span/trace id
-                    idGenerator.validateIdNotInFutureIfPresent(score.projectId(), "project");
                     idGenerator.validateIdNotInFutureIfPresent(score.sourceQueueId(), "annotation queue");
 
                     return score.toBuilder()

@@ -176,7 +176,6 @@ class OptimizationServiceImpl implements OptimizationService {
     public Mono<UUID> upsert(@NonNull Optimization optimization) {
         UUID id = optimization.id() == null ? idGenerator.generateId() : optimization.id();
         IdGenerator.validateVersion(id, "Optimization");
-        idGenerator.validateIdNotInFutureIfPresent(optimization.projectId(), "project");
 
         // Detect if this is a Studio optimization (has studioConfig in the request)
         boolean isStudioOptimization = optimization.studioConfig() != null;

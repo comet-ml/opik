@@ -52,15 +52,9 @@ public interface IdGenerator {
      * Null-safe variant of {@link #validateIdNotInFuture} for optional referenced ids (e.g. an optional
      * {@code projectId} that may be resolved by name instead). No-op when {@code id} is null.
      */
-    default void validateIdNotInFutureIfPresent(UUID id, String resource) {
-        if (id != null) {
-            validateIdNotInFuture(id, resource);
-        }
-    }
+    void validateIdNotInFutureIfPresent(UUID id, String resource);
 
-    default Mono<UUID> validateIdNotInFutureIfPresentAsync(UUID id, String resource) {
-        return id == null ? Mono.empty() : validateIdNotInFutureAsync(id, resource);
-    }
+    Mono<UUID> validateIdNotInFutureIfPresentAsync(UUID id, String resource);
 
     static Mono<UUID> validateVersionAsync(@NonNull UUID id, String resource) {
         return Mono.fromCallable(() -> {
@@ -124,5 +118,17 @@ class IdGeneratorImpl implements IdGenerator {
             validateIdNotInFuture(id, resource);
             return id;
         });
+    }
+
+    @Override
+    public void validateIdNotInFutureIfPresent(UUID id, String resource) {
+        if (id != null) {
+            validateIdNotInFuture(id, resource);
+        }
+    }
+
+    @Override
+    public Mono<UUID> validateIdNotInFutureIfPresentAsync(UUID id, String resource) {
+        return id == null ? Mono.empty() : validateIdNotInFutureAsync(id, resource);
     }
 }

@@ -226,7 +226,6 @@ public class SpanService {
                     .validateIdNotInFutureAsync(id, SPAN_KEY)
                     .then(Mono.fromRunnable(
                             () -> validateSpanReferences(spanUpdate.traceId(), spanUpdate.parentSpanId())))
-                    .then(idGenerator.validateIdNotInFutureIfPresentAsync(spanUpdate.projectId(), "project"))
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -256,7 +255,6 @@ public class SpanService {
             return Mono
                     .fromRunnable(() -> validateSpanReferences(batchUpdate.update().traceId(),
                             batchUpdate.update().parentSpanId()))
-                    .then(idGenerator.validateIdNotInFutureIfPresentAsync(batchUpdate.update().projectId(), "project"))
                     .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {

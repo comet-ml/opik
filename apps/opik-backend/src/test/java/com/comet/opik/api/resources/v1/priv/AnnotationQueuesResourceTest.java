@@ -28,13 +28,13 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
@@ -124,7 +124,7 @@ class AnnotationQueuesResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
+    private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private AnnotationQueue newAnnotationQueue() {
         return factory.manufacturePojo(AnnotationQueue.class)
@@ -553,9 +553,9 @@ class AnnotationQueuesResourceTest {
 
             // Generate some item IDs to add
             var itemIds = Set.of(
-                    GENERATOR.generate(),
-                    GENERATOR.generate(),
-                    GENERATOR.generate());
+                    idGenerator.generateId(),
+                    idGenerator.generateId(),
+                    idGenerator.generateId());
 
             // When & Then
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
@@ -581,8 +581,8 @@ class AnnotationQueuesResourceTest {
 
             // Generate some item IDs to add first, then remove
             var itemIds = Set.of(
-                    GENERATOR.generate(),
-                    GENERATOR.generate());
+                    idGenerator.generateId(),
+                    idGenerator.generateId());
 
             // Add items first
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
@@ -601,8 +601,8 @@ class AnnotationQueuesResourceTest {
         @DisplayName("should return 404 when adding items to non-existent annotation queue")
         void addItemsToAnnotationQueueWhenQueueNotExistsShouldReturn404() {
             // Given - Non-existent queue ID
-            var nonExistentQueueId = GENERATOR.generate();
-            var itemIds = Set.of(GENERATOR.generate());
+            var nonExistentQueueId = idGenerator.generateId();
+            var itemIds = Set.of(idGenerator.generateId());
 
             // When & Then
             annotationQueuesResourceClient.addItemsToAnnotationQueue(

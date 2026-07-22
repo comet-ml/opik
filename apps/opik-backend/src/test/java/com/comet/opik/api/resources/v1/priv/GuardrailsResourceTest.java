@@ -17,12 +17,12 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -84,7 +84,7 @@ public class GuardrailsResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
+    private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private TraceResourceClient traceResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
@@ -124,7 +124,7 @@ public class GuardrailsResourceTest {
                 .build();
         var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
-        var guardrails = guardrailsGenerator.generateGuardrailsForTrace(traceId, generator.generate(),
+        var guardrails = guardrailsGenerator.generateGuardrailsForTrace(traceId, idGenerator.generateId(),
                 trace.projectName());
 
         guardrailsResourceClient.addBatch(guardrails, API_KEY, TEST_WORKSPACE);
@@ -157,10 +157,10 @@ public class GuardrailsResourceTest {
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> Stream.concat(
                         // mimic two separate guardrails validation groups
-                        guardrailsGenerator.generateGuardrailsForTrace(trace.id(), generator.generate(),
+                        guardrailsGenerator.generateGuardrailsForTrace(trace.id(), idGenerator.generateId(),
                                 trace.projectName())
                                 .stream(),
-                        guardrailsGenerator.generateGuardrailsForTrace(trace.id(), generator.generate(),
+                        guardrailsGenerator.generateGuardrailsForTrace(trace.id(), idGenerator.generateId(),
                                 trace.projectName())
                                 .stream())
                         .toList()));
@@ -195,7 +195,7 @@ public class GuardrailsResourceTest {
 
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
-                        trace.id(), generator.generate(), trace.projectName())));
+                        trace.id(), idGenerator.generateId(), trace.projectName())));
 
         guardrailsByTraceId.values()
                 .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, API_KEY,

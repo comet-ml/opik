@@ -214,7 +214,6 @@ class PromptServiceImpl implements PromptService {
     private Prompt savePrompt(String workspaceId, Prompt prompt) {
 
         IdGenerator.validateVersion(prompt.id(), "prompt");
-        idGenerator.validateIdNotInFutureIfPresent(prompt.projectId(), "project");
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
@@ -333,7 +332,6 @@ class PromptServiceImpl implements PromptService {
                 : createPromptVersion.version().commit();
 
         IdGenerator.validateVersion(id, "prompt version");
-        idGenerator.validateIdNotInFutureIfPresent(createPromptVersion.projectId(), "project");
 
         TemplateStructure templateStructure = createPromptVersion.templateStructure();
 

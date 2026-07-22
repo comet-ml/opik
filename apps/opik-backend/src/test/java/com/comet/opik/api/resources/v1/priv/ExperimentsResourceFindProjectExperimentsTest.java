@@ -34,13 +34,13 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -112,7 +112,7 @@ class ExperimentsResourceFindProjectExperimentsTest {
     private final TestDropwizardAppExtension APP = setup.APP;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
+    private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private String baseURI;
     private ExperimentResourceClient experimentResourceClient;
@@ -1123,7 +1123,7 @@ class ExperimentsResourceFindProjectExperimentsTest {
         var project = factory.manufacturePojo(Project.class);
         var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-        UUID optimizationId = generator.generate();
+        UUID optimizationId = idGenerator.generateId();
 
         var experiments = experimentResourceClient.generateExperimentList()
                 .stream()

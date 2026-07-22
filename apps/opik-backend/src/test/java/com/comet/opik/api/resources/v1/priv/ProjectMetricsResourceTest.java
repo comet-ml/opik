@@ -44,13 +44,12 @@ import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.NotFoundException;
@@ -189,7 +188,7 @@ class ProjectMetricsResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
+    private static final IdGenerator testIdGenerator = TestIdGeneratorFactory.create();
     private IdGenerator idGenerator;
 
     private String baseURI;
@@ -426,7 +425,7 @@ class ProjectMetricsResourceTest {
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                    traces.getFirst().id(), generator.generate(), projectName).getFirst().toBuilder()
+                    traces.getFirst().id(), testIdGenerator.generateId(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
 
@@ -652,7 +651,7 @@ class ProjectMetricsResourceTest {
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                    traceForFilter.id(), generator.generate(), projectName).getFirst().toBuilder()
+                    traceForFilter.id(), testIdGenerator.generateId(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
 
@@ -1057,7 +1056,7 @@ class ProjectMetricsResourceTest {
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                    traceForFilter.id(), generator.generate(), projectName).getFirst().toBuilder()
+                    traceForFilter.id(), testIdGenerator.generateId(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
 
@@ -1276,7 +1275,7 @@ class ProjectMetricsResourceTest {
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                    traceForFilter.id(), generator.generate(), projectName).getFirst().toBuilder()
+                    traceForFilter.id(), testIdGenerator.generateId(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
 
@@ -1468,7 +1467,7 @@ class ProjectMetricsResourceTest {
 
             // create guardrails for the first trace
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                    traceForFilter.getFirst().id(), generator.generate(), projectName).getFirst().toBuilder()
+                    traceForFilter.getFirst().id(), testIdGenerator.generateId(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
 
@@ -1687,7 +1686,7 @@ class ProjectMetricsResourceTest {
             return traces.stream()
                     .map(trace -> {
                         List<Guardrail> guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(),
-                                generator.generate(),
+                                testIdGenerator.generateId(),
                                 trace.projectName());
                         guardrailsResourceClient.addBatch(guardrails, API_KEY, WORKSPACE_NAME);
                         return guardrails;
@@ -1714,7 +1713,7 @@ class ProjectMetricsResourceTest {
             List<Long> guardrailCounts = traces.stream()
                     .map(trace -> {
                         var guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(),
-                                generator.generate(),
+                                testIdGenerator.generateId(),
                                 trace.projectName());
                         var guardrailsWithAtLeastOneFailed = IntStream.range(0, guardrails.size())
                                 .mapToObj(i -> i == 0
@@ -3518,7 +3517,7 @@ class ProjectMetricsResourceTest {
             traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                    traceForFilter.getFirst().id(), generator.generate(), projectName).getFirst().toBuilder()
+                    traceForFilter.getFirst().id(), testIdGenerator.generateId(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
             guardrailsResourceClient.addBatch(List.of(guardrail), API_KEY, WORKSPACE_NAME);
@@ -3636,7 +3635,7 @@ class ProjectMetricsResourceTest {
             traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
             var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
-                    traceForFilter.id(), generator.generate(), projectName).getFirst().toBuilder()
+                    traceForFilter.id(), testIdGenerator.generateId(), projectName).getFirst().toBuilder()
                     .result(GuardrailResult.PASSED)
                     .build();
             guardrailsResourceClient.addBatch(List.of(guardrail), API_KEY, WORKSPACE_NAME);

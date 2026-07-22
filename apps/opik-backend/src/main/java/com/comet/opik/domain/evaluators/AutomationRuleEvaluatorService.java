@@ -117,6 +117,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         UUID id = idGenerator.generateId();
         IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
+        // projectIds are persisted without an existence check, so enforce v7 to avoid storing orphan v4 ids.
         projectIds.forEach(projectId -> idGenerator.validateIdNotInFutureIfPresent(projectId, "project"));
 
         // Dual-field sync: First projectId becomes the legacy project_id field

@@ -323,7 +323,6 @@ class TraceServiceImpl implements TraceService {
 
         return Mono.deferContextual(ctx -> idGenerator
                 .validateIdNotInFutureAsync(id, TRACE_KEY)
-                .then(idGenerator.validateIdNotInFutureIfPresentAsync(traceUpdate.projectId(), "project"))
                 .then(getProjectById(traceUpdate)
                         .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                         .subscribeOn(Schedulers.boundedElastic())
@@ -359,8 +358,7 @@ class TraceServiceImpl implements TraceService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
-            return idGenerator.validateIdNotInFutureIfPresentAsync(batchUpdate.update().projectId(), "project")
-                    .then(dao.getProjectIdsByTraceIds(new ArrayList<>(batchUpdate.ids())))
+            return dao.getProjectIdsByTraceIds(new ArrayList<>(batchUpdate.ids()))
                     .flatMap(traceToProjectMap -> {
                         var projectIds = Set.copyOf(traceToProjectMap.values());
                         return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)

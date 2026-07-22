@@ -555,6 +555,7 @@ class AlertServiceImpl implements AlertService {
 
         UUID id = alert.id() == null ? idGenerator.generateId() : alert.id();
         IdGenerator.validateVersion(id, "Alert");
+        // projectId is persisted without an existence check here, so enforce v7 to avoid storing an orphan v4.
         idGenerator.validateIdNotInFutureIfPresent(alert.projectId(), "project");
 
         UUID webhookId = alert.webhook().id() == null ? idGenerator.generateId() : alert.webhook().id();

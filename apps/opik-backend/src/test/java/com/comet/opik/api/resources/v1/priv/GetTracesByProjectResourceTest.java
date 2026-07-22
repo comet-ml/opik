@@ -53,6 +53,7 @@ import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -60,8 +61,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.collect.Lists;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.Response;
@@ -173,7 +172,7 @@ class GetTracesByProjectResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
+    private static final IdGenerator testIdGenerator = TestIdGeneratorFactory.create();
     private final FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
 
     private String baseURI;
@@ -3949,7 +3948,7 @@ class GetTracesByProjectResourceTest {
 
             var guardrailsByTraceId = traces.stream()
                     .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
-                            trace.id(), generator.generate(), trace.projectName())));
+                            trace.id(), testIdGenerator.generateId(), trace.projectName())));
 
             // set the first trace with failed guardrails
             guardrailsByTraceId.put(traces.getFirst().id(), guardrailsByTraceId.get(traces.getFirst().id()).stream()
@@ -5165,7 +5164,8 @@ class GetTracesByProjectResourceTest {
                     .toList();
 
             List<Guardrail> guardrailsByTraceId = traces.stream()
-                    .map(trace -> guardrailsGenerator.generateGuardrailsForTrace(trace.id(), generator.generate(),
+                    .map(trace -> guardrailsGenerator.generateGuardrailsForTrace(trace.id(),
+                            testIdGenerator.generateId(),
                             trace.projectName()))
                     .flatMap(Collection::stream)
                     .toList();
