@@ -191,7 +191,18 @@ class TraceServiceImpl implements TraceService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        return attachmentService.deleteAutoStrippedAttachments(EntityType.TRACE, traceIds)
+        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
+        // creation), so a rejected batch never mutates state. Runs inside deferContextual so the audit
+        // metric can attribute the batch's own ids to the request workspace.
+        return Mono.deferContextual(validationCtx -> {
+            String validationWorkspaceId = validationCtx.get(RequestContext.WORKSPACE_ID);
+            dedupedTraces.forEach(trace -> {
+                if (trace.id() != null) {
+                    idGenerator.validateId(trace.id(), TRACE_KEY, validationWorkspaceId);
+                }
+            });
+            return attachmentService.deleteAutoStrippedAttachments(EntityType.TRACE, traceIds);
+        })
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
@@ -200,7 +211,7 @@ class TraceServiceImpl implements TraceService {
                     Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
                             .flatMap(projectService::getOrCreate)
                             .collectList()
-                            .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects, workspaceId))
+                            .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
                             .flatMapMany(Flux::fromIterable)
                             .flatMap(trace -> attachmentStripperService.stripAttachments(trace, workspaceId,
                                     userName,
@@ -237,7 +248,7 @@ class TraceServiceImpl implements TraceService {
         return result;
     }
 
-    private List<Trace> bindTraceToProjectAndId(List<Trace> traces, List<Project> projects, String workspaceId) {
+    private List<Trace> bindTraceToProjectAndId(List<Trace> traces, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         WorkspaceUtils::stripProjectName,
@@ -251,8 +262,8 @@ class TraceServiceImpl implements TraceService {
                     String projectName = WorkspaceUtils.getProjectName(trace.projectName());
                     Project project = projectPerName.get(projectName);
 
+                    // Ids are already validated up-front in create(TraceBatch); generated ids are inherently valid.
                     UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
-                    idGenerator.validateId(id, TRACE_KEY, workspaceId);
 
                     return trace.toBuilder().id(id).projectId(project.id()).projectName(project.name()).build();
                 })
