@@ -209,9 +209,11 @@ build_platform_backend() {
         return 1
     fi
     log_info "Building comet-backend React webapp with JDK $(_java_major_of "$em_jh") at $em_jh (EM reactor; first run is slow)..."
+    # -DskipTests (not -Dmaven.test.skip): comet-ml-mpm-webapp needs comet-mpm-service's
+    # test-jar as a reactor dependency, which only gets produced if test sources compile.
     if ( cd "$COMET_BACKEND_PATH" && JAVA_HOME="$em_jh" \
          mvn -pl comet-ml-react-webapp -am clean install \
-             -T 1C -Dmaven.test.skip=true -Dspotless.skip=true \
+             -T 1C -DskipTests -Dspotless.skip=true \
              -Dmaven.javadoc.skip=true -Dmaven.source.skip=true ); then
         if ! find_platform_backend_jar; then
             log_error "comet-backend build finished but no react-webapp JAR was found"
