@@ -137,6 +137,11 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().uOutput()).isEqualTo(40L);
                 assertThat(row.get().projectId()).isNotBlank();
                 assertThat(row.get().startMs()).isEqualTo(cipxSpan.startTime().toEpochMilli());
+                // config knobs (thinking level + settings) parsed from cipx.call.config
+                assertThat(row.get().effort()).isEqualTo("high");
+                assertThat(row.get().thinkingType()).isEqualTo("adaptive");
+                assertThat(row.get().maxTokens()).isEqualTo(64000L);
+                assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
             });
 
             // The non-cipx span shared the same create event, so once the cipx row is present the
@@ -279,6 +284,20 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().schemaVersion()).isEqualTo(3);
                 assertThat(row.get().projectId()).isNotBlank();
                 assertThat(row.get().startMs()).isEqualTo(cipxTrace.startTime().toEpochMilli());
+                // payment-plan fields parsed from cipx.session.identity
+                assertThat(row.get().billingMode()).isEqualTo("subscription");
+                assertThat(row.get().plan()).isEqualTo("max");
+                assertThat(row.get().planUsageStatus()).isEqualTo("within");
+                // git info + per-turn committed delta parsed from cipx.session.repository (OPIK-7345)
+                assertThat(row.get().branch()).isEqualTo("main");
+                assertThat(row.get().headShaStart()).isEqualTo("aaaa1111");
+                assertThat(row.get().headShaEnd()).isEqualTo("bbbb2222");
+                assertThat(row.get().dirty()).isTrue();
+                assertThat(row.get().commitsInTrace()).isEqualTo(2);
+                assertThat(row.get().filesAdded()).isEqualTo(3);
+                assertThat(row.get().filesDeleted()).isEqualTo(1);
+                assertThat(row.get().linesAdded()).isEqualTo(40);
+                assertThat(row.get().linesDeleted()).isEqualTo(5);
 
                 assertThat(getUserMappings(email)).containsExactly(userUuid);
             });
@@ -379,6 +398,12 @@ class CostIntelligenceIngestionTest {
                                 "cache_read_input_tokens": %d,
                                 "cache_creation_input_tokens": %d,
                                 "output_tokens": %d
+                              },
+                              "config": {
+                                "effort": "high",
+                                "thinking_type": "adaptive",
+                                "max_tokens": 64000,
+                                "context_management": "clear_thinking_20251015"
                               }
                             },
                             "blocks": [
@@ -403,11 +428,25 @@ class CostIntelligenceIngestionTest {
                       "schema_version": %d,
                       "session_id": "cc-session-abc",
                       "harness": "%s",
-                      "repository": {"remote": "%s"},
+                      "repository": {
+                        "remote": "%s",
+                        "branch": "main",
+                        "head_sha": "aaaa1111",
+                        "head_sha_end": "bbbb2222",
+                        "dirty": true,
+                        "commits_in_trace": 2,
+                        "files_added": 3,
+                        "files_deleted": 1,
+                        "lines_added": 40,
+                        "lines_deleted": 5
+                      },
                       "identity": {
                         "user_uuid": "%s",
                         "email": "%s",
-                        "display_name": "%s"
+                        "display_name": "%s",
+                        "billing_mode": "subscription",
+                        "plan": "max",
+                        "plan_usage_status": "within"
                       }
                     }
                   }
@@ -421,7 +460,8 @@ class CostIntelligenceIngestionTest {
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
-                    u_input, u_cache_read, u_cache_creation, u_output
+                    u_input, u_cache_read, u_cache_creation, u_output,
+                    effort, thinking_type, max_tokens, context_management
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -437,7 +477,11 @@ class CostIntelligenceIngestionTest {
                             row.get("u_input", Long.class),
                             row.get("u_cache_read", Long.class),
                             row.get("u_cache_creation", Long.class),
-                            row.get("u_output", Long.class)))));
+                            row.get("u_output", Long.class),
+                            row.get("effort", String.class),
+                            row.get("thinking_type", String.class),
+                            row.get("max_tokens", Long.class),
+                            row.get("context_management", String.class)))));
         }).blockOptional();
     }
 
@@ -491,7 +535,10 @@ class CostIntelligenceIngestionTest {
                 SELECT
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
-                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version
+                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
+                    billing_mode, plan, plan_usage_status,
+                    branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
+                    files_added, files_deleted, lines_added, lines_deleted
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
@@ -509,7 +556,19 @@ class CostIntelligenceIngestionTest {
                             row.get("repository", String.class),
                             row.get("session_id", String.class),
                             row.get("harness", String.class),
-                            row.get("schema_version", Integer.class)))));
+                            row.get("schema_version", Integer.class),
+                            row.get("billing_mode", String.class),
+                            row.get("plan", String.class),
+                            row.get("plan_usage_status", String.class),
+                            row.get("branch", String.class),
+                            row.get("head_sha_start", String.class),
+                            row.get("head_sha_end", String.class),
+                            row.get("dirty", Boolean.class),
+                            row.get("commits_in_trace", Integer.class),
+                            row.get("files_added", Integer.class),
+                            row.get("files_deleted", Integer.class),
+                            row.get("lines_added", Integer.class),
+                            row.get("lines_deleted", Integer.class)))));
         }).blockOptional();
     }
 
@@ -537,7 +596,8 @@ class CostIntelligenceIngestionTest {
     }
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
-            Long uCacheCreation, Long uOutput) {
+            Long uCacheCreation, Long uOutput, String effort, String thinkingType,
+            Long maxTokens, String contextManagement) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
@@ -547,6 +607,9 @@ class CostIntelligenceIngestionTest {
     }
 
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
-            String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion) {
+            String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
+            String billingMode, String plan, String planUsageStatus,
+            String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,
+            Integer filesAdded, Integer filesDeleted, Integer linesAdded, Integer linesDeleted) {
     }
 }

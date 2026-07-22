@@ -1,0 +1,176 @@
+.onboarding-fade-in {
+  animation-name: onboarding-fade-in;
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes onboarding-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.slide-fade-subtle {
+  animation-name: slide-fade-subtle;
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes slide-fade-subtle {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-fade-left {
+  animation-name: slide-fade-left;
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes slide-fade-left {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-fade-right {
+  animation-name: slide-fade-right;
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes slide-fade-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slow-highlight-in {
+  animation-name: slow-highlight-in;
+  animation-duration: 1000ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+@keyframes slow-highlight-in {
+  0% {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+  25% {
+    background-color: color-mix(in srgb, var(--chart-yellow) 8%, transparent);
+    border-color: color-mix(in srgb, var(--chart-yellow) 80%, transparent);
+    box-shadow: none;
+  }
+  50% {
+    background-color: color-mix(in srgb, var(--chart-yellow) 15%, transparent);
+    border-color: var(--chart-yellow);
+    box-shadow: 0 0 0 5px
+      color-mix(in srgb, var(--chart-yellow) 20%, transparent);
+  }
+  100% {
+    background-color: color-mix(in srgb, var(--chart-yellow) 8%, transparent);
+    border-color: color-mix(in srgb, var(--chart-yellow) 80%, transparent);
+    box-shadow: none;
+  }
+}
+
+.illustration-fly {
+  animation-name: illustration-fly;
+  animation-duration: 2s;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  transform-origin: left center;
+}
+
+@keyframes illustration-fly {
+  /* dive — curving into horizontal early */
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  5% {
+    transform: translate(10vw, 40px) rotate(30deg);
+  }
+  13% {
+    transform: translate(25vw, 140px) rotate(60deg);
+  }
+  19% {
+    transform: translate(42vw, 230px) rotate(45deg);
+  }
+  /* bottom of arc — already moving right */
+  24% {
+    transform: translate(58vw, 270px) rotate(20deg);
+  }
+  29% {
+    transform: translate(72vw, 260px) rotate(0deg);
+  }
+  34% {
+    transform: translate(86vw, 220px) rotate(-15deg);
+  }
+  39% {
+    transform: translate(100vw, 155px) rotate(-30deg);
+  }
+  44% {
+    transform: translate(105vw, 65px) rotate(-42deg);
+  }
+  49% {
+    transform: translate(130vw, -60px) rotate(-52deg);
+  }
+  /* exit off the top-right */
+  56% {
+    transform: translate(180vw, -120vh) rotate(-60deg);
+    opacity: 1;
+  }
+  /* hide while repositioning */
+  61% {
+    transform: translate(-110vw, -60px) rotate(12deg);
+    opacity: 0;
+  }
+  /* arrive from left */
+  80% {
+    transform: translate(-50vw, -40px) rotate(30deg);
+    opacity: 1;
+  }
+  95% {
+    transform: translate(-5vw, -5px) rotate(5deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-fade-in,
+  .slide-fade-subtle,
+  .slide-fade-left,
+  .slide-fade-right,
+  .slow-highlight-in,
+  .illustration-fly,
+  .illustration-fly-small,
+  .illustration-fly-straight {
+    animation: none !important;
+  }
+}

@@ -367,6 +367,7 @@ class TestOpikClientCreateDataset:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.opik_client_._workspace = "my-workspace"
         self.mock_rest_datasets = self.opik_client_._rest_client.datasets
 
         with (
@@ -377,8 +378,10 @@ class TestOpikClientCreateDataset:
                 return_value=Mock(id="some-dataset-id"),
             ) as self.mock_get_by_identifier,
             patch.object(
-                self.opik_client_, "_display_created_dataset_url"
-            ) as self.mock_display_url,
+                self.opik_client_._rest_client.projects,
+                "retrieve_project",
+                return_value=Mock(id="proj-123"),
+            ) as self.mock_retrieve_project,
         ):
             yield
 
@@ -431,14 +434,15 @@ class TestOpikClientCreateDataset:
 
         assert result.dataset_items_count == 0
 
-    def test_create_dataset__logs_url_after_creation(self):
-        """Verify create_dataset calls _display_created_dataset_url with name and dataset id."""
+    def test_create_dataset__logs_project_scoped_url(self, capture_log):
+        """Verify create_dataset logs the direct, project-scoped dataset URL."""
         result = self.opik_client_.create_dataset(name="my-dataset")
-        dataset_id = result.id  # triggers cached_property fetch
 
-        self.mock_display_url.assert_called_once_with(
-            dataset_name="my-dataset", dataset_id=dataset_id
+        assert (
+            f"/opik/my-workspace/projects/proj-123/datasets/{result.id}/items"
+            in capture_log.text
         )
+        assert '"my-dataset" dataset' in capture_log.text
 
 
 class TestOpikClientGetDataset:
@@ -506,6 +510,7 @@ class TestOpikClientCreateTestSuite:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.opik_client_ = opik_client.Opik(project_name="default-project")
+        self.opik_client_._workspace = "my-workspace"
         self.mock_rest_datasets = self.opik_client_._rest_client.datasets
 
         with (
@@ -520,6 +525,11 @@ class TestOpikClientCreateTestSuite:
             patch.object(
                 self.mock_rest_datasets, "apply_dataset_item_changes"
             ) as self.mock_apply_changes,
+            patch.object(
+                self.opik_client_._rest_client.projects,
+                "retrieve_project",
+                return_value=Mock(id="proj-123"),
+            ) as self.mock_retrieve_project,
         ):
             yield
 
@@ -617,6 +627,16 @@ class TestOpikClientCreateTestSuite:
             )
 
         self.mock_create_dataset.assert_not_called()
+
+    def test_create_test_suite__logs_project_scoped_url(self, capture_log):
+        """Verify create_test_suite logs the direct, project-scoped test-suite URL."""
+        result = self.opik_client_.create_test_suite(name="my-suite")
+
+        assert (
+            f"/opik/my-workspace/projects/proj-123/test-suites/{result.id}/items"
+            in capture_log.text
+        )
+        assert '"my-suite" test suite' in capture_log.text
 
 
 class TestOpikClientDeleteDataset:

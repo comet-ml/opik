@@ -140,6 +140,14 @@ module.exports = {
         "chart-gray-light": "var(--chart-gray-light)",
         "chart-gray-dark": "var(--chart-gray-dark)",
 
+        /* Accent colors */
+        "accent-green": "var(--accent-green)",
+        "accent-blue": "var(--accent-blue)",
+        "accent-purple": "var(--accent-purple)",
+        "accent-magenta": "var(--accent-magenta)",
+        "accent-red": "var(--accent-red)",
+        "accent-indigo": "var(--accent-indigo)",
+
         /* Template icon colors */
         "template-icon-metrics": "var(--template-icon-metrics)",
         "template-icon-performance": "var(--template-icon-performance)",

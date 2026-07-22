@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { ErrorInfoWrite } from "./ErrorInfoWrite.js";
 import { JsonListStringWrite } from "./JsonListStringWrite.js";
 import { OptimizationStudioConfigWrite } from "./OptimizationStudioConfigWrite.js";
 import { OptimizationWriteStatus } from "./OptimizationWriteStatus.js";
@@ -20,6 +21,7 @@ export const OptimizationWrite: core.serialization.ObjectSchema<
     status: OptimizationWriteStatus,
     metadata: JsonListStringWrite.optional(),
     studioConfig: core.serialization.property("studio_config", OptimizationStudioConfigWrite.optional()),
+    errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
 });
 
@@ -34,6 +36,7 @@ export declare namespace OptimizationWrite {
         status: OptimizationWriteStatus.Raw;
         metadata?: JsonListStringWrite.Raw | null;
         studio_config?: OptimizationStudioConfigWrite.Raw | null;
+        error_info?: ErrorInfoWrite.Raw | null;
         last_updated_at?: string | null;
     }
 }

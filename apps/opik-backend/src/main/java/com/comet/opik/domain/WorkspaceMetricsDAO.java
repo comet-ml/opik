@@ -12,6 +12,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.SentinelTranslation;
@@ -106,6 +107,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 AND id BETWEEN :id_prior_start AND :id_end
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                 AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9);
             """;
 
@@ -190,6 +193,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
                   AND id BETWEEN :id_start AND :id_end
+                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
+                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY project_id, bucket
                 ORDER BY project_id, bucket
@@ -214,6 +219,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND id BETWEEN :id_start AND :id_end
+                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
+                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY bucket
                 ORDER BY bucket
@@ -313,6 +320,11 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull OpikConfiguration configuration;
+
+    private boolean spanColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
+    }
 
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
@@ -390,7 +402,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             Optional.ofNullable(request.filters())
                     .ifPresent(filters -> SPAN_FILTER_TEMPLATE_PLACEHOLDERS
                             .forEach((strategy, placeholder) -> FilterQueryBuilder
-                                    .toAnalyticsDbFilters(filters, strategy)
+                                    .toAnalyticsDbFilters(filters, strategy,
+                                            strategy == FilterStrategy.SPAN && spanColumnsNonNullable())
                                     .ifPresent(rendered -> stTemplate.add(placeholder, rendered))));
 
             stTemplate.add("uuid_from_time", true);
