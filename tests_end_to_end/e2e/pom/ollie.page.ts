@@ -129,6 +129,36 @@ export class OlliePage {
   }
 
   /**
+   * Wait for an Explain popover's "Continue conversation" hand-off to land in
+   * the chat. The bridge posts the question and the popover's already-settled
+   * answer as a pair of new messages (see `chat:continue` in explainStore.ts
+   * — "carries the verbatim Q&A already shown"), not a fresh generation, so
+   * this only waits for them to render, not for streaming. `beforeCount` is
+   * the message count read just before clicking "Continue conversation".
+   * Returns the last message's (the answer's) text.
+   */
+  async awaitContinuedConversation(beforeCount: number, timeoutMs = 30_000): Promise<string> {
+    return test.step('wait for the continued conversation to render in the sidebar', async () => {
+      await expect
+        .poll(async () => this.messages().count(), {
+          timeout: timeoutMs,
+          intervals: [300, 600, 1200],
+        })
+        .toBeGreaterThanOrEqual(beforeCount + 2);
+
+      const reply = this.messages().last();
+      await expect
+        .poll(async () => ((await reply.textContent()) ?? '').trim().length, {
+          timeout: timeoutMs,
+          intervals: [300, 600, 1200],
+        })
+        .toBeGreaterThan(0);
+
+      return ((await reply.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
    * Run the `/analyze` flow from the greeting action button and wait for a
    * non-empty assistant response to render. Ollie is a non-deterministic agent,
    * so callers should assert structurally (a reply landed, no error state), not

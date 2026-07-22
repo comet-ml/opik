@@ -17,6 +17,8 @@ export interface PythonSdkClient {
     tags?: string[];
     thread_id?: string;
     feedback_scores?: Array<{ name: string; value: number; reason?: string }>;
+    error_info?: { exception_type: string; message: string; traceback?: string };
+    duration_seconds?: number;
     spans: Array<{
       name: string;
       type?: 'general' | 'llm' | 'tool';
