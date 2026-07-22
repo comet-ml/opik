@@ -242,8 +242,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         Set<String> existingNames = ruleDAO.findNamesByProjects(projectIds, workspaceId);
         String uniqueName = AutomationRuleNames.generateUniqueName(requestedName, existingNames);
         if (!uniqueName.equals(requestedName)) {
-            log.info("Rule name '{}' already exists in projectIds '{}' on workspace '{}', using '{}' instead",
-                    requestedName, projectIds, workspaceId, uniqueName);
+            log.info(
+                    "Automation rule name already exists in project scope, applied suffix: requestedName='{}', uniqueName='{}', projectIds='{}', workspaceId='{}'",
+                    requestedName, uniqueName, projectIds, workspaceId);
         }
         return uniqueName;
     }
