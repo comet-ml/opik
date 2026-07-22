@@ -39,6 +39,26 @@ public interface AutomationRuleDAO {
             "VALUES (:rule.id, :workspaceId, :rule.action, :rule.name, :rule.samplingRate, :rule.enabled, :rule.filters)")
     void saveBaseRule(@BindMethods("rule") AutomationRuleModel rule, @Bind("workspaceId") String workspaceId);
 
+    /**
+     * Returns all rule names within the given projects, used to auto-suffix colliding names on create
+     * (OPIK-7371). Project-scoped via the junction table to match {@code findCount}'s filtering. Collision
+     * matching is done in Java (case-insensitive), so no name filter is applied here - this avoids LIKE
+     * metacharacter/escape pitfalls and keeps comparison consistent with the DB collation. Rules per
+     * project are few, so fetching the full set is cheap.
+     */
+    @SqlQuery("""
+            SELECT DISTINCT rule.name
+            FROM automation_rules rule
+            JOIN automation_rule_projects arp ON rule.id = arp.rule_id
+            WHERE rule.workspace_id = :workspaceId
+            AND arp.project_id IN (<projectIds>)
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Set<String> findNamesByProjects(
+            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
+            @Bind("workspaceId") String workspaceId);
+
     @SqlUpdate("""
             UPDATE automation_rules
             SET name = :name,

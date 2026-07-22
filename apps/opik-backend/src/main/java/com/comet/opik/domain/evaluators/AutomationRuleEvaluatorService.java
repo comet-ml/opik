@@ -124,11 +124,18 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         var savedEvaluator = template.inTransaction(WRITE, handle -> {
             var evaluatorsDAO = handle.attach(AutomationRuleEvaluatorDAO.class);
             var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
+            var ruleDAO = handle.attach(AutomationRuleDAO.class);
+
+            // Auto-suffix the name when it collides with existing rules in the same project(s) (OPIK-7371).
+            // Names are not unique at the DB layer, so re-running an SDK script would otherwise create
+            // rules that are indistinguishable in the UI.
+            String uniqueName = resolveUniqueName(ruleDAO, inputRuleEvaluator.getName(), projectIds, workspaceId);
 
             AutomationRuleEvaluatorModel<?> evaluator = switch (inputRuleEvaluator) {
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
                     var definition = llmAsJudge.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -142,6 +149,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -152,6 +160,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge -> {
                     var definition = traceThreadLlmAsJudge.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -165,6 +174,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -175,6 +185,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge -> {
                     var definition = spanLlmAsJudge.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -188,6 +199,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = spanUserDefinedMetricPython.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -220,6 +232,20 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         });
 
         return findById(savedEvaluator.id(), savedEvaluator.projectIds(), workspaceId);
+    }
+
+    private String resolveUniqueName(AutomationRuleDAO ruleDAO, String requestedName, Set<UUID> projectIds,
+            String workspaceId) {
+        if (projectIds.isEmpty()) {
+            return requestedName;
+        }
+        Set<String> existingNames = ruleDAO.findNamesByProjects(projectIds, workspaceId);
+        String uniqueName = AutomationRuleNames.generateUniqueName(requestedName, existingNames);
+        if (!uniqueName.equals(requestedName)) {
+            log.info("Rule name '{}' already exists in projectIds '{}' on workspace '{}', using '{}' instead",
+                    requestedName, projectIds, workspaceId, uniqueName);
+        }
+        return uniqueName;
     }
 
     @Override

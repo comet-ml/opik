@@ -763,6 +763,46 @@ class AutomationRuleEvaluatorsResourceTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Duplicate name handling")
+    class DuplicateNameHandling {
+
+        private String createRuleAndGetName(String name, UUID projectId) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+            try (var response = evaluatorsResourceClient.getEvaluator(id, projectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                return response.readEntity(AutomationRuleEvaluator.class).getName();
+            }
+        }
+
+        @Test
+        @DisplayName("when a rule name already exists in the same project, then auto-append a numeric suffix")
+        void whenNameCollidesInSameProject__thenSuffixIsAppended() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Hallucination " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name);
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name + "-1");
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name + "-2");
+        }
+
+        @Test
+        @DisplayName("when the same rule name is used in different projects, then no suffix is appended")
+        void whenNameCollidesInDifferentProject__thenNoSuffix() {
+            var projectId1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var projectId2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Relevance " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(name, projectId1)).isEqualTo(name);
+            assertThat(createRuleAndGetName(name, projectId2)).isEqualTo(name);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindEvaluator {
 
         Stream<Class<? extends AutomationRuleEvaluator<?, ?>>> find() {
