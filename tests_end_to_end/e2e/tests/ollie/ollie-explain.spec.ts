@@ -32,7 +32,7 @@ const KEYWORD_PATTERN: Record<'cost' | 'duration', RegExp> = {
 // button label) that isn't part of the answer itself.
 const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
 
-test.describe('Ollie — explain cells', { tag: ['@t2-cuj', '@ollie'] }, () => {
+test.describe('Ollie — explain cells', { tag: ['@t3-nightly', '@ollie'] }, () => {
   test.beforeEach(({ envConfig }) => skipIfOllieDisabled(envConfig));
 
   test('Explain renders on-topic text for the Errors, Estimated cost, and Duration cell of every seeded trace', async ({
