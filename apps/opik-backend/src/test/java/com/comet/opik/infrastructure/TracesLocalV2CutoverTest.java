@@ -568,7 +568,8 @@ class TracesLocalV2CutoverTest {
                 .isEqualTo("Distributed");
 
         // Restore the canonical baseline (traces = original, traces_local_v2 = successor) so @BeforeEach's reset — which
-        // assumes a regular `traces` — works for the next test. No deletes were bridged, so the reverse-replay is a no-op.
+        // assumes a regular `traces` — works for the next test. The stage-C reverse-replay still runs here; this test
+        // bridged no deletes in the (cutoverStart, ∞) window, so it matches zero ids and deletes nothing.
         rollbackAfterWrap(cutoverStart);
     }
 
@@ -1242,7 +1243,9 @@ class TracesLocalV2CutoverTest {
      * Count of fidelity-cohort rows whose {@code duration} disagrees between source and destination beyond the intended
      * ns-to-us truncation. The source computes duration from nanosecond timestamps and is {@code NULL} when unset; the
      * successor computes it from the microsecond copy and is {@code NaN} when unset. So a faithful row is unset on both
-     * (source NULL, dest NaN) or set on both within one microsecond (0.001 ms); anything else is a real divergence.
+     * (source NULL, dest NaN) or set on both within 1.5 microseconds (0.0015 ms); anything else is a real divergence.
+     * The bound is 1.5 us, not 1 us: truncating both the start and end timestamps ns-to-us can each shift the computed
+     * duration by up to ~1 us, so 0.0015 ms is a deliberate small margin over that (tightening it risks a flaky test).
      */
     private long durationMismatches(String workspaceId) {
         var sql = """
