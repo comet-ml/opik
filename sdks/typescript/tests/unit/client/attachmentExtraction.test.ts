@@ -68,7 +68,7 @@ describe("extractInlineAttachments", () => {
   });
 
   it("extracts a URL-safe base64 image (google.genai parity — OPIK-6387)", () => {
-    // google.genai emits URL-safe base64 (-/_ for +//); Node's decoder silently drops those chars,
+    // google.genai emits URL-safe base64 (uses `-` and `_` in place of `+` and `/`); Node's decoder drops those,
     // so the scanner must normalize before decoding. 0xFF bytes -> '/' in base64 -> '_' when URL-safe.
     const buf = Buffer.alloc(400, 0xff);
     PNG.forEach((byte, i) => (buf[i] = byte));
@@ -82,6 +82,21 @@ describe("extractInlineAttachments", () => {
     expect(attachments[0].mimeType).toBe("image/png");
     expect(attachments[0].data.subarray(0, 8)).toEqual(Buffer.from(PNG));
     expect((result.output as { image: string }).image).toMatch(PLACEHOLDER);
+  });
+
+  it("replaces a whole data URI even when the prefix is longer than the look-back window", () => {
+    // A long mime/params header pushes `data:...;base64,` past any fixed look-back; the scanner must
+    // still absorb the whole prefix (search back to the actual `data:`), not leave a dangling
+    // `data:...;base64,` fragment before the placeholder.
+    const longMime = "application/vnd.example+json;profile=" + "x".repeat(140); // > 128 chars, no comma
+    const span = { id: "s1", output: { img: dataUri(longMime, bigPng()) } };
+
+    const { result, attachments } = extractInlineAttachments(span, MIN);
+
+    expect(attachments).toHaveLength(1);
+    const img = (result.output as { img: string }).img;
+    expect(img).toMatch(PLACEHOLDER); // the WHOLE value is replaced, not just the base64 body
+    expect(img).not.toContain("data:"); // no dangling prefix fragment
   });
 
   it("leaves a blob below the size threshold inline", () => {

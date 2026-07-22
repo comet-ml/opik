@@ -67,10 +67,12 @@ const isBase64Char = (code: number): boolean =>
   code === 95; // _ (URL-safe base64 alias for /)
 const EQUALS = 61; // '='
 
-// An optional `data:<mime>;base64,` prefix immediately before a run is detected with a tiny
-// regex on a short look-back slice (safe — bounded length) so the whole URI is replaced.
+// An optional `data:<mime>;base64,` prefix immediately before a run is absorbed so the whole URI
+// is replaced, not just the base64 body. We search back to the actual `data:` (a long mime/params
+// header can exceed any fixed window — sdks/typescript/AGENTS.md forbids a fixed-size look-back) and
+// confirm the slice is a real prefix with a tiny anchored regex. `:` is not a base64 char, so any
+// `data:` we find lies outside the run, and the `;base64,$` anchor rejects a spurious `data:`.
 const DATA_URI_PREFIX_RE = /data:[^,]*;base64,$/;
-const PREFIX_LOOKBACK = 128;
 
 const extractFromString = (
   value: string,
@@ -113,10 +115,9 @@ const extractFromString = (
       if (decoded && mimeType) {
         // Absorb a preceding `data:<mime>;base64,` prefix so the whole URI is replaced.
         let replaceStart = i;
-        const lookback = value.slice(Math.max(0, i - PREFIX_LOOKBACK), i);
-        const prefixMatch = lookback.match(DATA_URI_PREFIX_RE);
-        if (prefixMatch) {
-          replaceStart = i - prefixMatch[0].length;
+        const dataStart = value.lastIndexOf("data:", i);
+        if (dataStart >= 0 && DATA_URI_PREFIX_RE.test(value.slice(dataStart, i))) {
+          replaceStart = dataStart;
         }
         const fileName = createAttachmentFileName(context, mimeType);
         parts.push(value.slice(lastEnd, replaceStart));
