@@ -155,8 +155,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 >
 > **Applying the deferred wrap later:** once the sharding-aware DAO has shipped, run
 > `exchange_and_wrap.sh --database opik --wrap-only` — it runs the settle gate and applies **only** the `RENAME` +
-> `Distributed` wrap on the already-EXCHANGEd `traces` (no second EXCHANGE, no new `cutover_start`). To roll the wrap
+> `Distributed` wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`). To roll the wrap
 > back, use `rollback.sh --stage C`.
+>
+> **Wrap flags** (`exchange_and_wrap.sh`, mutually exclusive; default is EXCHANGE-only): omit them (or pass
+> `--skip-wrap`, an explicit alias) to run the EXCHANGE and stop; `--with-wrap` to also apply the wrap in the same run;
+> `--wrap-only` to apply just the deferred wrap later.
 
 **Dedup note.** After the delta, a row can have two physical versions on `traces_local_v2` (the backfilled one and the
 delta one). This is normal — `ReplacingMergeTree` collapses them on merge / under `FINAL` / `LIMIT 1 BY id`, highest

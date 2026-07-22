@@ -29,9 +29,9 @@ def _handle_sigint(_signum, _frame):
 def _fetch_ids(client, project, want, exclude):
     try:
         traces = client.search_traces(project_name=project, max_results=want, truncate=True)
-    except Exception as exc:  # search is best-effort; keep the loop alive
-        LOGGER.warning("search_traces failed: %s", exc)
-        return []
+    except Exception as exc:  # transient search failure: signal the caller to retry, not to treat the pool as drained
+        LOGGER.warning("search_traces failed (will retry): %s", exc)
+        return None
     return [t.id for t in traces if t.id not in exclude]
 
 
@@ -56,7 +56,12 @@ def main(project, tps, duration, batch):
         tick = time.time()
         if len(pool) < batch:
             # Exclude both already-deleted ids and those still queued in `pool`, so a refill can't requeue an in-flight id.
-            pool.extend(_fetch_ids(client, project, want=500, exclude=seen | set(pool)))
+            fetched = _fetch_ids(client, project, want=500, exclude=seen | set(pool))
+            if fetched is None:
+                # transient search failure — back off and retry rather than mistaking it for "no more traces".
+                time.sleep(interval if interval > 0 else 0.5)
+                continue
+            pool.extend(fetched)
             if not pool:
                 LOGGER.info("no more traces to delete; stopping")
                 break
