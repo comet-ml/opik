@@ -219,9 +219,12 @@ All specs share **one flat directory**, `screenshots/baseline/` (see `snapshotPa
 
 ## Masks: scope them to your test, don't touch the shared list
 
-`tests/utils/screenshot.ts` exports `dynamicMasks(page)` — masks applied to **every** spec (relative dates, UUID columns, breadcrumbs, table duration cells, …). Do not add a mask there for something specific to your new page; it silently changes masking for every other visual test in the suite.
+`tests/utils/screenshot.ts` has two tiers, not one shared list:
 
-Instead, pass test-specific masks through `screenshot()`'s third argument:
+- `baseMasks(page)` (internal, always applied by `screenshot()`) — only page chrome that renders on virtually every screenshot and can legitimately vary between the two environments being compared: the breadcrumb (workspace/project name) and generic timestamp elements.
+- `tableMasks(page)` (exported) — masks for populated data tables: relative/absolute date cells, UUID columns, duration cells, pagination "Showing X-Y of Z". Only screenshots of an actual table with rows need this (see `visual-comparison.spec.ts`'s tests 01-06, which pass `tableMasks(page)` explicitly). Empty-state screenshots have no rows and the trace sidebar has no table at all, so neither passes it.
+
+Do not add a mask to `baseMasks` for something specific to your new page; it silently changes masking for every other visual test in the suite. If your new screenshot is a populated table, pass the existing `tableMasks(page)` — don't reinvent the same regexes. If it's something narrower (a single stat row, one specific element), pass a test-specific mask through `screenshot()`'s third argument instead:
 
 ```ts
 // tests/utils/screenshot.ts
@@ -231,11 +234,13 @@ export async function screenshot(page: Page, name: string, extraMasks: Locator[]
 ```ts
 // your spec
 await screenshot(page, 'S02-trace-sidebar-details', [panel.statsRowMask]);
+// or, for a table page:
+await screenshot(page, '07-widgets-page', tableMasks(page));
 ```
 
 Expose the locator as a getter on the relevant page object (see `TraceDetailsPanelPage.statsRowMask`) so the masking rationale lives next to the DOM it targets, not buried in the spec.
 
-Only promote a mask into the shared `dynamicMasks()` list if the pattern is genuinely generic and reusable (e.g. "any `td` matching a relative-date regex") — not a one-off element on the one page you're testing.
+Only promote a mask into `baseMasks` or `tableMasks` if the pattern is genuinely generic and reusable across many pages (e.g. "any `td` matching a relative-date regex") — not a one-off element on the one page you're testing.
 
 ### Mask the stable-sized container, not the small dynamic element
 
@@ -292,7 +297,7 @@ If a test in a `describe` block fails, Playwright restarts the worker process be
 | "The baseline folder already has PNGs, I don't need `--update-snapshots`" | Baselines are gitignored and per-machine — a name you just added has no baseline yet, regardless of what else is in the folder. |
 | "It passed once, ship it" | The stress-test loop — real timestamps and font jitter are intermittent by nature; one green run doesn't prove stability. |
 | "I'll match the row by trace/dataset name" | Checking what's actually rendered — many tables don't show a Name column; match visible cell text instead. |
-| "I'll add this mask to `dynamicMasks()`, it's easier" | Scoping — that changes every other visual test's masking. Use `screenshot()`'s `extraMasks` param. |
+| "I'll add this mask to `baseMasks()`, it's easier" | Scoping — that changes every other visual test's masking. Use `tableMasks(page)` if it's a table page, or `screenshot()`'s `extraMasks` param otherwise. |
 | "I'll mask just the timestamp `div`" | Checking whether it sits in a flex row with siblings — mask the stable-sized parent instead, or the siblings will still jitter. |
 | "The decorator's duration always shows 0s, it's fine" | Determinism — "usually 0s" still varies by a sub-pixel width; force it to exactly 0 with matching `start_time`/`end_time`. |
 | "All 4 tests failed, must be a bigger bug" | The hook-restart gotcha — check the *first* failure alone before assuming later ones are independent. |
