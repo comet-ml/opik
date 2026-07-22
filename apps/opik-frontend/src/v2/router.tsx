@@ -47,8 +47,8 @@ import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthCo
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/OptimizationCompareRedirect";
+import TrialsRedirect from "@/v2/pages/OptimizationPage/TrialsRedirect";
 import OptimizationsNewRedirect from "@/v2/pages/OptimizationPage/OptimizationsNewRedirect";
-import TrialPage from "@/v2/pages/TrialPage/TrialPage";
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import AlertsPageGuard from "@/v2/layout/AlertsPageGuard";
 import PromptsPageGuard from "@/v2/layout/PromptsPageGuard";
@@ -154,7 +154,7 @@ const baseRoute = createRoute({
   ),
 });
 
-// ----------- home (redirects to active project traces)
+// ----------- home (redirects to the workspace Projects tab)
 const homeRoute = createRoute({
   path: "/$workspaceName/home",
   getParentRoute: () => workspaceGuardRoute,
@@ -467,14 +467,12 @@ const optimizationRoute = createRoute({
   component: OptimizationPage,
 });
 
+// The trial view lives in a sidebar on the run overview; old /trials deep
+// links redirect there with their params intact.
 const trialRoute = createRoute({
   path: "/trials",
   getParentRoute: () => optimizationBaseRoute,
-  component: TrialPage,
-  staticData: {
-    param: "trial",
-    paramValue: "trials",
-  },
+  component: TrialsRedirect,
 });
 
 // ----------- agent runner (project-scoped)

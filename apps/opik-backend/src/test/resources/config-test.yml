@@ -90,10 +90,21 @@ databaseAnalyticsDataModel:
   #   Flip in lockstep with the cutover EXCHANGE.
   traceColumnsNonNullable: false
   #  Default: false
+  #  Description: Spans sibling of traceColumnsNonNullable. Leave false while the spans table still has Nullable
+  #   end_time/duration/ttft columns; span writes bind null for absent end_time/ttft. Set true once replaced with
+  #   sentinel-defaulted non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates
+  #   reads too. Flip in lockstep with the Slice 3 cutover EXCHANGE, independently of the trace flag.
+  spanColumnsNonNullable: false
+  #  Default: false
   #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
   #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
   #   copy. Scope capture to the backfill-to-cutover window.
   traceDeletionEventsCaptureEnabled: false
+  #  Default: false
+  #  Description: Spans sibling of traceDeletionEventsCaptureEnabled. Captures span ids removed by the trace-delete
+  #   cascade into the deletion_events_local bridge (source_table=spans). Leave false at deploy time; turn true once the
+  #   span backfill starts, independently of the trace flag.
+  spanDeletionEventsCaptureEnabled: false
   #  Default: 1000
   #  Description: Rows per INSERT into the deletion_events_local bridge. A single delete batch can carry more ids
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
@@ -1031,6 +1042,13 @@ alertProjectMigration:
   schedulerQueuedTaskCap: 50
   schedulerThreadTtl: 10s
 
+partitionMetrics:
+  enabled: false
+  # Poll interval (default 5 min). Min 30s, max 1h.
+  interval: 5m
+  # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
+  lwdTables: traces,spans
+
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
 migration:
@@ -1132,6 +1150,20 @@ agentConfig:
   # Default: 5000ms
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: 5000ms
+
+# Stalled Optimization Studio run reaper configuration
+optimizationStalledReaper:
+  # Disabled in tests: no suite exercises the reaper, and leaving the scheduled job off avoids it
+  # acquiring the distributed lock and mutating optimization rows mid-test. The Duration/size fields
+  # below are still required (non-null / >= 1) so config validation passes on boot.
+  enabled: false
+  startupDelay: 5m
+  jobInterval: 5m
+  initializedTimeout: 15m
+  runningTimeout: 26h
+  lookbackMargin: 7d
+  lockDuration: 4m
+  batchSize: 100
 
 # Environment CRUD configuration
 environment:

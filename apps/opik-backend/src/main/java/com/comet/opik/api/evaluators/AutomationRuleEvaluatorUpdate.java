@@ -56,6 +56,9 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T, E extends Filter> 
     @Builder.Default
     private final boolean enabled = true;
 
+    @Builder.Default
+    private final EvalTriggerScope triggerScope = EvalTriggerScope.PRODUCTION;
+
     @JsonIgnore
     @Builder.Default
     private final List<E> filters = List.of();

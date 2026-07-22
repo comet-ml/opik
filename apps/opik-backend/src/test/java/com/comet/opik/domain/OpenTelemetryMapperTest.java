@@ -148,7 +148,7 @@ class OpenTelemetryMapperTest {
 
         var span = spanBuilder.build();
 
-        assertThat(span.output().has("gen_ai.output.messages")).isTrue();
+        assertThat(span.output().has("messages")).isTrue();
         assertThat(span.input()).isNull();
     }
 
@@ -170,7 +170,7 @@ class OpenTelemetryMapperTest {
 
         var span = spanBuilder.build();
 
-        assertThat(span.input().has("gen_ai.input.messages")).isTrue();
+        assertThat(span.input().has("messages")).isTrue();
     }
 
     @Test
@@ -220,9 +220,9 @@ class OpenTelemetryMapperTest {
 
         var span = spanBuilder.build();
 
-        assertThat(span.metadata().has("gen_ai.cost.total_cost")).isTrue();
-        assertThat(span.metadata().has("gen_ai.cost.input_cost")).isTrue();
-        assertThat(span.metadata().has("gen_ai.cost.output_cost")).isTrue();
+        assertThat(span.metadata().has("total_cost")).isTrue();
+        assertThat(span.metadata().has("input_cost")).isTrue();
+        assertThat(span.metadata().has("output_cost")).isTrue();
         assertThat(span.input()).isNull();
     }
 
@@ -325,9 +325,9 @@ class OpenTelemetryMapperTest {
         var span = spanBuilder.build();
 
         assertThat(span.input().has("gen_ai.prompt")).isTrue();
-        assertThat(span.input().has("gen_ai.input.messages")).isTrue();
+        assertThat(span.input().has("messages")).isTrue();
         assertThat(span.output().has("gen_ai.completion")).isTrue();
-        assertThat(span.output().has("gen_ai.output.messages")).isTrue();
+        assertThat(span.output().has("messages")).isTrue();
     }
 
     @Test
@@ -352,8 +352,9 @@ class OpenTelemetryMapperTest {
 
         var span = spanBuilder.build();
 
-        assertThat(span.metadata().has("gen_ai.tool.name")).isTrue();
-        assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
+        assertThat(span.metadata().has("name")).isTrue();
+        assertThat(span.metadata().has("call.id")).isTrue();
+        assertThat(span.type()).isNull();
     }
 
     @Test
@@ -470,8 +471,58 @@ class OpenTelemetryMapperTest {
         assertThat(span.input().has("gen_ai.tool.call.arguments")).isTrue();
         assertThat(span.output().has("gen_ai.tool.call.result")).isTrue();
         // a non-I/O tool attribute still lands in metadata, not input/output
-        assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
-        assertThat(span.input().has("gen_ai.tool.call.id")).isFalse();
+        assertThat(span.metadata().has("call.id")).isTrue();
+        assertThat(span.input().has("call.id")).isFalse();
+        // gen_ai.tool.call.arguments and .result set the span type to tool
+        assertThat(span.type()).isEqualTo(SpanType.tool);
+    }
+
+    @Test
+    void testGenAiToolDefinitionsOnLlmSpanStaysLlm() {
+        // gen_ai.tool.definitions can appear on a span with gen_ai.request.model.
+        // The gen_ai.tool. prefix should not set the span type to tool. Only gen_ai.tool.call.arguments/result should set tool type.
+        var llmAttrs = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.request.model")
+                        .setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.definitions")
+                        .setValue(AnyValue.newBuilder().setStringValue("[{\"name\":\"get_weather\"}]"))
+                        .build());
+
+        var spanBuilderA = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilderA, llmAttrs, null, null);
+        var spanA = spanBuilderA.build();
+
+        var reversedAttrs = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.definitions")
+                        .setValue(AnyValue.newBuilder().setStringValue("[{\"name\":\"get_weather\"}]"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.request.model")
+                        .setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
+                        .build());
+        var spanBuilderB = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilderB, reversedAttrs, null, null);
+        var spanB = spanBuilderB.build();
+
+        // Both orders must result in llm.
+        assertThat(spanA.type()).isEqualTo(SpanType.llm);
+        assertThat(spanB.type()).isEqualTo(SpanType.llm);
+        assertThat(spanA.metadata().has("definitions")).isTrue();
+        assertThat(spanB.metadata().has("definitions")).isTrue();
+        assertThat(spanA.model()).isEqualTo("gpt-4o");
+        assertThat(spanB.model()).isEqualTo("gpt-4o");
     }
 
     @Test
@@ -513,7 +564,7 @@ class OpenTelemetryMapperTest {
 
         var span = spanBuilder.build();
 
-        assertThat(span.metadata().has("llm.response.finish_reason")).isTrue();
+        assertThat(span.metadata().has("finish_reason")).isTrue();
         assertThat(span.input()).isNull();
     }
 
@@ -613,9 +664,9 @@ class OpenTelemetryMapperTest {
 
         var span = spanBuilder.build();
 
-        assertThat(span.metadata().has("metadata.user_api_key_hash")).isTrue();
-        assertThat(span.metadata().has("metadata.user_api_key_team_id")).isTrue();
-        assertThat(span.metadata().has("metadata.requester_ip_address")).isTrue();
+        assertThat(span.metadata().has("user_api_key_hash")).isTrue();
+        assertThat(span.metadata().has("user_api_key_team_id")).isTrue();
+        assertThat(span.metadata().has("requester_ip_address")).isTrue();
         assertThat(span.input()).isNull();
     }
 
@@ -1012,6 +1063,25 @@ class OpenTelemetryMapperTest {
             // parent span ID should use normal OTEL conversion (override ignored)
             assertThat(opikSpan.parentSpanId()).isNotNull();
             assertThat(opikSpan.parentSpanId()).isNotEqualTo(overrideParentSpanId);
+        }
+        @Test
+        void toOpikSpan_parentSpanIdEqualsTraceId_isTreatedAsRootSpan() {
+            // Some instrumentations set parent_span_id to the 16-byte trace id to mean "top-level span".
+            // Converting those bytes would yield a dangling UUID, so the span must become a root span.
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+
+            // parent_span_id is the trace id (16 bytes), not a real span id
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, otelTraceId, List.of());
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
+            // parent_span_id == trace_id must resolve to null so the span renders as top-level
+            assertThat(opikSpan.parentSpanId()).isNull();
         }
     }
 
@@ -1751,6 +1821,154 @@ class OpenTelemetryMapperTest {
 
             assertThat(span.input().has("new_context")).isFalse();
             assertThat(span.metadata().get("new_context").asText()).isEqualTo("[USER PROMPT]\nhello");
+        }
+    }
+
+    /**
+     * Prefix matched INPUT/OUTPUT/METADATA attributes should strip the rule prefix from the
+     * storage key, and when the resulting suffix is empty a JSON-object value should be
+     * merged into the node instead of being nested. Exact-match rules should keep the full key.
+     */
+    @Nested
+    class PrefixStrippingAndMerge {
+
+        private Span enrich(List<KeyValue> attributes) {
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+            return spanBuilder.build();
+        }
+
+        private KeyValue str(String key, String value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setStringValue(value))
+                    .build();
+        }
+
+        private KeyValue dbl(String key, double value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setDoubleValue(value))
+                    .build();
+        }
+
+        @Test
+        void outputPrefixWithJsonObjectMergesIntoRoot() {
+            var span = enrich(List.of(str("output", "{\"choices\":[{\"message\":\"hi\"}]}")));
+
+            assertThat(span.output().has("output")).isFalse();
+            assertThat(span.output().has("choices")).isTrue();
+            assertThat(span.output().path("choices").get(0).get("message").asText()).isEqualTo("hi");
+        }
+
+        @Test
+        void inputPrefixWithJsonObjectMergesIntoRoot() {
+            var span = enrich(List.of(str("input", "{\"prompt\":\"hello\"}")));
+
+            assertThat(span.input().has("input")).isFalse();
+            assertThat(span.input().get("prompt").asText()).isEqualTo("hello");
+        }
+
+        @Test
+        void outputPrefixWithNonObjectNestsUnderPrefix() {
+            var span = enrich(List.of(str("output", "plain result")));
+
+            assertThat(span.output().get("output").asText()).isEqualTo("plain result");
+        }
+
+        @Test
+        void outputPrefixWithJsonArrayNestsUnderPrefix() {
+            var span = enrich(List.of(str("output", "[1,2,3]")));
+
+            assertThat(span.output().has("output")).isTrue();
+            assertThat(span.output().get("output").isArray()).isTrue();
+        }
+
+        @Test
+        void outputPrefixDottedSuffixStripsPrefix() {
+            var span = enrich(List.of(str("output.choices", "[{\"role\":\"assistant\"}]")));
+
+            assertThat(span.output().has("output.choices")).isFalse();
+            assertThat(span.output().has("choices")).isTrue();
+        }
+
+        @Test
+        void inputPrefixDottedSuffixStripsPrefix() {
+            var span = enrich(List.of(str("input.message", "{\"role\":\"user\"}")));
+
+            assertThat(span.input().has("input.message")).isFalse();
+            assertThat(span.input().has("message")).isTrue();
+        }
+
+        @Test
+        void opikMetadataPrefixDottedSuffixStripsPrefix() {
+            var span = enrich(List.of(
+                    str("opik.metadata.finish_reason", "stop"),
+                    str("opik.metadata.cached_tokens", "42")));
+
+            assertThat(span.metadata().has("opik.metadata.finish_reason")).isFalse();
+            assertThat(span.metadata().get("finish_reason").asText()).isEqualTo("stop");
+            assertThat(span.metadata().get("cached_tokens").asText()).isEqualTo("42");
+        }
+
+        @Test
+        void genAiOutputPrefixStripsPrefix() {
+            var span = enrich(List.of(str("gen_ai.output.messages",
+                    "[{\"role\":\"assistant\",\"content\":\"hi\"}]")));
+
+            assertThat(span.output().has("gen_ai.output.messages")).isFalse();
+            assertThat(span.output().has("messages")).isTrue();
+        }
+
+        @Test
+        void genAiInputPrefixStripsPrefix() {
+            var span = enrich(List.of(str("gen_ai.input.messages",
+                    "[{\"role\":\"user\",\"content\":\"hello\"}]")));
+
+            assertThat(span.input().has("gen_ai.input.messages")).isFalse();
+            assertThat(span.input().has("messages")).isTrue();
+        }
+
+        @Test
+        void exactMatchRulesKeepFullKey() {
+            var span = enrich(List.of(
+                    str("gen_ai.prompt", "the prompt"),
+                    str("gen_ai.completion", "the completion")));
+
+            assertThat(span.input().get("gen_ai.prompt").asText()).isEqualTo("the prompt");
+            assertThat(span.output().get("gen_ai.completion").asText()).isEqualTo("the completion");
+        }
+
+        @Test
+        void multipleOutputPrefixAttributesMergeAndStripTogether() {
+            var span = enrich(List.of(
+                    str("output", "{\"model\":\"gpt-4\"}"),
+                    str("output.choices", "[{\"message\":\"a\"}]")));
+
+            assertThat(span.output().has("output")).isFalse();
+            assertThat(span.output().get("model").asText()).isEqualTo("gpt-4");
+            assertThat(span.output().has("choices")).isTrue();
+        }
+
+        private static Stream<Arguments> reservedMetadataKeys() {
+            return Stream.of(
+                    Arguments.of("thread_id"),
+                    Arguments.of("integration"),
+                    Arguments.of("server.address"));
+        }
+
+        @ParameterizedTest(name = "filters reserved key: {0}")
+        @MethodSource("reservedMetadataKeys")
+        void opikMetadataMergeFiltersReservedKeys(String reservedKey) {
+            var span = enrich(List.of(str("opik.metadata",
+                    "{\"" + reservedKey + "\":\"spoofed\",\"custom\":\"ok\"}")));
+
+            assertThat(span.metadata().has(reservedKey)).isFalse();
+            assertThat(span.metadata().get("custom").asText()).isEqualTo("ok");
         }
     }
 }

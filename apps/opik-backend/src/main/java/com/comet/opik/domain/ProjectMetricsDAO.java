@@ -550,8 +550,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND trace_id IN (SELECT id FROM traces_filtered)
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = t.id
             )
             SELECT <bucket> AS bucket,
@@ -580,8 +582,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND trace_id IN (SELECT id FROM traces_filtered)
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = t.id
             )
             SELECT <bucket> AS bucket,
@@ -607,8 +611,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND trace_id IN (SELECT id FROM traces_filtered)
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
@@ -641,8 +647,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
                     AND trace_id IN (SELECT id FROM traces_filtered)
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
@@ -1088,7 +1096,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_SPAN_AVERAGE_DURATION = """
             %s
             SELECT <bucket> AS bucket,
-                   avg(duration) AS avg_duration
+                   avgIf(duration, NOT isNaN(duration)) AS avg_duration
             FROM spans_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -1155,8 +1163,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 ) s ON s.trace_id = tr.id
             )
             SELECT <bucket> AS bucket,
@@ -1634,7 +1644,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             } else if (SPAN_TIME_METRICS.contains(metricType)) {
                 Optional.ofNullable(request.spanFilters())
                         .ifPresent(filters -> {
-                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN,
+                                    spanColumnsNonNullable())
                                     .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
                                     .ifPresent(
@@ -1720,6 +1731,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private boolean traceColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
+    }
+
+    private boolean spanColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
     }
 
     private static final Set<MetricType> SPAN_TIME_METRICS = EnumSet.of(

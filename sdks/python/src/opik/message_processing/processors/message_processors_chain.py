@@ -8,7 +8,7 @@ from . import (
     message_processors,
     online_message_processor,
 )
-from .. import permissions
+from .. import data_loss, permissions
 from ..emulation import local_emulator_message_processor
 from ..replay import replay_manager
 
@@ -21,6 +21,7 @@ def create_message_processors_chain(
     file_upload_manager: base_upload_manager.BaseFileUploadManager,
     fallback_replay_manager: replay_manager.ReplayManager,
     unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
+    data_loss_tracker: data_loss.DataLossTracker,
     max_payload_size_mb: Optional[float] = None,
 ) -> message_processors.ChainedMessageProcessor:
     """
@@ -56,6 +57,7 @@ def create_message_processors_chain(
         file_upload_manager=file_upload_manager,
         fallback_replay_manager=fallback_replay_manager,
         unauthorized_message_types_registry=unauthorized_message_types_registry,
+        data_loss_tracker=data_loss_tracker,
         max_payload_size_mb=max_payload_size_mb,
     )
     # is not active by default - will be activated during evaluation

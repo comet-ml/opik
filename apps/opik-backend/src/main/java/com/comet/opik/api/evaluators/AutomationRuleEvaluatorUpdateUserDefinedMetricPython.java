@@ -27,13 +27,15 @@ public final class AutomationRuleEvaluatorUpdateUserDefinedMetricPython
         extends
             AutomationRuleEvaluatorUpdate<UserDefinedMetricPythonCode, TraceFilter> {
 
-    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId", "projectIds"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "triggerScope", "filters", "code", "projectId",
+            "projectIds"})
     public AutomationRuleEvaluatorUpdateUserDefinedMetricPython(
-            @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
+            @NotBlank String name, float samplingRate, boolean enabled, EvalTriggerScope triggerScope,
+            List<TraceFilter> filters,
             @NotNull UserDefinedMetricPythonCode code,
             UUID projectId,
             Set<UUID> projectIds) {
-        super(name, samplingRate, enabled, filters, code, projectId, projectIds);
+        super(name, samplingRate, enabled, triggerScope, filters, code, projectId, projectIds);
     }
 
     /**

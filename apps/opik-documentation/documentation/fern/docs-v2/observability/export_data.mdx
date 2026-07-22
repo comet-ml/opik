@@ -1,5 +1,5 @@
 ---
-headline: Export Data | Opik Documentation
+headline: Export Data
 og:description: Export traces, spans, threads, datasets, and experiments from Opik
   using the SDK, REST API, UI, or command-line tools
 og:site_name: Opik Documentation
@@ -118,13 +118,48 @@ client.search_traces(filter_string='tags contains "production"')
 
 The full list of supported columns per entity type is documented below.
 
+### Exporting at scale
+
+Read operations are rate limited per workspace. The search and listing endpoints used for export — `search_traces` and `search_spans` (and the underlying `GET /traces` and `GET /spans` endpoints) — are capped at `30` requests per minute per workspace. Exceeding a limit returns `429 Too Many Requests` with a `RateLimit-Reset` header telling you how long to wait. See the [rate-limit FAQ](/faq#are-there-are-rate-limits-on-opik-cloud) for the full list.
+
+That budget is small, so how you fetch matters:
+
+- **Fetch in bulk, not item-by-item.** A single `search_spans` call streams up to 2,000 rows per underlying request, auto-paginates, and backs off on `429`, so one call can return thousands of spans without ever erroring. Avoid making one request per trace.
+- **Filter on the server** with `filter_string` (e.g. a time window) so you only transfer the data you need.
+- **Go easy on concurrency.** Limits are shared per workspace, so parallel requests compete for the same budget and hit `429` sooner without finishing faster.
+
+```python title="✅ Do: fetch in bulk, join on the client"
+from collections import defaultdict
+
+traces = client.search_traces(project_name="Default project", max_results=1000000)
+
+# One call for all the spans, then group them by trace_id in memory.
+spans = client.search_spans(project_name="Default project", max_results=1000000)
+spans_by_trace = defaultdict(list)
+for span in spans:
+    spans_by_trace[str(span.trace_id)].append(span)
+```
+
+```python title="❌ Don't: one request per trace"
+traces = client.search_traces(project_name="Default project", max_results=1000000)
+
+# A request per trace: slow, and quickly hits the read rate limit.
+spans_by_trace = {}
+for trace in traces:
+    spans_by_trace[trace.id] = client.search_spans(
+        project_name="Default project", trace_id=trace.id
+    )
+```
+
 ## REST API
 
 Use the [`/traces`](/reference/rest-api/traces/get-traces-by-project) and [`/spans`](/reference/rest-api/spans/get-spans-by-project) endpoints to export data. Both endpoints are paginated.
 
 <Warning>
   The REST API `filter` parameter has limited flexibility as it was designed for use with the Opik UI.
-  For complex queries, use the SDK instead.
+  For complex queries, use the SDK instead. These endpoints are also rate limited and do not back off
+  on their own — for large exports, prefer the SDK (see [Exporting at scale](#exporting-at-scale)) or
+  implement your own retry on `429` that honors the `RateLimit-Reset` header.
 </Warning>
 
 ## UI

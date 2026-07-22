@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.bi;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
 import com.comet.opik.api.resources.v1.jobs.AlertProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.AutomationRuleProjectMigrationJob;
+import com.comet.opik.api.resources.v1.jobs.ClickHousePartitionMetricsJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
@@ -10,6 +11,7 @@ import com.comet.opik.api.resources.v1.jobs.ExperimentProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.LocalRunnerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
 import com.comet.opik.api.resources.v1.jobs.OptimizationProjectMigrationJob;
+import com.comet.opik.api.resources.v1.jobs.OptimizationStalledReaperJob;
 import com.comet.opik.api.resources.v1.jobs.ProjectLastUpdatedFlushJob;
 import com.comet.opik.api.resources.v1.jobs.PromptProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
@@ -21,6 +23,8 @@ import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.OptimizationStalledReaperConfig;
+import com.comet.opik.infrastructure.PartitionMetricsConfig;
 import com.comet.opik.infrastructure.ProjectLastUpdatedFlushConfig;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.StreamConsumerReaperConfig;
@@ -69,7 +73,9 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setProjectLastUpdatedFlushJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
+                setOptimizationStalledReaperJob();
                 setRetentionJobs();
+                setPartitionMetricsJob();
                 setLlmModelRegistryRefreshJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
                 scheduleExperimentProjectMigrationJobIfEnabled();
@@ -184,6 +190,20 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 reaperConfig.startupDelay().toJavaDuration());
     }
 
+    private void setOptimizationStalledReaperJob() {
+        OptimizationStalledReaperConfig reaperConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getOptimizationStalledReaper();
+
+        if (!reaperConfig.enabled()) {
+            log.info("Optimization stalled reaper job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(OptimizationStalledReaperJob.class,
+                reaperConfig.jobInterval().toJavaDuration(),
+                reaperConfig.startupDelay().toJavaDuration());
+    }
+
     private void setRetentionJobs() {
         RetentionConfig retentionConfig = injector.get().getInstance(OpikConfiguration.class).getRetention();
 
@@ -202,6 +222,19 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         } else {
             log.info("Retention catch-up jobs are disabled, skipping estimation and catch-up job setup");
         }
+    }
+
+    private void setPartitionMetricsJob() {
+        PartitionMetricsConfig partitionMetricsConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getPartitionMetrics();
+
+        if (!partitionMetricsConfig.isEnabled()) {
+            log.info("ClickHouse partition metrics job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(ClickHousePartitionMetricsJob.class,
+                partitionMetricsConfig.getInterval().toJavaDuration(), null);
     }
 
     private void setAgentInsightsReportJob() {

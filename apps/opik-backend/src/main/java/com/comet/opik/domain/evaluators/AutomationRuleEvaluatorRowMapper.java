@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -40,6 +41,8 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
         String name = rs.getString("name");
         Float samplingRate = rs.getFloat("sampling_rate");
         boolean enabled = rs.getBoolean("enabled");
+        String triggerScopeStr = rs.getString("trigger_scope");
+        EvalTriggerScope triggerScope = triggerScopeStr != null ? EvalTriggerScope.fromString(triggerScopeStr) : null;
         String filters = rs.getString("filters");
         Instant createdAt = rs.getTimestamp("created_at").toInstant();
         String createdBy = rs.getString("created_by");
@@ -82,6 +85,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                         .name(name)
                         .samplingRate(samplingRate)
                         .enabled(enabled)
+                        .triggerScope(triggerScope)
                         .filters(filters)
                         .code(OBJECT_MAPPER.treeToValue(codeNode, LlmAsJudgeCode.class))
                         .createdAt(createdAt)
@@ -99,6 +103,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                         .name(name)
                         .samplingRate(samplingRate)
                         .enabled(enabled)
+                        .triggerScope(triggerScope)
                         .filters(filters)
                         .code(OBJECT_MAPPER.treeToValue(codeNode, UserDefinedMetricPythonCode.class))
                         .createdAt(createdAt)
@@ -116,6 +121,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                         .name(name)
                         .samplingRate(samplingRate)
                         .enabled(enabled)
+                        .triggerScope(triggerScope)
                         .filters(filters)
                         .code(OBJECT_MAPPER.treeToValue(codeNode, TraceThreadLlmAsJudgeCode.class))
                         .createdAt(createdAt)
@@ -134,6 +140,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                             .name(name)
                             .samplingRate(samplingRate)
                             .enabled(enabled)
+                            .triggerScope(triggerScope)
                             .filters(filters)
                             .code(OBJECT_MAPPER.treeToValue(codeNode, TraceThreadUserDefinedMetricPythonCode.class))
                             .createdAt(createdAt)
@@ -151,6 +158,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                         .name(name)
                         .samplingRate(samplingRate)
                         .enabled(enabled)
+                        .triggerScope(triggerScope)
                         .filters(filters)
                         .code(OBJECT_MAPPER.treeToValue(codeNode, SpanLlmAsJudgeCode.class))
                         .createdAt(createdAt)
@@ -169,6 +177,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                             .name(name)
                             .samplingRate(samplingRate)
                             .enabled(enabled)
+                            .triggerScope(triggerScope)
                             .filters(filters)
                             .code(OBJECT_MAPPER.treeToValue(codeNode, SpanUserDefinedMetricPythonCode.class))
                             .createdAt(createdAt)

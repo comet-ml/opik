@@ -42,7 +42,9 @@ public class CostService {
             Map.entry("azure", "azure"),
             Map.entry("mistral", "mistral"),
             Map.entry("xai", "xai"),
-            Map.entry("deepseek", "deepseek"));
+            Map.entry("deepseek", "deepseek"),
+            Map.entry("perplexity", "perplexity"),
+            Map.entry("fireworks_ai", "fireworks_ai"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
@@ -60,16 +62,18 @@ public class CostService {
     private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
     private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
-            .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
-                    "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
-                    "azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
-                    "xai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
-                    "deepseek", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
-                    "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
-                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
-                    "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
-                    "gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle,
-                    "vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic);
+            .ofEntries(
+                    Map.entry("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic),
+                    Map.entry("openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("xai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("deepseek", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("fireworks_ai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock),
+                    Map.entry("bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock),
+                    Map.entry("vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle),
+                    Map.entry("gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle),
+                    Map.entry("vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic));
 
     static {
         try {
@@ -124,6 +128,10 @@ public class CostService {
         // Normalize runtime provider names ("gemini", "vertex-ai") to the canonical price-table provider
         // so callers holding an LlmProvider value hit the same rows as callers passing the canonical name.
         provider = RUNTIME_PROVIDER_MAPPING.getOrDefault(provider, provider);
+
+        // Preserve the original name so the provider-prefix fallback below can inspect it after
+        // all primary lookups have missed under the caller-supplied provider.
+        String originalModelName = modelName;
 
         // Strip provider prefix if present (e.g. "openai/gpt-4o" -> "gpt-4o").
         // LiteLLM sends model names with provider prefix via gen_ai.request.model.
@@ -203,6 +211,31 @@ public class CostService {
                         "Found model price using normalized base name after stripping version suffix. Original: '{}', Base: '{}'",
                         modelName, baseNormalizedVersionName);
                 return normalizedMatch;
+            }
+        }
+
+        // Provider-prefix fallback: when every primary lookup misses and the model name carries a
+        // provider prefix (e.g. "perplexity/sonar") that maps to a canonical provider we know
+        // pricing for, retry the lookup under that prefix's canonical provider. This covers models
+        // that a caller routes through an aggregator (LlmProviderFactoryImpl enumerates
+        // "perplexity/*", "xai/*", "deepseek/*" under OpenRouter, so BudgetGuard invokes
+        // calculateCost with provider="openrouter" — the pricing row itself lives under the
+        // model's actual origin provider, e.g. litellm_provider: "perplexity"). Only kicks in as
+        // a fallback, so no existing lookup semantics change for callers that already pass a
+        // matching provider directly.
+        int prefixSlash = originalModelName.indexOf('/');
+        if (prefixSlash > 0) {
+            String modelPrefix = originalModelName.substring(0, prefixSlash);
+            String canonicalFromPrefix = PROVIDERS_MAPPING.get(modelPrefix);
+            if (canonicalFromPrefix != null && !canonicalFromPrefix.equalsIgnoreCase(provider)) {
+                String prefixKey = createModelProviderKey(modelName, canonicalFromPrefix);
+                ModelPrice prefixMatch = modelProviderPrices.get(prefixKey);
+                if (prefixMatch != null) {
+                    log.debug(
+                            "Found model price using model-name provider prefix. Original model: '{}', supplied provider: '{}', prefix-derived provider: '{}'",
+                            originalModelName, provider, canonicalFromPrefix);
+                    return prefixMatch;
+                }
             }
         }
 

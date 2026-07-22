@@ -56,6 +56,14 @@ class SpanSeed(BaseModel):
     parent_index: int | None = None
 
 
+class ErrorInfoSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exception_type: str
+    message: str
+    traceback: str | None = None
+
+
 class NestedTraceCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -69,6 +77,14 @@ class NestedTraceCreate(BaseModel):
     feedback_scores: list[dict[str, Any]] | None = None
     spans: list[SpanSeed]
     workspace: str | None = None
+    # Sets the trace's own error_info (as opposed to a span's), driving the
+    # Traces table's Errors column/explain target. None means no trace-level error.
+    error_info: ErrorInfoSeed | None = None
+    # Backdates start_time by this many seconds and sets end_time to now, so the
+    # trace renders a specific Duration cell value. None leaves both start_time
+    # and end_time unset, which the UI renders as Duration "NA" — the same shape
+    # as the SDK's own not-yet-ended traces.
+    duration_seconds: float | None = None
 
 
 class NestedTraceResponse(BaseModel):
@@ -145,6 +161,48 @@ class ExperimentEvaluateResponse(BaseModel):
     item_count: int
     scored_item_count: int
     scores: list[ExperimentItemScore]
+
+
+class CompareDatasetItemSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    input: str
+    expected_output: str
+
+
+class CompareExperimentSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_name: str
+    # Per-experiment task outputs, aligned by index with the shared dataset
+    # items. Keeping task_output off the dataset item is what lets two
+    # experiments share the same items (same content hash) yet score
+    # differently under Equals(output, expected_output).
+    task_outputs: list[str]
+
+
+class ExperimentCompareSeedRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    dataset_name: str
+    items: list[CompareDatasetItemSeed]
+    experiments: list[CompareExperimentSeed]
+    dataset_description: str | None = None
+    workspace: str | None = None
+
+
+class CompareExperimentResult(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    scores: list[ExperimentItemScore]
+
+
+class ExperimentCompareSeedResponse(BaseModel):
+    dataset_id: str
+    dataset_name: str
+    item_count: int
+    experiments: list[CompareExperimentResult]
 
 
 class TestSuiteItemSeed(BaseModel):
@@ -228,5 +286,20 @@ class ChatPromptCreate(BaseModel):
 
 
 class PromptResponse(BaseModel):
+    id: str
+    name: str
+
+
+class AnnotationQueueCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    name: str
+    trace_ids: list[str]
+    feedback_definition_names: list[str] | None = None
+    workspace: str | None = None
+
+
+class AnnotationQueueResponse(BaseModel):
     id: str
     name: str

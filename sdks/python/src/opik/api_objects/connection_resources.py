@@ -30,6 +30,8 @@ from .. import httpx_client, rest_client_configurator
 from ..file_upload import upload_manager
 from ..healthcheck import connection_monitor, connection_probe
 from ..message_processing import (
+    data_loss,
+    flush_reporter,
     message_queue,
     permissions,
     streamer,
@@ -61,6 +63,7 @@ class SharedConnectionResourcesBundle:
         file_upload_manager: upload_manager.FileUploadManager,
         replay_manager: replay_manager.ReplayManager,
         streamer: streamer.Streamer,
+        data_loss_tracker: data_loss.DataLossTracker,
         flush_timeout: Optional[int],
     ) -> None:
         self.httpx_client = httpx_client
@@ -69,14 +72,18 @@ class SharedConnectionResourcesBundle:
         self.file_upload_manager = file_upload_manager
         self.replay_manager = replay_manager
         self.streamer = streamer
+        self.flush_reporter = flush_reporter.FlushReporter(
+            streamer=streamer,
+            data_loss_tracker=data_loss_tracker,
+        )
         self.flush_timeout = flush_timeout
 
-    def close(self, timeout: Optional[int], *, flush: bool) -> None:
+    def close(self, timeout: Optional[int], *, flush: bool) -> bool:
         # Drain/stop the streamer (consumer threads, replay, batch preprocessor);
         # on flush=True it also flushes pending file uploads.
         # Closing the streamer also stops and joins the replay manager (its own
         # daemon thread), so there is no separate replay teardown to do here.
-        self.streamer.close(timeout, flush=flush)
+        flushed = self.streamer.close(timeout, flush=flush)
         # Stop the upload worker pool too, so eviction doesn't leave its threads
         # running. wait=flush mirrors the streamer: block for in-flight uploads
         # on a durable close, return immediately on fire-and-forget teardown.
@@ -90,19 +97,23 @@ class SharedConnectionResourcesBundle:
             # daemon threads to finish in-flight requests, so closing the pool
             # here would race them — leave it for GC / process-exit close_all.
             self.httpx_client.close()
+        return flushed
 
-    def flush(self, timeout: Optional[int]) -> None:
+    def flush(self, timeout: Optional[int]) -> bool:
         """Drain the shared message queue without tearing the bundle down.
 
         Used when a handle releases with ``flush=True`` while other handles still
         share the bundle: the queued data is persisted now, but the transport
         stays alive for the remaining handles.
+
+        Returns whether the queue drained fully within ``timeout``.
         """
-        self.streamer.flush(timeout)
+        return self.streamer.flush(timeout)
 
 
 def _create_replay_manager(
-    config: opik_config.OpikConfig, httpx_client: httpx.Client
+    config: opik_config.OpikConfig,
+    httpx_client: httpx.Client,
 ) -> replay_manager.ReplayManager:
     probe = connection_probe.ConnectionProbe(
         base_url=config.url_override,
@@ -156,6 +167,8 @@ def create_connection_resources(
         worker_count=config.file_upload_background_workers,
     )
 
+    data_loss_tracker = data_loss.DataLossTracker()
+
     fallback_replay = _create_replay_manager(config, httpx_client_)
 
     message_processor = message_processors_chain.create_message_processors_chain(
@@ -166,6 +179,7 @@ def create_connection_resources(
             retry_interval_seconds=config.unauthorized_message_type_retry_interval,
             max_retry_count=config.unauthorized_message_type_max_retry_count,
         ),
+        data_loss_tracker=data_loss_tracker,
         max_payload_size_mb=config.max_payload_size_mb,
     )
     streamer_ = streamer_constructors.construct_online_streamer(
@@ -187,6 +201,7 @@ def create_connection_resources(
         file_upload_manager=file_uploader,
         replay_manager=fallback_replay,
         streamer=streamer_,
+        data_loss_tracker=data_loss_tracker,
         flush_timeout=config.default_flush_timeout,
     )
 
@@ -237,12 +252,16 @@ class Lease:
 
     def release(
         self, timeout: Optional[int], *, flush: bool = True, close_on_zero: bool
-    ) -> None:
+    ) -> Optional[bool]:
+        """Release this handle's reference. Returns the authoritative flush
+        outcome when this release performed the drain (an explicit
+        ``flush=True`` release), ``None`` otherwise (already released, or a GC
+        finalizer that does no network I/O)."""
         with self._once_lock:
             if self._released:
-                return
+                return None
             self._released = True
-        self._manager.release(
+        return self._manager.release(
             self._key, timeout, flush=flush, close_on_zero=close_on_zero
         )
 
@@ -327,7 +346,7 @@ class ConnectionResourceManager:
         *,
         flush: bool = True,
         close_on_zero: bool,
-    ) -> None:
+    ) -> Optional[bool]:
         # Durability under sharing: an explicit ``end(flush=True)`` on a handle
         # that still shares its bundle must drain the shared queue *before* this
         # handle gives up its reference. Flushing while our reference is still
@@ -338,6 +357,12 @@ class ConnectionResourceManager:
         # bundle; a sole holder's ``close(flush=True)`` below already drains
         # durably. A GC finalizer (``close_on_zero=False``) never does network
         # I/O, so it never pre-flushes.
+        # Authoritative flush outcome for the caller: set by whichever branch
+        # below actually drains — the shared pre-flush or the last-reference
+        # close. Stays None when this release did no draining (GC finalizer, or
+        # a bundle already released elsewhere), so the caller can tell "not
+        # confirmed" apart from "confirmed not flushed".
+        flushed: Optional[bool] = None
         if flush and close_on_zero:
             with self._lock:
                 entry = self._entries.get(key)
@@ -347,7 +372,7 @@ class ConnectionResourceManager:
                     else None
                 )
             if shared_bundle is not None:
-                shared_bundle.flush(timeout)
+                flushed = shared_bundle.flush(timeout)
 
         # Now drop our reference. Because we only decrement here — after any
         # pre-flush above has completed — a close can never run while another
@@ -356,10 +381,10 @@ class ConnectionResourceManager:
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
-                return
+                return flushed
             entry.refcount -= 1
             if entry.refcount > 0:
-                return
+                return flushed
             if not close_on_zero:
                 # The last reference was dropped by a GC finalizer (see
                 # ``Opik._acquire_shared_resources``). Only the refcount
@@ -368,13 +393,16 @@ class ConnectionResourceManager:
                 # never happen inside garbage collection. Leave the bundle
                 # cached so a later same-identity ``acquire`` reuses it, or
                 # ``close_all`` disposes it at process exit.
-                return
+                return flushed
             # Evict before close, under the lock, so a concurrent acquire never
             # receives a bundle that is being torn down.
             del self._entries[key]
             bundle = entry.resources
 
-        bundle.close(timeout, flush=flush)
+        closed_flushed = bundle.close(timeout, flush=flush)
+        # A non-draining teardown has no flush outcome to report — return None
+        # (not close()'s bool) so the result stays "no drain happened here".
+        return closed_flushed if flush else None
 
     def close_all(self, *, flush: bool = True) -> None:
         """Close and evict every cached bundle. Registered as the process

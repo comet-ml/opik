@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.1.26](https://img.shields.io/badge/Version-2.1.26-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.1.26](https://img.shields.io/badge/AppVersion-2.1.26-informational?style=flat-square)
+![Version: 2.2.3](https://img.shields.io/badge/Version-2.2.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.3](https://img.shields.io/badge/AppVersion-2.2.3-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -157,7 +157,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
 | clickhouse.extraVolumeMounts | list | `[]` | Additional volume mounts for the ClickHouse server container. Use this to mount volumes that ClickHouse server needs direct access to, such as a backup disk for embedded backups (BACKUP TO Disk(...)). The mount name can reference a CHI volumeClaimTemplate defined in `clickhouse.extraVolumeClaimTemplates` (matched by name automatically by the ClickHouse operator), or a volume defined in `clickhouse.extraVolumes`. |
 | clickhouse.extraVolumes | list | `[]` | Additional pod-level volumes for the ClickHouse pod, independent of the backup server sidecar. Use this for non-PVC volume types (configMap, secret, emptyDir, hostPath, etc.) that should be available to the ClickHouse server container. For persistent storage, prefer defining a CHI-managed PVC via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in `extraVolumeMounts` above. |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.8.16.10002.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:26.3.16.10001.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
@@ -205,6 +205,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.templates.replicaServiceTemplate | string | `"clickhouse-replica-svc-template"` |  |
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
+| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until a migration attaches the `tiered_replicated` policy to a table, so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
@@ -371,6 +372,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.enabled | bool | `false` |  |
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
+| component.frontend.keepaliveRequests | int | `100` |  |
+| component.frontend.keepaliveTimeout | string | `"60s"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.podDisruptionBudget.enabled | bool | `false` |  |
