@@ -20,6 +20,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceTokenUsageNamesRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -766,6 +767,121 @@ class WorkspacesResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
+    }
+
+    @Nested
+    @DisplayName("Token usage names")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TokenUsageNamesTest {
+
+        @Test
+        void matchesPerProjectEndpoint() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            createSpansWithUsage(projectName, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai"));
+
+            var perProject = projectResourceClient.findTokenUsageNames(projectId, apiKey, workspaceName);
+
+            // Explicit project subset must match the per-project endpoint exactly.
+            var workspaceSubset = workspaceResourceClient.getWorkspaceTokenUsageNames(
+                    namesRequest(Set.of(projectId)), apiKey, workspaceName);
+            assertThat(workspaceSubset.names()).containsExactlyInAnyOrderElementsOf(perProject.names());
+
+            // No project ids => all projects. Workspace has only this project, so it must also match.
+            var workspaceAll = workspaceResourceClient.getWorkspaceTokenUsageNames(namesRequest(null), apiKey,
+                    workspaceName);
+            assertThat(workspaceAll.names()).containsExactlyInAnyOrderElementsOf(perProject.names());
+        }
+
+        @Test
+        void unionsKeysAcrossSelectedProjects() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String projectName1 = RandomStringUtils.randomAlphabetic(10);
+            String projectName2 = RandomStringUtils.randomAlphabetic(10);
+            var projectId1 = projectResourceClient.createProject(projectName1, apiKey, workspaceName);
+            var projectId2 = projectResourceClient.createProject(projectName2, apiKey, workspaceName);
+            createSpansWithUsage(projectName1, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai"));
+            createSpansWithUsage(projectName2, apiKey, workspaceName, Instant.now(), "prompt_tokens",
+                    List.of("openai"));
+
+            var result = workspaceResourceClient.getWorkspaceTokenUsageNames(
+                    namesRequest(Set.of(projectId1, projectId2)), apiKey, workspaceName);
+
+            assertThat(result.names()).containsExactlyInAnyOrder("completion_tokens", "prompt_tokens");
+        }
+
+        // OPIK-7373 regression: a project with no token usage is the FE "representative" for a multi-project selection.
+        // The names list must still surface the other selected projects' keys instead of coming back empty.
+        @Test
+        void includesKeysFromOtherProjects_whenOneSelectedProjectHasNoUsage() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String emptyProjectName = RandomStringUtils.randomAlphabetic(10);
+            String usageProjectName = RandomStringUtils.randomAlphabetic(10);
+            var emptyProjectId = projectResourceClient.createProject(emptyProjectName, apiKey, workspaceName);
+            var usageProjectId = projectResourceClient.createProject(usageProjectName, apiKey, workspaceName);
+            createSpansWithUsage(usageProjectName, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai"));
+
+            // The empty project alone yields nothing (the exact condition that made the dropdown show "No data").
+            assertThat(projectResourceClient.findTokenUsageNames(emptyProjectId, apiKey, workspaceName).names())
+                    .isEmpty();
+
+            var result = workspaceResourceClient.getWorkspaceTokenUsageNames(
+                    namesRequest(Set.of(emptyProjectId, usageProjectId)), apiKey, workspaceName);
+
+            assertThat(result.names()).containsExactly("completion_tokens");
+        }
+
+        @Test
+        void returnsEmpty_whenNoUsage() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var result = workspaceResourceClient.getWorkspaceTokenUsageNames(namesRequest(Set.of(projectId)), apiKey,
+                    workspaceName);
+
+            assertThat(result.names()).isEmpty();
+        }
+
+        @Test
+        void namesIsolatedByWorkspace() {
+            var workspaceA = UUID.randomUUID().toString();
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceA, UUID.randomUUID().toString());
+            var workspaceB = UUID.randomUUID().toString();
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceB, UUID.randomUUID().toString());
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, apiKeyA, workspaceA);
+            createSpansWithUsage(projectName, apiKeyA, workspaceA, Instant.now(), "completion_tokens",
+                    List.of("openai"));
+
+            assertThat(workspaceResourceClient.getWorkspaceTokenUsageNames(namesRequest(null), apiKeyA, workspaceA)
+                    .names()).containsExactly("completion_tokens");
+            assertThat(workspaceResourceClient.getWorkspaceTokenUsageNames(namesRequest(null), apiKeyB, workspaceB)
+                    .names()).isEmpty();
+        }
+    }
+
+    private WorkspaceTokenUsageNamesRequest namesRequest(Set<UUID> projectIds) {
+        return WorkspaceTokenUsageNamesRequest.builder().projectIds(projectIds).build();
     }
 
     private WorkspaceSpanMetricRequest spanRequest(MetricType metricType, Set<UUID> projectIds, Instant startTime,
