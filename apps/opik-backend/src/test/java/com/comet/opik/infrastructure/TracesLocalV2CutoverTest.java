@@ -216,6 +216,22 @@ class TracesLocalV2CutoverTest {
      */
     @BeforeEach
     void resetTables() {
+        // Self-heal a topology leaked by a test that failed mid-cutover (after a swap/wrap, before its rollback): a green
+        // run always leaves the canonical layout, but a failure in between would otherwise leave `traces` a Distributed
+        // wrapper (or the successor) over dropped/renamed tables and cascade into every later test. The tests only ever
+        // hold two completed non-canonical topologies across a boundary; reverse whichever is present, then truncate.
+        if (isDistributed("traces")) { // post-wrap: traces = Distributed over traces_local; original parked as backup
+            execute("DROP TABLE traces ON CLUSTER '{cluster}' SYNC", _ -> {
+            });
+            execute("RENAME TABLE traces_pre_cutover_backup TO traces, traces_local TO traces_local_v2 ON CLUSTER '{cluster}'",
+                    _ -> {
+                    });
+        } else if (tableExists("traces_pre_cutover_backup")) { // post-EXCHANGE: traces = successor; original parked as backup
+            execute("EXCHANGE TABLES traces AND traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
+            });
+            execute("RENAME TABLE traces_pre_cutover_backup TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+            });
+        }
         execute("DROP TABLE IF EXISTS traces_local ON CLUSTER '{cluster}' SYNC", _ -> {
         });
         execute("DROP TABLE IF EXISTS traces_pre_cutover_backup ON CLUSTER '{cluster}' SYNC", _ -> {
