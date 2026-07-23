@@ -584,6 +584,16 @@ class OpikQueryLanguage:
 
             # If escaped key, skip the closing quote
             if is_quoted_key:
+                # An alnum char at the very end of the string can satisfy the
+                # loop's field-char branch without ever reaching the closing
+                # quote check, so verify it explicitly here.
+                if (
+                    self._cursor >= len(self.query_string)
+                    or self.query_string[self._cursor] != quote_type
+                ):
+                    raise ValueError(
+                        "Missing closing quote for: " + self.query_string[start - 1 :]
+                    )
                 key = key.replace(
                     quote_type * 2, quote_type
                 )  # Replace doubled quotes with single quotes
@@ -716,7 +726,9 @@ class OpikQueryLanguage:
                 self._cursor += 1
                 frac = self._get_number()
                 if not frac:
-                    raise ValueError("Expected digits after decimal point in filter value")
+                    raise ValueError(
+                        "Expected digits after decimal point in filter value"
+                    )
                 value += "." + frac
 
             return {"value": value}

@@ -378,12 +378,22 @@ def test_trace_oql__valid_filters(filter_string, expected):
         ("duration >=", r"Incomplete filter string.*"),
         ("name =", r"Incomplete filter string.*"),
         ("duration > 5 and", r"Incomplete filter string.*"),
+        # Whitespace-only query takes the full parser path (unlike None/""),
+        # and must still fail cleanly rather than raising IndexError.
+        ("   ", r"Incomplete filter string.*"),
         # Unterminated quoted values (keys already covered above).
         # Raised from _is_valid_escaped_key_char while scanning the value.
         (
             'name = "hello',
             r'Missing closing quote for: "hello',
         ),
+        # Malformed negative numbers
+        ("duration > -", r"Expected a number after '-' in filter value"),
+        ("duration > --5", r"Expected a number after '-' in filter value"),
+        ("duration > - 5", r"Expected a number after '-' in filter value"),
+        # Decimal point with no digits after it
+        ("duration > 5.", r"Expected digits after decimal point in filter value"),
+        ("duration > -5.", r"Expected digits after decimal point in filter value"),
     ],
 )
 def test_trace_oql__invalid_filters(filter_string, error_pattern):
@@ -415,6 +425,21 @@ def test_trace_oql__negative_numeric_values(filter_string, expected):
     for i, line in enumerate(expected):
         for key, value in line.items():
             assert parsed[i][key] == value
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected_value",
+    [
+        # Doubled double-quotes inside a value must unescape, same as keys.
+        ('name = "say ""hi"" there"', 'say "hi" there'),
+        ('name = """quoted"""', '"quoted"'),
+        ('name = ""', ""),
+    ],
+)
+def test_trace_oql__escaped_quotes_in_value(filter_string, expected_value):
+    oql = OpikQueryLanguage.for_traces(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert parsed[0]["value"] == expected_value
 
 
 @pytest.mark.parametrize("filter_string", [None, ""])
