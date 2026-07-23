@@ -255,6 +255,16 @@ class CostIntelligenceIngestionTest {
                 assertThat(residualCacheCreation.tier()).isEqualTo("cache_creation_1h");
                 assertThat(residualCacheCreation.alloc()).isCloseTo(5.0, within(1e-9));
 
+                // content_sha256 is persisted per row in order: only the memory block
+                // carried a sha256 in the fixture, so every other row must read "" —
+                // guards against a dropped or misordered hash across the batch.
+                assertThat(rows).filteredOn(row -> !row.contentSha256().isEmpty())
+                        .singleElement()
+                        .satisfies(row -> {
+                            assertThat(row.category()).isEqualTo("memory");
+                            assertThat(row.contentSha256()).isEqualTo("a1b2c3");
+                        });
+
                 // model and start_time ride on every block row.
                 assertThat(rows).allSatisfy(row -> {
                     assertThat(row.model()).isEqualTo("claude-sonnet-4-6");
