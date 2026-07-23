@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "@/ui/form";
 import VisualizationCardSelector from "@/v2/pages-shared/dashboards/widgets/shared/VisualizationCardSelector/VisualizationCardSelector";
-import { LoadableSelectBox } from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import { LoadableSelectBox } from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import ProjectsSelectBox, {
   useProjectsSelectData,
 } from "@/v2/pages-shared/automations/ProjectsSelectBox";
