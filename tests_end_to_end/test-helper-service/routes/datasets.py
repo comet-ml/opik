@@ -44,9 +44,9 @@ def create_dataset_for_project():
         # following an unrelated test failure) hits this with a name that
         # already exists — treat it as success rather than a fatal error.
         if e.status_code == 409:
-            dataset = client.get_dataset(data["name"])
+            dataset = client.get_dataset(data["name"], project_name=data["project_name"])
             return jsonify({"id": dataset.id, "name": dataset.name})
-        logger.error(f"Error creating dataset for project: {type(e).__name__}")
+        logger.exception("Error creating dataset for project")
         return jsonify({"error": "An internal error occurred"}), 500
 
 
@@ -57,13 +57,10 @@ def create_test_suite_dataset():
 
     client = get_opik_client()
     try:
-        test_suite = client.create_test_suite(name=data["name"], project_name=data["project_name"])
+        test_suite = client.get_or_create_test_suite(name=data["name"], project_name=data["project_name"])
         return jsonify({"id": test_suite.id, "name": test_suite.name})
-    except ApiError as e:
-        if e.status_code == 409:
-            test_suite = client.get_dataset(data["name"])
-            return jsonify({"id": test_suite.id, "name": test_suite.name})
-        logger.error(f"Error creating test suite dataset: {type(e).__name__}")
+    except ApiError:
+        logger.exception("Error creating test suite dataset")
         return jsonify({"error": "An internal error occurred"}), 500
 
 
