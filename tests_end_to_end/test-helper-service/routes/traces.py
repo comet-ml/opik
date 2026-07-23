@@ -293,6 +293,81 @@ def create_trace_with_span_attachment():
     )
 
 
+@traces_bp.route("/create-rich-trace-for-sidebar", methods=["POST"])
+def create_rich_trace_for_sidebar():
+    data = request.get_json()
+    validate_required_fields(
+        data, ["project_name", "trace_name", "prompt_name", "attachment_path"]
+    )
+
+    project_name = data["project_name"]
+    trace_name = data["trace_name"]
+    prompt_name = data["prompt_name"]
+    attachment_path = resolve_attachment_path(data["attachment_path"])
+
+    client = get_opik_client()
+    prompt = client.create_prompt(
+        name=prompt_name,
+        prompt="Translate the following text to French: {{text}}",
+    )
+
+    question = {"messages": [{"role": "user", "content": "What is Opik?"}]}
+    answer = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": (
+                        "Opik is an open-source platform for logging, "
+                        "evaluating and monitoring LLM applications."
+                    ),
+                }
+            }
+        ]
+    }
+
+    # Same start/end time on both trace and span so the sidebar always renders
+    # a fixed "0s" duration badge instead of a real, run-to-run varying value
+    # (a varying width there shifts the tabs/score badges next to it).
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    trace = client.trace(
+        name=trace_name,
+        project_name=project_name,
+        input=question,
+        output=answer,
+        start_time=now,
+        end_time=now,
+        tags=["visual", "sidebar-demo"],
+        metadata={
+            "environment": "visual-test",
+            "model": "gpt-4o",
+            "opik_prompts": [prompt.__internal_api__to_info_dict__()],
+        },
+        # A single score avoids relying on any ordering guarantee between two
+        # scores logged in the same request (the table has no explicit sort).
+        feedback_scores=[{"name": "correctness", "value": 0.95}],
+        attachments=[Attachment(data=attachment_path)],
+    )
+
+    span = trace.span(
+        name="generate-answer",
+        input=question,
+        output=answer,
+        start_time=now,
+        end_time=now,
+        metadata={"model": "gpt-4o", "temperature": 0.2},
+    )
+    span.log_feedback_score(name="relevance", value=0.9)
+
+    return success_response(
+        {
+            "attachment_name": os.path.basename(attachment_path),
+            "prompt_name": prompt.name,
+        }
+    )
+
+
 @traces_bp.route("/get-traces", methods=["POST"])
 def get_traces():
     data = request.get_json()

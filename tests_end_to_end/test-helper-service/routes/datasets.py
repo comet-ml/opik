@@ -36,9 +36,18 @@ def create_dataset_for_project():
     validate_required_fields(data, ["name", "project_name"])
 
     client = get_opik_client()
-    dataset = client.create_dataset(name=data["name"], project_name=data["project_name"])
-
-    return jsonify({"id": dataset.id, "name": dataset.name})
+    try:
+        dataset = client.create_dataset(name=data["name"], project_name=data["project_name"])
+        return jsonify({"id": dataset.id, "name": dataset.name})
+    except ApiError as e:
+        # A retried beforeAll hook (e.g. after Playwright restarts the worker
+        # following an unrelated test failure) hits this with a name that
+        # already exists — treat it as success rather than a fatal error.
+        if e.status_code == 409:
+            dataset = client.get_dataset(data["name"])
+            return jsonify({"id": dataset.id, "name": dataset.name})
+        logger.error(f"Error creating dataset for project: {type(e).__name__}")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @datasets_bp.route("/create-test-suite", methods=["POST"])
@@ -47,9 +56,15 @@ def create_test_suite_dataset():
     validate_required_fields(data, ["name", "project_name"])
 
     client = get_opik_client()
-    test_suite = client.create_test_suite(name=data["name"], project_name=data["project_name"])
-
-    return jsonify({"id": test_suite.id, "name": test_suite.name})
+    try:
+        test_suite = client.create_test_suite(name=data["name"], project_name=data["project_name"])
+        return jsonify({"id": test_suite.id, "name": test_suite.name})
+    except ApiError as e:
+        if e.status_code == 409:
+            test_suite = client.get_dataset(data["name"])
+            return jsonify({"id": test_suite.id, "name": test_suite.name})
+        logger.error(f"Error creating test suite dataset: {type(e).__name__}")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @datasets_bp.route("/find", methods=["POST"])
