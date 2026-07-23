@@ -26,6 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
@@ -286,6 +287,28 @@ public class JsonUtils {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    public void writeValue(@NonNull Writer writer, @NonNull Object value) {
+        try {
+            MAPPER.writeValue(writer, value);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Serialized character length of a node without materializing its JSON string — the node is streamed
+     * through a counting writer, so a large field costs O(1) transient heap rather than a full copy. A
+     * {@code null} or JSON-null node counts as 0.
+     */
+    public long getSerializedLength(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return 0L;
+        }
+        var counter = new CountingWriter();
+        writeValue(counter, node);
+        return counter.getCount();
     }
 
     public <T> T readJsonFile(@NonNull String fileName, @NonNull TypeReference<T> valueTypeRef) throws IOException {

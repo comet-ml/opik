@@ -33,6 +33,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -141,6 +142,23 @@ public class SpanService {
 
         return spanDAO.getByTraceIds(traceIds)
                 .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, true));
+    }
+
+    /**
+     * Cheap approximate serialized size (bytes) of all spans across the given trace ids. Used by the
+     * trace-thread online scorers to size the inline-vs-agentic-tools routing decision without fetching
+     * the spans into heap (OPIK-7454). No attachment reinjection — it's a pure aggregate, so it also
+     * skips the per-span attachment resolution that the full fetch pays. Returns 0 for empty input.
+     */
+    @WithSpan
+    public Mono<Long> getSpansSizeByTraceIds(Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(traceIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Estimating spans size for '{}' traces", traceIds.size());
+
+        return spanDAO.getSpansSizeByTraceIds(traceIds);
     }
 
     @WithSpan

@@ -25,6 +25,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -186,16 +187,31 @@ public interface AgenticScoringService {
             TraceCompressor traceCompressor, int charsPerToken);
 
     /**
-     * Rough character-based token estimate for the thread context as it would be rendered on the inline
-     * path. Estimates the enriched shape — trace input/output plus the assistant turn's child spans (tool
-     * calls + I/O) — so the agentic-tools routing decision reflects what the inline render will actually
-     * serialize. Pass an empty {@code spans} list when the toggle is off; the enriched serializer omits
-     * the {@code spans} field via {@code @JsonInclude(NON_NULL)}, so the estimate then matches the
-     * original trace-bodies-only shape exactly.
+     * Rough token estimate of the inline thread context — the shape
+     * {@code OnlineScoringEngine#fromTraceToThreadEnriched} renders: the trace bodies (user/assistant
+     * content) plus the thread's span content. {@code spanBytes} is supplied by the caller from the cheap
+     * ClickHouse size aggregate so no spans are materialized here; the trace bodies are measured in-heap.
      *
-     * <p>Same {@code charsPerToken} contract as {@link #estimateTraceContextTokens}.
+     * <p>An approximation for the inline-vs-agentic-tools routing gate: it sums the dominant content only
+     * — {@code spanBytes} (ClickHouse byte length) plus the trace bodies (serialized character length) —
+     * not the JSON structure, blending those two units on purpose, so it can slightly under-count. That is
+     * acceptable because a genuinely small thread stays inline either way while an oversized thread lands
+     * far above the threshold. The chars-per-token ratio is read from configuration
+     * ({@code onlineScoring.agenticToolsCharsPerToken}). See OPIK-7454.
      */
-    int estimateThreadContextTokens(List<Trace> traces, List<Span> spans, int charsPerToken);
+    int estimateThreadContextTokens(List<Trace> traces, long spanBytes);
+
+    /**
+     * Streaming, heap-bounded preload of a thread's spans used to size the inline-vs-agentic-tools routing
+     * decision without materializing an unbounded thread. Consumes the span {@link Flux} and accumulates
+     * spans and their approximate serialized size; once the running size exceeds {@code maxPreloadBytes} it
+     * cancels the upstream fetch and returns a preload with {@link ThreadSpanPreload#overflowed()}
+     * {@code == true} and an empty span list.
+     *
+     * <p>Overflow forces the agentic-tools path, which drills per-trace on demand and needs no buffer;
+     * below the cap the bounded span list is returned for the inline/enriched path. See OPIK-7454.
+     */
+    Mono<ThreadSpanPreload> preloadThreadSpansBounded(Flux<Span> spans, long maxPreloadBytes);
 
     /**
      * Build a sanitized one-line description of the outgoing LLM request for user-facing logs. The full
@@ -437,8 +453,9 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
 
     @Override
     public int estimateTokensFromJson(@NonNull JsonNode fullJson, int charsPerToken) {
-        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
-        return fullJson.toString().length() / charsPerToken;
+        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got '%s'", charsPerToken);
+        // Stream the node through a counting writer instead of materializing its full JSON string.
+        return (int) (JsonUtils.getSerializedLength(fullJson) / charsPerToken);
     }
 
     @Override
@@ -448,11 +465,36 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     }
 
     @Override
-    public int estimateThreadContextTokens(@NonNull List<Trace> traces, @NonNull List<Span> spans,
-            int charsPerToken) {
-        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
-        return JsonUtils.writeValueAsString(OnlineScoringEngine.fromTraceToThreadEnriched(traces, spans)).length()
-                / charsPerToken;
+    public int estimateThreadContextTokens(@NonNull List<Trace> traces, long spanBytes) {
+        // Inline prompt size ≈ trace bodies (measured in-heap) + span content (spanBytes, from the cheap
+        // size aggregate). Clamp so a very large thread can't overflow the int estimate.
+        var contextBytes = spanBytes + traceContentBytes(traces);
+        return (int) Math.min(Integer.MAX_VALUE, contextBytes / onlineScoringConfig.getAgenticToolsCharsPerToken());
+    }
+
+    /**
+     * Approximate serialized size of the trace bodies (user/assistant {@code content}) the inline thread
+     * context carries, measured over the already-in-heap traces without materializing their JSON.
+     */
+    private long traceContentBytes(List<Trace> traces) {
+        return traces.stream()
+                .mapToLong(trace -> JsonUtils.getSerializedLength(trace.input())
+                        + JsonUtils.getSerializedLength(trace.output()))
+                .sum();
+    }
+
+    @Override
+    public Mono<ThreadSpanPreload> preloadThreadSpansBounded(@NonNull Flux<Span> spans, long maxPreloadBytes) {
+        Preconditions.checkArgument(maxPreloadBytes >= 1, "maxPreloadBytes must be >= 1, got '%s'", maxPreloadBytes);
+        // Fresh accumulator per subscription (Mono.defer), so a retry/resubscribe never reuses buffered
+        // state. takeUntil cancels the upstream fetch as soon as the cap is crossed, so the whole thread
+        // is never materialized; the accumulated result is emitted once the stream completes.
+        return Mono.defer(() -> {
+            var accumulator = new BoundedSpanAccumulator(maxPreloadBytes);
+            return spans
+                    .takeUntil(accumulator::addAndCheckOverflow)
+                    .then(Mono.fromSupplier(accumulator::toPreload));
+        });
     }
 
     @Override

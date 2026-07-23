@@ -813,6 +813,35 @@ public class SpanDAO {
             """;
 
     /**
+     * Cheap size estimate for all spans across a set of trace ids, used only to route trace-thread online
+     * scoring between the inline and agentic-tools paths without materializing spans. Sums the
+     * pre-computed {@code *_length} materialized columns, so ClickHouse reads only small numeric columns
+     * instead of the (potentially large) {@code input}/{@code output}/{@code metadata} text. The latest
+     * version of each span is taken with {@code argMax(..., last_updated_at)} grouped by {@code id} —
+     * a hash aggregation that dedups the {@code ReplacingMergeTree} versions without the full-row
+     * {@code ORDER BY} + {@code LIMIT 1 BY id} sort that {@link #SELECT_BY_TRACE_IDS} pays. See OPIK-7454.
+     */
+    private static final String SELECT_SPANS_SIZE_BY_TRACE_IDS = """
+            WITH target_projects AS (
+                SELECT DISTINCT project_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND trace_id IN :trace_ids
+            )
+            SELECT sum(span_size) AS size_bytes
+            FROM (
+                SELECT argMax(input_length + output_length + metadata_length, last_updated_at) AS span_size
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND trace_id IN :trace_ids
+                GROUP BY id
+            )
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /**
      * Two-phase, wide-column-deferred span page query.
      * <p>
      * Phase 1 ({@code page_ids}) paginates on the light, deduped id + sort-key set only — wide text columns
@@ -2276,6 +2305,38 @@ public class SpanDAO {
                             .doFinally(signalType -> endSegment(segment));
                 }))
                 .flatMap(this::mapToDto);
+    }
+
+    /**
+     * Cheap approximate size (bytes) of all spans across the given trace ids, used to route trace-thread
+     * online scoring without materializing spans. Streaming aggregate — see
+     * {@link #SELECT_SPANS_SIZE_BY_TRACE_IDS}. Returns 0 for an empty input or when no spans match.
+     */
+    public Mono<Long> getSpansSizeByTraceIds(Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(traceIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Getting spans size estimate for '{}' traces", traceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(SELECT_SPANS_SIZE_BY_TRACE_IDS, "get_spans_size_by_trace_ids",
+                            workspaceId, userName, "traces_size=%s".formatted(traceIds.size()));
+                    var statement = connection.createStatement(template.render())
+                            .bind("trace_ids", traceIds.toArray(new UUID[0]))
+                            .bind("workspace_id", workspaceId);
+
+                    Segment segment = startSegment("spans", "Clickhouse", "get_spans_size_by_trace_ids");
+
+                    return Flux.from(statement.execute())
+                            .doFinally(signalType -> endSegment(segment));
+                }))
+                .flatMap(result -> result.map((row, rowMetadata) -> {
+                    var size = row.get("size_bytes", Long.class);
+                    return size == null ? 0L : size;
+                }))
+                .reduce(0L, Long::sum);
     }
 
     private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {

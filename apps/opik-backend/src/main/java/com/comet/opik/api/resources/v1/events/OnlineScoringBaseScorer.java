@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.RedisSubscriberMessage;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
  * Base online scorer for all particular implementations to extend. It listens to a Redis stream for
@@ -78,6 +80,36 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
         this.type = type;
+    }
+
+    /**
+     * The trace-thread span-preload cap in bytes. Single place that converts the MB-denominated config
+     * ({@code onlineScoring.agenticToolsMaxPreloadMb}) so the trace-thread scorers pass a consistent value
+     * to both the size gate and the bounded preload. See OPIK-7454.
+     */
+    protected long agenticToolsMaxPreloadBytes() {
+        return (long) onlineScoringConfig.getAgenticToolsMaxPreloadMb() * 1024 * 1024;
+    }
+
+    /**
+     * Returns the buffered spans from a bounded preload and, as a side effect, emits a user-facing warning
+     * when the preload {@link ThreadSpanPreload#overflowed()} the byte cap even though the size estimate had
+     * routed the thread to the enriched path — i.e. the cheap size aggregate under-counted the real
+     * serialized size. The overflow is already handled safely upstream (the buffer was dropped, so the
+     * returned list is empty and the thread scores with the unenriched context); the warning just makes the
+     * otherwise-silent fallback visible. See OPIK-7454.
+     */
+    protected List<Span> getSpansFromPreloadAndLogOverflow(@NonNull ThreadSpanPreload preload,
+            @NonNull Logger userFacingLogger, String threadId, Map<String, String> mdc) {
+        if (preload.overflowed()) {
+            try (var logContext = wrapWithMdc(mdc)) {
+                userFacingLogger.warn("""
+                        Thread span preload exceeded the enrichment cap despite a fitting size estimate; \
+                        scoring with the unenriched context. threadId='{}', approxBytes='{}', capBytes='{}'""",
+                        threadId, preload.approxBytes(), agenticToolsMaxPreloadBytes());
+            }
+        }
+        return preload.spans();
     }
 
     /**
