@@ -7,6 +7,7 @@ import WorkspaceVersionGate from "@/WorkspaceVersionGate";
 import usePluginsStore from "@/store/PluginsStore";
 import { APP_VERSION } from "@/constants/app";
 import { runLocalStorageMigrations } from "@/lib/ls-migrations";
+import { setupPreloadErrorHandler } from "@/lib/preload-error";
 
 import "./main.scss";
 import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
@@ -14,6 +15,8 @@ import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
 // other styles
 import "react18-json-view/src/style.css";
 import "react18-json-view/src/dark.css";
+
+setupPreloadErrorHandler();
 
 const container = document.getElementById("root") as HTMLDivElement;
 const root = createRoot(container);
