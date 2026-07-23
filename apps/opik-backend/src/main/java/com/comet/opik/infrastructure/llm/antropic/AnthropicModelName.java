@@ -19,14 +19,13 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_OPUS_4("claude-opus-4-20250514"),
     CLAUDE_OPUS_4_5("claude-opus-4-5-20251101"),
     CLAUDE_OPUS_4_6("claude-opus-4-6"),
-    // Adaptive-thinking models reject sampling params (temperature/top_p/top_k) with a 400.
-    CLAUDE_OPUS_4_7("claude-opus-4-7", false),
-    CLAUDE_OPUS_4_8("claude-opus-4-8", false),
     CLAUDE_SONNET_4("claude-sonnet-4-20250514"),
     CLAUDE_SONNET_4_5("claude-sonnet-4-5"),
     CLAUDE_SONNET_4_5_20250929("claude-sonnet-4-5-20250929"),
     CLAUDE_SONNET_4_6("claude-sonnet-4-6"),
-    CLAUDE_SONNET_5("claude-sonnet-5", false);
+    CLAUDE_OPUS_4_7("claude-opus-4-7"),
+    CLAUDE_OPUS_4_8("claude-opus-4-8"),
+    CLAUDE_SONNET_5("claude-sonnet-5");
 
     private final String value;
     private final boolean supportsSamplingParams;

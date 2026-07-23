@@ -105,12 +105,12 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
   CLAUDE_OPUS_4_5 = "claude-opus-4-5-20251101",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
-  CLAUDE_OPUS_4_7 = "claude-opus-4-7",
-  CLAUDE_OPUS_4_8 = "claude-opus-4-8",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
+  CLAUDE_OPUS_4_7 = "claude-opus-4-7",
+  CLAUDE_OPUS_4_8 = "claude-opus-4-8",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
 
   //  <---- OpenRouter
@@ -694,6 +694,8 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
   GEMINI_3_5_FLASH = "gemini-3.5-flash",
+  GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite",
+  GEMINI_3_6_FLASH = "gemini-3.6-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
   GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
@@ -702,8 +704,6 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite",
-  GEMINI_3_6_FLASH = "gemini-3.6-flash",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
