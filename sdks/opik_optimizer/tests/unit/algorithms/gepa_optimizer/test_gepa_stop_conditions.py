@@ -9,6 +9,7 @@ from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStoppe
 from opik_optimizer import GepaOptimizer, constants
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
     _coerce_no_improvement_iterations,
+    _coerce_positive_int,
 )
 
 
@@ -273,3 +274,31 @@ class TestCoerceNoImprovementIterations:
 
     def test_negative_disables(self) -> None:
         assert _coerce_no_improvement_iterations(-5) == 0
+
+
+class TestCoercePositiveInt:
+    """The generalized boundary coercion used for both stall + minibatch knobs."""
+
+    def test_allow_zero_false_below_min_uses_default(self) -> None:
+        # reflection_minibatch_size semantics: 0 is invalid, fall back to default.
+        assert _coerce_positive_int(0, default=3, allow_zero=False, name="mb") == 3
+        assert _coerce_positive_int(-1, default=3, allow_zero=False, name="mb") == 3
+
+    def test_allow_zero_true_keeps_zero(self) -> None:
+        assert _coerce_positive_int(0, default=10, allow_zero=True, name="n") == 0
+
+    def test_none_uses_default(self) -> None:
+        assert _coerce_positive_int(None, default=3, allow_zero=False, name="mb") == 3
+
+    def test_string_does_not_crash_and_uses_default(self) -> None:
+        # The reflection-minibatch crash Baz flagged: a string must warn, not raise.
+        assert _coerce_positive_int("big", default=3, allow_zero=False, name="mb") == 3
+
+    def test_dict_input_does_not_crash(self) -> None:
+        # A dict/list must not raise nor be dumped raw into logs.
+        assert (
+            _coerce_positive_int({"a": 1}, default=3, allow_zero=False, name="mb") == 3
+        )
+
+    def test_float_floored(self) -> None:
+        assert _coerce_positive_int(4.9, default=3, allow_zero=False, name="mb") == 4

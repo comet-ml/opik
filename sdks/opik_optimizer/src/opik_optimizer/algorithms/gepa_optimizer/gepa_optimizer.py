@@ -41,38 +41,60 @@ def _warn_if_reflection_minibatch_too_large(
         )
 
 
+def _coerce_positive_int(
+    value: Any, *, default: int, allow_zero: bool, name: str
+) -> int:
+    """Coerce a user-supplied extra_params value to a valid int at the boundary.
+
+    These are best-effort config knobs (typed Any), so this never raises: an
+    absent value (None) uses ``default``; an un-parseable value falls back to
+    ``default``; a non-integer float is floored with a warning (never silently);
+    a value below the minimum uses 0 when ``allow_zero`` (i.e. "disabled") else
+    ``default``. Invalid inputs are logged by type only — the raw value is not
+    dumped, so a stray dict/list can't flood WARNING logs.
+    """
+    if value is None:
+        return default
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Ignoring invalid %s (got %s); using default %s.",
+            name,
+            type(value).__name__,
+            default,
+        )
+        return default
+    if isinstance(value, float) and not value.is_integer():
+        logger.warning(
+            "%s=%s is not an integer; rounding down to %s.", name, value, coerced
+        )
+    minimum = 0 if allow_zero else 1
+    if coerced < minimum:
+        fallback = 0 if allow_zero else default
+        logger.warning(
+            "%s=%s is below the minimum (%s); using %s.",
+            name,
+            coerced,
+            minimum,
+            fallback,
+        )
+        return fallback
+    return coerced
+
+
 def _coerce_no_improvement_iterations(value: Any) -> int:
     """Validate the no_improvement_iterations override to a non-negative int.
 
-    The value comes from user-supplied extra_params (typed Any), so guard the
-    boundary: 0/None disables the stall stopper; a non-integer float is rounded
-    down with a warning (never silently); an un-parseable value falls back to
-    the default instead of aborting the run mid-flight.
+    ``0`` disables the stall stopper; ``None`` (or an absent/invalid value) uses
+    the default. See _coerce_positive_int for the boundary handling.
     """
-    if value is None:
-        return constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS
-    try:
-        iterations = int(value)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Ignoring invalid no_improvement_iterations=%r; using default %s.",
-            value,
-            constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS,
-        )
-        return constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS
-    if isinstance(value, float) and not value.is_integer():
-        logger.warning(
-            "no_improvement_iterations=%r is not an integer; rounding down to %s.",
-            value,
-            iterations,
-        )
-    if iterations < 0:
-        logger.warning(
-            "no_improvement_iterations=%s is negative; disabling the stall stopper.",
-            iterations,
-        )
-        return 0
-    return iterations
+    return _coerce_positive_int(
+        value,
+        default=constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS,
+        allow_zero=True,
+        name="no_improvement_iterations",
+    )
 
 
 def _build_gepa_stop_callbacks(
@@ -288,9 +310,14 @@ class GepaOptimizer(BaseOptimizer):
         self._validation_dataset = validation_dataset
         experiment_config = context.experiment_config
 
-        reflection_minibatch_size = context.extra_params.get(
-            "reflection_minibatch_size",
-            context.n_samples_minibatch or 3,
+        # Coerce at the boundary: extra_params is user-supplied (Any), and this
+        # value is both compared in _warn_if_reflection_minibatch_too_large and
+        # passed to gepa.optimize — a stray string must not crash setup.
+        reflection_minibatch_size = _coerce_positive_int(
+            context.extra_params.get("reflection_minibatch_size"),
+            default=context.n_samples_minibatch or 3,
+            allow_zero=False,
+            name="reflection_minibatch_size",
         )
         candidate_selection_strategy = context.extra_params.get(
             "candidate_selection_strategy", "pareto"

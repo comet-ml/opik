@@ -58,7 +58,9 @@ DEFAULT_N_SAMPLES_MINIBATCH = None
 # wired into gepa.optimize() as stop_callbacks instead. The stall stopper ends
 # a run after this many consecutive engine iterations without a full-eval
 # improvement (the strict-acceptance gate can otherwise spin on mini-batches,
-# burning metric calls until the budget is exhausted). 0/None disables it.
+# burning metric calls until the budget is exhausted). Set the
+# `no_improvement_iterations` extra_param to 0 to disable the stall stopper; an
+# absent/None value uses this default.
 DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS = 10
 
 # Benchmarks defaults.
