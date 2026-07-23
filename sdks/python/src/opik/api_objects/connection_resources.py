@@ -180,6 +180,7 @@ def create_connection_resources(
             max_retry_count=config.unauthorized_message_type_max_retry_count,
         ),
         data_loss_tracker=data_loss_tracker,
+        max_payload_size_mb=config.max_payload_size_mb,
     )
     streamer_ = streamer_constructors.construct_online_streamer(
         file_uploader=file_uploader,
