@@ -18,6 +18,19 @@ export const AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY =
 
 export const DEFAULT_ONBOARDING_FLOW = "manual";
 
+// Guided mobile onboarding A/B test (OPIK-7476 / PostHog experiment 387337).
+// On phones, "test" (Group B) gets the guided MobileOnboarding flow that steers
+// users to activate on desktop (no Run button); "control" (Group A) keeps the
+// legacy onboarding flow with the Run button. Undefined = PostHog unavailable /
+// flag not yet resolved (see NewQuickstart for how that is handled).
+export const GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY =
+  "guided-mobile-onboarding-flow";
+
+export const GUIDED_MOBILE_ONBOARDING_VARIANTS = {
+  CONTROL: "control",
+  TEST: "test",
+} as const;
+
 export const TRACES_OLDEST_FIRST_SORTING = [{ id: "id", desc: false }];
 
 export const AGENT_ONBOARDING_STEPS = {
