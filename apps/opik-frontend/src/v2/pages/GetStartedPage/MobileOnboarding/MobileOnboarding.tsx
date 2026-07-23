@@ -33,21 +33,12 @@ const MobileOnboarding: React.FC = () => {
   );
 
   // ConnectStep form state lives here so it survives the panel remounts that
-  // replay step entrance animations.
-  const [connectEmail, setConnectEmail] = useState(userEmail);
+  // replay step entrance animations. Only what the user typed is stored
+  // (null = untouched); the effective value falls back to the store's email,
+  // which may resolve after mount.
+  const [typedEmail, setTypedEmail] = useState<string | null>(null);
   const [connectEmailSent, setConnectEmailSent] = useState(false);
-  const emailTouchedRef = useRef(false);
-  useEffect(() => {
-    // The store may resolve the user's email after mount; prefill only while
-    // the user hasn't typed anything themselves.
-    if (!emailTouchedRef.current) {
-      setConnectEmail(userEmail);
-    }
-  }, [userEmail]);
-  const handleConnectEmailChange = useCallback((value: string) => {
-    emailTouchedRef.current = true;
-    setConnectEmail(value);
-  }, []);
+  const connectEmail = typedEmail ?? userEmail ?? "";
 
   const stepRef = useRef(1);
   const completedRef = useRef(completed);
@@ -135,7 +126,7 @@ const MobileOnboarding: React.FC = () => {
       <IssuesStep />
       <ConnectStep
         email={connectEmail}
-        onEmailChange={handleConnectEmailChange}
+        onEmailChange={setTypedEmail}
         emailSent={connectEmailSent}
         onEmailSentChange={setConnectEmailSent}
       />

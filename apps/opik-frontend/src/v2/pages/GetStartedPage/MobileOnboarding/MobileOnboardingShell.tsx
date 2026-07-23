@@ -19,6 +19,28 @@ interface MobileOnboardingShellProps {
 const clampStep = (value: number, totalSteps: number) =>
   Math.min(totalSteps, Math.max(1, value));
 
+interface PanelAnim {
+  /** Remount counter — bumping it replays the panel's entrance animation. */
+  seq: number;
+  mode: "in" | "out";
+}
+
+/** Panel animation state for a step change: the incoming panel replays its
+ * entrance, the outgoing one plays it in reverse, and any straggler still
+ * marked "out" (a rapid earlier navigation cancelled its pending restore)
+ * is brought back — offscreen, so its forward replay is invisible. */
+const panelAnimForStepChange = (
+  arr: PanelAnim[],
+  incomingIndex: number,
+  outgoingIndex: number,
+): PanelAnim[] =>
+  arr.map((p, i) => {
+    if (i === incomingIndex) return { seq: p.seq + 1, mode: "in" };
+    if (i === outgoingIndex) return { seq: p.seq + 1, mode: "out" };
+    if (p.mode === "out") return { seq: p.seq + 1, mode: "in" };
+    return p;
+  });
+
 // The outgoing panel is restored once its reverse cascade finishes, detected
 // via animationend debounce (which adapts to whatever delays the steps use).
 // The fallback cap only fires when no animation events arrive at all (e.g.
@@ -69,9 +91,9 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
   // out), while the incoming panel remounts normally and staggers in.
   const prevStep = useRef(step);
   const outResetTimer = useRef<ReturnType<typeof setTimeout>>();
-  const [panelAnim, setPanelAnim] = useState<
-    { seq: number; mode: "in" | "out" }[]
-  >(() => Array.from({ length: totalSteps }, () => ({ seq: 0, mode: "in" })));
+  const [panelAnim, setPanelAnim] = useState<PanelAnim[]>(() =>
+    Array.from({ length: totalSteps }, () => ({ seq: 0, mode: "in" })),
+  );
 
   // On step change: run the out/in animations and, for button navigation,
   // scroll the panel into view. Single effect so the fromScroll flag is read
@@ -81,20 +103,7 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
     const from = prevStep.current;
     prevStep.current = step;
 
-    setPanelAnim((arr) =>
-      arr.map((p, i) =>
-        i === step - 1
-          ? { seq: p.seq + 1, mode: "in" }
-          : i === from - 1
-            ? { seq: p.seq + 1, mode: "out" }
-            : p.mode === "out"
-              ? // A rapid earlier navigation may have cancelled this panel's
-                // pending restore — bring any straggler back now (offscreen,
-                // so the forward replay is invisible).
-                { seq: p.seq + 1, mode: "in" }
-              : p,
-      ),
-    );
+    setPanelAnim((arr) => panelAnimForStepChange(arr, step - 1, from - 1));
 
     // The reversed cascade parks the departed panel at its hidden first
     // frame (fill-mode: both). Once it finishes — detected by animationend
