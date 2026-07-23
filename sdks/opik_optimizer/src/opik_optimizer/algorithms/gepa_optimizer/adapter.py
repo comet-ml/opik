@@ -284,9 +284,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 "gepa": helpers.drop_none(
                     {
                         "phase": (
-                            "validation"
-                            if experiment_type == "trial"
-                            else "minibatch"
+                            "validation" if experiment_type == "trial" else "minibatch"
                         ),
                         "source": candidate.get("source"),
                         "candidate_id": candidate.get("id"),

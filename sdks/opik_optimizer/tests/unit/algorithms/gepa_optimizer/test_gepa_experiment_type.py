@@ -6,7 +6,20 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
+from opik_optimizer.algorithms.gepa_optimizer.types import OpikDataInst
 from tests.unit.fixtures.builders import make_mock_dataset, make_simple_metric
+
+
+def _make_batch(items: list[dict[str, Any]]) -> list[OpikDataInst]:
+    return [
+        OpikDataInst(
+            input_text=item["question"],
+            answer=item["answer"],
+            additional_context={},
+            opik_item=item,
+        )
+        for item in items
+    ]
 
 
 def _make_adapter(gepa_val_item_ids: set[str] | None) -> OpikGEPAAdapter:
@@ -122,10 +135,12 @@ class TestAdapterEvaluatePassesExperimentType:
             lambda **kwargs: {"project_name": "test"},
         )
 
-        batch = [
-            MagicMock(opik_item={"id": "t1", "question": "q", "answer": "a"}),
-            MagicMock(opik_item={"id": "t2", "question": "q", "answer": "a"}),
-        ]
+        batch = _make_batch(
+            [
+                {"id": "t1", "question": "q", "answer": "a"},
+                {"id": "t2", "question": "q", "answer": "a"},
+            ]
+        )
         adapter.evaluate(batch, candidate={}, capture_traces=False)
 
         assert captured["experiment_type"] == "mini-batch"
@@ -157,10 +172,12 @@ class TestAdapterEvaluatePassesExperimentType:
             lambda **kwargs: {"project_name": "test"},
         )
 
-        batch = [
-            MagicMock(opik_item={"id": "v1", "question": "q", "answer": "a"}),
-            MagicMock(opik_item={"id": "v2", "question": "q", "answer": "a"}),
-        ]
+        batch = _make_batch(
+            [
+                {"id": "v1", "question": "q", "answer": "a"},
+                {"id": "v2", "question": "q", "answer": "a"},
+            ]
+        )
         adapter.evaluate(batch, candidate={}, capture_traces=False)
 
         assert captured["experiment_type"] == "trial"

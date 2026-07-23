@@ -218,9 +218,7 @@ class TestStopperSemantics:
         so an empty/low full-eval list must not stop the run."""
         stopper = ScoreThresholdStopper(0.95)
         assert stopper(SimpleNamespace(program_full_scores_val_set=[])) is False
-        assert (
-            stopper(SimpleNamespace(program_full_scores_val_set=[0.5, 0.9])) is False
-        )
+        assert stopper(SimpleNamespace(program_full_scores_val_set=[0.5, 0.9])) is False
 
     def test_no_improvement_stopper_counts_stagnant_iterations(self) -> None:
         stopper = NoImprovementStopper(3)

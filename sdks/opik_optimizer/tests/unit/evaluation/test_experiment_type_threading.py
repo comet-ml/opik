@@ -59,7 +59,12 @@ class TestExperimentTypeThreading:
 
     def test_old_sdk_without_param_falls_back_gracefully(self, monkeypatch) -> None:
         """Against an opik SDK whose evaluate_optimization_trial lacks the
-        parameter, we log and record the legacy 'trial' type instead of crashing."""
+        parameter, we log and record the legacy 'trial' type instead of crashing.
+
+        This is the case that matters in the optimizer's own CI, which installs a
+        released ``opik`` that predates the ``experiment_type`` parameter — the
+        mini-batch typing simply no-ops there until the paired opik release
+        ships, rather than raising a TypeError."""
         captured = _capture_trial_call(monkeypatch)
         monkeypatch.setattr(
             task_evaluator,
@@ -70,8 +75,3 @@ class TestExperimentTypeThreading:
         _run_evaluate_with_result(experiment_type="mini-batch")
 
         assert "experiment_type" not in captured
-
-    def test_installed_sdk_supports_experiment_type(self) -> None:
-        """The repo's own opik SDK must expose the parameter (guards the
-        feature-detection constant against regressions)."""
-        assert task_evaluator._EVALUATE_OPTIMIZATION_TRIAL_ACCEPTS_EXPERIMENT_TYPE
