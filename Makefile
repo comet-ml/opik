@@ -1,8 +1,15 @@
-.PHONY: cursor codex claude clean-agents help hooks hooks-remove precommit precommit-all
+.PHONY: cursor codex claude agent-configs clean-agents help hooks hooks-remove agent-hooks agent-hooks-remove precommit precommit-all
 
 AI_DIR := .agents
 CURSOR_DIR := .cursor
 CLAUDE_DIR := .claude
+HOOKS_SRC := .hooks
+# Anchor hook paths to this Makefile's directory so `make agent-hooks` resolves
+# to this repo regardless of where make was invoked from (subdir, -f from another
+# repo, etc.), and works correctly inside a worktree.
+MAKEFILE_DIR := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
+GIT_COMMON_DIR := $(shell cd "$(MAKEFILE_DIR)" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)
+HOOKS_DEST := $(if $(GIT_COMMON_DIR),$(GIT_COMMON_DIR)/hooks)
 
 define link_agent_config
 	@if [ ! -d "$(AI_DIR)" ]; then \
@@ -34,18 +41,34 @@ define clean_synced_files
 	fi
 endef
 
+# Bail if core.hooksPath is set: git then ignores .git/hooks, so any hook we
+# install there would silently never fire. $(1) = the make target to re-run.
+define require_no_hookspath
+	@hp=$$(git config --get core.hooksPath || true); \
+	if [ -n "$$hp" ]; then \
+		echo "Error: core.hooksPath is set to '$$hp'; hooks in .git/hooks would be ignored."; \
+		echo "       Clear it, then re-run 'make $(1)':"; \
+		echo "         git config --unset core.hooksPath        # local (this repo)"; \
+		echo "         git config --global --unset core.hooksPath  # if it was set globally"; \
+		exit 1; \
+	fi
+endef
+
 help:
 	@echo "AI Editor Configuration Sync"
 	@echo ""
 	@echo "  make cursor        - Ensure .cursor symlink points to .agents/"
 	@echo "  make codex         - Ensure .codex symlink + generate Codex AGENTS.override.md from .agents/rules/*.mdc"
-	@echo "  make claude        - Sync .agents/ to .claude/ + generate .mcp.json (preserves local files)"
+	@echo "  make claude        - Sync .agents/ to .claude/ (generates .mcp.json only on first setup)"
+	@echo "  make agent-configs - Refresh every opted-in surface (Claude/Cursor/Codex); relinks in worktrees"
 	@echo "  make clean-agents  - Remove synced files from .claude/ and local Codex artifacts"
 	@echo ""
 	@echo "Git Hooks (pre-commit framework — install once per clone)"
 	@echo ""
 	@echo "  make hooks         - Install the pre-commit framework hook"
 	@echo "  make hooks-remove  - Uninstall the pre-commit framework hook"
+	@echo "  make agent-hooks       - Install local post-merge/post-checkout hooks that keep agent configs in sync"
+	@echo "  make agent-hooks-remove - Remove the local agent-config hooks"
 	@echo ""
 	@echo "Lint Checks (root .pre-commit-config.yaml is the single source of truth)"
 	@echo "  make precommit       - Run hooks on changed files (vs origin/main)"
@@ -113,6 +136,11 @@ claude:
 	fi
 	@echo "Claude ready! Files in $(CLAUDE_DIR)/ and .mcp.json"
 
+# Refresh the opted-in agent-config surfaces (Claude/Cursor/Codex). The target
+# the git hooks call.
+agent-configs:
+	@./scripts/sync-agent-configs.sh
+
 # Clean generated files (preserves .agents/ and local customizations in .claude/)
 # Only deletes files that have a corresponding source in .agents/
 clean-agents:
@@ -128,7 +156,9 @@ clean-agents:
 	$(call clean_synced_files,agents,-name "*.md",:;,agents)
 	@# Clean up empty directories
 	@find $(CLAUDE_DIR) -type d -empty -delete 2>/dev/null || true
-	@[ -f ".mcp.json" ] && rm -f .mcp.json && echo "Removed .mcp.json" || true
+	@# .mcp.json is intentionally NOT removed: it may hold personal tokens that
+	@# exist nowhere else, and clean-agents must never destroy them.
+	@[ -f ".mcp.json" ] && echo "Left .mcp.json in place (may contain personal tokens)." || true
 	@echo "Done! Local customizations preserved."
 
 # Install the pre-commit framework hook (writes .git/hooks/pre-commit).
@@ -137,24 +167,14 @@ hooks:
 		echo "Error: pre-commit not found. Install it: pip install pre-commit (or brew install pre-commit)."; \
 		exit 1; \
 	}
-	@# pre-commit refuses to install while core.hooksPath is set (it would write a
-	@# hook git then ignores). Detect it and tell the user exactly how to clear it,
-	@# rather than silently mutating their git config.
-	@hp=$$(git config --get core.hooksPath || true); \
-	if [ -n "$$hp" ]; then \
-		echo "Error: core.hooksPath is set to '$$hp', which makes pre-commit refuse to install"; \
-		echo "       (a hook written to .git/hooks would be ignored by git)."; \
-		echo "       Clear it, then re-run 'make hooks':"; \
-		echo "         git config --unset core.hooksPath        # local (this repo)"; \
-		echo "         git config --global --unset core.hooksPath  # if it was set globally"; \
-		exit 1; \
-	fi
+	$(call require_no_hookspath,hooks)
 	@# -f: install only pre-commit's hook, never chain a pre-existing one in
 	@# "migration mode" (a stale chained hook breaks commits). See OPIK-7235.
 	@pre-commit install -f
 	@# Clear any legacy hook a prior non-force install left behind.
 	@rm -f "$$(git rev-parse --git-path hooks)/pre-commit.legacy"
 	@echo "pre-commit hook installed."
+	@echo "Tip: if you use Claude/Cursor/Codex, run 'make agent-hooks' to keep their configs in sync on pull/checkout."
 
 # Uninstall the pre-commit framework hook.
 hooks-remove:
@@ -164,6 +184,36 @@ hooks-remove:
 	}
 	@pre-commit uninstall
 	@echo "pre-commit hook removed."
+
+# Install the local post-merge/post-checkout hooks. Kept separate from `make
+# hooks` (the pre-commit framework) because agent-config sync must never run in CI.
+agent-hooks:
+	@if [ -z "$(HOOKS_DEST)" ]; then \
+		echo "Error: $(MAKEFILE_DIR) is not in a git repository."; \
+		exit 1; \
+	fi
+	$(call require_no_hookspath,agent-hooks)
+	@cd "$(MAKEFILE_DIR)" && \
+		if [ ! -d "$(HOOKS_SRC)" ]; then echo "Error: $(MAKEFILE_DIR)/$(HOOKS_SRC)/ does not exist."; exit 1; fi && \
+		if [ ! -d "$(HOOKS_DEST)" ]; then echo "Error: $(HOOKS_DEST)/ does not exist."; exit 1; fi && \
+		for h in post-checkout post-merge; do \
+			cp "$(HOOKS_SRC)/$$h" "$(HOOKS_DEST)/$$h" && \
+			chmod +x "$(HOOKS_DEST)/$$h" && \
+			echo "$$h hook installed (make agent-configs)."; \
+		done
+
+# Remove the local agent-config hooks (leaves the pre-commit framework alone).
+agent-hooks-remove:
+	@if [ -z "$(HOOKS_DEST)" ]; then \
+		echo "Error: $(MAKEFILE_DIR) is not in a git repository."; \
+		exit 1; \
+	fi
+	@cd "$(MAKEFILE_DIR)" && \
+		for h in post-checkout post-merge; do \
+			if [ -f "$(HOOKS_DEST)/$$h" ]; then \
+				rm -f "$(HOOKS_DEST)/$$h" && echo "$$h hook removed."; \
+			fi; \
+		done
 
 # Run all hooks on files changed vs origin/main (the same hooks a commit runs,
 # but over the branch diff). Mirrors how CI lints a PR.
