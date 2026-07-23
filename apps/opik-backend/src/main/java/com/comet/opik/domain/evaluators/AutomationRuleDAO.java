@@ -1,6 +1,8 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRule;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
+import com.comet.opik.infrastructure.db.EvalTriggerScopeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
@@ -18,6 +20,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterArgumentFactory(EvalTriggerScopeColumnMapper.class)
 @RegisterRowMapper(AutomationRuleRowMapper.class)
 public interface AutomationRuleDAO {
 
@@ -35,9 +38,9 @@ public interface AutomationRuleDAO {
             )""")
     boolean hasVersion1AutomationRules(@Bind("workspaceId") String workspaceId);
 
-    @SqlUpdate("INSERT INTO automation_rules(id, workspace_id, `action`, name, sampling_rate, enabled, filters) "
+    @SqlUpdate("INSERT INTO automation_rules(id, workspace_id, `action`, name, sampling_rate, enabled, trigger_scope, filters) "
             +
-            "VALUES (:rule.id, :workspaceId, :rule.action, :rule.name, :rule.samplingRate, :rule.enabled, :rule.filters)")
+            "VALUES (:rule.id, :workspaceId, :rule.action, :rule.name, :rule.samplingRate, :rule.enabled, :rule.triggerScope, :rule.filters)")
     void saveBaseRule(@BindMethods("rule") AutomationRuleModel rule, @Bind("workspaceId") String workspaceId);
 
     /**
@@ -93,6 +96,7 @@ public interface AutomationRuleDAO {
             SET name = :name,
                 sampling_rate = :samplingRate,
                 enabled = :enabled,
+                trigger_scope = :triggerScope,
                 filters = :filters
             WHERE id = :id AND workspace_id = :workspaceId
             """)
@@ -101,6 +105,7 @@ public interface AutomationRuleDAO {
             @Bind("name") String name,
             @Bind("samplingRate") float samplingRate,
             @Bind("enabled") boolean enabled,
+            @Bind("triggerScope") EvalTriggerScope triggerScope,
             @Bind("filters") String filters);
 
     /**

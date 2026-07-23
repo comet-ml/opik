@@ -56,6 +56,14 @@ class SpanSeed(BaseModel):
     parent_index: int | None = None
 
 
+class ErrorInfoSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exception_type: str
+    message: str
+    traceback: str | None = None
+
+
 class NestedTraceCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -69,6 +77,14 @@ class NestedTraceCreate(BaseModel):
     feedback_scores: list[dict[str, Any]] | None = None
     spans: list[SpanSeed]
     workspace: str | None = None
+    # Sets the trace's own error_info (as opposed to a span's), driving the
+    # Traces table's Errors column/explain target. None means no trace-level error.
+    error_info: ErrorInfoSeed | None = None
+    # Backdates start_time by this many seconds and sets end_time to now, so the
+    # trace renders a specific Duration cell value. None leaves both start_time
+    # and end_time unset, which the UI renders as Duration "NA" — the same shape
+    # as the SDK's own not-yet-ended traces.
+    duration_seconds: float | None = None
 
 
 class NestedTraceResponse(BaseModel):
