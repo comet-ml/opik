@@ -22,11 +22,19 @@ traces_bp = Blueprint("traces", __name__)
 
 def resolve_attachment_path(relative_path: str) -> str:
     """Resolve attachment path relative to tests_end_to_end directory."""
+    if not isinstance(relative_path, str):
+        abort(400, description="attachment_path must be a string")
     current_dir = os.path.dirname(os.path.abspath(__file__))
     # routes/ -> test-helper-service/ -> tests_end_to_end/
-    tests_end_to_end_dir = os.path.join(current_dir, "..", "..")
-    full_path = os.path.join(tests_end_to_end_dir, relative_path)
-    return os.path.abspath(full_path)
+    tests_end_to_end_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
+    full_path = os.path.abspath(os.path.join(tests_end_to_end_dir, relative_path))
+    try:
+        within_base = os.path.commonpath([full_path, tests_end_to_end_dir]) == tests_end_to_end_dir
+    except ValueError:
+        within_base = False
+    if not within_base:
+        abort(400, description="attachment_path must resolve within tests_end_to_end")
+    return full_path
 
 
 @traces_bp.errorhandler(400)
@@ -290,6 +298,81 @@ def create_trace_with_span_attachment():
 
     return success_response(
         {"attachment_name": os.path.basename(attachment_path), "span_name": span_name}
+    )
+
+
+@traces_bp.route("/create-rich-trace-for-sidebar", methods=["POST"])
+def create_rich_trace_for_sidebar():
+    data = request.get_json()
+    validate_required_fields(
+        data, ["project_name", "trace_name", "prompt_name", "attachment_path"]
+    )
+
+    project_name = data["project_name"]
+    trace_name = data["trace_name"]
+    prompt_name = data["prompt_name"]
+    attachment_path = resolve_attachment_path(data["attachment_path"])
+
+    client = get_opik_client()
+    prompt = client.create_prompt(
+        name=prompt_name,
+        prompt="Translate the following text to French: {{text}}",
+    )
+
+    question = {"messages": [{"role": "user", "content": "What is Opik?"}]}
+    answer = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": (
+                        "Opik is an open-source platform for logging, "
+                        "evaluating and monitoring LLM applications."
+                    ),
+                }
+            }
+        ]
+    }
+
+    # Same start/end time on both trace and span so the sidebar always renders
+    # a fixed "0s" duration badge instead of a real, run-to-run varying value
+    # (a varying width there shifts the tabs/score badges next to it).
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    trace = client.trace(
+        name=trace_name,
+        project_name=project_name,
+        input=question,
+        output=answer,
+        start_time=now,
+        end_time=now,
+        tags=["visual", "sidebar-demo"],
+        metadata={
+            "environment": "visual-test",
+            "model": "gpt-4o",
+            "opik_prompts": [prompt.__internal_api__to_info_dict__()],
+        },
+        # A single score avoids relying on any ordering guarantee between two
+        # scores logged in the same request (the table has no explicit sort).
+        feedback_scores=[{"name": "correctness", "value": 0.95}],
+        attachments=[Attachment(data=attachment_path)],
+    )
+
+    span = trace.span(
+        name="generate-answer",
+        input=question,
+        output=answer,
+        start_time=now,
+        end_time=now,
+        metadata={"model": "gpt-4o", "temperature": 0.2},
+    )
+    span.log_feedback_score(name="relevance", value=0.9)
+
+    return success_response(
+        {
+            "attachment_name": os.path.basename(attachment_path),
+            "prompt_name": prompt.name,
+        }
     )
 
 

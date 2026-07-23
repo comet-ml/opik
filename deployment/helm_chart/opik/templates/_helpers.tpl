@@ -79,9 +79,13 @@ bind. Inert until a later, environment-gated migration attaches the
 <clickhouse>
   <storage_configuration>
     <disks>
-      <hot>
+      <!-- Hot tier is ClickHouse's built-in `default` disk (the main data path).
+           CH 26.x rejects a custom local disk whose <path> equals the server
+           data path, so we tune keep_free_space_bytes on `default` directly
+           rather than defining a separate <hot> disk. -->
+      <default>
         <keep_free_space_bytes>{{ $ts.hot.keepFreeSpaceBytes }}</keep_free_space_bytes>
-      </hot>
+      </default>
       <cold_s3>
         <type>s3</type>
         <endpoint>{{ $endpoint }}</endpoint>
@@ -109,7 +113,7 @@ bind. Inert until a later, environment-gated migration attaches the
       <tiered_replicated>
         <volumes>
           <hot>
-            <disk>hot</disk>
+            <disk>default</disk>
           </hot>
           <cold>
             <disk>cold</disk>
