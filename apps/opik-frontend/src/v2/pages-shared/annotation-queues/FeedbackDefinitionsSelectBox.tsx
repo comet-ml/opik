@@ -132,7 +132,7 @@ const FeedbackDefinitionsSelectBox: React.FC<
     () => (
       <>
         <Separator className="-mx-px my-1 bg-muted" />
-        <ListAction size="sm" onClick={handleAddNewClick}>
+        <ListAction variant="default" size="sm" onClick={handleAddNewClick}>
           <Plus className="size-3.5 shrink-0" />
           Add new
         </ListAction>

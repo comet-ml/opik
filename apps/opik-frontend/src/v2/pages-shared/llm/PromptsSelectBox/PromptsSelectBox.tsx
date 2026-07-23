@@ -143,6 +143,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
       <>
         <Separator className="-mx-px my-1 bg-muted" />
         <ListAction
+          variant="default"
           size="sm"
           onClick={() => {
             onValueChange(undefined);

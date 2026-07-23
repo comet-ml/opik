@@ -553,7 +553,11 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                   canCreateDatasets ? (
                     <>
                       <Separator className="-mx-px my-1 bg-muted" />
-                      <ListAction size="sm" onClick={() => setOpenDialog(true)}>
+                      <ListAction
+                        variant="default"
+                        size="sm"
+                        onClick={() => setOpenDialog(true)}
+                      >
                         <Plus className="size-3.5 shrink-0" />
                         Add {entityName}
                       </ListAction>
