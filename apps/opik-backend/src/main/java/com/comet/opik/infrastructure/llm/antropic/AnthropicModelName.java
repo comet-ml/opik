@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Set;
@@ -8,6 +9,7 @@ import java.util.Set;
 /**
  * This information is taken from <a href="https://docs.anthropic.com/en/docs/about-claude/models">Anthropic docs</a>
  */
+@Getter
 @RequiredArgsConstructor
 public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_SONNET_3_7("claude-3-7-sonnet-20250219"),
@@ -38,14 +40,19 @@ public enum AnthropicModelName implements StructuredOutputSupported {
      * per-constant flag (the original #7531 shape, {@code NAME("value", false)}) is silently
      * dropped on the next sync — which is exactly how #7582 reverted the adaptive-thinking opt-out
      * and reopened issue #7526. Keeping the capability here, outside the generated constant list,
-     * lets syncs add/remove/reorder constants freely without ever clobbering it.
+     * lets syncs add/remove/reorder constants freely without clobbering it. Referencing the enum
+     * constants (rather than duplicating the string literals) means a sync that renames or removes
+     * a referenced constant breaks compilation instead of drifting silently.
      *
-     * <p>When Anthropic ships a new adaptive-thinking model, add its API id to this set.
+     * <p><strong>Residual manual step.</strong> This guards against rename/removal of the
+     * <em>known</em> adaptive models below; it cannot force a <em>newly synced</em> adaptive model
+     * into the set. When Anthropic ships a new adaptive-thinking model, its API id must be added
+     * here by hand (the durable fix is teaching the generator to emit the capability directly).
      */
     private static final Set<String> ADAPTIVE_THINKING_MODELS = Set.of(
-            "claude-opus-4-7",
-            "claude-opus-4-8",
-            "claude-sonnet-5");
+            CLAUDE_OPUS_4_7.value,
+            CLAUDE_OPUS_4_8.value,
+            CLAUDE_SONNET_5.value);
 
     /**
      * Whether the model accepts sampling params (temperature/top_p/top_k). Adaptive-thinking models
