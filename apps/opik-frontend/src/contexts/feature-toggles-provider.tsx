@@ -19,7 +19,10 @@ type FeatureTogglesState = {
 
 const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED]: false,
-  [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
+  // Guardrails FE features (traces column, alert triggers) only read already-logged
+  // guardrail data — they don't depend on the guardrails validation service being
+  // deployed. Keep them always available regardless of backend config.
+  [FeatureToggleKeys.GUARDRAILS_ENABLED]: true,
   [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
@@ -70,7 +73,12 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
       // field) falls back to its declared default instead of becoming
       // `undefined`. Keeps the runtime in sync with the `FeatureToggles`
       // type contract, which promises a boolean for every key.
-      setFeatures({ ...DEFAULT_STATE, ...data });
+      setFeatures({
+        ...DEFAULT_STATE,
+        ...data,
+        // Force-on regardless of what the backend reports — see DEFAULT_STATE.
+        [FeatureToggleKeys.GUARDRAILS_ENABLED]: true,
+      });
       // Mirrors ServiceTogglesConfig bounds (5..100). Out-of-range or
       // malformed values fall through to the fallback so a misconfigured
       // deployment can't poison the UI.
