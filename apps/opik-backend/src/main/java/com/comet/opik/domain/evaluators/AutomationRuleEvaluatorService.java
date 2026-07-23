@@ -130,7 +130,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             // Names are not unique at the DB layer, so re-running an SDK script would otherwise create
             // rules that are indistinguishable in the UI.
             Set<String> existingNames = ruleDAO.findNamesByProjects(projectIds, workspaceId);
-            String uniqueName = resolveUniqueName(inputRuleEvaluator.getName(), existingNames, projectIds, workspaceId);
+            String uniqueName = AutomationRuleNames.generateUniqueName(inputRuleEvaluator.getName(), existingNames);
 
             AutomationRuleEvaluatorModel<?> evaluator = switch (inputRuleEvaluator) {
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
@@ -232,18 +232,20 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             }
         });
 
+        logSuffixApplied(inputRuleEvaluator.getName(), savedEvaluator.name(), projectIds, workspaceId);
+
         return findById(savedEvaluator.id(), savedEvaluator.projectIds(), workspaceId);
     }
 
-    private String resolveUniqueName(String requestedName, Set<String> existingNames, Set<UUID> projectIds,
+    // Logged after the write transaction commits (not inside it) so a rolled-back write never leaves a
+    // misleading "applied suffix" line.
+    private void logSuffixApplied(String requestedName, String appliedName, Set<UUID> projectIds,
             String workspaceId) {
-        String uniqueName = AutomationRuleNames.generateUniqueName(requestedName, existingNames);
-        if (!uniqueName.equals(requestedName)) {
+        if (appliedName != null && !appliedName.equals(requestedName)) {
             log.info(
-                    "Automation rule name already exists in project scope, applied suffix: requestedName='{}', uniqueName='{}', projectIds='{}', workspaceId='{}'",
-                    requestedName, uniqueName, projectIds, workspaceId);
+                    "Automation rule name already existed in project scope, applied suffix: requestedName='{}', uniqueName='{}', projectIds='{}', workspaceId='{}'",
+                    requestedName, appliedName, projectIds, workspaceId);
         }
-        return uniqueName;
     }
 
     @Override
@@ -254,6 +256,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         log.debug("Updating AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'", id,
                 projectIds,
                 workspaceId);
+        // Holder so the resolved name can be logged after the transaction commits.
+        String[] appliedName = {evaluatorUpdate.getName()};
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
@@ -262,11 +266,20 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             try {
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
 
-                // Auto-suffix on rename collisions too, excluding this rule itself so an unchanged name (or
-                // a non-name edit) is never spuriously suffixed (OPIK-7371).
-                Set<String> existingNames = ruleDAO.findNamesByProjectsExcludingRule(projectIds, workspaceId, id);
-                String uniqueName = resolveUniqueName(evaluatorUpdate.getName(), existingNames, projectIds,
-                        workspaceId);
+                // Only resolve a unique name on an actual rename. A non-name edit (sampling rate, enabled,
+                // filters) must never rename the rule, even if a same-named rule already exists in the
+                // project (e.g. legacy duplicates). On a real rename, dedup excluding this rule itself so it
+                // does not collide with its own current name (OPIK-7371).
+                String requestedName = evaluatorUpdate.getName();
+                String currentName = ruleDAO.findNameById(id, workspaceId);
+                String uniqueName;
+                if (Objects.equals(requestedName, currentName)) {
+                    uniqueName = requestedName;
+                } else {
+                    Set<String> existingNames = ruleDAO.findNamesByProjectsExcludingRule(projectIds, workspaceId, id);
+                    uniqueName = AutomationRuleNames.generateUniqueName(requestedName, existingNames);
+                }
+                appliedName[0] = uniqueName;
 
                 // Update base rule (project associations handled separately in junction table)
                 int resultBase = dao.updateBaseRule(id, workspaceId, uniqueName,
@@ -345,6 +358,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
             return null;
         });
+
+        logSuffixApplied(evaluatorUpdate.getName(), appliedName[0], projectIds, workspaceId);
     }
 
     @Override

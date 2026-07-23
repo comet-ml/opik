@@ -866,14 +866,18 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
-        private void renameRule(UUID id, String newName, UUID projectId) {
+        private void updateRule(UUID id, String newName, Set<UUID> projectIds) {
             var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
                     .name(newName)
-                    .projectIds(Set.of(projectId))
+                    .projectIds(projectIds)
                     .build();
             try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
+        }
+
+        private void renameRule(UUID id, String newName, UUID projectId) {
+            updateRule(id, newName, Set.of(projectId));
         }
 
         @Test
@@ -893,6 +897,23 @@ class AutomationRuleEvaluatorsResourceTest {
             // Rename B to its own current name: self is excluded, so no spurious suffix
             renameRule(idB, nameA + "-1", projectId);
             assertThat(getName(idB, projectId)).isEqualTo(nameA + "-1");
+        }
+
+        @Test
+        @DisplayName("a non-name edit does not rename the rule even if the name now collides in the scope")
+        void whenNonNameEditIntroducesCollision__thenNameIsUnchanged() {
+            var p1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var p2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Grounding " + UUID.randomUUID();
+
+            createLlmRule(name, p1); // rule A: name in p1
+            var idB = createLlmRule(name, p2); // rule B: same name but in p2 -> stays un-suffixed
+            assertThat(getName(idB, p2)).isEqualTo(name);
+
+            // Non-name edit: attach B to p1 as well (name unchanged). B now shares p1 with A, but because the
+            // name did not change it must NOT be renamed to name-1.
+            updateRule(idB, name, Set.of(p1, p2));
+            assertThat(getName(idB, p1)).isEqualTo(name);
         }
     }
 

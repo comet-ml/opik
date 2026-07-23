@@ -80,6 +80,13 @@ public interface AutomationRuleDAO {
             @Bind("workspaceId") String workspaceId,
             @Bind("excludeRuleId") UUID excludeRuleId);
 
+    /**
+     * Returns the currently stored name of a rule, or {@code null} if it does not exist. Used on update to
+     * skip name resolution entirely for non-name edits (OPIK-7371).
+     */
+    @SqlQuery("SELECT name FROM automation_rules WHERE id = :id AND workspace_id = :workspaceId")
+    String findNameById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
     @SqlUpdate("""
             UPDATE automation_rules
             SET name = :name,
