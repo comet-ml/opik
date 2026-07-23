@@ -49,7 +49,7 @@ public enum AnthropicModelName implements StructuredOutputSupported {
      * into the set. When Anthropic ships a new adaptive-thinking model, its API id must be added
      * here by hand (the durable fix is teaching the generator to emit the capability directly).
      */
-    private static final Set<String> ADAPTIVE_THINKING_MODELS = Set.of(
+    private static final Set<String> ADAPTIVE_THINKING_MODEL_IDS = Set.of(
             CLAUDE_OPUS_4_7.value,
             CLAUDE_OPUS_4_8.value,
             CLAUDE_SONNET_5.value);
@@ -60,7 +60,7 @@ public enum AnthropicModelName implements StructuredOutputSupported {
      * so registry-only Anthropic models (not enumerated here) keep temperature support.
      */
     public static boolean supportsSamplingParams(String modelName) {
-        return !ADAPTIVE_THINKING_MODELS.contains(modelName);
+        return !ADAPTIVE_THINKING_MODEL_IDS.contains(modelName);
     }
 
     @Override
