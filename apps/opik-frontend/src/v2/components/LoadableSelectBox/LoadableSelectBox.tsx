@@ -188,10 +188,15 @@ export const LoadableSelectBox = ({
     return options.filter((o) => toLower(o.label).includes(toLower(search)));
   }, [options, search]);
 
-  const filteredSelectedCount = multiselect
-    ? filteredOptions.filter((option) => selectedValuesSet.has(option.value))
-        .length
-    : 0;
+  const filteredSelectedCount = useMemo(
+    () =>
+      multiselect
+        ? filteredOptions.filter((option) =>
+            selectedValuesSet.has(option.value),
+          ).length
+        : 0,
+    [multiselect, filteredOptions, selectedValuesSet],
+  );
 
   const allFilteredSelected =
     filteredOptions.length > 0 &&
