@@ -483,7 +483,10 @@ def test_meteor__default_scorer__real_nltk_score():
             output="the cat sat on the mat",
             reference="the cat sat on the mat",
         )
-    except (LookupError, ImportError, MetricComputationError) as exc:
+    except (LookupError, ImportError) as exc:
+        # Only skip when the NLTK corpora are genuinely unavailable. A
+        # MetricComputationError from a valid input is a real regression and
+        # must surface as a failure, not be skipped.
         pytest.skip(f"NLTK WordNet corpora not available: {exc}")
 
     assert result.value == pytest.approx(0.9977, abs=1e-3)
