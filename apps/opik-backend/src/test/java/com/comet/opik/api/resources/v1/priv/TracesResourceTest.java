@@ -2378,6 +2378,76 @@ class TracesResourceTest {
             var id = generator.generate();
             getAndAssertTraceNotFound(id, API_KEY, TEST_WORKSPACE);
         }
+
+        @Test
+        @DisplayName("when the same trace id exists in two different projects, then cost/usage/span "
+                + "counts of the by-id response are scoped to the trace's own project, not summed across "
+                + "both projects")
+        void getTrace__whenTraceIdCollidesAcrossProjects__thenCostAndUsageAreNotAggregatedAcrossProjects() {
+            // Batch endpoints don't enforce the single-create project/id consistency check, so two
+            // traces sharing the same id can legitimately end up in different projects (e.g. via
+            // deterministic client-side id generation across independent imports). See OPIK-7473.
+            var sharedId = generator.generate();
+            var projectNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var traceA = createTrace().toBuilder().id(sharedId).projectName(projectNameA).build();
+            var traceB = createTrace().toBuilder().id(sharedId).projectName(projectNameB).build();
+            traceResourceClient.batchCreateTraces(List.of(traceA), API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(List.of(traceB), API_KEY, TEST_WORKSPACE);
+
+            BigDecimal costA = new BigDecimal("0.10");
+            BigDecimal costB = new BigDecimal("0.15");
+            // Span.usage() values are Integer; the trace-level aggregate (Trace.usage()) sums them as Long.
+            Map<String, Integer> spanUsageA = Map.of("prompt_tokens", 3);
+            Map<String, Integer> spanUsageB = Map.of("prompt_tokens", 7);
+            Map<String, Long> traceUsageA = Map.of("prompt_tokens", 3L);
+            Map<String, Long> traceUsageB = Map.of("prompt_tokens", 7L);
+
+            var spanA = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectNameA)
+                    .traceId(sharedId)
+                    .usage(spanUsageA)
+                    .totalEstimatedCost(costA)
+                    .build();
+            var spanB = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectNameB)
+                    .traceId(sharedId)
+                    .usage(spanUsageB)
+                    .totalEstimatedCost(costB)
+                    .build();
+            batchCreateSpansAndAssert(List.of(spanA), API_KEY, TEST_WORKSPACE);
+            batchCreateSpansAndAssert(List.of(spanB), API_KEY, TEST_WORKSPACE);
+
+            var projectIdA = getProjectId(projectNameA, TEST_WORKSPACE, API_KEY);
+            var projectIdB = getProjectId(projectNameB, TEST_WORKSPACE, API_KEY);
+
+            var actualTrace = traceResourceClient.getById(sharedId, TEST_WORKSPACE, API_KEY);
+
+            // Whichever project the by-id lookup resolves the trace to, its cost/usage/span count must
+            // match *that project's* single span only. Regardless of which project wins, the buggy
+            // behaviour (summing both projects' spans) is excluded by the "not equal to combined" checks
+            // below, and the "must equal the resolved project's own values" checks pin down correctness.
+            assertThat(actualTrace.projectId()).isIn(projectIdA, projectIdB);
+
+            BigDecimal expectedCost = actualTrace.projectId().equals(projectIdA) ? costA : costB;
+            Map<String, Long> expectedUsage = actualTrace.projectId().equals(projectIdA) ? traceUsageA : traceUsageB;
+
+            assertThat(actualTrace.totalEstimatedCost())
+                    .usingComparator(BigDecimal::compareTo)
+                    .isEqualTo(expectedCost);
+            assertThat(actualTrace.usage()).isEqualTo(expectedUsage);
+            assertThat(actualTrace.spanCount()).isEqualTo(1);
+
+            // The regression this guards against: before the fix, spans_agg grouped only by trace_id
+            // (not project_id) and was joined on trace_id alone, so a colliding trace_id summed cost,
+            // usage and span_count across every project sharing that id.
+            BigDecimal buggyAggregatedCost = costA.add(costB);
+            assertThat(actualTrace.totalEstimatedCost())
+                    .usingComparator(BigDecimal::compareTo)
+                    .isNotEqualTo(buggyAggregatedCost);
+            assertThat(actualTrace.spanCount()).isNotEqualTo(2);
+        }
     }
 
     private Trace createTrace() {

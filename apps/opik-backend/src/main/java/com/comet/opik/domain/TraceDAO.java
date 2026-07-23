@@ -671,6 +671,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM span_feedback_scores_grouped
             ), spans_agg AS (
                 SELECT
+                    project_id,
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
@@ -682,7 +683,13 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
-                GROUP BY trace_id
+                -- grouped per (project_id, trace_id): a trace_id may collide across
+                -- projects (e.g. batch-imported data), and target_project_ids can
+                -- legitimately contain more than one project id in that case. Without
+                -- grouping by project_id here, the join below would match every
+                -- colliding project's spans onto a single trace row and sum their
+                -- cost/usage together (see OPIK-7473).
+                GROUP BY project_id, trace_id
             ), experiments_agg AS (
                 SELECT
                     ei.trace_id,
@@ -744,7 +751,7 @@ class TraceDAOImpl implements TraceDAO {
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS t
-            LEFT JOIN spans_agg s ON t.id = s.trace_id
+            LEFT JOIN spans_agg s ON t.id = s.trace_id AND t.project_id = s.project_id
             LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
             LEFT JOIN (
                 SELECT
