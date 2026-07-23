@@ -109,7 +109,7 @@ public class CapturingSqlLogger implements SqlLogger {
 
     // Read paths the gate vets: plain SELECTs and CTE reads (WITH ... SELECT). Matching only "select" would skip the
     // CTE class entirely — exactly the multi-reference-CTE shape (OPIK-7198) the gate exists to catch. No WITH-prefixed
-    // @SqlUpdate writes exist in the backend, and MySQL EXPLAINs WITH ... SELECT the same as a plain SELECT.
+    // @SqlUpdate writes exist in the backend, and MySQL EXPLAIN handles WITH ... SELECT the same as a plain SELECT.
     private static boolean isReadQuery(String sql) {
         var normalized = sql.stripLeading().toLowerCase(Locale.ROOT);
         return normalized.startsWith("select") || normalized.startsWith("with");
