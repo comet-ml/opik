@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pause, Play } from "lucide-react";
 
@@ -25,7 +31,9 @@ import {
   usePromptCount,
   usePromptMap,
   useResetOutputMap,
+  useSelectAllMetricsByDefault,
   useSelectedRuleIds,
+  useSetSelectAllMetricsByDefault,
   useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
 import useActionButtonActions from "@/v1/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
@@ -41,6 +49,7 @@ import { COLUMN_DATA_ID, COLUMN_TYPE } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { getDatasetMetricRuleSelectionUpdate } from "@/lib/playgroundMetricSelection";
 
 const EMPTY_DATASETS: Dataset[] = [];
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -91,6 +100,11 @@ const PlaygroundOutputActions = ({
   const resetOutputMap = useResetOutputMap();
   const selectedRuleIds = useSelectedRuleIds();
   const setSelectedRuleIds = useSetSelectedRuleIds();
+  const selectAllMetricsByDefault = useSelectAllMetricsByDefault();
+  const setSelectAllMetricsByDefault = useSetSelectAllMetricsByDefault();
+  const resolvedMetricDatasetIdRef = useRef<string | null | undefined>(
+    undefined,
+  );
   const queryClient = useQueryClient();
   const createProjectMutation = useProjectCreateMutation();
 
@@ -156,6 +170,7 @@ const PlaygroundOutputActions = ({
   );
 
   const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
+  const ruleIds = useMemo(() => rules.map((rule) => rule.id), [rules]);
 
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList(
     {
@@ -381,13 +396,27 @@ const PlaygroundOutputActions = ({
   };
 
   useEffect(() => {
-    if (!datasetId) {
-      setSelectedRuleIds(null);
-    } else if (selectedRuleIds === null && rules.length > 0) {
-      // Resolve null (="all rules") to actual IDs so the backend can score non-SDK traces
-      setSelectedRuleIds(rules.map((r) => r.id));
+    const { trackedDatasetId, nextSelectedRuleIds } =
+      getDatasetMetricRuleSelectionUpdate({
+        datasetId,
+        trackedDatasetId: resolvedMetricDatasetIdRef.current,
+        selectedRuleIds,
+        ruleIds,
+        selectAllMetricsByDefault,
+      });
+
+    resolvedMetricDatasetIdRef.current = trackedDatasetId;
+
+    if (nextSelectedRuleIds !== undefined) {
+      setSelectedRuleIds(nextSelectedRuleIds);
     }
-  }, [datasetId, selectedRuleIds, rules, setSelectedRuleIds]);
+  }, [
+    datasetId,
+    selectedRuleIds,
+    ruleIds,
+    selectAllMetricsByDefault,
+    setSelectedRuleIds,
+  ]);
 
   useEffect(() => {
     // stop streaming whenever a user leaves a page
@@ -497,6 +526,7 @@ const PlaygroundOutputActions = ({
                   onCreateRuleClick={handleCreateRuleClick}
                   workspaceName={workspaceName}
                   canUsePlayground={canUsePlayground}
+                  onSelectAllChange={setSelectAllMetricsByDefault}
                 />
               </div>
               {datasetId && (

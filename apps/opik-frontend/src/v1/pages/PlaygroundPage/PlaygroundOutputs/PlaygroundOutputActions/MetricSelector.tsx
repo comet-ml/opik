@@ -13,6 +13,10 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import toLower from "lodash/toLower";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import {
+  isMetricRuleSelectionAll,
+  toggleMetricRuleSelection,
+} from "@/lib/playgroundMetricSelection";
 
 interface MetricSelectorProps {
   rules: EvaluatorsRule[];
@@ -22,6 +26,7 @@ interface MetricSelectorProps {
   onCreateRuleClick: () => void;
   workspaceName: string;
   canUsePlayground: boolean;
+  onSelectAllChange?: (selectAll: boolean) => void;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
@@ -32,6 +37,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   onCreateRuleClick,
   workspaceName,
   canUsePlayground,
+  onSelectAllChange,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -43,6 +49,8 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   const isAllSelected =
     selectedRuleIds === null || selectedRuleIds.length === rules.length;
 
+  const ruleIds = useMemo(() => rules.map((rule) => rule.id), [rules]);
+
   const filteredRules = useMemo(() => {
     if (!search) return rules;
     const searchLower = toLower(search);
@@ -51,28 +59,21 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const handleSelect = useCallback(
     (ruleId: string) => {
-      if (selectedRuleIds === null || selectedRuleIds.length === rules.length) {
-        // If all selected (null) or all specific items selected, deselect this one
-        const allRuleIds = rules.map((r) => r.id);
-        const newSelection = allRuleIds.filter((id) => id !== ruleId);
-        onSelectionChange(newSelection.length > 0 ? newSelection : []);
-      } else {
-        // Some items selected or none selected
-        const isSelected = selectedRuleIds.includes(ruleId);
-        if (isSelected) {
-          const newSelection = selectedRuleIds.filter((id) => id !== ruleId);
-          // If deselecting the last one, set to empty array (none selected)
-          onSelectionChange(newSelection.length > 0 ? newSelection : []);
-        } else {
-          const newSelection = [...selectedRuleIds, ruleId];
-          // If all are now selected, set to null (all selected)
-          onSelectionChange(
-            newSelection.length === rules.length ? null : newSelection,
-          );
-        }
-      }
+      const nextSelectedRuleIds = toggleMetricRuleSelection(
+        ruleIds,
+        selectedRuleIds,
+        ruleId,
+        {
+          useExplicitRuleIdsForAll: true,
+        },
+      );
+
+      onSelectAllChange?.(
+        isMetricRuleSelectionAll(ruleIds, nextSelectedRuleIds),
+      );
+      onSelectionChange(nextSelectedRuleIds);
     },
-    [selectedRuleIds, rules, onSelectionChange],
+    [selectedRuleIds, ruleIds, onSelectionChange, onSelectAllChange],
   );
 
   const handleSelectAll = useCallback(
@@ -81,6 +82,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
       if (checked !== undefined && checked !== "indeterminate") {
         // Called from checkbox onCheckedChange - checked is the NEW desired state
         // true = check = select all (null), false = uncheck = deselect all ([])
+        onSelectAllChange?.(checked);
         onSelectionChange(checked ? null : []);
       } else {
         // Called from div onClick or indeterminate state - toggle based on current state
@@ -91,10 +93,11 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
             rules.length > 0);
 
         // Toggle: if all selected, deselect; if not all selected, select all
+        onSelectAllChange?.(!allSelected);
         onSelectionChange(allSelected ? [] : null);
       }
     },
-    [onSelectionChange, selectedRuleIds, rules.length],
+    [onSelectionChange, onSelectAllChange, selectedRuleIds, rules.length],
   );
 
   const openChangeHandler = useCallback(
@@ -289,6 +292,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                 <Checkbox
                   checked={isAllSelected}
                   className="shrink-0"
+                  onClick={(event) => event.stopPropagation()}
                   onCheckedChange={(checked) => handleSelectAll(checked)}
                 />
                 <div className="min-w-0 flex-1">
