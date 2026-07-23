@@ -387,3 +387,5 @@ There are many ways to contribute to Opik:
 - Upvoting [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22enhancement%22) to show your support
 
 To learn more about how to contribute to Opik, please see our [contributing guidelines](CONTRIBUTING.md).
+
+<!-- perf-baseline throwaway PR: build a main adhoc env for OPIK-7264 before/after benchmark. Do not merge. -->
