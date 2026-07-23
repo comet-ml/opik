@@ -17,7 +17,7 @@ The suite is at `tests_end_to_end/visual-tests/`:
 - **Page objects:** `page-objects/<page>.page.ts` — see "Page object pattern" below; **always follow it**, don't freehand a different shape.
 - **Seeding:** `helpers/test-helper-client.ts` — a typed HTTP client over the Flask `test-helper-service` (`../test-helper-service/routes/*.py`), which wraps the real Python SDK. Add a new route + a new client method together; never seed by clicking through the UI.
 - **Screenshot util:** `tests/utils/screenshot.ts` — `screenshot(page, name, extraMasks?)`. Read this whole file before writing a new spec.
-- **Global setup/teardown:** `global-setup.ts` / `global-teardown.ts` — create/delete the two fixed-name projects (`visual-project`, `visual-empty-project`) used across every spec. Fixed names, no timestamp suffix, so screenshots are identical across runs.
+- **Global setup/teardown:** `global-setup.ts` / `global-teardown.ts` — create/delete the fixed-name projects (`visual-project`, `visual-empty-project`, `visual-sidebar-project`, …) used across specs. Fixed names, no timestamp suffix, so screenshots are identical across runs. **Give each new portion of screenshots its own project** — see "One project per screenshot group" below.
 - **Baselines:** `screenshots/baseline/*.png` — see "Baselines are local and gitignored" below before you assume one exists.
 
 ## Page object pattern
@@ -286,6 +286,17 @@ For any panel with lazy-loaded content (a trace/span side panel's Input/Output, 
 await this.root.getByText('Loading', { exact: true }).waitFor({ state: 'hidden', timeout: 15000 });
 ```
 
+## One project per screenshot group
+
+Don't seed a new spec's data into an existing spec's shared project (e.g. `visual-project`) just because it's already there and already has a `beforeAll` you could piggyback on. Every spec file that seeds its own traces/threads/datasets should create and use its **own dedicated project** in `global-setup.ts`/`global-teardown.ts` (see `visual-sidebar-project` for `trace-sidebar.spec.ts`).
+
+Reusing a shared project causes two distinct problems, both discovered the hard way while adding `trace-sidebar.spec.ts`:
+
+- **Cross-spec pollution.** Data seeded by spec B's `beforeAll` becomes visible in spec A's table screenshot (an extra row, a shifted count/chart) even though spec A never changed — because both specs' entities live in the same project. This produces a confusing, flaky-looking diff in a test you didn't touch.
+- **Non-idempotent-seed collisions compound.** Combined with the hook-restart gotcha below, two specs sharing one project multiplies the chance that a retried `beforeAll` collides with another spec's still-present data (dataset/name conflicts, unexpected table rows) — independent of any bug in your own spec.
+
+Cost is low — `global-setup.ts` already loops over project creation — so default to a new project per spec unless it's an empty-state test explicitly reusing `visual-empty-project` on purpose.
+
 ## Known Playwright gotcha: hook re-run on failure
 
 If a test in a `describe` block fails, Playwright restarts the worker process before the next test in that file — which re-runs `test.beforeAll`. If your `beforeAll` seeds data (as ours does), one real failure produces a **second copy** of the seeded entity before the next test runs, which can cascade into unrelated-looking failures in every subsequent test in the file (growing diffs, extra table rows). When diagnosing a multi-test failure, always look at the **first** failure in isolation — it's usually the only real bug; the rest may just be contamination from the worker restart.
@@ -301,5 +312,6 @@ If a test in a `describe` block fails, Playwright restarts the worker process be
 | "I'll mask just the timestamp `div`" | Checking whether it sits in a flex row with siblings — mask the stable-sized parent instead, or the siblings will still jitter. |
 | "The decorator's duration always shows 0s, it's fine" | Determinism — "usually 0s" still varies by a sub-pixel width; force it to exactly 0 with matching `start_time`/`end_time`. |
 | "All 4 tests failed, must be a bigger bug" | The hook-restart gotcha — check the *first* failure alone before assuming later ones are independent. |
+| "I'll just seed my new spec into `visual-project`, it's already there" | One project per screenshot group — reusing another spec's project pollutes its table screenshots with your seeded data. |
 | "I'll wrap this panel in `BasePage`" | The panel exception — a non-route panel takes just `Page` + a `root` testid locator, not the full `BasePage` constructor. |
 | "I stopped the test-helper-service, I'm done" | The rest of the cleanup checklist — config restore, a non-`SKIP_TEARDOWN` final run (server-side project deletion), and the local report/log directories (`test-results/`, `visual-report/`, `allure-results/`, `screenshots/comparison/`). |
