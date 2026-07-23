@@ -46,7 +46,7 @@ public class CapturingSqlLogger implements SqlLogger {
     @Override
     public void logAfterExecution(StatementContext context) {
         var renderedSql = context.getRenderedSql();
-        if (renderedSql == null || !isSelect(renderedSql)) {
+        if (renderedSql == null || !isReadQuery(renderedSql)) {
             return;
         }
         if (plansByRenderedSql.containsKey(renderedSql) || failedSql.contains(renderedSql)) {
@@ -107,8 +107,12 @@ public class CapturingSqlLogger implements SqlLogger {
         }
     }
 
-    private static boolean isSelect(String sql) {
-        return sql.stripLeading().toLowerCase(Locale.ROOT).startsWith("select");
+    // Read paths the gate vets: plain SELECTs and CTE reads (WITH ... SELECT). Matching only "select" would skip the
+    // CTE class entirely — exactly the multi-reference-CTE shape (OPIK-7198) the gate exists to catch. No WITH-prefixed
+    // @SqlUpdate writes exist in the backend, and MySQL EXPLAINs WITH ... SELECT the same as a plain SELECT.
+    private static boolean isReadQuery(String sql) {
+        var normalized = sql.stripLeading().toLowerCase(Locale.ROOT);
+        return normalized.startsWith("select") || normalized.startsWith("with");
     }
 
     public CapturedQueries captured() {
