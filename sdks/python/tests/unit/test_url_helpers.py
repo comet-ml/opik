@@ -35,6 +35,35 @@ def test_get_is_alive_ping_url__base_url__returns_expected_ping_url(
 
 
 @pytest.mark.parametrize(
+    ("url_override", "expected_permissions_url"),
+    [
+        (
+            "http://localhost:5173/api",
+            "http://localhost:5173/api/v1/private/workspace-permissions",
+        ),
+        (
+            "http://localhost:5173/api/",
+            "http://localhost:5173/api/v1/private/workspace-permissions",
+        ),
+        (
+            "https://www.comet.com/opik/api",
+            "https://www.comet.com/opik/api/v1/private/workspace-permissions",
+        ),
+        (
+            "https://www.comet.com/opik/api/",
+            "https://www.comet.com/opik/api/v1/private/workspace-permissions",
+        ),
+    ],
+)
+def test_get_user_permissions_url__url_override__keeps_path_prefix(
+    url_override: str, expected_permissions_url: str
+) -> None:
+    assert (
+        url_helpers.get_user_permissions_url(url_override) == expected_permissions_url
+    )
+
+
+@pytest.mark.parametrize(
     ("url_override", "expected_ui_url"),
     [
         # Shipped defaults must keep working.
