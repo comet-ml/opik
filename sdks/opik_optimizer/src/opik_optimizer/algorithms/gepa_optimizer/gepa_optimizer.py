@@ -23,13 +23,14 @@ def _warn_if_reflection_minibatch_too_large(
     *,
     reflection_minibatch_size: int,
     max_trials: int,
-    effective_n_samples: int,
-    max_metric_calls: int,
 ) -> None:
-    """Warn when the reflection minibatch is too large to run within the budget."""
-    budget_limited_trials = (
-        max_metric_calls // effective_n_samples if effective_n_samples else 0
-    )
+    """Warn when the reflection minibatch is too large for GEPA to run any reflection.
+
+    The metric budget allows exactly ``max_trials`` candidates
+    (``max_metric_calls = max_trials * effective_n_samples``), so a
+    budget-derived ceiling would equal ``max_trials`` — a single check covers
+    both.
+    """
     if reflection_minibatch_size > max_trials:
         # TODO(opik_optimizer/#gepa-batching): Centralize reflection minibatch clamping when we consolidate trial budgeting.
         logger.warning(
@@ -38,13 +39,40 @@ def _warn_if_reflection_minibatch_too_large(
             reflection_minibatch_size,
             max_trials,
         )
-    elif budget_limited_trials and reflection_minibatch_size > budget_limited_trials:
+
+
+def _coerce_no_improvement_iterations(value: Any) -> int:
+    """Validate the no_improvement_iterations override to a non-negative int.
+
+    The value comes from user-supplied extra_params (typed Any), so guard the
+    boundary: 0/None disables the stall stopper; a non-integer float is rounded
+    down with a warning (never silently); an un-parseable value falls back to
+    the default instead of aborting the run mid-flight.
+    """
+    if value is None:
+        return constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS
+    try:
+        iterations = int(value)
+    except (TypeError, ValueError):
         logger.warning(
-            "reflection_minibatch_size (%s) exceeds the number of candidates allowed by the metric budget (%s). "
-            "Consider increasing max_trials or n_samples.",
-            reflection_minibatch_size,
-            budget_limited_trials,
+            "Ignoring invalid no_improvement_iterations=%r; using default %s.",
+            value,
+            constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS,
         )
+        return constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS
+    if isinstance(value, float) and not value.is_integer():
+        logger.warning(
+            "no_improvement_iterations=%r is not an integer; rounding down to %s.",
+            value,
+            iterations,
+        )
+    if iterations < 0:
+        logger.warning(
+            "no_improvement_iterations=%s is negative; disabling the stall stopper.",
+            iterations,
+        )
+        return 0
+    return iterations
 
 
 def _build_gepa_stop_callbacks(
@@ -56,17 +84,18 @@ def _build_gepa_stop_callbacks(
     apples-to-apples with mini-batch screening excluded:
     - ScoreThresholdStopper stops the moment a full eval reaches perfect_score;
     - NoImprovementStopper ends the reject/skip spin below the threshold
-      (disabled when no_improvement_iterations is falsy).
+      (disabled when no_improvement_iterations coerces to 0).
     """
     from gepa.utils.stop_condition import (
         NoImprovementStopper,
         ScoreThresholdStopper,
     )
 
+    iterations = _coerce_no_improvement_iterations(no_improvement_iterations)
     stop_callbacks: list[Any] = [ScoreThresholdStopper(perfect_score)]
     no_improvement_stopper: Any = None
-    if no_improvement_iterations:
-        no_improvement_stopper = NoImprovementStopper(int(no_improvement_iterations))
+    if iterations:
+        no_improvement_stopper = NoImprovementStopper(iterations)
         stop_callbacks.append(no_improvement_stopper)
     return stop_callbacks, no_improvement_stopper
 
@@ -341,8 +370,6 @@ class GepaOptimizer(BaseOptimizer):
         _warn_if_reflection_minibatch_too_large(
             reflection_minibatch_size=reflection_minibatch_size,
             max_trials=max_trials,
-            effective_n_samples=effective_n_samples,
-            max_metric_calls=max_metric_calls,
         )
 
         train_insts = helpers.build_data_insts(train_items, input_key, output_key)
@@ -362,7 +389,9 @@ class GepaOptimizer(BaseOptimizer):
             dataset=dataset,
             experiment_config=experiment_config,
             validation_dataset=validation_dataset,
-            gepa_val_item_ids={str(item["id"]) for item in val_items if item.get("id")},
+            gepa_val_item_ids={
+                str(item["id"]) for item in val_items if item.get("id") is not None
+            },
         )
 
         try:

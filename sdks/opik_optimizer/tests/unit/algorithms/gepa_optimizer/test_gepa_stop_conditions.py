@@ -6,7 +6,10 @@ from unittest.mock import MagicMock
 
 from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStopper
 
-from opik_optimizer import GepaOptimizer
+from opik_optimizer import GepaOptimizer, constants
+from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
+    _coerce_no_improvement_iterations,
+)
 
 
 def _make_mock_gepa_result(**overrides: Any) -> MagicMock:
@@ -238,3 +241,35 @@ class TestStopperSemantics:
         assert stopper(SimpleNamespace(program_full_scores_val_set=[0.6])) is False
         assert stopper(SimpleNamespace(program_full_scores_val_set=[0.6])) is False
         assert stopper(SimpleNamespace(program_full_scores_val_set=[0.6])) is True
+
+
+class TestCoerceNoImprovementIterations:
+    """no_improvement_iterations comes from user extra_params (Any) — validate it."""
+
+    def test_none_falls_back_to_default(self) -> None:
+        assert (
+            _coerce_no_improvement_iterations(None)
+            == constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS
+        )
+
+    def test_valid_int_passthrough(self) -> None:
+        assert _coerce_no_improvement_iterations(7) == 7
+
+    def test_zero_disables(self) -> None:
+        assert _coerce_no_improvement_iterations(0) == 0
+
+    def test_float_rounds_down_not_silently(self) -> None:
+        # 2.5 must not be silently truncated to a surprising value; we floor it.
+        assert _coerce_no_improvement_iterations(2.5) == 2
+
+    def test_numeric_string_parsed(self) -> None:
+        assert _coerce_no_improvement_iterations("3") == 3
+
+    def test_invalid_string_falls_back_to_default(self) -> None:
+        assert (
+            _coerce_no_improvement_iterations("soon")
+            == constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS
+        )
+
+    def test_negative_disables(self) -> None:
+        assert _coerce_no_improvement_iterations(-5) == 0
