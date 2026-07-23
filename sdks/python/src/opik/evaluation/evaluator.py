@@ -1242,12 +1242,18 @@ def evaluate_optimization_trial(
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
+    experiment_type: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
 
     Args:
         optimization_id: The ID of the optimization associated with the experiment.
+
+        experiment_type: The experiment type recorded for this trial. Optimizers use
+            "mini-batch" for small-sample candidate screening evaluations and "trial"
+            (default) for full evaluations, so that mini-batch scores are excluded
+            from best-score aggregations.
 
         dataset: An Opik Dataset or DatasetVersion instance
 
@@ -1382,7 +1388,7 @@ def evaluate_optimization_trial(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=checked_prompts,
-        type="trial",
+        type=experiment_type or "trial",
         optimization_id=optimization_id,
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),

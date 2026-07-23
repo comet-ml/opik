@@ -47,6 +47,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         dataset: Dataset,
         experiment_config: dict[str, Any] | None,
         validation_dataset: Dataset | None = None,
+        gepa_val_item_ids: set[str] | None = None,
     ) -> None:
         self._base_prompts = base_prompts
         self._agent = agent
@@ -56,6 +57,10 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         self._dataset = dataset
         self._validation_dataset = validation_dataset
         self._experiment_config = experiment_config
+        # Exact item ids of the GEPA valset (the sampled subset GEPA evaluates
+        # accepted candidates on). Used to classify each evaluate() call as a
+        # full evaluation ("trial") vs. a mini-batch screening eval ("mini-batch").
+        self._gepa_val_item_ids = gepa_val_item_ids or set()
         self._metric_name = metric.__name__
         self._allowed_roles = (
             context.extra_params.get("optimizable_roles")
@@ -75,6 +80,29 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 for item in validation_dataset.get_items()
                 if item.get("id")
             }
+
+    def _classify_experiment_type(
+        self,
+        *,
+        dataset_item_ids: list[str],
+        capture_traces: bool,
+        missing_ids: bool,
+    ) -> str:
+        """Classify an evaluate() call as full eval ("trial") or "mini-batch".
+
+        Mini-batch screening runs must be recorded with their real experiment
+        type so they never mix into best-score aggregations. Parent reflection
+        evals (capture_traces=True) are always mini-batches; otherwise only a
+        batch covering the exact GEPA valset is a full eval. When ids are
+        unknown we keep the legacy "trial" label (safe fallback).
+        """
+        if missing_ids or not self._gepa_val_item_ids:
+            return "trial"
+        if capture_traces:
+            return "mini-batch"
+        if set(dataset_item_ids) == self._gepa_val_item_ids:
+            return "trial"
+        return "mini-batch"
 
     def _resolve_dataset_for_batch(self, dataset_item_ids: list[str]) -> Dataset:
         """
@@ -245,12 +273,21 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         # Resolve which dataset to use based on item IDs (train vs validation)
         target_dataset = self._resolve_dataset_for_batch(dataset_item_ids)
+        experiment_type = self._classify_experiment_type(
+            dataset_item_ids=dataset_item_ids,
+            capture_traces=capture_traces,
+            missing_ids=missing_ids,
+        )
         # Attach GEPA-specific metadata without disturbing the caller's experiment config.
         configuration_updates = helpers.drop_none(
             {
                 "gepa": helpers.drop_none(
                     {
-                        "phase": "candidate",
+                        "phase": (
+                            "validation"
+                            if experiment_type == "trial"
+                            else "minibatch"
+                        ),
                         "source": candidate.get("source"),
                         "candidate_id": candidate.get("id"),
                     }
@@ -391,6 +428,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 n_samples=None,
                 experiment_config=experiment_config,
                 verbose=0,
+                experiment_type=experiment_type,
             )
         except Exception:
             logger.exception(

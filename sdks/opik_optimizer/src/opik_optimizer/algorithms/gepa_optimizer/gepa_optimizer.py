@@ -183,6 +183,10 @@ class GepaOptimizer(BaseOptimizer):
         )
         use_merge = context.extra_params.get("use_merge", False)
         max_merge_invocations = context.extra_params.get("max_merge_invocations", 5)
+        no_improvement_iterations = context.extra_params.get(
+            "no_improvement_iterations",
+            constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS,
+        )
         run_dir = context.extra_params.get("run_dir", None)
         track_best_outputs = context.extra_params.get("track_best_outputs", False)
         display_progress_bar = context.extra_params.get("display_progress_bar", False)
@@ -287,12 +291,33 @@ class GepaOptimizer(BaseOptimizer):
             dataset=dataset,
             experiment_config=experiment_config,
             validation_dataset=validation_dataset,
+            gepa_val_item_ids={
+                str(item["id"]) for item in val_items if item.get("id")
+            },
         )
 
         try:
             import gepa
+            from gepa.utils.stop_condition import (
+                NoImprovementStopper,
+                ScoreThresholdStopper,
+            )
         except Exception as exc:  # pragma: no cover
             raise ImportError("gepa package is required for GepaOptimizer") from exc
+
+        # gepa.optimize() only stops on its metric-call budget by default:
+        # perfect_score/skip_perfect_score merely skip single iterations, so a
+        # run that hits 100% on a full eval would keep burning budget. Both
+        # stoppers below read full-eval (valset) scores only, keeping the stop
+        # decision apples-to-apples with mini-batch screening excluded.
+        threshold_stopper = ScoreThresholdStopper(self.perfect_score)
+        stop_callbacks: list[Any] = [threshold_stopper]
+        no_improvement_stopper: Any = None
+        if no_improvement_iterations:
+            no_improvement_stopper = NoImprovementStopper(
+                int(no_improvement_iterations)
+            )
+            stop_callbacks.append(no_improvement_stopper)
 
         use_adapter_progress_bar = display_progress_bar if self.verbose == 0 else False
 
@@ -320,6 +345,7 @@ class GepaOptimizer(BaseOptimizer):
                 "use_merge": use_merge,
                 "max_merge_invocations": max_merge_invocations,
                 "max_metric_calls": max_metric_calls,
+                "stop_callbacks": stop_callbacks,
                 "run_dir": run_dir,
                 "track_best_outputs": track_best_outputs,
                 "display_progress_bar": use_adapter_progress_bar,
@@ -332,6 +358,28 @@ class GepaOptimizer(BaseOptimizer):
 
         candidates: list[dict[str, str]] = getattr(gepa_result, "candidates", []) or []
         val_scores: list[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
+
+        # Surface why the search ended so the run doesn't silently look like a
+        # full budget burn. finish_reason flows into result metadata/logs via
+        # the base class (runtime.build_final_result).
+        finite_val_scores = [s for s in val_scores if s is not None]
+        if finite_val_scores and max(finite_val_scores) >= self.perfect_score:
+            context.finish_reason = context.finish_reason or "perfect_score"
+            logger.info(
+                "GEPA stopped early: full-eval score %.4f reached perfect_score %.4f.",
+                max(finite_val_scores),
+                self.perfect_score,
+            )
+        elif (
+            no_improvement_stopper is not None
+            and no_improvement_stopper.iterations_without_improvement
+            >= no_improvement_stopper.max_iterations_without_improvement
+        ):
+            context.finish_reason = context.finish_reason or "no_improvement"
+            logger.info(
+                "GEPA stopped early: no full-eval improvement for %s iterations.",
+                no_improvement_iterations,
+            )
 
         # Filter duplicate candidates based on content
         (
