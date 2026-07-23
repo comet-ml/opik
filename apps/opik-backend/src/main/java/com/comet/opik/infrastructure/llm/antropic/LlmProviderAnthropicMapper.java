@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Mapper
@@ -57,13 +58,52 @@ interface LlmProviderAnthropicMapper {
 
     @Mapping(expression = "java(request.model())", target = "model")
     @Mapping(expression = "java(Boolean.TRUE.equals(request.stream()))", target = "stream")
-    @Mapping(expression = "java(request.temperature())", target = "temperature")
-    @Mapping(expression = "java(request.temperature() != null ? null : request.topP())", target = "topP")
+    @Mapping(source = "request", target = "temperature", qualifiedByName = "resolveTemperature")
+    @Mapping(source = "request", target = "topP", qualifiedByName = "resolveTopP")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
     @Mapping(source = "request", target = "maxTokens", qualifiedByName = "resolveMaxTokens")
     @Mapping(source = "request", target = "messages", qualifiedByName = "mapToMessages")
     @Mapping(source = "request", target = "system", qualifiedByName = "mapToSystemMessages")
     AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request);
+
+    @Named("resolveTemperature")
+    default Double resolveTemperature(@NonNull ChatCompletionRequest request) {
+        return samplingParamsAllowed(request) ? request.temperature() : null;
+    }
+
+    @Named("resolveTopP")
+    default Double resolveTopP(@NonNull ChatCompletionRequest request) {
+        if (!samplingParamsAllowed(request)) {
+            return null;
+        }
+        // Anthropic recommends against sending temperature and top_p together; temperature wins when both are set.
+        return request.temperature() != null ? null : request.topP();
+    }
+
+    /**
+     * Anthropic rejects sampling params (temperature/top_p) with a 400 for adaptive-thinking models
+     * (claude-sonnet-5, claude-opus-4-7/4-8) and whenever extended thinking is enabled for the request.
+     * Gate them server-side so API-created requests — which bypass the FE sanitizer from OPIK-6244 — don't
+     * fail. Mirrors the judge-path logic in {@code AnthropicClientGenerator}.
+     */
+    private boolean samplingParamsAllowed(ChatCompletionRequest request) {
+        return AnthropicModelName.supportsSamplingParams(request.model()) && !thinkingEnabled(request);
+    }
+
+    /**
+     * Extended thinking counts as enabled only when the request's {@code custom_parameters.thinking.type} is an
+     * explicit, non-blank value other than {@code "disabled"} — so {@code "enabled"}, {@code "adaptive"}, and any
+     * future type gate sampling params off, while a missing/blank type (or absent block) leaves them untouched.
+     */
+    private boolean thinkingEnabled(ChatCompletionRequest request) {
+        if (request.customParameters() == null
+                || !(request.customParameters().get("thinking") instanceof Map<?, ?> thinking)) {
+            return false;
+        }
+        return thinking.get("type") instanceof String type
+                && StringUtils.isNotBlank(type)
+                && !"disabled".equals(type);
+    }
 
     @Named("resolveMaxTokens")
     default Integer resolveMaxTokens(@NonNull ChatCompletionRequest request) {
