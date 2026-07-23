@@ -171,7 +171,7 @@ class CostIntelligenceIngestionTest {
 
             await().atMost(30, SECONDS).untilAsserted(() -> {
                 var rows = getCipxBlocks(span.id(), ws.workspaceId());
-                assertThat(rows).hasSize(6);
+                assertThat(rows).hasSize(7);
 
                 // idx 0: memory block, cache_read tier; identity_context at raw idx 1 is dropped but
                 // does not shift the following indexes.
@@ -185,6 +185,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(memory.label()).isEqualTo("CLAUDE.md");
                 assertThat(memory.isDefinition()).isEqualTo(1);
                 assertThat(memory.alloc()).isCloseTo(5.0, within(1e-9)); // 120 * 20 / 480
+                assertThat(memory.contentSha256()).isEqualTo("a1b2c3"); // block sha256 persisted verbatim
 
                 var skills = rows.get(1);
                 assertThat(skills.blockIdx()).isEqualTo(2);
@@ -225,8 +226,18 @@ class CostIntelligenceIngestionTest {
                 assertThat(noTier.label()).isEqualTo("Bash");
                 assertThat(noTier.alloc()).isZero();
 
+                // idx 5: agent_overhead (harness-injected user-role text) folds into the
+                // static_overhead lane, so it never counts as a user prompt (OPIK-7457).
+                var agentOverhead = rows.get(4);
+                assertThat(agentOverhead.blockIdx()).isEqualTo(5);
+                assertThat(agentOverhead.category()).isEqualTo("agent_overhead");
+                assertThat(agentOverhead.lane()).isEqualTo("static_overhead");
+                assertThat(agentOverhead.bdLane()).isEqualTo("static_overhead");
+                assertThat(agentOverhead.label()).isEqualTo("agent_overhead");
+                assertThat(agentOverhead.isDefinition()).isZero();
+
                 // residuals: billed tiers with no blocks (input, cache_creation), deterministic idx.
-                var residualInput = rows.get(4);
+                var residualInput = rows.get(5);
                 assertThat(residualInput.blockIdx()).isEqualTo(65531);
                 assertThat(residualInput.src()).isEqualTo("r");
                 assertThat(residualInput.category()).isEmpty();
@@ -238,7 +249,7 @@ class CostIntelligenceIngestionTest {
 
                 // cache_creation residual inherits the span's TTL: the usage split has 1h > 0, so the
                 // write tier is labeled cache_creation_1h (OPIK-7392).
-                var residualCacheCreation = rows.get(5);
+                var residualCacheCreation = rows.get(6);
                 assertThat(residualCacheCreation.blockIdx()).isEqualTo(65533);
                 assertThat(residualCacheCreation.src()).isEqualTo("r");
                 assertThat(residualCacheCreation.tier()).isEqualTo("cache_creation_1h");
@@ -444,11 +455,12 @@ class CostIntelligenceIngestionTest {
                               }
                             },
                             "blocks": [
-                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text"},
+                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","sha256":"a1b2c3"},
                               {"category":"identity_context","side":"input","cache_status":"none","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"skills_loaded","side":"input","cache_status":"read","parent_category":"context","chars":360,"tool_name":"","tool_server":"","tool_use_id":"","resource":"dataviz","kind":"text"},
                               {"category":"mcp_tool_calls","side":"output","cache_status":"none","parent_category":"assistant","chars":30,"tool_name":"search","tool_server":"srv","tool_use_id":"tu1","resource":"res","kind":"tool"},
-                              {"category":"tool_io","side":"input","cache_status":"unknown","parent_category":"context","chars":75,"tool_name":"Bash","tool_server":"","tool_use_id":"tu2","resource":"","kind":"tool"}
+                              {"category":"tool_io","side":"input","cache_status":"unknown","parent_category":"context","chars":75,"tool_name":"Bash","tool_server":"","tool_use_id":"tu2","resource":"","kind":"tool"},
+                              {"category":"agent_overhead","side":"input","cache_status":"unknown","parent_category":"context","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
                             ]
                           }
                         }
@@ -564,6 +576,7 @@ class CostIntelligenceIngestionTest {
                     model,
                     side, cache_status, parent_category, chars,
                     tool_name, tool_server, tool_use_id, resource, kind,
+                    content_sha256,
                     toUnixTimestamp64Milli(start_time) AS start_ms
                 FROM cipx_spend_blocks FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
@@ -594,6 +607,7 @@ class CostIntelligenceIngestionTest {
                             row.get("tool_use_id", String.class),
                             row.get("resource", String.class),
                             row.get("kind", String.class),
+                            row.get("content_sha256", String.class),
                             row.get("start_ms", Long.class))))
                     .collectList();
         }).block();
@@ -672,7 +686,7 @@ class CostIntelligenceIngestionTest {
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
             String bdLane, String label, Integer isDefinition, Double alloc, String model, String side,
             String cacheStatus, String parentCategory, Long chars, String toolName, String toolServer,
-            String toolUseId, String resource, String kind, Long startMs) {
+            String toolUseId, String resource, String kind, String contentSha256, Long startMs) {
     }
 
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
