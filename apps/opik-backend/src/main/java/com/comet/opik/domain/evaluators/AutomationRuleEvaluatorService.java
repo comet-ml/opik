@@ -271,7 +271,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 // project (e.g. legacy duplicates). On a real rename, dedup excluding this rule itself so it
                 // does not collide with its own current name (OPIK-7371).
                 String requestedName = evaluatorUpdate.getName();
-                String currentName = ruleDAO.findNameById(id, workspaceId);
+                String currentName = ruleDAO.findNameById(id, workspaceId).orElse(null);
                 String uniqueName;
                 if (Objects.equals(requestedName, currentName)) {
                     uniqueName = requestedName;

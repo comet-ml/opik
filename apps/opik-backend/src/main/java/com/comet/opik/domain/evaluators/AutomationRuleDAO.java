@@ -13,6 +13,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -85,7 +86,7 @@ public interface AutomationRuleDAO {
      * skip name resolution entirely for non-name edits (OPIK-7371).
      */
     @SqlQuery("SELECT name FROM automation_rules WHERE id = :id AND workspace_id = :workspaceId")
-    String findNameById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+    Optional<String> findNameById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE automation_rules

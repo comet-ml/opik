@@ -915,6 +915,20 @@ class AutomationRuleEvaluatorsResourceTest {
             updateRule(idB, name, Set.of(p1, p2));
             assertThat(getName(idB, p1)).isEqualTo(name);
         }
+
+        @Test
+        @DisplayName("updating a non-existent rule returns 404 (name lookup tolerates the missing row)")
+        void whenUpdatingNonExistentRule__thenNotFound() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .name("Ghost " + UUID.randomUUID())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(UUID.randomUUID(), WORKSPACE_NAME, update,
+                    API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
     }
 
     @Nested
