@@ -11465,6 +11465,14 @@ components:
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -12018,6 +12026,14 @@ components:
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         type:
           type: string
           enum:
@@ -12363,6 +12379,14 @@ components:
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -12818,6 +12842,14 @@ components:
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -12913,6 +12945,12 @@ components:
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          enum:
+          - production
+          - experiment
+          - both
         project_id:
           type: string
           description: "Primary project ID (legacy field, maintained for backwards\
