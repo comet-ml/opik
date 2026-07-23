@@ -791,11 +791,29 @@ class WorkspacesResourceTest {
             var workspaceSubset = workspaceResourceClient.getWorkspaceTokenUsageNames(
                     namesRequest(Set.of(projectId)), apiKey, workspaceName);
             assertThat(workspaceSubset.names()).containsExactlyInAnyOrderElementsOf(perProject.names());
+        }
 
-            // No project ids => all projects. Workspace has only this project, so it must also match.
-            var workspaceAll = workspaceResourceClient.getWorkspaceTokenUsageNames(namesRequest(null), apiKey,
-                    workspaceName);
+        // "All projects" is signalled by an absent (null) or explicit empty project_ids; both resolve to every project
+        // in the workspace. Parameterized so the empty-array path can't regress in WorkspaceMetricsService.resolveProjectIds.
+        @ParameterizedTest
+        @NullAndEmptySource
+        void allProjectsMatchesPerProjectEndpoint(Set<UUID> allProjectsSelector) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            createSpansWithUsage(projectName, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai"));
+
+            var perProject = projectResourceClient.findTokenUsageNames(projectId, apiKey, workspaceName);
+
+            // Workspace has only this project, so "all projects" must match the per-project endpoint exactly.
+            var workspaceAll = workspaceResourceClient.getWorkspaceTokenUsageNames(
+                    namesRequest(allProjectsSelector), apiKey, workspaceName);
             assertThat(workspaceAll.names()).containsExactlyInAnyOrderElementsOf(perProject.names());
+            assertThat(workspaceAll.names()).isNotEmpty();
         }
 
         @Test

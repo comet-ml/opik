@@ -305,22 +305,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
-    // Distinct span token-usage key names across an explicit project set, all-time. Mirrors ProjectMetricsDAO's
-    // GET_PROJECT_TOKEN_USAGE_NAMES with the single-project predicate widened to a bounded project_id IN (...) list.
-    private static final String GET_WORKSPACE_TOKEN_USAGE_NAMES = """
-            SELECT DISTINCT name
-            FROM (
-                SELECT usage
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                AND project_id IN :project_ids
-            )
-            ARRAY JOIN
-                mapKeys(usage) AS name,
-                mapValues(usage) AS value
-            WHERE value > 0
-            SETTINGS log_comment = '<log_comment>';
-            """;
+    // Distinct span token-usage key names across an explicit project set, all-time. Shares SpanMetricsQueries with
+    // ProjectMetricsDAO's per-project query; only the project predicate differs (a bounded project_id IN (...) list).
+    private static final String GET_WORKSPACE_TOKEN_USAGE_NAMES = SpanMetricsQueries
+            .tokenUsageNames("project_id IN :project_ids");
 
     private static final String WORKSPACE_METRIC_QUERY_NAME_PREFIX = "WorkspaceMetrics_";
 
