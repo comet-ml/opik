@@ -451,9 +451,14 @@ def test_meteor__default_scorer__passes_tokenized_inputs_to_nltk(monkeypatch):
         captured["hypothesis"] = hypothesis
         return 0.5
 
-    # Avoid the WordNet corpora requirement and stub the NLTK scorer so the test
-    # needs no network/corpora.
-    monkeypatch.setattr(meteor_module.wordnet, "ensure_loaded", lambda: None)
+    # Stub the NLTK scorer and WordNet loader so the test needs no corpora/network.
+    # Replace the whole ``wordnet`` object rather than setattr on it: touching the
+    # real NLTK LazyCorpusLoader forces a corpus load, raising LookupError in CI.
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        meteor_module, "wordnet", SimpleNamespace(ensure_loaded=lambda: None)
+    )
     monkeypatch.setattr(
         meteor_module.nltk_meteor_score, "meteor_score", fake_meteor_score
     )
