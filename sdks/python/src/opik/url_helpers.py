@@ -33,7 +33,10 @@ def get_experiment_url_by_id(
 ) -> str:
     domain_root = get_base_url(base_url)
     experiments = urllib.parse.quote(json.dumps([experiment_id]))
-    return f"{domain_root}opik/{workspace}/experiments/{dataset_id}/compare?experiments={experiments}"
+    return (
+        f"{domain_root}opik/{workspace}/experiments/{dataset_id}/compare"
+        f"?experiments={experiments}"
+    )
 
 
 def get_project_url_by_workspace(
