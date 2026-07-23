@@ -206,13 +206,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         message.llmAsJudgeCode().variables(),
                         message.promptType());
 
-        // Monitoring recorder for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
-        // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then runs
-        // exactly as before with no extra writes.
-        EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(trace, message.ruleId(), message.ruleName(),
-                        message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
-                : EvaluationRecorder.NOOP;
+        // Monitoring trace for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
+        // evaluation, one llm span per LLM round.
+        EvaluationRecorder recorder = onlineEvaluationRecorder.begin(trace, message.ruleId(),
+                message.ruleName(), message.llmAsJudgeCode().model().name(), message.workspaceId(),
+                message.userName());
 
         Mono<List<FeedbackScoreBatchItem>> scoring = spansMono
                 .flatMap(spans -> referencesTrace

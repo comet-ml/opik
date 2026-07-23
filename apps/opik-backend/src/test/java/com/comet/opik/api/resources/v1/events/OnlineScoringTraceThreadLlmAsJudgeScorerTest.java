@@ -9,6 +9,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluation.EvaluatedSubject;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
@@ -146,6 +147,10 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         // override these per-case.
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
+
+        Mockito.lenient().when(onlineEvaluationRecorder.begin(
+                any(EvaluatedSubject.class), any(), any(), any(), any(), any()))
+                .thenReturn(EvaluationRecorder.NOOP);
 
         agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry);
 

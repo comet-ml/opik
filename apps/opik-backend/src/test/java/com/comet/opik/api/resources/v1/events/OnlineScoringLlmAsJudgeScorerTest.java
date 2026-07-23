@@ -141,6 +141,10 @@ class OnlineScoringLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getAttachmentFetchMaxRetries()).thenReturn(5);
         lenient().when(onlineScoringConfig.getAttachmentFetchRetryDelay()).thenReturn(Duration.milliseconds(300));
 
+        lenient().when(onlineEvaluationRecorder.begin(
+                any(Trace.class), any(), any(), any(), any(), any()))
+                .thenReturn(EvaluationRecorder.NOOP);
+
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(GetTraceSpansTool.NAME, "{}"),
                 stubTool(ReadTool.NAME, "{}")));
