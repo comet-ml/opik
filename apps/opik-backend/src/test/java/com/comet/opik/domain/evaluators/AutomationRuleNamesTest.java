@@ -78,6 +78,18 @@ class AutomationRuleNamesTest {
     }
 
     @Test
+    @DisplayName("likePrefix escapes LIKE metacharacters and strips trailing spaces")
+    void likePrefixEscaping() {
+        assertThat(AutomationRuleNames.likePrefix("Hallucination")).isEqualTo("Hallucination");
+        assertThat(AutomationRuleNames.likePrefix("Quality ")).isEqualTo("Quality");
+        assertThat(AutomationRuleNames.likePrefix("a_b")).isEqualTo("a\\_b");
+        assertThat(AutomationRuleNames.likePrefix("50%")).isEqualTo("50\\%");
+        // Backslash is escaped first so we do not double-escape the escapes we add.
+        assertThat(AutomationRuleNames.likePrefix("a\\b")).isEqualTo("a\\\\b");
+        assertThat(AutomationRuleNames.likePrefix(null)).isNull();
+    }
+
+    @Test
     @DisplayName("does not regenerate an existing suffixed name for near-max-length names on re-run")
     void longNameDoesNotCollideOnRerun() {
         String base = "a".repeat(150);

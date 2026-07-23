@@ -62,6 +62,24 @@ class AutomationRuleNames {
     }
 
     /**
+     * Builds the escaped prefix to feed to a {@code name LIKE concat(?, '%')} lookup for {@code name}.
+     * Trailing spaces are stripped (MySQL PAD SPACE comparison ignores them) and LIKE metacharacters
+     * ({@code \}, {@code %}, {@code _}) are escaped so they match literally rather than as wildcards -
+     * otherwise a name such as {@code a\b} or {@code 50%} would silently miss its own collisions.
+     * Case/accent folding is left to the column collation. Final precise matching happens in
+     * {@link #generateUniqueName} over the returned candidate set.
+     */
+    static String likePrefix(String name) {
+        if (name == null) {
+            return null;
+        }
+        return StringUtils.stripEnd(name, " ")
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+    }
+
+    /**
      * Normalizes a name for collision comparison, approximating the folding of MySQL's
      * {@code utf8mb4_unicode_ci} collation: strips trailing spaces (PAD SPACE comparison ignores them),
      * strips diacritics, and lower-cases. Mirrors the normalization used by

@@ -44,45 +44,35 @@ public interface AutomationRuleDAO {
     void saveBaseRule(@BindMethods("rule") AutomationRuleModel rule, @Bind("workspaceId") String workspaceId);
 
     /**
-     * Returns all rule names within the given projects, used to auto-suffix colliding names on create
-     * (OPIK-7371). Project-scoped through the junction table AND the legacy {@code project_id} column, so
-     * pre-junction rules (created before migration 000041 and never lazy-migrated) are also considered -
-     * these still exist on older SaaS/enterprise installs. Collision matching is done in Java
-     * (case-insensitive), so no name filter is applied here - this avoids LIKE metacharacter/escape
-     * pitfalls and keeps comparison consistent with the DB collation. Rules per project are few, so
-     * fetching the full set is cheap.
+     * Returns existing rule names in the given project(s) that start with {@code namePrefix}, used to
+     * auto-suffix colliding names (OPIK-7371). Scoped per project via the junction table (the authoritative
+     * association after the AutomationRuleProjectMigration backfill); the legacy {@code project_id} column
+     * is intentionally not used (it is nulled on update). {@code excludeRuleId} (optional) skips a single
+     * rule so its own name is not treated as a self-collision on update. The {@code LIKE} prefix keeps the
+     * result set small and index-backed - callers MUST pass a prefix escaped via
+     * {@link AutomationRuleNames#likePrefix(String)} so LIKE metacharacters in the name are matched
+     * literally. Final precise matching is done in Java over this small candidate set.
+     * <p>
+     * Assumptions (optimistic, per OPIK-7371): the junction backfill is complete, so a rare un-backfilled
+     * legacy rule (no junction row) may be missed - degrading to a duplicate name, not an error; and
+     * concurrent creates of the same name race without a DB constraint.
      */
     @SqlQuery("""
             SELECT DISTINCT rule.name
             FROM automation_rules rule
-            LEFT JOIN automation_rule_projects arp ON rule.id = arp.rule_id
+            JOIN automation_rule_projects arp ON rule.id = arp.rule_id
             WHERE rule.workspace_id = :workspaceId
-            AND (arp.project_id IN (<projectIds>) OR rule.project_id IN (<projectIds>))
+            AND arp.project_id IN (<projectIds>)
+            AND rule.name LIKE concat(:namePrefix, '%')
+            <if(excludeRuleId)> AND rule.id != :excludeRuleId <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    Set<String> findNamesByProjects(
-            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
-            @Bind("workspaceId") String workspaceId);
-
-    /**
-     * Same as {@link #findNamesByProjects} but excludes a single rule by id, used on update so a rule's own
-     * name (unchanged name or a non-name edit) does not count as a self-collision (OPIK-7371).
-     */
-    @SqlQuery("""
-            SELECT DISTINCT rule.name
-            FROM automation_rules rule
-            LEFT JOIN automation_rule_projects arp ON rule.id = arp.rule_id
-            WHERE rule.workspace_id = :workspaceId
-            AND rule.id != :excludeRuleId
-            AND (arp.project_id IN (<projectIds>) OR rule.project_id IN (<projectIds>))
-            """)
-    @UseStringTemplateEngine
-    @AllowUnusedBindings
-    Set<String> findNamesByProjectsExcludingRule(
+    Set<String> findCollidingNames(
             @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
             @Bind("workspaceId") String workspaceId,
-            @Bind("excludeRuleId") UUID excludeRuleId);
+            @Bind("namePrefix") String namePrefix,
+            @Define("excludeRuleId") @Bind("excludeRuleId") UUID excludeRuleId);
 
     /**
      * Returns the currently stored name of a rule, or {@code null} if it does not exist. Used on update to

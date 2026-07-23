@@ -917,6 +917,17 @@ class AutomationRuleEvaluatorsResourceTest {
             assertThat(getName(idB, p1)).isEqualTo(name);
         }
 
+        @ParameterizedTest
+        @ValueSource(strings = {"metric_score", "cost 50%", "path\\to\\rule"})
+        @DisplayName("collision is detected for names containing LIKE metacharacters (prefix is escaped)")
+        void whenNameHasLikeMetacharacters__thenSuffixIsAppended(String name) {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var uniqueName = name + " " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(uniqueName, projectId)).isEqualTo(uniqueName);
+            assertThat(createRuleAndGetName(uniqueName, projectId)).isEqualTo(uniqueName + "-1");
+        }
+
         @Test
         @DisplayName("updating a non-existent rule returns 404 (name lookup tolerates the missing row)")
         void whenUpdatingNonExistentRule__thenNotFound() {
