@@ -102,15 +102,20 @@ class MySqlQueryPlanGateTest {
     void mySqlReadPathsHaveNoPlanShapeRegressions() {
         READ_PATHS.forEach(this::getPage);
 
-        var asserter = new MySqlPlanShapeAsserter(FULL_SCAN_SENSITIVE_TABLES);
-        var violations = capturingSqlLogger.capturedPlans().entrySet().stream()
-                .filter(entry -> entry.getValue() != null)
-                .flatMap(entry -> asserter.findViolations(entry.getKey(), entry.getValue()).stream())
-                .toList();
+        var captured = capturingSqlLogger.captured();
 
-        assertThat(capturingSqlLogger.capturedPlans())
+        assertThat(captured.plansByRenderedSql())
                 .as("the gate must capture SELECTs; an empty capture means the read paths did not exercise MySQL")
                 .isNotEmpty();
+
+        assertThat(captured.failedSql())
+                .as("every captured SELECT must be EXPLAIN-able; an un-vetted query would pass the gate by omission")
+                .isEmpty();
+
+        var asserter = new MySqlPlanShapeAsserter(FULL_SCAN_SENSITIVE_TABLES);
+        var violations = captured.plansByRenderedSql().entrySet().stream()
+                .flatMap(entry -> asserter.findViolations(entry.getKey(), entry.getValue()).stream())
+                .toList();
 
         var netNew = PlanShapeBaseline.loadFromClasspath(BASELINE_RESOURCE).netNew(violations);
 

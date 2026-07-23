@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.planshape;
 
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import lombok.Builder;
 import lombok.NonNull;
 
 import java.io.InputStream;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
  */
 public class PlanShapeBaseline {
 
+    @Builder(toBuilder = true)
     public record Entry(@NonNull String fingerprint, String note) {
     }
 

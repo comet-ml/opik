@@ -9,29 +9,27 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Inspects a MySQL {@code EXPLAIN FORMAT=JSON} plan for the query-shape regressions the gate guards against
- * (OPIK-7448):
+ * Inspects a MySQL {@code EXPLAIN FORMAT=JSON} plan (JSON <b>format version 2</b>, produced by
+ * {@link CapturingSqlLogger}) for the query-shape regressions the gate guards against (OPIK-7448):
  *
  * <ul>
  *   <li><b>Materialized / temporary-table nodes</b> — the OPIK-7198 class. Multi-reference CTEs and derived tables that
- *       MySQL materializes into an internal {@code #sql...} temporary table saturate the TempTable pool under load and
- *       fail non-deterministically. The JSON surfaces these as {@code materialized_from_subquery} nodes or a
- *       {@code using_temporary_table} flag.</li>
- *   <li><b>Full table scans</b> ({@code access_type = ALL}) on tables that grow with tenant data — a latency cliff at
- *       scale.</li>
+ *       MySQL materializes into an internal temporary table saturate the TempTable pool under load and fail
+ *       non-deterministically. In v2 these appear as a node with {@code access_type = "materialize"}.</li>
+ *   <li><b>Full table scans</b> on tables that grow with tenant data — a latency cliff at scale. In v2 a base-table
+ *       scan is {@code access_type = "table"} (an indexed read is {@code "index"}), and {@code table_name} is the base
+ *       table name (v1 reported the alias here, which is why the gate pins v2).</li>
  * </ul>
  *
- * The walk is recursive because EXPLAIN nests {@code query_block} / {@code nested_loop} / {@code table} /
- * {@code materialized_from_subquery} arbitrarily deep.
+ * The walk is recursive because the v2 plan nests {@code inputs} / nested operations arbitrarily deep.
  */
 public class MySqlPlanShapeAsserter {
 
-    private static final String MATERIALIZED_FROM_SUBQUERY = "materialized_from_subquery";
-    private static final String USING_TEMPORARY_TABLE = "using_temporary_table";
-    private static final String TABLE = "table";
-    private static final String TABLE_NAME = "table_name";
+    private static final String OPERATION = "operation";
     private static final String ACCESS_TYPE = "access_type";
-    private static final String FULL_SCAN = "ALL";
+    private static final String TABLE_NAME = "table_name";
+    private static final String ACCESS_MATERIALIZE = "materialize";
+    private static final String ACCESS_TABLE_SCAN = "table";
 
     private final Set<String> fullScanSensitiveTables;
 
@@ -51,32 +49,30 @@ public class MySqlPlanShapeAsserter {
         }
 
         if (node.isObject()) {
-            if (node.has(MATERIALIZED_FROM_SUBQUERY)) {
-                violations.add(new PlanShapeViolation(renderedSql, PlanShapeViolation.Type.MATERIALIZED_SUBQUERY,
-                        "Plan materializes a subquery into an internal temporary table (OPIK-7198 class)."));
-            }
-            if (node.path(USING_TEMPORARY_TABLE).asBoolean(false)) {
-                violations.add(new PlanShapeViolation(renderedSql, PlanShapeViolation.Type.TEMPORARY_TABLE,
-                        "Plan uses an internal temporary table (OPIK-7198 class)."));
-            }
+            var accessType = node.path(ACCESS_TYPE).asText(null);
 
-            var tableNode = node.get(TABLE);
-            if (tableNode != null && tableNode.isObject()) {
-                checkTableAccess(tableNode, renderedSql, violations);
+            if (ACCESS_MATERIALIZE.equals(accessType)) {
+                violations.add(PlanShapeViolation.builder()
+                        .renderedSql(renderedSql)
+                        .type(PlanShapeViolation.Type.MATERIALIZED_SUBQUERY)
+                        .detail("Plan materializes a subquery into an internal temporary table (OPIK-7198 class): "
+                                + node.path(OPERATION).asText("materialize"))
+                        .build());
+            } else if (ACCESS_TABLE_SCAN.equals(accessType)) {
+                var tableName = node.path(TABLE_NAME).asText(null);
+                if (tableName != null && fullScanSensitiveTables.contains(tableName)) {
+                    violations.add(PlanShapeViolation.builder()
+                            .renderedSql(renderedSql)
+                            .type(PlanShapeViolation.Type.FULL_TABLE_SCAN)
+                            .detail("Full table scan on tenant-growing table '%s': %s".formatted(
+                                    tableName, node.path(OPERATION).asText("table scan")))
+                            .build());
+                }
             }
 
             node.fields().forEachRemaining(entry -> walk(entry.getValue(), renderedSql, violations));
         } else if (node.isArray()) {
             node.forEach(child -> walk(child, renderedSql, violations));
-        }
-    }
-
-    private void checkTableAccess(JsonNode tableNode, String renderedSql, List<PlanShapeViolation> violations) {
-        var accessType = tableNode.path(ACCESS_TYPE).asText(null);
-        var tableName = tableNode.path(TABLE_NAME).asText(null);
-        if (FULL_SCAN.equals(accessType) && tableName != null && fullScanSensitiveTables.contains(tableName)) {
-            violations.add(new PlanShapeViolation(renderedSql, PlanShapeViolation.Type.FULL_TABLE_SCAN,
-                    "Full table scan (access_type=ALL) on tenant-growing table '%s'.".formatted(tableName)));
         }
     }
 }

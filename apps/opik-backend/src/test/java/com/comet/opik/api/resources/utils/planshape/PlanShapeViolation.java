@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.planshape;
 
+import lombok.Builder;
 import lombok.NonNull;
 
 import java.util.Locale;
@@ -10,11 +11,11 @@ import java.util.Locale;
  * that run-to-run parameter differences (random UUIDs, timestamps) do not change identity, while a genuinely new or
  * structurally-changed query does.
  */
+@Builder(toBuilder = true)
 public record PlanShapeViolation(@NonNull String renderedSql, @NonNull Type type, @NonNull String detail) {
 
     public enum Type {
         MATERIALIZED_SUBQUERY,
-        TEMPORARY_TABLE,
         FULL_TABLE_SCAN
     }
 
