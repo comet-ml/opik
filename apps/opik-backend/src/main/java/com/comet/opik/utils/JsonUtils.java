@@ -25,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.math.BigDecimal;
@@ -297,16 +298,41 @@ public class JsonUtils {
         }
     }
 
+    public void writeValue(@NonNull OutputStream outputStream, @NonNull Object value) {
+        try {
+            MAPPER.writeValue(outputStream, value);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     /**
-     * Serialized character length of a node without materializing its JSON string — the node is streamed
-     * through a counting writer, so a large field costs O(1) transient heap rather than a full copy. A
-     * {@code null} or JSON-null node counts as 0.
+     * Serialized character (UTF-16) length of a node without materializing its JSON string — the node is
+     * streamed through a counting writer, so a large field costs O(1) transient heap rather than a full
+     * copy. A {@code null} or JSON-null node counts as 0. Use {@link #getSerializedLengthInBytes} to
+     * enforce byte-denominated limits.
      */
     public long getSerializedLength(JsonNode node) {
         if (node == null || node.isNull()) {
             return 0L;
         }
         var counter = new CountingWriter();
+        writeValue(counter, node);
+        return counter.getCount();
+    }
+
+    /**
+     * Serialized UTF-8 byte length of a node without materializing its JSON — the node is streamed through
+     * a counting output stream, so a large field costs O(1) transient heap rather than a full copy. This
+     * is the byte-accurate variant of {@link #getSerializedLength}, for enforcing byte-denominated caps
+     * (where non-ASCII text makes the byte count exceed the character count). A {@code null} or JSON-null
+     * node counts as 0.
+     */
+    public long getSerializedLengthInBytes(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return 0L;
+        }
+        var counter = new CountingOutputStream();
         writeValue(counter, node);
         return counter.getCount();
     }

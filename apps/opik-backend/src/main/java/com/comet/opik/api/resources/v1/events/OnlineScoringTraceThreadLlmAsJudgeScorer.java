@@ -263,9 +263,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         // path regardless of context size (the judge needs get_attachment to fetch them). Best-effort:
         // a transient listing error returns false and falls back to the normal size-based routing.
         Mono<Boolean> hasAttachmentsMono = serviceTogglesConfig.isAgenticToolsEnabled()
-                ? attachmentService.hasAnyAttachmentByEntityIds(
-                        EntityType.TRACE,
-                        traces.stream().map(Trace::id).collect(Collectors.toSet()))
+                ? attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, traceIds)
                         .onErrorReturn(false)
                         .contextWrite(ctx -> ctx
                                 .put(RequestContext.WORKSPACE_ID, message.workspaceId())

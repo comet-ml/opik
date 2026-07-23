@@ -53,8 +53,8 @@ final class BoundedSpanAccumulator {
     }
 
     private long approxSpanBytes(Span span) {
-        return JsonUtils.getSerializedLength(span.input())
-                + JsonUtils.getSerializedLength(span.output())
-                + JsonUtils.getSerializedLength(span.metadata());
+        return JsonUtils.getSerializedLengthInBytes(span.input())
+                + JsonUtils.getSerializedLengthInBytes(span.output())
+                + JsonUtils.getSerializedLengthInBytes(span.metadata());
     }
 }

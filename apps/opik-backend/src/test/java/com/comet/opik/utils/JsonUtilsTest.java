@@ -7,6 +7,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -29,6 +30,9 @@ class JsonUtilsTest {
                 "42",
                 "3.14",
                 "true",
+                // non-ASCII: UTF-8 byte length (é=2, CJK=3 each) exceeds the UTF-16 char length, so the
+                // char and byte variants must disagree here.
+                "{\"m\":\"café-世界\"}",
                 "{\"payload\":\"" + "x".repeat(5_000) + "\"}");
     }
 
@@ -37,9 +41,20 @@ class JsonUtilsTest {
     @DisplayName("getSerializedLength: equals the serialized character length for any non-null node")
     void getSerializedLengthMatchesSerializedLength(String json) {
         var node = node(json);
-        // The primitive both the size estimate and the byte cap rely on: streaming through CountingWriter
-        // must yield exactly the length of the materialized serialization, at any size/shape.
+        // The char primitive the token estimate relies on: streaming through CountingWriter must yield
+        // exactly the character length of the materialized serialization, at any size/shape.
         assertThat(JsonUtils.getSerializedLength(node)).isEqualTo(JsonUtils.writeValueAsString(node).length());
+    }
+
+    @ParameterizedTest
+    @MethodSource("serializableNodes")
+    @DisplayName("getSerializedLengthInBytes: equals the UTF-8 serialized byte length for any non-null node")
+    void getSerializedLengthInBytesMatchesUtf8ByteLength(String json) {
+        var node = node(json);
+        // The byte primitive the heap cap relies on: it must count UTF-8 bytes (not UTF-16 chars), so the
+        // non-ASCII case above yields a strictly larger number than getSerializedLength.
+        assertThat(JsonUtils.getSerializedLengthInBytes(node))
+                .isEqualTo(JsonUtils.writeValueAsString(node).getBytes(StandardCharsets.UTF_8).length);
     }
 
     static Stream<Arguments> nullishNodes() {
@@ -55,6 +70,13 @@ class JsonUtilsTest {
     @DisplayName("getSerializedLength: a nullish node counts as 0, not its serialized form")
     void getSerializedLengthNullishIsZero(String description, JsonNode node) {
         assertThat(JsonUtils.getSerializedLength(node)).isZero();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("nullishNodes")
+    @DisplayName("getSerializedLengthInBytes: a nullish node counts as 0")
+    void getSerializedLengthInBytesNullishIsZero(String description, JsonNode node) {
+        assertThat(JsonUtils.getSerializedLengthInBytes(node)).isZero();
     }
 
     @Test
