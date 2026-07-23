@@ -12,6 +12,7 @@ import {
   getBaselineCandidate,
   aggregateCandidates,
   mergeExperimentScores,
+  splitExperimentsByEvalType,
 } from "@/lib/optimizations";
 import useAppStore from "@/store/AppStore";
 
@@ -124,9 +125,20 @@ export const useOptimizationExperiments = () => {
     });
   }, [data?.content, isTestSuite, optimization?.objective_name]);
 
+  // v1 loads only TRIAL-typed experiments, so new runs (whose mini-batches are
+  // typed "mini-batch" by the optimizer SDK) are already clean. The split
+  // guards LEGACY runs, where mini-batch screening evals were also recorded as
+  // "trial": those must not blend into candidate aggregation or "best".
+  // (The v2 page additionally renders mini-batches as a distinct series.)
+  const { fullEvalExperiments } = useMemo(
+    () => splitExperimentsByEvalType(experiments),
+    [experiments],
+  );
+
   const candidates = useMemo(
-    () => aggregateCandidates(experiments, optimization?.objective_name),
-    [experiments, optimization?.objective_name],
+    () =>
+      aggregateCandidates(fullEvalExperiments, optimization?.objective_name),
+    [fullEvalExperiments, optimization?.objective_name],
   );
 
   const inProgressInfo = useMemo(() => {
@@ -154,7 +166,7 @@ export const useOptimizationExperiments = () => {
   }, [isInProgress, latestExperimentData?.content]);
 
   const { scoreMap, baseScore, bestExperiment } = useOptimizationScores(
-    experiments,
+    fullEvalExperiments,
     optimization?.objective_name,
   );
 
@@ -174,12 +186,14 @@ export const useOptimizationExperiments = () => {
   }, [candidates]);
 
   const baselineExperiment = useMemo(() => {
-    if (!experiments.length) return undefined;
-    const sortedRows = experiments
+    // Baseline = earliest FULL evaluation; a legacy mini-batch recorded first
+    // must never stand in as the baseline.
+    if (!fullEvalExperiments.length) return undefined;
+    const sortedRows = fullEvalExperiments
       .slice()
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
     return sortedRows[0];
-  }, [experiments]);
+  }, [fullEvalExperiments]);
 
   const handleRefresh = useCallback(() => {
     refetchOptimization();

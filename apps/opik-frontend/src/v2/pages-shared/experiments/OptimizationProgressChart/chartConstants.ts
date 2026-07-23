@@ -33,6 +33,12 @@ export const getDotRadius = ({
 export const DOT_STROKE_WIDTH = 1.5;
 export const DOT_BEST_RING_WIDTH = 2;
 
+// Mini-batch screening dots: small hollow rings, visually subordinate to the
+// solid full-eval dots (screening evals cover ~3-5 items vs a full ~30).
+export const MINI_BATCH_DOT_RADIUS = 2.5;
+export const MINI_BATCH_DOT_STROKE_WIDTH = 1.25;
+export const MINI_BATCH_DOT_OPACITY = 0.7;
+
 // Overlap spacing for dots sharing the same (step, score)
 export const OVERLAP_SPACING = 16;
 

@@ -11,7 +11,11 @@ import {
 import { AggregatedFeedbackScore } from "@/types/shared";
 import { aggregateExperimentMetrics } from "@/lib/experiment-metrics";
 import { getFeedbackScore } from "@/lib/feedback-scores";
-import { Experiment, EVALUATION_METHOD } from "@/types/datasets";
+import {
+  Experiment,
+  EVALUATION_METHOD,
+  EXPERIMENT_TYPE,
+} from "@/types/datasets";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import {
@@ -388,6 +392,74 @@ export const checkIsTestSuite = (experiments: Experiment[]): boolean => {
   return experiments.some(
     (e) => e.evaluation_method === EVALUATION_METHOD.TEST_SUITE,
   );
+};
+
+/**
+ * Legacy mini-batch classification threshold: an experiment counts as a
+ * mini-batch screening eval only when it evaluated fewer than half the items
+ * of the run's largest evaluation. Real mini-batches are ~3-5 items vs ~30
+ * full-eval items (ratio ≲ 0.17), while a full eval that lost a few items to
+ * scoring failures stays well above 0.5 — so partial failures are never
+ * misclassified.
+ */
+const MINI_BATCH_LEGACY_RATIO = 0.5;
+
+const getExperimentItemCount = (experiment: Experiment): number =>
+  experiment.total_count ?? experiment.trace_count ?? 0;
+
+export type SplitExperimentPools = {
+  fullEvalExperiments: Experiment[];
+  miniBatchExperiments: Experiment[];
+};
+
+/**
+ * Split an optimization's experiments into full evaluations vs mini-batch
+ * screening evals, so mini-batch scores never mix into candidate aggregation
+ * or best-score selection (they evaluate ~3-5 items vs ~30 and are not
+ * comparable apples-to-apples).
+ *
+ * New runs tag mini-batches with `type: "mini-batch"` (set by the optimizer
+ * SDK), which is authoritative. Runs recorded before that tagging have every
+ * experiment typed "trial"; for those we fall back to a size heuristic —
+ * experiments that evaluated fewer than half the run's largest item count are
+ * treated as mini-batches. The heuristic never runs when explicit types are
+ * present, and is inert for homogeneous runs (all counts equal).
+ */
+export const splitExperimentsByEvalType = (
+  experiments: Experiment[],
+): SplitExperimentPools => {
+  const hasTypedMiniBatches = experiments.some(
+    (e) => e.type === EXPERIMENT_TYPE.MINI_BATCH,
+  );
+
+  if (hasTypedMiniBatches) {
+    return {
+      fullEvalExperiments: experiments.filter(
+        (e) => e.type !== EXPERIMENT_TYPE.MINI_BATCH,
+      ),
+      miniBatchExperiments: experiments.filter(
+        (e) => e.type === EXPERIMENT_TYPE.MINI_BATCH,
+      ),
+    };
+  }
+
+  const maxItemCount = experiments.reduce(
+    (max, e) => Math.max(max, getExperimentItemCount(e)),
+    0,
+  );
+  if (maxItemCount <= 0) {
+    return { fullEvalExperiments: experiments, miniBatchExperiments: [] };
+  }
+
+  const isLegacyMiniBatch = (e: Experiment) => {
+    const count = getExperimentItemCount(e);
+    return count > 0 && count < maxItemCount * MINI_BATCH_LEGACY_RATIO;
+  };
+
+  return {
+    fullEvalExperiments: experiments.filter((e) => !isLegacyMiniBatch(e)),
+    miniBatchExperiments: experiments.filter(isLegacyMiniBatch),
+  };
 };
 
 export const getOptimizationMetadata = (

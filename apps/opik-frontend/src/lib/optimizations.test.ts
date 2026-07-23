@@ -6,6 +6,7 @@ import {
   extractKwargsKeysFromPython,
   extractRequiredScoreParams,
   extractMetricNameFromCode,
+  splitExperimentsByEvalType,
 } from "./optimizations";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
@@ -897,5 +898,158 @@ describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
     ) as LLMAnthropicConfigsType;
 
     expect(config.temperature).toBeUndefined();
+  });
+});
+
+describe("splitExperimentsByEvalType", () => {
+  it("splits by explicit experiment type when mini-batches are typed", () => {
+    const experiments = [
+      makeExperiment({ id: "full-1", type: EXPERIMENT_TYPE.TRIAL }),
+      makeExperiment({ id: "mb-1", type: EXPERIMENT_TYPE.MINI_BATCH }),
+      makeExperiment({ id: "full-2", type: EXPERIMENT_TYPE.TRIAL }),
+    ];
+
+    const { fullEvalExperiments, miniBatchExperiments } =
+      splitExperimentsByEvalType(experiments);
+
+    expect(fullEvalExperiments.map((e) => e.id)).toEqual(["full-1", "full-2"]);
+    expect(miniBatchExperiments.map((e) => e.id)).toEqual(["mb-1"]);
+  });
+
+  it("never applies the size heuristic when explicit types are present", () => {
+    // A tiny TRIAL-typed experiment stays a full eval when the run carries
+    // typed mini-batches — the explicit type is authoritative.
+    const experiments = [
+      makeExperiment({
+        id: "small-trial",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: 2,
+      }),
+      makeExperiment({
+        id: "big-trial",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: 30,
+      }),
+      makeExperiment({ id: "mb-1", type: EXPERIMENT_TYPE.MINI_BATCH }),
+    ];
+
+    const { fullEvalExperiments } = splitExperimentsByEvalType(experiments);
+
+    expect(fullEvalExperiments.map((e) => e.id)).toEqual([
+      "small-trial",
+      "big-trial",
+    ]);
+  });
+
+  it("classifies legacy runs by relative item count", () => {
+    // Pre-fix runs recorded every eval as "trial"; ~5-item mini-batches must
+    // split away from ~30-item full evals.
+    const experiments = [
+      makeExperiment({
+        id: "full-1",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: 30,
+      }),
+      makeExperiment({
+        id: "mb-1",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: 5,
+      }),
+      makeExperiment({
+        id: "full-2",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: 28,
+      }),
+    ];
+
+    const { fullEvalExperiments, miniBatchExperiments } =
+      splitExperimentsByEvalType(experiments);
+
+    expect(fullEvalExperiments.map((e) => e.id)).toEqual(["full-1", "full-2"]);
+    expect(miniBatchExperiments.map((e) => e.id)).toEqual(["mb-1"]);
+  });
+
+  it("keeps a full eval that lost items to scoring failures", () => {
+    // 20 of 30 scored is above the 0.5 ratio — a partial failure is not a
+    // mini-batch.
+    const experiments = [
+      makeExperiment({
+        id: "full-1",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: 30,
+      }),
+      makeExperiment({
+        id: "partial",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: 20,
+      }),
+    ];
+
+    const { fullEvalExperiments, miniBatchExperiments } =
+      splitExperimentsByEvalType(experiments);
+
+    expect(fullEvalExperiments.map((e) => e.id)).toEqual(["full-1", "partial"]);
+    expect(miniBatchExperiments).toEqual([]);
+  });
+
+  it("is inert for homogeneous legacy runs", () => {
+    const experiments = [
+      makeExperiment({ id: "a", type: EXPERIMENT_TYPE.TRIAL, total_count: 30 }),
+      makeExperiment({ id: "b", type: EXPERIMENT_TYPE.TRIAL, total_count: 30 }),
+    ];
+
+    const { fullEvalExperiments, miniBatchExperiments } =
+      splitExperimentsByEvalType(experiments);
+
+    expect(fullEvalExperiments).toHaveLength(2);
+    expect(miniBatchExperiments).toEqual([]);
+  });
+
+  it("falls back to trace_count and keeps zero-count experiments as full", () => {
+    const experiments = [
+      makeExperiment({
+        id: "full-1",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: undefined,
+        trace_count: 30,
+      }),
+      // An unscored/failed trial (0 items) must keep its full-eval treatment
+      // (it renders as "failed", never as a mini-batch).
+      makeExperiment({
+        id: "failed",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: undefined,
+        trace_count: 0,
+      }),
+      makeExperiment({
+        id: "mb-1",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: undefined,
+        trace_count: 4,
+      }),
+    ];
+
+    const { fullEvalExperiments, miniBatchExperiments } =
+      splitExperimentsByEvalType(experiments);
+
+    expect(fullEvalExperiments.map((e) => e.id)).toEqual(["full-1", "failed"]);
+    expect(miniBatchExperiments.map((e) => e.id)).toEqual(["mb-1"]);
+  });
+
+  it("returns everything as full when no experiment has a count", () => {
+    const experiments = [
+      makeExperiment({
+        id: "a",
+        type: EXPERIMENT_TYPE.TRIAL,
+        total_count: undefined,
+        trace_count: 0,
+      }),
+    ];
+
+    const { fullEvalExperiments, miniBatchExperiments } =
+      splitExperimentsByEvalType(experiments);
+
+    expect(fullEvalExperiments).toHaveLength(1);
+    expect(miniBatchExperiments).toEqual([]);
   });
 });

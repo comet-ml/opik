@@ -26,7 +26,12 @@ export type TrialStatus =
   // A trial that ran but produced no score — the metric/judge failed on it.
   // Distinct from "running" (which means "not scored *yet*"): a "failed" trial
   // is terminal. See computeCandidateStatuses for how this is derived.
-  | "failed";
+  | "failed"
+  // A mini-batch screening eval (~3-5 items vs a ~30-item full eval). Rendered
+  // as a small hollow dot; never a candidate for "best". A mini-batch whose
+  // candidate never earned a full eval renders as "pruned" (Discarded) instead
+  // — it was rejected by the optimizer's acceptance gate.
+  | "minibatch";
 
 export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   baseline: "gray",
@@ -35,6 +40,7 @@ export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   pruned: "pink",
   running: "yellow",
   failed: "red",
+  minibatch: "gray",
 };
 
 // A fuchsia scale encodes trial status on the progress chart: baseline and
@@ -48,6 +54,7 @@ export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
   pruned: "var(--trial-pruned)",
   running: "var(--color-yellow)",
   failed: "var(--color-red)",
+  minibatch: "var(--trial-minibatch)",
 };
 
 /** Best-trial dot colour — darkest in the fuchsia scale (theme-aware, see main.scss). */
@@ -75,9 +82,11 @@ export const getTrialDotColor = ({
   if (isBest) return TRIAL_BEST_COLOR;
   if (isTestSuite) return TRIAL_STATUS_COLORS[status];
   // Dataset runs collapse most statuses to passed, but a failed trial must stay
-  // red (it scored nothing — it is not a passing trial) and pruned stays faded.
+  // red (it scored nothing — it is not a passing trial), pruned stays faded,
+  // and mini-batch screening dots keep their muted colour.
   if (status === "pruned") return TRIAL_STATUS_COLORS.pruned;
   if (status === "failed") return TRIAL_STATUS_COLORS.failed;
+  if (status === "minibatch") return TRIAL_STATUS_COLORS.minibatch;
   return TRIAL_STATUS_COLORS.passed;
 };
 
@@ -89,6 +98,7 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   pruned: "Discarded",
   running: "Running",
   failed: "Failed",
+  minibatch: "Mini-batch eval",
 };
 
 /**
@@ -113,6 +123,8 @@ export const getTrialStatusLabel = (
       return `Running step ${stepIndex}`;
     case "failed":
       return `Failed step ${stepIndex}`;
+    case "minibatch":
+      return `Mini-batch eval, step ${stepIndex}`;
     default:
       return TRIAL_STATUS_LABELS[status];
   }
@@ -149,12 +161,18 @@ export const buildTrialCardModel = ({
   stepIndex,
   isTestSuite,
   isBest,
+  kind,
+  fullEvalItemCount,
 }: {
   candidate: AggregatedCandidate;
   status: TrialStatus;
   stepIndex: number;
   isTestSuite?: boolean;
   isBest?: boolean;
+  /** "minibatch" when the card describes a screening-eval dot. */
+  kind?: "full" | "minibatch";
+  /** Item count of a full evaluation in this run, for the "N of M" row. */
+  fullEvalItemCount?: number;
 }): TrialCardModel => {
   const percentage = isNumber(candidate.score)
     ? formatAsPercentage(candidate.score)
@@ -170,6 +188,18 @@ export const buildTrialCardModel = ({
       value: `${percentage}${fraction}`,
     },
   ];
+  // Surface how many dataset items the evaluation covered so a 5-item
+  // mini-batch and a 30-item full eval never read as equals.
+  if (candidate.totalDatasetItemCount > 0) {
+    const itemCount = candidate.totalDatasetItemCount;
+    rows.push({
+      label: "Items evaluated",
+      value:
+        fullEvalItemCount && fullEvalItemCount > itemCount
+          ? `${itemCount} of ${fullEvalItemCount}`
+          : `${itemCount}`,
+    });
+  }
   if (candidate.latencyP50 != null) {
     rows.push({
       label: "Latency",
@@ -183,9 +213,14 @@ export const buildTrialCardModel = ({
     });
   }
 
+  const isMiniBatch = kind === "minibatch";
   return {
-    title: `Trial #${candidate.trialNumber}`,
-    statusLabel: isBest ? "Best trial" : getTrialStatusLabel(status, stepIndex),
+    title: isMiniBatch ? "Mini-batch eval" : `Trial #${candidate.trialNumber}`,
+    statusLabel: isBest
+      ? "Best trial"
+      : isMiniBatch && status === "pruned"
+        ? `Discarded in step ${stepIndex}`
+        : getTrialStatusLabel(status, stepIndex),
     dotColor: isBest ? TRIAL_BEST_COLOR : TRIAL_STATUS_COLORS[status],
     dotRingColor: isBest ? TRIAL_BEST_RING_COLOR : undefined,
     rows,
@@ -196,6 +231,7 @@ export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
   "baseline",
   "passed",
   "evaluating",
+  "minibatch",
   "pruned",
   "running",
   "failed",
@@ -208,6 +244,67 @@ export type CandidateDataPoint = {
   value: number | null;
   status: TrialStatus;
   name: string;
+  /** "minibatch" for screening-eval dots; absent/"full" for full evaluations. */
+  kind?: "full" | "minibatch";
+};
+
+/**
+ * Suffix appended to a mini-batch point's candidateId on the chart so it never
+ * collides with the full-eval dot of the same candidate (dot positions, hover
+ * and click are all keyed by this id).
+ */
+export const MINI_BATCH_POINT_SUFFIX = "__mb";
+
+/** Strip the mini-batch suffix, recovering the underlying candidate id. */
+export const getBaseCandidateId = (pointId: string): string =>
+  pointId.endsWith(MINI_BATCH_POINT_SUFFIX)
+    ? pointId.slice(0, -MINI_BATCH_POINT_SUFFIX.length)
+    : pointId;
+
+/**
+ * Build chart points for mini-batch screening evals.
+ *
+ * - A mini-batch whose candidate also has a full evaluation renders as a small
+ *   muted "minibatch" dot at that candidate's step.
+ * - A mini-batch whose candidate NEVER got a full evaluation was rejected by
+ *   the optimizer's acceptance gate — it renders as "pruned" (Discarded).
+ * - Points without a full-eval twin are placed at the step of the latest full
+ *   evaluation created before them (the step the search was on), baseline
+ *   step 0 otherwise.
+ */
+export const buildMiniBatchChartPoints = (
+  miniBatchCandidates: AggregatedCandidate[],
+  fullCandidates: AggregatedCandidate[],
+): CandidateDataPoint[] => {
+  if (!miniBatchCandidates.length) return [];
+
+  const fullByCandidateId = new Map(
+    fullCandidates.map((c) => [c.candidateId, c]),
+  );
+  const fullByCreation = fullCandidates
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  const resolveStepIndex = (mb: AggregatedCandidate): number => {
+    const twin = fullByCandidateId.get(mb.candidateId);
+    if (twin) return twin.stepIndex;
+    let step = 0;
+    for (const full of fullByCreation) {
+      if (full.created_at <= mb.created_at) step = full.stepIndex;
+      else break;
+    }
+    return step;
+  };
+
+  return miniBatchCandidates.map((mb) => ({
+    candidateId: `${mb.candidateId}${MINI_BATCH_POINT_SUFFIX}`,
+    stepIndex: resolveStepIndex(mb),
+    parentCandidateIds: [],
+    value: mb.score ?? null,
+    status: fullByCandidateId.has(mb.candidateId) ? "minibatch" : "pruned",
+    name: mb.name,
+    kind: "minibatch" as const,
+  }));
 };
 
 export type ParentChildEdge = {

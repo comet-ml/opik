@@ -17,6 +17,8 @@ type ChartTooltipProps = {
   chartData: CandidateDataPoint[];
   isTestSuite?: boolean;
   bestCandidateId?: string;
+  /** Item count of a full evaluation in this run, for the "N of M" row. */
+  fullEvalItemCount?: number;
   /** Constrain the popover to this element (the chart container) so it flips /
    *  shifts to stay inside the chart rather than overflowing onto surrounding
    *  content. */
@@ -38,6 +40,7 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
   chartData,
   isTestSuite,
   bestCandidateId,
+  fullEvalItemCount,
   boundaryElement,
 }) => {
   const chartPoint = chartData.find(
@@ -73,6 +76,8 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
           stepIndex={stepIndex}
           isTestSuite={isTestSuite}
           isBest={isBest}
+          kind={chartPoint?.kind}
+          fullEvalItemCount={fullEvalItemCount}
         />
       </PopoverContent>
     </Popover>

@@ -10,6 +10,7 @@ import { Spinner } from "@/ui/spinner";
 import OptimizationProgressChartContent from "./OptimizationProgressChartContent";
 import {
   buildCandidateChartData,
+  buildMiniBatchChartPoints,
   type InProgressInfo,
 } from "./optimizationChartUtils";
 
@@ -18,6 +19,8 @@ const CALCULATING_BASELINE_MESSAGE = "Calculating baseline...";
 
 type OptimizationProgressChartContainerProps = {
   candidates: AggregatedCandidate[];
+  /** Mini-batch screening evals (secondary series, visually distinct dots). */
+  miniBatchCandidates?: AggregatedCandidate[];
   bestCandidateId?: string;
   objectiveName?: string;
   status?: OPTIMIZATION_STATUS;
@@ -37,6 +40,7 @@ const OptimizationProgressChartContainer: React.FC<
   OptimizationProgressChartContainerProps
 > = ({
   candidates,
+  miniBatchCandidates,
   bestCandidateId,
   status,
   objectiveName = "",
@@ -55,16 +59,28 @@ const OptimizationProgressChartContainer: React.FC<
     ? CALCULATING_BASELINE_MESSAGE
     : INITIALIZING_MESSAGE;
 
-  const chartData = useMemo(
-    () =>
-      buildCandidateChartData(
-        candidates,
-        isTestSuite,
-        isInProgress,
-        inProgressInfo,
-      ),
-    [candidates, isTestSuite, isInProgress, inProgressInfo],
-  );
+  const chartData = useMemo(() => {
+    const fullPoints = buildCandidateChartData(
+      candidates,
+      isTestSuite,
+      isInProgress,
+      inProgressInfo,
+    );
+    // Mini-batch points join the same dataset (they share axes and the
+    // hover/click machinery) but carry kind="minibatch" so they render as
+    // small hollow dots, never join the trend line, and never become "best".
+    const miniBatchPoints = buildMiniBatchChartPoints(
+      miniBatchCandidates ?? [],
+      candidates,
+    );
+    return [...fullPoints, ...miniBatchPoints];
+  }, [
+    candidates,
+    miniBatchCandidates,
+    isTestSuite,
+    isInProgress,
+    inProgressInfo,
+  ]);
 
   const noData = useMemo(
     () => chartData.every((d) => isNull(d.value)),
@@ -100,6 +116,7 @@ const OptimizationProgressChartContainer: React.FC<
       <OptimizationProgressChartContent
         chartData={chartData}
         candidates={candidates}
+        miniBatchCandidates={miniBatchCandidates}
         bestCandidateId={bestCandidateId}
         objectiveName={objectiveName}
         selectedTrialId={selectedTrialId}

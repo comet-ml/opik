@@ -12,6 +12,7 @@ import {
   getBaselineCandidate,
   aggregateCandidates,
   mergeExperimentScores,
+  splitExperimentsByEvalType,
 } from "@/lib/optimizations";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 
@@ -58,7 +59,11 @@ export const useOptimizationExperiments = () => {
       optimizationId: optimizationId,
       sorting: [{ id: "created_at", desc: false }],
       forceSorting: true,
-      types: [EXPERIMENT_TYPE.TRIAL],
+      // Mini-batches are loaded alongside full evals but are split into their
+      // own pool below — they must never enter candidate aggregation or any
+      // best-score selection (5-item screening scores are not comparable with
+      // 30-item full evaluations).
+      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
       page: 1,
       size: MAX_EXPERIMENTS_LOADED,
     },
@@ -130,9 +135,27 @@ export const useOptimizationExperiments = () => {
     });
   }, [data?.content, isTestSuite, optimization?.objective_name]);
 
+  // Split BEFORE aggregation: mini-batch experiments for the same candidate
+  // would otherwise blend into its full-eval score (aggregation is
+  // trace-weighted), corrupting the chart and every "best" computation.
+  const { fullEvalExperiments, miniBatchExperiments } = useMemo(
+    () => splitExperimentsByEvalType(experiments),
+    [experiments],
+  );
+
   const candidates = useMemo(
-    () => aggregateCandidates(experiments, optimization?.objective_name),
-    [experiments, optimization?.objective_name],
+    () =>
+      aggregateCandidates(fullEvalExperiments, optimization?.objective_name),
+    [fullEvalExperiments, optimization?.objective_name],
+  );
+
+  // Mini-batch screening evals, aggregated per candidate within their own
+  // pool. Rendered as a visually distinct secondary chart series; never a
+  // source for best prompt / best score.
+  const miniBatchCandidates = useMemo(
+    () =>
+      aggregateCandidates(miniBatchExperiments, optimization?.objective_name),
+    [miniBatchExperiments, optimization?.objective_name],
   );
 
   const inProgressInfo = useMemo(() => {
@@ -160,7 +183,7 @@ export const useOptimizationExperiments = () => {
   }, [isInProgress, latestExperimentData?.content]);
 
   const { scoreMap, baseScore, bestExperiment } = useOptimizationScores(
-    experiments,
+    fullEvalExperiments,
     optimization?.objective_name,
   );
 
@@ -194,12 +217,14 @@ export const useOptimizationExperiments = () => {
   }, [bestCandidate, baselineCandidate]);
 
   const baselineExperiment = useMemo(() => {
-    if (!experiments.length) return undefined;
-    const sortedRows = experiments
+    // Baseline = earliest FULL evaluation; a mini-batch screening eval that
+    // happens to be recorded first must never stand in as the baseline.
+    if (!fullEvalExperiments.length) return undefined;
+    const sortedRows = fullEvalExperiments
       .slice()
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
     return sortedRows[0];
-  }, [experiments]);
+  }, [fullEvalExperiments]);
 
   const handleRefresh = useCallback(() => {
     refetchOptimization();
@@ -211,7 +236,9 @@ export const useOptimizationExperiments = () => {
     optimizationId,
     optimization,
     experiments,
+    fullEvalExperiments,
     candidates,
+    miniBatchCandidates,
     isTestSuite,
     scoreMap,
     baseScore,

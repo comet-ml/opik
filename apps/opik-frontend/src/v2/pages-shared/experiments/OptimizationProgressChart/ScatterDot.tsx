@@ -14,6 +14,9 @@ import {
   DOT_BEST_RING_WIDTH,
   DOT_STROKE_WIDTH,
   DOT_STROKE_COLOR,
+  MINI_BATCH_DOT_RADIUS,
+  MINI_BATCH_DOT_STROKE_WIDTH,
+  MINI_BATCH_DOT_OPACITY,
   BEST_LABEL_WIDTH,
   BEST_LABEL_HEIGHT,
   BEST_LABEL_BORDER_RADIUS,
@@ -62,6 +65,7 @@ const useScatterDot = ({
       const pxOffset = overlapOffsets.get(payload.candidateId) ?? 0;
       const cx = rawCx + pxOffset;
       const isBest = payload.candidateId === bestCandidateId;
+      const isMiniBatch = payload.kind === "minibatch";
       const color = getTrialDotColor({
         status: payload.status,
         isBest,
@@ -74,6 +78,24 @@ const useScatterDot = ({
       const radius = getDotRadius({ isBest, isHovered });
 
       dotPositionsRef.current.set(payload.candidateId, { cx, cy });
+
+      // Mini-batch screening evals render as small hollow rings so they read
+      // as search activity, visually subordinate to the solid full-eval dots.
+      if (isMiniBatch) {
+        return (
+          <g key={payload.candidateId} pointerEvents="none">
+            <circle
+              cx={cx}
+              cy={cy}
+              r={MINI_BATCH_DOT_RADIUS + (isHovered ? 1 : 0)}
+              fill={DOT_STROKE_COLOR}
+              stroke={color}
+              strokeWidth={MINI_BATCH_DOT_STROKE_WIDTH}
+              opacity={MINI_BATCH_DOT_OPACITY}
+            />
+          </g>
+        );
+      }
 
       return (
         <g key={payload.candidateId} pointerEvents="none">

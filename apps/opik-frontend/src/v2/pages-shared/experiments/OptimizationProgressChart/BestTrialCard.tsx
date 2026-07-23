@@ -14,6 +14,8 @@ type UseBestTrialCardParams = {
   candidateMap: Map<string, AggregatedCandidate>;
   chartData: CandidateDataPoint[];
   isTestSuite?: boolean;
+  /** Item count of a full evaluation in this run, for the "N of M" row. */
+  fullEvalItemCount?: number;
   /** Skip rendering entirely (e.g. while the trial sidebar is open). */
   suppress?: boolean;
 };
@@ -36,6 +38,7 @@ const useBestTrialCard = ({
   candidateMap,
   chartData,
   isTestSuite,
+  fullEvalItemCount,
   suppress = false,
 }: UseBestTrialCardParams) =>
   useCallback(() => {
@@ -59,6 +62,7 @@ const useBestTrialCard = ({
         chartData={chartData}
         isTestSuite={isTestSuite}
         bestCandidateId={bestCandidateId}
+        fullEvalItemCount={fullEvalItemCount}
         boundaryElement={containerRef.current}
       />,
       containerRef.current,
@@ -71,6 +75,7 @@ const useBestTrialCard = ({
     candidateMap,
     chartData,
     isTestSuite,
+    fullEvalItemCount,
     suppress,
   ]);
 
