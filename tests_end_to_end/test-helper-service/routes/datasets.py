@@ -59,7 +59,13 @@ def create_test_suite_dataset():
     try:
         test_suite = client.get_or_create_test_suite(name=data["name"], project_name=data["project_name"])
         return jsonify({"id": test_suite.id, "name": test_suite.name})
-    except ApiError:
+    except ApiError as e:
+        # get_or_create_test_suite races on the get-then-create path: if another
+        # worker creates the suite between our 404 and our create() call, the
+        # create() 409 propagates here uncaught.
+        if e.status_code == 409:
+            test_suite = client.get_test_suite(data["name"], project_name=data["project_name"])
+            return jsonify({"id": test_suite.id, "name": test_suite.name})
         logger.exception("Error creating test suite dataset")
         return jsonify({"error": "An internal error occurred"}), 500
 
