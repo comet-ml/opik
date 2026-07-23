@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.antropic;
 import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Set;
 
@@ -56,11 +57,12 @@ public enum AnthropicModelName implements StructuredOutputSupported {
 
     /**
      * Whether the model accepts sampling params (temperature/top_p/top_k). Adaptive-thinking models
-     * reject them with a 400 and are opted out explicitly. Unknown model names default to {@code true}
-     * so registry-only Anthropic models (not enumerated here) keep temperature support.
+     * reject them with a 400 and are opted out explicitly. Unknown model names — including
+     * {@code null} or blank — default to {@code true} so registry-only Anthropic models (not
+     * enumerated here) keep temperature support.
      */
     public static boolean supportsSamplingParams(String modelName) {
-        return !ADAPTIVE_THINKING_MODEL_IDS.contains(modelName);
+        return StringUtils.isBlank(modelName) || !ADAPTIVE_THINKING_MODEL_IDS.contains(modelName);
     }
 
     @Override

@@ -51,6 +51,11 @@ class AnthropicClientGeneratorTest {
             assertThat(AnthropicModelName.supportsSamplingParams(modelName)).isTrue();
         }
 
+        @Test
+        void supportsSamplingParamsDefaultsTrueForNullModel() {
+            assertThat(AnthropicModelName.supportsSamplingParams(null)).isTrue();
+        }
+
         /**
          * Regression guard for #7526 / #7531 → #7582. The adaptive-thinking opt-out must NOT be
          * encoded as a per-constant argument in the enum constant list, because that list is
