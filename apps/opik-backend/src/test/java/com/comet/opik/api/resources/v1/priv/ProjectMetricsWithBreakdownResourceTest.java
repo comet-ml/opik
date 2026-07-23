@@ -753,7 +753,7 @@ class ProjectMetricsWithBreakdownResourceTest {
 
             traces.forEach(trace -> {
                 var template = guardrailsGenerator
-                        .generateGuardrailsForTrace(trace.id(), UUID.randomUUID(), projectName).getFirst();
+                        .generateGuardrailsForTrace(trace.id(), idGenerator.generateId(), projectName).getFirst();
                 var guardrails = List.of(
                         template.toBuilder().name(GuardrailType.TOPIC).result(GuardrailResult.FAILED).build(),
                         template.toBuilder().name(GuardrailType.PII).result(GuardrailResult.FAILED).build());

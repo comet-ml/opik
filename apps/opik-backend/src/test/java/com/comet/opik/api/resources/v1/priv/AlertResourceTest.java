@@ -1837,7 +1837,7 @@ class AlertResourceTest {
                     .projectName(projectName).usage(null).visibilityMode(null).build();
             traceResourceClient.createTrace(topicTrace, mock.getLeft(), mock.getRight());
             Guardrail topicGuardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
-                    .entityId(topicTrace.id()).secondaryId(UUID.randomUUID())
+                    .entityId(topicTrace.id()).secondaryId(idGenerator.generateId())
                     .projectName(projectName).name(GuardrailType.TOPIC).result(GuardrailResult.FAILED).build();
             guardrailsResourceClient.addBatch(List.of(topicGuardrail), mock.getLeft(), mock.getRight());
 
@@ -1854,7 +1854,7 @@ class AlertResourceTest {
                     .projectName(projectName).usage(null).visibilityMode(null).build();
             traceResourceClient.createTrace(piiTrace, mock.getLeft(), mock.getRight());
             Guardrail piiGuardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
-                    .entityId(piiTrace.id()).secondaryId(UUID.randomUUID())
+                    .entityId(piiTrace.id()).secondaryId(idGenerator.generateId())
                     .projectName(projectName).name(GuardrailType.PII).result(GuardrailResult.FAILED).build();
             guardrailsResourceClient.addBatch(List.of(piiGuardrail), mock.getLeft(), mock.getRight());
 
