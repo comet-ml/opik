@@ -22,6 +22,7 @@ def create_message_processors_chain(
     fallback_replay_manager: replay_manager.ReplayManager,
     unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
     data_loss_tracker: data_loss.DataLossTracker,
+    max_payload_size_mb: Optional[float] = None,
 ) -> message_processors.ChainedMessageProcessor:
     """
     Creates a chain of message processors by combining an online processor and a
@@ -42,6 +43,11 @@ def create_message_processors_chain(
             processor.
         unauthorized_message_types_registry: Unauthorized message types registry instance used
             to configure the online message processor.
+        max_payload_size_mb: Per-object size limit in MB for spans **and** traces, applied by the
+            online processor right before sending. An ``input``/``output`` field over the limit -
+            or the two together over it - is replaced with a truncation marker (a warning logged).
+            ``metadata`` is never truncated and is excluded from the measurement. ``None`` or a
+            value ``<= 0`` disables the check (no truncation).
 
     Returns:
         A chained message processor containing the online and local emulator processors.
@@ -52,6 +58,7 @@ def create_message_processors_chain(
         fallback_replay_manager=fallback_replay_manager,
         unauthorized_message_types_registry=unauthorized_message_types_registry,
         data_loss_tracker=data_loss_tracker,
+        max_payload_size_mb=max_payload_size_mb,
     )
     # is not active by default - will be activated during evaluation
     local = local_emulator_message_processor.LocalEmulatorMessageProcessor(active=False)
