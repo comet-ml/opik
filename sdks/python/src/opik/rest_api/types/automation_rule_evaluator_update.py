@@ -7,6 +7,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .automation_rule_evaluator_update_action import AutomationRuleEvaluatorUpdateAction
+from .automation_rule_evaluator_update_trigger_scope import AutomationRuleEvaluatorUpdateTriggerScope
 from .llm_as_judge_code import LlmAsJudgeCode
 from .span_filter import SpanFilter
 from .span_llm_as_judge_code import SpanLlmAsJudgeCode
@@ -22,6 +23,7 @@ class Base(UniversalBaseModel):
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None
+    trigger_scope: typing.Optional[AutomationRuleEvaluatorUpdateTriggerScope] = None
     project_id: typing.Optional[str] = pydantic.Field(default=None)
     """
     Primary project ID (legacy field, maintained for backwards compatibility)
