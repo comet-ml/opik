@@ -72,6 +72,10 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.SentinelTranslation.epochToNull;
+import static com.comet.opik.utils.SentinelTranslation.nanToNull;
+import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
+import static com.comet.opik.utils.SentinelTranslation.nullToNaN;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
 
@@ -228,7 +232,7 @@ public class SpanDAO {
                     new_span.start_time
                 ) as start_time,
                 multiIf(
-                    isNotNull(old_span.end_time), old_span.end_time,
+                    notEquals(old_span.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_span.end_time >= toDateTime64('1970-01-01 00:00:00.000', 9), old_span.end_time,
                     new_span.end_time
                 ) as end_time,
                 multiIf(
@@ -290,7 +294,7 @@ public class SpanDAO {
                     new_span.output_slim
                 ) as output_slim,
                 multiIf(
-                    isNotNull(old_span.ttft), old_span.ttft,
+                    old_span.id != '' AND NOT isNaN(old_span.ttft), old_span.ttft,
                     new_span.ttft
                 ) as ttft,
                 multiIf(
@@ -311,7 +315,7 @@ public class SpanDAO {
                     :name as name,
                     :type as type,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
-                    <if(end_time)> parseDateTime64BestEffort(:end_time, 9) as end_time, <else> null as end_time, <endif>
+                    parseDateTime64BestEffort(:end_time, 9) as end_time,
                     :input as input,
                     :output as output,
                     :metadata as metadata,
@@ -543,8 +547,8 @@ public class SpanDAO {
                     new_span.output_slim
                 ) as output_slim,
                 multiIf(
-                    isNotNull(new_span.ttft), new_span.ttft,
-                    isNotNull(old_span.ttft), old_span.ttft,
+                    NOT isNaN(new_span.ttft), new_span.ttft,
+                    old_span.id != '' AND NOT isNaN(old_span.ttft), old_span.ttft,
                     new_span.ttft
                 ) as ttft,
                 multiIf(
@@ -565,7 +569,7 @@ public class SpanDAO {
                     <if(name)> :name <else> '' <endif> as name,
                     <if(type)> :type <else> 'unknown' <endif> as type,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
-                    <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> null <endif> as end_time,
+                    parseDateTime64BestEffort(:end_time, 9) as end_time,
                     <if(input)> :input <else> '' <endif> as input,
                     <if(output)> :output <else> '' <endif> as output,
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
@@ -582,7 +586,7 @@ public class SpanDAO {
                     :truncation_threshold as truncation_threshold,
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
                     <if(output)> :output_slim <else> '' <endif> as output_slim,
-                    <if(ttft)> :ttft <else> null <endif> as ttft,
+                    :ttft as ttft,
                     :source as source,
                     <if(environment)> :environment <else> '' <endif> as environment
             ) as new_span
@@ -1763,6 +1767,14 @@ public class SpanDAO {
     // 1.1 - Added cached tokens for OpenAI
     private static final String ESTIMATED_COST_VERSION = "1.1";
 
+    /**
+     * Sort mapping applied under {@code spanColumnsNonNullable}: {@code nullIf} restores an absent (epoch)
+     * {@code end_time} to {@code NULL} so it sorts last in ASC like a Nullable column did. Mirrors the trace-side
+     * mapping; {@code duration} needs no entry — ClickHouse sorts {@code NaN} like {@code NULL}.
+     */
+    private static final Map<String, String> SORT_FIELD_MAPPING_END_TIME_SENTINEL = Map.of(
+            SortableFields.END_TIME, "nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9))");
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SpanSortingFactory sortingFactory;
@@ -1827,11 +1839,7 @@ public class SpanDAO {
                         .bind("input_slim" + i, TruncationUtils.createSlimJsonString(inputValue))
                         .bind("output_slim" + i, TruncationUtils.createSlimJsonString(outputValue));
 
-                if (span.endTime() != null) {
-                    statement.bind("end_time" + i, ClickHouseDateTimeFormat.formatNanos(span.endTime()));
-                } else {
-                    statement.bindNull("end_time" + i, String.class);
-                }
+                bindEpochSentinel(statement, "end_time" + i, span.endTime());
 
                 statement.bind("usage" + i, UsageUtils.sanitizeUsage(span.usage()));
 
@@ -1854,11 +1862,7 @@ public class SpanDAO {
                                 ? ESTIMATED_COST_VERSION
                                 : "");
 
-                if (span.ttft() != null) {
-                    statement.bind("ttft" + i, span.ttft());
-                } else {
-                    statement.bindNull("ttft" + i, Double.class);
-                }
+                bindNanSentinel(statement, "ttft" + i, span.ttft());
 
                 if (span.source() != null) {
                     statement.bind("source" + i, span.source().getValue());
@@ -1882,7 +1886,7 @@ public class SpanDAO {
 
     private Publisher<? extends Result> insert(Span span, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = newInsertTemplate(span, workspaceId, userName);
+            var template = newInsertTemplate(workspaceId, userName);
             String inputValue = TruncationUtils.toJsonString(span.input());
             String outputValue = TruncationUtils.toJsonString(span.output());
             var statement = connection.createStatement(template.render())
@@ -1904,9 +1908,7 @@ public class SpanDAO {
             } else {
                 statement.bind("parent_span_id", "");
             }
-            if (span.endTime() != null) {
-                statement.bind("end_time", span.endTime().toString());
-            }
+            bindEpochSentinel(statement, "end_time", span.endTime());
 
             if (span.tags() != null) {
                 statement.bind("tags", span.tags().toArray(String[]::new));
@@ -1942,11 +1944,7 @@ public class SpanDAO {
 
             bindCost(span, statement, "");
 
-            if (span.ttft() != null) {
-                statement.bind("ttft", span.ttft());
-            } else {
-                statement.bindNull("ttft", Double.class);
-            }
+            bindNanSentinel(statement, "ttft", span.ttft());
 
             if (span.source() != null) {
                 statement.bind("source", span.source().getValue());
@@ -1965,14 +1963,61 @@ public class SpanDAO {
         });
     }
 
-    private ST newInsertTemplate(Span span, String workspaceId, String userName) {
-        var template = getSTWithLogComment(INSERT, "insert_span", workspaceId, userName, "");
-        Optional.ofNullable(span.endTime())
-                .ifPresent(endTime -> template.add("end_time", endTime));
-        Optional.ofNullable(span.ttft())
-                .ifPresent(ttft -> template.add("ttft", ttft));
+    private boolean spanColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
+    }
 
-        return template;
+    /**
+     * Binds a {@code DateTime64} write parameter, applying the epoch sentinel for an absent value once the column is
+     * non-nullable (a {@code null} bind would be rejected); while still Nullable an absent value binds {@code null}.
+     * The span sibling of the trace-side helper.
+     */
+    private void bindEpochSentinel(Statement statement, String parameter, Instant value) {
+        if (spanColumnsNonNullable()) {
+            statement.bind(parameter, ClickHouseDateTimeFormat.formatNanos(nullToEpoch(value)));
+        } else if (value != null) {
+            statement.bind(parameter, ClickHouseDateTimeFormat.formatNanos(value));
+        } else {
+            statement.bindNull(parameter, String.class);
+        }
+    }
+
+    /**
+     * Binds a {@code Float64} write parameter, applying the {@code NaN} sentinel for an absent value once the column is
+     * non-nullable; while still Nullable an absent value binds {@code null}.
+     */
+    private void bindNanSentinel(Statement statement, String parameter, Double value) {
+        if (spanColumnsNonNullable()) {
+            statement.bind(parameter, nullToNaN(value));
+        } else if (value != null) {
+            statement.bind(parameter, value);
+        } else {
+            statement.bindNull(parameter, Double.class);
+        }
+    }
+
+    /**
+     * Reads a {@code DateTime64} column, translating the epoch sentinel to {@code null} only once the columns are
+     * non-nullable. While still {@code Nullable} the value is returned as-is so a legitimate epoch timestamp is
+     * preserved (the column distinguishes it from {@code null}). Symmetric with the flag-gated write binding.
+     */
+    private Instant readEpochSentinel(Set<SpanField> exclude, SpanField field, Row row, String fieldName) {
+        var value = getValue(exclude, field, row, fieldName, Instant.class);
+        return spanColumnsNonNullable() ? epochToNull(value) : value;
+    }
+
+    /**
+     * Reads a {@code Float64} column and maps the {@code NaN} sentinel to {@code null}. No flag is needed (unlike
+     * {@code end_time}): neither {@code duration} (materialized, never {@code NaN} today) nor {@code ttft} (cannot
+     * arrive as {@code NaN} via JSON) is ever {@code NaN} while the column is still {@code Nullable}, so the
+     * translation is always a no-op today and correct once the column is non-nullable.
+     */
+    private Double readNanSentinel(Set<SpanField> exclude, SpanField field, Row row, String fieldName) {
+        return nanToNull(getValue(exclude, field, row, fieldName, Double.class));
+    }
+
+    private ST newInsertTemplate(String workspaceId, String userName) {
+        return getSTWithLogComment(INSERT, "insert_span", workspaceId, userName, "");
     }
 
     @WithSpan
@@ -2003,6 +2048,12 @@ public class SpanDAO {
                     }
 
                     bindUpdateParams(spanUpdate, statement, false);
+
+                    // PARTIAL_INSERT builds the full new_span row, so end_time/ttft are referenced unconditionally and
+                    // must always be bound (sentinel or null for an absent value) — unlike the conditional UPDATE
+                    // keep-column path.
+                    bindEpochSentinel(statement, "end_time", spanUpdate.endTime());
+                    bindNanSentinel(statement, "ttft", spanUpdate.ttft());
 
                     if (spanUpdate.source() != null) {
                         statement.bind("source", spanUpdate.source().getValue());
@@ -2350,7 +2401,7 @@ public class SpanDAO {
                         null))
                 .type(SpanType.fromString(getValue(exclude, SpanField.TYPE, row, "type", String.class)))
                 .startTime(getValue(exclude, SpanField.START_TIME, row, "start_time", Instant.class))
-                .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
+                .endTime(readEpochSentinel(exclude, SpanField.END_TIME, row, "end_time"))
                 .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated",
@@ -2402,8 +2453,8 @@ public class SpanDAO {
                 .createdBy(getValue(exclude, SpanField.CREATED_BY, row, "created_by", String.class))
                 .lastUpdatedBy(
                         getValue(exclude, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
-                .duration(getValue(exclude, SpanField.DURATION, row, "duration", Double.class))
-                .ttft(getValue(exclude, SpanField.TTFT, row, "ttft", Double.class))
+                .duration(readNanSentinel(exclude, SpanField.DURATION, row, "duration"))
+                .ttft(readNanSentinel(exclude, SpanField.TTFT, row, "ttft"))
                 .source(Optional.ofNullable(
                         getValue(exclude, SpanField.SOURCE, row, "source", String.class))
                         .flatMap(Source::fromString)
@@ -2538,7 +2589,8 @@ public class SpanDAO {
 
             addSortNeedsWideFlag(template, spanSearchCriteria.sortingFields());
 
-            var orderBySql = sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields());
+            var orderBySql = sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields(),
+                    spanColumnsNonNullable() ? SORT_FIELD_MAPPING_END_TIME_SENTINEL : null);
             boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)
                     .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
@@ -2655,7 +2707,7 @@ public class SpanDAO {
                 .ifPresent(type -> template.add("type", type.toString()));
         Optional.ofNullable(spanSearchCriteria.filters())
                 .ifPresent(filters -> {
-                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN, spanColumnsNonNullable())
                             .ifPresent(spanFilters -> template.add("filters", spanFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));

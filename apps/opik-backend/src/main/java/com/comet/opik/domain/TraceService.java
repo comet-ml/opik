@@ -322,7 +322,7 @@ class TraceServiceImpl implements TraceService {
         var projectName = WorkspaceUtils.getProjectName(traceUpdate.projectName());
 
         return Mono.deferContextual(ctx -> idGenerator
-                .validateIdForUpdateAsync(id, TRACE_KEY)
+                .validateIdNotInFutureAsync(id, TRACE_KEY)
                 .then(getProjectById(traceUpdate)
                         .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                         .subscribeOn(Schedulers.boundedElastic())

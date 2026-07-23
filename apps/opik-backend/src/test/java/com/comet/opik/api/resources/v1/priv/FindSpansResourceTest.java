@@ -1506,7 +1506,7 @@ class FindSpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = generator.generate().toString();
-            var traceId = UUID.randomUUID();
+            var traceId = generator.generate();
 
             // Create 5 spans with the same trace_id (these should be returned by the filter)
             var expectedSpanCount = 5;
@@ -1528,7 +1528,7 @@ class FindSpansResourceTest {
                     .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .traceId(UUID.randomUUID())
+                            .traceId(generator.generate())
                             .name("other-span-" + i)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)

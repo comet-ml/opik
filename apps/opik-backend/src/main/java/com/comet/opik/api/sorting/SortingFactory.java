@@ -30,6 +30,12 @@ public abstract class SortingFactory {
             throw new BadRequestException(ERR_INVALID_SORTING_PARAM_TEMPLATE.formatted(queryParam), exception);
         }
 
+        // Drop entries with a null/blank field before any per-field processing. Subclass
+        // processFields hooks (e.g. SortingFactoryDatasets.ensureBindKeyParam) and the validity
+        // check dereference the field, and immutable getSortableFields().contains(null) /
+        // field.startsWith(...) both throw NPE on a null field.
+        sorting = sorting.stream().filter(field -> StringUtils.isNotBlank(field.field())).toList();
+
         // Hook for subclasses to process fields after deserialization
         sorting = processFields(sorting);
 

@@ -13,6 +13,8 @@ from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
+from ..types.error_info import ErrorInfo
+from ..types.error_info_write import ErrorInfoWrite
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.optimization_page_public import OptimizationPagePublic
@@ -125,6 +127,7 @@ class RawOptimizationsClient:
         project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -153,6 +156,8 @@ class RawOptimizationsClient:
 
         studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
+        error_info : typing.Optional[ErrorInfoWrite]
+
         last_updated_at : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
@@ -178,6 +183,9 @@ class RawOptimizationsClient:
                 ),
                 "studio_config": convert_and_respect_annotation_metadata(
                     object_=studio_config, annotation=OptimizationStudioConfigWrite, direction="write"
+                ),
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
             },
@@ -207,6 +215,7 @@ class RawOptimizationsClient:
         project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -235,6 +244,8 @@ class RawOptimizationsClient:
 
         studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
+        error_info : typing.Optional[ErrorInfoWrite]
+
         last_updated_at : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
@@ -260,6 +271,9 @@ class RawOptimizationsClient:
                 ),
                 "studio_config": convert_and_respect_annotation_metadata(
                     object_=studio_config, annotation=OptimizationStudioConfigWrite, direction="write"
+                ),
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
             },
@@ -369,6 +383,7 @@ class RawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         metadata: typing.Optional[JsonListString] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -382,6 +397,8 @@ class RawOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
+
+        error_info : typing.Optional[ErrorInfo]
 
         metadata : typing.Optional[JsonListString]
 
@@ -398,6 +415,9 @@ class RawOptimizationsClient:
             json={
                 "name": name,
                 "status": status,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfo, direction="write"
+                ),
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListString, direction="write"
                 ),
@@ -565,6 +585,7 @@ class AsyncRawOptimizationsClient:
         project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -593,6 +614,8 @@ class AsyncRawOptimizationsClient:
 
         studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
+        error_info : typing.Optional[ErrorInfoWrite]
+
         last_updated_at : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
@@ -618,6 +641,9 @@ class AsyncRawOptimizationsClient:
                 ),
                 "studio_config": convert_and_respect_annotation_metadata(
                     object_=studio_config, annotation=OptimizationStudioConfigWrite, direction="write"
+                ),
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
             },
@@ -647,6 +673,7 @@ class AsyncRawOptimizationsClient:
         project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -675,6 +702,8 @@ class AsyncRawOptimizationsClient:
 
         studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
+        error_info : typing.Optional[ErrorInfoWrite]
+
         last_updated_at : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
@@ -700,6 +729,9 @@ class AsyncRawOptimizationsClient:
                 ),
                 "studio_config": convert_and_respect_annotation_metadata(
                     object_=studio_config, annotation=OptimizationStudioConfigWrite, direction="write"
+                ),
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
             },
@@ -809,6 +841,7 @@ class AsyncRawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         metadata: typing.Optional[JsonListString] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -822,6 +855,8 @@ class AsyncRawOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
+
+        error_info : typing.Optional[ErrorInfo]
 
         metadata : typing.Optional[JsonListString]
 
@@ -838,6 +873,9 @@ class AsyncRawOptimizationsClient:
             json={
                 "name": name,
                 "status": status,
+                "error_info": convert_and_respect_annotation_metadata(
+                    object_=error_info, annotation=ErrorInfo, direction="write"
+                ),
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListString, direction="write"
                 ),

@@ -80,6 +80,7 @@ public class OptimizationStalledReaperJob extends Job implements InterruptableJo
                     return optimizationService.reconcileStalledStudioOptimizations(
                             config.initializedTimeout().toJavaDuration(),
                             config.runningTimeout().toJavaDuration(),
+                            config.lookbackMargin().toJavaDuration(),
                             config.batchSize())
                             .doOnSuccess(count -> {
                                 if (count > 0) {

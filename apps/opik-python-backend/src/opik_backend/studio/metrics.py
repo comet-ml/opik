@@ -61,7 +61,7 @@ from .exceptions import InvalidMetricError
 
 logger = logging.getLogger(__name__)
 
-_JSONPATH_PATTERN = re.compile(r'[\[$?@]|\.\.')
+_JSONPATH_PATTERN = re.compile(r"[\[$?@]|\.\.")
 
 
 def _is_jsonpath(key: str) -> bool:
@@ -89,7 +89,9 @@ def _resolve_reference(dataset_item: dict, reference_key: str, default=""):
             return matches[0]
         return default
     except Exception as e:
-        logger.warning(f"JSONPath parse error for '{reference_key}': {e}, falling back to dict lookup")
+        logger.warning(
+            f"JSONPath parse error for '{reference_key}': {e}, falling back to dict lookup"
+        )
         return dataset_item.get(reference_key, default)
 
 
@@ -108,12 +110,14 @@ def _reference_key_resolves(dataset_item: Any, reference_key: str) -> bool:
 
 def _available_fields_hint(dataset_items: List[Any]) -> str:
     """A ', '-joined sample of top-level field names, for error messages."""
-    fields = sorted({
-        key
-        for item in dataset_items[:20]
-        if isinstance(item, dict)
-        for key in item.keys()
-    })
+    fields = sorted(
+        {
+            key
+            for item in dataset_items[:20]
+            if isinstance(item, dict)
+            for key in item.keys()
+        }
+    )
     return ", ".join(fields) or "(none)"
 
 
@@ -193,7 +197,9 @@ def _validate_reference_key_resolves(
     # report it before the generic "no field matched" message.
     _raise_if_malformed_jsonpath(metric_type, reference_key)
     raise _reference_key_error(
-        metric_type, reference_key, dataset_items,
+        metric_type,
+        reference_key,
+        dataset_items,
         "did not resolve against any dataset item",
     )
 
@@ -225,18 +231,18 @@ _code_metric_executor: Optional[CodeExecutorBase] = None
 
 def _run_code_metric(code: str, data: dict) -> dict:
     """Execute code metric using the appropriate executor strategy.
-    
+
     Reuses the automations evaluator infrastructure (opik_backend.evaluator) while
     respecting the architectural constraints of running in optimization subprocesses.
-    
+
     Security Strategy (controlled by PYTHON_CODE_EXECUTOR_STRATEGY env var):
-    
+
     'docker' strategy (multi-tenant environments):
       - Uses DockerExecutor.run_scoring() for full container sandboxing
       - Inherits pre-allocated sandbox environments
       - Configured timeouts, concurrency via env vars
       - Same executor used by opik_backend.evaluator.execute_evaluator_python
-    
+
     'process' strategy (local/self-hosted environments):
       - Uses run_user_code() directly from opik_backend.process_worker
       - Same core security logic as ProcessExecutor (exec in isolated namespace)
@@ -247,70 +253,81 @@ def _run_code_metric(code: str, data: dict) -> dict:
         * run_user_code() provides same isolation without nested pools
         * ProcessExecutor's throughput/concurrency configs are irrelevant since
           metrics execute sequentially in the optimization subprocess
-    
+
     This hybrid approach reuses the executor infrastructure while respecting
     the architectural reality that optimization jobs run in isolated subprocesses.
-    
+
     Args:
         code: Python code containing a BaseMetric subclass
         data: Dictionary with 'output' (LLM response) and dataset_item fields
-        
+
     Returns:
         Response dict with 'scores' list on success, or 'error' key on failure
     """
     global _code_metric_executor
-    
+
     if EXECUTION_STRATEGY == "docker":
         # Multi-tenant: Use DockerExecutor for full container sandboxing
         if _code_metric_executor is None:
             from opik_backend.executor_docker import DockerExecutor
+
             _code_metric_executor = DockerExecutor()
-            logger.info("Created DockerExecutor for code metrics (multi-tenant isolation)")
+            logger.info(
+                "Created DockerExecutor for code metrics (multi-tenant isolation)"
+            )
         return _code_metric_executor.run_scoring(code, data)
-    
+
     else:
         # Local/self-hosted (process strategy): Use run_user_code directly
         # This is the same core logic used by ProcessExecutor, but without creating
         # a worker pool (which would fail in the nested subprocess context)
         from opik_backend.process_worker import run_user_code
+
         return run_user_code(code, data)
 
 
 class MetricFactory:
     """Factory for creating metric functions from config.
-    
+
     Uses a registry pattern to allow easy addition of new metrics.
     Each metric builder is registered with the @MetricFactory.register decorator.
     """
-    
+
     _BUILDERS: Dict[str, Callable] = {}
-    
+
     @classmethod
     def register(cls, metric_type: str):
         """Decorator to register metric builders.
-        
+
         Args:
             metric_type: The metric type identifier (e.g., "equals", "geval")
-            
+
         Returns:
             Decorator function
-            
+
         Example:
             @MetricFactory.register("my_metric")
             def _build_my_metric(params: Dict[str, Any], model: str):
                 # Build and return metric function
                 pass
         """
+
         def decorator(func):
             cls._BUILDERS[metric_type] = func
             return func
+
         return decorator
-    
+
     @classmethod
-    def build(cls, metric_type: str, metric_params: Dict[str, Any], model: str,
-              dataset_items_provider: Callable[[], List[Dict[str, Any]]] = None) -> Callable:
+    def build(
+        cls,
+        metric_type: str,
+        metric_params: Dict[str, Any],
+        model: str,
+        dataset_items_provider: Callable[[], List[Dict[str, Any]]] = None,
+    ) -> Callable:
         """Build a metric function from config.
-        
+
         Args:
             metric_type: The type of metric to build
             metric_params: Parameters for the metric
@@ -334,15 +351,14 @@ class MetricFactory:
         """
         if metric_type not in cls._BUILDERS:
             available = ", ".join(sorted(cls._BUILDERS.keys()))
-            raise InvalidMetricError(
-                metric_type,
-                f"Available metrics: {available}"
-            )
-        
+            raise InvalidMetricError(metric_type, f"Available metrics: {available}")
+
         logger.debug(f"Building metric: {metric_type} with params: {metric_params}")
         try:
             metric_fn = cls._BUILDERS[metric_type](
-                metric_params, model, dataset_items_provider=dataset_items_provider,
+                metric_params,
+                model,
+                dataset_items_provider=dataset_items_provider,
             )
         except InvalidMetricError:
             raise
@@ -454,50 +470,51 @@ def _build_levenshtein_metric(params: Dict[str, Any], model: str, **kwargs) -> C
 
 def _interpolate_template(template: str, dataset_item: Dict[str, Any]) -> str:
     """Interpolate dataset item fields into a template string.
-    
+
     Replaces {{field_name}} placeholders with values from the dataset item.
     If a field is not found, the placeholder is left unchanged.
-    
+
     Supports field names with alphanumerics, underscores, dots, and hyphens
     (e.g., {{answer}}, {{user.name}}, {{answer-key}}).
-    
+
     Args:
         template: String containing {{field_name}} placeholders
         dataset_item: Dictionary of dataset item fields
-        
+
     Returns:
         Interpolated string with placeholders replaced by values
-        
+
     Example:
         >>> _interpolate_template("Expected: {{answer}}", {"answer": "42"})
         "Expected: 42"
     """
     import re
-    
+
     def replace_match(match):
         field_name = match.group(1).strip()
         if field_name in dataset_item:
             return str(dataset_item[field_name])
         return match.group(0)  # Leave unchanged if not found
-    
+
     # Match field names with alphanumerics, underscores, dots, and hyphens
-    return re.sub(r'\{\{\s*([\w.-]+)\s*\}\}', replace_match, template)
+    return re.sub(r"\{\{\s*([\w.-]+)\s*\}\}", replace_match, template)
 
 
 def _has_template_placeholders(text: str) -> bool:
     """Check if text contains {{field_name}} template placeholders."""
     import re
-    return bool(re.search(r'\{\{', text))
+
+    return bool(re.search(r"\{\{", text))
 
 
 @MetricFactory.register("geval")
 def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build a GEval metric function.
-    
+
     Uses an LLM to evaluate outputs based on custom criteria.
     Supports dataset item field interpolation using {{field_name}} syntax
     in task_introduction and evaluation_criteria.
-    
+
     Args:
         params: Metric parameters
             - task_introduction (str): Description of the task being evaluated.
@@ -505,10 +522,10 @@ def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callabl
             - evaluation_criteria (str): Criteria for evaluation.
               Can include {{field_name}} placeholders for dataset item fields.
         model: LLM model to use for evaluation
-        
+
     Returns:
         Metric function
-        
+
     Example:
         With evaluation_criteria="Check if output matches expected: {{answer}}"
         and dataset_item={"answer": "Paris"}, the LLM judge will see:
@@ -517,13 +534,12 @@ def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callabl
     # Normalize nullable params to strings - callers may pass explicit None
     task_intro_template = params.get("task_introduction") or "Evaluate the output"
     eval_criteria_template = params.get("evaluation_criteria") or ""
-    
+
     # Check if templates contain placeholders that need runtime interpolation
-    needs_interpolation = (
-        _has_template_placeholders(task_intro_template) or 
-        _has_template_placeholders(eval_criteria_template)
-    )
-    
+    needs_interpolation = _has_template_placeholders(
+        task_intro_template
+    ) or _has_template_placeholders(eval_criteria_template)
+
     llm_model = LiteLLMChatModel(model_name=model, stream=False)
 
     if not needs_interpolation:
@@ -531,89 +547,90 @@ def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callabl
         geval_metric = GEval(
             task_introduction=task_intro_template,
             evaluation_criteria=eval_criteria_template,
-            model=llm_model
+            model=llm_model,
         )
-        
+
         def metric_fn(dataset_item, llm_output):
             # Note: GEval.score() only accepts 'output' - dataset_item context is embedded
             # in task_introduction/evaluation_criteria via template interpolation, not passed
             # separately. GEval's score() ignores any extra kwargs (**ignored_kwargs).
             return geval_metric.score(output=llm_output)
-        
+
         metric_fn.__name__ = "geval"
         return metric_fn
-    
+
     # Has placeholders - interpolate at evaluation time
     # Note: Each unique interpolated criteria will generate its own chain-of-thought,
     # which is cached by GEval. This is expected behavior for customized evaluation.
     logger.info("GEval metric using template interpolation for dataset item fields")
-    
+
     def metric_fn_with_interpolation(dataset_item, llm_output):
         # Normalize dataset_item to prevent TypeError if None is passed
         item = dataset_item or {}
         # Interpolate dataset item fields into templates
         task_intro = _interpolate_template(task_intro_template, item)
         eval_criteria = _interpolate_template(eval_criteria_template, item)
-        
+
         # Create GEval with interpolated values
         # GEval internally caches chain-of-thought by (task_intro, criteria, model)
         geval_metric = GEval(
             task_introduction=task_intro,
             evaluation_criteria=eval_criteria,
-            model=llm_model
+            model=llm_model,
         )
-        
+
         # Note: GEval.score() only accepts 'output' - dataset_item context is already
         # embedded in task_introduction/evaluation_criteria above via interpolation.
         # GEval's score() ignores any extra kwargs (**ignored_kwargs).
         return geval_metric.score(output=llm_output)
-    
+
     metric_fn_with_interpolation.__name__ = "geval"
     return metric_fn_with_interpolation
 
 
 @MetricFactory.register("json_schema_validator")
-def _build_json_schema_validator_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
+def _build_json_schema_validator_metric(
+    params: Dict[str, Any], model: str, **kwargs
+) -> Callable:
     """Build a JSON Schema Validator metric function.
-    
+
     Validates that the LLM output complies with a JSON schema from the dataset item.
-    
+
     Args:
         params: Metric parameters
             - schema_key (str): Key in dataset item containing the JSON schema (default: "json_schema")
         model: LLM model to use for validation
-        
+
     Returns:
         Metric function
     """
     schema_key = params.get("schema_key", "json_schema")
-    
+
     llm_model = LiteLLMChatModel(model_name=model, stream=False)
     structured_metric = StructuredOutputCompliance(
-        model=llm_model,
-        name="json_schema_validator"
+        model=llm_model, name="json_schema_validator"
     )
-    
+
     def metric_fn(dataset_item, llm_output):
         schema = dataset_item.get(schema_key)
         if not schema:
             from opik.evaluation.metrics.score_result import ScoreResult
+
             return ScoreResult(
-                value=0.0, 
-                name="json_schema_validator", 
-                reason=f"Missing schema in dataset item key '{schema_key}'"
+                value=0.0,
+                name="json_schema_validator",
+                reason=f"Missing schema in dataset item key '{schema_key}'",
             )
-        return structured_metric.score(
-            output=llm_output,
-            schema=schema
-        )
-    
+        return structured_metric.score(output=llm_output, schema=schema)
+
     metric_fn.__name__ = "json_schema_validator"
     return metric_fn
 
 
 @MetricFactory.register("numerical_similarity")
-def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
+def _build_numerical_similarity_metric(
+    params: Dict[str, Any], model: str, **kwargs
+) -> Callable:
     """Normalized similarity between a numeric LLM output and a reference value.
 
     Score = max(0, 1 - |output - reference| / scale_range)
@@ -662,12 +679,16 @@ def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwa
             if not resolved_any:
                 _raise_if_malformed_jsonpath("numerical_similarity", reference_key)
                 raise _reference_key_error(
-                    "numerical_similarity", reference_key, items,
+                    "numerical_similarity",
+                    reference_key,
+                    items,
                     "did not resolve against any dataset item",
                 )
             if not ref_values:
                 raise _reference_key_error(
-                    "numerical_similarity", reference_key, items,
+                    "numerical_similarity",
+                    reference_key,
+                    items,
                     "resolved but no dataset item held a numeric value",
                 )
             if len(ref_values) >= 2:
@@ -688,7 +709,7 @@ def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwa
             return ScoreResult(
                 value=0.0,
                 name="numerical_similarity",
-                reason=f"Could not parse LLM output as number: {str(llm_output)[:100]}"
+                reason=f"Could not parse LLM output as number: {str(llm_output)[:100]}",
             )
 
         if reference is None:
@@ -700,7 +721,7 @@ def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwa
             return ScoreResult(
                 value=0.0,
                 name="numerical_similarity",
-                reason=f"Reference value is not numeric: {str(reference)[:100]}"
+                reason=f"Reference value is not numeric: {str(reference)[:100]}",
             )
 
         normalized_error = abs(output_val - reference_val) / scale_range
@@ -710,7 +731,7 @@ def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwa
             value=score,
             name="numerical_similarity",
             reason=f"output={output_val}, reference={reference_val}, "
-                   f"abs_error={abs(output_val - reference_val):.4f}, scale_range={scale_range}"
+            f"abs_error={abs(output_val - reference_val):.4f}, scale_range={scale_range}",
         )
 
     metric_fn.__name__ = "numerical_similarity"
@@ -720,24 +741,24 @@ def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwa
 @MetricFactory.register("code")
 def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build a custom code metric function using the secure executor infrastructure.
-    
+
     User code is executed using the same executor infrastructure as the automations
     evaluator, providing security isolation appropriate for the deployment environment:
     - DockerExecutor: Full container sandboxing for multi-tenant environments
     - ProcessExecutor: Process isolation with pre-warmed worker pools for local/OSS
-    
+
     The executor type is determined by PYTHON_CODE_EXECUTOR_STRATEGY env var and
     inherits all configuration (timeouts, concurrency, etc.) from the executor setup.
-    
+
     Code must define a BaseMetric subclass:
-    
+
         from opik.evaluation.metrics import BaseMetric
         from opik.evaluation.metrics.score_result import ScoreResult
-        
+
         class MyMetric(BaseMetric):
             def __init__(self, name: str = "my_metric"):
                 super().__init__(name=name)
-            
+
             def score(self, output: str, **kwargs) -> ScoreResult:
                 # output: the LLM response
                 # kwargs: contains dataset_item fields
@@ -746,86 +767,177 @@ def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable
                     value=1.0,
                     reason="Evaluation reason"
                 )
-    
+
     Args:
         params: Metric parameters
             - code (str): Python code containing a BaseMetric subclass
+            - arguments (Dict[str, str], optional): Rename-capable map from a
+              score() parameter name to a dataset column name (see the
+              "arguments-map contract" below). Absent/empty preserves the
+              historical full-splat behavior.
         model: LLM model (not used for this metric)
-        
+
     Returns:
         Metric function with signature (dataset_item, llm_output) -> ScoreResult
-        
+
     Raises:
         InvalidMetricError: If code is missing or invalid
+
+    arguments-map contract (consumed here; produced by the mapping UI):
+        ``params["arguments"]`` is an optional ``{score_param: dataset_column}``
+        dict. At scoring time ``isolated_metric`` assembles the ``score()``
+        kwargs as follows:
+          - ``output`` is injected from the LLM response whenever ``score()`` can
+            accept it (a ``**kwargs`` signature, or a strict signature that
+            declares an ``output`` param) and is never overridden by the map. A
+            strict signature that does not declare ``output`` does not receive it
+            (injecting it would raise ``TypeError`` -> masked 0.0, OPIK-7172).
+          - Each mapped param exposes its dataset column's value under the
+            param name (so ``score(self, reference)`` can read column
+            ``expected_answer`` via ``{"reference": "expected_answer"}``).
+          - Whether the remaining (unmapped) dataset columns are also splatted
+            depends on the metric's ``score()`` signature, detected at build
+            time (``accepts_var_keyword``):
+              * ``score(self, output, **kwargs)`` (VAR_KEYWORD present) -> ALL
+                remaining columns ARE splatted (rename sources are NOT removed —
+                a mapped column is still present under its original name in
+                addition to the renamed param), so unmapped params resolve by
+                same name and ``**kwargs`` keeps receiving the rest (back-compat).
+              * ``score(self, output, reference)`` (strict, no ``**kwargs``) ->
+                the remaining columns are NOT splatted. Passing them would land
+                as unexpected keyword arguments -> ``TypeError`` -> swallowed to
+                ``ScoreResult(0.0)`` (OPIK-7172). ``data`` is restricted to
+                ``output`` + the mapped params only.
+          - No/empty ``arguments`` -> full splat of the whole dataset item
+            (historical behavior), regardless of signature.
     """
     code = params.get("code")
     if not code:
         raise InvalidMetricError("code", "Missing 'code' parameter for code metric")
-    
+
     logger.info(f"Building code metric (code length: {len(code)} chars)")
-    
-    # Validate code and extract metric name by running it once with dummy data
-    # This gets the actual metric.name attribute from the instantiated class
-    # Uses the same secure executor infrastructure (Docker or Process) as actual scoring
-    try:
-        # Do a quick validation run with dummy data to extract the metric name
-        validation_response = _run_code_metric(code, {"output": ""})
-        
-        if "error" in validation_response:
-            raise InvalidMetricError("code", f"Invalid Python code: {validation_response['error']}")
-        
-        # Extract the metric name from the first score result
-        scores = validation_response.get("scores", [])
-        if scores and scores[0].get("name"):
-            metric_name = scores[0]["name"]
-        else:
-            metric_name = "code"
-        logger.info(f"Extracted metric name from class: {metric_name}")
-        
-    except InvalidMetricError:
-        raise
-    except Exception as e:
-        raise InvalidMetricError("code", f"Failed to validate metric code: {e}")
-    
+
+    # Optional rename-capable arguments map (score() param -> dataset column).
+    arguments = params.get("arguments") or {}
+    if not isinstance(arguments, dict):
+        logger.warning(
+            f"Ignoring non-dict 'arguments' for code metric: {type(arguments).__name__}"
+        )
+        arguments = {}
+    else:
+        # Both the score() param and the dataset column name are strings; drop
+        # any non-string entries (the backend's raw JsonNode can carry numbers/
+        # lists) so they can't reach the dataset-key lookup below and surface as
+        # a masked TypeError at score time.
+        cleaned = {
+            k: v
+            for k, v in arguments.items()
+            if isinstance(k, str) and isinstance(v, str)
+        }
+        if len(cleaned) != len(arguments):
+            logger.warning(
+                "Dropping non-string entries from code-metric 'arguments' map"
+            )
+        arguments = cleaned
+
+    # Statically validate the code and read the metric name WITHOUT calling
+    # score(). Executing score() with a dummy empty payload (the previous
+    # behavior) rejected any metric that reads a required dataset-derived
+    # keyword (e.g. kwargs["x"]) even though it scores fine on real data
+    # (OPIK-7172). Validation runs in-process here because the optimization job
+    # already runs inside an isolated subprocess; per-score isolation
+    # (Docker/process) still applies at scoring time via _run_code_metric.
+    from opik_backend.process_worker import validate_user_code
+
+    validation = validate_user_code(code)
+    if "error" in validation:
+        raise InvalidMetricError("code", validation["error"])
+
+    metric_name = validation.get("name") or "code"
+    # Whether score() declares **kwargs, detected at build time. Governs whether
+    # unmapped dataset columns are safe to splat: a strict signature (no
+    # **kwargs) would reject extra columns as unexpected keywords -> TypeError ->
+    # swallowed to 0.0 (OPIK-7172). Default True keeps the historical full-splat
+    # behavior when the flag is somehow absent.
+    accepts_var_keyword = validation.get("accepts_var_keyword", True)
+    # score()'s declared params (excluding self), read statically at build time.
+    # Used to restrict a strict signature's kwargs to exactly what it declares.
+    score_params = validation.get("score_params") or []
+    logger.info(
+        f"Extracted metric name from class: {metric_name} "
+        f"(accepts_var_keyword={accepts_var_keyword}, score_params={score_params})"
+    )
+
     def isolated_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
-        """Execute the metric using the configured executor strategy."""
-        # Merge data: output + dataset_item fields
-        # This matches metric.score(**data) interface in process_worker.py
-        data = {"output": llm_output, **dataset_item}
-        
+        """Execute the metric using the configured executor strategy.
+
+        Builds the score() kwargs from the optional rename-capable ``arguments``
+        map — see the "arguments-map contract" in the enclosing docstring.
+        """
+        if accepts_var_keyword:
+            # **kwargs signature: splat every column; an explicit arguments entry
+            # additionally exposes a renamed column under the score() param name.
+            data: Dict[str, Any] = {**dataset_item}
+            for param, column in arguments.items():
+                if column in dataset_item:
+                    data[param] = dataset_item[column]
+        else:
+            # Strict signature (no **kwargs): pass ONLY score()'s declared params,
+            # each resolved via the arguments map or a same-named column. Never
+            # splat extra dataset columns — they would arrive as unexpected
+            # keyword arguments and raise TypeError, which _run_code_metric
+            # swallows to 0.0 (OPIK-7172). Holds whether or not a map is provided.
+            data = {}
+            for param in score_params:
+                if param == "output":
+                    continue
+                column = arguments.get(param, param)
+                if column in dataset_item:
+                    data[param] = dataset_item[column]
+        # output is the LLM response. Inject it only when score() can actually
+        # accept it: a **kwargs signature absorbs it, and a strict signature must
+        # declare an `output` param. Injecting `output=` into a strict signature
+        # that does not declare it (e.g. `def score(self, reference)`) would
+        # arrive as an unexpected keyword -> TypeError -> masked 0.0 (OPIK-7172).
+        if accepts_var_keyword or "output" in score_params:
+            data["output"] = llm_output
+
         logger.debug(f"Executing code metric with data keys: {list(data.keys())}")
-        
+
         # Execute using the executor infrastructure (same as automations evaluator)
         # This respects PYTHON_CODE_EXECUTOR_STRATEGY for appropriate security level
         response = _run_code_metric(code, data)
-        
+
         if "error" in response:
-            error_msg = response.get('error', 'Unknown error')
+            error_msg = response.get("error", "Unknown error")
             logger.warning(f"Code metric error: {error_msg}")
             return ScoreResult(
-                name="code",
-                value=0.0,
-                reason=f"Error: {error_msg[:200]}"
+                name="code", value=0.0, reason=f"Error: {error_msg[:200]}"
             )
-        
+
         scores = response.get("scores", [])
         if not scores:
             logger.warning("Code metric returned no scores")
             return ScoreResult(
-                name="code",
-                value=0.0,
-                reason="No ScoreResult returned by metric"
+                name="code", value=0.0, reason="No ScoreResult returned by metric"
             )
-        
+
         # Return first score (studio expects single score)
         # The metric name is preserved from the user's BaseMetric class
         score = scores[0]
-        logger.debug(f"Code metric returned score: name={score.get('name')}, value={score.get('value')}")
+        logger.debug(
+            f"Code metric returned score: name={score.get('name')}, value={score.get('value')}"
+        )
         return ScoreResult(
             name=score.get("name"),
             value=score.get("value", 0.0),
-            reason=score.get("reason", "")
+            reason=score.get("reason", ""),
         )
-    
+
+    # objective_name follows the metric's class `.name` (read via
+    # validate_user_code) rather than the emitted ScoreResult.name. Intentional:
+    # the name is known at build time without running score(), so it is stable
+    # for the objective before any item is scored. The two diverge only if a
+    # metric returns a ScoreResult with a different name than its class .name.
     isolated_metric.__name__ = metric_name
     return isolated_metric

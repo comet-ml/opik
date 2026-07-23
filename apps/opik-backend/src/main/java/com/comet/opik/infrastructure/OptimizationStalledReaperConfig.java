@@ -39,6 +39,12 @@ import java.util.concurrent.TimeUnit;
  *        run would be reaped mid-flight. The {@code @MinDuration} floor is pinned to that 6h worker
  *        default so a below-worker-timeout override fails fast at boot instead of silently reaping
  *        in-flight runs (same fail-fast intent as {@link #isLockDurationBelowJobInterval()}).
+ * @param lookbackMargin added to {@code max(initializedTimeout, runningTimeout)} to size the
+ *        {@code last_updated_at >= now - window} floor of the reaper's scan. It is pure reaper-downtime
+ *        insurance: a run that stalled just before the reaper became unavailable is still caught once the
+ *        reaper recovers, as long as it was down for less than this margin. It does NOT need to be large
+ *        to find fresh stalls (those are always within the timeout), so keep it only as big as the longest
+ *        expected reaper outage — a shorter margin also tightens the skip-index granule pruning.
  * @param lockDuration lock TTL, held until expiry, that suppresses other instances from reconciling until
  *        it elapses. MUST be kept below {@link #jobInterval()} (the lock is held until expiry, so a
  *        lockDuration &gt;= jobInterval would make every other scheduled tick a no-op and silently halve
@@ -54,6 +60,7 @@ public record OptimizationStalledReaperConfig(
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 6, unit = TimeUnit.HOURS) Duration jobInterval,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 24, unit = TimeUnit.HOURS) Duration initializedTimeout,
         @NotNull @MinDuration(value = 6, unit = TimeUnit.HOURS) @MaxDuration(value = 7, unit = TimeUnit.DAYS) Duration runningTimeout,
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS) @MaxDuration(value = 30, unit = TimeUnit.DAYS) Duration lookbackMargin,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration lockDuration,
         @Min(1) @Max(10_000) int batchSize) {
 
