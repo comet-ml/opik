@@ -99,6 +99,26 @@
     --chart-gray-light: #ebf2f5;
     --chart-gray-dark: #45575f;
 
+    /* Agent Insights — severity + issue-callout palette. Tokenized from
+       previously hardcoded hex; values preserved 1:1. Pending design
+       ratification (names/values), see OPIK design-token cleanup. */
+    --severity-critical: #dc2626;
+    --severity-high: #f43f5e;
+    --severity-medium: #f59e0b;
+    --severity-low: #94a3b8;
+    --insight-error: #f14668;
+    --insight-error-surface: #f146681a;
+    --insight-warning: #fb923c;
+    --insight-warning-surface: #fb923c1a;
+    --insight-accent: #a78bfa;
+    --insight-accent-surface: #c4b5fd1a;
+    --insight-info: #89deff;
+    --insight-info-surface: #89deff1a;
+    /* Assertion pass indicator — no dark override (preserves current behavior) */
+    --assertion-indicator: #89deff;
+    /* Dataset version type icon — interim color per OPIK-6845 */
+    --dataset-version-accent: #6bdf93;
+
     /* Optimization Studio icon accents (per-algorithm / per-metric) */
     --optimizer-icon-gepa: #12a594;
     --optimizer-icon-hierarchical: #6e56cf;
@@ -459,6 +479,11 @@
     --accent-magenta: #be48ea;
     --accent-red: #df5a40;
     --accent-indigo: #5356f1;
+
+    /* Agent Insights — dark overrides. Only --insight-info had an explicit
+       dark variant in the original hardcoded markup; the rest inherit :root
+       (which matches their prior no-dark-variant behavior). */
+    --insight-info: #1e3a47;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;

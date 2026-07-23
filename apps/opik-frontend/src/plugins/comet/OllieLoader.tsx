@@ -54,7 +54,7 @@ export function OllieLoader({
             className={cn(
               "text-center font-code text-foreground",
               variant === "page"
-                ? "text-[16px] leading-5"
+                ? "text-base leading-5"
                 : "text-[13px] leading-4",
             )}
           >

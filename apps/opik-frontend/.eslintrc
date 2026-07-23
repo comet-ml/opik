@@ -56,6 +56,17 @@
         ]
       }
     ],
-    "tailwindcss/no-contradicting-classname": "error"
+    "tailwindcss/no-contradicting-classname": "error",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value=/-\\[#[0-9a-fA-F]/]",
+        "message": "Don't hardcode a hex color in a Tailwind class (e.g. bg-[#7C3AED]). Use a design token: an existing semantic color (bg-destructive, text-muted-slate, …) or add one to main.scss + tailwind.config.ts. See .agents/skills/frontend-design-fidelity."
+      },
+      {
+        "selector": "TemplateElement[value.raw=/-\\[#[0-9a-fA-F]/]",
+        "message": "Don't hardcode a hex color in a Tailwind class. Use a design token. See .agents/skills/frontend-design-fidelity."
+      }
+    ]
   }
 }

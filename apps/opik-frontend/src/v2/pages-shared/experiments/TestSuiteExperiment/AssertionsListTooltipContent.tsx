@@ -18,7 +18,7 @@ export const AssertionsListTooltipContent: React.FC<
   return (
     <div className="flex w-[250px] flex-col p-2">
       <div className="flex items-center gap-1.5 px-1 pb-0.5 pt-1">
-        <div className="flex size-4 items-center justify-center rounded bg-[#89DEFF]">
+        <div className="flex size-4 items-center justify-center rounded bg-assertion-indicator">
           <CheckCheck className="size-3 text-foreground" />
         </div>
         <span className="comet-body-xs-accented text-foreground">{title}</span>
@@ -27,7 +27,7 @@ export const AssertionsListTooltipContent: React.FC<
       {assertions.map((assertion, index) => (
         <Fragment key={index}>
           <div className="flex items-start gap-1.5 px-2 py-1">
-            <div className="mt-[5px] size-[7px] shrink-0 rounded-[1.5px] bg-[#89DEFF]" />
+            <div className="mt-[5px] size-[7px] shrink-0 rounded-[1.5px] bg-assertion-indicator" />
             <span className="comet-body-xs text-muted-slate">{assertion}</span>
           </div>
           {index < assertions.length - 1 && (
