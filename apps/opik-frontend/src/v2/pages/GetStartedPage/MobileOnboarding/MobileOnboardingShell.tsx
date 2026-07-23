@@ -19,9 +19,12 @@ interface MobileOnboardingShellProps {
 const clampStep = (value: number, totalSteps: number) =>
   Math.min(totalSteps, Math.max(1, value));
 
-// Longest stagger (525ms delay + 200ms duration) rounded up — after this the
-// outgoing panel's reverse cascade is done and it can be restored.
-const OUT_ANIMATION_TOTAL_MS = 800;
+// The outgoing panel is restored once its reverse cascade finishes, detected
+// via animationend debounce (which adapts to whatever delays the steps use).
+// The fallback cap only fires when no animation events arrive at all (e.g.
+// prefers-reduced-motion disables the animations, leaving content visible).
+const OUT_RESET_DEBOUNCE_MS = 300;
+const OUT_RESET_FALLBACK_MS = 2500;
 
 /** Derives the 1-indexed step the scroller is currently closest to. */
 const stepFromScroll = (el: HTMLElement, totalSteps: number) =>
@@ -35,8 +38,8 @@ const stepFromScroll = (el: HTMLElement, totalSteps: number) =>
 const scrollPanelIntoView = (el: HTMLElement, step: number): number | null => {
   const left = (step - 1) * el.clientWidth;
   if (Math.abs(el.scrollLeft - left) < 2) return null;
-  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")
-    .matches;
+  const reduceMotion =
+    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
   el.scrollTo({ left, behavior: reduceMotion ? "auto" : "smooth" });
   return left;
 };
@@ -84,24 +87,25 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
           ? { seq: p.seq + 1, mode: "in" }
           : i === from - 1
             ? { seq: p.seq + 1, mode: "out" }
-            : p,
+            : p.mode === "out"
+              ? // A rapid earlier navigation may have cancelled this panel's
+                // pending restore — bring any straggler back now (offscreen,
+                // so the forward replay is invisible).
+                { seq: p.seq + 1, mode: "in" }
+              : p,
       ),
     );
 
     // The reversed cascade parks the departed panel at its hidden first
-    // frame (fill-mode: both). Once it finishes, restore the panel to its
-    // settled visible state — the forward replay happens offscreen — so
-    // peeking back at it mid-swipe never reveals a blank page.
-    // (Cleared on any subsequent step change, so firing implies the departed
-    // panel is still not the current one.)
+    // frame (fill-mode: both). Once it finishes — detected by animationend
+    // debounce below, with this timer as a no-events fallback — restore the
+    // panel to its settled visible state so peeking back at it mid-swipe
+    // never reveals a blank page.
     clearTimeout(outResetTimer.current);
-    outResetTimer.current = setTimeout(() => {
-      setPanelAnim((arr) =>
-        arr.map((p, i) =>
-          i === from - 1 ? { seq: p.seq + 1, mode: "in" } : p,
-        ),
-      );
-    }, OUT_ANIMATION_TOTAL_MS);
+    outResetTimer.current = setTimeout(
+      () => restoreOutPanel(from - 1),
+      OUT_RESET_FALLBACK_MS,
+    );
 
     const el = scrollerRef.current;
     if (!el) return;
@@ -114,6 +118,28 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
   }, [step]);
 
   useEffect(() => () => clearTimeout(outResetTimer.current), []);
+
+  // Restores a departed panel to its settled visible state after its reverse
+  // cascade. Guarded on mode so a late timer can't remount an active panel.
+  const restoreOutPanel = (panelIndex: number) => {
+    setPanelAnim((arr) =>
+      arr.map((p, i) =>
+        i === panelIndex && p.mode === "out"
+          ? { seq: p.seq + 1, mode: "in" }
+          : p,
+      ),
+    );
+  };
+
+  // Each animationend from the outgoing panel pushes the debounce forward;
+  // when the events stop, the cascade is done and the panel can be restored.
+  const handlePanelAnimationEnd = (panelIndex: number) => {
+    clearTimeout(outResetTimer.current);
+    outResetTimer.current = setTimeout(
+      () => restoreOutPanel(panelIndex),
+      OUT_RESET_DEBOUNCE_MS,
+    );
+  };
 
   // Swiping is plain native horizontal scrolling with snap points; we only
   // observe it to keep the step state (progress bar, labels) in sync.
@@ -182,9 +208,26 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
             // accessibility tree and pointer events, so keyboard/screen-reader
             // users can't reach controls of steps they're not on. Set
             // imperatively — React 18 has no boolean `inert` prop support.
+            // Browsers without inert fall back to aria-hidden plus disabled
+            // pointer events (tab order can't be fully fixed without inert).
             ref={(node) => {
-              if (node) node.inert = i + 1 !== step;
+              if (!node) return;
+              const inactive = i + 1 !== step;
+              if ("inert" in node) {
+                node.inert = inactive;
+              } else if (inactive) {
+                (node as HTMLElement).setAttribute("aria-hidden", "true");
+                (node as HTMLElement).style.pointerEvents = "none";
+              } else {
+                (node as HTMLElement).removeAttribute("aria-hidden");
+                (node as HTMLElement).style.pointerEvents = "";
+              }
             }}
+            onAnimationEnd={
+              panelAnim[i]?.mode === "out"
+                ? () => handlePanelAnimationEnd(i)
+                : undefined
+            }
             className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden px-5 py-3"
           >
             <div
