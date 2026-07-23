@@ -9,4 +9,5 @@ response = litellm.completion(
     model="gpt-3.5-turbo",
     messages=[{"role": "user", "content": "Write a haiku about AI engineering."}],
 )
-print(response.choices[0].message.content)
+if getattr(response, "choices", None) and response.choices[0].message is not None:
+    print(response.choices[0].message.content)
