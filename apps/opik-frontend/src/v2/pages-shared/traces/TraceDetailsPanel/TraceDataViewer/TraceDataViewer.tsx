@@ -73,6 +73,14 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     ["metadata", METADATA_AGENT_GRAPH_KEY],
     null,
   );
+
+  const alreadyShownCountRaw = get(
+    data,
+    ["metadata", "already_shown_count"],
+    undefined,
+  );
+  const unchangedPrefixLength =
+    typeof alreadyShownCountRaw === "number" ? alreadyShownCountRaw : undefined;
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
 
@@ -308,11 +316,17 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           {canShowMessagesTab && (
             <TabsContent value="messages">
               <MessagesTab
+                // Not remounted between spans otherwise (TraceDataViewer isn't keyed by the
+                // caller) -- forces the accordion/already-shown-disclosure state in MessagesTab
+                // to reset instead of carrying over stale per-span computed defaults when
+                // navigating between spans without closing the panel.
+                key={data.id}
                 transformedInput={transformedInput}
                 transformedOutput={transformedOutput}
                 media={media}
                 isLoading={isSpanInputOutputLoading}
                 scrollContainerRef={rootScrollRef}
+                unchangedPrefixLength={unchangedPrefixLength}
               />
             </TabsContent>
           )}

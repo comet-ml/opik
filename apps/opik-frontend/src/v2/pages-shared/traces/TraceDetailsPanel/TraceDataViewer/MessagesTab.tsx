@@ -6,7 +6,7 @@ import React, {
   useEffect,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { FoldVertical, UnfoldVertical } from "lucide-react";
+import { ChevronRight, FoldVertical, UnfoldVertical } from "lucide-react";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
 import {
   MediaProvider,
@@ -34,7 +34,25 @@ type MessagesTabProps = {
   media: UnifiedMediaItem[];
   isLoading: boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement>;
+  // Count of leading input messages already presented to the viewer in an earlier span of the
+  // same session (autonomic-opik-export's metadata.already_shown_count, or any exporter
+  // populating the same key) -- hidden by default behind a single disclosure row, independent of
+  // per-message accordion state and the Expand/Collapse-all toggle (see AlreadyShownDisclosure).
+  // Provider-agnostic: every registered format mapper (openai/langchain/anthropic) ids input
+  // messages "input-{index}" by position in the raw input message array, so this maps directly
+  // without needing to know which format matched.
+  unchangedPrefixLength?: number;
 };
+
+type DisplayItem =
+  | { kind: "message"; message: LLMMessageDescriptor }
+  | { kind: "disclosure"; count: number };
+
+const isMessageItem = (
+  item: DisplayItem,
+): item is Extract<DisplayItem, { kind: "message" }> => item.kind === "message";
+
+const ALREADY_SHOWN_DISCLOSURE_ID = "already-shown-disclosure";
 
 function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
   const Component = descriptor.component as React.ComponentType<
@@ -49,21 +67,81 @@ function renderContentBlocks(message: LLMMessageDescriptor) {
   );
 }
 
+const AlreadyShownDisclosure: React.FC<{
+  count: number;
+  onReveal: () => void;
+}> = ({ count, onReveal }) => (
+  <button
+    type="button"
+    onClick={onReveal}
+    className="comet-body-xs-accented flex w-full select-none items-center gap-1 rounded-sm p-1 text-muted-slate transition-colors hover:bg-primary-foreground"
+  >
+    <ChevronRight className="size-3.5 shrink-0 text-light-slate" />
+    {count} earlier message{count === 1 ? "" : "s"} already shown in a previous
+    turn — click to view
+  </button>
+);
+
 const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   transformedInput,
   transformedOutput,
   media,
   isLoading,
   scrollContainerRef,
+  unchangedPrefixLength,
 }) => {
   const { messages: combinedMessages, usage } = useMemo(
     () => mapAndCombineMessages(transformedInput, transformedOutput),
     [transformedInput, transformedOutput],
   );
 
+  // Ids of the leading input messages already presented to the viewer on an earlier span --
+  // hidden behind a single disclosure row rather than collapsed individually (see
+  // AlreadyShownDisclosure), so neither Expand/Collapse-all nor the persisted expand-state
+  // preference (shared across every trace, see useLLMMessagesExpandAll) can silently reveal or
+  // re-hide them.
+  const alreadyShownIdSet = useMemo(() => {
+    if (!unchangedPrefixLength || unchangedPrefixLength <= 0) return null;
+    const ids = new Set<string>();
+    for (let i = 0; i < unchangedPrefixLength; i += 1) ids.add(`input-${i}`);
+    return ids;
+  }, [unchangedPrefixLength]);
+
+  const [alreadyShownRevealed, setAlreadyShownRevealed] = useState(false);
+
+  const displayItems = useMemo<DisplayItem[]>(() => {
+    if (!alreadyShownIdSet || alreadyShownRevealed) {
+      return combinedMessages.map(
+        (message): DisplayItem => ({ kind: "message", message }),
+      );
+    }
+    const items: DisplayItem[] = [];
+    let disclosureAdded = false;
+    combinedMessages.forEach((message) => {
+      if (alreadyShownIdSet.has(message.id)) {
+        if (!disclosureAdded) {
+          items.push({ kind: "disclosure", count: alreadyShownIdSet.size });
+          disclosureAdded = true;
+        }
+        return;
+      }
+      items.push({ kind: "message", message });
+    });
+    return items;
+  }, [combinedMessages, alreadyShownIdSet, alreadyShownRevealed]);
+
   const allMessageIds = useMemo(
-    () => combinedMessages.map((msg) => msg.id),
-    [combinedMessages],
+    () => displayItems.filter(isMessageItem).map((item) => item.message.id),
+    [displayItems],
+  );
+
+  const defaultCollapsedIds = useMemo(
+    () =>
+      displayItems
+        .filter(isMessageItem)
+        .filter((item) => item.message.role === "system")
+        .map((item) => item.message.id),
+    [displayItems],
   );
 
   const {
@@ -71,7 +149,11 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     expandedMessages,
     handleToggleAll,
     handleValueChange,
-  } = useLLMMessagesExpandAll(allMessageIds, "messages-tab-combined");
+  } = useLLMMessagesExpandAll(
+    allMessageIds,
+    "messages-tab-combined",
+    defaultCollapsedIds,
+  );
 
   const expandedSet = useMemo(
     () => new Set(expandedMessages),
@@ -88,7 +170,7 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     [transformedInput, transformedOutput],
   );
 
-  const shouldVirtualize = combinedMessages.length > VIRTUALIZATION_THRESHOLD;
+  const shouldVirtualize = displayItems.length > VIRTUALIZATION_THRESHOLD;
 
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const effectiveScrollRef = scrollContainerRef ?? internalScrollRef;
@@ -101,17 +183,24 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     }
   }, []);
 
+  const getDisplayItemKey = useCallback(
+    (item: DisplayItem) =>
+      isMessageItem(item) ? item.message.id : ALREADY_SHOWN_DISCLOSURE_ID,
+    [],
+  );
+
   const virtualizer = useVirtualizer({
-    count: combinedMessages.length,
+    count: displayItems.length,
     getScrollElement: () => effectiveScrollRef.current,
     estimateSize: (index) => {
-      const id = combinedMessages[index]?.id;
-      return id && expandedSet.has(id)
+      const item = displayItems[index];
+      if (!item) return ESTIMATED_COLLAPSED_HEIGHT;
+      return isMessageItem(item) && expandedSet.has(item.message.id)
         ? ESTIMATED_EXPANDED_HEIGHT
         : ESTIMATED_COLLAPSED_HEIGHT;
     },
     overscan: VIRTUAL_OVERSCAN,
-    getItemKey: (index) => combinedMessages[index].id,
+    getItemKey: (index) => getDisplayItemKey(displayItems[index]),
     enabled: shouldVirtualize,
     scrollMargin,
   });
@@ -146,8 +235,18 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedMessages]);
 
-  const renderMessage = useCallback(
-    (message: LLMMessageDescriptor) => (
+  const renderDisplayItem = useCallback((item: DisplayItem) => {
+    if (!isMessageItem(item)) {
+      return (
+        <AlreadyShownDisclosure
+          key={ALREADY_SHOWN_DISCLOSURE_ID}
+          count={item.count}
+          onReveal={() => setAlreadyShownRevealed(true)}
+        />
+      );
+    }
+    const { message } = item;
+    return (
       <PrettyLLMMessage.Root key={message.id} value={message.id}>
         <PrettyLLMMessage.Header role={message.role} label={message.label} />
         <PrettyLLMMessage.Content>
@@ -159,9 +258,8 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
           )}
         </PrettyLLMMessage.Content>
       </PrettyLLMMessage.Root>
-    ),
-    [],
-  );
+    );
+  }, []);
 
   const expandCollapseButton = (
     <Tooltip>
@@ -216,15 +314,15 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
             }}
           >
             {virtualizer.getVirtualItems().map((virtualRow) => {
-              const message = combinedMessages[virtualRow.index];
+              const item = displayItems[virtualRow.index];
               return (
                 <div
-                  key={message.id}
+                  key={getDisplayItemKey(item)}
                   data-index={virtualRow.index}
                   ref={virtualizer.measureElement}
                   className="w-full pb-1"
                 >
-                  {renderMessage(message)}
+                  {renderDisplayItem(item)}
                 </div>
               );
             })}
@@ -242,7 +340,7 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
         onValueChange={handleValueChange}
         className="space-y-1"
       >
-        {combinedMessages.map((message) => renderMessage(message))}
+        {displayItems.map((item) => renderDisplayItem(item))}
       </PrettyLLMMessage.Container>
     );
   }
@@ -253,13 +351,13 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
         title="LLM messages"
         actions={
           <>
-            {combinedMessages.length > 0 && expandCollapseButton}
+            {displayItems.length > 0 && expandCollapseButton}
             {copyButton}
           </>
         }
         bodyClassName="px-2 pb-2 pt-1"
       >
-        {combinedMessages.length > 0 ? (
+        {displayItems.length > 0 ? (
           <>
             {shouldVirtualize
               ? renderVirtualizedMessages()
