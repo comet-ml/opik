@@ -27,6 +27,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -118,6 +119,7 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private static final IdGenerator testIdGenerator = TestIdGeneratorFactory.create();
     private IdGenerator idGenerator;
 
     private String baseURI;
@@ -1469,7 +1471,7 @@ class ProjectMetricsWithBreakdownResourceTest {
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             // Add guardrail (alternating between pass and fail)
-            var guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(), UUID.randomUUID(),
+            var guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(), testIdGenerator.generateId(),
                     projectName);
             // Set result to FAILED for even indices, PASSED for odd
             var guardrailsWithResult = guardrails.stream()

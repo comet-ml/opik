@@ -13,6 +13,15 @@ def _get_expected_payload_size_MB(item: T) -> float:
     return size / (1024 * 1024)
 
 
+def get_payload_size_MB(item: T) -> float:
+    """Estimate the JSON-serialized size of ``item`` in megabytes.
+
+    Public wrapper around the internal size estimator, reused by span-truncation
+    so the size measured for truncation matches the batching size estimate.
+    """
+    return _get_expected_payload_size_MB(item)
+
+
 def _get_json_size(obj: Any) -> Any:
     """
     Compute the size of the resulting JSON without actually doing the JSON

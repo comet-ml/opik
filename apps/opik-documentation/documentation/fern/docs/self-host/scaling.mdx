@@ -129,6 +129,26 @@ Memory-optimized instances are recommended, with a minimum 4:1 memory-to-CPU rat
 
 Always scale vertically before adding more replicas for efficiency.
 
+#### Fresh multi-replica installs: migrate first, then scale
+
+A brand-new install running directly on **2 or more ClickHouse replicas** cannot complete its analytics migrations. Opik's earliest migrations aren't cluster-aware, so on a fresh multi-replica cluster they only reach one replica; later migrations then fail with errors such as `UNKNOWN_TABLE` or `UNKNOWN_DATABASE` (a table or the `opik` database missing on one replica), and `opik-backend` never becomes ready. Install High-Availability deployments in two phases:
+
+<Steps>
+  <Step>
+    Install with `clickhouse.replicasCount: 1`.
+  </Step>
+  <Step>
+    Wait until `opik-backend` is `Ready` — all migrations are then applied on the single replica.
+  </Step>
+  <Step>
+    Raise `clickhouse.replicasCount` (e.g. to `2`) and upgrade. The ClickHouse operator provisions the new replica and copies the fully-migrated schema to it.
+  </Step>
+</Steps>
+
+<Callout intent="info">
+This only affects **fresh** installs. Single-replica installs and upgrades of already-migrated multi-replica clusters are unaffected — cluster-aware migrations use `ON CLUSTER '{cluster}'`, so once the base schema is present on all replicas it stays consistent automatically. See [Troubleshooting](/v1/self-host/troubleshooting) if you hit this on a fresh multi-replica install.
+</Callout>
+
 ### CPU & Memory Guidance
 
 Target 10–20% CPU utilization, with safe spikes up to 40–50%.

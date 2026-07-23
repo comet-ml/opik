@@ -94,6 +94,11 @@ class Streamer:
                 teardowns where pending data can be dropped (e.g. per-test
                 cleanup in e2e tests where assertions already polled the
                 backend during the test body).
+
+        Returns:
+            Whether all data was flushed to the backend. Authoritative on a
+            ``flush=True`` close (the result of the internal ``flush(timeout)``);
+            ``False`` on ``flush=False`` (pending data is deliberately dropped).
         """
         with self._lock:
             if self._drain:
@@ -116,8 +121,9 @@ class Streamer:
             # actually drain before releasing the caller. Consumers must keep
             # running while the queue drains, so close them at the very end.
             self._fallback_replay_manager.join(timeout)
-            self.flush(timeout)
+            flushed = self.flush(timeout)
             self._close_queue_consumers()
+            return flushed
         else:
             # Fire-and-forget: drop pending messages so the stop-signalled
             # consumers see an empty queue and exit on their own. No joins —
@@ -135,8 +141,7 @@ class Streamer:
                 )
             self._message_queue.clear()
             self._close_queue_consumers()
-
-        return self._message_queue.empty()
+            return False
 
     def drain_to_processors(self, timeout: Optional[float] = None) -> bool:
         """Lightweight drain: ensure every message submitted so far has

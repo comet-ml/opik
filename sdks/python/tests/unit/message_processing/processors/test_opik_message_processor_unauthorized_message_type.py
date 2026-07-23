@@ -16,6 +16,7 @@ from unittest import mock
 
 import pytest
 
+from opik.message_processing import data_loss
 from opik.message_processing import messages
 from opik.message_processing import permissions
 from opik.message_processing.processors import online_message_processor
@@ -107,6 +108,7 @@ def processor(
         file_upload_manager=mock_file_uploader,
         fallback_replay_manager=mock_replay,
         unauthorized_message_types_registry=mock_registry,
+        data_loss_tracker=data_loss.DataLossTracker(),
     )
 
 
@@ -142,6 +144,7 @@ class TestUnauthorizedMessageTypeBlocking:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=mock_replay,
             unauthorized_message_types_registry=registry,
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
     def test_process__unauthorized_message_type__handler_not_called(
@@ -203,6 +206,7 @@ class TestUnauthorizedMessageTypeBlocking:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=mock_replay,
             unauthorized_message_types_registry=registry,
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
         msg = _create_trace_message()
@@ -318,6 +322,7 @@ class TestUnauthorizedMessageTypeEndToEnd:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=mock_replay,
             unauthorized_message_types_registry=real_registry,
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
         # The first call gets a 401 → type is registered as unauthorized
@@ -358,6 +363,7 @@ class TestUnauthorizedMessageTypeEndToEnd:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=mock_replay,
             unauthorized_message_types_registry=real_registry,
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
         # Cause CreateTraceMessage to be blocked via a 401
@@ -390,6 +396,7 @@ class TestUnauthorizedMessageTypeEndToEnd:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=mock_replay,
             unauthorized_message_types_registry=real_registry,
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
         # Manually add the type with a timestamp far in the past so the

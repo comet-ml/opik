@@ -87,6 +87,21 @@ public interface OptimizationLogSyncService {
      * @return Mono that completes when logs are finalized
      */
     Mono<Void> finalizeLogsOnCompletion(@NonNull String workspaceId, @NonNull UUID optimizationId);
+
+    /**
+     * Append a single system-generated log line to an optimization's Redis log stream so it is surfaced
+     * to the UI alongside the worker's own logs. Used when the backend, not the worker, terminates a run
+     * (e.g. the stalled-run reaper) and needs to record a human-readable reason — for a run whose worker
+     * never started there are otherwise no logs at all. Bumps {@code last_append_ts} so the periodic
+     * flusher and completion finalization sync the line to S3. Best-effort: never fails the caller.
+     *
+     * @param workspaceId    the workspace ID
+     * @param optimizationId the optimization ID
+     * @param message        the log line to append (no trailing newline needed)
+     * @return Mono that completes when the line is appended (or immediately if logging is disabled)
+     */
+    Mono<Void> appendSystemLogLine(@NonNull String workspaceId, @NonNull UUID optimizationId,
+            @NonNull String message);
 }
 
 @Singleton
@@ -144,6 +159,33 @@ class OptimizationLogSyncServiceImpl implements OptimizationLogSyncService {
 
     // TTL to set on Redis keys after finalization (1 hour) - allows late logs to be captured
     private static final long FINALIZATION_TTL_SECONDS = 3600;
+
+    @Override
+    @WithSpan
+    public Mono<Void> appendSystemLogLine(@NonNull String workspaceId, @NonNull UUID optimizationId,
+            @NonNull String message) {
+        if (!config.isEnabled()) {
+            log.debug("Optimization log sync is disabled, skipping system log line");
+            return Mono.empty();
+        }
+
+        String logKey = formatLogKey(workspaceId, optimizationId);
+        String metaKey = formatMetaKey(workspaceId, optimizationId);
+
+        RListReactive<String> logList = redisClient.getList(logKey, StringCodec.INSTANCE);
+        RMapReactive<String, String> metaMap = redisClient.getMap(metaKey, StringCodec.INSTANCE);
+
+        // Append the line and bump last_append_ts so both the periodic flusher and completion
+        // finalization treat it as new content and sync it to S3.
+        return logList.add(message)
+                .then(metaMap.put(META_LAST_APPEND_TS, String.valueOf(System.currentTimeMillis())))
+                .doOnSuccess(__ -> log.info("Appended system log line for optimization '{}'", optimizationId))
+                .onErrorResume(error -> {
+                    log.warn("Failed to append system log line for optimization '{}'", optimizationId, error);
+                    return Mono.empty();
+                })
+                .then();
+    }
 
     @Override
     @WithSpan

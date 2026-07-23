@@ -52,6 +52,8 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -170,6 +172,7 @@ class AlertResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private AlertResourceClient alertResourceClient;
     private PromptResourceClient promptResourceClient;
@@ -1786,7 +1789,7 @@ class AlertResourceTest {
             // Create guardrails for the trace
             Guardrail guardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(trace.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(idGenerator.generateId())
                     .projectName(projectName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -1958,7 +1961,7 @@ class AlertResourceTest {
 
             Guardrail guardrailA = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(traceA.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(idGenerator.generateId())
                     .projectName(projectAName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -1983,7 +1986,7 @@ class AlertResourceTest {
 
             Guardrail guardrailB = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(traceB.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(idGenerator.generateId())
                     .projectName(projectBName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -2774,7 +2777,7 @@ class AlertResourceTest {
             List<Guardrail> guardrails = IntStream.range(0, 2)
                     .mapToObj(i -> factory.manufacturePojo(Guardrail.class).toBuilder()
                             .entityId(trace.id())
-                            .secondaryId(UUID.randomUUID())
+                            .secondaryId(idGenerator.generateId())
                             .projectName(projectName)
                             .projectId(projectId)
                             .result(GuardrailResult.FAILED)
@@ -2866,7 +2869,7 @@ class AlertResourceTest {
 
                         return factory.manufacturePojo(Guardrail.class).toBuilder()
                                 .entityId(trace.id())
-                                .secondaryId(UUID.randomUUID())
+                                .secondaryId(idGenerator.generateId())
                                 .projectName(projectName)
                                 .projectId(projectId)
                                 .result(GuardrailResult.FAILED)
