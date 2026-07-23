@@ -190,6 +190,7 @@ You can learn more about the `opik` python SDK in the following sections:
    integrations/llama_index/index
    integrations/openai/index
    integrations/adk/index
+   integrations/pydantic_ai/index
 
 .. toctree::
    :caption: Evaluation

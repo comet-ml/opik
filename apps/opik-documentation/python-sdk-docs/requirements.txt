@@ -16,3 +16,4 @@ haystack-ai
 langchain
 langchain_core
 llama_index
+pydantic-ai
