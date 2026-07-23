@@ -470,6 +470,25 @@ def test_meteor__default_scorer__passes_tokenized_inputs_to_nltk(monkeypatch):
     assert captured["references"] == [["the", "cat", "sat"]]
 
 
+def test_meteor__default_scorer__real_nltk_score():
+    """Exercise the real default scorer end-to-end (no mocking).
+
+    Complements the tokenization test above by catching regressions in the
+    actual NLTK integration. Requires the WordNet corpora, so it is skipped
+    when they are unavailable (e.g. a CI environment without the NLTK data).
+    """
+    pytest.importorskip("nltk")
+    try:
+        result = METEOR(track=False).score(
+            output="the cat sat on the mat",
+            reference="the cat sat on the mat",
+        )
+    except (LookupError, ImportError, MetricComputationError) as exc:
+        pytest.skip(f"NLTK WordNet corpora not available: {exc}")
+
+    assert result.value == pytest.approx(0.9977, abs=1e-3)
+
+
 def test_gleu_metric_with_custom_fn():
     def gleu_fn(references, hypothesis):
         return 0.5
