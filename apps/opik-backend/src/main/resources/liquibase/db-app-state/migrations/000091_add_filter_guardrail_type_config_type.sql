@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset alexkuzmik:000090_add_filter_guardrail_type_config_type
+--changeset alexkuzmik:000091_add_filter_guardrail_type_config_type
 --comment: Add filter:guardrail_type config type to alert_trigger_configs
 
 ALTER TABLE alert_trigger_configs
