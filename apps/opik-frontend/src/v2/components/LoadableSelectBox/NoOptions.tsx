@@ -2,12 +2,12 @@ import React from "react";
 import isFunction from "lodash/isFunction";
 import { Button } from "@/ui/button";
 
-export type SelectBoxProps = {
+export type NoOptionsProps = {
   text?: string;
   onLoadMore?: () => void;
 };
 
-export const NoOptions = ({ text = "", onLoadMore }: SelectBoxProps) => {
+export const NoOptions = ({ text = "", onLoadMore }: NoOptionsProps) => {
   return (
     <div className="flex min-h-24 flex-col items-center justify-center px-6 py-4">
       <div className="comet-body-s text-center text-muted-slate">{text}</div>

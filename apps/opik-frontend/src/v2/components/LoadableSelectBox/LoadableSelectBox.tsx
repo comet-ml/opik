@@ -61,14 +61,14 @@ interface SingleSelectProps extends BaseLoadableSelectBoxProps {
   value?: string;
   onChange: (value: string) => void;
   multiselect?: false;
-  renderTitle?: (option: DropdownOption<string>) => ReactElement;
+  renderTitle?: (option: LoadableSelectBoxOption) => ReactElement;
 }
 
 interface MultiSelectProps extends BaseLoadableSelectBoxProps {
   value?: string[];
   onChange: (value: string[]) => void;
   multiselect: true;
-  renderTitle?: (option: DropdownOption<string>[]) => ReactElement;
+  renderTitle?: (option: LoadableSelectBoxOption[]) => ReactElement;
   showSelectAll?: boolean;
   selectAllLabel?: string;
 }
@@ -171,12 +171,12 @@ export const LoadableSelectBox = ({
       return multiselect
         ? (
             parentRenderTitle as (
-              option: DropdownOption<string>[],
+              option: LoadableSelectBoxOption[],
             ) => ReactElement
           )(selectedOptions)
         : (
             parentRenderTitle as (
-              option: DropdownOption<string>,
+              option: LoadableSelectBoxOption,
             ) => ReactElement
           )(selectedOptions[0]);
     }
@@ -332,7 +332,11 @@ export const LoadableSelectBox = ({
             <Separator className="-mx-px my-1 bg-muted" />
           </>
         )}
-        <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden">
+        <div
+          className="max-h-[40vh] overflow-y-auto overflow-x-hidden"
+          role="listbox"
+          aria-multiselectable={multiselect || undefined}
+        >
           {isLoading && (
             <div className="flex items-center justify-center">
               <Spinner />
@@ -351,6 +355,8 @@ export const LoadableSelectBox = ({
                 const optionContent = (
                   <div
                     key={option.value}
+                    role="option"
+                    aria-selected={selected}
                     className={cn(
                       "group flex cursor-pointer items-center gap-2 rounded-md px-3",
                       option.description ? "min-h-12 py-2" : "h-8",
