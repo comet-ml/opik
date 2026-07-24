@@ -223,7 +223,7 @@ if [[ "$WITH_WRAP" == "1" ]]; then
     echo "Distributed wrap done: 'traces' fronts 'traces_local' via sipHash64(project_id)."
 else
     echo "Distributed wrap deferred (default). Deletes still work on the MergeTree 'traces'. Apply the wrap later with"
-    echo "--wrap-only once the delete/read DAOs target traces_local."
+    echo "'--wrap-only --confirm-maintenance' once the delete/read DAOs target traces_local."
 fi
 
 echo "Restore databaseAnalytics.asyncInsertBusyTimeoutMaxMs to default, verify, and keep traces_pre_cutover_backup for the soak."
