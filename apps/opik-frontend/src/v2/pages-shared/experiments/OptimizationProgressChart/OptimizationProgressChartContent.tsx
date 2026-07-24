@@ -99,7 +99,9 @@ const OptimizationProgressChartContent: React.FC<
     [chartData],
   );
 
-  const legendItems = useMemo<{ color: string; label: string }[]>(() => {
+  const legendItems = useMemo<
+    { color: string; label: string; hollow?: boolean }[]
+  >(() => {
     if (isTestSuite) {
       return TRIAL_STATUS_ORDER.filter((s) =>
         chartData.some((d) => d.status === s),
@@ -114,8 +116,9 @@ const OptimizationProgressChartContent: React.FC<
       ...(hasMiniBatches
         ? [
             {
-              color: TRIAL_STATUS_COLORS.minibatch,
-              label: "Mini-batch eval",
+              color: TRIAL_STATUS_COLORS.pruned,
+              label: "Discarded at screening",
+              hollow: true,
             },
           ]
         : []),
@@ -421,12 +424,19 @@ const OptimizationProgressChartContent: React.FC<
       )}
 
       <div className="mt-1 flex items-center justify-center">
-        {legendItems.map(({ color, label }) => (
+        {legendItems.map(({ color, label, hollow }) => (
           <div key={label} className="flex items-center gap-0.5 pl-1 pr-1.5">
             <span className="flex size-3 items-center justify-center">
               <span
                 className="size-1.5 rounded-full"
-                style={{ backgroundColor: color }}
+                style={
+                  hollow
+                    ? {
+                        backgroundColor: "hsl(var(--background))",
+                        border: `1.25px solid ${color}`,
+                      }
+                    : { backgroundColor: color }
+                }
               />
             </span>
             <span className="comet-body-xs text-foreground">{label}</span>

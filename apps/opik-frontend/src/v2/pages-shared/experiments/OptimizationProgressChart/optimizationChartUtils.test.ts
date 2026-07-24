@@ -720,26 +720,26 @@ describe("buildMiniBatchChartPoints", () => {
     expect(buildMiniBatchChartPoints([], fullCandidates)).toEqual([]);
   });
 
-  it("suffixes ids so screening dots never collide with full-eval dots", () => {
+  it("omits screening dots for candidates that were promoted to a full eval", () => {
+    // "c1" has a full-eval twin, so its screening eval is redundant — no dot.
     const points = buildMiniBatchChartPoints(
       [makeCandidate({ candidateId: "c1", stepIndex: -1, score: 1 })],
       fullCandidates,
     );
-    expect(points[0].candidateId).toBe(`c1${MINI_BATCH_POINT_SUFFIX}`);
-    expect(getBaseCandidateId(points[0].candidateId)).toBe("c1");
+    expect(points).toEqual([]);
+  });
+
+  it("suffixes ids so screening dots never collide with full-eval dots", () => {
+    const points = buildMiniBatchChartPoints(
+      [makeCandidate({ candidateId: "rej", stepIndex: -1, score: 1 })],
+      fullCandidates,
+    );
+    expect(points[0].candidateId).toBe(`rej${MINI_BATCH_POINT_SUFFIX}`);
+    expect(getBaseCandidateId(points[0].candidateId)).toBe("rej");
     expect(points[0].kind).toBe("minibatch");
   });
 
-  it("marks a screened candidate WITH a full eval as 'minibatch' at its step", () => {
-    const points = buildMiniBatchChartPoints(
-      [makeCandidate({ candidateId: "c1", stepIndex: -1, score: 1 })],
-      fullCandidates,
-    );
-    expect(points[0].status).toBe("minibatch");
-    expect(points[0].stepIndex).toBe(1);
-  });
-
-  it("marks a mini-batch-only candidate as 'pruned' (Discarded) — it was rejected", () => {
+  it("marks a screened-and-discarded candidate as 'pruned' (Discarded)", () => {
     const points = buildMiniBatchChartPoints(
       [
         makeCandidate({
@@ -771,9 +771,9 @@ describe("buildMiniBatchChartPoints", () => {
     expect(points[0].stepIndex).toBe(0);
   });
 
-  it("a 100% mini-batch never joins the trend line or 'best' statuses", () => {
+  it("a 100% screened-and-discarded point never joins the trend line", () => {
     const points = buildMiniBatchChartPoints(
-      [makeCandidate({ candidateId: "c1", stepIndex: -1, score: 1 })],
+      [makeCandidate({ candidateId: "rej", stepIndex: -1, score: 1 })],
       fullCandidates,
     );
     const edges = buildTrendLineEdges(points);
@@ -782,7 +782,7 @@ describe("buildMiniBatchChartPoints", () => {
 });
 
 describe("buildTrialCardModel — items evaluated & mini-batch title", () => {
-  it("shows 'N of M' for a mini-batch screening eval", () => {
+  it("shows 'N of M' and a Discarded label for a screened eval", () => {
     const model = buildTrialCardModel({
       candidate: makeCandidate({
         candidateId: "mb",
@@ -790,13 +790,14 @@ describe("buildTrialCardModel — items evaluated & mini-batch title", () => {
         score: 1,
         totalDatasetItemCount: 5,
       }),
-      status: "minibatch",
+      status: "pruned",
       stepIndex: 2,
       kind: "minibatch",
       fullEvalItemCount: 30,
     });
+    // Title keeps the "Mini-batch eval" context; the status reads as Discarded.
     expect(model.title).toBe("Mini-batch eval");
-    expect(model.statusLabel).toBe("Mini-batch eval, step 2");
+    expect(model.statusLabel).toBe("Discarded in step 2");
     expect(model.rows).toContainEqual({
       label: "Items evaluated",
       value: "5 of 30",

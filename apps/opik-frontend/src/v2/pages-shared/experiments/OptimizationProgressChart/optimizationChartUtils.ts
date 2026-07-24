@@ -26,12 +26,15 @@ export type TrialStatus =
   // A trial that ran but produced no score — the metric/judge failed on it.
   // Distinct from "running" (which means "not scored *yet*"): a "failed" trial
   // is terminal. See computeCandidateStatuses for how this is derived.
-  | "failed"
-  // A mini-batch screening eval (~3-5 items vs a ~30-item full eval). Rendered
-  // as a small hollow dot; never a candidate for "best". A mini-batch whose
-  // candidate never earned a full eval renders as "pruned" (Discarded) instead
-  // — it was rejected by the optimizer's acceptance gate.
-  | "minibatch";
+  | "failed";
+
+// A mini-batch screening eval is a candidate the search evaluated on a small
+// sample (~3-5 items vs a ~30-item full eval) and discarded before spending a
+// full evaluation. It is a "pruned" (Discarded) point like any other discard —
+// the distinction is purely visual (hollow dot via CandidateDataPoint.kind),
+// signalling "small-sample score, rejected at screening". Screening evals of
+// candidates that WERE promoted to a full eval are redundant with that
+// candidate's solid dot and are not plotted (see buildMiniBatchChartPoints).
 
 export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   baseline: "gray",
@@ -40,7 +43,6 @@ export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   pruned: "pink",
   running: "yellow",
   failed: "red",
-  minibatch: "gray",
 };
 
 // A fuchsia scale encodes trial status on the progress chart: baseline and
@@ -54,7 +56,6 @@ export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
   pruned: "var(--trial-pruned)",
   running: "var(--color-yellow)",
   failed: "var(--color-red)",
-  minibatch: "var(--trial-minibatch)",
 };
 
 /** Best-trial dot colour — darkest in the fuchsia scale (theme-aware, see main.scss). */
@@ -82,11 +83,11 @@ export const getTrialDotColor = ({
   if (isBest) return TRIAL_BEST_COLOR;
   if (isTestSuite) return TRIAL_STATUS_COLORS[status];
   // Dataset runs collapse most statuses to passed, but a failed trial must stay
-  // red (it scored nothing — it is not a passing trial), pruned stays faded,
-  // and mini-batch screening dots keep their muted colour.
+  // red (it scored nothing — it is not a passing trial) and discarded stays
+  // faded. Screened-and-discarded points share the discarded colour; the hollow
+  // dot (kind === "minibatch") is what sets them apart visually.
   if (status === "pruned") return TRIAL_STATUS_COLORS.pruned;
   if (status === "failed") return TRIAL_STATUS_COLORS.failed;
-  if (status === "minibatch") return TRIAL_STATUS_COLORS.minibatch;
   return TRIAL_STATUS_COLORS.passed;
 };
 
@@ -98,7 +99,6 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   pruned: "Discarded",
   running: "Running",
   failed: "Failed",
-  minibatch: "Mini-batch eval",
 };
 
 /**
@@ -123,8 +123,6 @@ export const getTrialStatusLabel = (
       return `Running step ${stepIndex}`;
     case "failed":
       return `Failed step ${stepIndex}`;
-    case "minibatch":
-      return `Mini-batch eval, step ${stepIndex}`;
     default:
       return TRIAL_STATUS_LABELS[status];
   }
@@ -231,7 +229,6 @@ export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
   "baseline",
   "passed",
   "evaluating",
-  "minibatch",
   "pruned",
   "running",
   "failed",
@@ -262,15 +259,17 @@ export const getBaseCandidateId = (pointId: string): string =>
     : pointId;
 
 /**
- * Build chart points for mini-batch screening evals.
+ * Build chart points for candidates the search screened on a mini-batch and
+ * DISCARDED before spending a full evaluation.
  *
- * - A mini-batch whose candidate also has a full evaluation renders as a small
- *   muted "minibatch" dot at that candidate's step.
- * - A mini-batch whose candidate NEVER got a full evaluation was rejected by
- *   the optimizer's acceptance gate — it renders as "pruned" (Discarded).
- * - Points without a full-eval twin are placed at the step of the latest full
- *   evaluation created before them (the step the search was on), baseline
- *   step 0 otherwise.
+ * A candidate that WAS promoted (has a full-eval twin) is already represented by
+ * its solid full-eval dot, so its screening eval is redundant and not plotted.
+ * The remaining candidates never earned a full evaluation — they were rejected
+ * by the optimizer's acceptance gate — so each is a "pruned" (Discarded) point,
+ * rendered as a small hollow dot (kind === "minibatch") to signal a low-
+ * confidence small-sample score. Each is placed at the step of the latest full
+ * evaluation created before it (the step the search was on), baseline step 0
+ * otherwise.
  */
 export const buildMiniBatchChartPoints = (
   miniBatchCandidates: AggregatedCandidate[],
@@ -278,16 +277,12 @@ export const buildMiniBatchChartPoints = (
 ): CandidateDataPoint[] => {
   if (!miniBatchCandidates.length) return [];
 
-  const fullByCandidateId = new Map(
-    fullCandidates.map((c) => [c.candidateId, c]),
-  );
+  const fullCandidateIds = new Set(fullCandidates.map((c) => c.candidateId));
   const fullByCreation = fullCandidates
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   const resolveStepIndex = (mb: AggregatedCandidate): number => {
-    const twin = fullByCandidateId.get(mb.candidateId);
-    if (twin) return twin.stepIndex;
     let step = 0;
     for (const full of fullByCreation) {
       if (full.created_at <= mb.created_at) step = full.stepIndex;
@@ -296,15 +291,21 @@ export const buildMiniBatchChartPoints = (
     return step;
   };
 
-  return miniBatchCandidates.map((mb) => ({
-    candidateId: `${mb.candidateId}${MINI_BATCH_POINT_SUFFIX}`,
-    stepIndex: resolveStepIndex(mb),
-    parentCandidateIds: [],
-    value: mb.score ?? null,
-    status: fullByCandidateId.has(mb.candidateId) ? "minibatch" : "pruned",
-    name: mb.name,
-    kind: "minibatch" as const,
-  }));
+  return (
+    miniBatchCandidates
+      // Drop screening evals of candidates that went on to a full evaluation —
+      // that candidate is already shown as its solid dot.
+      .filter((mb) => !fullCandidateIds.has(mb.candidateId))
+      .map((mb) => ({
+        candidateId: `${mb.candidateId}${MINI_BATCH_POINT_SUFFIX}`,
+        stepIndex: resolveStepIndex(mb),
+        parentCandidateIds: [],
+        value: mb.score ?? null,
+        status: "pruned" as const,
+        name: mb.name,
+        kind: "minibatch" as const,
+      }))
+  );
 };
 
 export type ParentChildEdge = {
