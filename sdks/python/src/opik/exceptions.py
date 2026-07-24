@@ -167,6 +167,27 @@ class GuardrailValidationFailed(OpikException):
         return f"{self.message}. Failed validations: {self.failed_validations}\n"
 
 
+class GuardrailValidationError(GuardrailValidationFailed):
+    """Raised when a guardrail cannot be evaluated, for example when the guardrails
+    backend is unreachable, times out, or the LLM judge provider call fails.
+
+    Opik guardrails fail closed: if a check cannot be completed, validation is treated
+    as failed so the protected code path does not proceed. This subclasses
+    ``GuardrailValidationFailed`` so existing ``except GuardrailValidationFailed``
+    handlers also block on evaluation errors.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message, validation_results=[], failed_validations=[])
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class GuardrailTrainingError(OpikException):
+    """Raised when training a custom guardrail fails or does not complete in time."""
+
+
 class OpikCloudRequestsRateLimited(OpikException):
     """Exception raised when the Opik Cloud limits the request rate."""
 
