@@ -15,9 +15,10 @@ title: Alerts
 
 Alerts allow you to configure automated webhook notifications for important events in your Opik workspace. When specific events occur — such as trace errors, new feedback scores, or prompt changes — Opik sends HTTP POST requests to your configured endpoint with detailed event data.
 
-Opik provides three destination types for alerts:
+Opik provides four destination types for alerts:
 - **Slack**: Native integration with automatic message formatting for Slack
 - **PagerDuty**: Native integration with automatic event formatting for PagerDuty
+- **Feishu**: Native integration with automatic interactive-card formatting for Feishu (Lark)
 - **General**: For custom webhooks, no-code automation platforms, or middleware services
 
 <Frame>
@@ -51,9 +52,11 @@ Opik provides three destination types for alerts:
      - **General**: For custom webhooks, no-code automation platforms, or middleware services
      - **Slack**: For native Slack webhook integration (automatically formats messages for Slack)
      - **PagerDuty**: For native PagerDuty integration (automatically formats events for PagerDuty)
+     - **Feishu**: For native Feishu (Lark) integration (automatically formats events as interactive cards)
    - **Endpoint URL**: Enter your webhook URL (must start with `http://` or `https://`)
      - For Slack: Use your Slack Incoming Webhook URL (e.g., `https://hooks.slack.com/services/...`)
      - For PagerDuty: Use your PagerDuty Events API v2 integration URL (e.g., `https://events.pagerduty.com/v2/enqueue`)
+     - For Feishu: Use your Feishu group bot webhook URL (e.g., `https://open.feishu.cn/open-apis/bot/v2/hook/...`)
      - For General: Use any HTTP endpoint that can receive POST requests
 
 4. **Advanced webhook settings** (optional)
@@ -153,6 +156,36 @@ Opik will automatically format all alert payloads into PagerDuty-compatible even
 - Detailed event information
 - Custom fields for filtering and routing
 - Deduplication keys to prevent duplicate incidents
+
+### Feishu integration (Native)
+
+Opik provides native Feishu (Lark) integration that automatically formats alert events as [interactive cards](https://open.feishu.cn/document/common-capabilities/message-card/message-cards-content) delivered to a group chat via a custom bot webhook.
+
+#### Prerequisites
+- A Feishu (Lark) group chat where you can add a custom bot
+- Permission to create custom bots in the group
+
+#### Setup steps
+
+1. **In Feishu (Lark)**:
+   - Open the target group chat → Settings → Bots
+   - Click "Add Bot" and choose "Custom Bot"
+   - Give the bot a name (e.g., "Opik Alerts") and copy the generated Webhook URL
+
+2. **In Opik**:
+   - Go to Configuration → Alerts tab
+   - Click "Create new alert"
+   - Give your alert a descriptive name
+   - Select **Feishu** as the destination type
+   - Enter the Feishu bot webhook URL: `https://open.feishu.cn/open-apis/bot/v2/hook/...`
+   - Add triggers for the events you want to monitor
+   - Click "Test connection" to verify
+   - Click "Create alert"
+
+Opik will automatically format all alert payloads into Feishu interactive cards with:
+- Color-coded headers by severity (red for errors, orange for metric thresholds, blue for informational events)
+- Human-readable event summaries and details
+- "View in Opik" action buttons linking back to the relevant page
 
 ### Custom integration with middleware service (Optional)
 

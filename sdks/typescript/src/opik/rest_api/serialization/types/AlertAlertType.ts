@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const AlertAlertType: core.serialization.Schema<serializers.AlertAlertType.Raw, OpikApi.AlertAlertType> =
-    core.serialization.enum_(["general", "slack", "pagerduty"]);
+    core.serialization.enum_(["general", "slack", "pagerduty", "feishu"]);
 
 export declare namespace AlertAlertType {
-    export type Raw = "general" | "slack" | "pagerduty";
+    export type Raw = "general" | "slack" | "pagerduty" | "feishu";
 }

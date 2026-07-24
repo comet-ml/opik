@@ -13,6 +13,7 @@ const ALERT_TYPES = [
   ALERT_TYPE.general,
   ALERT_TYPE.slack,
   ALERT_TYPE.pagerduty,
+  ALERT_TYPE.feishu,
 ] as const;
 
 const DestinationSelector: React.FunctionComponent<

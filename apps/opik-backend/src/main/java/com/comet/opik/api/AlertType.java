@@ -12,7 +12,8 @@ import java.util.Arrays;
 public enum AlertType {
     GENERAL("general"),
     SLACK("slack"),
-    PAGERDUTY("pagerduty");
+    PAGERDUTY("pagerduty"),
+    FEISHU("feishu");
 
     @JsonValue
     private final String value;

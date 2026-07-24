@@ -24,6 +24,7 @@ export enum ALERT_TYPE {
   general = "general",
   slack = "slack",
   pagerduty = "pagerduty",
+  feishu = "feishu",
 }
 
 export interface AlertTriggerConfig {

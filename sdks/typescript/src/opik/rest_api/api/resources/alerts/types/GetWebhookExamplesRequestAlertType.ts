@@ -4,6 +4,7 @@ export const GetWebhookExamplesRequestAlertType = {
     General: "general",
     Slack: "slack",
     Pagerduty: "pagerduty",
+    Feishu: "feishu",
 } as const;
 export type GetWebhookExamplesRequestAlertType =
     (typeof GetWebhookExamplesRequestAlertType)[keyof typeof GetWebhookExamplesRequestAlertType];

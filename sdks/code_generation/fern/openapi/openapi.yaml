@@ -1447,6 +1447,7 @@ paths:
           - general
           - slack
           - pagerduty
+          - feishu
       responses:
         "200":
           description: Webhook examples
@@ -10364,6 +10365,7 @@ components:
           - general
           - slack
           - pagerduty
+          - feishu
         metadata:
           type: object
           additionalProperties:
@@ -10586,6 +10588,7 @@ components:
           - general
           - slack
           - pagerduty
+          - feishu
         metadata:
           type: object
           additionalProperties:
@@ -10760,6 +10763,7 @@ components:
           - general
           - slack
           - pagerduty
+          - feishu
         metadata:
           type: object
           additionalProperties:
