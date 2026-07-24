@@ -133,7 +133,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             // Names are not unique at the DB layer, so re-running an SDK script would otherwise create
             // rules that are indistinguishable in the UI. Only names sharing the prefix are fetched.
             String requestedName = inputRuleEvaluator.getName();
-            Set<String> candidates = ruleDAO.findCollidingNames(projectIds, workspaceId,
+            Set<String> candidates = ruleDAO.findCandidateNames(projectIds, workspaceId,
                     AutomationRuleNames.likePrefix(requestedName), null);
             String uniqueName = AutomationRuleNames.generateUniqueName(requestedName, candidates);
 
@@ -283,7 +283,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 if (Objects.equals(requestedName, currentName)) {
                     uniqueName = requestedName;
                 } else {
-                    Set<String> candidates = ruleDAO.findCollidingNames(projectIds, workspaceId,
+                    Set<String> candidates = ruleDAO.findCandidateNames(projectIds, workspaceId,
                             AutomationRuleNames.likePrefix(requestedName), id);
                     uniqueName = AutomationRuleNames.generateUniqueName(requestedName, candidates);
                 }

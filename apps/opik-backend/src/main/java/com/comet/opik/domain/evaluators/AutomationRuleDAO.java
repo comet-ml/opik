@@ -68,7 +68,7 @@ public interface AutomationRuleDAO {
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    Set<String> findCollidingNames(
+    Set<String> findCandidateNames(
             @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
             @Bind("workspaceId") String workspaceId,
             @Bind("namePrefix") String namePrefix,
