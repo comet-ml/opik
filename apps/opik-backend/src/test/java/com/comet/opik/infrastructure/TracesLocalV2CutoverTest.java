@@ -876,15 +876,19 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * Rollback stage B (000004_rollback_stage_b + reverse_replay): swap the original (parked as
-     * {@code traces_pre_cutover_backup}) back to live {@code traces}, rename the now-parked successor back to
-     * {@code traces_local_v2}, then reverse-replay so a delete on the successor since {@code cutoverStart} does not
-     * resurrect on the restored original.
+     * Rollback stage B (000004_rollback_stage_b + reverse_replay): a single atomic multi-target RENAME rotates both
+     * names back — the successor ({@code traces}) returns to {@code traces_local_v2} and the original
+     * ({@code traces_pre_cutover_backup}) returns to {@code traces} (the name freed by the first clause) — so there is no
+     * window where a partial failure strands the successor under the backup name. Then reverse-replay so a delete on the
+     * successor since {@code cutoverStart} does not resurrect on the restored original.
      */
     private void rollbackExchangeBack(String cutoverStart) {
-        execute("EXCHANGE TABLES traces AND traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
-        });
-        execute("RENAME TABLE traces_pre_cutover_backup TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+        execute("""
+                RENAME TABLE
+                    traces TO traces_local_v2,
+                    traces_pre_cutover_backup TO traces
+                    ON CLUSTER '{cluster}'
+                """, _ -> {
         });
         reverseReplay(cutoverStart);
     }

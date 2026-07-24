@@ -70,10 +70,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 6. **Cutover buffer knob ready** — `databaseAnalytics.asyncInsertBusyTimeoutMaxMs` (env
    `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS`), unset by default so the buffer inherits the
    `async_insert_busy_timeout_max_ms=250` carried by `queryParameters`. Raise it to ~10000 for the cutover, then unset it
-   again. On a staging load test, confirm the adaptive-timeout widening actually takes effect before production. **Also
-   confirm client/SDK insert timeouts exceed the widened buffer** (~10s) — with `wait_for_async_insert=1` a raised
-   ceiling blocks each insert until it flushes, so a shorter client timeout would surface as ingestion errors during the
-   window.
+   again. **This is operator-verified, not script-enforced:** the ceiling is a backend per-query setting applied on the
+   backend's own ClickHouse client, so it is not visible to the migration scripts' direct `clickhouse-client` session —
+   they cannot gate on it. Confirm it took effect on the prod-clone/staging load test (this is the Go/No-Go "Async-insert
+   ceiling confirmed" item), before the write-facing stages run in production. **Also confirm client/SDK insert timeouts
+   exceed the widened buffer** (~10s) — with `wait_for_async_insert=1` a raised ceiling blocks each insert until it
+   flushes, so a shorter client timeout would surface as ingestion errors during the window.
 7. **Schema-state flag wired, with a rollout plan** — `databaseAnalyticsDataModel.traceColumnsNonNullable` (env
    `ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE`, default `false`). The successor's `end_time`/`ttft` are
    **non-nullable sentinel** columns, so the app must bind epoch/NaN instead of `null` once they are live — a `null`
