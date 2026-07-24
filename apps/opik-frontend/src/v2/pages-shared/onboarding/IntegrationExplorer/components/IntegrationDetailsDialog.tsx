@@ -27,6 +27,11 @@ import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "@/v2/pages-shared/onboarding/CodeExecutor/CodeExecutor";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
+import { useIsPhone } from "@/hooks/useIsPhone";
+import {
+  GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY,
+  GUIDED_MOBILE_ONBOARDING_VARIANTS,
+} from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
 
 type IntegrationDetailsDialogProps = {
   selectedIntegration?: Integration;
@@ -39,6 +44,17 @@ const IntegrationDetailsDialog: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
   const variant = useFeatureFlagVariantKey("run-button-activation-test");
+  // Group A (control) of the guided-mobile-onboarding A/B test (OPIK-7476) is
+  // defined as the legacy onboarding flow *with* the Run button, so force the
+  // code executor on for those phone users regardless of the separate
+  // run-button-activation-test rollout.
+  const { isPhone } = useIsPhone();
+  const guidedMobileOnboardingVariant = useFeatureFlagVariantKey(
+    GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY,
+  );
+  const isGuidedMobileOnboardingControl =
+    isPhone &&
+    guidedMobileOnboardingVariant === GUIDED_MOBILE_ONBOARDING_VARIANTS.CONTROL;
   const projectName = useActiveProjectName();
   const { themeMode } = useTheme();
 
@@ -74,7 +90,9 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     apiKey &&
     Boolean(CODE_EXECUTOR_SERVICE_URL);
 
-  const shouldShowCodeExecutor = canExecuteCode && variant === "test";
+  const shouldShowCodeExecutor =
+    Boolean(canExecuteCode) &&
+    (variant === "test" || isGuidedMobileOnboardingControl);
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {

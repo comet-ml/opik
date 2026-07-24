@@ -8,6 +8,8 @@ const localStorageStore: Record<string, unknown> = {};
 const localStorageSetters: Record<string, ReturnType<typeof vi.fn>> = {};
 
 let mockVariant: string | null = "manual";
+let mockMobileVariant: string | null | undefined = undefined;
+let mockIsPhone = false;
 let mockHasTraces = false;
 let mockPollExpired = false;
 let mockFirstTraceProjectId: string | null = null;
@@ -17,7 +19,25 @@ let mockDemoDataEnabled = true;
 // ──────────────────────────────────────────────────────────────────────────
 
 vi.mock("posthog-js/react", () => ({
-  useFeatureFlagVariantKey: vi.fn(() => mockVariant),
+  useFeatureFlagVariantKey: vi.fn((key: string) =>
+    key === "guided-mobile-onboarding-flow" ? mockMobileVariant : mockVariant,
+  ),
+}));
+
+vi.mock("@/hooks/useIsPhone", () => ({
+  useIsPhone: vi.fn(() => ({
+    isPhone: mockIsPhone,
+    isPhonePortrait: mockIsPhone,
+    isPhoneLandscape: false,
+  })),
+}));
+
+vi.mock("./MobileOnboarding/MobileOnboarding", () => ({
+  default: () => <div data-testid="mobile-onboarding" />,
+}));
+
+vi.mock("@/shared/Loader/Loader", () => ({
+  default: () => <div data-testid="loader" />,
 }));
 
 vi.mock("use-local-storage-state", () => ({
@@ -159,6 +179,9 @@ vi.mock("./AgentOnboarding/AgentOnboardingContext", () => ({
   MANUAL_ONBOARDING_KEY: "manual-onboarding",
   AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY: "onboarding-integrations-3-options",
   DEFAULT_ONBOARDING_FLOW: "manual",
+  GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY:
+    "guided-mobile-onboarding-flow",
+  GUIDED_MOBILE_ONBOARDING_VARIANTS: { CONTROL: "control", TEST: "test" },
   AGENT_ONBOARDING_STEPS: {
     SELECT_INTENT: "select-intent",
     AGENT_NAME: "agent-name",
@@ -193,6 +216,8 @@ describe("NewQuickstart — manual variant", () => {
     for (const key of Object.keys(localStorageSetters))
       delete localStorageSetters[key];
     mockVariant = "manual";
+    mockMobileVariant = undefined;
+    mockIsPhone = false;
     mockHasTraces = false;
     mockPollExpired = false;
     mockFirstTraceProjectId = null;
@@ -319,6 +344,9 @@ describe("NewQuickstart — non-manual variants", () => {
       delete localStorageStore[key];
     for (const key of Object.keys(localStorageSetters))
       delete localStorageSetters[key];
+    mockVariant = "control";
+    mockMobileVariant = undefined;
+    mockIsPhone = false;
     mockProjectData = undefined;
     mockProjectIsPending = false;
   });
@@ -371,5 +399,69 @@ describe("NewQuickstart — non-manual variants", () => {
 
     const nav = screen.getByTestId("navigate");
     expect(nav).toHaveAttribute("data-to", "/$workspaceName/home");
+  });
+});
+
+describe("NewQuickstart — guided mobile onboarding A/B test (OPIK-7476)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockNavigate.mockReset();
+    for (const key of Object.keys(localStorageStore))
+      delete localStorageStore[key];
+    for (const key of Object.keys(localStorageSetters))
+      delete localStorageSetters[key];
+    mockVariant = "manual";
+    mockIsPhone = true;
+    mockHasTraces = false;
+    mockPollExpired = false;
+    mockFirstTraceProjectId = null;
+    mockDemoDataEnabled = true;
+    setManualDone(false);
+  });
+
+  it('renders the guided mobile onboarding flow for the "test" variant (Group B)', () => {
+    mockMobileVariant = "test";
+    render(<NewQuickstart />);
+
+    expect(screen.getByTestId("mobile-onboarding")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-integrations-page"),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders the legacy onboarding flow for the "control" variant (Group A)', () => {
+    mockMobileVariant = "control";
+    render(<NewQuickstart />);
+
+    // Control falls through to the same manual flow desktop users get (which
+    // carries the Run button), not the guided mobile flow.
+    expect(
+      screen.getByTestId("onboarding-integrations-page"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-onboarding")).not.toBeInTheDocument();
+  });
+
+  it("holds rendering behind a loader while the experiment bucket is unresolved", () => {
+    mockMobileVariant = undefined;
+    render(<NewQuickstart />);
+
+    expect(screen.getByTestId("loader")).toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-onboarding")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-integrations-page"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not gate desktop users on the mobile experiment flag", () => {
+    mockIsPhone = false;
+    mockMobileVariant = undefined;
+    render(<NewQuickstart />);
+
+    // No loader, no mobile flow — desktop renders its normal onboarding.
+    expect(screen.queryByTestId("loader")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-onboarding")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-integrations-page"),
+    ).toBeInTheDocument();
   });
 });
