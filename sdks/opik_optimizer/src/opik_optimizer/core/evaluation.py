@@ -27,6 +27,11 @@ _EVALUATE_ON_DICT_ITEMS_ACCEPTS_EXPERIMENT_CONFIG = (
     in inspect.signature(_opik_evaluate_on_dict_items).parameters
 )
 
+_EVALUATE_OPTIMIZATION_TRIAL_ACCEPTS_EXPERIMENT_TYPE = (
+    "experiment_type"
+    in inspect.signature(opik_evaluator.evaluate_optimization_trial).parameters
+)
+
 
 def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
     def _normalize_metric_value(
@@ -276,6 +281,7 @@ def evaluate_with_result(
     experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
     use_evaluate_on_dict_items: bool = False,
+    experiment_type: str | None = None,
 ) -> tuple[
     float,
     opik_evaluation_result.EvaluationResult
@@ -284,6 +290,11 @@ def evaluate_with_result(
 ]:
     """
     Run evaluation and return both the aggregate score and the underlying Opik result.
+
+    Args:
+        experiment_type: Optional experiment type recorded on the optimization trial
+            ("trial" for full evaluations, "mini-batch" for candidate screening).
+            Only used when optimization_id is set.
     """
     return _evaluate_internal(
         dataset=dataset,
@@ -297,6 +308,7 @@ def evaluate_with_result(
         experiment_config=experiment_config,
         verbose=verbose,
         use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+        experiment_type=experiment_type,
     )
 
 
@@ -394,20 +406,31 @@ def _run_evaluator(
     n_samples: int | None,
     experiment_config: dict[str, Any] | None,
     verbose: int,
+    experiment_type: str | None = None,
 ) -> opik_evaluation_result.EvaluationResult:
     if optimization_id is not None:
-        return opik_evaluator.evaluate_optimization_trial(
-            optimization_id=optimization_id,
-            dataset=dataset,
-            task=evaluated_task,
-            project_name=project_name,
-            dataset_item_ids=dataset_item_ids,
-            scoring_metrics=scoring_metrics,
-            task_threads=num_threads,
-            nb_samples=n_samples,
-            experiment_config=experiment_config,
-            verbose=verbose,
-        )
+        trial_kwargs: dict[str, Any] = {
+            "optimization_id": optimization_id,
+            "dataset": dataset,
+            "task": evaluated_task,
+            "project_name": project_name,
+            "dataset_item_ids": dataset_item_ids,
+            "scoring_metrics": scoring_metrics,
+            "task_threads": num_threads,
+            "nb_samples": n_samples,
+            "experiment_config": experiment_config,
+            "verbose": verbose,
+        }
+        if experiment_type is not None:
+            if _EVALUATE_OPTIMIZATION_TRIAL_ACCEPTS_EXPERIMENT_TYPE:
+                trial_kwargs["experiment_type"] = experiment_type
+            elif experiment_type != "trial":
+                logger.debug(
+                    "Installed opik SDK does not support experiment_type on "
+                    "evaluate_optimization_trial; recording %r trial as 'trial'.",
+                    experiment_type,
+                )
+        return opik_evaluator.evaluate_optimization_trial(**trial_kwargs)
     return opik_evaluator.evaluate(
         dataset=dataset,
         task=evaluated_task,
@@ -526,6 +549,7 @@ def _evaluate_internal(
     experiment_config: dict[str, Any] | None,
     verbose: int,
     use_evaluate_on_dict_items: bool,
+    experiment_type: str | None = None,
 ) -> tuple[
     float,
     opik_evaluation_result.EvaluationResult
@@ -574,6 +598,7 @@ def _evaluate_internal(
             n_samples=n_samples,
             experiment_config=experiment_config,
             verbose=verbose,
+            experiment_type=experiment_type,
         )
 
     if not evaluation_result.test_results:
