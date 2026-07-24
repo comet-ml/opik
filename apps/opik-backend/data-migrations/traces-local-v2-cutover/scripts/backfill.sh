@@ -146,8 +146,8 @@ preflight_capacity() {
 count_src() {
     ch "SELECT count()
         FROM $SRC_TABLE
-        WHERE created_at >= toDateTime64('$1', 9)
-          AND created_at <  toDateTime64('$2', 9)"
+        WHERE created_at >= toDateTime64('$1', 9, 'UTC')
+          AND created_at <  toDateTime64('$2', 9, 'UTC')"
 }
 
 # Distinct LOGICAL rows in [lo, hi), by the ReplacingMergeTree dedup key. Reconciliation must be dedup-aware: raw
@@ -156,15 +156,15 @@ count_src() {
 count_src_uniq() {
     ch "SELECT uniqExact(workspace_id, project_id, id)
         FROM $SRC_TABLE
-        WHERE created_at >= toDateTime64('$1', 9)
-          AND created_at <  toDateTime64('$2', 9)"
+        WHERE created_at >= toDateTime64('$1', 9, 'UTC')
+          AND created_at <  toDateTime64('$2', 9, 'UTC')"
 }
 
 count_dst_uniq() {
     ch "SELECT uniqExact(workspace_id, project_id, id)
         FROM $DST_TABLE
-        WHERE created_at >= toDateTime64('$1', 6)
-          AND created_at <  toDateTime64('$2', 6)"
+        WHERE created_at >= toDateTime64('$1', 6, 'UTC')
+          AND created_at <  toDateTime64('$2', 6, 'UTC')"
 }
 
 # Render the reference INSERT for one window by substituting placeholders (pure bash, no envsubst dependency).
@@ -219,8 +219,10 @@ insert_window() {
         log "$label ($lo .. $hi): live window (src_uniq=$src dst_uniq=$dst) — the delta-insert will reconcile concurrent writes"
     elif [[ "$dst" -gt "$src" ]]; then
         log "$label ($lo .. $hi): src_uniq=$src dst_uniq=$dst — concurrent source deletes; the deletion replay will reconcile"
-    else
+    elif [[ "$dst" == "$src" ]]; then
         log "$label ($lo .. $hi): OK (src_uniq=dst_uniq=$src)"
+    else
+        log "$label ($lo .. $hi): OK within tolerance (src_uniq=$src dst_uniq=$dst)"
     fi
 
     if [[ "$PAUSE_SECONDS" != "0" ]]; then

@@ -10,4 +10,8 @@
 -- running it, so it cannot fire post-EXCHANGE — by which point the old original has been renamed to
 -- `traces_pre_cutover_backup` and `traces_local_v2` no longer exists, so there is nothing here that could touch the
 -- backup.
-TRUNCATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}';
+--
+-- max_table_size_to_drop = 0 disables the drop-size guard for this statement: TRUNCATE is subject to
+-- max_table_size_to_drop (default 50 GB) just like DROP, and the shadow is well over that on any instance large enough
+-- to need this runbook — without the override the rollback throws exactly when it is needed.
+TRUNCATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' SETTINGS max_table_size_to_drop = 0;

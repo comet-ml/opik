@@ -12,8 +12,10 @@
 --   * end_time and ttft are the two denullified columns: coalesce them to their sentinels (epoch / NaN).
 --   * is_deleted is omitted so the new column defaults to 0.
 --   * apply_deleted_mask stays at its default 1, so rows already lightweight-deleted on the source are skipped.
---   * No explicit ORDER BY: source and destination share ORDER BY (workspace_id, project_id, id), so rows are read in
---     destination order and parts form cleanly (see README "Why slice by created_at").
+--   * No explicit ORDER BY: omitted deliberately to avoid a full per-window sort (memory). A parallel SELECT gives no
+--     output-order guarantee, so inserted blocks may span/interleave partitions; the destination ReplacingMergeTree
+--     dedups regardless of insert order and background merges compact the parts. This is NOT a claim that rows arrive
+--     in sort-key order — do not rely on it (see README "Why slice by created_at").
 --   * SETTINGS max_insert_block_size bounds the rows per part-forming block; peak insert memory is a small multiple of
 --     the smaller of that and min_insert_block_size_bytes (256 MB default), which dominates for wide trace rows.
 
@@ -67,9 +69,10 @@ SELECT
     source,
     environment
 FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
-WHERE created_at >= toDateTime64('${WINDOW_LO}', 9)
-  AND created_at <  toDateTime64('${WINDOW_HI}', 9)
-SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE};
+WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
+  AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
+SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
+         log_comment = 'traces_local_v2_backfill:${WINDOW_LO}:${WINDOW_HI}';
 
 -- Per-window reconciliation is automated by backfill.sh (uniqExact of the dedup key, aborting on > 0.01% divergence);
 -- fidelity QA across the whole copy is 000005 via verify.sh. Rollback before the EXCHANGE: rollback.sh --stage A.

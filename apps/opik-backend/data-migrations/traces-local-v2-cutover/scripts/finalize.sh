@@ -82,5 +82,7 @@ if [[ "$CONFIRM" != "1" ]]; then
     exit 0
 fi
 
-ch "DROP TABLE IF EXISTS $BACKUP ON CLUSTER '{cluster}' SYNC"
+# max_table_size_to_drop = 0 disables the drop-size guard (default 50 GB): the parked backup is the full old original
+# (multi-TB after a successful cutover), so without the override the DROP throws "size exceeds the limit".
+ch "DROP TABLE IF EXISTS $BACKUP ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0"
 echo "Dropped $DATABASE.$BACKUP. The cutover is finalized."
