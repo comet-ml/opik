@@ -100,36 +100,44 @@ class Guardrail:
                 provider failure). Guardrails fail closed, so this blocks the
                 protected code path.
         """
-        try:
-            result: schemas.ValidationResponse = self._validate(generation=text)  # type: ignore
-        except (httpx.HTTPError, rest_api_core.ApiError) as e:
-            raise exceptions.GuardrailValidationError(
-                f"Guardrail could not be evaluated, failing closed: {e}"
-            ) from e
+        result = self._validate(generation=text)
+
+        if result.error is not None:
+            raise exceptions.GuardrailValidationError(result.error)
 
         return self._parse_result(result)
 
     @GUARDRAIL_DECORATOR.track
     def _validate(self, generation: str) -> schemas.ValidationResponse:
-        remote_validations = []
+        result = schemas.ValidationResponse(validation_passed=True, validations=[])
 
-        for guard in self.guards:
-            remote_validations.extend(guard.get_validation_configs())
+        # Fail-closed errors are captured on the result instead of raised so the
+        # decorated span still records the guardrail output; validate() re-raises them
+        # once the span has been finalized.
+        try:
+            remote_validations = []
+            for guard in self.guards:
+                remote_validations.extend(guard.get_validation_configs())
 
-        if remote_validations:
-            result = self._api_client.validate(generation, remote_validations)
+            if remote_validations:
+                result = self._api_client.validate(generation, remote_validations)
+
+            for guard in self.guards:
+                if guard.local:
+                    result.validations.extend(
+                        guard.validate_local(generation, self._client)
+                    )
+        except (httpx.HTTPError, rest_api_core.ApiError) as e:
+            result.error = f"Guardrail could not be evaluated, failing closed: {e}"
+        except exceptions.GuardrailValidationError as e:
+            result.error = str(e)
+
+        if result.error is not None:
+            result.validation_passed = False
         else:
-            result = schemas.ValidationResponse(validation_passed=True, validations=[])
-
-        for guard in self.guards:
-            if guard.local:
-                result.validations.extend(
-                    guard.validate_local(generation, self._client)
-                )
-
-        result.validation_passed = all(
-            validation.validation_passed for validation in result.validations
-        )
+            result.validation_passed = all(
+                validation.validation_passed for validation in result.validations
+            )
 
         if not result.validation_passed:
             result.guardrail_result = "failed"

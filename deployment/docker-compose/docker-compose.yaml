@@ -318,6 +318,9 @@ services:
     hostname: guardrails
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
+      HF_TOKEN: ${HF_TOKEN:-}
+      OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL: ${OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL:-}
+      OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL: ${OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL:-}
     healthcheck:
       test: [ "CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck" ]
       interval: 2s
