@@ -14,4 +14,5 @@
 -- max_table_size_to_drop = 0 disables the drop-size guard for this statement: TRUNCATE is subject to
 -- max_table_size_to_drop (default 50 GB) just like DROP, and the shadow is well over that on any instance large enough
 -- to need this runbook — without the override the rollback throws exactly when it is needed.
+SET log_comment = 'traces_local_v2_rollback:stage_a';
 TRUNCATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' SETTINGS max_table_size_to_drop = 0;
