@@ -53,7 +53,7 @@ _This guardrails relies on a small language model, specifically a zero-shot clas
 
 The prompt injection guardrail detects attempts to make your LLM ignore, override, or reveal its instructions, along with other malicious queries. Use it on user inputs to block jailbreaks and injection attacks before they reach your model.
 
-It runs [Vanallen](/guardrails/prompt-injection-model), a fine-tuned classifier, on the guardrails server, so the [guardrails server](/guardrails/server) must be running. The model is distributed as a private Hugging Face repository, so the server also needs a Hugging Face token configured (see the [server configuration](/guardrails/server#configuration)).
+It runs [Opik Guard](/guardrails/prompt-injection-model), a fine-tuned classifier, on the guardrails server, so the [guardrails server](/guardrails/server) must be running. The model is distributed as a private Hugging Face repository, so the server also needs a Hugging Face token configured (see the [server configuration](/guardrails/server#configuration)).
 
 ```python
 from opik.guardrails import Guardrail, PromptInjection

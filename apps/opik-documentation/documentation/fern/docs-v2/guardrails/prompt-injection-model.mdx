@@ -1,9 +1,9 @@
 ---
 title: Prompt injection model
-subtitle: Vanallen, our purpose-built detection model, evaluated on attacks it has never seen
+subtitle: Opik Guard, our purpose-built detection model, evaluated on attacks it has never seen
 headline: Prompt Injection Model | Opik Documentation
 og:title: Prompt Injection Model - Opik
-og:description: Vanallen is Opik's custom-trained model behind the prompt injection guardrail, built on real attacks and evaluated out-of-distribution for honest generalization.
+og:description: Opik Guard is Opik's custom-trained model behind the prompt injection guardrail, built on real attacks and evaluated out-of-distribution for honest generalization.
 og:site_name: Opik Documentation
 ---
 
@@ -12,11 +12,11 @@ og:site_name: Opik Documentation
   [sales@comet.com](mailto:sales@comet.com) to enable them for your account.
 </Tip>
 
-**Vanallen** is the model behind Opik's [prompt injection guardrail](/guardrails/guardrails#prompt-injection-guardrail). We trained it ourselves, from scratch, for exactly one job: catching attempts to make your LLM ignore, override, or reveal its instructions, along with other malicious inputs. It is small enough to run inline on every request and accurate enough to trust in the blocking path.
+**Opik Guard** is the model behind Opik's [prompt injection guardrail](/guardrails/guardrails#prompt-injection-guardrail). We trained it ourselves, from scratch, for exactly one job: catching attempts to make your LLM ignore, override, or reveal its instructions, along with other malicious inputs. It is small enough to run inline on every request and accurate enough to trust in the blocking path.
 
 ## A classifier, not a guess
 
-Vanallen is a Small Language Model trained as a **single-token classifier**. It answers with exactly one token, `true` or `false`, and both training and inference use only those two class-token logits. The softmax over them is a **calibrated probability** that the input is an attack.
+Opik Guard is a Small Language Model trained as a **single-token classifier**. It answers with exactly one token, `true` or `false`, and both training and inference use only those two class-token logits. The softmax over them is a **calibrated probability** that the input is an attack.
 
 That design is what makes it dependable: you set a threshold and you know precisely what it means, instead of parsing a larger model's free-form answer and hoping it stayed on format. A score of 0.9 means the model is 90% confident the input is an injection attempt, every time.
 
@@ -34,11 +34,11 @@ We deliberately avoided the trap that flatters most published numbers: the score
 
 ## Built for the blocking path
 
-At 1.5 billion parameters, Vanallen runs on the guardrails server's GPU with low latency, so you can validate every request without adding meaningful overhead. It sits behind the same [guardrails server](/guardrails/server) as the PII and Topic guardrails and is distributed as a private model, so using it only requires a token from the Opik team.
+At 1.5 billion parameters, Opik Guard runs on the guardrails server's GPU with low latency, so you can validate every request without adding meaningful overhead. It sits behind the same [guardrails server](/guardrails/server) as the PII and Topic guardrails and is distributed as a private model, so using it only requires a token from the Opik team.
 
 ## Using it
 
-Turn Vanallen on with the `PromptInjection` guard. It reads exactly like the other guards:
+Turn Opik Guard on with the `PromptInjection` guard. It reads exactly like the other guards:
 
 ```python
 from opik.guardrails import Guardrail, PromptInjection
