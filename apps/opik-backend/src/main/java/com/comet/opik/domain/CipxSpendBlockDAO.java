@@ -81,7 +81,8 @@ public class CipxSpendBlockDAO {
             @NonNull String bdLane,
             @NonNull String label,
             int isDefinition,
-            double alloc) {
+            double alloc,
+            @NonNull String contentSha256) {
 
         /**
          * Derives all rows for one cipx span: one attributed row per non-identity block (keeping the
@@ -190,6 +191,7 @@ public class CipxSpendBlockDAO {
                     .label(label(category, toolServer, toolName, resource, kind, chars))
                     .isDefinition(isDefinition(category))
                     .alloc(alloc)
+                    .contentSha256(block.path("sha256").asText(""))
                     .build();
         }
 
@@ -213,6 +215,7 @@ public class CipxSpendBlockDAO {
                     .label("")
                     .isDefinition(0)
                     .alloc(tokens)
+                    .contentSha256("")
                     .build();
         }
 
@@ -248,7 +251,7 @@ public class CipxSpendBlockDAO {
                 case "memory" -> "memory";
                 case "file_attachments" -> "file_attachments";
                 case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> "static_overhead";
-                case "auto_classifier" -> "static_overhead";
+                case "auto_classifier", "agent_overhead" -> "static_overhead";
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> "built_in_tool_calls";
@@ -270,7 +273,7 @@ public class CipxSpendBlockDAO {
                 case "memory" -> "memory";
                 case "file_attachments" -> "file_attachments";
                 case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> "static_overhead";
-                case "auto_classifier" -> "static_overhead";
+                case "auto_classifier", "agent_overhead" -> "static_overhead";
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> "built_in_tool_calls";
@@ -292,7 +295,8 @@ public class CipxSpendBlockDAO {
                 case "tool_io" -> toolServer.isEmpty() ? toolName : toolServer;
                 case "prior_assistant" -> kind;
                 case "mcp_tools_active", "mcp_tool_calls" -> toolServer;
-                case "system_prompt", "env_info", "system_tools", "system_tools_deferred", "auto_classifier" ->
+                case "system_prompt", "env_info", "system_tools", "system_tools_deferred", "auto_classifier",
+                        "agent_overhead" ->
                     category;
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
@@ -392,6 +396,7 @@ public class CipxSpendBlockDAO {
         node.put("label", row.label());
         node.put("is_definition", row.isDefinition());
         node.put("alloc", row.alloc());
+        node.put("content_sha256", row.contentSha256());
         node.put("start_time", ClickHouseDateTimeFormat.formatNanos(row.startTime()));
         out.append(node).append('\n');
     }
