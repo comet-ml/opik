@@ -99,7 +99,7 @@ class AnalyticsQueriesResourceTest {
                         // The read-only free-form SQL user is provisioned globally on the ClickHouse container
                         // (users.xml) and wired by config-test.yml; the test only needs to flip the toggle on.
                         .customConfigs(List.of(
-                                new CustomConfig("serviceToggles.agentInsightsEnabled", "true")))
+                                new CustomConfig("serviceToggles.ollieEnabled", "true")))
                         .build());
     }
 

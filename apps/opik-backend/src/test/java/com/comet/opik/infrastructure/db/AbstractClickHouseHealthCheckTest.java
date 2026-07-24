@@ -97,7 +97,7 @@ class AbstractClickHouseHealthCheckTest {
     }
 
     /**
-     * Behaviours specific to the Agent Insights read-only subclass: the {@code agentInsightsEnabled}
+     * Behaviours specific to the Agent Insights read-only subclass: the {@code ollieEnabled}
      * short-circuit and the {@link ClickHouseReadOnlyFreeFormSqlHealthCheck#newQuerySettings()}
      * override that returns {@code null} so the probe carries no per-call settings — the production
      * {@code readonly=1} profile rejects any setting not in its {@code CHANGEABLE_IN_READONLY}
@@ -136,9 +136,9 @@ class AbstractClickHouseHealthCheckTest {
                 .equals(settings.getAllSettings().get(CLICKHOUSE_SETTING_MAX_EXECUTION_TIME));
     }
 
-    private ServiceTogglesConfig toggles(boolean agentInsightsEnabled) {
+    private ServiceTogglesConfig toggles(boolean ollieEnabled) {
         var serviceTogglesConfig = new ServiceTogglesConfig();
-        serviceTogglesConfig.setAgentInsightsEnabled(agentInsightsEnabled);
+        serviceTogglesConfig.setOllieEnabled(ollieEnabled);
         return serviceTogglesConfig;
     }
 

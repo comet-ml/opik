@@ -69,7 +69,7 @@ class AnalyticsQueriesResourceDisabledTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
-        // agentInsightsEnabled is left at its default (false): the endpoint must return 501.
+        // ollieEnabled is left at its default (false): the endpoint must return 501.
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())

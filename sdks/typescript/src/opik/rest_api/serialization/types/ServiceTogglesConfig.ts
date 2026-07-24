@@ -32,7 +32,6 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     ollieEnabled: core.serialization.boolean(),
     projectHomepageEnabled: core.serialization.boolean(),
     agenticToolsEnabled: core.serialization.boolean(),
-    agentInsightsEnabled: core.serialization.boolean(),
     onlineScoringTracingEnabled: core.serialization.boolean(),
     v2WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     v1WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
@@ -68,7 +67,6 @@ export declare namespace ServiceTogglesConfig {
         ollieEnabled: boolean;
         projectHomepageEnabled: boolean;
         agenticToolsEnabled: boolean;
-        agentInsightsEnabled: boolean;
         onlineScoringTracingEnabled: boolean;
         v2WorkspaceAllowlistIds: string[];
         v1WorkspaceAllowlistIds: string[];

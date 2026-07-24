@@ -73,7 +73,7 @@ class HealthCheckIntegrationTest {
     }
 
     /**
-     * Default test-config: {@code serviceToggles.agentInsightsEnabled} off. Covers the standard
+     * Default test-config: {@code serviceToggles.ollieEnabled} off. Covers the standard
      * health check HTTP surface (per-check + aggregate {@code all}). Opik-owned checks
      * (clickhouse, mysql, redis, clickhouse-readonly-freeform-sql) are asserted individually;
      * Dropwizard-provided checks (db, deadlocks) only appear in the aggregate row.
@@ -150,7 +150,7 @@ class HealthCheckIntegrationTest {
     }
 
     /**
-     * {@code serviceToggles.agentInsightsEnabled} on. The production-shape Agent Insights
+     * {@code serviceToggles.ollieEnabled} on. The production-shape Agent Insights
      * read-only user is provisioned globally on the test ClickHouse container (see
      * {@code src/test/resources/users.xml}, mirroring
      * {@code apps/opik-backend/provision_agent_insights_readonly_user.sh}), so the {@code
@@ -167,7 +167,7 @@ class HealthCheckIntegrationTest {
 
         @RegisterApp
         private final TestDropwizardAppExtension app = newApp(List.of(
-                new CustomConfig("serviceToggles.agentInsightsEnabled", "true")));
+                new CustomConfig("serviceToggles.ollieEnabled", "true")));
 
         private ClientSupport client;
         private String baseURI;
