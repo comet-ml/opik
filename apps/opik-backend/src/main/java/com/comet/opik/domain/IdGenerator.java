@@ -50,6 +50,13 @@ public interface IdGenerator {
      */
     void validateIdNotInFuture(UUID id, String resource);
 
+    /**
+     * Workspace-attributed overload of {@link #validateIdNotInFuture(UUID, String)}: callers that know the
+     * request workspace pass it so the audit metric is attributed. The 2-arg form defaults to
+     * {@link ErrorMetricsResolver#UNKNOWN} for callers that don't carry a workspace.
+     */
+    void validateIdNotInFuture(UUID id, String resource, String workspaceId);
+
     Mono<UUID> validateIdNotInFutureAsync(UUID id, String resource);
 
     /**
@@ -57,6 +64,9 @@ public interface IdGenerator {
      * {@code projectId} that may be resolved by name instead). No-op when {@code id} is null.
      */
     void validateIdNotInFutureIfPresent(UUID id, String resource);
+
+    /** Workspace-attributed overload of {@link #validateIdNotInFutureIfPresent(UUID, String)}. */
+    void validateIdNotInFutureIfPresent(UUID id, String resource, String workspaceId);
 
     Mono<UUID> validateIdNotInFutureIfPresentAsync(UUID id, String resource);
 
@@ -112,18 +122,20 @@ class IdGeneratorImpl implements IdGenerator {
 
     @Override
     public void validateIdNotInFuture(@NonNull UUID id, String resource) {
+        // Callers that don't carry a workspace (most config-entity references) default to UNKNOWN.
+        validateIdNotInFuture(id, resource, ErrorMetricsResolver.UNKNOWN);
+    }
+
+    @Override
+    public void validateIdNotInFuture(@NonNull UUID id, String resource, String workspaceId) {
         IdGenerator.validateVersion(id, resource);
-        // Referenced/foreign ids are validated where the request-scoped workspace is not threaded
-        // (e.g. the synchronous fail-fast batch pass), so the audit metric falls back to UNKNOWN here;
-        // the batch's own ids still carry the workspace via validateId.
-        uuidV7TimestampValidator.validateNotInFuture(id, resource, ErrorMetricsResolver.UNKNOWN);
+        uuidV7TimestampValidator.validateNotInFuture(id, resource, workspaceId);
     }
 
     @Override
     public Mono<UUID> validateIdNotInFutureAsync(@NonNull UUID id, String resource) {
         return Mono.deferContextual(ctx -> {
-            IdGenerator.validateVersion(id, resource);
-            uuidV7TimestampValidator.validateNotInFuture(id, resource, workspaceId(ctx));
+            validateIdNotInFuture(id, resource, workspaceId(ctx));
             return Mono.just(id);
         });
     }
@@ -141,6 +153,13 @@ class IdGeneratorImpl implements IdGenerator {
     public void validateIdNotInFutureIfPresent(UUID id, String resource) {
         if (id != null) {
             validateIdNotInFuture(id, resource);
+        }
+    }
+
+    @Override
+    public void validateIdNotInFutureIfPresent(UUID id, String resource, String workspaceId) {
+        if (id != null) {
+            validateIdNotInFuture(id, resource, workspaceId);
         }
     }
 

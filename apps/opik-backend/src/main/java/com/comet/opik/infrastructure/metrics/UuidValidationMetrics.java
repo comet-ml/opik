@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.metrics;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Singleton;
@@ -63,12 +64,9 @@ public class UuidValidationMetrics {
      * (trace/span), {@code workspaceId} the emitting workspace. All fall back to {@code unknown}.
      */
     public void recordAudit(String reason, String resource, String workspaceId) {
-        rejectedCounter.add(1, Attributes.builder()
-                .put(MODE_KEY, MODE_AUDIT)
-                .put(REASON_KEY, StringUtils.defaultIfBlank(reason, UNKNOWN))
+        record(MODE_AUDIT, reason, Attributes.builder()
                 .put(RESOURCE_KEY, StringUtils.defaultIfBlank(resource, UNKNOWN))
-                .put(WORKSPACE_ID_KEY, StringUtils.defaultIfBlank(workspaceId, UNKNOWN))
-                .build());
+                .put(WORKSPACE_ID_KEY, StringUtils.defaultIfBlank(workspaceId, UNKNOWN)));
     }
 
     /**
@@ -78,10 +76,18 @@ public class UuidValidationMetrics {
      * fall back to {@code unknown}.
      */
     public void recordReject(String reason, String httpRoute) {
-        rejectedCounter.add(1, Attributes.builder()
-                .put(MODE_KEY, MODE_REJECT)
+        record(MODE_REJECT, reason, Attributes.builder()
+                .put(HTTP_ROUTE_KEY, StringUtils.defaultIfBlank(httpRoute, UNKNOWN)));
+    }
+
+    /**
+     * Shared assembly for the {@code opik.ingestion.uuid_v7.rejected} counter: stamps the common
+     * {@code mode} and {@code reason} tags onto the caller's path-specific attributes and increments.
+     */
+    private void record(String mode, String reason, AttributesBuilder attributes) {
+        rejectedCounter.add(1, attributes
+                .put(MODE_KEY, mode)
                 .put(REASON_KEY, StringUtils.defaultIfBlank(reason, UNKNOWN))
-                .put(HTTP_ROUTE_KEY, StringUtils.defaultIfBlank(httpRoute, UNKNOWN))
                 .build());
     }
 }
