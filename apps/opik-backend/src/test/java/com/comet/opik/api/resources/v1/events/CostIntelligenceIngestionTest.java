@@ -291,7 +291,7 @@ class CostIntelligenceIngestionTest {
 
                 // schema block for a named tool: reclassified out of static_overhead, keyed by
                 // tool_name instead of the bare category string (mirrors tool_io's own labeling).
-                var bash = rows.get(0);
+                var bash = rows.getFirst();
                 assertThat(bash.category()).isEqualTo("system_tools");
                 assertThat(bash.lane()).isEqualTo("built_in_tools");
                 assertThat(bash.bdLane()).isEqualTo("built_in_tools");
@@ -315,7 +315,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(systemPrompt.label()).isEqualTo("system_prompt");
                 assertThat(systemPrompt.isDefinition()).isEqualTo(1);
 
-                var envInfo = rows.get(3);
+                var envInfo = rows.getLast();
                 assertThat(envInfo.category()).isEqualTo("env_info");
                 assertThat(envInfo.lane()).isEqualTo("static_overhead");
                 assertThat(envInfo.bdLane()).isEqualTo("static_overhead");
