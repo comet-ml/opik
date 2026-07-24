@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aadereiko:000111_add_usage_windows_to_cipx_trace_identities
+--changeset aadereiko:000113_add_usage_windows_to_cipx_trace_identities
 --comment: Add rolling usage-window columns to cipx_trace_identities (Anthropic 5h/7d utilization + reset, for the Spend & Activity limits meter)
 
 -- The proxy now captures the raw rolling rate-limit windows from /api/oauth/usage (previously it kept
