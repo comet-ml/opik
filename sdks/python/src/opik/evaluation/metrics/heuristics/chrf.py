@@ -85,11 +85,11 @@ class ChrF(BaseMetric):
                     " `pip install nltk` or provide `chrf_fn`."
                 )
 
-            def _compute(candidate: Sequence[str], references: Sequence[str]) -> float:
+            def _score_single(candidate: Sequence[str], reference: str) -> float:
                 try:
                     return float(
                         nltk_chrf_score.sentence_chrf(
-                            references,
+                            reference,
                             candidate,
                             max_len=self._char_order,
                             beta=self._beta,
@@ -98,7 +98,14 @@ class ChrF(BaseMetric):
                     )
                 except TypeError:
                     # Older NLTK versions expose the helper with fewer keyword arguments.
-                    return float(nltk_chrf_score.sentence_chrf(references, candidate))
+                    return float(nltk_chrf_score.sentence_chrf(reference, candidate))
+
+            def _compute(candidate: Sequence[str], references: Sequence[str]) -> float:
+                # NLTK's ``sentence_chrf`` supports only a single reference; passing
+                # a list of references makes it misinterpret the input and return a
+                # wrong score. For multiple references, score against each one and
+                # take the best match (standard multi-reference chrF semantics).
+                return max(_score_single(candidate, ref) for ref in references)
 
             self._chrf_fn = _compute
 
