@@ -890,20 +890,17 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * Rollback stage C (000004_rollback_stage_c + reverse_replay): drop the Distributed wrapper (no data), then in one
-     * atomic RENAME promote the parked original (from {@code traces_pre_cutover_backup}) back to {@code traces} and park
-     * the successor data back under {@code traces_local_v2}, ending in the canonical state with no leftover names. Then
-     * reverse-replay.
+     * Rollback stage C (000004_rollback_stage_c + reverse_replay): promote the parked original back to {@code traces}
+     * GAPLESSLY — EXCHANGE swaps it in atomically (no window where {@code traces} is absent), then the now-data-less
+     * Distributed wrapper (parked under the backup name) is dropped and the successor shard is parked back under
+     * {@code traces_local_v2}, ending in the canonical state with no leftover names. Then reverse-replay.
      */
     private void rollbackAfterWrap(String cutoverStart) {
-        execute("DROP TABLE traces ON CLUSTER '{cluster}' SYNC", _ -> {
+        execute("EXCHANGE TABLES traces AND traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
         });
-        execute("""
-                RENAME TABLE
-                    traces_pre_cutover_backup TO traces,
-                    traces_local TO traces_local_v2
-                    ON CLUSTER '{cluster}'
-                """, _ -> {
+        execute("DROP TABLE IF EXISTS traces_pre_cutover_backup ON CLUSTER '{cluster}' SYNC", _ -> {
+        });
+        execute("RENAME TABLE traces_local TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
         });
         reverseReplay(cutoverStart);
     }
