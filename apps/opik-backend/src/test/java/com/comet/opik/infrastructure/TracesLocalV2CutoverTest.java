@@ -250,7 +250,10 @@ class TracesLocalV2CutoverTest {
             }
         }
         // 4. Canonical now; truncate the two tables and clear any residual artifacts (IF EXISTS so a genuinely
-        //    unrecoverable partial state still cannot throw here).
+        //    unrecoverable partial state still cannot throw here). traces_dist is the temp wrapper the gapless wrap
+        //    builds before its atomic rename — a leak only if a test died between the CREATE and the RENAME.
+        execute("DROP TABLE IF EXISTS traces_dist ON CLUSTER '{cluster}' SYNC", _ -> {
+        });
         execute("DROP TABLE IF EXISTS traces_local ON CLUSTER '{cluster}' SYNC", _ -> {
         });
         execute("DROP TABLE IF EXISTS traces_pre_cutover_backup ON CLUSTER '{cluster}' SYNC", _ -> {
@@ -860,13 +863,21 @@ class TracesLocalV2CutoverTest {
         });
     }
 
+    // Gapless wrap (000003 wrap block): build the Distributed wrapper under a temp name first (its 'traces_local' target
+    // need not exist yet), then one atomic multi-target RENAME rotates the data to traces_local and the wrapper into
+    // traces (the name freed by the first clause), so traces is never absent on a node.
     private void wrapInDistributed() {
-        execute("RENAME TABLE traces TO traces_local ON CLUSTER '{cluster}'", _ -> {
-        });
-        execute(("CREATE TABLE traces ON CLUSTER '{cluster}' AS traces_local "
+        execute(("CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces "
                 + "ENGINE = Distributed('{cluster}', '" + DATABASE_NAME + "', 'traces_local', sipHash64(project_id))"),
                 _ -> {
                 });
+        execute("""
+                RENAME TABLE
+                    traces TO traces_local,
+                    traces_dist TO traces
+                    ON CLUSTER '{cluster}'
+                """, _ -> {
+        });
     }
 
     /** Rollback stage A (000004_rollback_stage_a): discard the disposable shadow; the live `traces` is untouched. */

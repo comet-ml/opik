@@ -158,14 +158,16 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > ships. The wrap is the sharding-readiness layer, not the cutover.
 >
 > **Applying the deferred wrap later:** once the sharding-aware DAO has shipped, run
-> `exchange_and_wrap.sh --database opik --wrap-only` — it runs the settle gate and applies **only** the `RENAME` +
-> `Distributed` wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`). To roll the wrap
-> back, use `rollback.sh --stage C`.
+> `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance` — it runs the settle gate and applies **only**
+> the wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`). To roll the wrap back, use
+> `rollback.sh --stage C`.
 >
-> The wrap is a non-atomic `RENAME`→`CREATE`, so `traces` is **briefly absent** (INSERT/SELECT fail with "Table doesn't
-> exist" during that window; `ON CLUSTER` widens it per node). The same-run path is covered by the still-raised EXCHANGE
-> buffer; for the deferred `--wrap-only` path, **re-raise `asyncInsertBusyTimeoutMaxMs` (or quiesce ingestion / take a
-> maintenance window) first** so the wrap runs under the same buffered conditions.
+> The wrap is **gapless per node**: it pre-builds the `Distributed` wrapper under a temp name, then one atomic
+> multi-target `RENAME` rotates the data to `traces_local` and the wrapper into `traces`, so `traces` is never absent on
+> a node. A brief **cross-node** `ON CLUSTER` propagation skew still exists (as for any `ON CLUSTER` DDL), during which a
+> Distributed query could route to a not-yet-created `traces_local` on a lagging node — so the deferred `--wrap-only`
+> path still **requires `--confirm-maintenance`** (re-raise `asyncInsertBusyTimeoutMaxMs` / quiesce ingestion / take a
+> maintenance window). The same-run `--with-wrap` path is already covered by the still-raised EXCHANGE buffer.
 >
 > **Wrap flags** (`exchange_and_wrap.sh`, mutually exclusive; default is EXCHANGE-only): omit them (or pass
 > `--skip-wrap`, an explicit alias) to run the EXCHANGE and stop; `--with-wrap` to also apply the wrap in the same run;
