@@ -43,7 +43,7 @@ import {
   isWorkspaceMetric,
   isMultiProjectSelection,
 } from "@/lib/dashboard/workspaceMetrics";
-import useProjectTokenUsageNames from "@/api/projects/useProjectTokenUsageNames";
+import useUsageMetricOptions from "@/api/projects/useUsageMetricOptions";
 import { DEFAULT_DATE_PRESET } from "@/v2/pages-shared/traces/MetricDateRangeSelect/constants";
 import {
   DashboardWidget,
@@ -229,27 +229,15 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     metricType === METRIC_NAME_TYPE.TOKEN_USAGE ||
     metricType === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
-  const { data: tokenUsageNamesData, isPending: isLoadingUsageKeys } =
-    useProjectTokenUsageNames(
-      {
-        projectId,
-      },
-      {
-        enabled: isTokenUsageMetric && !!projectId,
-      },
-    );
-
-  // Map token usage names to select options
-  const usageKeyOptions = useMemo(() => {
-    if (!tokenUsageNamesData?.names) return [];
-
-    return tokenUsageNamesData.names
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => ({
-        value: name,
-        label: name,
-      }));
-  }, [tokenUsageNamesData?.names]);
+  // Token usage keys: a single project reads them per-project; a multi-project / "all projects" selection reads them
+  // aggregated across the selected projects, so the dropdown lists every key rather than only the representative's.
+  const { usageKeyOptions, isLoadingUsageKeys } = useUsageMetricOptions({
+    runtimeProjectId: runtimeContext.projectId,
+    projectIds: localProjectIds,
+    allProjects,
+    enabled: isTokenUsageMetric,
+    selectedUsageMetrics: usageMetrics,
+  });
 
   // For feedback score metrics, group by is only allowed when exactly one metric is selected
   const hasExactlyOneFeedbackScoreSelected = feedbackScores.length === 1;
@@ -370,6 +358,9 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     nextConfig.spanFilters = [];
     nextConfig.feedbackScores = [];
     nextConfig.durationMetrics = [];
+    // Leave usageMetrics empty (= all usage keys) rather than seeding a specific key: the chart shows every series,
+    // and seeding e.g. total_tokens would render an empty chart when the data has no such key. The user selects a
+    // single key from the (now populated) dropdown to enable group-by.
     nextConfig.usageMetrics = [];
     nextConfig.breakdown = { field: BREAKDOWN_FIELD.NONE };
     form.setValue("metricType", METRIC_NAME_TYPE.SPAN_TOKEN_USAGE);
@@ -491,6 +482,11 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
           control={form.control}
           name="projectIds"
           render={({ field, formState }) => {
+            // When the dashboard is pinned to a single project (runtime context), the widget's scope is fixed to that
+            // project, so the "all projects" toggle and project selector don't apply — hide the whole block.
+            if (hasRuntimeProjectId) {
+              return <></>;
+            }
             const validationErrors = get(formState.errors, ["projectIds"]);
             return (
               <FormItem>

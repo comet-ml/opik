@@ -1181,21 +1181,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
-    private static final String GET_PROJECT_TOKEN_USAGE_NAMES = """
-            SELECT DISTINCT name
-            FROM (
-                SELECT
-                    usage
-                FROM spans final
-                WHERE project_id = :project_id
-                AND workspace_id = :workspace_id
-            )
-            ARRAY JOIN
-                mapKeys(usage) AS name,
-                mapValues(usage) AS value
-            WHERE value > 0
-            SETTINGS log_comment = '<log_comment>';
-            """;
+    private static final String GET_PROJECT_TOKEN_USAGE_NAMES = SpanMetricsQueries
+            .tokenUsageNames("project_id = :project_id");
 
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {

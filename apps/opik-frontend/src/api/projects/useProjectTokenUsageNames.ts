@@ -1,7 +1,7 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 
-type TokenUsageNamesResponse = {
+export type TokenUsageNamesResponse = {
   names: string[];
 };
 
