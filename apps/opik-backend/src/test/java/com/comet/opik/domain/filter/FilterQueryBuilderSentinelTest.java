@@ -24,8 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
- * Verifies the flag-gated sentinel handling in the filter SQL {@link FilterQueryBuilder} generates for the trace-column
- * non-nullable migration. Exercises the R2DBC entry point ({@code toAnalyticsDbFilters}); the v2-client placeholder
+ * Verifies the flag-gated sentinel handling in the filter SQL {@link FilterQueryBuilder} generates for the trace- and
+ * span-column non-nullable migration. Exercises the R2DBC entry point ({@code toAnalyticsDbFilters}); the v2-client placeholder
  * machinery is covered separately in {@link FilterQueryBuilderV2ClientTest}. The post-cutover behavior cannot be
  * exercised end-to-end while the columns are still {@code Nullable}, so the contract is asserted on the generated SQL.
  */
@@ -44,7 +44,9 @@ class FilterQueryBuilderSentinelTest {
                 arguments(FilterStrategy.TRACE, TraceFilter.builder()
                         .field(TraceField.END_TIME).operator(Operator.LESS_THAN).value(value).build()),
                 arguments(FilterStrategy.TRACE_THREAD, TraceThreadFilter.builder()
-                        .field(TraceThreadField.END_TIME).operator(Operator.LESS_THAN).value(value).build()));
+                        .field(TraceThreadField.END_TIME).operator(Operator.LESS_THAN).value(value).build()),
+                arguments(FilterStrategy.SPAN, SpanFilter.builder()
+                        .field(SpanField.END_TIME).operator(Operator.LESS_THAN).value(value).build()));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -60,16 +62,25 @@ class FilterQueryBuilderSentinelTest {
         assertThat(actualWithoutFlag).isEqualTo(expectedWithoutFlag);
     }
 
-    @Test
-    void spanEndTimeFilterIgnoresFlagKeepingRawColumn() {
-        var value = Instant.now().toString();
-        var filter = SpanFilter.builder()
-                .field(SpanField.END_TIME).operator(Operator.LESS_THAN).value(value).build();
-        var expected = singleFilter("end_time", "< parseDateTime64BestEffort(:filter0, 9)");
+    static Stream<Arguments> unconditionalSpanSentinelFilterIgnoresFlag() {
+        return Stream.of(
+                arguments(SpanField.DURATION, Operator.GREATER_THAN, DURATION_EXPR, "> :filter0"),
+                arguments(SpanField.TTFT, Operator.NOT_EQUAL, TTFT_EXPR, "!= :filter0"));
+    }
 
-        var actual = toSql(filter, FilterStrategy.SPAN, true);
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void unconditionalSpanSentinelFilterIgnoresFlag(
+            SpanField field, Operator operator, String columnExpr, String operatorAndPlaceholder) {
+        var value = RandomStringUtils.secure().nextNumeric(32);
+        var filter = SpanFilter.builder().field(field).operator(operator).value(value).build();
+        var expected = singleFilter(columnExpr, operatorAndPlaceholder);
 
-        assertThat(actual).isEqualTo(expected);
+        var actualWithoutFlag = toSql(filter, FilterStrategy.SPAN, false);
+        var actualWithFlag = toSql(filter, FilterStrategy.SPAN, true);
+
+        assertThat(actualWithoutFlag).isEqualTo(expected);
+        assertThat(actualWithFlag).isEqualTo(expected);
     }
 
     static Stream<Arguments> unconditionalSentinelFilterIgnoresFlag() {
@@ -117,8 +128,8 @@ class FilterQueryBuilderSentinelTest {
         return "((%s %s))".formatted(columnExpr, operatorAndPlaceholder);
     }
 
-    private String toSql(Filter filter, FilterStrategy strategy, boolean traceColumnsNonNullable) {
-        return FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), strategy, traceColumnsNonNullable)
+    private String toSql(Filter filter, FilterStrategy strategy, boolean columnsNonNullable) {
+        return FilterQueryBuilder.toAnalyticsDbFilters(List.of(filter), strategy, columnsNonNullable)
                 .orElseThrow();
     }
 }

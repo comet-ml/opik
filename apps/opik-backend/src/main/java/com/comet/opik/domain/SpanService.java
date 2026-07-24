@@ -20,6 +20,7 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -35,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -60,6 +62,8 @@ public class SpanService {
     public static final String PARENT_SPAN_IS_MISMATCH = "parent_span_id does not match the existing span";
     public static final String TRACE_ID_MISMATCH = "trace_id does not match the existing span";
     public static final String SPAN_KEY = "Span";
+    public static final String SPAN_TRACE_KEY = "Span trace";
+    public static final String SPAN_PARENT_KEY = "Span parent";
     public static final String PROJECT_AND_WORKSPACE_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
 
     private final @NonNull SpanDAO spanDAO;
@@ -72,6 +76,8 @@ public class SpanService {
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull EventBus eventBus;
+    private final @NonNull DeletionEventDAO deletionEventDAO;
+    private final @NonNull @Config OpikConfiguration config;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -155,6 +161,7 @@ public class SpanService {
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return idGenerator
                 .validateIdAsync(id, SPAN_KEY)
+                .then(Mono.fromRunnable(() -> validateSpanReferences(span.traceId(), span.parentSpanId())))
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -216,7 +223,9 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return idGenerator
-                    .validateIdForUpdateAsync(id, SPAN_KEY)
+                    .validateIdNotInFutureAsync(id, SPAN_KEY)
+                    .then(Mono.fromRunnable(
+                            () -> validateSpanReferences(spanUpdate.traceId(), spanUpdate.parentSpanId())))
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -243,7 +252,10 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+            return Mono
+                    .fromRunnable(() -> validateSpanReferences(batchUpdate.update().traceId(),
+                            batchUpdate.update().parentSpanId()))
+                    .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
@@ -363,6 +375,15 @@ public class SpanService {
 
         List<Span> dedupedSpans = dedupSpans(batch.spans());
 
+        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
+        // creation), so a rejected batch never mutates state.
+        dedupedSpans.forEach(span -> {
+            if (span.id() != null) {
+                idGenerator.validateId(span.id(), SPAN_KEY);
+            }
+            validateSpanReferences(span.traceId(), span.parentSpanId());
+        });
+
         List<String> projectNames = dedupedSpans
                 .stream()
                 .map(Span::projectName)
@@ -434,6 +455,13 @@ public class SpanService {
         return result;
     }
 
+    // Shared span reference-id policy: the trace (required) and parent (optional) must be time-ordered
+    // UUIDv7, past allowed. Used by every span write path so the rules can't drift between them.
+    private void validateSpanReferences(UUID traceId, UUID parentSpanId) {
+        idGenerator.validateIdNotInFuture(traceId, SPAN_TRACE_KEY);
+        idGenerator.validateIdNotInFutureIfPresent(parentSpanId, SPAN_PARENT_KEY);
+    }
+
     private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
@@ -456,6 +484,7 @@ public class SpanService {
 
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
                     idGenerator.validateId(id, SPAN_KEY);
+                    // trace/parent references are validated up front in create(SpanBatch) before side effects.
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })
@@ -500,6 +529,7 @@ public class SpanService {
                                         .doOnSuccess(__ -> log.info(
                                                 "Deleted '{}' spans for workspace '{}', project '{}'",
                                                 spanIds.size(), workspaceId, projectId)))
+                                .then(captureDeletions(spanIds, projectId, workspaceId, userName))
                                 .thenReturn(spanIds);
                     })
                     .doOnSuccess(spanIds -> {
@@ -508,6 +538,40 @@ public class SpanService {
                         }
                     })
                     .then();
+        });
+    }
+
+    /**
+     * Records the span ids removed by the trace-delete cascade in the {@code deletion_events_local} bridge so they
+     * survive the {@code spans} table copy during the Slice 3 migration window. Best-effort and deferred: gated by
+     * {@code spanDeletionEventsCaptureEnabled} and run only after the delete succeeds, and any capture failure is
+     * logged and swallowed so it can never disrupt the delete. Spans have no standalone delete, so this cascade is the
+     * only capture path. Mirrors {@code TraceService.captureDeletions}.
+     */
+    private Mono<Void> captureDeletions(Set<UUID> ids, UUID projectId, String workspaceId, String userName) {
+        return Mono.defer(() -> {
+            if (!config.getDatabaseAnalyticsDataModel().spanDeletionEventsCaptureEnabled()) {
+                return Mono.empty();
+            }
+            var events = ids.stream()
+                    .map(id -> DeletionEvent.builder()
+                            .sourceTable(SourceTable.SPANS)
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .deletedId(id.toString())
+                            .deletionReason(DeletionReason.CASCADE)
+                            .build())
+                    .collect(Collectors.toUnmodifiableSet());
+            return deletionEventDAO.insert(events, userName)
+                    .doOnSuccess(_ -> log.info(
+                            "Captured span deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
+                            ids.size(), projectId, workspaceId))
+                    .onErrorResume(throwable -> {
+                        log.warn(
+                                "Failed to capture span deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
+                                ids.size(), projectId, workspaceId, throwable);
+                        return Mono.empty();
+                    });
         });
     }
 

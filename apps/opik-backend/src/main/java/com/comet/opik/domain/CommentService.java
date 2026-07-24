@@ -53,6 +53,7 @@ class CommentServiceImpl implements CommentService {
 
     @Override
     public Mono<UUID> create(@NonNull UUID entityId, @NonNull Comment comment, CommentDAO.EntityType entityType) {
+        idGenerator.validateIdNotInFuture(entityId, entityType.getType());
         UUID id = idGenerator.generateId();
         var monoProjectId = resolveProjectId(entityType, entityId);
 

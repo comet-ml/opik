@@ -1,4 +1,4 @@
-import { test as baseTest } from './experiment.fixture';
+import { test as baseTest } from './comparison-experiment.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 
 export interface TestSuiteItemSeed {

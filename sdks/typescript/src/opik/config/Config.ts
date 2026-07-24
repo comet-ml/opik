@@ -17,6 +17,20 @@ export interface OpikConfig {
   holdUntilFlush?: boolean;
   promptCacheTtlSeconds?: number;
   trackDisable?: boolean;
+  // Per-object payload cap (MB): span/trace input/output larger than this are truncated
+  // before send; metadata is exempt and excluded from the measurement (parity with the
+  // Python SDK). <= 0 disables. Default 20.
+  maxPayloadSizeMb?: number;
+  // Extract inline base64 blobs (e.g. images) from span/trace input/output/metadata and
+  // upload them as attachments before send, so they don't count toward the size cap
+  // (parity with the Python SDK). Default true.
+  isAttachmentExtractionActive?: boolean;
+  // Minimum length of an inline base64 blob (in encoded characters/bytes) before it is extracted
+  // as an attachment; smaller blobs are left inline. This gates on the *encoded* string length, so
+  // the decoded blob is ~3/4 of it (the 256000 default extracts blobs ~192 KB+ decoded). Gating on
+  // the encoded length matches the Python SDK and avoids decoding every candidate just to size it.
+  // Default 256000.
+  minBase64EmbeddedAttachmentSize?: number;
 }
 
 export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
@@ -25,7 +39,9 @@ export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
 
 const CONFIG_FILE_PATH_DEFAULT = path.join(os.homedir(), ".opik.config");
 
-export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "environment" | "promptCacheTtlSeconds">> = {
+export const DEFAULT_CONFIG: Required<
+  Omit<OpikConfig, "requestOptions" | "environment" | "promptCacheTtlSeconds">
+> = {
   apiKey: "",
   apiUrl: "https://www.comet.com/opik/api",
   projectName: "Default Project",
@@ -33,11 +49,14 @@ export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "envir
   batchDelayMs: 300,
   holdUntilFlush: false,
   trackDisable: false,
+  maxPayloadSizeMb: 20,
+  isAttachmentExtractionActive: true,
+  minBase64EmbeddedAttachmentSize: 256_000,
 };
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, value]) => value !== undefined)
+    Object.entries(obj).filter(([, value]) => value !== undefined),
   ) as Partial<T>;
 }
 
@@ -60,9 +79,31 @@ function loadFromEnv(): Partial<OpikConfig> {
       : undefined,
     holdUntilFlush: parseBooleanFlag(process.env.OPIK_HOLD_UNTIL_FLUSH),
     trackDisable: parseBooleanFlag(process.env.OPIK_TRACK_DISABLE),
+    // A non-numeric value (e.g. the units typo "20MB") must fall back to the default, not NaN:
+    // NaN would survive filterUndefined and the `??` guards downstream and silently disable the
+    // size guard entirely - strictly worse than leaving the var unset.
+    maxPayloadSizeMb:
+      process.env.OPIK_MAX_PAYLOAD_SIZE_MB &&
+      Number.isFinite(Number(process.env.OPIK_MAX_PAYLOAD_SIZE_MB))
+        ? Number(process.env.OPIK_MAX_PAYLOAD_SIZE_MB)
+        : undefined,
+    isAttachmentExtractionActive: parseBooleanFlag(
+      process.env.OPIK_IS_ATTACHMENT_EXTRACTION_ACTIVE,
+    ),
+    // Non-numeric values fall back to the default (see maxPayloadSizeMb above).
+    minBase64EmbeddedAttachmentSize:
+      process.env.OPIK_MIN_BASE64_EMBEDDED_ATTACHMENT_SIZE &&
+      Number.isFinite(
+        Number(process.env.OPIK_MIN_BASE64_EMBEDDED_ATTACHMENT_SIZE),
+      )
+        ? Number(process.env.OPIK_MIN_BASE64_EMBEDDED_ATTACHMENT_SIZE)
+        : undefined,
     // parseInt returns NaN for non-numeric strings; `|| 1` converts NaN→1 before Math.max enforces the minimum
     promptCacheTtlSeconds: process.env.OPIK_PROMPT_CACHE_TTL_SECONDS
-      ? Math.max(1, parseInt(process.env.OPIK_PROMPT_CACHE_TTL_SECONDS, 10) || 1)
+      ? Math.max(
+          1,
+          parseInt(process.env.OPIK_PROMPT_CACHE_TTL_SECONDS, 10) || 1,
+        )
       : undefined,
   });
 }
@@ -91,6 +132,9 @@ function loadFromConfigFile(): Partial<OpikConfig> {
       return {};
     }
 
+    // Only identity/string settings are read from the config file. Numeric and flag
+    // settings (batchDelayMs, maxPayloadSizeMb, isAttachmentExtractionActive,
+    // minBase64EmbeddedAttachmentSize, ...) are configured via OPIK_* env vars only.
     return filterUndefined({
       apiKey: config.opik.api_key,
       apiUrl: config.opik.url_override,
@@ -99,14 +143,16 @@ function loadFromConfigFile(): Partial<OpikConfig> {
       trackDisable: parseBooleanFlag(config.opik.track_disable),
     });
   } catch (error) {
-    logger.error(`Error loading config file ${expandedConfigFilePath}: ${error}`);
+    logger.error(
+      `Error loading config file ${expandedConfigFilePath}: ${error}`,
+    );
 
     return {};
   }
 }
 
 export function loadConfig(
-  explicit?: Partial<ConstructorOpikConfig>
+  explicit?: Partial<ConstructorOpikConfig>,
 ): OpikConfig {
   const envConfig = loadFromEnv();
   const fileConfig = loadFromConfigFile();

@@ -71,6 +71,7 @@ from .. import (
     url_helpers,
 )
 from ..message_processing import (
+    data_loss,
     messages,
 )
 from ..message_processing.batching import sequence_splitter
@@ -217,6 +218,8 @@ class Opik:
         self._rest_client = self._resources.rest_client
         self.__internal_api__message_processor__ = self._resources.message_processor
         self._streamer = self._resources.streamer
+        self._flush_reporter = self._resources.flush_reporter
+        self._last_flush_result: Optional[data_loss.FlushResult] = None
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
         project_url = url_helpers.get_project_url_by_trace_id(
@@ -502,7 +505,7 @@ class Opik:
 
         Args:
             trace_id: The unique identifier for the trace. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
-            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
+            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
             parent_span_id: The unique identifier for the parent span.
             name: The name of the span.
             type: The type of the span. Default is "general".
@@ -1927,9 +1930,13 @@ class Opik:
             project_name=experiment_public.project_name,
         )
 
-    def end(self, timeout: Optional[int] = None, *, flush: bool = True) -> None:
+    def end(
+        self, timeout: Optional[int] = None, *, flush: bool = True
+    ) -> Optional[data_loss.FlushResult]:
         """
-        End the Opik session and submit all pending messages.
+        End the Opik session, releasing this client's connection reference. When
+        ``flush`` is True (the default), all pending messages are submitted
+        first; when ``flush`` is False, anything still queued is dropped.
 
         Connection resources are shared and ref-counted across clients with a
         matching configuration: this releases the current client's reference.
@@ -1957,28 +1964,102 @@ class Opik:
         is shared — it may still succeed by riding another live client's
         resources. Do not rely on either outcome; create a new client instead.
 
+        The outcome is also available afterwards via :attr:`last_flush_result`.
+
         Returns:
-            None
+            The flush outcome (including any data-loss detail) when ``flush`` is
+            True; ``None`` when ``flush`` is False (nothing was flushed).
         """
         timeout = timeout if timeout is not None else self._flush_timeout
+        marker = self._flush_reporter.marker()
         # Explicit teardown on a user thread, so close on the last reference
         # (close_on_zero=True). Releasing is idempotent, so the detached GC
-        # finalizer cannot double-decrement.
-        self._lease.release(timeout, flush=flush, close_on_zero=True)
+        # finalizer cannot double-decrement. release() returns the authoritative
+        # flush outcome computed inside the drain (streamer.flush) — the same
+        # source flush() uses — rather than the weaker queue_size()==0 proxy,
+        # which can read empty on the pop-vs-processed race and while file
+        # uploads are still in flight.
+        flushed = self._lease.release(timeout, flush=flush, close_on_zero=True)
         self._finalizer.detach()
+        if not flush:
+            return None
+        if flushed is None:
+            # No drain ran on this call — e.g. a repeated end() after the client
+            # was already released. Keep the outcome from the release that did
+            # the work rather than overwriting it with a spurious not-flushed
+            # result, so end() is idempotent.
+            return self._last_flush_result
+        self._last_flush_result = self._flush_reporter.build_result(
+            marker, flushed=flushed
+        )
+        return self._last_flush_result
 
     def flush(self, timeout: Optional[int] = None) -> bool:
         """
         Flush the streamer to ensure all messages are sent.
 
+        Attachment/file upload *failures* are not counted in the data-loss
+        detail (``dropped_*`` / ``failures``), but an incomplete upload still
+        makes the flush report as not fully flushed — so ``flushed`` (and hence
+        the returned bool) does reflect uploads. Never raises and never blocks
+        beyond ``timeout``: an observability SDK must not disrupt the app it
+        instruments. Detailed outcome — including any data that was dropped — is
+        available via :attr:`last_flush_result`.
+
         Args:
             timeout (Optional[int]): The timeout for flushing the streamer. Once the timeout is reached, the flush method will return regardless of whether all messages have been sent.
 
         Returns:
-            True if all messages have been sent within specified timeout, False otherwise.
+            True if all messages were delivered within the timeout with no data
+            loss; False if the timeout was hit or any message was dropped.
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        return self._streamer.flush(timeout)
+        try:
+            marker = self._flush_reporter.marker()
+            flushed = self._streamer.flush(timeout)
+            self._last_flush_result = self._flush_reporter.build_result(
+                marker, flushed=flushed
+            )
+            return self._last_flush_result.success
+        except Exception:
+            # An observability SDK must not disrupt the app it instruments: a
+            # failure inside flush is reported as "not flushed", never raised.
+            # Record a failed outcome so last_flush_result reflects this attempt
+            # rather than keeping a stale prior success. Built directly (not via
+            # build_result, which may itself be what raised) so it cannot re-raise.
+            LOGGER.error("Opik flush failed unexpectedly", exc_info=True)
+            self._last_flush_result = data_loss.FlushResult(
+                flushed=False,
+                remaining_queue_size=0,
+                dropped_messages=0,
+                dropped_items=0,
+                failures=(),
+            )
+            return False
+
+    @property
+    def last_flush_result(self) -> Optional[data_loss.FlushResult]:
+        """Outcome of the most recent ``flush()``/``end()`` on this client.
+
+        ``None`` until the first flush.
+        """
+        return self._last_flush_result
+
+    def get_errors_report(self) -> data_loss.ErrorsReport:
+        """Report of messages the background sender terminally dropped.
+
+        Unlike :attr:`last_flush_result`, which is scoped to a single flush, this
+        reports the sender's retained data-loss history — including drops that
+        happened before or between flushes.
+
+        The report is **capped**: the total counts are exact, but the per-drop
+        ``failures`` list keeps only the most recent entries (bounded, drop-oldest)
+        so it never grows without bound — see :class:`~opik.ErrorsReport`.
+
+        The sender is shared across clients with a matching configuration, so
+        the report may include drops from sibling clients on the same connection.
+        """
+        return self._flush_reporter.build_errors_report()
 
     def __internal_api__drain_to_processors__(
         self, timeout: Optional[float] = None
@@ -2658,30 +2739,32 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
 
         Example:
-            # Get all versions of a prompt
-            versions = client.get_prompt_history(name="my-prompt", project_name="my-project")
+            .. code-block:: python
 
-            # Filter by tags (versions containing "production" tag)
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                filter_string='tags contains "production"'
-            )
+                # Get all versions of a prompt
+                versions = client.get_prompt_history(name="my-prompt", project_name="my-project")
 
-            # Search for specific text in template or change description fields
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                search="customer"
-            )
+                # Filter by tags (versions containing "production" tag)
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    filter_string='tags contains "production"'
+                )
 
-            # Combine search and filtering
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                search="customer",
-                filter_string='tags contains "production"'
-            )
+                # Search for specific text in template or change description fields
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    search="customer"
+                )
+
+                # Combine search and filtering
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    search="customer",
+                    filter_string='tags contains "production"'
+                )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
@@ -2750,30 +2833,32 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
 
         Example:
-            # Get all versions of a chat prompt
-            versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")
+            .. code-block:: python
 
-            # Filter by tags (versions containing "production" tag)
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                filter_string='tags contains "production"'
-            )
+                # Get all versions of a chat prompt
+                versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")
 
-            # Search for specific text in template or change description fields
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                search="helpful assistant"
-            )
+                # Filter by tags (versions containing "production" tag)
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    filter_string='tags contains "production"'
+                )
 
-            # Combine search and filtering
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                search="helpful assistant",
-                filter_string='tags contains "production"'
-            )
+                # Search for specific text in template or change description fields
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    search="helpful assistant"
+                )
+
+                # Combine search and filtering
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    search="helpful assistant",
+                    filter_string='tags contains "production"'
+                )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
@@ -2958,11 +3043,13 @@ class Opik:
             An instance of the PromptClient initialized with a cached REST client.
 
         Example:
-            prompts_client = client.get_prompts_client()
-            prompts_client.batch_update_prompt_version_tags(
-                version_ids=["version-id-1", "version-id-2"],
-                tags=["production", "v2"]
-            )
+            .. code-block:: python
+
+                prompts_client = client.get_prompts_client()
+                prompts_client.batch_update_prompt_version_tags(
+                    version_ids=["version-id-1", "version-id-2"],
+                    tags=["production", "v2"]
+                )
         """
         return prompt_client.PromptClient(self._rest_client)
 

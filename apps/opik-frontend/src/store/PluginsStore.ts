@@ -42,6 +42,7 @@ type PluginStore = {
   AssistantDebugInfo: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
   BillingLink: React.ComponentType | null;
+  sendOnboardingEmail: ((email: string) => Promise<void>) | null;
   init: unknown;
   collectRoutes: (parents: PluginRouteParents) => AnyRoute[];
   sidebarSections: PluginSidebarSection[];
@@ -70,6 +71,7 @@ const PLUGIN_NAMES = [
   "AssistantDebugInfo",
   "UpgradeButton",
   "BillingLink",
+  "sendOnboardingEmail",
   "init",
 ];
 
@@ -116,6 +118,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   AssistantDebugInfo: null,
   UpgradeButton: null,
   BillingLink: null,
+  sendOnboardingEmail: null,
   init: null,
   collectRoutes: (parents) =>
     ACTIVE_MANIFESTS.flatMap((manifest) => manifest.routes?.(parents) ?? []),

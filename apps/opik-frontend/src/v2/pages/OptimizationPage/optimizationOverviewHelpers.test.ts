@@ -1,12 +1,41 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  computeEmptyRunWarning,
   getCompletedRunDurationSeconds,
+  getEmptyRunKPICaption,
+  getEmptyRunWarningMessage,
   getOptimizationDurationSeconds,
   getOptimizationRefetchInterval,
 } from "./optimizationOverviewHelpers";
-import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import {
+  AggregatedCandidate,
+  OPTIMIZATION_STATUS,
+  OptimizationScoringHealth,
+} from "@/types/optimizations";
 import { OPTIMIZATION_ACTIVE_REFETCH_INTERVAL } from "@/lib/optimizations";
+
+const makeCandidate = (
+  overrides: Partial<AggregatedCandidate> & {
+    candidateId: string;
+    stepIndex: number;
+  },
+): AggregatedCandidate => ({
+  id: overrides.candidateId,
+  parentCandidateIds: [],
+  trialNumber: 1,
+  score: undefined,
+  runtimeCost: undefined,
+  latencyP50: undefined,
+  totalTraceCount: 0,
+  totalDatasetItemCount: 0,
+  passedCount: 0,
+  totalCount: 0,
+  experimentIds: [],
+  name: "test",
+  created_at: "2025-01-01T00:00:00Z",
+  ...overrides,
+});
 
 describe("getOptimizationDurationSeconds", () => {
   it("returns the wall-clock seconds between created and end", () => {
@@ -82,6 +111,74 @@ describe("getCompletedRunDurationSeconds", () => {
   });
 });
 
+describe("computeEmptyRunWarning", () => {
+  it("does not warn while the run is unfinished or errored", () => {
+    const candidates = [makeCandidate({ candidateId: "a", stepIndex: 0 })];
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.RUNNING),
+    ).toBe(false);
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.INITIALIZED),
+    ).toBe(false);
+    expect(computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.ERROR)).toBe(
+      false,
+    );
+    expect(computeEmptyRunWarning(candidates, undefined)).toBe(false);
+  });
+
+  it("warns on a COMPLETED run where no non-baseline trial scored", () => {
+    const candidates = [
+      // A scored baseline does not count — it is expected on every run.
+      makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
+      makeCandidate({
+        candidateId: "a",
+        stepIndex: 1,
+        score: undefined,
+        parentCandidateIds: ["base"],
+      }),
+      makeCandidate({
+        candidateId: "b",
+        stepIndex: 2,
+        score: undefined,
+        parentCandidateIds: ["a"],
+      }),
+    ];
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(true);
+  });
+
+  it("warns on a COMPLETED run that produced no non-baseline trials at all", () => {
+    const candidates = [
+      makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
+    ];
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(true);
+  });
+
+  it("does not warn when at least one non-baseline trial scored", () => {
+    const candidates = [
+      makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
+      makeCandidate({
+        candidateId: "a",
+        stepIndex: 1,
+        score: undefined,
+        parentCandidateIds: ["base"],
+      }),
+      makeCandidate({
+        candidateId: "b",
+        stepIndex: 1,
+        score: 0.7,
+        parentCandidateIds: ["base"],
+      }),
+    ];
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(false);
+  });
+});
+
 describe("getOptimizationRefetchInterval", () => {
   it("polls while the run is in progress", () => {
     expect(getOptimizationRefetchInterval(OPTIMIZATION_STATUS.RUNNING)).toBe(
@@ -100,5 +197,141 @@ describe("getOptimizationRefetchInterval", () => {
       false,
     );
     expect(getOptimizationRefetchInterval(undefined)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getEmptyRunWarningMessage — Wave 2 exact-count path + Wave-1 fallback
+// ---------------------------------------------------------------------------
+
+describe("getEmptyRunWarningMessage", () => {
+  // --- Exact-count path (scoring_health present) ---
+
+  it("uses all-failed framing when every item failed (plural)", () => {
+    const health: OptimizationScoringHealth = {
+      failed_count: 5,
+      total_count: 5,
+    };
+    const msg = getEmptyRunWarningMessage(health);
+    expect(msg).toContain("All 5 items failed to score");
+  });
+
+  it("uses all-failed framing when every item failed (singular — 1 item)", () => {
+    const health: OptimizationScoringHealth = {
+      failed_count: 1,
+      total_count: 1,
+    };
+    const msg = getEmptyRunWarningMessage(health);
+    // A one-item dataset reads "The item failed …", never "All 1 item …".
+    expect(msg).toContain("The item failed to score");
+    expect(msg).not.toContain("All 1");
+    expect(msg).not.toContain("1 items");
+  });
+
+  it("uses partial framing when some items failed", () => {
+    const health: OptimizationScoringHealth = {
+      failed_count: 3,
+      total_count: 10,
+    };
+    const msg = getEmptyRunWarningMessage(health);
+    expect(msg).toContain("3 of 10 items failed to score");
+    // Partial framing should NOT say "All"
+    expect(msg).not.toMatch(/^All /);
+  });
+
+  it("uses plural 'items' for a partial single failure (noun agrees with total)", () => {
+    const health: OptimizationScoringHealth = {
+      failed_count: 1,
+      total_count: 10,
+    };
+    const msg = getEmptyRunWarningMessage(health);
+    // "1 of 10 items" — the noun agrees with the total, not the failed count.
+    expect(msg).toContain("1 of 10 items failed to score");
+  });
+
+  it("returns null when failed_count is 0 (nothing failed)", () => {
+    const health: OptimizationScoringHealth = {
+      failed_count: 0,
+      total_count: 10,
+    };
+    expect(getEmptyRunWarningMessage(health)).toBeNull();
+  });
+
+  it("falls back to the heuristic message when total_count is 0 (degenerate health object)", () => {
+    // total_count === 0 → the exact-count branch is skipped and heuristic is used.
+    const health: OptimizationScoringHealth = {
+      failed_count: 0,
+      total_count: 0,
+    };
+    // With total_count === 0, the guard `total_count > 0` is false, so we
+    // return the heuristic fallback (non-null).
+    const msg = getEmptyRunWarningMessage(health);
+    expect(msg).not.toBeNull();
+    expect(msg).toContain("no usable scores");
+  });
+
+  // --- Heuristic fallback (absent scoring_health) ---
+
+  it("returns the Wave-1 heuristic copy when scoring_health is absent", () => {
+    const msg = getEmptyRunWarningMessage(undefined);
+    // The static Wave-1 message must be returned unchanged.
+    expect(msg).toBe(
+      "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getEmptyRunKPICaption — compact caption for the KPI score card
+// ---------------------------------------------------------------------------
+
+describe("getEmptyRunKPICaption", () => {
+  it("returns null when the run is not empty (isEmptyRun=false)", () => {
+    expect(getEmptyRunKPICaption(false)).toBeNull();
+    expect(
+      getEmptyRunKPICaption(false, {
+        failed_count: 5,
+        total_count: 5,
+      }),
+    ).toBeNull();
+  });
+
+  it("all-failed exact count caption (plural)", () => {
+    const caption = getEmptyRunKPICaption(true, {
+      failed_count: 8,
+      total_count: 8,
+    });
+    expect(caption).toContain("All 8 items failed to score");
+    expect(caption).toContain("check the logs");
+  });
+
+  it("all-failed exact count caption (singular)", () => {
+    const caption = getEmptyRunKPICaption(true, {
+      failed_count: 1,
+      total_count: 1,
+    });
+    expect(caption).toContain("The item failed to score");
+    expect(caption).not.toContain("All 1");
+    expect(caption).not.toContain("1 items");
+  });
+
+  it("partial failure exact count caption", () => {
+    const caption = getEmptyRunKPICaption(true, {
+      failed_count: 4,
+      total_count: 12,
+    });
+    expect(caption).toContain("4 of 12 items failed to score");
+    expect(caption).toContain("check the logs");
+  });
+
+  it("returns null when failed_count is 0", () => {
+    expect(
+      getEmptyRunKPICaption(true, { failed_count: 0, total_count: 10 }),
+    ).toBeNull();
+  });
+
+  it("falls back to Wave-1 heuristic copy when scoring_health is absent", () => {
+    const caption = getEmptyRunKPICaption(true, undefined);
+    expect(caption).toBe("No usable scores — check the logs.");
   });
 });

@@ -1,0 +1,19 @@
+## AND/OR Condition Grouping in Alerts
+
+Alert rules now support structured condition grouping: conditions within a group are evaluated with AND, while groups themselves are combined with OR. This makes it possible to express logic such as "flag a trace if (hallucination score > 0.8 AND relevance score < 0.3) OR (toxicity score > 0.5)".
+
+Existing single-condition alerts continue to work exactly as before — each legacy condition is automatically treated as its own group, so no migration is needed.
+
+## Bug Fixes & Improvements
+
+- **Prompt masks (Python & TypeScript SDKs)** — `prompt_mask_context(masks)` / `promptMaskContext(masks)` lets you run agent code with specific prompt IDs silently redirected to a different version ID, non-destructively. The agent calls `get_prompt()` as usual and receives the overridden template without any permanent change to the prompt library. Designed for A/B testing and optimizer sweep scenarios.
+- **Experiments: dataset version shown inline** — the dataset version is now displayed as a pill alongside the item source in both the experiments table and the experiment detail header. The standalone "Test suite version" column has been removed; the same information is now visible in context.
+- **Dataset items: conflicting key names no longer cause errors** — iterating a dataset whose items contain a key that matches a `DatasetItem` field (e.g. `id`, as in HotpotQA) previously raised `TypeError: multiple values for keyword argument`. The SDK now strips conflicting keys and emits a one-time warning so iteration completes.
+- **Harbor integration: supports harbor `<0.8` and `>=0.8`** — `track_harbor()` now patches whichever method name the installed version of harbor exposes (`_setup_environment` or `_setup_agent_environment`), so tracing works regardless of which version is installed.
+- **New Playground models** — Gemini 3.5 Flash and `qwen/qwen3.7-max` are now available in the model picker.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.37...2.0.47)
+
+_Releases_: `2.0.42`, `2.0.43`, `2.0.44`, `2.0.45`, `2.0.46`, `2.0.47`

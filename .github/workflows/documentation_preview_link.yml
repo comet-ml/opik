@@ -44,10 +44,14 @@ jobs:
 
                 # --concurrency 500: the preview CDN serves bursts without rate-limiting;
                 # the recurse otherwise brushes the job's 15-minute timeout.
+                #
+                # app.buildwithfern.com is skipped: Fern's own platform JS bundle 404s with
+                # a per-build hash, so it is a false positive we do not control.
                 npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                   --recurse \
                   --concurrency 500 \
                   --skip "search\/v2\/key" \
+                  --skip "app.buildwithfern.com" \
                   --skip "https://ai.google.dev/gemini-api" \
                   --skip "https://ai.google.dev/aistudio" \
                   --skip "chat.comet.com" \
@@ -73,42 +77,28 @@ jobs:
                   exit 0
                 fi
 
-                # `↳ on page` strips the ephemeral preview host, leaving a stable,
-                # greppable doc path. Append one report entry for a status-0 url whose
-                # recheck label is computed by the caller.
-                report_timeout() {
-                  local url=$1 label=$2 parent
-                  parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" \
-                    '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
-                  BROKEN_LINKS=$(printf '%s\n❌ Broken link: %s (%s)\n   ↳ on page: %s' "$BROKEN_LINKS" "$url" "$label" "$parent")
-                }
-
-                # Real HTTP errors (excluding 403s), deduped by url — one broken sidebar
-                # link otherwise multiplies into hundreds of lines and overflows GitHub's
-                # 65,536-char comment limit.
+                # Only 404/410 means a link is genuinely broken — the resource is gone or
+                # renamed. That is what catches real regressions (a moved provider page, a
+                # deleted doc) from any host. Everything else non-OK (0=timeout, 403=bot
+                # block, 429=rate limit, 5xx=their server) is an external host being slow or
+                # hostile to crawlers, not a broken link — and must not fail the check:
+                # under --concurrency 500 a different random subset of external hosts flakes
+                # every run, so failing on those never converges. `↳ on page` strips the
+                # ephemeral preview host to leave a stable, greppable doc path; dedup by url
+                # so one bad sidebar link cannot overflow GitHub's 65,536-char comment cap.
                 BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
-                  [.links[] | select(.state != "OK" and .status != 403 and .status != 0)]
+                  [.links[] | select(.state == "BROKEN" and (.status == 404 or .status == 410))]
                   | group_by(.url) | map(.[0]) | .[]
                   | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
                 ' linkinator_results.json)
 
-                # Status 0 is "crawl gave up", not an HTTP error — a false positive for
-                # healthy-but-slow pages. Re-check each (only on the preview origin, so a
-                # PR-authored link can't point curl at an arbitrary host) and keep it only
-                # if genuinely unreachable.
-                while IFS= read -r url; do
-                  [ -z "$url" ] && continue
-                  case "$url" in
-                    "$PREVIEW_ORIGIN"/*|"$PREVIEW_ORIGIN")
-                      code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
-                      { [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; } && continue
-                      report_timeout "$url" "timeout, recheck ${code:-000}"
-                      ;;
-                    *)
-                      report_timeout "$url" "timeout"
-                      ;;
-                  esac
-                done <<< "$(jq -r '[.links[] | select(.status == 0) | .url] | unique | .[]' linkinator_results.json)"
+                # Links the crawl could not confirm (timeout / bot block / rate limit / 5xx).
+                # Listed for visibility only — they do NOT fail the check.
+                UNVERIFIED_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
+                  [.links[] | select(.state == "BROKEN" and (.status != 404 and .status != 410))]
+                  | group_by(.url) | map(.[0]) | .[]
+                  | "• \(.url) (\(if .status == 0 then "timeout" else .status | tostring end))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
+                ' linkinator_results.json)
 
                 if [ -n "$BROKEN_LINKS" ]; then
                   {
@@ -120,6 +110,17 @@ jobs:
                   echo "true" > check_failed.flag
                 else
                   echo "No broken links found" >> preview_url.txt
+                fi
+
+                if [ -n "$UNVERIFIED_LINKS" ]; then
+                  {
+                    echo ""
+                    echo "<details><summary>Unverified links (timeout / rate-limited / server error — not failing the check)</summary>"
+                    echo ""
+                    echo "$UNVERIFIED_LINKS"
+                    echo ""
+                    echo "</details>"
+                  } >> preview_url.txt
                 fi
 
                 rm -f linkinator_results.json

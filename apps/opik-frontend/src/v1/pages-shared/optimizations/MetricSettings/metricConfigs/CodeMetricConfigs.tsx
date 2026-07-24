@@ -7,27 +7,16 @@ import { EditorView } from "@codemirror/view";
 import { Extension } from "@codemirror/state";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { cn } from "@/lib/utils";
+import { DEFAULT_CODE_METRIC_CONFIGS } from "@/constants/optimizations";
 
 interface CodeMetricConfigsProps {
   configs: Partial<CodeMetricParameters>;
   onChange: (configs: Partial<CodeMetricParameters>) => void;
 }
 
-const DEFAULT_CODE = `from opik.evaluation.metrics import BaseMetric
-from opik.evaluation.metrics.score_result import ScoreResult
-
-class MyMetric(BaseMetric):
-    def __init__(self, name: str = "my_metric"):
-        super().__init__(name=name)
-
-    def score(self, output: str, **kwargs) -> ScoreResult:
-        # output: the LLM response
-        # kwargs: contains dataset_item fields
-        return ScoreResult(
-            name=self.name,
-            value=1.0,
-            reason="Evaluation passed"
-        )`;
+// Shared with the v2 editor and the form's default-value source so the
+// template only lives in one place.
+const DEFAULT_CODE = DEFAULT_CODE_METRIC_CONFIGS.CODE;
 
 // Static CodeMirror configuration - defined at module level to avoid recreation on every render
 const CODEMIRROR_EXTENSIONS: Extension[] = [python(), EditorView.lineWrapping];
@@ -69,8 +58,9 @@ const CodeMetricConfigs = ({ configs, onChange }: CodeMetricConfigsProps) => {
         <p className="text-xs text-muted-slate">
           Define a class that extends <code>BaseMetric</code> with a{" "}
           <code>score</code> method that takes <code>output</code> (the LLM
-          response) and <code>**kwargs</code> (dataset fields), returning a{" "}
-          <code>ScoreResult</code>.
+          response) and <code>**kwargs</code> (dataset fields). Read fields with{" "}
+          <code>kwargs.get(&quot;field_name&quot;)</code> so a missing field
+          doesn&apos;t raise, returning a <code>ScoreResult</code>.
         </p>
       </div>
     </div>

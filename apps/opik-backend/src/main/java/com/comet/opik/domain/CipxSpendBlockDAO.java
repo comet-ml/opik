@@ -45,9 +45,12 @@ import java.util.UUID;
 @Slf4j
 public class CipxSpendBlockDAO {
 
-    /** Tier names ordered by the residual block_idx ordinal. */
+    /** Tier names ordered by the residual block_idx ordinal. The cache_creation entry (ordinal 2) is a
+     * placeholder: its written label is the per-span TTL variant (cache_creation_5m / cache_creation_1h),
+     * resolved by {@link BlockRow#tierName(int, String)}. */
     private static final String[] TIER_NAMES = {"input", "cache_read", "cache_creation", "output"};
     private static final int RESIDUAL_IDX_BASE = 65531;
+    private static final int CACHE_CREATION_TIER = 2;
     /** Rows per bulk-insert chunk; caps the JSON payload at ~35MB (~650 bytes/row). */
     private static final int INSERT_CHUNK_SIZE = 50_000;
     private static final String SRC_ATTRIBUTED = "a";
@@ -98,6 +101,15 @@ public class CipxSpendBlockDAO {
                     usage.path("cache_creation_input_tokens").asLong(0),
                     usage.path("output_tokens").asLong(0),
             };
+            // A cipx span is a single LLM call, and Claude Code writes all of a call's cache breakpoints
+            // with one TTL, so every write block on the span inherits the span's TTL. Pick it from the
+            // usage split; when the split is absent (legacy / not reported) fall back to 1h, since CC's
+            // cache writes are overwhelmingly 1h (OPIK-7392).
+            JsonNode cacheCreation = usage.path("cache_creation");
+            String writeTier = cacheCreation.path("ephemeral_5m_input_tokens").asLong(0) > 0
+                    && cacheCreation.path("ephemeral_1h_input_tokens").asLong(0) == 0
+                            ? "cache_creation_5m"
+                            : "cache_creation_1h";
 
             JsonNode blocks = metadata.path("cipx").path("blocks");
             long[] tierChars = new long[TIER_NAMES.length];
@@ -128,19 +140,24 @@ public class CipxSpendBlockDAO {
                     if (isIdentityContext(block)) {
                         continue;
                     }
-                    rows.add(attributed(base, idx, block, tierTokens, tierChars));
+                    rows.add(attributed(base, idx, block, tierTokens, tierChars, writeTier));
                 }
             }
             for (int tier = 0; tier < TIER_NAMES.length; tier++) {
                 if (!tierPresent[tier] && tierTokens[tier] > 0) {
-                    rows.add(residual(base, tier, tierTokens[tier]));
+                    rows.add(residual(base, tier, tierTokens[tier], writeTier));
                 }
             }
             return rows;
         }
 
+        /** cache_creation (ordinal 2) is written as its per-span TTL variant; the rest are fixed. */
+        private static String tierName(int tier, String writeTier) {
+            return tier == CACHE_CREATION_TIER ? writeTier : TIER_NAMES[tier];
+        }
+
         private static BlockRow attributed(BlockRowBuilder base, int idx, JsonNode block, long[] tierTokens,
-                long[] tierChars) {
+                long[] tierChars, String writeTier) {
             String category = block.path("category").asText("");
             String side = block.path("side").asText("");
             String cacheStatus = block.path("cache_status").asText("");
@@ -167,7 +184,7 @@ public class CipxSpendBlockDAO {
                     .toolUseId(block.path("tool_use_id").asText(""))
                     .resource(resource)
                     .kind(kind)
-                    .tier(tier >= 0 ? TIER_NAMES[tier] : "")
+                    .tier(tier >= 0 ? tierName(tier, writeTier) : "")
                     .lane(lane(category, toolServer))
                     .bdLane(bdLane(category, toolServer))
                     .label(label(category, toolServer, toolName, resource, kind, chars))
@@ -176,7 +193,7 @@ public class CipxSpendBlockDAO {
                     .build();
         }
 
-        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens) {
+        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens, String writeTier) {
             return base
                     .blockIdx(RESIDUAL_IDX_BASE + tier)
                     .src(SRC_RESIDUAL)
@@ -190,7 +207,7 @@ public class CipxSpendBlockDAO {
                     .toolUseId("")
                     .resource("")
                     .kind("")
-                    .tier(TIER_NAMES[tier])
+                    .tier(tierName(tier, writeTier))
                     .lane("unattributed")
                     .bdLane("")
                     .label("")

@@ -220,6 +220,9 @@ redirects:
   - source: "/docs/opik/tracing/integrations/flowise"
     destination: "/docs/opik/integrations/flowise"
     permanent: true
+  - source: "/docs/opik/tracing/integrations/hermes"
+    destination: "/docs/opik/integrations/hermes"
+    permanent: true
   - source: "/docs/opik/tracing/integrations/gemini"
     destination: "/docs/opik/integrations/gemini"
     permanent: true
@@ -452,7 +455,7 @@ redirects:
     destination: "/docs/opik/tracing/advanced/cost_tracking"
     permanent: true
   - source: "/docs/opik/tracing/dynamic_tracing_control"
-    destination: "/docs/opik/tracing/log_traces#disabling-the-logging-process"
+    destination: "/docs/opik/tracing/advanced/log_traces#disabling-the-logging-process"
     permanent: true
   # Agent optimization restructuring redirects
   - source: "/docs/opik/agent_optimization/opik_optimizer/quickstart"
@@ -514,7 +517,7 @@ redirects:
     destination: "/docs/opik/integrations/opentelemetry"
     permanent: true
   - source: "/docs/opik/tracing/log_agents"
-    destination: "/docs/opik/tracing/log_traces"
+    destination: "/docs/opik/tracing/advanced/log_traces"
     permanent: true
   - source: "/docs/opik/self-host/kubernetes/backup"
     destination: "/docs/opik/self-host/backup"

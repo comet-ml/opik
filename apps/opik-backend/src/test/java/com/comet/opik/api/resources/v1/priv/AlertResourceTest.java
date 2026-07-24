@@ -11,6 +11,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Guardrail;
+import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
@@ -51,6 +52,8 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -169,6 +172,7 @@ class AlertResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private AlertResourceClient alertResourceClient;
     private PromptResourceClient promptResourceClient;
@@ -1785,7 +1789,7 @@ class AlertResourceTest {
             // Create guardrails for the trace
             Guardrail guardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(trace.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(idGenerator.generateId())
                     .projectName(projectName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -1805,6 +1809,59 @@ class AlertResourceTest {
                                     .withIgnoredFields("id", "projectId")
                                     .build())
                     .isEqualTo(guardrail);
+        }
+
+        @Test
+        @DisplayName("when a guardrail-type filter is configured, webhook fires only for matching guardrail types")
+        void whenGuardrailTypeFilterConfigured__thenWebhookFiresOnlyForMatchingType() {
+            var mock = prepareMockWorkspace();
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Alert fires only for PII guardrails
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                    .triggerConfigs(List.of(AlertTriggerConfig.builder()
+                            .type(AlertTriggerConfigType.FILTER_GUARDRAIL_TYPE)
+                            .configValue(Map.of(
+                                    AlertTriggerConfig.GUARDRAIL_TYPES_CONFIG_KEY, GuardrailType.PII.name()))
+                            .build()))
+                    .build()).toBuilder()
+                    .projectId(projectId)
+                    .build();
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // A TOPIC guardrail fails — webhook should NOT fire
+            Trace topicTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName).usage(null).visibilityMode(null).build();
+            traceResourceClient.createTrace(topicTrace, mock.getLeft(), mock.getRight());
+            Guardrail topicGuardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(topicTrace.id()).secondaryId(idGenerator.generateId())
+                    .projectName(projectName).name(GuardrailType.TOPIC).result(GuardrailResult.FAILED).build();
+            guardrailsResourceClient.addBatch(List.of(topicGuardrail), mock.getLeft(), mock.getRight());
+
+            Awaitility.await()
+                    .pollDelay(java.time.Duration.ofSeconds(2))
+                    .atMost(java.time.Duration.ofSeconds(3))
+                    .untilAsserted(() -> {
+                        var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                        assertThat(requests).isEmpty();
+                    });
+
+            // A PII guardrail fails — webhook SHOULD fire
+            Trace piiTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName).usage(null).visibilityMode(null).build();
+            traceResourceClient.createTrace(piiTrace, mock.getLeft(), mock.getRight());
+            Guardrail piiGuardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(piiTrace.id()).secondaryId(idGenerator.generateId())
+                    .projectName(projectName).name(GuardrailType.PII).result(GuardrailResult.FAILED).build();
+            guardrailsResourceClient.addBatch(List.of(piiGuardrail), mock.getLeft(), mock.getRight());
+
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<Guardrail> guardrails = JsonUtils.readCollectionValue(payload, List.class, Guardrail.class);
+            assertThat(guardrails).hasSize(1);
+            assertThat(guardrails.getFirst().name()).isEqualTo(GuardrailType.PII);
         }
 
         @Test
@@ -1904,7 +1961,7 @@ class AlertResourceTest {
 
             Guardrail guardrailA = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(traceA.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(idGenerator.generateId())
                     .projectName(projectAName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -1929,7 +1986,7 @@ class AlertResourceTest {
 
             Guardrail guardrailB = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(traceB.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(idGenerator.generateId())
                     .projectName(projectBName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -2720,7 +2777,7 @@ class AlertResourceTest {
             List<Guardrail> guardrails = IntStream.range(0, 2)
                     .mapToObj(i -> factory.manufacturePojo(Guardrail.class).toBuilder()
                             .entityId(trace.id())
-                            .secondaryId(UUID.randomUUID())
+                            .secondaryId(idGenerator.generateId())
                             .projectName(projectName)
                             .projectId(projectId)
                             .result(GuardrailResult.FAILED)
@@ -2812,7 +2869,7 @@ class AlertResourceTest {
 
                         return factory.manufacturePojo(Guardrail.class).toBuilder()
                                 .entityId(trace.id())
-                                .secondaryId(UUID.randomUUID())
+                                .secondaryId(idGenerator.generateId())
                                 .projectName(projectName)
                                 .projectId(projectId)
                                 .result(GuardrailResult.FAILED)

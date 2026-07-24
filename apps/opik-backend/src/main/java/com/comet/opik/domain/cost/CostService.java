@@ -43,7 +43,8 @@ public class CostService {
             Map.entry("mistral", "mistral"),
             Map.entry("xai", "xai"),
             Map.entry("deepseek", "deepseek"),
-            Map.entry("perplexity", "perplexity"));
+            Map.entry("perplexity", "perplexity"),
+            Map.entry("fireworks_ai", "fireworks_ai"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
@@ -61,16 +62,18 @@ public class CostService {
     private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
     private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
-            .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
-                    "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
-                    "azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
-                    "xai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
-                    "deepseek", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
-                    "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
-                    "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
-                    "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
-                    "gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle,
-                    "vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic);
+            .ofEntries(
+                    Map.entry("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic),
+                    Map.entry("openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("xai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("deepseek", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("fireworks_ai", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock),
+                    Map.entry("bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock),
+                    Map.entry("vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle),
+                    Map.entry("gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle),
+                    Map.entry("vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic));
 
     static {
         try {

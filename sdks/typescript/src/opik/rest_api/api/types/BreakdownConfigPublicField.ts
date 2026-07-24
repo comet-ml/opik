@@ -10,5 +10,6 @@ export const BreakdownConfigPublicField = {
     Model: "model",
     Provider: "provider",
     Type: "type",
+    GuardrailName: "guardrail_name",
 } as const;
 export type BreakdownConfigPublicField = (typeof BreakdownConfigPublicField)[keyof typeof BreakdownConfigPublicField];

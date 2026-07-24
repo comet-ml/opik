@@ -351,7 +351,7 @@ class DatasetsResourceCreateFromTracesTest {
         UUID nonExistentDatasetId = UUID.randomUUID();
 
         var request = CreateDatasetItemsFromTracesRequest.builder()
-                .traceIds(Set.of(UUID.randomUUID()))
+                .traceIds(Set.of(GENERATOR.generate()))
                 .enrichmentOptions(
                         TraceEnrichmentOptions.builder().build())
                 .build();

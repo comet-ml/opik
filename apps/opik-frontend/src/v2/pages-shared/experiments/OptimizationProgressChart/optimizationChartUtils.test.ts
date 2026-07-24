@@ -9,7 +9,10 @@ import {
   findNearestDot,
   getTrialStatusLabel,
   getTrialDotColor,
+  STATUS_VARIANT_MAP,
   TRIAL_STATUS_COLORS,
+  TRIAL_STATUS_LABELS,
+  TRIAL_STATUS_ORDER,
   TRIAL_BEST_COLOR,
   TRIAL_BEST_RING_COLOR,
   CandidateDataPoint,
@@ -61,7 +64,7 @@ describe("computeCandidateStatuses", () => {
   });
 
   describe("running", () => {
-    it("should mark unscored candidate as running", () => {
+    it("should mark unscored candidate as running while in progress", () => {
       const candidates = [
         makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),
         makeCandidate({
@@ -70,8 +73,34 @@ describe("computeCandidateStatuses", () => {
           parentCandidateIds: ["a"],
         }),
       ];
-      const result = computeCandidateStatuses(candidates);
+      // isInProgress = true → an unscored trial is still "running".
+      const result = computeCandidateStatuses(candidates, true, true);
       expect(result.get("b")).toBe("running");
+    });
+  });
+
+  describe("failed", () => {
+    it("marks an unscored trial as failed once the run is terminal (not in progress)", () => {
+      const candidates = [
+        makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: undefined,
+          parentCandidateIds: ["a"],
+        }),
+      ];
+      // isInProgress defaults to false → terminal run → unscored trial is "failed".
+      const result = computeCandidateStatuses(candidates);
+      expect(result.get("b")).toBe("failed");
+    });
+
+    it("never marks the baseline as failed even when unscored", () => {
+      const candidates = [
+        makeCandidate({ candidateId: "a", stepIndex: 0, score: undefined }),
+      ];
+      const result = computeCandidateStatuses(candidates);
+      expect(result.get("a")).toBe("baseline");
     });
   });
 
@@ -429,6 +458,28 @@ describe("getTrialDotColor", () => {
         isTestSuite: false,
       }),
     ).toBe(TRIAL_STATUS_COLORS.passed);
+  });
+
+  it("keeps a failed trial red on dataset runs (never collapsed to passed)", () => {
+    expect(
+      getTrialDotColor({ status: "failed", isBest: false, isTestSuite: false }),
+    ).toBe(TRIAL_STATUS_COLORS.failed);
+    expect(
+      getTrialDotColor({ status: "failed", isBest: false, isTestSuite: true }),
+    ).toBe(TRIAL_STATUS_COLORS.failed);
+  });
+});
+
+describe("failed trial-status maps", () => {
+  it("labels and colours the failed status with a red tag variant", () => {
+    expect(TRIAL_STATUS_LABELS.failed).toBe("Failed");
+    expect(STATUS_VARIANT_MAP.failed).toBe("red");
+    expect(TRIAL_STATUS_COLORS.failed).toBe("var(--color-red)");
+    expect(TRIAL_STATUS_ORDER).toContain("failed");
+  });
+
+  it("gives the failed trial a stepped tooltip label", () => {
+    expect(getTrialStatusLabel("failed", 2)).toBe("Failed step 2");
   });
 });
 

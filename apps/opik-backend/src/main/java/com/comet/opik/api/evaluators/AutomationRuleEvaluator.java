@@ -83,6 +83,11 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     @Builder.Default
     private final boolean enabled = true;
 
+    @JsonView({View.Public.class, View.Write.class})
+    @Schema(description = "Controls whether the rule fires on production traces, experiment traces, or both. Defaults to 'production' if omitted.")
+    @Builder.Default
+    private final EvalTriggerScope triggerScope = EvalTriggerScope.PRODUCTION;
+
     @JsonIgnore
     @Builder.Default
     private final List<E> filters = List.of();

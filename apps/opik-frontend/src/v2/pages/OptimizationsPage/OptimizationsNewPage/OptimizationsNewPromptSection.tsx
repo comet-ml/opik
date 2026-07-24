@@ -298,6 +298,11 @@ const OptimizationsNewPromptSection: React.FC<
           }}
         />
       </div>
+      {form.formState.errors.modelName && (
+        <p className="comet-body-s text-destructive">
+          {form.formState.errors.modelName.message}
+        </p>
+      )}
 
       <AddNewPromptVersionDialog
         open={showSaveChatPromptDialog}

@@ -1,0 +1,49 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog/2026-07-13
+---
+
+## Per-Evaluation Spend Budget for LLM-as-Judge Evaluators
+
+Online LLM-as-judge scoring rules for traces and threads can now be given a **Max cost per evaluation (USD)** budget. Once an evaluation's cumulative spend crosses the limit, the agentic scoring loop stops starting new tool-calling turns and returns a best-effort verdict from whatever evidence it has already gathered, instead of continuing to spend without bound. The monitoring trace for a capped run is tagged `budget_exceeded` so you can tell a budget-limited verdict apart from a fully-investigated one. The field is hidden for span-scope rules, since a single LLM call has no loop to cap.
+
+## Optimization Runs: New-Run Sidebar & Redesigned List
+
+Starting a new optimization run no longer navigates away from the runs list: the "New optimization run" form now opens as a side panel over the list (via the list's `?new` — or `?template` / `?rerun` — parameter) so you can start, clone, or re-run an optimization without losing your place. The runs list itself has a new **Item source** column (the same reusable cell used on the Experiments page), Run ID / Algorithm / Metric columns available to add, and the "Pruned" trial status is now labeled **Discarded** for clarity.
+
+## Bug Fixes & Improvements
+
+- **Diagnostics: clearer failure copy and working billing link** — Follow-ups to last week's Diagnostics failure reasons: a permission-denied run failure now shows explanatory copy instead of a generic message, and the "View billing" link in the failure dialog now opens the right settings page.
+
+- **Claude Agent SDK / Claude Code traces now show real input/output** — Spans emitted by the Claude Agent SDK and Claude Code carried their prompt, tool, and response content on attributes that no mapping rule recognized, so everything fell into a generic attribute bag instead of the trace's input/output fields. These spans are now mapped correctly, and model/provider are set so cost is calculated instead of showing as $0.
+
+- **New: Mistral AI Python integration (`track_mistral`)** — A native integration for the `mistralai` Python SDK: wrap a client with `track_mistral(client)` to trace `chat.complete`/`chat.complete_async` and `chat.stream`/`stream_async` calls (including structured-output `parse` calls and streamed responses aggregated into a single span), with input, output, token usage, and cost captured automatically.
+
+- **`opik migrate dataset` can resume after an interruption** — A crash, network drop, or OOM during `opik migrate dataset` used to mean starting over. Progress now checkpoints after each completed experiment, so a re-run picks up where it left off, and the source dataset keeps its original name until the destination copy is fully verified — a failed run leaves only a discardable temporary copy behind rather than a renamed source.
+
+- **`opik migrate dataset` no longer runs out of memory on large datasets** — The migration's read path could request full-fidelity pages large enough to exhaust the process's memory and get killed mid-run. Reads are now paged more conservatively, with an automatic page-size shrink on read timeouts/connection errors.
+
+- **`opik export`/`opik import` preserve tags for prompts, experiments, and datasets** — Tags on prompts, experiments, and datasets were silently dropped when exporting or importing via the CLI (traces and spans already round-tripped correctly). All four entity types now preserve tags end-to-end.
+
+- **`opik export ... all` no longer runs out of memory on large projects** — Exporting a project used to buffer every trace and span in memory before writing anything, so peak memory scaled with project size. Export now processes traces in bounded chunks, flushing and discarding each chunk as it's written, and an interrupted export resumes mid-project instead of restarting.
+
+- **Fixed duplicate rows in the test suite detail view** — Editing a dataset item could cause its experiment result to render multiple times in the test suite detail view, due to a join that matched more than one dataset-item version per item.
+
+- **Prompt names are now unique per project instead of per workspace** — Two prompts with the same name in different projects no longer conflict.
+
+- **Custom metrics fail loudly on an unresolvable reference key** — An `equals`/`levenshtein_ratio`/`numerical_similarity` metric configured with a reference key that matches no dataset field used to silently score every item 0, making a broken metric indistinguishable from a genuinely low-scoring run. This now raises a clear error at build time listing the available fields, and a per-item missing value is scored 0 with an explicit "Missing reference value" reason instead of a spurious perfect match.
+
+- **Fixed cost calculation for the highest LiteLLM pricing tiers** — Models with `above_128k_tokens` (e.g. Gemini 1.5 Flash) or `above_272k_tokens` (e.g. the GPT-5.4/5.5 family and their Azure-hosted equivalents) pricing tiers were being undercharged, since only the `above_200k_tokens` tier was applied. All published tiers are now taken into account.
+
+- **Fixed an outbound gzip decompression error** — Self-hosted deployments with `jerseyClient.gzipEnabled: true` could hit `ZipException: Not in GZIP format` on outbound calls that read a gzip-encoded response body (for example, some Ollama responses), because the response was decompressed twice. The stale `Content-Encoding` header is now stripped after the first decode.
+
+## Performance Improvements
+
+- **Faster Logs page loads on large projects** — The Traces/Spans/Threads "log your first trace" onboarding check used to run a full project-wide aggregation query just to see if any row existed. It now uses a minimal existence check, removing a multi-second scan from every Logs page load.
+
+- **Reduced full-table scans in dataset and experiment queries** — Several ClickHouse queries backing dataset-item filters and experiment views scanned far more data than needed — in one case, an experiment/dataset-item filter query read 75x fewer granules after being scoped to the relevant experiment's trace IDs instead of the whole workspace. These queries now carry tighter project/trace-id/workspace bounds, reducing ClickHouse load on large workspaces.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.1.15...2.1.22)
+
+_Releases_: `2.1.16`, `2.1.17`, `2.1.18`, `2.1.19`, `2.1.20`, `2.1.21`, `2.1.22`

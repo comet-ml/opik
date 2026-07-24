@@ -6,6 +6,10 @@ import useDatasetById from "@/api/datasets/useDatasetById";
 import { METRIC_TYPE } from "@/types/optimizations";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { extractMessageContent, safelyGetPromptVariables } from "@/lib/prompt";
+import {
+  extractKwargsKeysFromPython,
+  extractRequiredScoreParams,
+} from "@/lib/optimizations";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
 import { useOptimizerFormHandlers } from "./formHandlers/useOptimizerFormHandlers";
@@ -61,6 +65,32 @@ export const useOptimizationsNewFormHandlers = () => {
       };
       collect(params.task_introduction);
       collect(params.evaluation_criteria);
+    }
+
+    // Code metrics read dataset columns three ways, all of which must exist in
+    // the item source:
+    //   1. dynamic `kwargs["x"]` accesses (static-scanned);
+    //   2. strict `score()` positional params (no `**kwargs`) — each needs a
+    //      same-named column unless the `arguments` map points it elsewhere,
+    //      otherwise score() raises a missing-argument TypeError (silent 0.0);
+    //   3. the explicit rename map (`arguments`: score() param → dataset column).
+    // Empty mappings are skipped — an unmapped param falls back to a same-named
+    // column backend-side, so a blank row is not a missing-column error.
+    if (metricType === METRIC_TYPE.CODE && metricParams) {
+      const params = metricParams as {
+        code?: string;
+        arguments?: Record<string, string>;
+      };
+      const code = params.code ?? "";
+      const argumentsMap = params.arguments ?? {};
+      extractKwargsKeysFromPython(code).forEach((key) => referenced.add(key));
+      extractRequiredScoreParams(code).forEach((param) => {
+        // A mapped param's target column is already covered by the map loop below.
+        if (!argumentsMap[param]) referenced.add(param);
+      });
+      Object.values(argumentsMap).forEach((column) => {
+        if (column) referenced.add(column);
+      });
     }
 
     return [...referenced].filter((tag) => !datasetVariables.includes(tag));

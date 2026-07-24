@@ -13,7 +13,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public enum DeletionReason {
 
-    USER_REQUEST("user_request");
+    USER_REQUEST("user_request"),
+    CASCADE("cascade");
 
     private final String value;
 

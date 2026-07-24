@@ -199,7 +199,7 @@ public class OptimizationsResource {
             @ApiResponse(responseCode = "204", description = "No content")})
     @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE)
     public Response updateOptimizationsById(@PathParam("id") UUID id,
-            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationUpdate.class))) @NotNull OptimizationUpdate request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationUpdate.class))) @NotNull @Valid OptimizationUpdate request) {
         log.info("Update optimization with id '{}', with request '{}'", id, request);
 
         optimizationService.update(id, request)
@@ -212,16 +212,6 @@ public class OptimizationsResource {
     }
 
     // ==================== Studio Endpoints ====================
-
-    @GET
-    @Path("/studio/{id}/cancel")
-    @Operation(operationId = "cancelStudioOptimizations", summary = "Cancel Studio optimizations", description = "Cancel Studio optimizations by id", responses = {
-            @ApiResponse(responseCode = "501", description = "Not Implemented")})
-    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE)
-    public Response cancelStudioOptimization(@PathParam("id") UUID id) {
-        log.info("Cancel Studio optimization endpoint called for id '{}' - not yet implemented", id);
-        return Response.status(Response.Status.NOT_IMPLEMENTED).build();
-    }
 
     @GET
     @Path("/studio/{id}/logs")

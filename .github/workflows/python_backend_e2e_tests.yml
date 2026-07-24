@@ -52,6 +52,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+
       - name: Run Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
@@ -71,8 +74,8 @@ jobs:
       - name: Install opik-python-backend
         run: |
           cd ${{ github.workspace }}/apps/opik-python-backend
-          pip install -r requirements.txt -r tests/test_requirements.txt
-          pip install .
+          uv pip install --system -r requirements.txt -r tests/test_requirements.txt
+          uv pip install --system .
 
       - name: Run Python BE E2E tests
         run: |

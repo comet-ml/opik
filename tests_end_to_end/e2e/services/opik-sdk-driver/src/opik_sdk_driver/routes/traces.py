@@ -1,4 +1,5 @@
 import atexit
+import datetime
 
 import opik
 from fastapi import APIRouter, Header, HTTPException
@@ -76,6 +77,12 @@ def create_nested_trace(
     # SDK is translated to HTTP by the app-wide exception handler.
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     try:
+        start_time: datetime.datetime | None = None
+        end_time: datetime.datetime | None = None
+        if body.duration_seconds is not None:
+            end_time = datetime.datetime.now(datetime.timezone.utc)
+            start_time = end_time - datetime.timedelta(seconds=body.duration_seconds)
+
         trace = client.trace(
             project_name=body.project_name,
             name=body.name,
@@ -85,6 +92,18 @@ def create_nested_trace(
             tags=body.tags,
             thread_id=body.thread_id,
             feedback_scores=body.feedback_scores,
+            error_info=(
+                {
+                    "exception_type": body.error_info.exception_type,
+                    "message": body.error_info.message,
+                    # The REST ErrorInfo type requires a non-null traceback string.
+                    "traceback": body.error_info.traceback or "",
+                }
+                if body.error_info
+                else None
+            ),
+            start_time=start_time,
+            end_time=end_time,
         )
 
         created: list = []

@@ -568,6 +568,29 @@ export class TestHelperClient {
     }
   }
 
+  async createRichTraceForSidebar(
+    projectName: string,
+    traceName: string,
+    promptName: string,
+    attachmentPath: string
+  ): Promise<{ attachmentName: string; promptName: string }> {
+    try {
+      const response = await this.client.post('/api/traces/create-rich-trace-for-sidebar', {
+        project_name: projectName,
+        trace_name: traceName,
+        prompt_name: promptName,
+        attachment_path: attachmentPath,
+      });
+
+      return {
+        attachmentName: response.data.attachment_name,
+        promptName: response.data.prompt_name,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create rich trace for sidebar');
+    }
+  }
+
   async searchTraces(
     projectName: string,
     options?: {

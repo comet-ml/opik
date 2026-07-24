@@ -43,6 +43,7 @@ class AssertionResultServiceImpl implements AssertionResultService {
     private final @NonNull AssertionResultDAO assertionResultDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull EventBus eventBus;
+    private final @NonNull IdGenerator idGenerator;
 
     @Override
     public Mono<Long> insertBatch(@NonNull EntityType entityType,
@@ -63,7 +64,7 @@ class AssertionResultServiceImpl implements AssertionResultService {
         }
 
         // Validate up front so a bad id fails fast and independently of project-name normalisation.
-        assertionResults.forEach(item -> IdGenerator.validateVersion(item.entityId(), entityType.getType()));
+        assertionResults.forEach(item -> idGenerator.validateIdNotInFuture(item.entityId(), entityType.getType()));
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);

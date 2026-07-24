@@ -13,7 +13,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public enum SourceTable {
 
-    TRACES("traces");
+    TRACES("traces"),
+    SPANS("spans");
 
     private final String value;
 

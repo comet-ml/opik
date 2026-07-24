@@ -53,6 +53,8 @@ public class CipxSpendDAO {
             long uInput,
             long uCacheRead,
             long uCacheCreation,
+            long uCacheCreation5m,
+            long uCacheCreation1h,
             long uOutput,
             @NonNull String effort,
             @NonNull String thinkingType,
@@ -62,6 +64,7 @@ public class CipxSpendDAO {
         public static SpanRow from(UUID spanId, UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
             JsonNode usage = call.path("usage");
+            JsonNode cacheCreation = usage.path("cache_creation");
             JsonNode config = call.path("config");
             return SpanRow.builder()
                     .spanId(spanId.toString())
@@ -72,6 +75,8 @@ public class CipxSpendDAO {
                     .uInput(usage.path("input_tokens").asLong(0))
                     .uCacheRead(usage.path("cache_read_input_tokens").asLong(0))
                     .uCacheCreation(usage.path("cache_creation_input_tokens").asLong(0))
+                    .uCacheCreation5m(cacheCreation.path("ephemeral_5m_input_tokens").asLong(0))
+                    .uCacheCreation1h(cacheCreation.path("ephemeral_1h_input_tokens").asLong(0))
                     .uOutput(usage.path("output_tokens").asLong(0))
                     .effort(config.path("effort").asText(""))
                     .thinkingType(config.path("thinking_type").asText(""))
@@ -86,7 +91,7 @@ public class CipxSpendDAO {
     private static final String INSERT = """
             INSERT INTO cipx_spends
                 (workspace_id, project_id, trace_id, span_id, start_time, model,
-                 u_input, u_cache_read, u_cache_creation, u_output,
+                 u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
                  effort, thinking_type, max_tokens, context_management)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -101,6 +106,8 @@ public class CipxSpendDAO {
                         :u_input<item.index>,
                         :u_cache_read<item.index>,
                         :u_cache_creation<item.index>,
+                        :u_cache_creation_5m<item.index>,
+                        :u_cache_creation_1h<item.index>,
                         :u_output<item.index>,
                         :effort<item.index>,
                         :thinking_type<item.index>,
@@ -134,7 +141,7 @@ public class CipxSpendDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 13 parameters per row tuple in template order.
+        // (repeats dedup), then 15 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (SpanRow row : rows) {
@@ -146,6 +153,8 @@ public class CipxSpendDAO {
                     .bind(index++, row.uInput())
                     .bind(index++, row.uCacheRead())
                     .bind(index++, row.uCacheCreation())
+                    .bind(index++, row.uCacheCreation5m())
+                    .bind(index++, row.uCacheCreation1h())
                     .bind(index++, row.uOutput())
                     .bind(index++, row.effort())
                     .bind(index++, row.thinkingType())

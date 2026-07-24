@@ -406,12 +406,12 @@ class OpenTelemetryResourceTest {
             assertThat(span.provider()).isEqualTo("openai");
             assertThat(span.type()).isEqualTo(SpanType.llm);
 
-            assertThat(span.metadata().get("code.line").asInt()).isEqualTo(11);
-            assertThat(span.metadata().get("smolagents.single").asText()).isEqualTo("value");
-            assertThat(span.metadata().get("smolagents.node").get("key").asText()).isEqualTo("value");
-            assertThat(span.metadata().get("smolagents.array").isArray()).isTrue();
+            assertThat(span.metadata().get("line").asInt()).isEqualTo(11);
+            assertThat(span.metadata().get("single").asText()).isEqualTo("value");
+            assertThat(span.metadata().get("node").get("key").asText()).isEqualTo("value");
+            assertThat(span.metadata().get("array").isArray()).isTrue();
 
-            assertThat(span.input().get("input").get("key").asText()).isEqualTo("value");
+            assertThat(span.input().get("key").asText()).isEqualTo("value");
             assertThat(span.input().get("tools").isArray()).isEqualTo(Boolean.TRUE);
             assertThat(span.input().get("all_messages").isArray()).isEqualTo(Boolean.TRUE);
 
@@ -423,8 +423,8 @@ class OpenTelemetryResourceTest {
 
             // check metadata
             assertThat(span.metadata()).isNotEmpty();
-            assertThat(span.metadata().get("opik.metadata").get("foo").asText()).isEqualTo("bar");
-            assertThat(span.metadata().get("opik.metadata.inline").asText()).isEqualTo("inline_value");
+            assertThat(span.metadata().get("foo").asText()).isEqualTo("bar");
+            assertThat(span.metadata().get("inline").asText()).isEqualTo("inline_value");
         }
 
         @Test
@@ -608,6 +608,64 @@ class OpenTelemetryResourceTest {
                     .findFirst()
                     .orElseThrow();
             assertThat(rootSpanFromDb.metadata().get("thread_id").asLong()).isEqualTo(integerThreadId);
+        }
+
+        @Test
+        @DisplayName("test opik.tags on root span propagates to trace in OpenTelemetry")
+        void testRootSpanTagsPropagateToTrace() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var parentSpanId = UUID.randomUUID().toString().getBytes();
+
+            // Create a root span with opik.tags attribute
+            var rootSpan = Span.newBuilder()
+                    .setName("root span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(parentSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("opik.tags")
+                            .setValue(AnyValue.newBuilder()
+                                    .setStringValue("[\"machine-learning\", \"nlp\", \"chatbot\"]"))
+                            .build())
+                    .build();
+
+            // Create a child span
+            var childSpan = Span.newBuilder()
+                    .setName("child span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(parentSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            var otelSpans = List.of(rootSpan, childSpan);
+
+            // Calculate expected Opik trace ID
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            // Send the spans
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            // Verify the tags propagated from the root span to the trace
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+            assertThat(trace.tags()).containsExactlyInAnyOrder("machine-learning", "nlp", "chatbot");
+
+            // Verify the root span retains its tags too
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            var rootSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(rootSpanFromDb.tags()).containsExactlyInAnyOrder("machine-learning", "nlp", "chatbot");
         }
 
         @Test
@@ -1032,6 +1090,62 @@ class OpenTelemetryResourceTest {
             assertThat(existingTraceSpans.size()).isEqualTo(1);
             assertThat(existingTraceSpans.content().getFirst().name()).isEqualTo("override span");
             assertThat(existingTraceSpans.content().getFirst().traceId()).isEqualTo(existingTraceId);
+        }
+
+        @Test
+        @DisplayName("two top-level spans with parent_span_id==trace_id share one trace")
+        void twoTopLevelSpansWithParentSpanIdEqualsTraceId() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var mcpSpanId = UUID.randomUUID().toString().getBytes();
+            var llmSpanId = UUID.randomUUID().toString().getBytes();
+
+            // MCP registration span: top-level, parent_span_id set to the trace id
+            var mcpSpan = Span.newBuilder()
+                    .setName("mcp_registration")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(mcpSpanId))
+                    .setParentSpanId(ByteString.copyFrom(otelTraceId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            // LLM call span: top-level, parent_span_id set to the trace id
+            var llmSpan = Span.newBuilder()
+                    .setName("llm_request")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(llmSpanId))
+                    .setParentSpanId(ByteString.copyFrom(otelTraceId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            var otelSpans = List.of(mcpSpan, llmSpan);
+
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            // Exactly one trace must be created for both top-level spans
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+
+            // Both spans must persist under the same trace as top-level (parentSpanId == null)
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(2);
+
+            var topSpans = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .toList();
+            assertThat(topSpans).hasSize(2);
+            assertThat(topSpans.stream().map(com.comet.opik.api.Span::name))
+                    .containsExactlyInAnyOrder("mcp_registration", "llm_request");
+            topSpans.forEach(span -> assertThat(span.traceId()).isEqualTo(expectedOpikTraceId));
         }
 
         Stream<Arguments> sendProtobufTracesOutOfWindowTimestampThrowsException() {

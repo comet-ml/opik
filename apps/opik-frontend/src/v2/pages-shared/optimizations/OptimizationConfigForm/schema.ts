@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pythonLanguage } from "@codemirror/lang-python";
 import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
@@ -50,9 +51,51 @@ export const GEvalMetricParamsSchema = z.object({
   evaluation_criteria: z.string().min(1, "Evaluation criteria is required"),
 });
 
-export const CodeMetricParamsSchema = z.object({
-  code: z.string().min(1, "Python code is required"),
-});
+// Client-side Python syntax check using the error-tolerant Lezer grammar that
+// @codemirror/lang-python already ships (no extra dependency). We reuse the
+// language's parser directly instead of building an EditorState, then walk the
+// resulting tree for error nodes. Lezer recovers from syntax errors by
+// inserting nodes whose type reports `isError`, so a valid program yields none.
+// This only catches *syntax* problems (unclosed brackets, bad indentation,
+// stray tokens) — it never inspects semantics, so it can't false-positive on
+// otherwise-valid Python (e.g. metrics that read `kwargs["x"]`).
+export const hasPythonSyntaxError = (code: string): boolean => {
+  const tree = pythonLanguage.parser.parse(code);
+  let hasError = false;
+  tree.iterate({
+    enter: (node) => {
+      if (node.type.isError) {
+        hasError = true;
+        return false;
+      }
+      return undefined;
+    },
+  });
+  return hasError;
+};
+
+export const CodeMetricParamsSchema = z
+  .object({
+    code: z.string().min(1, "Python code is required"),
+    // Rename-capable `score()` param → dataset column map. Shape matches the
+    // backend `_build_code_metric` arguments contract (plain column names, not
+    // trace paths). Optional/partial: unmapped params fall back to same-named
+    // columns backend-side, so only explicit renames need entries here.
+    arguments: z.record(z.string()).optional(),
+  })
+  .superRefine((params, ctx) => {
+    // `.min(1)` above already reports empty code; only run the syntax check when
+    // there is something to parse so we don't double-report on an empty editor.
+    if (params.code && hasPythonSyntaxError(params.code)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        // Anchor to the `code` field so the message flows through
+        // `errors?.code?.message` into CodeMetricConfigs' FormErrorSkeleton.
+        path: ["code"],
+        message: "Python code has a syntax error",
+      });
+    }
+  });
 
 export const LevenshteinMetricParamsSchema = z.object({
   normalize: z.boolean().optional(),
@@ -81,7 +124,7 @@ const isMessageEmpty = (message: LLMMessage): boolean => {
 
 const BaseOptimizationConfigSchema = z.object({
   name: z.string().optional(),
-  datasetId: z.string().min(1, "Test suite is required"),
+  datasetId: z.string().min(1, "Item source is required"),
   optimizerType: z.nativeEnum(OPTIMIZER_TYPE),
   optimizerParams: z.union([
     GepaOptimizerParamsSchema,

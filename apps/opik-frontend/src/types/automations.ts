@@ -22,6 +22,12 @@ export enum UI_EVALUATORS_RULE_TYPE {
   python_code = "python_code",
 }
 
+export enum EVAL_TRIGGER_SCOPE {
+  production = "production",
+  experiment = "experiment",
+  both = "both",
+}
+
 export interface LLMJudgeModel {
   name: PROVIDER_MODEL_TYPE;
   temperature?: number;
@@ -88,6 +94,7 @@ export type EvaluatorsRule = {
   project_name?: string; // Legacy field for backward compatibility (first project's name)
   sampling_rate: number;
   enabled?: boolean;
+  trigger_scope?: EVAL_TRIGGER_SCOPE;
   filters?: Filters;
   created_at: string;
   created_by: string;

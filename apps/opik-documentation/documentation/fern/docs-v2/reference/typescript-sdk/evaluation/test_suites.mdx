@@ -1,0 +1,506 @@
+---
+headline: Test Suites
+og:description: Create and run regression test suites against your LLM application
+  using the Opik TypeScript SDK, with assertions and configurable execution policies.
+og:site_name: Opik Documentation
+og:title: Test Suites with Opik TypeScript SDK
+title: Test Suites
+---
+
+<Note>
+  Test suites are project-scoped. Make sure to specify a `projectName` when creating a test suite so it is associated with the correct project.
+</Note>
+
+Test suites are pre-configured regression tests for your LLM application. They let you validate that prompt changes, model updates, or code modifications don't break existing functionality — codifying real production failures as reusable test cases.
+
+A test suite pairs:
+
+- **Items** — a dataset of inputs (and any context they need), each with optional item-level assertions and execution policy overrides
+- **Global assertions** — natural-language checks (evaluated by an LLM judge) applied to every item
+- **An execution policy** — how many times to run each item, and how many of those runs must pass
+
+For a walkthrough of building suites via Ollie, the UI, or the SDK, see [Building Test Suites](/evaluation/advanced/building-test-suites). This page is the SDK API reference.
+
+## Creating and Managing Test Suites
+
+The TypeScript SDK provides several methods to create and manage test suites through the `OpikClient` class.
+
+```typescript
+import { Opik } from "opik";
+
+const opik = new Opik();
+
+// Create a new test suite with suite-level assertions
+const suite = await opik.createTestSuite({
+  name: "customer-support-qa",
+  description: "Regression tests for the support agent",
+  projectName: "my-project",
+  globalAssertions: [
+    "The response is grounded in the provided documentation context",
+    "The response directly addresses the user's question",
+  ],
+  globalExecutionPolicy: { runsPerItem: 2, passThreshold: 2 },
+});
+
+// Get an existing test suite, or create it if it doesn't exist
+const suite2 = await opik.getOrCreateTestSuite({
+  name: "customer-support-qa",
+  projectName: "my-project",
+});
+
+// Get an existing test suite by name
+const existing = await opik.getTestSuite("customer-support-qa", "my-project");
+
+// List test suites
+const suites = await opik.getTestSuites(100, "my-project");
+
+// Delete a test suite
+await opik.deleteTestSuite("customer-support-qa", "my-project");
+```
+
+<Tip>
+  A test suite is backed by an evaluation-type dataset — `createTestSuite`/`getTestSuite` etc. are separate from `createDataset`/`getDataset` and won't resolve suites created through the dataset APIs, or vice versa.
+</Tip>
+
+## Working with Test Suite Items
+
+```typescript
+// Insert items — item-level assertions/execution policy are optional
+// and add to (not replace) the suite-level ones
+await suite.insert([
+  {
+    data: { question: "How do I reset my password?" },
+  },
+  {
+    data: { question: "Can I use this with Kubernetes?" },
+    assertions: ["The response does NOT claim Kubernetes is supported"],
+    executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+  },
+]);
+
+// Update existing items (each item must include an `id`)
+await suite.update([
+  { id: "item-1", assertions: ["The response is under 3 sentences"] },
+]);
+
+// Retrieve items, with item-level and suite-level policy merged
+const items = await suite.getItems();
+
+// Retrieve items with the raw, unmerged stored payload — evaluators as
+// EvaluatorItemWrite[] rather than decoded assertion strings, and the
+// item-level executionPolicy only (not merged with the suite default)
+const rawItems = await suite.getRawItems();
+
+// Delete specific items
+await suite.delete(["item-1", "item-2"]);
+
+// Delete all items in the suite
+await suite.clear();
+```
+
+### Updating a single item's assertions or execution policy
+
+```typescript
+await suite.updateItemAssertions("item-1", [
+  "The response cites a specific step from the provided context",
+]);
+
+await suite.updateItemExecutionPolicy("item-1", {
+  runsPerItem: 5,
+  passThreshold: 4,
+});
+
+// Or update both at once
+await suite.updateItem("item-1", {
+  assertions: ["The response is polite"],
+  executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+});
+```
+
+## Execution Policies
+
+Execution policies control how many times each item is run and how many of those runs must pass — useful for handling non-deterministic LLM outputs.
+
+- A **run** passes if all its assertions pass
+- An **item** passes if `runsPassed >= passThreshold`
+- The suite's **pass rate** is the ratio of passed items to total items
+
+```typescript
+// Read the suite-level defaults
+const assertions = await suite.getGlobalAssertions();
+const policy = await suite.getGlobalExecutionPolicy();
+
+// Update suite-level assertions and/or execution policy
+await suite.updateTestSettings({
+  globalAssertions: [
+    "The response is grounded in the provided context",
+    "The response is concise",
+  ],
+  globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 },
+});
+```
+
+## Running a Test Suite
+
+`runTests` is the primary entry point for executing a suite: it runs your task against every item, scores results using the suite's configured assertions, and returns pass/fail results.
+
+```typescript
+import { runTests } from "opik";
+
+const result = await runTests({
+  testSuite: suite,
+  task: async (item) => ({
+    input: item,
+    output: await myLLM(item.question),
+  }),
+});
+
+console.log(result.allItemsPassed, result.passRate);
+```
+
+<Note>
+  `input` should contain only the data your agent actually received when generating its response. The LLM judge uses `input` and `output` to evaluate assertions — including fields like an expected answer in `input` can let the judge use them to pass assertions that should fail.
+</Note>
+
+Each run creates a separate experiment in Opik, so you can compare multiple runs (e.g. two prompt versions) against the same suite in the dashboard. `evaluateTestSuite` is the lower-level function `runTests` builds on, useful if you need the raw `EvaluationResult` rather than the suite-shaped `TestSuiteResult`.
+
+## Test Suite Versions
+
+Like datasets, test suites are versioned. See [Datasets](/reference/typescript-sdk/evaluation/datasets) for the general versioning model — the same `DatasetVersion`-style methods are available on `TestSuite`:
+
+```typescript
+const currentVersion = await suite.getCurrentVersionName();
+const versionInfo = await suite.getVersionInfo();
+const v2 = await suite.getVersionView("v2");
+```
+
+## API Reference
+
+### OpikClient Test Suite Methods
+
+#### `createTestSuite`
+
+Creates a new test suite.
+
+**Arguments:**
+
+- `options: CreateTestSuiteOptions` - `{ name, description?, globalAssertions?, globalExecutionPolicy?, tags?, projectName? }`
+
+**Returns:** `Promise<TestSuite>` - The created test suite
+
+#### `getTestSuite`
+
+Retrieves an existing test suite by name.
+
+**Arguments:**
+
+- `name: string` - The name of the test suite to retrieve
+- `projectName?: string` - Optional project name to scope the lookup. If not provided, uses the client's configured project.
+
+**Returns:** `Promise<TestSuite>`
+
+**Throws:** `DatasetNotFoundError` if the test suite doesn't exist
+
+#### `getOrCreateTestSuite`
+
+Retrieves an existing test suite by name, or creates it if it doesn't exist.
+
+**Arguments:**
+
+- `options: CreateTestSuiteOptions` - Same shape as `createTestSuite`
+
+**Returns:** `Promise<TestSuite>` - The existing or newly created test suite
+
+#### `deleteTestSuite`
+
+Deletes a test suite by name.
+
+**Arguments:**
+
+- `name: string` - The name of the test suite to delete
+- `projectName?: string` - Optional project name to scope the lookup. If not provided, uses the client's configured project.
+
+**Returns:** `Promise<void>`
+
+#### `getTestSuites`
+
+Returns all test suites up to the specified limit.
+
+**Arguments:**
+
+- `maxResults?: number` - Maximum number of test suites to return (default: 1000)
+- `projectName?: string` - Optional project name to filter by. If not provided, uses the client's configured project.
+
+**Returns:** `Promise<TestSuite[]>`
+
+#### `getTestSuiteExperiments`
+
+Retrieves all experiments associated with a test suite.
+
+**Arguments:**
+
+- `name: string` - The name of the test suite
+- `maxResults?: number` - Maximum number of experiments to return (default: 100)
+- `projectName?: string` - Optional project name to scope the suite lookup. If not provided, uses the client's configured project.
+
+**Returns:** `Promise<TestSuiteExperiment[]>` - Each entry carries the suite-specific assertion aggregates (`passRate`, `passedCount`, `totalCount`, `assertionScores`) populated by the backend
+
+**Throws:** `DatasetNotFoundError` if the test suite doesn't exist
+
+### TestSuite Class Methods
+
+#### `insert`
+
+Inserts new items into the test suite.
+
+**Arguments:**
+
+- `items: TestSuiteItem[]` - `{ data, assertions?, description?, executionPolicy? }[]`
+
+**Returns:** `Promise<void>`
+
+#### `update`
+
+Updates existing items. Each item must include an `id`.
+
+**Arguments:**
+
+- `items: UpdateTestSuiteItem[]` - `{ id, data?, assertions?, description?, executionPolicy? }[]`
+
+**Returns:** `Promise<void>`
+
+**Throws:** `Error` if any item is missing an `id`
+
+#### `getItems`
+
+Retrieves items with item-level assertions decoded and the item-level execution policy merged with the suite-level default.
+
+**Arguments:**
+
+- `nbSamples?: number` - Max items to retrieve (default: all)
+- `lastRetrievedId?: string` - Opaque cursor for pagination
+
+**Returns:** `Promise<Array<{ id, data, description?, assertions, executionPolicy }>>`
+
+#### `getRawItems`
+
+Retrieves items with the stored payload preserved verbatim — `evaluators` as raw `EvaluatorItemWrite[]` (not decoded to assertion strings) and `executionPolicy` as the item-level value only (not merged with the suite default). Use this when you need to inspect or forward the stored config as-is.
+
+**Arguments:**
+
+- `nbSamples?: number` - Max items to retrieve (default: all)
+- `lastRetrievedId?: string` - Opaque cursor for pagination
+
+**Returns:** `Promise<RawTestSuiteItem[]>`
+
+#### `delete`
+
+Deletes items from the test suite.
+
+**Arguments:**
+
+- `itemIds: string[]` - List of item IDs to delete
+
+**Returns:** `Promise<void>`
+
+#### `clear`
+
+Deletes all items from the test suite.
+
+**Returns:** `Promise<void>`
+
+#### `getGlobalAssertions`
+
+**Returns:** `Promise<string[]>` - The suite-level assertions
+
+#### `getGlobalExecutionPolicy`
+
+**Returns:** `Promise<Required<ExecutionPolicy>>` - The suite-level execution policy (`{ runsPerItem, passThreshold }`)
+
+#### `updateTestSettings`
+
+Updates suite-level assertions and/or execution policy. Fields you omit retain their current value.
+
+**Arguments:**
+
+- `options: UpdateTestSuiteOptions` - `{ globalAssertions?, globalExecutionPolicy? }` — at least one is required
+
+**Returns:** `Promise<void>`
+
+#### `updateItem`
+
+Updates a single item's assertions and/or execution policy.
+
+**Arguments:**
+
+- `itemId: string`
+- `options: { assertions?: string[]; executionPolicy?: ExecutionPolicy }` - At least one is required
+
+**Returns:** `Promise<void>`
+
+#### `updateItemAssertions`
+
+Shorthand for `updateItem(itemId, { assertions })`.
+
+**Arguments:**
+
+- `itemId: string`
+- `assertions: string[]`
+
+**Returns:** `Promise<void>`
+
+#### `updateItemExecutionPolicy`
+
+Shorthand for `updateItem(itemId, { executionPolicy })`.
+
+**Arguments:**
+
+- `itemId: string`
+- `executionPolicy: ExecutionPolicy`
+
+**Returns:** `Promise<void>`
+
+#### `getTags`
+
+**Returns:** `Promise<string[]>`
+
+#### `getItemsCount`
+
+**Returns:** `Promise<number | undefined>`
+
+#### `getCurrentVersionName`
+
+**Returns:** `Promise<string | undefined>` - The latest version name (e.g. `"v1"`), or `undefined` if no versions exist
+
+#### `getVersionInfo`
+
+**Returns:** `Promise<DatasetVersionPublic | undefined>`
+
+#### `getVersionView`
+
+**Arguments:**
+
+- `versionName: string` - e.g. `"v1"`, `"v2"`
+
+**Returns:** `Promise<DatasetVersion>`
+
+**Throws:** `DatasetVersionNotFoundError` if the version doesn't exist
+
+### `runTests`
+
+The primary entry point for running a test suite.
+
+```typescript
+async function runTests(options: RunTestsOptions): Promise<TestSuiteResult>;
+```
+
+| Parameter          | Type              | Required | Description                                                                 |
+| ------------------ | ----------------- | -------- | ----------------------------------------------------------------------------- |
+| `testSuite`        | `TestSuite`       | Yes      | The test suite to run against                                                |
+| `task`             | `EvaluationTask`  | Yes      | Receives each item's data and must return `{ input, output }`                |
+| `experimentName`   | `string`          | No       | Optional name for the experiment created for this run                       |
+| `projectName`      | `string`          | No       | Optional project to associate the experiment with (defaults to the suite's) |
+| `experimentConfig` | `Record<string, unknown>` | No | Optional configuration stored on the experiment                             |
+| `prompts`          | `Prompt[]`        | No       | Optional prompts to link with the experiment                                |
+| `experimentTags`   | `string[]`        | No       | Optional tags to associate with the experiment                              |
+| `model`            | `string`          | No       | Optional model name override for the LLM judge evaluators                   |
+| `taskThreads`      | `number`          | No       | Number of concurrent task executions (default: 16, matching the Python SDK) |
+| `nbSamples`        | `number`          | No       | Limit the number of items evaluated (default: all)                          |
+
+**Returns:** `Promise<TestSuiteResult>`
+
+### `evaluateTestSuite`
+
+The lower-level function `runTests` is built on. Runs a test suite using the evaluators and execution policy stored in the suite's dataset version metadata, and returns the raw `EvaluationResult` rather than a suite-shaped `TestSuiteResult`.
+
+```typescript
+async function evaluateTestSuite(
+  options: EvaluateTestSuiteOptions
+): Promise<EvaluationResult>;
+```
+
+**Arguments:** same shape as [`evaluate`](/reference/typescript-sdk/evaluation/evaluate_function), plus `dataset` (the suite's dataset).
+
+**Returns:** `Promise<EvaluationResult>`
+
+## Data Structures
+
+### TestSuiteResult
+
+Result of running a test suite. Returned by `runTests`.
+
+```typescript
+class TestSuiteResult {
+  readonly allItemsPassed: boolean;
+  readonly itemsPassed: number;
+  readonly itemsTotal: number;
+  readonly passRate: number | undefined;
+  readonly itemResults: Map<string, ItemResult>;
+  readonly experimentId: string;
+  readonly experimentName?: string;
+  readonly experimentUrl?: string;
+  readonly suiteName?: string;
+  readonly totalTime?: number;
+
+  // Converts the result to a plain report object (camelCase keys), grouping
+  // test results by trial and including per-item pass/fail and assertion detail
+  toReportDict(): Record<string, unknown>;
+
+  // Alias for toReportDict()
+  toDict(): Record<string, unknown>;
+}
+```
+
+### ItemResult
+
+Result for a single test suite item, keyed by `datasetItemId` in `TestSuiteResult.itemResults`.
+
+```typescript
+type ItemResult = {
+  datasetItemId: string;
+  passed: boolean;
+  // Whether this item had at least one assertion evaluated across any of its runs
+  hasAssertions: boolean;
+  runsPassed: number;
+  runsTotal: number;
+  // Configured runsPerItem from the execution policy
+  configuredRunsPerItem: number;
+  passThreshold: number;
+  testResults: EvaluationTestResult[];
+};
+```
+
+### TestSuiteExperiment
+
+Represents an experiment run against a test suite. Extends `Experiment` (see [Experiments](/reference/typescript-sdk/evaluation/experiments)) with the aggregate assertion statistics the backend populates only for test suite experiments (`undefined` for regular dataset experiments).
+
+```typescript
+class TestSuiteExperiment extends Experiment {
+  readonly passRate?: number;
+  readonly passedCount?: number;
+  readonly totalCount?: number;
+  readonly assertionScores?: AssertionScoreAveragePublic[];
+}
+```
+
+### CreateTestSuiteOptions
+
+```typescript
+interface CreateTestSuiteOptions {
+  name: string;
+  description?: string;
+  globalAssertions?: string[];
+  globalExecutionPolicy?: ExecutionPolicy;
+  tags?: string[];
+  projectName?: string;
+}
+```
+
+### ExecutionPolicy
+
+```typescript
+interface ExecutionPolicy {
+  runsPerItem?: number;
+  passThreshold?: number;
+}
+```

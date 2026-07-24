@@ -9,6 +9,7 @@ import { AutomationRuleEvaluatorSpanLlmAsJudge } from "./AutomationRuleEvaluator
 import { AutomationRuleEvaluatorSpanUserDefinedMetricPython } from "./AutomationRuleEvaluatorSpanUserDefinedMetricPython.js";
 import { AutomationRuleEvaluatorTraceThreadLlmAsJudge } from "./AutomationRuleEvaluatorTraceThreadLlmAsJudge.js";
 import { AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython } from "./AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.js";
+import { AutomationRuleEvaluatorTriggerScope } from "./AutomationRuleEvaluatorTriggerScope.js";
 import { AutomationRuleEvaluatorUserDefinedMetricPython } from "./AutomationRuleEvaluatorUserDefinedMetricPython.js";
 import { ProjectReference } from "./ProjectReference.js";
 
@@ -24,6 +25,7 @@ const _Base = core.serialization.object({
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
     enabled: core.serialization.boolean().optional(),
+    triggerScope: core.serialization.property("trigger_scope", AutomationRuleEvaluatorTriggerScope.optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -92,6 +94,7 @@ export declare namespace AutomationRuleEvaluator {
         name: string;
         sampling_rate?: number | null;
         enabled?: boolean | null;
+        trigger_scope?: AutomationRuleEvaluatorTriggerScope.Raw | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

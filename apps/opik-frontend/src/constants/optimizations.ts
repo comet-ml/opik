@@ -177,6 +177,11 @@ export const OPTIMIZATION_METRIC_OPTIONS = [
     description:
       "Compares numeric output against a reference value. Closer values score higher.",
   },
+  {
+    value: METRIC_TYPE.CODE,
+    label: "Custom code",
+    description: "Score outputs with a custom Python metric.",
+  },
 ];
 
 export type IconConfig = { icon: LucideIcon; color: string };

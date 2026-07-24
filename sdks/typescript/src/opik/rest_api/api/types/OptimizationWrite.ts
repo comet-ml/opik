@@ -14,5 +14,6 @@ export interface OptimizationWrite {
     status: OpikApi.OptimizationWriteStatus;
     metadata?: OpikApi.JsonListStringWrite;
     studioConfig?: OpikApi.OptimizationStudioConfigWrite;
+    errorInfo?: OpikApi.ErrorInfoWrite;
     lastUpdatedAt?: Date;
 }

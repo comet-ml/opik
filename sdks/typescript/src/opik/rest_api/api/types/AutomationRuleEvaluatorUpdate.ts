@@ -45,6 +45,7 @@ export namespace AutomationRuleEvaluatorUpdate {
         name: string;
         samplingRate?: number;
         enabled?: boolean;
+        triggerScope?: OpikApi.AutomationRuleEvaluatorUpdateTriggerScope;
         /** Primary project ID (legacy field, maintained for backwards compatibility) */
         projectId?: string;
         /** Multiple project IDs (new field for multi-project support) */

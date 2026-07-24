@@ -9,6 +9,7 @@ import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -119,12 +120,14 @@ class AttachmentServiceImpl implements AttachmentService {
     private final @NonNull ProjectService projectService;
     private final @NonNull OpikConfiguration config;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull IdGenerator idGenerator;
     private static final Tika tika = new Tika();
     private static final int MAX_ATTACHMENTS_PER_ENTITY = 1_000;
 
     @Override
     public StartMultipartUploadResponse startMultiPartUpload(@NonNull StartMultipartUploadRequest startUploadRequest,
             @NonNull String workspaceId, @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(startUploadRequest.entityId(), startUploadRequest.entityType().getValue());
         if (config.getS3Config().isMinIO()) {
             return prepareMinIOUploadResponse(startUploadRequest);
         }
@@ -149,6 +152,8 @@ class AttachmentServiceImpl implements AttachmentService {
     public void completeMultiPartUpload(@NonNull CompleteMultipartUploadRequest completeUploadRequest,
             @NonNull String workspaceId,
             @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(completeUploadRequest.entityId(),
+                completeUploadRequest.entityType().getValue());
         // In case of MinIO complete is not needed, file is uploaded directly via BE
         if (config.getS3Config().isMinIO()) {
             log.info("Skipping completeMultiPartUpload for MinIO");
@@ -190,6 +195,7 @@ class AttachmentServiceImpl implements AttachmentService {
     @Override
     public void uploadAttachmentInternal(@NonNull AttachmentInfo attachmentInfo, byte[] data,
             @NonNull String workspaceId, @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(attachmentInfo.entityId(), attachmentInfo.entityType().getValue());
 
         attachmentInfo = attachmentInfo.toBuilder()
                 .containerId(getProjectIdByName(attachmentInfo.projectName(), workspaceId, userName))

@@ -6,7 +6,7 @@ import { LogsPage } from '../page-objects/logs.page';
 import { DatasetsPage } from '../page-objects/datasets.page';
 import { TestSuitesPage } from '../page-objects/test-suites.page';
 import { ExperimentsPage } from '../page-objects/experiments.page';
-import { screenshot } from './utils/screenshot';
+import { screenshot, tableMasks } from './utils/screenshot';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -76,14 +76,14 @@ test.describe('Visual Comparison - Opik UI', () => {
     await projectsPage.goto();
     await projectsPage.searchAndWait(projectName());
     await projectsPage.waitForProject(projectName());
-    await screenshot(page, '01-projects-page');
+    await screenshot(page, '01-projects-page', tableMasks(page));
   });
 
   test('02: Logs - Traces view', async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.waitForTracesReady('input-0');
-    await screenshot(page, '02-logs-traces');
+    await screenshot(page, '02-logs-traces', tableMasks(page));
   });
 
   test('03: Logs - Threads view', async ({ page }) => {
@@ -91,27 +91,27 @@ test.describe('Visual Comparison - Opik UI', () => {
     await logsPage.goto(projectId);
     await logsPage.switchToThreads();
     await logsPage.waitForThreadsReady('Hello, what is Opik?');
-    await screenshot(page, '03-logs-threads');
+    await screenshot(page, '03-logs-threads', tableMasks(page));
   });
 
   test('04: Datasets page', async ({ page }) => {
     const datasetsPage = new DatasetsPage(page, baseUrl, workspace);
     await datasetsPage.goto(projectId);
     await datasetsPage.waitForReady('visual-dataset');
-    await screenshot(page, '04-datasets-page');
+    await screenshot(page, '04-datasets-page', tableMasks(page));
   });
 
   test('05: Test Suites page', async ({ page }) => {
     const testSuitesPage = new TestSuitesPage(page, baseUrl, workspace);
     await testSuitesPage.goto(projectId);
     await testSuitesPage.waitForReady('visual-testsuite');
-    await screenshot(page, '05-testsuites-page');
+    await screenshot(page, '05-testsuites-page', tableMasks(page));
   });
 
   test('06: Experiments page', async ({ page }) => {
     const experimentsPage = new ExperimentsPage(page, baseUrl, workspace);
     await experimentsPage.goto(projectId);
     await experimentsPage.waitForExperiment(experimentName());
-    await screenshot(page, '06-experiments-page');
+    await screenshot(page, '06-experiments-page', tableMasks(page));
   });
 });
