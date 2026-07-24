@@ -1,25 +1,28 @@
 import { useReducer } from "react";
-import { GuardrailsState, guardrailsDefaultState } from "./guardrailsConfig";
-import { QuickConfigGuardrailType } from "@/types/guardrails";
+import {
+  GuardrailFields,
+  GuardrailsState,
+  guardrailsDefaultState,
+} from "./guardrailsConfig";
+import { GuardrailTypes } from "@/types/guardrails";
 
 enum ActionType {
-  UPDATE_THRESHOLD = "UPDATE_THRESHOLD",
-  UPDATE_ENTITIES = "UPDATE_ENTITIES",
+  UPDATE_FIELD = "UPDATE_FIELD",
   TOGGLE_ENABLED = "TOGGLE_ENABLED",
 }
 
 type GuardrailAction =
   | {
-      type: ActionType.UPDATE_THRESHOLD;
-      payload: { guardrailType: QuickConfigGuardrailType; threshold: number };
-    }
-  | {
-      type: ActionType.UPDATE_ENTITIES;
-      payload: { guardrailType: QuickConfigGuardrailType; entities: string[] };
+      type: ActionType.UPDATE_FIELD;
+      payload: {
+        guardrailType: GuardrailTypes;
+        field: keyof GuardrailFields;
+        value: GuardrailFields[keyof GuardrailFields];
+      };
     }
   | {
       type: ActionType.TOGGLE_ENABLED;
-      payload: { guardrailType: QuickConfigGuardrailType };
+      payload: { guardrailType: GuardrailTypes };
     };
 
 const guardrailReducer = (
@@ -29,20 +32,12 @@ const guardrailReducer = (
   const { type, payload } = action;
 
   switch (type) {
-    case ActionType.UPDATE_THRESHOLD:
+    case ActionType.UPDATE_FIELD:
       return {
         ...state,
         [payload.guardrailType]: {
           ...state[payload.guardrailType],
-          threshold: payload.threshold,
-        },
-      };
-    case ActionType.UPDATE_ENTITIES:
-      return {
-        ...state,
-        [payload.guardrailType]: {
-          ...state[payload.guardrailType],
-          entities: payload.entities,
+          [payload.field]: payload.value,
         },
       };
     case ActionType.TOGGLE_ENABLED:
@@ -63,43 +58,33 @@ export const useGuardrailConfigState = (
 ) => {
   const [state, dispatch] = useReducer(guardrailReducer, initialState);
 
-  const updateThreshold = (
-    guardrailType: QuickConfigGuardrailType,
-    threshold: number,
+  const updateField = <K extends keyof GuardrailFields>(
+    guardrailType: GuardrailTypes,
+    field: K,
+    value: GuardrailFields[K],
   ) => {
     dispatch({
-      type: ActionType.UPDATE_THRESHOLD,
-      payload: { guardrailType, threshold },
+      type: ActionType.UPDATE_FIELD,
+      payload: { guardrailType, field, value },
     });
   };
 
-  const updateEntities = (
-    guardrailType: QuickConfigGuardrailType,
-    entities: string[],
-  ) => {
-    dispatch({
-      type: ActionType.UPDATE_ENTITIES,
-      payload: { guardrailType, entities },
-    });
-  };
-
-  const toggleEnabled = (guardrailType: QuickConfigGuardrailType) => {
+  const toggleEnabled = (guardrailType: GuardrailTypes) => {
     dispatch({
       type: ActionType.TOGGLE_ENABLED,
       payload: { guardrailType },
     });
   };
 
-  const getEnabledGuardrailTypes = (): QuickConfigGuardrailType[] => {
+  const getEnabledGuardrailTypes = (): GuardrailTypes[] => {
     return Object.keys(state).filter(
-      (key) => state[key as QuickConfigGuardrailType].enabled,
-    ) as QuickConfigGuardrailType[];
+      (key) => state[key as GuardrailTypes].enabled,
+    ) as GuardrailTypes[];
   };
 
   return {
     state,
-    updateThreshold,
-    updateEntities,
+    updateField,
     toggleEnabled,
     getEnabledGuardrailTypes,
   };
