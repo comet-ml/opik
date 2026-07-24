@@ -82,6 +82,7 @@ def test_passing_guardrails__happyflow(opik_client, override_project_name):
         "guardrail_result": "passed",
         "validations": [mock.ANY, mock.ANY],
         "validation_passed": mock.ANY,
+        "error": None,
     }
 
     verifiers.verify_span(
@@ -143,6 +144,7 @@ def test_failing_guardrails__happyflow(opik_client: opik.Opik):
         "guardrail_result": "failed",
         "validations": [mock.ANY, mock.ANY],
         "validation_passed": mock.ANY,
+        "error": None,
     }
 
     verifiers.verify_span(
