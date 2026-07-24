@@ -44,13 +44,13 @@ DRILL_DOWN=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --database) DATABASE="$2"; shift 2 ;;
-        --old-table) OLD_TABLE="$2"; shift 2 ;;
-        --new-table) NEW_TABLE="$2"; shift 2 ;;
-        --sample-mod) SAMPLE_MOD="$2"; shift 2 ;;
-        --from-week) FROM_WEEK="$2"; shift 2 ;;
-        --to-week) TO_WEEK="$2"; shift 2 ;;
-        --weeks-stride) WEEKS_STRIDE="$2"; shift 2 ;;
+        --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --old-table) OLD_TABLE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --new-table) NEW_TABLE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --sample-mod) SAMPLE_MOD="${2:?"$1 requires a value"}"; shift 2 ;;
+        --from-week) FROM_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --to-week) TO_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --weeks-stride) WEEKS_STRIDE="${2:?"$1 requires a value"}"; shift 2 ;;
         --drill-down) DRILL_DOWN=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -69,7 +69,7 @@ done
 [[ -f "$VERIFY_SQL" ]] || { echo "ERROR: cannot find verify SQL at $VERIFY_SQL" >&2; exit 2; }
 
 ch() {
-    clickhouse-client --database "$DATABASE" --query "$1"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --query "$1"
 }
 
 log() {
@@ -93,12 +93,12 @@ render_block() {
 
 # Verdict TSV row for one window: src_rows dst_rows src_checksum dst_checksum ok
 compare_window() {
-    clickhouse-client --database "$DATABASE" --multiquery --query "$(render_block compare "$1" "$2")"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block compare "$1" "$2")"
 }
 
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
 drill_down_window() {
-    clickhouse-client --database "$DATABASE" --multiquery --query "$(render_block drill-down "$1" "$2")"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block drill-down "$1" "$2")"
 }
 
 ROWS="$(ch "SELECT count() FROM $OLD_TABLE")"

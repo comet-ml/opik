@@ -60,7 +60,7 @@ CONFIRM_BUFFER_RAISED=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --database) DATABASE="$2"; shift 2 ;;
+        --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --skip-wrap) SKIP_WRAP=1; shift ;;
         --with-wrap) WITH_WRAP=1; shift ;;
         --wrap-only) WRAP_ONLY=1; shift ;;
@@ -110,7 +110,7 @@ if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_BUFFER_RAISED" != "1" ]]; then
 fi
 
 ch() {
-    clickhouse-client --database "$DATABASE" --query "$1"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "$1"
 }
 
 # Single scalar (empty string if the object does not exist).
@@ -249,7 +249,7 @@ if [[ "$WRAP_ONLY" == "1" ]]; then
     exit 0
 fi
 
-CUTOVER_START="$(clickhouse-client --database "$DATABASE" --query "SELECT toString(now64(6))")"
+CUTOVER_START="$(clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6))")"
 echo "RECORD cutover_start=$CUTOVER_START  (pass to rollback.sh --cutover-start if you roll back after this point)"
 
 run_block exchange

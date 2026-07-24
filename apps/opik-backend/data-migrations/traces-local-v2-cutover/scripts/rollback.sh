@@ -29,9 +29,9 @@ CUTOVER_START=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --database) DATABASE="$2"; shift 2 ;;
-        --stage) STAGE="$2"; shift 2 ;;
-        --cutover-start) CUTOVER_START="$2"; shift 2 ;;
+        --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --stage) STAGE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --cutover-start) CUTOVER_START="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -46,7 +46,7 @@ case "$STAGE" in
 esac
 
 ch() {
-    clickhouse-client --database "$DATABASE" --query "$1"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_rollback' --query "$1"
 }
 
 # Single scalar (or empty string if the object does not exist). Used by the topology guards below.

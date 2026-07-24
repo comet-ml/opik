@@ -38,12 +38,12 @@ ROWS_PER_SEC=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --database) DATABASE="$2"; shift 2 ;;
-        --max-rows-per-insert) MAX_ROWS="$2"; shift 2 ;;
-        --pause-seconds) PAUSE_SECONDS="$2"; shift 2 ;;
-        --probe-rows) PROBE_ROWS="$2"; shift 2 ;;
-        --write-cost-factor) WRITE_COST_FACTOR="$2"; shift 2 ;;
-        --rows-per-sec) ROWS_PER_SEC="$2"; shift 2 ;;
+        --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-rows-per-insert) MAX_ROWS="${2:?"$1 requires a value"}"; shift 2 ;;
+        --pause-seconds) PAUSE_SECONDS="${2:?"$1 requires a value"}"; shift 2 ;;
+        --probe-rows) PROBE_ROWS="${2:?"$1 requires a value"}"; shift 2 ;;
+        --write-cost-factor) WRITE_COST_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
+        --rows-per-sec) ROWS_PER_SEC="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -59,7 +59,7 @@ done
 [[ -z "$ROWS_PER_SEC" || "$ROWS_PER_SEC" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --rows-per-sec must be a number." >&2; exit 2; }
 
 ch() {
-    clickhouse-client --database "$DATABASE" --query "$1"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:estimate' --query "$1"
 }
 
 # Physical rows to copy (count() honors the deleted-row mask, so masked rows are excluded — as the backfill excludes
@@ -105,7 +105,7 @@ FACTOR_NOTE=""
 if [[ -z "$ROWS_PER_SEC" ]]; then
     PROBE_ACTUAL="$(awk -v a="$PROBE_ROWS" -v b="$TOTAL_ROWS" 'BEGIN { print (a < b) ? a : b }')"
     echo "Probing read throughput with a $PROBE_ACTUAL-row SELECT ... FORMAT Null (no table created)..."
-    ELAPSED="$(clickhouse-client --database "$DATABASE" --time --query \
+    ELAPSED="$(clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:estimate' --time --query \
         "SELECT * FROM traces LIMIT $PROBE_ROWS FORMAT Null" 2>&1 1>/dev/null)"
     READ_RPS="$(awk -v r="$PROBE_ACTUAL" -v t="$ELAPSED" 'BEGIN { print (t > 0) ? r / t : 0 }')"
     [[ "$(awk -v v="$READ_RPS" 'BEGIN { print (v > 0) ? 1 : 0 }')" == "1" ]] || {

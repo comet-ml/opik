@@ -102,7 +102,8 @@ SELECT
     ifNull(src.h, 0) AS src_checksum,
     ifNull(dst.h, 0) AS dst_checksum,
     (src.c = dst.c AND ifNull(src.h, 0) = ifNull(dst.h, 0)) AS ok
-FROM src, dst;
+FROM src, dst
+SETTINGS use_skip_indexes_if_final = 1;
 -- >>> END compare
 
 -- >>> BEGIN drill-down
@@ -183,5 +184,5 @@ WHERE src_hash != dst_hash
    OR src_hash IS NULL
    OR dst_hash IS NULL
 LIMIT 100
-SETTINGS join_use_nulls = 1;
+SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- >>> END drill-down
