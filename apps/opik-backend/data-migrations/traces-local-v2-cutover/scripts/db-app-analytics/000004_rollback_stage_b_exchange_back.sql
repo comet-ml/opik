@@ -9,6 +9,7 @@
 -- rollback.sh runs the reverse-replay (000004_rollback_reverse_replay.sql) right after this so deletes since
 -- cutover_start do not resurrect. rollback.sh asserts the post-EXCHANGE, pre-wrap topology (traces = successor schema,
 -- not Distributed) before running it.
+SET log_comment = 'traces_local_v2_rollback:stage_b';
 RENAME TABLE
     ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2,
     ${ANALYTICS_DB_DATABASE_NAME}.traces_pre_cutover_backup TO ${ANALYTICS_DB_DATABASE_NAME}.traces

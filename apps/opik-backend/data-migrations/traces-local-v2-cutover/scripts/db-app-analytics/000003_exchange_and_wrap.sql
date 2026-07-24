@@ -14,6 +14,9 @@
 -- not the "v2" successor (rationale: README "Naming and the parked backup"). Requires an Atomic database (default). If
 -- the Liquibase ClickHouse extension cannot execute EXCHANGE ON CLUSTER in the downtime-based path, use the fallback
 -- RENAME sequence in the README instead.
+-- log_comment tags these DDL statements in system.query_log for cutover attribution (DDL takes it via a leading SET,
+-- not a trailing SETTINGS clause).
+SET log_comment = 'traces_local_v2_cutover:exchange';
 EXCHANGE TABLES ${ANALYTICS_DB_DATABASE_NAME}.traces AND ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}';
 
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 TO ${ANALYTICS_DB_DATABASE_NAME}.traces_pre_cutover_backup ON CLUSTER '{cluster}';
@@ -37,6 +40,7 @@ RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 TO ${ANALYTICS_DB_DAT
 -- gate covers it.) Partial-failure recovery: if the RENAME fails after the CREATE, `traces` is untouched (still the
 -- successor MergeTree, live) and only the temp wrapper lingers — drop it and retry:
 --   DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces_dist ON CLUSTER '{cluster}' SYNC;
+SET log_comment = 'traces_local_v2_cutover:wrap';
 CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_dist ON CLUSTER '{cluster}' AS ${ANALYTICS_DB_DATABASE_NAME}.traces
     ENGINE = Distributed('{cluster}', '${ANALYTICS_DB_DATABASE_NAME}', 'traces_local', sipHash64(project_id));
 

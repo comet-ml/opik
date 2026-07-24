@@ -34,6 +34,10 @@
 #                     `traces_local` on a lagging node. Unlike the same-run --with-wrap path (still buffered from the
 #                     EXCHANGE), --wrap-only runs later against live, unbuffered ingestion. This flag asserts the
 #                     async-insert buffer is re-raised (or ingestion quiesced / a maintenance window is in effect).
+#   --confirm-daos-retargeted  REQUIRED whenever the wrap is applied (--with-wrap or --wrap-only). Asserts the trace
+#                     delete/mutation DAOs already target `traces_local` (OPIK-7455) — a Distributed `traces` rejects
+#                     mutations, so without the retarget delete-by-id and retention deletes return 500 the moment the
+#                     wrap lands. The script cannot inspect backend code, so the operator must assert it.
 
 set -euo pipefail
 
@@ -46,6 +50,7 @@ WITH_WRAP=0
 WRAP_ONLY=0
 FORCE=0
 CONFIRM_MAINTENANCE=0
+CONFIRM_DAOS_RETARGETED=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -55,6 +60,7 @@ while [[ $# -gt 0 ]]; do
         --wrap-only) WRAP_ONLY=1; shift ;;
         --force) FORCE=1; shift ;;
         --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
+        --confirm-daos-retargeted) CONFIRM_DAOS_RETARGETED=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -74,6 +80,14 @@ fi
 if [[ "$WRAP_ONLY" == "1" && "$CONFIRM_MAINTENANCE" != "1" ]]; then
     echo "ERROR: --wrap-only requires --confirm-maintenance. Re-raise asyncInsertBusyTimeoutMaxMs (or quiesce ingestion /" >&2
     echo "       take a maintenance window) first — the wrap has a brief cross-node window — then re-run with it." >&2
+    exit 2
+fi
+# HARD PREREQUISITE (OPIK-7455): a Distributed table rejects mutations, so once the wrap is applied the product's
+# DELETE_BY_ID and retention deletes return 500 against `traces` unless those DAO paths already target `traces_local`.
+# The script can't inspect backend code, so any wrap-applying mode must assert it. Fail fast, before touching ClickHouse.
+if [[ ( "$WITH_WRAP" == "1" || "$WRAP_ONLY" == "1" ) && "$CONFIRM_DAOS_RETARGETED" != "1" ]]; then
+    echo "ERROR: applying the wrap requires --confirm-daos-retargeted. The trace delete/mutation DAOs must target" >&2
+    echo "       'traces_local' (OPIK-7455) before 'traces' becomes Distributed, or deletes/retention break at runtime." >&2
     exit 2
 fi
 
@@ -140,6 +154,11 @@ assert_pre_wrap_topology() {
         echo "ERROR: --wrap-only: 'traces_local_v2' still exists — the post-EXCHANGE RENAME did not complete, so wrapping" >&2
         echo "       now would orphan the old data under the wrong name. Finish the rename first, then re-run --wrap-only:" >&2
         echo "         clickhouse-client --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
+        exit 1
+    fi
+    if [[ -z "$(traces_engine traces_pre_cutover_backup)" ]]; then
+        echo "ERROR: --wrap-only: 'traces_pre_cutover_backup' (the parked original) does not exist — stage C rollback would" >&2
+        echo "       have nothing to restore, making the wrap one-way. Refusing. (Did finalize.sh already drop the backup?)" >&2
         exit 1
     fi
 }

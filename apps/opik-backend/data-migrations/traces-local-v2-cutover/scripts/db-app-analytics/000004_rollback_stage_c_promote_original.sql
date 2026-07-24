@@ -15,6 +15,7 @@
 -- cutover_start do not resurrect, and asserts the post-wrap topology (traces = Distributed) before running it.
 
 -- 1. Gapless promote: rotate all three names atomically.
+SET log_comment = 'traces_local_v2_rollback:stage_c';
 RENAME TABLE
     ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces_dist_old,
     ${ANALYTICS_DB_DATABASE_NAME}.traces_pre_cutover_backup TO ${ANALYTICS_DB_DATABASE_NAME}.traces,

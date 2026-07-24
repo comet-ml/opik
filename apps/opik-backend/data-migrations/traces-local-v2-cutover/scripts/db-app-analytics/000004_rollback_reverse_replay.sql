@@ -34,4 +34,5 @@ OR (workspace_id, id) IN (
 -- lightweight_deletes_sync = 2: wait for the mutation on every replica so the restored `traces` is consistent
 -- cluster-wide before the rollback is declared done (see 000002 for the rationale).
 SETTINGS allow_nondeterministic_mutations = 1,
-         lightweight_deletes_sync = 2;
+         lightweight_deletes_sync = 2,
+         log_comment = 'traces_local_v2_rollback:reverse_replay';

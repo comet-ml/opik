@@ -167,7 +167,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > a node. A brief **cross-node** `ON CLUSTER` propagation skew still exists (as for any `ON CLUSTER` DDL), during which a
 > Distributed query could route to a not-yet-created `traces_local` on a lagging node — so the deferred `--wrap-only`
 > path still **requires `--confirm-maintenance`** (re-raise `asyncInsertBusyTimeoutMaxMs` / quiesce ingestion / take a
-> maintenance window). The same-run `--with-wrap` path is already covered by the still-raised EXCHANGE buffer.
+> maintenance window). The same-run `--with-wrap` path **shares that cross-node window** — the still-raised EXCHANGE
+> buffer parks INSERTs (reducing, not eliminating, the exposure to a size-triggered flush routed at a not-yet-created
+> `traces_local`), and SELECTs are not buffered — so the brief skew is an accepted cost of the cutover window either way,
+> not something the buffer fully covers.
 >
 > **Wrap flags** (`exchange_and_wrap.sh`, mutually exclusive; default is EXCHANGE-only): omit them (or pass
 > `--skip-wrap`, an explicit alias) to run the EXCHANGE and stop; `--with-wrap` to also apply the wrap in the same run;
