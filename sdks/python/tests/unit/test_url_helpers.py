@@ -138,3 +138,47 @@ def test_get_test_suite_url_by_id__returns_direct_project_scoped_url(
         )
         == expected_test_suite_url
     )
+
+
+@pytest.mark.parametrize(
+    ("base_url", "workspace", "dataset_id", "experiment_id", "expected_url"),
+    [
+        (
+            "http://localhost:5173/api",
+            "default",
+            "dataset-abc123",
+            "exp-xyz789",
+            "http://localhost:5173/opik/default/experiments/dataset-abc123/compare?experiments=%5B%22exp-xyz789%22%5D",
+        ),
+        (
+            "http://localhost:5173/api/",
+            "default",
+            "dataset-abc123",
+            "exp-xyz789",
+            "http://localhost:5173/opik/default/experiments/dataset-abc123/compare?experiments=%5B%22exp-xyz789%22%5D",
+        ),
+        (
+            "https://www.comet.com/opik/api",
+            "my-team",
+            "ds-id-001",
+            "exp-id-002",
+            "https://www.comet.com/opik/my-team/experiments/ds-id-001/compare?experiments=%5B%22exp-id-002%22%5D",
+        ),
+    ],
+)
+def test_get_experiment_url_by_id__returns_direct_workspace_scoped_url(
+    base_url: str,
+    workspace: str,
+    dataset_id: str,
+    experiment_id: str,
+    expected_url: str,
+) -> None:
+    assert (
+        url_helpers.get_experiment_url_by_id(
+            base_url=base_url,
+            workspace=workspace,
+            dataset_id=dataset_id,
+            experiment_id=experiment_id,
+        )
+        == expected_url
+    )
