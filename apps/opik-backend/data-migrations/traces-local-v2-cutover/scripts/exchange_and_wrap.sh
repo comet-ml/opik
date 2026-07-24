@@ -38,6 +38,11 @@
 #                     delete/mutation DAOs already target `traces_local` (OPIK-7455) — a Distributed `traces` rejects
 #                     mutations, so without the retarget delete-by-id and retention deletes return 500 the moment the
 #                     wrap lands. The script cannot inspect backend code, so the operator must assert it.
+#   --confirm-buffer-raised  REQUIRED for every EXCHANGE path (the default and --with-wrap; not --wrap-only). Asserts the
+#                     async-insert buffer (asyncInsertBusyTimeoutMaxMs) is raised on every backend instance — it holds
+#                     writes across the swap so they land on the new table; at the default, a write in the final window
+#                     can commit to the old table and be lost after the EXCHANGE. It's a backend setting the script can't
+#                     read, so the operator must assert it.
 
 set -euo pipefail
 
@@ -51,6 +56,7 @@ WRAP_ONLY=0
 FORCE=0
 CONFIRM_MAINTENANCE=0
 CONFIRM_DAOS_RETARGETED=0
+CONFIRM_BUFFER_RAISED=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,6 +67,7 @@ while [[ $# -gt 0 ]]; do
         --force) FORCE=1; shift ;;
         --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
         --confirm-daos-retargeted) CONFIRM_DAOS_RETARGETED=1; shift ;;
+        --confirm-buffer-raised) CONFIRM_BUFFER_RAISED=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -88,6 +95,17 @@ fi
 if [[ ( "$WITH_WRAP" == "1" || "$WRAP_ONLY" == "1" ) && "$CONFIRM_DAOS_RETARGETED" != "1" ]]; then
     echo "ERROR: applying the wrap requires --confirm-daos-retargeted. The trace delete/mutation DAOs must target" >&2
     echo "       'traces_local' (OPIK-7455) before 'traces' becomes Distributed, or deletes/retention break at runtime." >&2
+    exit 2
+fi
+# The EXCHANGE is the zero-loss step: writes in the final-delta -> EXCHANGE gap must be held by the raised async-insert
+# buffer (asyncInsertBusyTimeoutMaxMs) so they flush onto the new table after the swap; if the buffer is at its default,
+# such a write can commit to the old table just before the swap and be silently lost. The buffer is a backend per-query
+# setting the script can't read, so require the operator to assert it. Applies to every EXCHANGE path (not --wrap-only,
+# which does no EXCHANGE). Fail fast, before touching ClickHouse.
+if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_BUFFER_RAISED" != "1" ]]; then
+    echo "ERROR: the EXCHANGE requires --confirm-buffer-raised. Raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs on" >&2
+    echo "       every backend instance first — it holds writes across the swap; at the default, writes in the final" >&2
+    echo "       window can commit to the old table and be lost after the EXCHANGE — then re-run with the flag." >&2
     exit 2
 fi
 

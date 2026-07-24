@@ -70,10 +70,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 6. **Cutover buffer knob ready** — `databaseAnalytics.asyncInsertBusyTimeoutMaxMs` (env
    `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS`), unset by default so the buffer inherits the
    `async_insert_busy_timeout_max_ms=250` carried by `queryParameters`. Raise it to ~10000 for the cutover, then unset it
-   again. **This is operator-verified, not script-enforced:** the ceiling is a backend per-query setting applied on the
-   backend's own ClickHouse client, so it is not visible to the migration scripts' direct `clickhouse-client` session —
-   they cannot gate on it. Confirm it took effect on the prod-clone/staging load test (this is the Go/No-Go "Async-insert
-   ceiling confirmed" item), before the write-facing stages run in production. **Also confirm client/SDK insert timeouts
+   again. The ceiling is a backend per-query setting applied on the backend's own ClickHouse client, so the migration
+   scripts' direct `clickhouse-client` session **cannot read or verify it**. It is therefore **operator-asserted**:
+   `exchange_and_wrap.sh` refuses the EXCHANGE without `--confirm-buffer-raised` (a fail-fast acknowledgment gate — it
+   forces the operator to confirm the step, though it cannot prove the value took effect). Confirm it actually took
+   effect on the prod-clone/staging load test (the Go/No-Go "Async-insert ceiling confirmed" item) before production.
+   **Also confirm client/SDK insert timeouts
    exceed the widened buffer** (~10s) — with `wait_for_async_insert=1` a raised ceiling blocks each insert until it
    flushes, so a shorter client timeout would surface as ingestion errors during the window.
 7. **Schema-state flag wired, with a rollout plan** — `databaseAnalyticsDataModel.traceColumnsNonNullable` (env
@@ -142,8 +144,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    leaving `traces` a `MergeTree` where deletes still work); the `RENAME` + `Distributed` wrap runs only with
    `--with-wrap`. Restore the buffer ceiling and verify.
    ```bash
-   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik
+   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik --confirm-buffer-raised
    ```
+   `--confirm-buffer-raised` is required on every EXCHANGE path: it asserts the async-insert buffer is raised so writes in
+   the final window survive the swap (add `--with-wrap --confirm-daos-retargeted` only once the DAOs target `traces_local`).
 
 > **HARD PREREQUISITE for the wrap (step 4, part 2): the delete/mutation DAO must target `traces_local` first.** A
 > `Distributed` table supports `SELECT` and `INSERT` but **not** mutations. Verified on ClickHouse 26.3:
@@ -598,7 +602,8 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 - [ ] **`EXCHANGE TABLES ... ON CLUSTER` works end-to-end** — or the fallback `RENAME` sequence is documented for the
       variant that needs it.
 - [ ] **Async-insert ceiling confirmed** — raising `asyncInsertBusyTimeoutMaxMs` demonstrably widens the adaptive buffer
-      under load, not just the cap.
+      under load, not just the cap. `exchange_and_wrap.sh` enforces the acknowledgment via `--confirm-buffer-raised`, but
+      that is an assertion only — this checklist item is the actual "it took effect under load" verification.
 - [ ] **Data Retention confirmed disabled** for the cutover window (`RETENTION_ENABLED=false`).
 - [ ] **Reconciliation clean** — per-window source/dest counts within 0.01% across the whole backfill.
 - [ ] **Replication settled before the EXCHANGE** — `replication_queue` empty and the deletion-replay mutation
