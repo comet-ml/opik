@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.requesty.RequestyModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Inject;
@@ -134,6 +135,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         if (model.startsWith("openrouter/")
                 || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
             return LlmProvider.OPEN_ROUTER;
+        }
+
+        if (model.startsWith("requesty/")
+                || isModelBelongToProvider(model, RequestyModelName.class, RequestyModelName::toString)) {
+            return LlmProvider.REQUESTY;
         }
 
         if (isModelBelongToProvider(model, VertexAIModelName.class, VertexAIModelName::qualifiedName)) {

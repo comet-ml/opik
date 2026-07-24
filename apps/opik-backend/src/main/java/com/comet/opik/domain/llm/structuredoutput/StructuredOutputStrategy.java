@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.requesty.RequestyModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -40,6 +41,8 @@ public interface StructuredOutputStrategy {
             case GEMINI -> GeminiModelName.byValue(modelName)
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
             case OPEN_ROUTER -> OpenRouterModelName.byValue(modelName)
+                    .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
+            case REQUESTY -> RequestyModelName.byValue(modelName)
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
             case VERTEX_AI -> VertexAIModelName.byQualifiedName(modelName)
                     .map(StructuredOutputSupported::isStructuredOutputSupported).orElse(false);
