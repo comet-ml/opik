@@ -675,6 +675,52 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * The workspace-scoped ({@code project_id = ''}) replay branch must SPARE a live row that shares an {@code id} with
+     * another project. A delete-by-ids fallback that cannot resolve a project is bridged with an empty project and
+     * replayed on the {@code (workspace_id, id)} key; its resurrection guard keys only on {@code (workspace_id, id)}, so
+     * this proves it does not over-delete a cross-project live copy. Complements the single-project
+     * {@link #deleteThenResurrectSurvivesTheReplay} and the full-key reused-id case in
+     * {@link #bufferedCutoverPreservesEveryDeletionAcrossExchange}.
+     */
+    @Test
+    void workspaceScopedReplaySparesLiveCrossProjectRow() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectA = ID_GENERATOR.generateId();
+        var projectB = ID_GENERATOR.generateId();
+        var reusedInstant = weekInstant(0, 1);
+        var reusedId = ID_GENERATOR.generateId(reusedInstant);
+        var reused = List.of(CategorizedId.builder().id(reusedId).createdAt(reusedInstant).build());
+        // Same id in two projects — ids are not globally unique.
+        seedTraces(reused, workspaceId, projectA);
+        seedTraces(reused, workspaceId, projectB);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+
+        // Workspace-scoped delete: bridged with an empty project_id (the delete-by-ids fallback). The source LWD is
+        // workspace-scoped, so it removes the id from BOTH projects; then resurrect it in projectB only (a newer version
+        // wins under FINAL), so it is live again on the source in B and caught by the delta's last_updated_at arm.
+        recordDeletionEvents(Set.of(reusedId.toString()), workspaceId, "", "user_request");
+        lightweightDelete(Set.of(reusedId.toString()), workspaceId);
+        insertRows(reused, workspaceId, projectB, "resurrected", _ -> Instant.now());
+
+        deltaInsert(backfillStart);
+        replayDeletions(backfillStart);
+        replayDeletions(backfillStart); // idempotent
+
+        assertThat(liveCountScoped("traces_local_v2", Set.of(reusedId.toString()), workspaceId, projectB))
+                .as("workspace-scoped replay spares the live projectB copy that shares an id with projectA")
+                .isEqualTo(1L);
+        // Known residual (OPIK-7483; the 000005 fingerprint flags it as an extra destination row, ok=0): because the id
+        // is live in B, the (workspace_id, id) guard skips the whole id, so the stale projectA copy is not removed here.
+        assertThat(liveCountScoped("traces_local_v2", Set.of(reusedId.toString()), workspaceId, projectA))
+                .as("documented residual: the stale other-project copy remains until OPIK-7483")
+                .isEqualTo(1L);
+    }
+
+    /**
      * Schema-drift guard. The cutover copies a fixed column list, and the fidelity fingerprint also lists fixed
      * columns — so a base column added to {@code traces} by a future migration would be silently left uncopied, with no
      * existing check failing. This asserts the cutover's {@link #COPIED_COLUMNS} equals the live stored columns of
@@ -1419,8 +1465,8 @@ class TracesLocalV2CutoverTest {
     }
 
     /** A within-day offset so ids/created_at in the same week are distinct but stay inside their weekly partition. */
-    private Instant weekInstant(int weekOffset, int minuteOffset) {
-        return ANCHOR_MONDAY.plusWeeks(weekOffset).atTime(1, 0).plusSeconds(minuteOffset).toInstant(ZoneOffset.UTC);
+    private Instant weekInstant(int weekOffset, int secondOffset) {
+        return ANCHOR_MONDAY.plusWeeks(weekOffset).atTime(1, 0).plusSeconds(secondOffset).toInstant(ZoneOffset.UTC);
     }
 
     @Builder(toBuilder = true)

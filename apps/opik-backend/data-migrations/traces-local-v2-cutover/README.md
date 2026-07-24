@@ -432,9 +432,13 @@ Pick the stage by how far the cutover got (`cutover_start` is the value `exchang
   and parks the successor under `traces_local_v2`, then the reverse replay. (Guarded: aborts unless `traces` is
   `Distributed`.)
 
-After a stage B or C rollback, `traces` is the Nullable original again — **revert `traceColumnsNonNullable` to `false`**
-(config, operator-owned) so the app resumes binding `null` for absent values and filters use Nullable logic. Leaving it
-`true` is write-safe but would make absent-value filters/sorts use sentinel logic against a Nullable column.
+After a stage B or C rollback, `traces` is the Nullable original again — **revert `traceColumnsNonNullable` to `false`
+AND roll-restart every backend instance**. The flag is read from a **startup snapshot** of `OpikConfiguration` (bound via
+`toInstance`), so a config change does **not** take effect until each instance restarts — exactly like the forward
+rollout before the EXCHANGE. Until the restart completes, the app keeps binding sentinels (epoch/NaN) and using
+sentinel-based absent-value logic against the now-Nullable column, mixing sentinel and `null` representations: not a hard
+write failure, but inconsistent absent-value reads/filters/sorts. The rollback is therefore not fully complete until the
+rolling restart lands on the whole fleet.
 
 **Point of no return.** The `EXCHANGE` is reversible for as long as the parked backup exists (stage B/C). Dropping that
 backup with `finalize.sh` is the one irreversible step, so gate it on an explicit soak:

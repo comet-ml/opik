@@ -28,7 +28,7 @@ CONFIRM=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --database) DATABASE="$2"; shift 2 ;;
+        --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --confirm) CONFIRM=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -39,7 +39,7 @@ done
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 
 ch() {
-    clickhouse-client --database "$DATABASE" --query "$1"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:finalize' --query "$1"
 }
 
 exists() {

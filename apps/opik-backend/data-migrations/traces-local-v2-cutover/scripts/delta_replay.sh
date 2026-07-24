@@ -23,9 +23,9 @@ MAX_INSERT_BLOCK_SIZE=1048576
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --database) DATABASE="$2"; shift 2 ;;
-        --backfill-start) BACKFILL_START="$2"; shift 2 ;;
-        --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="$2"; shift 2 ;;
+        --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --backfill-start) BACKFILL_START="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done

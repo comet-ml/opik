@@ -74,16 +74,16 @@ MIN_WINDOW_SECONDS=60
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --database) DATABASE="$2"; shift 2 ;;
+        --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
-        --from-week) FROM_WEEK="$2"; shift 2 ;;
-        --to-week) TO_WEEK="$2"; shift 2 ;;
-        --max-rows-per-insert) MAX_ROWS="$2"; shift 2 ;;
-        --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="$2"; shift 2 ;;
-        --divergence) DIVERGENCE="$2"; shift 2 ;;
-        --pause-seconds) PAUSE_SECONDS="$2"; shift 2 ;;
-        --min-free-factor) MIN_FREE_FACTOR="$2"; shift 2 ;;
-        --state-file) STATE_FILE="$2"; shift 2 ;;
+        --from-week) FROM_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --to-week) TO_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-rows-per-insert) MAX_ROWS="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --divergence) DIVERGENCE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --pause-seconds) PAUSE_SECONDS="${2:?"$1 requires a value"}"; shift 2 ;;
+        --min-free-factor) MIN_FREE_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
+        --state-file) STATE_FILE="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -106,7 +106,7 @@ done
 
 # Every query runs against the analytics database; --query keeps output scriptable (TSV, no formatting).
 ch() {
-    clickhouse-client --database "$DATABASE" --query "$1"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:backfill' --query "$1"
 }
 
 log() {
