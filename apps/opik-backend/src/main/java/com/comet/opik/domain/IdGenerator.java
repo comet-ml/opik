@@ -2,7 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.error.InvalidUUIDException;
 import com.comet.opik.api.error.InvalidUUIDException.Reason;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.UuidV7TimestampValidator;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.inject.ImplementedBy;
@@ -11,6 +13,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
+import reactor.util.context.ContextView;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -25,11 +28,12 @@ public interface IdGenerator {
     UUID getTimeOrderedEpoch(long epochMilli);
 
     /**
-     * Validates an ingested {@code id}: it must be a version 7 UUID ({@link #validateVersion(UUID, String)})
-     * whose embedded timestamp is within the configured ingestion window.
-     * Rejects with HTTP 400. Encapsulates both data-quality checks behind one call.
+     * Validates an ingested {@code id}: it must be a version 7 UUID
+     * ({@link #validateVersion(UUID, String)}) whose embedded timestamp is within the configured
+     * ingestion window, throwing {@link InvalidUUIDException} otherwise. {@code workspaceId} attributes
+     * the source workspace for observability; pass {@link ErrorMetricsResolver#UNKNOWN} when unavailable.
      */
-    void validateId(UUID id, String resource);
+    void validateId(UUID id, String resource, String workspaceId);
 
     Mono<UUID> validateIdAsync(UUID id, String resource);
 
@@ -46,6 +50,13 @@ public interface IdGenerator {
      */
     void validateIdNotInFuture(UUID id, String resource);
 
+    /**
+     * Workspace-attributed overload of {@link #validateIdNotInFuture(UUID, String)}: callers that know the
+     * request workspace pass it so the audit metric is attributed. The 2-arg form defaults to
+     * {@link ErrorMetricsResolver#UNKNOWN} for callers that don't carry a workspace.
+     */
+    void validateIdNotInFuture(UUID id, String resource, String workspaceId);
+
     Mono<UUID> validateIdNotInFutureAsync(UUID id, String resource);
 
     /**
@@ -53,6 +64,9 @@ public interface IdGenerator {
      * {@code projectId} that may be resolved by name instead). No-op when {@code id} is null.
      */
     void validateIdNotInFutureIfPresent(UUID id, String resource);
+
+    /** Workspace-attributed overload of {@link #validateIdNotInFutureIfPresent(UUID, String)}. */
+    void validateIdNotInFutureIfPresent(UUID id, String resource, String workspaceId);
 
     Mono<UUID> validateIdNotInFutureIfPresentAsync(UUID id, String resource);
 
@@ -93,37 +107,59 @@ class IdGeneratorImpl implements IdGenerator {
     }
 
     @Override
-    public void validateId(@NonNull UUID id, String resource) {
+    public void validateId(@NonNull UUID id, String resource, String workspaceId) {
         IdGenerator.validateVersion(id, resource);
-        uuidV7TimestampValidator.validate(id);
+        uuidV7TimestampValidator.validate(id, resource, workspaceId);
     }
 
     @Override
     public Mono<UUID> validateIdAsync(@NonNull UUID id, String resource) {
-        return Mono.fromCallable(() -> {
-            validateId(id, resource);
-            return id;
+        return Mono.deferContextual(ctx -> {
+            validateId(id, resource, workspaceId(ctx));
+            return Mono.just(id);
         });
     }
 
     @Override
     public void validateIdNotInFuture(@NonNull UUID id, String resource) {
+        // Callers that don't carry a workspace (most config-entity references) default to UNKNOWN.
+        validateIdNotInFuture(id, resource, ErrorMetricsResolver.UNKNOWN);
+    }
+
+    @Override
+    public void validateIdNotInFuture(@NonNull UUID id, String resource, String workspaceId) {
         IdGenerator.validateVersion(id, resource);
-        uuidV7TimestampValidator.validateNotInFuture(id);
+        uuidV7TimestampValidator.validateNotInFuture(id, resource, workspaceId);
     }
 
     @Override
     public Mono<UUID> validateIdNotInFutureAsync(@NonNull UUID id, String resource) {
-        return Mono.fromCallable(() -> {
-            validateIdNotInFuture(id, resource);
-            return id;
+        return Mono.deferContextual(ctx -> {
+            validateIdNotInFuture(id, resource, workspaceId(ctx));
+            return Mono.just(id);
         });
+    }
+
+    /**
+     * Reads the {@code workspace_id} from the reactive context (the async ingestion paths carry it
+     * there, not in a request-scoped thread-local), falling back to {@link ErrorMetricsResolver#UNKNOWN}
+     * so the audit metric always has a value.
+     */
+    private static String workspaceId(ContextView ctx) {
+        return ctx.getOrDefault(RequestContext.WORKSPACE_ID, ErrorMetricsResolver.UNKNOWN);
     }
 
     @Override
     public void validateIdNotInFutureIfPresent(UUID id, String resource) {
         if (id != null) {
             validateIdNotInFuture(id, resource);
+        }
+    }
+
+    @Override
+    public void validateIdNotInFutureIfPresent(UUID id, String resource, String workspaceId) {
+        if (id != null) {
+            validateIdNotInFuture(id, resource, workspaceId);
         }
     }
 
