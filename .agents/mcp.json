@@ -37,11 +37,6 @@
         "args": ["mcp-atlassian"],
         "envFile": "${workspaceFolder}/.env.local"
       },
-      "Notion": {
-        "command": "npx",
-        "args": ["-y", "mcp-remote", "https://mcp.notion.com/mcp"],
-        "env": {}
-      },
       "Sentry": {
         "command": "npx",
         "args": ["-y", "@sentry/mcp-server@latest"],
