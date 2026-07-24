@@ -250,9 +250,12 @@ class TracesLocalV2CutoverTest {
             }
         }
         // 4. Canonical now; truncate the two tables and clear any residual artifacts (IF EXISTS so a genuinely
-        //    unrecoverable partial state still cannot throw here). traces_dist is the temp wrapper the gapless wrap
-        //    builds before its atomic rename — a leak only if a test died between the CREATE and the RENAME.
+        //    unrecoverable partial state still cannot throw here). traces_dist / traces_dist_old are the temp wrapper
+        //    names the gapless wrap and stage-C rollback use around their atomic renames — leaks only if a test died
+        //    between a CREATE/RENAME and the following statement.
         execute("DROP TABLE IF EXISTS traces_dist ON CLUSTER '{cluster}' SYNC", _ -> {
+        });
+        execute("DROP TABLE IF EXISTS traces_dist_old ON CLUSTER '{cluster}' SYNC", _ -> {
         });
         execute("DROP TABLE IF EXISTS traces_local ON CLUSTER '{cluster}' SYNC", _ -> {
         });
@@ -906,16 +909,22 @@ class TracesLocalV2CutoverTest {
 
     /**
      * Rollback stage C (000004_rollback_stage_c + reverse_replay): promote the parked original back to {@code traces}
-     * GAPLESSLY — EXCHANGE swaps it in atomically (no window where {@code traces} is absent), then the now-data-less
-     * Distributed wrapper (parked under the backup name) is dropped and the successor shard is parked back under
-     * {@code traces_local_v2}, ending in the canonical state with no leftover names. Then reverse-replay.
+     * GAPLESSLY with a single atomic multi-target RENAME that rotates all three names — the data-less wrapper
+     * ({@code traces}) to an explicit temp name, the original ({@code traces_pre_cutover_backup}) to live {@code traces}
+     * (the name freed by the first clause), and the successor shard to {@code traces_local_v2}. Then the ex-wrapper is
+     * dropped under its temp name {@code traces_dist_old} — a name only the data-less wrapper ever held, so the DROP
+     * cannot hit the original data regardless of replica timing. Then reverse-replay.
      */
     private void rollbackAfterWrap(String cutoverStart) {
-        execute("EXCHANGE TABLES traces AND traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
+        execute("""
+                RENAME TABLE
+                    traces TO traces_dist_old,
+                    traces_pre_cutover_backup TO traces,
+                    traces_local TO traces_local_v2
+                    ON CLUSTER '{cluster}'
+                """, _ -> {
         });
-        execute("DROP TABLE IF EXISTS traces_pre_cutover_backup ON CLUSTER '{cluster}' SYNC", _ -> {
-        });
-        execute("RENAME TABLE traces_local TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+        execute("DROP TABLE IF EXISTS traces_dist_old ON CLUSTER '{cluster}' SYNC", _ -> {
         });
         reverseReplay(cutoverStart);
     }
