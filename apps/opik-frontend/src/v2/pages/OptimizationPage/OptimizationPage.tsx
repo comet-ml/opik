@@ -41,7 +41,6 @@ const OptimizationPage: React.FC = () => {
     optimization,
     experiments,
     candidates,
-    miniBatchCandidates,
     rows,
     noDataText,
     sortableBy,
@@ -272,7 +271,6 @@ const OptimizationPage: React.FC = () => {
             <div className="shrink-0">
               <OptimizationProgressChartContainer
                 candidates={candidates}
-                miniBatchCandidates={miniBatchCandidates}
                 bestCandidateId={bestCandidate?.candidateId}
                 objectiveName={optimization?.objective_name}
                 status={optimization?.status}

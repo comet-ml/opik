@@ -24,8 +24,6 @@ type TrialCardProps = {
   stepIndex: number;
   isTestSuite?: boolean;
   isBest?: boolean;
-  kind?: CandidateDataPoint["kind"];
-  fullEvalItemCount?: number;
 };
 
 /**
@@ -39,19 +37,9 @@ const TrialCard: React.FC<TrialCardProps> = ({
   stepIndex,
   isTestSuite,
   isBest,
-  kind,
-  fullEvalItemCount,
 }) => {
   const { title, statusLabel, dotColor, dotRingColor, rows } =
-    buildTrialCardModel({
-      candidate,
-      status,
-      stepIndex,
-      isTestSuite,
-      isBest,
-      kind,
-      fullEvalItemCount,
-    });
+    buildTrialCardModel({ candidate, status, stepIndex, isTestSuite, isBest });
 
   return (
     <>

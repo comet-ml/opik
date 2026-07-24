@@ -28,14 +28,6 @@ export type TrialStatus =
   // is terminal. See computeCandidateStatuses for how this is derived.
   | "failed";
 
-// A mini-batch screening eval is a candidate the search evaluated on a small
-// sample (~3-5 items vs a ~30-item full eval) and discarded before spending a
-// full evaluation. It is a "pruned" (Discarded) point like any other discard —
-// the distinction is purely visual (hollow dot via CandidateDataPoint.kind),
-// signalling "small-sample score, rejected at screening". Screening evals of
-// candidates that WERE promoted to a full eval are redundant with that
-// candidate's solid dot and are not plotted (see buildMiniBatchChartPoints).
-
 export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   baseline: "gray",
   passed: "blue",
@@ -83,9 +75,7 @@ export const getTrialDotColor = ({
   if (isBest) return TRIAL_BEST_COLOR;
   if (isTestSuite) return TRIAL_STATUS_COLORS[status];
   // Dataset runs collapse most statuses to passed, but a failed trial must stay
-  // red (it scored nothing — it is not a passing trial) and discarded stays
-  // faded. Screened-and-discarded points share the discarded colour; the hollow
-  // dot (kind === "minibatch") is what sets them apart visually.
+  // red (it scored nothing — it is not a passing trial) and pruned stays faded.
   if (status === "pruned") return TRIAL_STATUS_COLORS.pruned;
   if (status === "failed") return TRIAL_STATUS_COLORS.failed;
   return TRIAL_STATUS_COLORS.passed;
@@ -159,18 +149,12 @@ export const buildTrialCardModel = ({
   stepIndex,
   isTestSuite,
   isBest,
-  kind,
-  fullEvalItemCount,
 }: {
   candidate: AggregatedCandidate;
   status: TrialStatus;
   stepIndex: number;
   isTestSuite?: boolean;
   isBest?: boolean;
-  /** "minibatch" when the card describes a screening-eval dot. */
-  kind?: "full" | "minibatch";
-  /** Item count of a full evaluation in this run, for the "N of M" row. */
-  fullEvalItemCount?: number;
 }): TrialCardModel => {
   const percentage = isNumber(candidate.score)
     ? formatAsPercentage(candidate.score)
@@ -186,18 +170,6 @@ export const buildTrialCardModel = ({
       value: `${percentage}${fraction}`,
     },
   ];
-  // Surface how many dataset items the evaluation covered so a 5-item
-  // mini-batch and a 30-item full eval never read as equals.
-  if (candidate.totalDatasetItemCount > 0) {
-    const itemCount = candidate.totalDatasetItemCount;
-    rows.push({
-      label: "Items evaluated",
-      value:
-        fullEvalItemCount && fullEvalItemCount > itemCount
-          ? `${itemCount} of ${fullEvalItemCount}`
-          : `${itemCount}`,
-    });
-  }
   if (candidate.latencyP50 != null) {
     rows.push({
       label: "Latency",
@@ -211,14 +183,9 @@ export const buildTrialCardModel = ({
     });
   }
 
-  const isMiniBatch = kind === "minibatch";
   return {
-    title: isMiniBatch ? "Mini-batch eval" : `Trial #${candidate.trialNumber}`,
-    statusLabel: isBest
-      ? "Best trial"
-      : isMiniBatch && status === "pruned"
-        ? `Discarded in step ${stepIndex}`
-        : getTrialStatusLabel(status, stepIndex),
+    title: `Trial #${candidate.trialNumber}`,
+    statusLabel: isBest ? "Best trial" : getTrialStatusLabel(status, stepIndex),
     dotColor: isBest ? TRIAL_BEST_COLOR : TRIAL_STATUS_COLORS[status],
     dotRingColor: isBest ? TRIAL_BEST_RING_COLOR : undefined,
     rows,
@@ -241,71 +208,6 @@ export type CandidateDataPoint = {
   value: number | null;
   status: TrialStatus;
   name: string;
-  /** "minibatch" for screening-eval dots; absent/"full" for full evaluations. */
-  kind?: "full" | "minibatch";
-};
-
-/**
- * Suffix appended to a mini-batch point's candidateId on the chart so it never
- * collides with the full-eval dot of the same candidate (dot positions, hover
- * and click are all keyed by this id).
- */
-export const MINI_BATCH_POINT_SUFFIX = "__mb";
-
-/** Strip the mini-batch suffix, recovering the underlying candidate id. */
-export const getBaseCandidateId = (pointId: string): string =>
-  pointId.endsWith(MINI_BATCH_POINT_SUFFIX)
-    ? pointId.slice(0, -MINI_BATCH_POINT_SUFFIX.length)
-    : pointId;
-
-/**
- * Build chart points for candidates the search screened on a mini-batch and
- * DISCARDED before spending a full evaluation.
- *
- * A candidate that WAS promoted (has a full-eval twin) is already represented by
- * its solid full-eval dot, so its screening eval is redundant and not plotted.
- * The remaining candidates never earned a full evaluation — they were rejected
- * by the optimizer's acceptance gate — so each is a "pruned" (Discarded) point,
- * rendered as a small hollow dot (kind === "minibatch") to signal a low-
- * confidence small-sample score. Each is placed at the step of the latest full
- * evaluation created before it (the step the search was on), baseline step 0
- * otherwise.
- */
-export const buildMiniBatchChartPoints = (
-  miniBatchCandidates: AggregatedCandidate[],
-  fullCandidates: AggregatedCandidate[],
-): CandidateDataPoint[] => {
-  if (!miniBatchCandidates.length) return [];
-
-  const fullCandidateIds = new Set(fullCandidates.map((c) => c.candidateId));
-  const fullByCreation = fullCandidates
-    .slice()
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
-
-  const resolveStepIndex = (mb: AggregatedCandidate): number => {
-    let step = 0;
-    for (const full of fullByCreation) {
-      if (full.created_at <= mb.created_at) step = full.stepIndex;
-      else break;
-    }
-    return step;
-  };
-
-  return (
-    miniBatchCandidates
-      // Drop screening evals of candidates that went on to a full evaluation —
-      // that candidate is already shown as its solid dot.
-      .filter((mb) => !fullCandidateIds.has(mb.candidateId))
-      .map((mb) => ({
-        candidateId: `${mb.candidateId}${MINI_BATCH_POINT_SUFFIX}`,
-        stepIndex: resolveStepIndex(mb),
-        parentCandidateIds: [],
-        value: mb.score ?? null,
-        status: "pruned" as const,
-        name: mb.name,
-        kind: "minibatch" as const,
-      }))
-  );
 };
 
 export type ParentChildEdge = {

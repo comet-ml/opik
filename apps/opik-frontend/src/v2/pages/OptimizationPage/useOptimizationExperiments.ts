@@ -59,11 +59,11 @@ export const useOptimizationExperiments = () => {
       optimizationId: optimizationId,
       sorting: [{ id: "created_at", desc: false }],
       forceSorting: true,
-      // Mini-batches are loaded alongside full evals but are split into their
-      // own pool below — they must never enter candidate aggregation or any
-      // best-score selection (5-item screening scores are not comparable with
-      // 30-item full evaluations).
-      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
+      // Only full-eval trials are loaded — mini-batch screening evals are not
+      // shown on the chart. New runs type them `mini-batch` (never fetched
+      // here); legacy runs recorded them as `trial`, so we still split them out
+      // of scoring below via splitExperimentsByEvalType.
+      types: [EXPERIMENT_TYPE.TRIAL],
       page: 1,
       size: MAX_EXPERIMENTS_LOADED,
     },
@@ -135,10 +135,11 @@ export const useOptimizationExperiments = () => {
     });
   }, [data?.content, isTestSuite, optimization?.objective_name]);
 
-  // Split BEFORE aggregation: mini-batch experiments for the same candidate
-  // would otherwise blend into its full-eval score (aggregation is
-  // trace-weighted), corrupting the chart and every "best" computation.
-  const { fullEvalExperiments, miniBatchExperiments } = useMemo(
+  // Keep only full evaluations out of scoring. New runs never fetch mini-batch
+  // experiments (query above), but LEGACY runs recorded screening evals as
+  // `trial` — this split removes those by relative item count so they can't
+  // blend into a candidate's aggregated score or the "best" computation.
+  const { fullEvalExperiments } = useMemo(
     () => splitExperimentsByEvalType(experiments),
     [experiments],
   );
@@ -147,15 +148,6 @@ export const useOptimizationExperiments = () => {
     () =>
       aggregateCandidates(fullEvalExperiments, optimization?.objective_name),
     [fullEvalExperiments, optimization?.objective_name],
-  );
-
-  // Mini-batch screening evals, aggregated per candidate within their own
-  // pool. Rendered as a visually distinct secondary chart series; never a
-  // source for best prompt / best score.
-  const miniBatchCandidates = useMemo(
-    () =>
-      aggregateCandidates(miniBatchExperiments, optimization?.objective_name),
-    [miniBatchExperiments, optimization?.objective_name],
   );
 
   const inProgressInfo = useMemo(() => {
@@ -236,9 +228,7 @@ export const useOptimizationExperiments = () => {
     optimizationId,
     optimization,
     experiments,
-    fullEvalExperiments,
     candidates,
-    miniBatchCandidates,
     isTestSuite,
     scoreMap,
     baseScore,

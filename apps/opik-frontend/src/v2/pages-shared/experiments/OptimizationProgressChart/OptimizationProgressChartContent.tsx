@@ -21,9 +21,7 @@ import {
   TRIAL_STATUS_LABELS,
   TRIAL_STATUS_ORDER,
   CandidateDataPoint,
-  MINI_BATCH_POINT_SUFFIX,
   buildTrendLineEdges,
-  getBaseCandidateId,
   getUniqueSteps,
   findNearestDot,
 } from "./optimizationChartUtils";
@@ -46,8 +44,6 @@ const GHOST_ID = "__ghost__";
 type OptimizationProgressChartContentProps = {
   chartData: CandidateDataPoint[];
   candidates: AggregatedCandidate[];
-  /** Mini-batch screening evals, aggregated per candidate (secondary series). */
-  miniBatchCandidates?: AggregatedCandidate[];
   bestCandidateId?: string;
   objectiveName: string;
   selectedTrialId?: string;
@@ -78,7 +74,6 @@ const OptimizationProgressChartContent: React.FC<
 > = ({
   chartData,
   candidates,
-  miniBatchCandidates,
   bestCandidateId,
   objectiveName,
   selectedTrialId,
@@ -94,14 +89,7 @@ const OptimizationProgressChartContent: React.FC<
   // Test-suite runs distinguish every status (only those actually present);
   // dataset runs collapse to a fixed Passed/Discarded pair (matching the dot
   // colours from getTrialDotColor).
-  const hasMiniBatches = useMemo(
-    () => chartData.some((d) => d.kind === "minibatch"),
-    [chartData],
-  );
-
-  const legendItems = useMemo<
-    { color: string; label: string; hollow?: boolean }[]
-  >(() => {
+  const legendItems = useMemo<{ color: string; label: string }[]>(() => {
     if (isTestSuite) {
       return TRIAL_STATUS_ORDER.filter((s) =>
         chartData.some((d) => d.status === s),
@@ -113,17 +101,8 @@ const OptimizationProgressChartContent: React.FC<
     return [
       { color: TRIAL_STATUS_COLORS.passed, label: "Passed trial" },
       { color: TRIAL_STATUS_COLORS.pruned, label: "Discarded trial" },
-      ...(hasMiniBatches
-        ? [
-            {
-              color: TRIAL_STATUS_COLORS.pruned,
-              label: "Discarded at screening",
-              hollow: true,
-            },
-          ]
-        : []),
     ];
-  }, [isTestSuite, chartData, hasMiniBatches]);
+  }, [isTestSuite, chartData]);
 
   const positionedData = useMemo(() => {
     return chartData.map((d) => ({
@@ -194,21 +173,8 @@ const OptimizationProgressChartContent: React.FC<
     for (const c of candidates) {
       map.set(c.candidateId, c);
     }
-    // Mini-batch entries are keyed with their chart-point suffix so a
-    // candidate's screening dot never collides with its full-eval dot.
-    for (const c of miniBatchCandidates ?? []) {
-      map.set(`${c.candidateId}${MINI_BATCH_POINT_SUFFIX}`, c);
-    }
     return map;
-  }, [candidates, miniBatchCandidates]);
-
-  // Item count of a full evaluation in this run — the "M" of the tooltip's
-  // "Items evaluated: N of M" row.
-  const fullEvalItemCount = useMemo(
-    () =>
-      candidates.reduce((max, c) => Math.max(max, c.totalDatasetItemCount), 0),
-    [candidates],
-  );
+  }, [candidates]);
 
   const edges = useMemo(() => buildTrendLineEdges(chartData), [chartData]);
 
@@ -288,23 +254,13 @@ const OptimizationProgressChartContent: React.FC<
     (e: React.MouseEvent<HTMLDivElement>) => {
       const nearest = findNearestCandidate(e.clientX, e.clientY);
       if (!nearest) return;
-      // A mini-batch dot resolves to its underlying candidate: clicking it
-      // opens that candidate's trial when it has a full eval, and is a no-op
-      // for discarded (mini-batch-only) candidates — there is no trial to open.
-      const baseCandidateId = getBaseCandidateId(nearest.candidateId);
-      if (
-        baseCandidateId !== nearest.candidateId &&
-        !candidates.some((c) => c.candidateId === baseCandidateId)
-      ) {
-        return;
-      }
       if (onTrialClick) {
-        onTrialClick(baseCandidateId);
+        onTrialClick(nearest.candidateId);
       } else {
-        onTrialSelect?.(baseCandidateId);
+        onTrialSelect?.(nearest.candidateId);
       }
     },
-    [findNearestCandidate, onTrialClick, onTrialSelect, candidates],
+    [findNearestCandidate, onTrialClick, onTrialSelect],
   );
 
   const renderEdges = useChartEdges({ edges, chartData, overlapOffsets });
@@ -327,7 +283,6 @@ const OptimizationProgressChartContent: React.FC<
     candidateMap,
     chartData,
     isTestSuite,
-    fullEvalItemCount,
     suppress: suppressBestTrialCard,
   });
 
@@ -418,25 +373,17 @@ const OptimizationProgressChartContent: React.FC<
           chartData={chartData}
           isTestSuite={isTestSuite}
           bestCandidateId={bestCandidateId}
-          fullEvalItemCount={fullEvalItemCount}
           boundaryElement={containerRef.current}
         />
       )}
 
       <div className="mt-1 flex items-center justify-center">
-        {legendItems.map(({ color, label, hollow }) => (
+        {legendItems.map(({ color, label }) => (
           <div key={label} className="flex items-center gap-0.5 pl-1 pr-1.5">
             <span className="flex size-3 items-center justify-center">
               <span
                 className="size-1.5 rounded-full"
-                style={
-                  hollow
-                    ? {
-                        backgroundColor: "hsl(var(--background))",
-                        border: `1.25px solid ${color}`,
-                      }
-                    : { backgroundColor: color }
-                }
+                style={{ backgroundColor: color }}
               />
             </span>
             <span className="comet-body-xs text-foreground">{label}</span>
