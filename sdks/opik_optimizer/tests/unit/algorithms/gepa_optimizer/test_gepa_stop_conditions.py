@@ -8,6 +8,7 @@ from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStoppe
 
 from opik_optimizer import GepaOptimizer, constants
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
+    _build_gepa_stop_callbacks,
     _coerce_no_improvement_iterations,
     _coerce_positive_int,
 )
@@ -302,3 +303,39 @@ class TestCoercePositiveInt:
 
     def test_float_floored(self) -> None:
         assert _coerce_positive_int(4.9, default=3, allow_zero=False, name="mb") == 4
+
+    def test_infinity_does_not_crash(self) -> None:
+        # int(float("inf")) raises OverflowError — must be caught, not propagated.
+        assert (
+            _coerce_positive_int(float("inf"), default=3, allow_zero=False, name="mb")
+            == 3
+        )
+
+    def test_nan_does_not_crash(self) -> None:
+        assert (
+            _coerce_positive_int(float("nan"), default=7, allow_zero=True, name="n")
+            == 7
+        )
+
+
+class TestBuildGepaStopCallbacks:
+    """Direct unit tests for the stop-callback builder (review hardening)."""
+
+    def test_positive_perfect_score_wires_threshold_stopper(self) -> None:
+        stoppers, _ = _build_gepa_stop_callbacks(0.95, 10)
+        assert any(isinstance(s, ScoreThresholdStopper) for s in stoppers)
+        assert any(isinstance(s, NoImprovementStopper) for s in stoppers)
+
+    def test_nonpositive_perfect_score_omits_threshold_stopper(self) -> None:
+        # perfect_score=0 would fire on the first full eval (score >= 0) and halt
+        # the run immediately, so the threshold stopper must not be wired.
+        stoppers, _ = _build_gepa_stop_callbacks(0.0, 10)
+        assert not any(isinstance(s, ScoreThresholdStopper) for s in stoppers)
+        assert any(isinstance(s, NoImprovementStopper) for s in stoppers)
+
+    def test_empty_callbacks_when_both_disabled(self) -> None:
+        # No threshold + no stall stopper → empty list; gepa still stops on the
+        # metric-call budget.
+        stoppers, no_improve = _build_gepa_stop_callbacks(0.0, 0)
+        assert stoppers == []
+        assert no_improve is None

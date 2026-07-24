@@ -12,7 +12,6 @@ import {
   getBaselineCandidate,
   aggregateCandidates,
   mergeExperimentScores,
-  splitExperimentsByEvalType,
 } from "@/lib/optimizations";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 
@@ -59,10 +58,6 @@ export const useOptimizationExperiments = () => {
       optimizationId: optimizationId,
       sorting: [{ id: "created_at", desc: false }],
       forceSorting: true,
-      // Only full-eval trials are loaded — mini-batch screening evals are not
-      // shown on the chart. New runs type them `mini-batch` (never fetched
-      // here); legacy runs recorded them as `trial`, so we still split them out
-      // of scoring below via splitExperimentsByEvalType.
       types: [EXPERIMENT_TYPE.TRIAL],
       page: 1,
       size: MAX_EXPERIMENTS_LOADED,
@@ -135,19 +130,9 @@ export const useOptimizationExperiments = () => {
     });
   }, [data?.content, isTestSuite, optimization?.objective_name]);
 
-  // Keep only full evaluations out of scoring. New runs never fetch mini-batch
-  // experiments (query above), but LEGACY runs recorded screening evals as
-  // `trial` — this split removes those by relative item count so they can't
-  // blend into a candidate's aggregated score or the "best" computation.
-  const { fullEvalExperiments } = useMemo(
-    () => splitExperimentsByEvalType(experiments),
-    [experiments],
-  );
-
   const candidates = useMemo(
-    () =>
-      aggregateCandidates(fullEvalExperiments, optimization?.objective_name),
-    [fullEvalExperiments, optimization?.objective_name],
+    () => aggregateCandidates(experiments, optimization?.objective_name),
+    [experiments, optimization?.objective_name],
   );
 
   const inProgressInfo = useMemo(() => {
@@ -175,7 +160,7 @@ export const useOptimizationExperiments = () => {
   }, [isInProgress, latestExperimentData?.content]);
 
   const { scoreMap, baseScore, bestExperiment } = useOptimizationScores(
-    fullEvalExperiments,
+    experiments,
     optimization?.objective_name,
   );
 
@@ -209,14 +194,12 @@ export const useOptimizationExperiments = () => {
   }, [bestCandidate, baselineCandidate]);
 
   const baselineExperiment = useMemo(() => {
-    // Baseline = earliest FULL evaluation; a mini-batch screening eval that
-    // happens to be recorded first must never stand in as the baseline.
-    if (!fullEvalExperiments.length) return undefined;
-    const sortedRows = fullEvalExperiments
+    if (!experiments.length) return undefined;
+    const sortedRows = experiments
       .slice()
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
     return sortedRows[0];
-  }, [fullEvalExperiments]);
+  }, [experiments]);
 
   const handleRefresh = useCallback(() => {
     refetchOptimization();

@@ -95,6 +95,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         evals (capture_traces=True) are always mini-batches; otherwise only a
         batch covering the exact GEPA valset is a full eval. When ids are
         unknown we keep the legacy "trial" label (safe fallback).
+
+        Assumes a full eval arrives as the complete valset in one call — true
+        with Opik's defaults (FullEvaluationPolicy, no evaluation_cache). If a
+        subsampling val policy or gepa's evaluation_cache is ever enabled, a
+        full eval could arrive as a valset subset and be misclassified as
+        "mini-batch"; revisit this check then.
         """
         if missing_ids or not self._gepa_val_item_ids:
             return "trial"

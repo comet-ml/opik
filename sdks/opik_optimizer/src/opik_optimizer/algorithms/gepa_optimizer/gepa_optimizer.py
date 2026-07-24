@@ -57,7 +57,8 @@ def _coerce_positive_int(
         return default
     try:
         coerced = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError covers float('inf'); ValueError covers NaN / bad strings.
         logger.warning(
             "Ignoring invalid %s (got %s); using default %s.",
             name,
@@ -104,9 +105,13 @@ def _build_gepa_stop_callbacks(
 
     Both stoppers read full-eval (valset) scores only, keeping the stop decision
     apples-to-apples with mini-batch screening excluded:
-    - ScoreThresholdStopper stops the moment a full eval reaches perfect_score;
+    - ScoreThresholdStopper stops the moment a full eval reaches perfect_score
+      (only wired for a positive target — see below);
     - NoImprovementStopper ends the reject/skip spin below the threshold
       (disabled when no_improvement_iterations coerces to 0).
+
+    gepa always falls back to the max_metric_calls budget, so an empty list here
+    is safe.
     """
     from gepa.utils.stop_condition import (
         NoImprovementStopper,
@@ -114,7 +119,12 @@ def _build_gepa_stop_callbacks(
     )
 
     iterations = _coerce_no_improvement_iterations(no_improvement_iterations)
-    stop_callbacks: list[Any] = [ScoreThresholdStopper(perfect_score)]
+    stop_callbacks: list[Any] = []
+    # A non-positive perfect_score would make ScoreThresholdStopper fire on the
+    # very first full eval (any score >= 0), halting the run immediately — so
+    # only wire it for a sensible target.
+    if perfect_score > 0:
+        stop_callbacks.append(ScoreThresholdStopper(perfect_score))
     no_improvement_stopper: Any = None
     if iterations:
         no_improvement_stopper = NoImprovementStopper(iterations)
@@ -134,7 +144,7 @@ def _resolve_gepa_finish_reason(
     Decided from full-eval (valset) scores only, matching the stop conditions.
     """
     finite = [s for s in val_scores if s is not None]
-    if finite and max(finite) >= perfect_score:
+    if perfect_score > 0 and finite and max(finite) >= perfect_score:
         logger.info(
             "GEPA stopped early: full-eval score %.4f reached perfect_score %.4f.",
             max(finite),
