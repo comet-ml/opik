@@ -818,6 +818,8 @@ clickhouse:
     enabled: false
     hot:
       # keep_free_space_bytes on the hot disk (headroom before TTL MOVE to cold).
+      # The hot tier is ClickHouse's built-in `default` disk (the server data
+      # path); this only tunes its free-space headroom.
       keepFreeSpaceBytes: "10737418240" # 10 GiB
     cold:
       s3:

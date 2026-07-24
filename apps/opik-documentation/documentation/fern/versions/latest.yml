@@ -731,6 +731,9 @@ navigation:
               - page: Groq
                 path: ../docs-v2/integrations/groq.mdx
                 slug: groq
+              - page: MiniMax
+                path: ../docs-v2/integrations/minimax.mdx
+                slug: minimax
               - page: Mistral AI
                 path: ../docs-v2/integrations/mistral.mdx
                 slug: mistral

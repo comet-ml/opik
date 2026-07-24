@@ -11,6 +11,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Guardrail;
+import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
@@ -1808,6 +1809,59 @@ class AlertResourceTest {
                                     .withIgnoredFields("id", "projectId")
                                     .build())
                     .isEqualTo(guardrail);
+        }
+
+        @Test
+        @DisplayName("when a guardrail-type filter is configured, webhook fires only for matching guardrail types")
+        void whenGuardrailTypeFilterConfigured__thenWebhookFiresOnlyForMatchingType() {
+            var mock = prepareMockWorkspace();
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Alert fires only for PII guardrails
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                    .triggerConfigs(List.of(AlertTriggerConfig.builder()
+                            .type(AlertTriggerConfigType.FILTER_GUARDRAIL_TYPE)
+                            .configValue(Map.of(
+                                    AlertTriggerConfig.GUARDRAIL_TYPES_CONFIG_KEY, GuardrailType.PII.name()))
+                            .build()))
+                    .build()).toBuilder()
+                    .projectId(projectId)
+                    .build();
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // A TOPIC guardrail fails — webhook should NOT fire
+            Trace topicTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName).usage(null).visibilityMode(null).build();
+            traceResourceClient.createTrace(topicTrace, mock.getLeft(), mock.getRight());
+            Guardrail topicGuardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(topicTrace.id()).secondaryId(idGenerator.generateId())
+                    .projectName(projectName).name(GuardrailType.TOPIC).result(GuardrailResult.FAILED).build();
+            guardrailsResourceClient.addBatch(List.of(topicGuardrail), mock.getLeft(), mock.getRight());
+
+            Awaitility.await()
+                    .pollDelay(java.time.Duration.ofSeconds(2))
+                    .atMost(java.time.Duration.ofSeconds(3))
+                    .untilAsserted(() -> {
+                        var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                        assertThat(requests).isEmpty();
+                    });
+
+            // A PII guardrail fails — webhook SHOULD fire
+            Trace piiTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName).usage(null).visibilityMode(null).build();
+            traceResourceClient.createTrace(piiTrace, mock.getLeft(), mock.getRight());
+            Guardrail piiGuardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(piiTrace.id()).secondaryId(idGenerator.generateId())
+                    .projectName(projectName).name(GuardrailType.PII).result(GuardrailResult.FAILED).build();
+            guardrailsResourceClient.addBatch(List.of(piiGuardrail), mock.getLeft(), mock.getRight());
+
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<Guardrail> guardrails = JsonUtils.readCollectionValue(payload, List.class, Guardrail.class);
+            assertThat(guardrails).hasSize(1);
+            assertThat(guardrails.getFirst().name()).isEqualTo(GuardrailType.PII);
         }
 
         @Test

@@ -10452,6 +10452,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10528,6 +10529,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10676,6 +10678,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -19697,6 +19700,7 @@ components:
           - model
           - provider
           - type
+          - guardrail_name
         metadata_key:
           type: string
         sub_metric:
@@ -22487,6 +22491,7 @@ components:
           - model
           - provider
           - type
+          - guardrail_name
         metadata_key:
           type: string
         sub_metric:

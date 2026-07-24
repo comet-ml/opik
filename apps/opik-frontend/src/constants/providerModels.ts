@@ -804,6 +804,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-2.6-flash:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FREE,
+      label: "inclusionai/ling-3.0-flash:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
       label: "inclusionai/ring-2.6-1t",
     },
@@ -2450,6 +2454,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
+      label: "Gemini 3.6 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
       label: "Gemini 3.5 Flash",
