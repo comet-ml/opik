@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.DisplayName;
@@ -36,7 +37,8 @@ class DatasetItemServiceFilterDataTest {
             mock(FeatureFlags.class),
             mock(DatasetVersioningMigrationService.class),
             mock(ProjectService.class),
-            mock(OpikConfiguration.class));
+            mock(OpikConfiguration.class),
+            mock(LockService.class));
 
     private static final Map<String, JsonNode> ENRICHED_DATA = Map.of(
             "input", JsonUtils.getJsonNodeFromString("{\"topic\":\"Formula1\",\"lang\":\"en\"}"),
