@@ -53,6 +53,9 @@ public class CipxTraceIdentityDAO {
             @NonNull String billingMode,
             @NonNull String plan,
             @NonNull String planUsageStatus,
+            @NonNull String organizationType,
+            @NonNull String seatTier,
+            @NonNull String billingType,
             @NonNull String branch,
             @NonNull String headShaStart,
             @NonNull String headShaEnd,
@@ -85,6 +88,9 @@ public class CipxTraceIdentityDAO {
                     .billingMode(identity.path("billing_mode").asText(""))
                     .plan(identity.path("plan").asText(""))
                     .planUsageStatus(identity.path("plan_usage_status").asText(""))
+                    .organizationType(identity.path("organization_type").asText(""))
+                    .seatTier(identity.path("seat_tier").asText(""))
+                    .billingType(identity.path("billing_type").asText(""))
                     .branch(repository.path("branch").asText(""))
                     .headShaStart(repository.path("head_sha").asText(""))
                     .headShaEnd(repository.path("head_sha_end").asText(""))
@@ -104,7 +110,7 @@ public class CipxTraceIdentityDAO {
             INSERT INTO cipx_trace_identities
                 (workspace_id, project_id, trace_id, start_time, user_uuid,
                  user_email, user_display_name, repository, session_id, harness, schema_version,
-                 billing_mode, plan, plan_usage_status,
+                 billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                  branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                  files_added, files_deleted, lines_added, lines_deleted)
             SETTINGS log_comment = '<log_comment>'
@@ -125,6 +131,9 @@ public class CipxTraceIdentityDAO {
                         :billing_mode<item.index>,
                         :plan<item.index>,
                         :plan_usage_status<item.index>,
+                        :organization_type<item.index>,
+                        :seat_tier<item.index>,
+                        :billing_type<item.index>,
                         :branch<item.index>,
                         :head_sha_start<item.index>,
                         :head_sha_end<item.index>,
@@ -180,6 +189,9 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.billingMode())
                     .bind(index++, row.plan())
                     .bind(index++, row.planUsageStatus())
+                    .bind(index++, row.organizationType())
+                    .bind(index++, row.seatTier())
+                    .bind(index++, row.billingType())
                     .bind(index++, row.branch())
                     .bind(index++, row.headShaStart())
                     .bind(index++, row.headShaEnd())
