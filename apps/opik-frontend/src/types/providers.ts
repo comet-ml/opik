@@ -105,12 +105,12 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
   CLAUDE_OPUS_4_5 = "claude-opus-4-5-20251101",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
+  CLAUDE_OPUS_4_7 = "claude-opus-4-7",
+  CLAUDE_OPUS_4_8 = "claude-opus-4-8",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
-  CLAUDE_OPUS_4_7 = "claude-opus-4-7",
-  CLAUDE_OPUS_4_8 = "claude-opus-4-8",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
 
   //  <---- OpenRouter
@@ -275,6 +275,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_2_6_1T_FREE = "inclusionai/ling-2.6-1t:free",
   INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
+  INCLUSIONAI_LING_3_0_FLASH_FREE = "inclusionai/ling-3.0-flash:free",
   INCLUSIONAI_RING_2_6_1T = "inclusionai/ring-2.6-1t",
   INCLUSIONAI_RING_2_6_1T_FREE = "inclusionai/ring-2.6-1t:free",
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
@@ -719,6 +720,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_PRO = "vertex_ai/gemini-3-pro-preview",
   VERTEX_AI_GEMINI_3_1_PRO = "vertex_ai/gemini-3.1-pro-preview",
   VERTEX_AI_GEMINI_3_5_FLASH = "vertex_ai/gemini-3.5-flash",
+  VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
 }
 
 export interface ProviderModelsMap {
