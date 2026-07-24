@@ -20,7 +20,7 @@ RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 TO ${ANALYTICS_DB_DAT
 -- >>> END exchange
 
 -- >>> BEGIN wrap
--- Sharding-ready wrap: rename the partitioned table to *_local and front it with a Distributed table keyed on
+-- Sharding-ready wrap: move the partitioned table under *_local and front it with a Distributed table keyed on
 -- sipHash64(project_id). Transparent on a single shard; switching on sharding later is config-only. The {cluster} macro
 -- (not the literal 'cluster') keeps the DDL portable; it is resolved server-side.
 -- HARD PREREQUISITE: a Distributed table supports SELECT and INSERT but NOT mutations — a lightweight DELETE returns
@@ -28,10 +28,22 @@ RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 TO ${ANALYTICS_DB_DAT
 -- (code 48). So the product's delete-by-id AND retention deletes both break the moment this wrap is applied. Do NOT run
 -- the wrap until those DAO paths target `traces_local` (see README "The Distributed wrap"). The EXCHANGE above is the
 -- data cutover and leaves `traces` a MergeTree where deletes still work; the wrap is a separate, gated step.
-RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}';
-
-CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' AS ${ANALYTICS_DB_DATABASE_NAME}.traces_local
+--
+-- GAPLESS per node: build the Distributed wrapper under a temp name FIRST (its 'traces_local' target need not exist
+-- yet — Distributed resolves it lazily), then a SINGLE atomic multi-target RENAME rotates the data to `traces_local`
+-- and the wrapper into `traces` (the name freed by the first clause). So `traces` transitions MergeTree->Distributed
+-- with no window where the name is absent — unlike a RENAME-then-CREATE, which leaves `traces` missing in between.
+-- (A cross-node ON CLUSTER propagation skew still exists, as for any ON CLUSTER DDL; the driver's --confirm-maintenance
+-- gate covers it.) Partial-failure recovery: if the RENAME fails after the CREATE, `traces` is untouched (still the
+-- successor MergeTree, live) and only the temp wrapper lingers — drop it and retry:
+--   DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces_dist ON CLUSTER '{cluster}' SYNC;
+CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_dist ON CLUSTER '{cluster}' AS ${ANALYTICS_DB_DATABASE_NAME}.traces
     ENGINE = Distributed('{cluster}', '${ANALYTICS_DB_DATABASE_NAME}', 'traces_local', sipHash64(project_id));
+
+RENAME TABLE
+    ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces_local,
+    ${ANALYTICS_DB_DATABASE_NAME}.traces_dist TO ${ANALYTICS_DB_DATABASE_NAME}.traces
+    ON CLUSTER '{cluster}';
 -- >>> END wrap
 
 -- After the wrap: restore the buffer ceiling (unset asyncInsertBusyTimeoutMaxMs), verify (README "Verifying the
