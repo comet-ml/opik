@@ -34,7 +34,7 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
     getEnabledGuardrailTypes,
   } = useGuardrailConfigState();
 
-  const enabledGuardrailsKeys = getEnabledGuardrailTypes() as GuardrailTypes[];
+  const enabledGuardrailsKeys = getEnabledGuardrailTypes();
   const importCodeNames = enabledGuardrailsKeys.map(
     (key) => guardrailsMap[key].codeImportName,
   );

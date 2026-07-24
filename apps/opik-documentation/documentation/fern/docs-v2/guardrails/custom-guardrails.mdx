@@ -9,7 +9,7 @@ og:site_name: Opik Documentation
 
 When the built-in guardrails do not cover a check you need, you can train your own. You provide labeled examples and a short description of what you want to catch, and Opik fine-tunes a small classifier (the same architecture as the built-in [prompt injection](/guardrails/guardrails#prompt-injection-guardrail) guardrail) that runs on the [guardrails server](/guardrails/server).
 
-This is the trained counterpart to the [LLM judge](/guardrails/guardrails#llm-judge-guardrail): use the LLM judge to prototype a check with a natural-language policy, and once it matters, train a custom guardrail so it runs fast and cheap inline at high volume.
+This is the trained counterpart to the [LLM judge](/guardrails/guardrails#llm-judge-guardrail): use the LLM judge to prototype a check with a natural-language policy, and once it matters, train a custom guardrail so it runs fast and cheap inline at high volume. It's also the trained counterpart to a [manual guardrail](/guardrails/guardrails#manual-guardrail): reach for a manual guardrail for a one-off heuristic, and train a custom guardrail once you want a real model backing that same check.
 
 ## How it works
 

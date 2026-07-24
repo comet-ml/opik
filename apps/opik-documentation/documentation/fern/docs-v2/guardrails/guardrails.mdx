@@ -112,9 +112,16 @@ The judge's model call is recorded as a nested LLM span under the guardrail span
 
 _This guardrail relies on a large language model, and is best suited to complex checks where accuracy matters more than latency._
 
-### Custom guardrail
+### Manual guardrail
 
-Custom guardrail allows you to define your own guardrails using a custom model, custom library or custom business logic and log the response to Opik. Below is a basic example that filters out competitor brands:
+For checks that don't fit PII, Topic, prompt injection, or an LLM judge, write the check yourself and log the result to Opik directly — no guard class, and no guardrails server involved. Below is a basic example that filters out competitor brands:
+
+<Tip>
+  This is different from a [custom guardrail](/guardrails/custom-guardrails), which trains a classifier on your
+  labeled examples and runs it through the `CustomGuardrail` guard. Reach for a manual guardrail for a one-off
+  heuristic or business rule; train a custom guardrail once that same check needs to run fast and consistently at
+  high volume.
+</Tip>
 
 ```python
 import opik
@@ -136,11 +143,11 @@ competitor_brands = [
 opik_client = opik.Opik()
 
 
-def custom_guardrails(generation: str, trace_id: str) -> str:
+def check_competitor_mentions(generation: str, trace_id: str) -> str:
     # Start the guardrail span first so the duration is accurately captured
     guardrail_span = opik_client.span(name="Guardrail", input={"generation": generation}, type="guardrail", trace_id=trace_id)
 
-    # Custom guardrail logic - detect competitor brand mentions
+    # Manual guardrail logic - detect competitor brand mentions
     found_brands = []
     for brand in competitor_brands:
         if brand.lower() in generation.lower():
@@ -178,17 +185,17 @@ def custom_guardrails(generation: str, trace_id: str) -> str:
 @opik.track
 def main():
     good_generation = "You should use our AI platform for your machine learning projects!"
-    custom_guardrails(good_generation, opik.opik_context.get_current_trace_data().id)
+    check_competitor_mentions(good_generation, opik.opik_context.get_current_trace_data().id)
 
     bad_generation = "You might want to try OpenAI or Google AI for your project instead."
-    custom_guardrails(bad_generation, opik.opik_context.get_current_trace_data().id)
+    check_competitor_mentions(bad_generation, opik.opik_context.get_current_trace_data().id)
 
 
 if __name__ == "__main__":
     main()
 ```
 
-After running the custom guardrail example above, you can view the results in the Opik dashboard. The guardrail spans will appear alongside your traces, showing which brand mentions were detected and whether the guardrail passed or failed.
+After running the manual guardrail example above, you can view the results in the Opik dashboard. The guardrail spans will appear alongside your traces, showing which brand mentions were detected and whether the guardrail passed or failed.
 
 <Frame>
   <img src="/img/production/custom-guardrails-dashboard.png" />
