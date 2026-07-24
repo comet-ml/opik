@@ -7,6 +7,7 @@ import {
   ALERT_TRIGGER_CONFIG_TYPE,
   AlertTriggerConfig,
 } from "@/types/alerts";
+import { GuardrailTypes } from "@/types/guardrails";
 
 const fbScore = (
   configValue: Record<string, string>,
@@ -235,5 +236,54 @@ describe("formTriggersToAlertTriggers", () => {
     const back = formTriggersToAlertTriggers(form);
 
     expect(back[0].trigger_configs?.map((c) => c.group_index)).toEqual([0, 1]);
+  });
+});
+
+describe("guardrail type filtering", () => {
+  it("builds a filter:guardrail_type config from selected guardrail types", () => {
+    const [trigger] = formTriggersToAlertTriggers([
+      {
+        eventType: ALERT_EVENT_TYPE.trace_guardrails_triggered,
+        guardrailTypes: [GuardrailTypes.PII, GuardrailTypes.TOPIC],
+      },
+    ]);
+
+    expect(trigger.trigger_configs).toHaveLength(1);
+    expect(trigger.trigger_configs?.[0].type).toBe(
+      ALERT_TRIGGER_CONFIG_TYPE["filter:guardrail_type"],
+    );
+    expect(trigger.trigger_configs?.[0].config_value.guardrail_types).toBe(
+      "PII,TOPIC",
+    );
+  });
+
+  it("omits the config when no guardrail types are selected (fires for any type)", () => {
+    const [trigger] = formTriggersToAlertTriggers([
+      { eventType: ALERT_EVENT_TYPE.trace_guardrails_triggered },
+    ]);
+
+    expect(trigger.trigger_configs).toHaveLength(0);
+  });
+
+  it("round-trips guardrail types back to the same selection", () => {
+    const incoming: AlertTriggerConfig[] = [
+      {
+        type: ALERT_TRIGGER_CONFIG_TYPE["filter:guardrail_type"],
+        config_value: { guardrail_types: "PII" },
+      },
+    ];
+    const form = alertTriggersToFormTriggers([
+      {
+        event_type: ALERT_EVENT_TYPE.trace_guardrails_triggered,
+        trigger_configs: incoming,
+      },
+    ]);
+
+    expect(form[0].guardrailTypes).toEqual([GuardrailTypes.PII]);
+
+    const back = formTriggersToAlertTriggers(form);
+    expect(back[0].trigger_configs?.[0].config_value.guardrail_types).toBe(
+      "PII",
+    );
   });
 });

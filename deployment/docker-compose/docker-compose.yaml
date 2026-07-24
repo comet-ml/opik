@@ -274,6 +274,10 @@ services:
     tmpfs:
       - /var/lib/docker
 
+  # Default variant: the published GPU-capable image, which runs on CPU when no
+  # GPU is present (torch falls back). For GPU acceleration run it standalone with
+  # `docker run --gpus all`. Use the guardrails-backend-cpu service for a slim,
+  # multi-arch CPU-only image built from source.
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
     pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-always}
@@ -282,6 +286,27 @@ services:
     build:
       context: ../../apps/opik-guardrails-backend
       dockerfile: Dockerfile
+    hostname: guardrails
+    environment:
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
+    healthcheck:
+      test: [ "CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck" ]
+      interval: 2s
+      timeout: 60s
+      retries: 30
+      start_period: 10s
+
+  # CPU-only variant (slim multi-arch image, no GPU or NVIDIA toolkit required).
+  # There is no published CPU image, so it is always built from source. Shares the
+  # `guardrails` hostname with the GPU service; only one of the two runs at a time
+  # (mutually exclusive profiles).
+  guardrails-backend-cpu:
+    pull_policy: build
+    profiles:
+      - guardrails-cpu
+    build:
+      context: ../../apps/opik-guardrails-backend
+      dockerfile: Dockerfile.cpu
     hostname: guardrails
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}

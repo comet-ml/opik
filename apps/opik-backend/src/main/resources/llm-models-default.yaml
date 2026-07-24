@@ -233,6 +233,10 @@ gemini:
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
 vertex-ai:
+  - id: "gemini-3.6-flash"
+    qualifiedName: "vertex_ai/gemini-3.6-flash"
+    label: "Gemini 3.6 Flash"
+    structuredOutput: true
   - id: "gemini-3.5-flash"
     qualifiedName: "vertex_ai/gemini-3.5-flash"
     label: "Gemini 3.5 Flash"
@@ -633,6 +637,8 @@ openrouter:
     label: "inclusionai/ling-2.6-flash"
   - id: "inclusionai/ling-2.6-flash:free"
     label: "inclusionai/ling-2.6-flash:free"
+  - id: "inclusionai/ling-3.0-flash:free"
+    label: "inclusionai/ling-3.0-flash:free"
   - id: "inclusionai/ring-2.6-1t"
     label: "inclusionai/ring-2.6-1t"
   - id: "inclusionai/ring-2.6-1t:free"

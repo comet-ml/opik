@@ -124,7 +124,11 @@ class Guardrail:
 
         for validation in result.validations:
             guardrail_batch_item_message = GuardrailBatchItemMessage(
-                project_name=self._client._project_name,
+                # Guardrail results must live in the same project as the trace/span they
+                # are attached to; otherwise project-scoped reads (e.g. the traces list)
+                # cannot match them. Fall back to the client project when the trace has
+                # no explicit project (rare).
+                project_name=current_trace.project_name or self._client._project_name,
                 entity_id=current_trace.id,
                 secondary_id=current_span.id,
                 name=validation.type,
