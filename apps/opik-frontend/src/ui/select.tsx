@@ -25,7 +25,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="size-4 shrink-0 text-foreground opacity-50 group-disabled:text-muted-gray" />
+      <ChevronDown className="size-3.5 shrink-0 text-foreground opacity-50 group-disabled:text-muted-gray" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -43,7 +43,7 @@ const SelectScrollUpButton = React.forwardRef<
     )}
     {...props}
   >
-    <ChevronUp className="size-4" />
+    <ChevronUp className="size-3.5" />
   </SelectPrimitive.ScrollUpButton>
 ));
 SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName;
@@ -60,7 +60,7 @@ const SelectScrollDownButton = React.forwardRef<
     )}
     {...props}
   >
-    <ChevronDown className="size-4" />
+    <ChevronDown className="size-3.5" />
   </SelectPrimitive.ScrollDownButton>
 ));
 SelectScrollDownButton.displayName =
@@ -131,7 +131,7 @@ const SelectItem = React.forwardRef<
     <SelectPrimitive.Item
       ref={ref}
       className={cn(
-        "relative flex flex-col w-full cursor-default select-none justify-stretch rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-primary-100 data-[state=checked]:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "relative flex flex-col w-full cursor-default select-none justify-stretch rounded-sm px-3 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-primary-100 data-[state=checked]:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
       )}
       {...props}

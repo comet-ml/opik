@@ -1,0 +1,5 @@
+self-hosted-runner:
+  labels:
+    # Org-hosted larger runner. Not a public GitHub label, so actionlint
+    # needs it declared here to avoid a false "unknown label" error.
+    - ubuntu-latest-m

@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -26,6 +27,7 @@ import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluator
 public class PythonEvaluatorService {
 
     private static final String URL_TEMPLATE = "%s/v1/private/evaluators/python";
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 500;
 
     private final @NonNull RetriableHttpClient client;
     private final @NonNull OpikConfiguration config;
@@ -70,7 +72,19 @@ public class PythonEvaluatorService {
         Response.StatusType statusInfo = response.getStatusInfo();
 
         if (statusInfo.getFamily() == Response.Status.Family.SUCCESSFUL) {
-            return response.readEntity(PythonEvaluatorResponse.class).scores();
+            // Buffer before reading: the response is consumed further down the reactive chain on a
+            // boundedElastic thread, after which the underlying connection can already be recycled and
+            // readEntity would yield null. A null body (or null scores) must surface as a clean error
+            // rather than a NullPointerException.
+            var body = response.hasEntity() && response.bufferEntity()
+                    ? response.readEntity(PythonEvaluatorResponse.class)
+                    : null;
+            if (body == null || body.scores() == null) {
+                throw new InternalServerErrorException(
+                        "Python evaluation returned HTTP '%s' with an empty or unparseable response body"
+                                .formatted(statusCode));
+            }
+            return body.scores();
         }
 
         String errorMessage = extractErrorMessage(response);
@@ -80,26 +94,37 @@ public class PythonEvaluatorService {
         }
 
         throw new InternalServerErrorException(
-                "Python evaluation failed (HTTP " + statusCode + "): " + errorMessage);
+                "Python evaluation failed (HTTP '%s'): %s".formatted(statusCode, errorMessage));
     }
 
     private String extractErrorMessage(Response response) {
-        String errorMessage = "Unknown error during Python evaluation";
-
         if (response.hasEntity() && response.bufferEntity()) {
             try {
-                errorMessage = response.readEntity(PythonEvaluatorErrorResponse.class).error();
-            } catch (RuntimeException parseErrorResponse) {
-                log.warn("Failed to parse error response, falling back to parsing string", parseErrorResponse);
-                try {
-                    errorMessage = response.readEntity(String.class);
-                } catch (RuntimeException parseStringResponse) {
-                    log.warn("Failed to parse error string response", parseStringResponse);
+                var errorResponse = response.readEntity(PythonEvaluatorErrorResponse.class);
+                if (errorResponse != null && StringUtils.isNotBlank(errorResponse.error())) {
+                    return StringUtils.truncate(errorResponse.error(), MAX_ERROR_MESSAGE_LENGTH);
                 }
+            } catch (RuntimeException parseErrorResponse) {
+                // Expected when the body is not the structured error shape; fall back to the raw body.
+                log.debug("Failed to parse structured error response, falling back to parsing string",
+                        parseErrorResponse);
+            }
+
+            // Fall back to the raw body when the structured error is absent/blank so the backend
+            // detail is not lost (e.g. python-backend "can't be evaluated:" with an empty message).
+            // The body is the evaluated user metric's own error, which we want to surface; bound its
+            // length so an oversized payload can't bloat the thrown exception message.
+            try {
+                var body = response.readEntity(String.class);
+                if (StringUtils.isNotBlank(body)) {
+                    return StringUtils.truncate(body, MAX_ERROR_MESSAGE_LENGTH);
+                }
+            } catch (RuntimeException parseStringResponse) {
+                log.warn("Failed to read error response body", parseStringResponse);
             }
         }
 
-        return errorMessage;
+        return "Unknown error during Python evaluation";
     }
 
 }

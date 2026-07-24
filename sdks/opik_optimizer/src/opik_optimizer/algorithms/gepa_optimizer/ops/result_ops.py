@@ -99,6 +99,9 @@ def build_algorithm_result(
         "dataset_item_ids": [item.get("id") for item in train_items],
     }
     if best_matches_seed:
+        # Legacy GEPA-only key. The canonical, algorithm-agnostic signal is
+        # OptimizationResult.details["reused_baseline"], set in
+        # core.runtime.build_final_result (OPIK-7038). Kept for back-compat.
         metadata["final_evaluation_reused_baseline"] = True
     if experiment_config:
         metadata["experiment"] = experiment_config

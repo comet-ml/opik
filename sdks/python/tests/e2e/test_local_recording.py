@@ -1,6 +1,7 @@
 import pytest
 
 import opik
+from opik import exceptions
 from opik.api_objects import opik_client
 from opik.message_processing.emulation.models import TraceModel, SpanModel
 from opik.message_processing.processors import message_processors_chain
@@ -69,7 +70,7 @@ def test_records_spans_and_traces__happy_path():
 
 def test_prevents_nested_usage():
     with opik.record_traces_locally():
-        with pytest.raises(RuntimeError):
+        with pytest.raises(exceptions.LocalRecordingAlreadyActive):
             with opik.record_traces_locally():
                 pass
 

@@ -1,0 +1,236 @@
+suite: opik.probe helper
+
+# Exercises the `opik.probe` helper (templates/_helpers.tpl) through the real
+# deployment template. The helper supports two shapes:
+#   1. Simplified path/port  — emits httpGet + Accept header and fills in timing
+#      defaults (timeoutSeconds 2 / periodSeconds 10 / initialDelaySeconds 0 /
+#      successThreshold 1 / failureThreshold 2).
+#   2. Full definition       — any other spec is emitted verbatim via toYaml.
+#
+# Tests target the `python-backend` component: it has NO probe defined in
+# values.yaml, so each test's `set` is a clean probe spec rather than a deep
+# merge over a pre-existing httpGet default (which would leak into full-mode
+# assertions). The deployment renders one document per enabled component, so we
+# select the python-backend deployment by name and read its single container.
+templates:
+  - templates/deployment.yaml
+
+documentSelector: &pyb
+  path: metadata.name
+  value: opik-python-backend
+
+tests:
+  # ---- Simplified mode: only path/port set ----------------------------------
+  - it: simplified mode renders httpGet with the Accept header
+    set:
+      component.python-backend.livenessProbe:
+        path: /healthcheck
+        port: 8000
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthcheck
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 8000
+      - contains:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.httpHeaders
+          content:
+            name: Accept
+            value: application/json
+
+  - it: simplified mode fills in the hard-coded timing defaults
+    set:
+      component.python-backend.livenessProbe:
+        path: /healthcheck
+        port: 8000
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 2
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.successThreshold
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 2
+
+  - it: simplified mode defaults initialDelaySeconds to 0 when unset
+    set:
+      component.python-backend.livenessProbe:
+        path: /healthcheck
+        port: 8000
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 0
+
+  - it: simplified mode honors initialDelaySeconds when set
+    set:
+      component.python-backend.livenessProbe:
+        path: /healthcheck
+        port: 8000
+        initialDelaySeconds: 20
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 20
+
+  - it: simplified mode honors overridden timing fields
+    set:
+      component.python-backend.readinessProbe:
+        path: /healthcheck
+        port: 8000
+        timeoutSeconds: 5
+        periodSeconds: 30
+        successThreshold: 3
+        failureThreshold: 6
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.successThreshold
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 6
+
+  # ---- Full-definition mode: spec emitted verbatim --------------------------
+  - it: full httpGet definition is emitted verbatim and not overwritten
+    set:
+      component.python-backend.livenessProbe:
+        httpGet:
+          path: /custom/health
+          port: 9999
+          httpHeaders:
+            - name: Accept
+              value: application/json
+        timeoutSeconds: 7
+        periodSeconds: 11
+        failureThreshold: 4
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /custom/health
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 9999
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 7
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 11
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 4
+      # The helper must NOT inject simplified-mode defaults in full mode.
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.successThreshold
+
+  - it: full exec definition is emitted verbatim
+    set:
+      component.python-backend.livenessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - curl -f http://localhost:8000/healthcheck
+        initialDelaySeconds: 15
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command
+          value:
+            - /bin/sh
+            - -c
+            - curl -f http://localhost:8000/healthcheck
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 15
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+
+  - it: full tcpSocket definition is emitted verbatim
+    set:
+      component.python-backend.livenessProbe:
+        tcpSocket:
+          port: 8000
+        periodSeconds: 20
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 8000
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 20
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+
+  # ---- startupProbe: renders only when defined ------------------------------
+  - it: startupProbe is absent when not defined
+    documentSelector: *pyb
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: startupProbe renders in simplified mode
+    set:
+      component.python-backend.startupProbe:
+        path: /healthcheck
+        port: 8000
+        failureThreshold: 30
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /healthcheck
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.port
+          value: 8000
+      - contains:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.httpHeaders
+          content:
+            name: Accept
+            value: application/json
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+      # Defaults still fill in for the unset timing fields.
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 10
+
+  - it: startupProbe renders in full-definition mode
+    set:
+      component.python-backend.startupProbe:
+        httpGet:
+          path: /startup
+          port: 8000
+        periodSeconds: 5
+        failureThreshold: 60
+    documentSelector: *pyb
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /startup
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 60

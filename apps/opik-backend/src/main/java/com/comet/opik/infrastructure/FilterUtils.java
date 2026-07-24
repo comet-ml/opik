@@ -126,12 +126,15 @@ public class FilterUtils {
         }
     }
 
-    public static ST newTraceThreadFindTemplate(String query, TraceSearchCriteria traceSearchCriteria,
-            String searchClause) {
+    public static ST newTraceThreadFindTemplate(
+            String query,
+            TraceSearchCriteria traceSearchCriteria,
+            String searchClause,
+            boolean traceColumnsNonNullable) {
         var template = TemplateUtils.newST(query);
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
-                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable)
                             .ifPresent(traceFilters -> template.add("filters", traceFilters));
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_AGGREGATION)
                             .ifPresent(traceAggregationFilters -> template.add("trace_aggregation_filters",
@@ -147,7 +150,8 @@ public class FilterUtils {
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_AGGREGATION)
                             .ifPresent(traceExperimentFilters -> template.add("experiment_filters",
                                     traceExperimentFilters));
-                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
+                    FilterQueryBuilder.toAnalyticsDbFilters(
+                            filters, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable)
                             .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",

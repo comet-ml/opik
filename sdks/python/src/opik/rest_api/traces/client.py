@@ -8,6 +8,7 @@ from ..core.request_options import RequestOptions
 from ..types.comment import Comment
 from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
+from ..types.existence_response import ExistenceResponse
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
 from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
@@ -1520,6 +1521,51 @@ class TracesClient:
             request_options=request_options,
         ) as r:
             yield from r.data
+
+    def exist(
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
+        source: typing.Optional[str] = None,
+        thread_only: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExistenceResponse:
+        """
+        Returns whether the project has at least one trace matching the given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions without scanning or aggregating the whole project.
+
+        Parameters
+        ----------
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        source : typing.Optional[str]
+
+        thread_only : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExistenceResponse
+            Trace existence
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.traces.exist()
+        """
+        _response = self._raw_client.exist(
+            project_id=project_id,
+            project_name=project_name,
+            source=source,
+            thread_only=thread_only,
+            request_options=request_options,
+        )
+        return _response.data
 
     def update_thread(
         self,
@@ -3269,6 +3315,54 @@ class AsyncTracesClient:
         ) as r:
             async for data in r.data:
                 yield data
+
+    async def exist(
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
+        source: typing.Optional[str] = None,
+        thread_only: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ExistenceResponse:
+        """
+        Returns whether the project has at least one trace matching the given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions without scanning or aggregating the whole project.
+
+        Parameters
+        ----------
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        source : typing.Optional[str]
+
+        thread_only : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ExistenceResponse
+            Trace existence
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.traces.exist()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.exist(
+            project_id=project_id,
+            project_name=project_name,
+            source=source,
+            thread_only=thread_only,
+            request_options=request_options,
+        )
+        return _response.data
 
     async def update_thread(
         self,

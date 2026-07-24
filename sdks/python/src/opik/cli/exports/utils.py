@@ -162,6 +162,7 @@ def create_experiment_data_structure(
             "feedback_scores": getattr(experiment_data_obj, "feedback_scores", None),
             "comments": getattr(experiment_data_obj, "comments", None),
             "duration": getattr(experiment_data_obj, "duration", None),
+            "tags": getattr(experiment_data_obj, "tags", None),
             "prompt_version": getattr(experiment_data_obj, "prompt_version", None),
             "prompt_versions": getattr(experiment_data_obj, "prompt_versions", None),
         },

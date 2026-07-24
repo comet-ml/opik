@@ -1,41 +1,6 @@
 import { test, expect } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
-import { ConfigurationPage } from '@e2e/pom/configuration.page';
-
-/**
- * Pick an Anthropic / OpenAI / OpenRouter model from env; provision the matching
- * provider key via the UI if it isn't already configured. Returns the model
- * display name to use with the playground.
- */
-async function ensureModelAvailable(page: import('@playwright/test').Page): Promise<string> {
-  const anthropic = process.env.ANTHROPIC_API_KEY;
-  const openai = process.env.OPENAI_API_KEY;
-  const openrouter = process.env.OPENROUTER_API_KEY;
-  if (!anthropic && !openai && !openrouter) {
-    test.skip(
-      true,
-      'None of ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY is set',
-    );
-    return ''; // unreachable
-  }
-  const cfg = new ConfigurationPage(page);
-  await cfg.gotoAiProviders();
-  if (anthropic) {
-    await cfg.ensureProviderConfigured('Anthropic', anthropic);
-    return 'Claude Haiku 4.5';
-  }
-  if (openai) {
-    await cfg.ensureProviderConfigured('OpenAI', openai);
-    return 'GPT 4o Mini';
-  }
-  await cfg.ensureCustomProviderConfigured({
-    providerName: 'openrouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    apiKey: openrouter!,
-    models: 'openai/gpt-4o-mini',
-  });
-  return 'openai/gpt-4o-mini';
-}
+import { ensureModelAvailable } from '@e2e/pom/model-availability';
 
 /**
  * T1 Playground smoke: run prompts against a seeded dataset → Re-run auto-creates
@@ -68,7 +33,7 @@ test.describe('Playground — smoke', { tag: ['@t1-smoke', '@playground'] }, () 
         modelDisplayName,
       });
       await playground.clickRunExperiment();
-      await playground.submitRunExperimentDialog({ mode: 'dataset', entityName: dataset.name });
+      await playground.selectRunExperimentSource({ mode: 'dataset', entityName: dataset.name });
       await expect(playground.loadedSourcePill()).toBeVisible();
       await playground.clickReRun();
       await playground.waitForRunsComplete({ expectedRows: 3, timeoutMs: 120_000 });

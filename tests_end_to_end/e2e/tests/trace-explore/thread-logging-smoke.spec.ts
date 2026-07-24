@@ -10,12 +10,19 @@ test.describe('Thread logging — smoke', { tag: ['@t1-smoke', '@trace-explore']
 
     await test.step('Open Logs Threads view', async () => {
       await logs.gotoThreads(conversation.projectId);
-      await logs.waitForThreadsReady();
+      await logs.waitForThreadsReady(conversation.threadId);
     });
 
     await test.step('Verify a single thread is present', async () => {
       await expect(logs.threadsTab).toBeChecked();
-      expect(await logs.countThreads()).toBe(1);
+      // The Threads count card is eventually consistent — poll rather than
+      // reading it once, so a slow-propagating deploy doesn't fail the assertion.
+      await expect
+        .poll(async () => logs.countThreads(), {
+          timeout: 15_000,
+          intervals: [500, 1000, 2000],
+        })
+        .toBe(1);
       await expect(logs.threadRow(conversation.threadId)).toBeVisible();
     });
 
@@ -40,7 +47,7 @@ test.describe('Thread logging — smoke', { tag: ['@t1-smoke', '@trace-explore']
 
     const panel = await test.step('Open the thread detail panel', async () => {
       await logs.gotoThreads(conversation.projectId);
-      await logs.waitForThreadsReady();
+      await logs.waitForThreadsReady(conversation.threadId);
       const panel = await logs.openThreadById(conversation.threadId);
       await panel.waitForFullyLoaded();
       return panel;

@@ -46,6 +46,37 @@ autodoc_default_options = {
     "show-inheritance": True,
 }
 
+# Mock the heavy third-party integration libraries. autodoc only imports the
+# opik.integrations.* wrappers to read their signatures/docstrings; it does not
+# need the real SDKs, several of which fail to import in the docs environment
+# (e.g. google-genai / litellm raise PydanticSchemaGenerationError at import).
+# Without this, every integration reference page renders empty. Do NOT list
+# libraries the opik core imports (pydantic, httpx), only integration-only deps.
+autodoc_mock_imports = [
+    "agents",
+    "aisuite",
+    "anthropic",
+    "boto3",
+    "botocore",
+    "crewai",
+    "crewai_tools",
+    "dspy",
+    "google",
+    "groq",
+    "guardrails",
+    "harbor",
+    "haystack",
+    "langchain",
+    "langchain_core",
+    "langgraph",
+    "litellm",
+    "llama_index",
+    "mistralai",
+    "openai",
+    "pyagentspec",
+    "sagemaker",
+]
+
 # -- Options for Markdown files ----------------------------------------------
 #
 

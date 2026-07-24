@@ -3,6 +3,7 @@ import React, { useCallback } from "react";
 import {
   TRIAL_STATUS_COLORS,
   CandidateDataPoint,
+  buildEdgePath,
 } from "./optimizationChartUtils";
 import type { InProgressInfo } from "./optimizationChartUtils";
 import type { DotPosition } from "./ScatterDot";
@@ -81,8 +82,10 @@ const useGhostCandidate = ({
     return (
       <g>
         {parentPositions.map((parentPos, i) => {
-          const midX = (parentPos.cx + ghostCx) / 2;
-          const pathD = `M ${parentPos.cx},${parentPos.cy} C ${midX},${parentPos.cy} ${midX},${ghostCy} ${ghostCx},${ghostCy}`;
+          const pathD = buildEdgePath(parentPos, {
+            cx: ghostCx,
+            cy: ghostCy,
+          });
           return (
             <path
               key={i}

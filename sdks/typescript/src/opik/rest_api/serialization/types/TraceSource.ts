@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const TraceSource: core.serialization.Schema<serializers.TraceSource.Raw, OpikApi.TraceSource> =
-    core.serialization.enum_(["sdk", "experiment", "playground", "optimization"]);
+    core.serialization.enum_(["sdk", "experiment", "playground", "optimization", "evaluator"]);
 
 export declare namespace TraceSource {
-    export type Raw = "sdk" | "experiment" | "playground" | "optimization";
+    export type Raw = "sdk" | "experiment" | "playground" | "optimization" | "evaluator";
 }

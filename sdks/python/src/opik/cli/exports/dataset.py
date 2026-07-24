@@ -55,11 +55,25 @@ def export_single_dataset(
             formatted_item = {k: v for k, v in item.items() if k != "id"}
             formatted_items.append(formatted_item)
 
+        # Dataset-level tags are stored on the version, not surfaced by
+        # get_dataset(); fetch them explicitly. Never let a tags lookup abort
+        # the export, but log it so a missing-tags export is diagnosable.
+        try:
+            dataset_tags = dataset.get_tags()
+        except Exception as tag_error:
+            dataset_tags = None
+            console.print(
+                f"[yellow]Warning: Could not fetch tags for dataset "
+                f"'{dataset.name}' ({dataset_id}): {tag_error}. "
+                f"Exporting without tags.[/yellow]"
+            )
+
         # Create dataset data structure
         dataset_data = {
             "id": dataset_id,
             "name": dataset.name,
             "description": dataset.description,
+            "tags": dataset_tags,
             "items": formatted_items,
             "downloaded_at": datetime.now().isoformat(),
         }
@@ -156,7 +170,7 @@ def export_experiment_datasets(
     format: str,
     debug: bool,
     force: bool,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Export datasets related to an experiment.
 
     Args:
@@ -169,10 +183,11 @@ def export_experiment_datasets(
         force: Re-download datasets even if they already exist locally
 
     Returns:
-        Tuple of (exported_count, skipped_count)
+        Tuple of (exported_count, skipped_count, error_count)
     """
     exported_count = 0
     skipped_count = 0
+    error_count = 0
 
     for dataset_name in datasets_to_export:
         try:
@@ -204,10 +219,21 @@ def export_experiment_datasets(
 
             dataset_items = dataset_obj.get_items()
 
+            try:
+                dataset_tags = dataset_obj.get_tags()
+            except Exception as tag_error:
+                dataset_tags = None
+                console.print(
+                    f"[yellow]Warning: Could not fetch tags for dataset "
+                    f"'{dataset_name}' ({dataset_id}): {tag_error}. "
+                    f"Exporting without tags.[/yellow]"
+                )
+
             dataset_data = {
                 "dataset": {
                     "name": dataset_name,
                     "id": dataset_id,
+                    "tags": dataset_tags,
                 },
                 # Use all fields from each item, excluding 'id' (internal field)
                 "items": [
@@ -226,6 +252,7 @@ def export_experiment_datasets(
             console.print(f"[green]Exported dataset: {dataset_name}[/green]")
             exported_count += 1
         except Exception as e:
+            error_count += 1
             if debug:
                 console.print(
                     f"[yellow]Warning: Could not export dataset {dataset_name}: {e}[/yellow]"
@@ -233,7 +260,7 @@ def export_experiment_datasets(
             else:
                 console.print(f"[red]Error exporting dataset {dataset_name}: {e}[/red]")
 
-    return exported_count, skipped_count
+    return exported_count, skipped_count, error_count
 
 
 @click.command(name="dataset")

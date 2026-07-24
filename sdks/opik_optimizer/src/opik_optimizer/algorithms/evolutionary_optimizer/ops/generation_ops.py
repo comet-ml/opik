@@ -18,6 +18,7 @@ except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
 from ....core.state import OptimizationContext
 from ....utils import display as display_utils
 from ....utils import rng as rng_utils
+from ....utils.scoring import improves_over
 from .. import reporting
 from . import crossover_ops, mutation_ops, pareto_ops, population_ops, style_ops
 
@@ -410,7 +411,10 @@ def run_generations(
                     )
                     if current_best_ind is not None:
                         updated_best_primary_score = current_best_ind.fitness.values[0]
-                        if updated_best_primary_score > best_primary_score_overall:
+                        # Tie policy (OPIK-7038): strict improvement only.
+                        if improves_over(
+                            updated_best_primary_score, best_primary_score_overall
+                        ):
                             best_primary_score_overall = updated_best_primary_score
                             best_prompts_overall = optimizer._individual_to_prompts(
                                 current_best_ind

@@ -187,6 +187,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         log.info("Creating dataset items from '{}' traces for dataset '{}'", traceIds.size(), datasetId);
 
+        traceIds.forEach(traceId -> idGenerator.validateIdNotInFuture(traceId, "dataset_item trace"));
+
         // Verify dataset exists
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -239,6 +241,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             ExecutionPolicy executionPolicy) {
 
         log.info("Creating dataset items from '{}' spans for dataset '{}'", spanIds.size(), datasetId);
+
+        spanIds.forEach(spanId -> idGenerator.validateIdNotInFuture(spanId, "dataset_item span"));
 
         // Verify dataset exists
         return Mono.deferContextual(ctx -> {
@@ -382,6 +386,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<Void> patch(@NonNull UUID id, @NonNull DatasetItem item) {
+        validateReferencedTraceAndSpan(item);
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -903,9 +908,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .stream()
                 .map(item -> {
                     IdGenerator.validateVersion(item.id(), "dataset_item");
+                    validateReferencedTraceAndSpan(item);
                     return item;
                 })
                 .toList();
+    }
+
+    // The dataset_item's referenced trace_id / span_id must be a time-ordered UUIDv7 (past allowed:
+    // items are commonly linked to older traces/spans). Reuses the shared referenced-id policy.
+    private void validateReferencedTraceAndSpan(DatasetItem item) {
+        if (item.traceId() != null) {
+            idGenerator.validateIdNotInFuture(item.traceId(), "dataset_item trace");
+        }
+        if (item.spanId() != null) {
+            idGenerator.validateIdNotInFuture(item.spanId(), "dataset_item span");
+        }
     }
 
     private <T> Mono<T> failWithConflict(String message) {

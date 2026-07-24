@@ -13,7 +13,7 @@ This skill is how we add an end-to-end test to the Opik E2E suite. You give it a
 
 The suite is at `tests_end_to_end/e2e/`. Inside it:
 
-- **Specs:** `tests/<feature>/<name>.spec.ts` — one feature directory per page family (`datasets`, `trace-explore`, `experiments`, `test-suites`, `online-evaluation`, …).
+- **Specs:** `tests/<feature>/<name>.spec.ts` — one feature directory per page family (`datasets`, `trace-explore`, `experiments`, `test-suites`, `online-evaluation`, …). Dev-authored release-gate specs are the exception: they live under `tests/_release-gate/` with `@release-gate` tags — see [conventions.md](conventions.md) and `.agents/skills/explore-feature/release-gate-contract.md`.
 - **Page Object Models:** `pom/<name>.page.ts` — one class per page, methods for the interactions a test needs.
 - **Fixtures:** `fixtures/<name>.fixture.ts` — seed entities (project, dataset, trace, experiment, testSuite) and tear them down. Composed in a chain; re-exported from `fixtures/index.ts`.
 - **SDK clients:** `core/sdk/` — `sdkClient.python` (HTTP wrapper over the bridge) and `sdkClient.typescript` (direct `new Opik({...})`) for seeding. `core/backend/` holds the typed REST client for inspection + teardown.

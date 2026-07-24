@@ -22,11 +22,14 @@ from rich.table import Table
 import opik
 
 from .audit import AuditLog, default_audit_path
+from .checkpoint import MigrationCheckpoint, load_or_create
 from .datasets.executor import execute_plan, record_planned
 from .datasets.planner import (
     CascadeExperiments,
     CascadeOptimizations,
     CreateDestination,
+    DiscardStaleTemp,
+    PromoteDestination,
     RenameSource,
     ReplayVersions,
     build_dataset_plan,
@@ -197,6 +200,8 @@ def _finalize_with_skips_or_ok(
     target_label: str,
     target_project: str,
     elapsed_seconds: float,
+    experiments_excluded: bool = False,
+    checkpoint: Optional[MigrationCheckpoint] = None,
 ) -> None:
     """Finalize the audit log, then either fail loud on skips or print the
     happy-path message.
@@ -207,6 +212,17 @@ def _finalize_with_skips_or_ok(
     print a SKIP_SUMMARY line to **stderr** so CI pipelines can grep
     without parsing the JSON, and exit non-zero. Operators rely on the
     audit log to know what made it across.
+
+    ``experiments_excluded`` (OPIK-7161) is orthogonal to the OPIK-6599
+    skip machinery above: it's an intentional opt-out, not a lossy cascade,
+    so it only annotates the happy-path success line. When
+    ``--exclude-experiments`` is set there are no cascade actions and thus
+    no ``skipped`` records, so this path is always the one taken.
+
+    ``checkpoint`` (OPIK-7168) is deleted only on the clean-success path: a
+    fully successful migration has nothing left to resume, so the local
+    checkpoint file is removed. On the skip/loss path it is retained so a
+    later re-run can still resume (the skipped experiments aren't marked done).
     """
     skip_records = [
         action for action in audit.actions if action.get("status") == "skipped"
@@ -214,10 +230,18 @@ def _finalize_with_skips_or_ok(
     if not skip_records:
         audit.finalize("ok")
         audit.write(audit_path)
+        if checkpoint is not None:
+            checkpoint.delete()
         elapsed = _format_elapsed(elapsed_seconds)
+        excluded_note = (
+            " Experiments and optimizations were skipped (--exclude-experiments)."
+            if experiments_excluded
+            else ""
+        )
         console.print(
             f"[green]Migrated '{name}' into project '{target_project}' as "
-            f"'{target_label}'.[/green] Took {elapsed}. Audit log: {audit_path}"
+            f"'{target_label}'.[/green]{excluded_note} Took {elapsed}. "
+            f"Audit log: {audit_path}"
         )
         return
 
@@ -296,6 +320,15 @@ def _finalize_with_skips_or_ok(
     ),
 )
 @click.option(
+    "--exclude-experiments",
+    is_flag=True,
+    help=(
+        "Migrate the dataset and its full version history but skip all "
+        "experiment (and optimization) migration. Opt-out and off by "
+        "default; a plain run migrates experiments as before."
+    ),
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview the migration without applying any changes.",
@@ -312,6 +345,7 @@ def migrate_dataset_command(
     name: str,
     to_project: str,
     from_project: Optional[str],
+    exclude_experiments: bool,
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
@@ -319,10 +353,30 @@ def migrate_dataset_command(
 
     \b
     Steps performed (in order):
-        1. Rename source to "<name>_v1"
-        2. Create the destination dataset under --to-project
-        3. Replay every source version onto the destination (full history)
-        4. Cascade experiments + traces + spans into the destination project
+        1. Create the destination under a temp name ("<name>__migrating")
+        2. Replay every source version onto the destination (full history)
+        3. Cascade experiments + traces + spans into the destination project
+        4. Rename source to "<name>_v1", then promote the destination to
+           "<name>" — the name handoff runs only after the copy succeeds
+
+    The source keeps its original name for the entire copy, so an interrupted
+    run leaves the source untouched and only a discardable "<name>__migrating"
+    dataset behind. Re-running with the original name is therefore safe and
+    idempotent: a stale temp from a prior failed run is discarded and the
+    copy restarts from scratch (OPIK-7162).
+
+    Pass ``--exclude-experiments`` to stop before the cascade (step 3): the
+    dataset and its versions migrate, but experiments and optimizations are
+    skipped entirely (no discovery pass runs).
+
+    If a migration is interrupted (crash, network drop, OOM), re-running the
+    same command from the same machine resumes from the last completed
+    experiment instead of restarting: already-completed experiments are
+    skipped, and an experiment that was interrupted mid-flight has its partial
+    destination data cleaned up before it is re-migrated (so no duplicates are
+    left behind). Progress is checkpointed locally per experiment, keyed by
+    workspace + destination project + dataset name, in a file next to the
+    audit log; it is removed once the migration completes successfully.
 
     Dataset names are workspace-unique on the BE
     (``UNIQUE (workspace_id, name)``); ``--from-project`` is an
@@ -333,20 +387,59 @@ def migrate_dataset_command(
         "name": name,
         "to_project": to_project,
         "from_project": from_project,
+        "exclude_experiments": exclude_experiments,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
     audit_path = audit_log or default_audit_path()
     started_at = time.monotonic()
+    checkpoint: Optional[MigrationCheckpoint] = None
 
     try:
         client = _build_client(ctx)
         _print_workspace_banner(client)
+        if exclude_experiments:
+            console.print(
+                "[yellow]--exclude-experiments set: migrating dataset + "
+                "versions only; experiments and optimizations will be "
+                "skipped.[/yellow]"
+            )
+        # Checkpoint/resume (OPIK-7168) only applies to the experiment cascade,
+        # so it's skipped when experiments are excluded (nothing to resume) and
+        # on dry runs (no side effects to resume). Keyed by workspace +
+        # destination project + dataset name and persisted locally so a re-run
+        # from the same machine resumes. Loaded BEFORE the plan is built so the
+        # planner can emit a cascade-only resume plan when a prior run already
+        # finished the dataset phase.
+        if not exclude_experiments and not dry_run:
+            checkpoint = load_or_create(
+                workspace=getattr(client, "_workspace", None) or "default",
+                project=to_project,
+                dataset=name,
+            )
+            if checkpoint is None:
+                pass  # no resume support (location unresolvable); run uncheckpointed
+            elif checkpoint.dataset_phase_done:
+                console.print(
+                    f"[blue]Resuming migration: dataset + versions already copied; "
+                    f"{checkpoint.completed_count} experiment(s) completed on a "
+                    f"prior run will be skipped, then the name handoff will "
+                    f"finish.[/blue]"
+                )
+            elif checkpoint.completed_count > 0 or checkpoint.in_flight is not None:
+                console.print(
+                    f"[blue]Resuming migration: "
+                    f"{checkpoint.completed_count} experiment(s) already "
+                    f"completed on a prior run will be skipped.[/blue]"
+                )
+
         plan = build_dataset_plan(
             client=client,
             name=name,
             to_project=to_project,
             from_project=from_project,
+            exclude_experiments=exclude_experiments,
+            resume_checkpoint=checkpoint,
         )
 
         _print_plan(plan)
@@ -361,7 +454,7 @@ def migrate_dataset_command(
             return
 
         with _quiet_streamer_rate_limit_logs():
-            execute_plan(client, plan, audit)
+            execute_plan(client, plan, audit, checkpoint=checkpoint)
     except MigrationError as exc:
         _finalize_and_fail(
             audit,
@@ -386,6 +479,8 @@ def migrate_dataset_command(
         target_label=plan.target_name,
         target_project=to_project,
         elapsed_seconds=time.monotonic() - started_at,
+        experiments_excluded=exclude_experiments,
+        checkpoint=checkpoint,
     )
 
 
@@ -523,18 +618,32 @@ def _print_plan(plan: Any) -> None:
 
     Handles both dataset and prompt action records. The two action sets
     share the same field names where they overlap (``from_name`` /
-    ``to_name`` on rename; ``name`` / ``project_name`` on create;
-    ``source_name_after_rename`` / ``dest_name`` on replay) so the table
-    rows are generated uniformly.
+    ``to_name`` on rename/promote; ``name`` / ``project_name`` on create).
+    The replay source-name attribute differs (datasets read the source's
+    original name — ``source_name`` — because OPIK-7162 defers the rename;
+    prompts still rename up-front and expose ``source_name_after_rename``),
+    so it's read with ``getattr`` fallback.
     """
     table = Table(title="Migration plan")
     table.add_column("#", justify="right")
     table.add_column("Action")
     table.add_column("Detail")
     for idx, action in enumerate(plan.actions, start=1):
-        if isinstance(action, (RenameSource, PromptRenameSource)):
+        if isinstance(action, DiscardStaleTemp):
+            table.add_row(
+                str(idx),
+                "discard stale temp",
+                f"delete leftover '{action.temp_name}'",
+            )
+        elif isinstance(action, (RenameSource, PromptRenameSource)):
             table.add_row(
                 str(idx), "rename source", f"{action.from_name} → {action.to_name}"
+            )
+        elif isinstance(action, PromoteDestination):
+            table.add_row(
+                str(idx),
+                "promote destination",
+                f"{action.from_name} → {action.to_name}",
             )
         elif isinstance(action, (CreateDestination, PromptCreateDestination)):
             table.add_row(
@@ -543,10 +652,13 @@ def _print_plan(plan: Any) -> None:
                 f"{action.name} (project: {action.project_name})",
             )
         elif isinstance(action, (ReplayVersions, PromptReplayVersions)):
+            replay_from = getattr(action, "source_name", None) or getattr(
+                action, "source_name_after_rename", None
+            )
             table.add_row(
                 str(idx),
                 "replay versions",
-                f"{action.source_name_after_rename} → {action.dest_name} (full history)",
+                f"{replay_from} → {action.dest_name} (full history)",
             )
         elif isinstance(action, CascadeOptimizations):
             table.add_row(

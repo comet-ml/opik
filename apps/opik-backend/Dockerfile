@@ -13,7 +13,7 @@ COPY src ./src
 ARG OPIK_VERSION
 ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
 RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
-    mvn clean package -DskipTests
+    mvn clean package -DskipTests -Dspotless.skip=true
 
 ###############################
 FROM amazoncorretto:25.0.3-al2023
@@ -32,6 +32,11 @@ COPY install_rds_cert.sh /tmp/install_rds_cert.sh
 # perl is intentionally not installed: it pulls in perl-Archive-Tar, which is
 # affected by CVE-2026-9538 (ALAS2023-2026-1805) and has no patched AL2023 RPM.
 # install_rds_cert.sh uses sed/openssl instead of perl to extract the cert CN.
+# pipefail so the `sha256sum -c` failing inside the piped RUN below aborts the build.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# DL3033: AL2023 core packages track a rolling security channel; pinning exact
+# RPM versions here would rot as AWS updates the base image's repos.
+# hadolint ignore=DL3033
 RUN yum update -y && \
     yum install -y --allowerasing shadow ca-certificates openssl dos2unix curl && \
     yum clean all && \

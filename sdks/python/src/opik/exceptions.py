@@ -16,6 +16,13 @@ class ContextExtractorNotSet(OpikException):
     pass
 
 
+class LocalRecordingAlreadyActive(OpikException):
+    """Raised when record_traces_locally() is entered while a recording is
+    already active on the same connection (nested/overlapping recording)."""
+
+    pass
+
+
 class ConfigurationError(OpikException):
     pass
 

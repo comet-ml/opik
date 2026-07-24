@@ -357,6 +357,54 @@ class RetentionPolicyServiceTest {
     }
 
     @Nested
+    @DisplayName("SpanDAO retention keys off trace_id, not the span id")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanRetentionTraceIdOnly {
+
+        /**
+         * Drives a full retention cycle and asserts a span whose own {@code id} is a much later ISO week than its
+         * {@code trace_id} is still deleted — purely on {@code trace_id}. The span's {@code id} (and thus the future
+         * partition column {@code id_at}) is client-assigned and can lag its {@code trace_id}'s week, which is why the
+         * retention paths carry no {@code toMonday(id_at)} bound. This test would fail if such a bound were
+         * reintroduced, since it would exclude the late-id span from the sweep.
+         */
+        @Test
+        @DisplayName("Retention cycle deletes a span whose id is a later week than its trace_id")
+        void retentionCycleDeletesSpanWithLateIdKeyedOnTraceId() {
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var wsId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+
+            var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D).build();
+            retentionClient.createAndGet(rule, API_KEY, wsName);
+
+            Instant now = Instant.now();
+
+            // Deletable: trace_id 61d old (past the 60d cutoff, inside the sliding window), but the span's own id is
+            // only 5d old — a much later ISO week, the case a toMonday(id_at) upper bound would have excluded.
+            var oldTraceId = idGenerator.generateId(now.minus(61, ChronoUnit.DAYS));
+            var lateSpanId = idGenerator.generateId(now.minus(5, ChronoUnit.DAYS));
+            createTestTrace(oldTraceId, API_KEY, wsName);
+            createTestSpan(lateSpanId, oldTraceId, API_KEY, wsName);
+
+            // Survivor: trace_id after the cutoff (3d old) must be kept.
+            var recentTraceId = idGenerator.generateId(now.minus(3, ChronoUnit.DAYS));
+            var recentSpanId = idGenerator.generateId(now.minus(3, ChronoUnit.DAYS));
+            createTestTrace(recentTraceId, API_KEY, wsName);
+            createTestSpan(recentSpanId, recentTraceId, API_KEY, wsName);
+
+            waitForRows("spans", wsId, 2);
+
+            // Derive the fraction this random workspace falls into (48 = retention.executionsPerDay), as WeekBoundary.
+            var fraction = Math.min((int) (Long.parseLong(wsId.substring(0, 8), 16) / ((0xFFFFFFFFL + 1) / 48)), 47);
+            retentionPolicyService.executeRetentionCycle(fraction, now).block();
+
+            assertThat(countRowsById("spans", lateSpanId)).isZero();
+            assertThat(countRowsById("spans", recentSpanId)).isEqualTo(1);
+        }
+    }
+
+    @Nested
     @DisplayName("Rule priority resolution")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class RulePriorityResolution {

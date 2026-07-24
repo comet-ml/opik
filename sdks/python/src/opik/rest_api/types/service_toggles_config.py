@@ -38,6 +38,9 @@ class ServiceTogglesConfig(UniversalBaseModel):
     project_homepage_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="projectHomepageEnabled")]
     agentic_tools_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="agenticToolsEnabled")]
     agent_insights_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="agentInsightsEnabled")]
+    online_scoring_tracing_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="onlineScoringTracingEnabled")
+    ]
     v2workspace_allowlist_ids: typing_extensions.Annotated[
         typing.List[str], FieldMetadata(alias="v2WorkspaceAllowlistIds")
     ]

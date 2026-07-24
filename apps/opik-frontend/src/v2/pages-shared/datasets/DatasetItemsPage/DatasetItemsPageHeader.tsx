@@ -68,9 +68,6 @@ const DatasetItemsPageHeader: React.FunctionComponent<
 }) => {
   const datasetTags = dataset?.tags ?? [];
   const showTags = canEditDatasets || datasetTags.length > 0;
-  const tagListProps = canEditDatasets
-    ? { tags: datasetTags }
-    : { tags: [] as string[], immutableTags: datasetTags };
 
   const latestVersion = dataset?.latest_version;
 
@@ -231,10 +228,10 @@ const DatasetItemsPageHeader: React.FunctionComponent<
       </div>
       {showTags && (
         <TagListRenderer
-          {...tagListProps}
+          tags={datasetTags}
           onAddTag={onAddTag}
           onDeleteTag={onDeleteTag}
-          canAdd={canEditDatasets}
+          readOnly={!canEditDatasets}
           align="start"
           className="[&>:first-child]:-mr-1"
           tagVariant="green"

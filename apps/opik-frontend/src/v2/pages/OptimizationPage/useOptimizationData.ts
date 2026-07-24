@@ -1,5 +1,6 @@
 import { useOptimizationExperiments } from "./useOptimizationExperiments";
 import { useOptimizationTableState } from "./useOptimizationTableState";
+import { useTrialSidebarState } from "./TrialSidebar/useTrialSidebarState";
 
 export {
   MAX_EXPERIMENTS_LOADED,
@@ -10,20 +11,21 @@ export {
 export const useOptimizationData = () => {
   const experimentsData = useOptimizationExperiments();
 
-  const { workspaceName, optimizationId, optimization, candidates } =
-    experimentsData;
+  const { optimization, optimizationId, candidates } = experimentsData;
 
   const title = optimization?.name || optimizationId;
 
+  const trialSidebar = useTrialSidebarState();
+
   const tableState = useOptimizationTableState({
     candidates,
-    workspaceName,
-    optimizationId,
+    onRowClick: trialSidebar.openTrial,
   });
 
   return {
     ...experimentsData,
     ...tableState,
+    trialSidebar,
     title,
   };
 };

@@ -10,6 +10,7 @@ import {
   LevenshteinMetricParameters,
   NumericalSimilarityMetricParameters,
   CodeMetricParameters,
+  MetricParamErrors,
 } from "@/types/optimizations";
 import {
   DropdownMenu,
@@ -34,6 +35,9 @@ interface MetricConfigsProps {
   disabled?: boolean;
   inline?: boolean;
   datasetVariables?: string[];
+  // Per-field validation errors keyed by param name (e.g. task_introduction,
+  // reference_key). Rendered under the relevant input by each metric form.
+  errors?: MetricParamErrors;
 }
 
 const MetricConfigs = ({
@@ -44,6 +48,7 @@ const MetricConfigs = ({
   disabled: disabledProp = false,
   inline = false,
   datasetVariables = [],
+  errors,
 }: MetricConfigsProps) => {
   const getMetricForm = () => {
     if (metricType === METRIC_TYPE.EQUALS) {
@@ -52,6 +57,7 @@ const MetricConfigs = ({
           configs={configs as Partial<EqualsMetricParameters>}
           onChange={onChange}
           datasetVariables={datasetVariables}
+          errors={errors}
         />
       );
     }
@@ -62,6 +68,7 @@ const MetricConfigs = ({
           configs={configs as Partial<JsonSchemaValidatorMetricParameters>}
           onChange={onChange}
           datasetVariables={datasetVariables}
+          errors={errors}
         />
       );
     }
@@ -72,6 +79,7 @@ const MetricConfigs = ({
           configs={configs as Partial<GEvalMetricParameters>}
           onChange={onChange}
           datasetVariables={datasetVariables}
+          errors={errors}
         />
       );
     }
@@ -82,6 +90,7 @@ const MetricConfigs = ({
           configs={configs as Partial<LevenshteinMetricParameters>}
           onChange={onChange}
           datasetVariables={datasetVariables}
+          errors={errors}
         />
       );
     }
@@ -92,6 +101,7 @@ const MetricConfigs = ({
           configs={configs as Partial<NumericalSimilarityMetricParameters>}
           onChange={onChange}
           datasetVariables={datasetVariables}
+          errors={errors}
         />
       );
     }
@@ -101,6 +111,8 @@ const MetricConfigs = ({
         <CodeMetricConfigs
           configs={configs as Partial<CodeMetricParameters>}
           onChange={onChange}
+          datasetVariables={datasetVariables}
+          error={errors?.code?.message}
         />
       );
     }

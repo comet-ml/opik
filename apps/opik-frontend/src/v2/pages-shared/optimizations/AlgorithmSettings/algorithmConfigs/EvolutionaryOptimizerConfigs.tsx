@@ -1,6 +1,6 @@
 import React from "react";
 import { Label } from "@/ui/label";
-import { Checkbox } from "@/ui/checkbox";
+import { Switch } from "@/ui/switch";
 import { Input } from "@/ui/input";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { EvolutionaryOptimizerParameters } from "@/types/optimizations";
@@ -17,8 +17,10 @@ const EvolutionaryOptimizerConfigs = ({
   configs,
   onChange,
 }: EvolutionaryOptimizerConfigsProps) => {
+  // Fragment (no wrapper): fields render as direct siblings of the popover's
+  // column so every field shares one consistent gap.
   return (
-    <div className="flex w-72 flex-col gap-6">
+    <>
       <SliderInputControl
         value={
           configs.population_size ??
@@ -109,18 +111,8 @@ const EvolutionaryOptimizerConfigs = ({
         tooltip="Number of best solutions preserved unchanged in each generation"
       />
 
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="adaptive_mutation"
-            checked={
-              configs.adaptive_mutation ??
-              DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ADAPTIVE_MUTATION
-            }
-            onCheckedChange={(checked) =>
-              onChange({ ...configs, adaptive_mutation: checked === true })
-            }
-          />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
           <Label htmlFor="adaptive_mutation" className="cursor-pointer text-sm">
             Adaptive mutation
           </Label>
@@ -128,20 +120,21 @@ const EvolutionaryOptimizerConfigs = ({
             {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_adaptive_mutation]}
           />
         </div>
+        <Switch
+          id="adaptive_mutation"
+          size="sm"
+          checked={
+            configs.adaptive_mutation ??
+            DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ADAPTIVE_MUTATION
+          }
+          onCheckedChange={(checked) =>
+            onChange({ ...configs, adaptive_mutation: checked })
+          }
+        />
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="enable_moo"
-            checked={
-              configs.enable_moo ??
-              DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ENABLE_MOO
-            }
-            onCheckedChange={(checked) =>
-              onChange({ ...configs, enable_moo: checked === true })
-            }
-          />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
           <Label htmlFor="enable_moo" className="cursor-pointer text-sm">
             Enable multi-objective optimization
           </Label>
@@ -149,20 +142,21 @@ const EvolutionaryOptimizerConfigs = ({
             {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_enable_moo]}
           />
         </div>
+        <Switch
+          id="enable_moo"
+          size="sm"
+          checked={
+            configs.enable_moo ??
+            DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ENABLE_MOO
+          }
+          onCheckedChange={(checked) =>
+            onChange({ ...configs, enable_moo: checked })
+          }
+        />
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="enable_llm_crossover"
-            checked={
-              configs.enable_llm_crossover ??
-              DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ENABLE_LLM_CROSSOVER
-            }
-            onCheckedChange={(checked) =>
-              onChange({ ...configs, enable_llm_crossover: checked === true })
-            }
-          />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
           <Label
             htmlFor="enable_llm_crossover"
             className="cursor-pointer text-sm"
@@ -173,6 +167,17 @@ const EvolutionaryOptimizerConfigs = ({
             {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_enable_llm_crossover]}
           />
         </div>
+        <Switch
+          id="enable_llm_crossover"
+          size="sm"
+          checked={
+            configs.enable_llm_crossover ??
+            DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ENABLE_LLM_CROSSOVER
+          }
+          onCheckedChange={(checked) =>
+            onChange({ ...configs, enable_llm_crossover: checked })
+          }
+        />
       </div>
 
       <div className="space-y-2">
@@ -198,18 +203,8 @@ const EvolutionaryOptimizerConfigs = ({
         />
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="infer_output_style"
-            checked={
-              configs.infer_output_style ??
-              DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.INFER_OUTPUT_STYLE
-            }
-            onCheckedChange={(checked) =>
-              onChange({ ...configs, infer_output_style: checked === true })
-            }
-          />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
           <Label
             htmlFor="infer_output_style"
             className="cursor-pointer text-sm"
@@ -220,6 +215,17 @@ const EvolutionaryOptimizerConfigs = ({
             {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_infer_output_style]}
           />
         </div>
+        <Switch
+          id="infer_output_style"
+          size="sm"
+          checked={
+            configs.infer_output_style ??
+            DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.INFER_OUTPUT_STYLE
+          }
+          onCheckedChange={(checked) =>
+            onChange({ ...configs, infer_output_style: checked })
+          }
+        />
       </div>
 
       <SliderInputControl
@@ -236,22 +242,23 @@ const EvolutionaryOptimizerConfigs = ({
         tooltip="Parallel threads for faster optimization"
       />
 
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="verbose"
-            checked={
-              configs.verbose ?? DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.VERBOSE
-            }
-            onCheckedChange={(checked) =>
-              onChange({ ...configs, verbose: checked === true })
-            }
-          />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
           <Label htmlFor="verbose" className="cursor-pointer text-sm">
             Verbose
           </Label>
           <ExplainerIcon {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_verbose]} />
         </div>
+        <Switch
+          id="verbose"
+          size="sm"
+          checked={
+            configs.verbose ?? DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.VERBOSE
+          }
+          onCheckedChange={(checked) =>
+            onChange({ ...configs, verbose: checked })
+          }
+        />
       </div>
 
       <SliderInputControl
@@ -265,7 +272,7 @@ const EvolutionaryOptimizerConfigs = ({
         label="Seed"
         tooltip="Random seed for reproducibility. Use the same seed to get consistent results across runs."
       />
-    </div>
+    </>
   );
 };
 

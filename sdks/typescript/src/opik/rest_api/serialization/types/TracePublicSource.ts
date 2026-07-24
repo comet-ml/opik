@@ -7,8 +7,8 @@ import type * as serializers from "../index.js";
 export const TracePublicSource: core.serialization.Schema<
     serializers.TracePublicSource.Raw,
     OpikApi.TracePublicSource
-> = core.serialization.enum_(["sdk", "experiment", "playground", "optimization"]);
+> = core.serialization.enum_(["sdk", "experiment", "playground", "optimization", "evaluator"]);
 
 export declare namespace TracePublicSource {
-    export type Raw = "sdk" | "experiment" | "playground" | "optimization";
+    export type Raw = "sdk" | "experiment" | "playground" | "optimization" | "evaluator";
 }

@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LogItem.LogLevel;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
@@ -15,6 +16,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudg
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -86,6 +88,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1062,28 +1065,6 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @DisplayName("estimateThreadContextTokens reflects spans size, so big enriched threads route to agentic-tools")
-    void estimateThreadContextTokensFactorsInSpansSize() {
-        var traceId = generator.generate();
-        var projectId = generator.generate();
-        var trace = createTrace(traceId, projectId);
-        var bigSpan = Span.builder()
-                .id(generator.generate()).name("huge-tool-call").type(SpanType.tool)
-                .startTime(java.time.Instant.now()).traceId(traceId).projectId(projectId)
-                .input(JsonUtils.readTree("{\"payload\":\"" + "x".repeat(2000) + "\"}"))
-                .build();
-
-        int estimateNoSpans = OnlineScoringEngine.estimateThreadContextTokens(
-                List.of(trace), List.of(), 4);
-        int estimateWithSpans = OnlineScoringEngine.estimateThreadContextTokens(
-                List.of(trace), List.of(bigSpan), 4);
-
-        // Adding ~2KB of span payload must move the estimate up — otherwise the agentic-tools
-        // routing gate would underestimate and inline-render an oversized prompt.
-        assertThat(estimateWithSpans).isGreaterThan(estimateNoSpans);
-    }
-
-    @Test
     @DisplayName("prepare LLM request with tool-calling strategy")
     void testPrepareLlmRequestWithToolCallingStrategy() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
@@ -1203,6 +1184,58 @@ class OnlineScoringEngineTest {
                 Map.of("spans", "input.spans"), mustache)).isFalse();
         // No {{spans}} in template, no sentinel in variables — false.
         assertThat(OnlineScoringEngine.templateReferencesSpans(noSpansMessage, Map.of(), mustache)).isFalse();
+    }
+
+    @Test
+    @DisplayName("templateReferencesTrace detects the 'trace' sentinel and implicit {{trace}} references")
+    void templateReferencesTraceDetectsSentinelAndImplicitReference() {
+        var mustache = PromptType.MUSTACHE;
+        var noMessages = List.<LlmAsJudgeMessage>of();
+        var traceMessage = List.of(LlmAsJudgeMessage.builder()
+                .role(ChatMessageType.USER)
+                .content("Trace: {{trace}}")
+                .build());
+
+        // Sentinel-valued variable (bare "trace") anywhere in the map.
+        assertThat(OnlineScoringEngine.templateReferencesTraceStructure(noMessages, Map.of("t", "trace"), mustache))
+                .isTrue();
+        // Implicit reference: prompt has {{trace}}, variables map doesn't bind "trace".
+        assertThat(OnlineScoringEngine.templateReferencesTraceStructure(traceMessage, Map.of(), mustache)).isTrue();
+        // Explicit override to a JSONPath wins — don't treat it as the sentinel.
+        assertThat(OnlineScoringEngine.templateReferencesTraceStructure(traceMessage,
+                Map.of("trace", "input.trace"), mustache)).isFalse();
+        // Case-sensitive, and "input.trace" is not the bare sentinel.
+        assertThat(OnlineScoringEngine.templateReferencesTraceStructure(noMessages, Map.of("x", "Trace"), mustache))
+                .isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesTraceStructure(noMessages,
+                Map.of("x", "input.trace"), mustache)).isFalse();
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest substitutes a {{trace}}-referencing variable with the supplied structure JSON")
+    void prepareLlmRequestInjectsTraceStructure() {
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        LlmAsJudgeMessage.builder()
+                                .role(ChatMessageType.USER)
+                                .content("Inspect: {{trace}}")
+                                .build()))
+                .variables(new LinkedHashMap<>(Map.of("trace", "trace")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var traceId = "trace-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var structure = "{\"trace_id\":\"%s\",\"span_tree\":[]}".formatted(traceId);
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                PromptType.MUSTACHE, List.of(), structure);
+
+        var allText = request.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
+        assertThat(allText).contains(traceId);
+        // Sentinel literal must not leak into the rendered prompt.
+        assertThat(allText).doesNotContain("{{trace}}");
     }
 
     @Test
@@ -2293,6 +2326,108 @@ class OnlineScoringEngineTest {
         assertThat(userMessage.singleText()).contains("Summary: " + SUMMARY_STR);
         assertThat(userMessage.singleText()).contains("Instruction: " + OUTPUT_STR);
         assertThat(userMessage.singleText()).contains("Literal: some literal value");
+    }
+
+    @Test
+    @DisplayName("templateReferencesSpanStructure detects the 'span' sentinel and implicit {{span}} references")
+    void templateReferencesSpanStructureDetectsSentinelAndImplicitReference() {
+        var mustache = PromptType.MUSTACHE;
+        var noMessages = List.<LlmAsJudgeMessage>of();
+        var spanMessage = List.of(LlmAsJudgeMessage.builder()
+                .role(ChatMessageType.USER)
+                .content("Span: {{span}}")
+                .build());
+
+        // Sentinel-valued variable (bare "span") anywhere in the map.
+        assertThat(OnlineScoringEngine.templateReferencesSpanStructure(noMessages, Map.of("s", "span"), mustache))
+                .isTrue();
+        // Implicit reference: prompt has {{span}}, variables map doesn't bind "span".
+        assertThat(OnlineScoringEngine.templateReferencesSpanStructure(spanMessage, Map.of(), mustache)).isTrue();
+        // Explicit override to a JSONPath wins — don't treat it as the sentinel.
+        assertThat(OnlineScoringEngine.templateReferencesSpanStructure(spanMessage,
+                Map.of("span", "input.span"), mustache)).isFalse();
+        // Case-sensitive, and "input.span" / the plural "spans" are not the bare "span" sentinel.
+        assertThat(OnlineScoringEngine.templateReferencesSpanStructure(noMessages, Map.of("x", "Span"), mustache))
+                .isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesSpanStructure(noMessages, Map.of("x", "spans"), mustache))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("prepareSpanLlmRequest (tool-mode) substitutes a {{span}}-referencing variable with the structure JSON")
+    void prepareSpanLlmRequestInjectsSpanStructure() {
+        var evaluatorCode = AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
+                .model(LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        LlmAsJudgeMessage.builder()
+                                .role(ChatMessageType.USER)
+                                .content("Inspect: {{span}}")
+                                .build()))
+                .variables(new LinkedHashMap<>(Map.of("span", "span")))
+                .schema(List.of())
+                .build();
+        var span = createSpan(generator.generate(), generator.generate());
+        var spanRef = "span-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var structure = "{\"span_id\":\"%s\",\"attachments\":[]}".formatted(spanRef);
+
+        var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span, new InstructionStrategy(),
+                4_000, "drill hint", structure);
+
+        var allText = request.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
+        assertThat(allText).contains(spanRef);
+        // Sentinel literal must not leak into the rendered prompt.
+        assertThat(allText).doesNotContain("{{span}}");
+    }
+
+    @Test
+    @DisplayName("prepareSpanLlmRequest (inline) injects the {{span}} structure without capping")
+    void prepareSpanLlmRequestInlineInjectsSpanStructure() {
+        var evaluatorCode = AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
+                .model(LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        LlmAsJudgeMessage.builder()
+                                .role(ChatMessageType.USER)
+                                .content("Inspect: {{span}}")
+                                .build()))
+                .variables(new LinkedHashMap<>(Map.of("span", "span")))
+                .schema(List.of())
+                .build();
+        var span = createSpan(generator.generate(), generator.generate());
+        var spanRef = "span-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var structure = "{\"span_id\":\"%s\",\"attachments\":[]}".formatted(spanRef);
+
+        var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span,
+                new InstructionStrategy(), structure);
+
+        var allText = request.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
+        assertThat(allText).contains(spanRef);
+        assertThat(allText).doesNotContain("{{span}}");
+    }
+
+    @Test
+    @DisplayName("prepareSpanLlmRequest renders {{span}} as {} when no structure is supplied, not the literal sentinel")
+    void prepareSpanLlmRequestRendersEmptyStructureWhenNull() {
+        var evaluatorCode = AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
+                .model(LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        LlmAsJudgeMessage.builder()
+                                .role(ChatMessageType.USER)
+                                .content("Inspect: {{span}}")
+                                .build()))
+                .variables(new LinkedHashMap<>(Map.of("span", "span")))
+                .schema(List.of())
+                .build();
+        var span = createSpan(generator.generate(), generator.generate());
+
+        var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span,
+                new InstructionStrategy(), null);
+
+        var allText = request.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
+        assertThat(allText).contains("Inspect: {}");
+        assertThat(allText).doesNotContain("{{span}}");
     }
 
     private Span createSpan(UUID spanId, UUID projectId) {

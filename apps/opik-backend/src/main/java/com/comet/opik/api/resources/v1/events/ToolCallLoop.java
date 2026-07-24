@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.resources.v1.events.tools.MediaMessageBuilder;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -79,6 +80,19 @@ final class ToolCallLoop {
             + " the original instructions. Do not call any more tools. Do not include any"
             + " prose, commentary, or markdown fences — emit only the raw JSON object.";
 
+    /**
+     * Budget-triggered wrap-up. Unlike {@link #WRAP_UP_USER_MESSAGE}, this does not claim the
+     * investigation is complete — the spend budget cut it short. It tells the model to stop now and
+     * give a best-effort verdict from the partial data gathered so far, so the emitted JSON reflects
+     * an acknowledged-incomplete assessment rather than a falsely-confident "finished" one.
+     */
+    private static final String BUDGET_WRAP_UP_USER_MESSAGE = "The evaluation spend budget for this"
+            + " judgment has been reached, so you must stop investigating now even though your"
+            + " analysis may be incomplete. Do not call any more tools. Based only on the"
+            + " information you have already gathered, give your best-effort assessment and respond"
+            + " with ONLY the JSON object specified in the original instructions. Do not include any"
+            + " prose, commentary, or markdown fences — emit only the raw JSON object.";
+
     private ToolCallLoop() {
     }
 
@@ -123,10 +137,12 @@ final class ToolCallLoop {
             @NonNull ArrayList<ChatMessage> messages,
             @NonNull TraceToolContext ctx,
             @NonNull Budget budget,
+            @NonNull BudgetGuard costGuard,
             @NonNull String logIdValue,
-            @NonNull Map<String, String> mdc) {
+            @NonNull Map<String, String> mdc,
+            @NonNull EvaluationRecorder recorder) {
         return toolCallLoop(0, initialResponse, toolRequest, followUpParameters, toolRegistry,
-                scoreTrace, messages, ctx, budget, logIdValue, mdc);
+                scoreTrace, messages, ctx, budget, costGuard, logIdValue, mdc, recorder);
     }
 
     /**
@@ -149,12 +165,23 @@ final class ToolCallLoop {
             @NonNull ArrayList<ChatMessage> messages,
             @NonNull TraceToolContext ctx,
             @NonNull Budget budget,
+            @NonNull BudgetGuard costGuard,
             @NonNull String logIdValue,
-            @NonNull Map<String, String> mdc) {
+            @NonNull Map<String, String> mdc,
+            @NonNull EvaluationRecorder recorder) {
         return run(initialResponse, toolRequest, followUpParameters, toolRegistry, scoreTrace,
-                messages, ctx, budget, logIdValue, mdc)
+                messages, ctx, budget, costGuard, logIdValue, mdc, recorder)
                 .flatMap(loopFinalResponse -> {
-                    messages.add(UserMessage.from(WRAP_UP_USER_MESSAGE));
+                    // Budget-triggered wrap-up gets a distinct instruction: the run was cut short, so
+                    // ask for a best-effort verdict from partial data rather than telling the model it
+                    // "completed" its investigation. Keyed on wasBudgetEnforced() (the gate actually
+                    // abandoned pending tool calls), NOT shouldWrapUp() (mere spend >= limit): a model
+                    // that stopped naturally on the turn its cost tipped over the limit still "completed"
+                    // its investigation and must get the standard instruction.
+                    var wrapUpMessage = costGuard.wasBudgetEnforced()
+                            ? BUDGET_WRAP_UP_USER_MESSAGE
+                            : WRAP_UP_USER_MESSAGE;
+                    messages.add(UserMessage.from(wrapUpMessage));
                     var finalRequest = structuredRequest.toBuilder()
                             .messages(new ArrayList<>(messages))
                             .build();
@@ -165,21 +192,43 @@ final class ToolCallLoop {
     private static Mono<ChatResponse> toolCallLoop(int round, ChatResponse currentResponse,
             ChatRequest toolRequest, ChatRequestParameters followUpParameters,
             ToolRegistry toolRegistry, Function<ChatRequest, Mono<ChatResponse>> scoreTrace,
-            ArrayList<ChatMessage> messages, TraceToolContext ctx, Budget budget,
-            String logIdValue, Map<String, String> mdc) {
-        if (round >= MAX_TOOL_CALL_ROUNDS) {
-            // Don't append: the cap-round response may carry unfulfilled tool_executions_requests
-            // (we're abandoning them by hitting the cap). An AiMessage with tool_calls but no
-            // matching ToolExecutionResultMessage produces a malformed sequence that OpenAI /
-            // Anthropic reject. runWithWrapUp will bridge via the forcing user message.
+            ArrayList<ChatMessage> messages, TraceToolContext ctx, Budget budget, BudgetGuard costGuard,
+            String logIdValue, Map<String, String> mdc, EvaluationRecorder recorder) {
+        // Model stopped on its own (no tool requests) — append its terminal AiMessage and finish,
+        // regardless of round count or spend budget. There are no pending tool calls to leave
+        // unfulfilled here, so appending is always safe; the downstream wrap-up (runWithWrapUp) then
+        // re-issues the structured request WITH the assistant's last turn in the conversation
+        // history. Checked before the round/budget gate below so a response that both finishes
+        // naturally AND tips over the budget still keeps its final reasoning turn (otherwise the
+        // wrap-up "emit only JSON" message would be appended in a vacuum).
+        if (!currentResponse.aiMessage().hasToolExecutionRequests()) {
+            messages.add(currentResponse.aiMessage());
             return Mono.just(currentResponse);
         }
-        if (!currentResponse.aiMessage().hasToolExecutionRequests()) {
-            // Model stopped on its own — append its terminal AiMessage so the downstream wrap-up
-            // (runWithWrapUp) re-issues the structured request with the assistant's last turn in
-            // the conversation history. Without this, the wrap-up "emit only JSON" user message
-            // is appended in a vacuum where the model's final reasoning is missing.
-            messages.add(currentResponse.aiMessage());
+        // Between agent turns: stop starting new turns at the round cap or once the spend budget is
+        // reached, and let runWithWrapUp do its final tools-stripped call (the intended, bounded
+        // overshoot). Don't append: the response here carries unfulfilled tool_execution_requests
+        // (we're abandoning them). An AiMessage with tool_calls but no matching
+        // ToolExecutionResultMessage produces a malformed sequence that OpenAI / Anthropic reject.
+        // runWithWrapUp will bridge via the forcing user message.
+        if (round >= MAX_TOOL_CALL_ROUNDS || costGuard.shouldWrapUp()) {
+            if (costGuard.shouldWrapUp() && round < MAX_TOOL_CALL_ROUNDS) {
+                // The spend budget (not the round cap) is cutting this agentic run short, here at the
+                // authoritative point the gate abandons pending tool calls. This drives all three
+                // budget signals off one event: markBudgetEnforced() is the source the wrap-up
+                // instruction and the scorer's user-facing warn key off, and flagBudgetExceeded() tags
+                // the monitoring trace even if the wrap-up/scoring chain errors afterwards. A natural
+                // stop that merely crossed spend reaches the no-tool branch above (never here), so it is
+                // not mislabelled by any of the three. Idempotent — the gate trips once.
+                try (var logContext = wrapWithMdc(mdc)) {
+                    // debug (the user-facing warn in the scorer is the primary signal); wrapped in MDC so
+                    // it carries the same workspace_id / rule_id tags as the other tool-loop log lines.
+                    log.debug("Evaluation spend budget reached for '{}' (spent '{}' of '{}' USD); wrapping up",
+                            logIdValue, costGuard.spentUsd(), costGuard.limitUsd());
+                }
+                costGuard.markBudgetEnforced();
+                recorder.flagBudgetExceeded();
+            }
             return Mono.just(currentResponse);
         }
 
@@ -194,7 +243,7 @@ final class ToolCallLoop {
             Flux<ToolExecutionResultMessage> roundResults = Flux
                     .fromIterable(currentResponse.aiMessage().toolExecutionRequests())
                     .concatMap(toolExecRequest -> executeToolOrBudgetExhausted(round, toolExecRequest,
-                            toolRegistry, ctx, budget, logIdValue, mdc));
+                            toolRegistry, ctx, budget, logIdValue, mdc, recorder));
 
             return roundResults
                     .doOnNext(messages::add)
@@ -221,13 +270,13 @@ final class ToolCallLoop {
                     }))
                     .flatMap(nextResponse -> toolCallLoop(round + 1, nextResponse, toolRequest,
                             followUpParameters, toolRegistry, scoreTrace, messages, ctx, budget,
-                            logIdValue, mdc));
+                            costGuard, logIdValue, mdc, recorder));
         });
     }
 
     private static Mono<ToolExecutionResultMessage> executeToolOrBudgetExhausted(int round,
             ToolExecutionRequest toolExecRequest, ToolRegistry toolRegistry, TraceToolContext ctx,
-            Budget budget, String logIdValue, Map<String, String> mdc) {
+            Budget budget, String logIdValue, Map<String, String> mdc, EvaluationRecorder recorder) {
         // Re-apply MDC so the slf4j tags (workspace_id, trace/thread id, rule_id) follow the
         // tool-loop log lines — the reactive chain may have hopped threads since the scorer's
         // sync prep step set MDC. The toolRegistry.execute() call lives INSIDE this scope so
@@ -247,7 +296,11 @@ final class ToolCallLoop {
                 return Mono.just(ToolExecutionResultMessage.from(toolExecRequest,
                         BUDGET_EXHAUSTED_MESSAGE.formatted(CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS)));
             }
-            return toolRegistry.execute(toolExecRequest.name(), toolExecRequest.arguments(), ctx)
+            // Record the execution as a monitoring tool span (OPIK-6994); NOOP when tracing is off.
+            // Wraps execution so the span captures arguments/result/timing without altering the
+            // budget accounting below.
+            return recorder.recordToolCall(toolExecRequest.name(), toolExecRequest.arguments(),
+                    toolRegistry.execute(toolExecRequest.name(), toolExecRequest.arguments(), ctx))
                     .map(result -> {
                         budget.cumulative += result.length();
                         return ToolExecutionResultMessage.from(toolExecRequest, result);

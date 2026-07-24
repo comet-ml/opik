@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.domain.AgentInsightsJobService;
 import com.comet.opik.domain.AgentInsightsMetrics;
 import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsReportMessage;
@@ -29,17 +30,20 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
     private final AgentInsightsReportConfig config;
     private final ServiceTogglesConfig serviceToggles;
     private final AgentInsightsReportClient reportClient;
+    private final AgentInsightsJobService jobService;
 
     @Inject
     public AgentInsightsReportSubscriber(
             @NonNull @Config("agentInsightsReport") AgentInsightsReportConfig config,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull RedissonReactiveClient redisson,
-            @NonNull AgentInsightsReportClient reportClient) {
+            @NonNull AgentInsightsReportClient reportClient,
+            @NonNull AgentInsightsJobService jobService) {
         super(config, redisson, AgentInsightsReportConfig.PAYLOAD_FIELD, METRICS_NAMESPACE, METRICS_BASE_NAME);
         this.config = config;
         this.serviceToggles = serviceToggles;
         this.reportClient = reportClient;
+        this.jobService = jobService;
     }
 
     @Override
@@ -67,8 +71,13 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         log.info("Processing Agent Insights report trigger: reportId='{}', project='{}', workspace='{}'",
                 message.reportId(), message.projectId(), message.workspaceId());
 
+        // Default a null (legacy message queued before triggerSource existed) to the scheduled sweep.
+        String triggerSource = message.triggerSource() != null
+                ? message.triggerSource()
+                : AgentInsightsMetrics.SCHEDULED;
+
         return Mono.fromRunnable(() -> reportClient.triggerAgentInsights(message.reportId(), message.projectId(),
-                message.workspaceId(), message.periodStart(), message.periodEnd()))
+                message.workspaceId(), message.periodStart(), message.periodEnd(), triggerSource))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then()
                 .doOnSuccess(unused -> {
@@ -88,8 +97,20 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                     // reportId is carried on the message as the idempotency key if downstream dedup is added.
                     log.error("Failed to trigger Agent Insights report, dropping reportId='{}', project='{}'",
                             message.reportId(), message.projectId(), throwable);
+                    // Ollie never ran, so it can't report this itself: record "did not start" so the UI stops.
+                    markDidNotStart(message, throwable);
                     return Mono.empty();
                 });
+    }
+
+    private void markDidNotStart(AgentInsightsReportMessage message, Throwable throwable) {
+        try {
+            jobService.markRunFailed(message.workspaceId(), message.projectId(), "did_not_start",
+                    throwable.getMessage());
+        } catch (Exception e) {
+            log.warn("Failed to record run failure for reportId='{}', project='{}'",
+                    message.reportId(), message.projectId(), e);
+        }
     }
 
     private boolean isDisabled() {

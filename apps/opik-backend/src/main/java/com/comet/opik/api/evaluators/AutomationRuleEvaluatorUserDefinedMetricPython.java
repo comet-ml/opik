@@ -42,18 +42,20 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
     }
 
     @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",
-            "enabled", "filters", "code",
+            "enabled", "triggerScope", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorUserDefinedMetricPython(UUID id, UUID projectId, String projectName,
             SortedSet<ProjectReference> projects,
             Set<UUID> projectIds,
-            @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
+            @NotBlank String name, float samplingRate, boolean enabled, EvalTriggerScope triggerScope,
+            List<TraceFilter> filters,
             @NotNull UserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, projects, projectIds, name, samplingRate, enabled, filters, code,
+        super(id, projectId, projectName, projects, projectIds, name, samplingRate, enabled, triggerScope, filters,
+                code,
                 createdAt, createdBy,
                 lastUpdatedAt, lastUpdatedBy);
     }

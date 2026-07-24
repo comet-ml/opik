@@ -70,6 +70,15 @@ describe("supportsSamplingParams", () => {
       false,
     );
   });
+
+  it("returns false for Claude Sonnet 5 and Fable 5", () => {
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5)).toBe(
+      false,
+    );
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5)).toBe(
+      false,
+    );
+  });
 });
 
 describe("updateProviderConfig — Anthropic", () => {

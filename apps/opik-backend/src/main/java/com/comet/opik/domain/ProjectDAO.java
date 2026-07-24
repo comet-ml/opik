@@ -54,6 +54,9 @@ interface ProjectDAO {
     @SqlQuery("SELECT * FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId ORDER BY id")
     List<Project> findByIds(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
+    @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId")
+    Set<UUID> findIdsByWorkspaceId(@Bind("workspaceId") String workspaceId);
+
     @SqlQuery("SELECT COUNT(*) FROM projects " +
             " WHERE workspace_id = :workspaceId " +
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +

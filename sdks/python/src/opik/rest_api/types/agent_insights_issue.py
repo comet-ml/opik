@@ -23,6 +23,11 @@ class AgentInsightsIssue(UniversalBaseModel):
     SUM(count) over the requested window
     """
 
+    latest_count: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Occurrences on the latest report day in the window only. The issue's description/cause narrate that most recent run, so this is the count consistent with them; totalOccurrences instead sums every day in the window.
+    """
+
     total: typing.Optional[int] = pydantic.Field(default=None)
     """
     SUM(total_count) over the requested window

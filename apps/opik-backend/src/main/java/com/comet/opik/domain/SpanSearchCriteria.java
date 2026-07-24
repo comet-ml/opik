@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingField;
 import lombok.Builder;
@@ -14,6 +15,7 @@ import static com.comet.opik.api.Span.SpanField;
 public record SpanSearchCriteria(
         String projectName,
         UUID projectId,
+        Source source,
         UUID traceId,
         SpanType type,
         List<? extends Filter> filters,

@@ -83,6 +83,22 @@ def _make_full_page(n=500, offset=0):
     return _make_page([_make_mock_trace(f"bulk-{offset + i}") for i in range(n)])
 
 
+def _uuid7(n: int) -> str:
+    """Deterministic, valid UUIDv7 string for trace index *n*.
+
+    Version nibble is 7 and the variant nibble is RFC-4122 (8), so
+    ``uuid.UUID(...).version == 7`` — this is what makes the exporter build a
+    bounded ``trace_id`` range filter instead of falling back to a full scan.
+    """
+    high = f"{0x0190A1B2C3D4 + n:012x}"
+    return f"{high[:8]}-{high[8:12]}-7000-8000-{n:012x}"
+
+
+def _make_full_page_uuid7(n=500, offset=0):
+    """Like ``_make_full_page`` but with UUIDv7 trace ids (bounded-scan path)."""
+    return _make_page([_make_mock_trace(_uuid7(offset + i)) for i in range(n)])
+
+
 # ---------------------------------------------------------------------------
 # Retry wait behaviour — tested via export_traces (public API)
 # ---------------------------------------------------------------------------
@@ -356,6 +372,224 @@ class TestExportTracesSpanFetchFailures:
         assert had_errors is True
         assert exported == 2  # both trace files written, just without spans
         assert skipped == 0
+
+
+# ---------------------------------------------------------------------------
+# export_traces — bounded-chunk (memory) behaviour
+# ---------------------------------------------------------------------------
+
+
+class TestExportTracesChunking:
+    def test_export_traces__large_project_flushes_in_bounded_chunks(self):
+        """A multi-page export writes traces incrementally, one bounded chunk at
+        a time, instead of buffering every trace and span before the first write.
+        Incremental flushing is what keeps peak memory from scaling with the
+        whole project (the previous all-at-once design OOM'd on large projects).
+
+        The export is driven purely through the public ``export_traces`` API,
+        mocking only the public REST client boundary
+        (``traces.get_traces_by_project`` / ``spans.get_spans_by_project``) — no
+        private helpers are patched.  Correctness is asserted on the returned
+        tuple and the final ``trace_*.json`` artifacts.  The bounded-chunk
+        property is asserted through robust invariants observed at the public
+        span endpoint (files already on disk when each span fetch fires), not a
+        brittle exact-call-order snapshot: the assertions hold regardless of the
+        exact chunk boundary the implementation picks.
+        """
+        from opik.cli.exports.project import export_traces
+
+        # UUIDv7 ids so each chunk builds a bounded trace_id range filter and
+        # scans spans per chunk (the common, memory-bounded path).
+        page1 = _make_full_page_uuid7(2, offset=0)
+        page2 = _make_full_page_uuid7(2, offset=2)
+        page3 = _make_full_page_uuid7(2, offset=4)
+        mock_client = MagicMock()
+        expected_ids = [_uuid7(i) for i in range(6)]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project_dir = Path(tmp)
+            files_on_disk_at_each_span_fetch = []
+
+            def span_fetch_side_effect(*args, **kwargs):
+                # How many trace files already exist when a span fetch begins.
+                # A growing, sub-total count proves earlier chunks were flushed
+                # to disk before later chunks are processed (incremental), rather
+                # than one all-at-once sweep after buffering everything.
+                files_on_disk_at_each_span_fetch.append(
+                    len(list(project_dir.glob("trace_*.json")))
+                )
+                return _make_page([])
+
+            mock_client.rest_client.traces.get_traces_by_project.side_effect = [
+                page1,
+                page2,
+                page3,
+                _make_page([]),
+            ]
+            mock_client.rest_client.spans.get_spans_by_project.side_effect = (
+                span_fetch_side_effect
+            )
+
+            with patch(f"{_MODULE}.time.sleep"):
+                exported, skipped, had_errors = export_traces(
+                    client=mock_client,
+                    project_name="proj",
+                    project_dir=project_dir,
+                    max_results=None,
+                    filter_string=None,
+                    show_progress=False,
+                    page_size=2,
+                )
+
+            # Public result contract.
+            assert (exported, skipped, had_errors) == (6, 0, False)
+
+            # Final artifacts: exactly the six expected trace files were written.
+            written_ids = sorted(
+                p.name[len("trace_") : -len(".json")]
+                for p in project_dir.glob("trace_*.json")
+            )
+            assert written_ids == sorted(expected_ids)
+
+        # Bounded-chunk invariants (robust to the exact chunk boundary):
+        #  - more than one span-fetch session → work is chunked, not one sweep;
+        #  - counts never decrease → files accumulate as chunks flush;
+        #  - a later fetch sees files already written → earlier chunks were
+        #    flushed to disk before the last chunk was processed, so only ~one
+        #    chunk's worth of traces is held in memory at a time.
+        assert len(files_on_disk_at_each_span_fetch) > 1
+        assert files_on_disk_at_each_span_fetch == sorted(
+            files_on_disk_at_each_span_fetch
+        )
+        assert files_on_disk_at_each_span_fetch[0] == 0
+        assert files_on_disk_at_each_span_fetch[-1] > 0
+
+    def test_export_traces__non_uuid7_ids__span_scan_bounded_per_chunk(self):
+        """When trace ids aren't UUIDv7 the span scan can't be bounded by a
+        trace_id range, so the backend streams back every span in the project.
+
+        Rather than cache that whole-project span set — which would reintroduce
+        the unbounded memory peak this chunked export exists to prevent — each
+        chunk runs its own scan and keeps only its own traces' spans.  Peak
+        memory therefore stays bounded to one chunk regardless of project size;
+        the trade-off is one unfiltered scan per chunk on this rare fallback.
+        """
+        from opik.cli.exports.project import export_traces
+
+        # Non-UUIDv7 ids ("bulk-N") force the unfiltered-scan fallback.
+        page1 = _make_full_page(2, offset=0)
+        page2 = _make_full_page(2, offset=2)
+        page3 = _make_full_page(2, offset=4)
+        mock_client = MagicMock()
+        expected_ids = [f"bulk-{i}" for i in range(6)]
+
+        # Each per-chunk scan pages GET /spans starting at page 1; a fresh page-1
+        # request marks a new scan session.
+        scan_sessions = []
+
+        def span_fetch_side_effect(*args, **kwargs):
+            page = kwargs.get("page")
+            if page == 1:
+                scan_sessions.append([])
+            scan_sessions[-1].append(page)
+            return _make_page([])
+
+        mock_client.rest_client.traces.get_traces_by_project.side_effect = [
+            page1,
+            page2,
+            page3,
+            _make_page([]),
+        ]
+        mock_client.rest_client.spans.get_spans_by_project.side_effect = (
+            span_fetch_side_effect
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project_dir = Path(tmp)
+            with patch(f"{_MODULE}.time.sleep"):
+                exported, skipped, had_errors = export_traces(
+                    client=mock_client,
+                    project_name="proj",
+                    project_dir=project_dir,
+                    max_results=None,
+                    filter_string=None,
+                    show_progress=False,
+                    page_size=2,
+                )
+
+            assert (exported, skipped, had_errors) == (6, 0, False)
+            written_ids = sorted(
+                p.name[len("trace_") : -len(".json")]
+                for p in project_dir.glob("trace_*.json")
+            )
+            assert written_ids == sorted(expected_ids)
+
+        # One unfiltered scan per flushed chunk (3) — not a single cached
+        # whole-project scan — which is what keeps peak memory bounded to a chunk.
+        assert len(scan_sessions) == 3
+
+    def test_export_traces__span_scan_error_isolated_to_its_chunk(self):
+        """A transient span-scan failure is confined to the chunk that hit it.
+
+        With per-chunk scanning there is no shared span cache to poison: the
+        failed chunk is exported with partial spans and had_errors is set, while
+        later chunks scan independently and export normally.  The failure is
+        injected at the public REST boundary (``spans.get_spans_by_project``),
+        per the SDK testing guidelines, not at a private transport helper.
+        """
+        from opik.cli.exports.project import export_traces
+
+        # Non-UUIDv7 ids force the unfiltered per-chunk scan fallback.
+        page1 = _make_full_page(2, offset=0)
+        page2 = _make_full_page(2, offset=2)
+        page3 = _make_full_page(2, offset=4)
+        mock_client = MagicMock()
+        expected_ids = [f"bulk-{i}" for i in range(6)]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project_dir = Path(tmp)
+
+            def get_spans_side_effect(*args, **kwargs):
+                # Fail every span page while the first chunk is being scanned
+                # (nothing flushed yet); once earlier chunks have written their
+                # files, succeed — proving the error didn't leak across chunks.
+                if not any(project_dir.glob("trace_*.json")):
+                    raise ApiError(status_code=503)
+                return _make_page([])
+
+            mock_client.rest_client.traces.get_traces_by_project.side_effect = [
+                page1,
+                page2,
+                page3,
+                _make_page([]),
+            ]
+            mock_client.rest_client.spans.get_spans_by_project.side_effect = (
+                get_spans_side_effect
+            )
+
+            # Neutralise the retry decorator's sleep (public boundary triggers
+            # the real 8-attempt retry) and the inter-page delay.
+            with patch(f"{_MODULE}._fetch_spans_page.retry.sleep"):
+                with patch(f"{_MODULE}.time.sleep"):
+                    exported, skipped, had_errors = export_traces(
+                        client=mock_client,
+                        project_name="proj",
+                        project_dir=project_dir,
+                        max_results=None,
+                        filter_string=None,
+                        show_progress=False,
+                        page_size=2,
+                    )
+
+            # The failed chunk still wrote its traces (with partial spans) and the
+            # failure is flagged; later chunks were unaffected, so all 6 landed.
+            assert (exported, skipped) == (6, 0)
+            assert had_errors is True
+            written_ids = sorted(
+                p.name[len("trace_") : -len(".json")]
+                for p in project_dir.glob("trace_*.json")
+            )
+            assert written_ids == sorted(expected_ids)
 
 
 # ---------------------------------------------------------------------------

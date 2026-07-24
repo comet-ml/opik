@@ -307,7 +307,7 @@ class TestVersionReplayUnit:
         result = replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -373,7 +373,7 @@ class TestVersionReplayUnit:
         result = replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -464,7 +464,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -534,7 +534,7 @@ class TestVersionReplayUnit:
         result = replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -598,7 +598,7 @@ class TestVersionReplayUnit:
         result = replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -653,7 +653,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -709,7 +709,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -769,7 +769,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -821,7 +821,7 @@ class TestVersionReplayUnit:
         result = replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -905,7 +905,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -992,7 +992,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -1058,7 +1058,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -1103,7 +1103,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -1155,7 +1155,7 @@ class TestVersionReplayUnit:
             replay_all_versions(
                 rest_client,
                 source_dataset_id="src-id",
-                source_name_after_rename="MyDataset_v1",
+                source_name="MyDataset",
                 source_project_name=None,
                 dest_dataset_id="tgt-dataset-id",
                 dest_name="MyDataset",
@@ -1203,7 +1203,7 @@ class TestVersionReplayUnit:
         replay_all_versions(
             rest_client,
             source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
+            source_name="MyDataset",
             source_project_name=None,
             dest_dataset_id="tgt-dataset-id",
             dest_name="MyDataset",
@@ -1501,7 +1501,7 @@ class TestVersionReplayAuditLog:
             replay_all_versions(
                 rest_client,
                 source_dataset_id="src-id",
-                source_name_after_rename="MyDataset_v1",
+                source_name="MyDataset",
                 source_project_name=None,
                 dest_dataset_id="tgt-dataset-id",
                 dest_name="MyDataset",

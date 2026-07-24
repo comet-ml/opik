@@ -1087,7 +1087,7 @@ class PromptResourceTest {
                     .projectId(null)
                     .build();
 
-            Prompt duplicatedPrompt = buildPrompt().build();
+            Prompt duplicatedPrompt = buildPrompt().projectName(factory.manufacturePojo(String.class)).build();
             createPrompt(duplicatedPrompt, API_KEY, TEST_WORKSPACE);
 
             return Stream.of(
@@ -1116,6 +1116,30 @@ class PromptResourceTest {
                     Arguments.of(buildPrompt().name("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")), ErrorMessage.class));
+        }
+
+        @Test
+        @DisplayName("when creating prompts with the same name in different projects, then both succeed")
+        void when__creatingPromptsWithSameNameInDifferentProjects__thenBothSucceed() {
+            String sharedName = UUID.randomUUID().toString();
+
+            var projectId1 = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+                    TEST_WORKSPACE);
+            var projectId2 = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+                    TEST_WORKSPACE);
+
+            var prompt1 = buildPrompt().name(sharedName).lastUpdatedBy(USER).createdBy(USER).versionCount(1L)
+                    .projectId(projectId1).build();
+            var prompt2 = buildPrompt().name(sharedName).lastUpdatedBy(USER).createdBy(USER).versionCount(1L)
+                    .projectId(projectId2).build();
+
+            var id1 = createPrompt(prompt1, API_KEY, TEST_WORKSPACE);
+            var id2 = createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+
+            assertThat(id1).isNotEqualTo(id2);
+
+            getPromptAndAssert(id1, prompt1, API_KEY, TEST_WORKSPACE, Set.of());
+            getPromptAndAssert(id2, prompt2, API_KEY, TEST_WORKSPACE, Set.of());
         }
     }
 
@@ -1174,14 +1198,18 @@ class PromptResourceTest {
         @DisplayName("when updating prompt name to an existing one, then return conflict")
         void when__updatingPromptNameToAnExistingOne__thenReturnConflict() {
 
+            String projectName = factory.manufacturePojo(String.class);
+
             var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .projectName(projectName)
                     .build();
 
             var prompt2 = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .projectName(projectName)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);

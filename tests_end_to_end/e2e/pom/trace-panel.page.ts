@@ -132,6 +132,26 @@ export class TracePanelPage {
   }
 
   /**
+   * The reason textarea for a named annotate score. Disabled until a score is set.
+   * Sits in a grid cell that is a sibling of the score-input cell (the one carrying
+   * the row testid), not a descendant — so it's scoped to the panel root, same as
+   * the score's "Clear score" button.
+   */
+  annotateReasonInput(definitionName: string): Locator {
+    return this.root.getByTestId(`annotate-score-reason-${definitionName}`);
+  }
+
+  /** Set (or change) the reason text in a named annotate score row. Requires a score to be set first. */
+  async setAnnotateReason(definitionName: string, reason: string): Promise<void> {
+    return test.step(`Set ${definitionName} reason to "${reason}"`, async () => {
+      const input = this.annotateReasonInput(definitionName);
+      await input.fill(reason);
+      // The reason input debounces; blur to flush the write.
+      await input.blur();
+    });
+  }
+
+  /**
    * Clear the score in a named annotate score row. The clear button sits in a
    * grid cell that is a sibling of the score-input cell (the one carrying the
    * row testid), not a descendant — so it's scoped to the panel root. With a

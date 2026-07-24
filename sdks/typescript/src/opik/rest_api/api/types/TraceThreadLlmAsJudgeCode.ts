@@ -6,4 +6,5 @@ export interface TraceThreadLlmAsJudgeCode {
     model: OpikApi.LlmAsJudgeModelParameters;
     messages: OpikApi.LlmAsJudgeMessage[];
     schema: OpikApi.LlmAsJudgeOutputSchema[];
+    maxCostUsd?: number;
 }

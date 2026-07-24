@@ -27,6 +27,7 @@ type ResizableSidePanelProps = {
   children: React.ReactNode;
   entity?: string;
   header?: React.ReactNode;
+  headerClassName?: string;
   headerContent?: React.ReactNode;
   open?: boolean;
   onClose: () => void;
@@ -65,6 +66,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   children,
   entity = "",
   header,
+  headerClassName,
   headerContent,
   open = false,
   onClose,
@@ -317,6 +319,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                 className={cn(
                   "absolute inset-x-0 top-0 flex h-[47px] items-center overflow-hidden pr-4",
                   header !== undefined ? "pl-2" : "pl-6",
+                  headerClassName,
                 )}
               >
                 {header !== undefined ? (

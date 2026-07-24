@@ -6,7 +6,6 @@ import httpx
 from .agent_configs.client import AgentConfigsClient, AsyncAgentConfigsClient
 from .agent_insights.client import AgentInsightsClient, AsyncAgentInsightsClient
 from .agent_insights_jobs.client import AgentInsightsJobsClient, AsyncAgentInsightsJobsClient
-from .ai_spend.client import AiSpendClient, AsyncAiSpendClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
 from .assertion_results.client import AssertionResultsClient, AsyncAssertionResultsClient
@@ -37,6 +36,7 @@ from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
 from .raw_client import AsyncRawOpikApi, RawOpikApi
 from .redirect.client import AsyncRedirectClient, RedirectClient
+from .report_failures.client import AsyncReportFailuresClient, ReportFailuresClient
 from .reports.client import AsyncReportsClient, ReportsClient
 from .retention_rules.client import AsyncRetentionRulesClient, RetentionRulesClient
 from .runners.client import AsyncRunnersClient, RunnersClient
@@ -115,7 +115,6 @@ class OpikApi:
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights_jobs = AgentInsightsJobsClient(client_wrapper=self._client_wrapper)
         self.agent_insights = AgentInsightsClient(client_wrapper=self._client_wrapper)
-        self.ai_spend = AiSpendClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AssertionResultsClient(client_wrapper=self._client_wrapper)
@@ -141,6 +140,7 @@ class OpikApi:
         self.pairing = PairingClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
+        self.report_failures = ReportFailuresClient(client_wrapper=self._client_wrapper)
         self.reports = ReportsClient(client_wrapper=self._client_wrapper)
         self.retention_rules = RetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
@@ -270,7 +270,6 @@ class AsyncOpikApi:
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights_jobs = AsyncAgentInsightsJobsClient(client_wrapper=self._client_wrapper)
         self.agent_insights = AsyncAgentInsightsClient(client_wrapper=self._client_wrapper)
-        self.ai_spend = AsyncAiSpendClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AsyncAssertionResultsClient(client_wrapper=self._client_wrapper)
@@ -296,6 +295,7 @@ class AsyncOpikApi:
         self.pairing = AsyncPairingClient(client_wrapper=self._client_wrapper)
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)
+        self.report_failures = AsyncReportFailuresClient(client_wrapper=self._client_wrapper)
         self.reports = AsyncReportsClient(client_wrapper=self._client_wrapper)
         self.retention_rules = AsyncRetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)

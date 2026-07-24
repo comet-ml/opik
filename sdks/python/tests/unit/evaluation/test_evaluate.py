@@ -2961,6 +2961,38 @@ def test_evaluate_on_dict_items__with_scoring_functions(fake_backend):
     }
 
 
+def test_evaluate_on_dict_items__scoring_metrics_list_is_not_mutated(fake_backend):
+    """Reusing a scoring_metrics list across calls must not accumulate wrapped scorers."""
+    items = [{"input": "What is 2+2?", "expected_output": "4"}]
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {"output": "4"}
+
+    def custom_scorer(
+        dataset_item: Dict[str, Any],
+        task_outputs: Dict[str, Any],
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(name="custom_scorer", value=1.0)
+
+    scoring_metrics = [metrics.Equals()]
+
+    for _ in range(2):
+        result = evaluation.evaluate_on_dict_items(
+            items=items,
+            task=task,
+            scoring_metrics=scoring_metrics,
+            scoring_functions=[custom_scorer],
+            scoring_key_mapping={"reference": "expected_output"},
+            scoring_threads=1,
+        )
+
+    assert [metric.name for metric in scoring_metrics] == ["equals_metric"]
+    assert [score.name for score in result.test_results[0].score_results] == [
+        "equals_metric",
+        "custom_scorer",
+    ]
+
+
 def test_evaluate__uses_streaming_by_default(fake_backend):
     """Test that evaluate uses streaming mode by default when no dataset_item_ids or dataset_sampler is provided."""
     mock_dataset = mock.MagicMock(

@@ -21,6 +21,15 @@ from opik.cli.imports.prompt import import_prompts_from_directory
 from ..conftest import random_chars
 from . import verifiers
 
+# Tags seeded on the created entities so the export/import flow can be asserted
+# to preserve them (regression guard for OPIK-7292, where tags were dropped for
+# prompts, experiments, and datasets). Backends don't guarantee tag ordering, so
+# assertions compare as sets.
+_DATASET_TAGS = ["cli-test", "dataset-tag"]
+_PROMPT_TAGS = ["cli-test", "prompt-tag"]
+_CHAT_PROMPT_TAGS = ["cli-test", "chat-prompt-tag"]
+_EXPERIMENT_TAGS = ["cli-test", "experiment-tag"]
+
 
 def _find_project_dir(base_dir: Path, project_name: str) -> Path:
     """Locate the id-named export folder for a project by its recorded name.
@@ -110,6 +119,12 @@ class TestCLIImportExport:
             ]
         )
 
+        # create_dataset() has no tags argument; set dataset-level tags via REST
+        # so the export/import round-trip can be asserted to preserve them.
+        opik_client.rest_client.datasets.update_dataset(
+            dataset.id, name=dataset_name, tags=_DATASET_TAGS
+        )
+
         return dataset_name
 
     def _create_test_prompt(self, opik_client: opik.Opik, project_name: str) -> str:
@@ -118,6 +133,7 @@ class TestCLIImportExport:
         opik_client.create_prompt(
             name=prompt_name,
             prompt="You are a helpful assistant. Answer the following question: {question}",
+            tags=_PROMPT_TAGS,
             project_name=project_name,
         )
         return prompt_name
@@ -138,6 +154,7 @@ class TestCLIImportExport:
             name=prompt_name,
             messages=messages,
             metadata={"version": "1.0", "test": "chat_import_export"},
+            tags=_CHAT_PROMPT_TAGS,
             project_name=project_name,
         )
         return prompt_name
@@ -155,6 +172,7 @@ class TestCLIImportExport:
             dataset_name=dataset_name,
             name=experiment_name,
             experiment_config={"model": "test-model", "version": "1.0"},
+            tags=_EXPERIMENT_TAGS,
             project_name=project_name,
         )
 
@@ -333,6 +351,10 @@ class TestCLIImportExport:
         assert "name" in dataset_data
         assert "items" in dataset_data
         assert "downloaded_at" in dataset_data
+        # Dataset-level tags must survive export (OPIK-7292).
+        assert set(dataset_data.get("tags") or []) == set(_DATASET_TAGS), (
+            f"Exported dataset tags mismatch: {dataset_data.get('tags')!r}"
+        )
 
         # Step 3: Import datasets using direct function call
         source_dir = _find_project_dir(test_data_dir, source_project_name) / "datasets"
@@ -348,6 +370,14 @@ class TestCLIImportExport:
         # Verify import succeeded
         assert stats.get("datasets", 0) >= 1, (
             "Expected at least 1 dataset to be imported"
+        )
+
+        # Tags must survive the import back onto the dataset.
+        imported_dataset = opik_client.get_dataset(
+            dataset_name, project_name=source_project_name
+        )
+        assert set(imported_dataset.get_tags()) == set(_DATASET_TAGS), (
+            f"Imported dataset tags mismatch: {imported_dataset.get_tags()!r}"
         )
 
     def test_export_import_prompts_happy_flow(
@@ -398,6 +428,12 @@ class TestCLIImportExport:
         assert "current_version" in prompt_data
         assert "history" in prompt_data
         assert "downloaded_at" in prompt_data
+        # Prompt tags must survive export (OPIK-7292).
+        assert set(prompt_data["current_version"].get("tags") or []) == set(
+            _PROMPT_TAGS
+        ), (
+            f"Exported prompt tags mismatch: {prompt_data['current_version'].get('tags')!r}"
+        )
 
         # Step 3: Import prompts using direct function call
         source_dir = _find_project_dir(test_data_dir, source_project_name) / "prompts"
@@ -425,6 +461,9 @@ class TestCLIImportExport:
         verifiers.verify_prompt_version(
             imported_prompt,
             name=prompt_name,
+        )
+        assert set(imported_prompt.tags or []) == set(_PROMPT_TAGS), (
+            f"Imported prompt tags mismatch: {imported_prompt.tags!r}"
         )
 
     def test_export_import_all_data_types_happy_flow(
@@ -755,6 +794,7 @@ class TestCLIImportExport:
         experiment1 = opik_client.create_experiment(
             name=exp1_name,
             dataset_name=dataset1_name,
+            tags=_EXPERIMENT_TAGS,
             project_name=source_project_name,
         )
         experiment2 = opik_client.create_experiment(
@@ -848,6 +888,10 @@ class TestCLIImportExport:
         assert exp_data["experiment"]["dataset_name"] == dataset1_name, (
             f"Expected dataset_name to be {dataset1_name}, got {exp_data['experiment']['dataset_name']}"
         )
+        # Experiment tags must survive export (OPIK-7292).
+        assert set(exp_data["experiment"].get("tags") or []) == set(_EXPERIMENT_TAGS), (
+            f"Exported experiment tags mismatch: {exp_data['experiment'].get('tags')!r}"
+        )
 
     def test_export_import_chat_prompts_happy_flow(
         self,
@@ -902,6 +946,10 @@ class TestCLIImportExport:
         )
         assert "template_structure" in current_version
         assert current_version["template_structure"] == "chat"
+        # Chat prompt tags must survive export (OPIK-7292).
+        assert set(current_version.get("tags") or []) == set(_CHAT_PROMPT_TAGS), (
+            f"Exported chat prompt tags mismatch: {current_version.get('tags')!r}"
+        )
 
         # Step 3: Import chat prompt using direct function call
         source_dir = _find_project_dir(test_data_dir, source_project_name) / "prompts"
@@ -932,6 +980,16 @@ class TestCLIImportExport:
             imported_chat_prompt,
             name=prompt_name,
         )
+        # Tags live on the prompt container and are not surfaced by
+        # get_chat_prompt()/retrieve_prompt_version (they come back empty);
+        # search_prompts() injects the container tags. Assert against it to
+        # mirror the text-prompt flow above and exports._resolve_prompt_tags.
+        imported_chat_container = next(
+            p for p in imported_prompts if p.name == prompt_name
+        )
+        assert set(imported_chat_container.tags or []) == set(_CHAT_PROMPT_TAGS), (
+            f"Imported chat prompt tags mismatch: {imported_chat_container.tags!r}"
+        )
 
     def test_import_projects_automatically_recreates_experiments(
         self,
@@ -943,7 +1001,9 @@ class TestCLIImportExport:
         # Step 1: Prepare test data with experiments
         dataset_name = self._create_test_dataset(opik_client, source_project_name)
         self._create_test_traces(opik_client, source_project_name)
-        self._create_test_experiment(opik_client, source_project_name, dataset_name)
+        experiment_name = self._create_test_experiment(
+            opik_client, source_project_name, dataset_name
+        )
 
         # Step 2: Export the project data (traces) using direct function call
         export_project_traces(
@@ -958,9 +1018,38 @@ class TestCLIImportExport:
             api_key=None,
         )
 
+        # Export the experiment too, so the recreate-on-import path has an
+        # experiment_*.json file to work with (trace export alone does not emit
+        # experiments).
+        export_experiment_by_name(
+            name=experiment_name,
+            workspace="default",
+            project_name=source_project_name,
+            output_path=str(test_data_dir),
+            dataset=dataset_name,
+            max_traces=None,
+            force=False,
+            debug=False,
+            format="json",
+            api_key=None,
+        )
+
         # Verify export files were created
         project_dir = _find_project_dir(test_data_dir, source_project_name)
         assert project_dir.exists(), f"Export directory not found: {project_dir}"
+
+        # The exported experiment file must carry the tags (OPIK-7292).
+        experiments_dir = project_dir / "experiments"
+        exp_file = next(
+            ef
+            for ef in experiments_dir.glob("experiment_*.json")
+            if json.loads(ef.read_text()).get("experiment", {}).get("name")
+            == experiment_name
+        )
+        exported_experiment = json.loads(exp_file.read_text())["experiment"]
+        assert set(exported_experiment.get("tags") or []) == set(_EXPERIMENT_TAGS), (
+            f"Exported experiment tags mismatch: {exported_experiment.get('tags')!r}"
+        )
 
         # Step 3: Test import (experiments are automatically recreated) using direct function call
         project_dir = _find_project_dir(test_data_dir, source_project_name)
@@ -978,6 +1067,21 @@ class TestCLIImportExport:
         assert stats.get("projects", 0) >= 1, (
             "Expected at least 1 project to be imported"
         )
+        assert stats.get("experiments", 0) >= 1, (
+            "Expected at least 1 experiment to be recreated"
+        )
+
+        # The recreated experiment must carry the tags (OPIK-7292). Importing
+        # into the source project leaves the original alongside the recreated
+        # copy; both were created with the same tags, so assert every match.
+        recreated = opik_client.get_experiments_by_name(
+            experiment_name, project_name=source_project_name
+        )
+        assert recreated, f"Expected experiment {experiment_name} after import"
+        for exp in recreated:
+            assert set(exp.tags or []) == set(_EXPERIMENT_TAGS), (
+                f"Recreated experiment tags mismatch: {exp.tags!r}"
+            )
 
     def test_export_import_llm_span_preserves_type_and_usage(
         self,

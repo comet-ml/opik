@@ -47,7 +47,9 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetVersionDAO;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanEnrichmentOptions;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.TraceEnrichmentOptions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -2819,6 +2821,8 @@ class DatasetVersionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ExperimentDatasetVersionLinking {
 
+        private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
+
         private Experiment getExperiment(UUID id) {
             return experimentResourceClient.getExperiment(id, API_KEY, TEST_WORKSPACE);
         }
@@ -3059,7 +3063,7 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(datasetName);
             createDatasetItems(datasetId, 1);
 
-            var nonExistentVersionId = UUID.randomUUID();
+            var nonExistentVersionId = idGenerator.generateId();
 
             // when - create experiment with non-existent version ID
             var experiment = experimentResourceClient.createPartialExperiment()

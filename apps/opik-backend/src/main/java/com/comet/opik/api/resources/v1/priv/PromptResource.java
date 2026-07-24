@@ -91,6 +91,7 @@ public class PromptResource {
 
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_CREATE)
     public Response createPrompt(
             @RequestBody(content = @Content(schema = @Schema(implementation = Prompt.class))) @JsonView(Prompt.View.Write.class) @Valid Prompt prompt,
             @Context UriInfo uriInfo) {
@@ -112,6 +113,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptPage.class))),
     })
     @JsonView({Prompt.View.Public.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response getPrompts(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -143,6 +145,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({Prompt.View.Detail.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response getPromptById(@PathParam("id") UUID id,
             @Parameter(description = "Optional mask version id; when set, requestedVersion is the mask row for that id") @QueryParam("mask_id") UUID maskId,
             @Parameter(description = "Optional environment name; when set, requestedVersion is the version mapped to that environment for the prompt") @QueryParam("environment") @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") String environment) {
@@ -170,6 +173,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_EDIT)
     public Response updatePrompt(
             @PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Prompt.class))) @JsonView(Prompt.View.Updatable.class) @Valid Prompt prompt) {
@@ -222,6 +226,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @JsonView({PromptVersion.View.Detail.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response retrievePromptVersionsByIds(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionIdsRequest.class))) @Valid PromptVersionIdsRequest request) {
 
@@ -244,6 +249,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersionLink.class)))),
     })
     @JsonView({Prompt.View.Public.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response getPromptsByCommits(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionCommitsRequest.class))) @Valid PromptVersionCommitsRequest request) {
 
@@ -269,6 +275,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({Prompt.View.Detail.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response getPromptByCommit(
             @PathParam("commit") @Pattern(regexp = ValidationUtils.COMMIT_PATTERN) String commit) {
 
@@ -292,6 +299,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_EDIT)
     @JsonView({PromptVersion.View.Detail.class})
     public Response createPromptVersion(
             @RequestBody(content = @Content(schema = @Schema(implementation = CreatePromptVersion.class))) @JsonView({
@@ -316,6 +324,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersionPage.class))),
     })
     @JsonView({PromptVersion.View.Public.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response getPromptVersions(@PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -341,6 +350,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({PromptVersion.View.Detail.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response getPromptVersionById(@PathParam("versionId") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -362,6 +372,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({PromptVersion.View.Detail.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response getPromptVersionByNumber(@PathParam("promptId") UUID promptId,
             @PathParam("versionNumber") @Pattern(regexp = "v\\d+", message = "must match v<N>") @Size(max = 10, message = "cannot exceed 10 characters") String versionNumber) {
 
@@ -396,6 +407,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_EDIT)
     public Response updatePromptVersions(
             @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionBatchUpdate.class))) @Valid @NotNull PromptVersionBatchUpdate request) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -421,6 +433,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_EDIT)
     public Response setPromptVersionEnvironment(@PathParam("versionId") UUID versionId,
             @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionEnvironmentUpdate.class))) @Valid @NotNull PromptVersionEnvironmentUpdate request) {
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -441,6 +454,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({PromptVersion.View.Detail.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_VIEW)
     public Response retrievePromptVersion(
             @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionRetrieve.class))) @Valid PromptVersionRetrieve request) {
 
@@ -474,6 +488,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_EDIT)
     @JsonView({PromptVersion.View.Detail.class})
     public Response restorePromptVersion(@PathParam("promptId") UUID promptId, @PathParam("versionId") UUID versionId) {
 

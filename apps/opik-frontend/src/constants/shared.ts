@@ -26,6 +26,9 @@ export const INSTALL_SDK_SECTION_TITLE = "2. Install the SDK";
 
 export const TRUNCATION_DISABLED_MAX_PAGE_SIZE = 10;
 
+export const TOOLTIP_DELAY_DURATION = 500;
+export const TOOLTIP_SKIP_DELAY_DURATION = 0;
+
 export const TABLE_HEADER_Z_INDEX = 2;
 export const TABLE_ROW_Z_INDEX = 0;
 

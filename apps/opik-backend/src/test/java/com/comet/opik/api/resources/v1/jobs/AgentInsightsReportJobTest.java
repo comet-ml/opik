@@ -67,12 +67,12 @@ class AgentInsightsReportJobTest {
         when(agentInsightsJobService.findAllEnabled()).thenReturn(List.of(withTraces, withoutTraces));
         when(traceService.getProjectsWithTracesInRange(any(), any(), any()))
                 .thenReturn(Mono.just(Set.of(withTraces.projectId())));
-        when(reportPublisher.enqueue(any(), any(), any(), any())).thenReturn(Mono.just("report-id"));
+        when(reportPublisher.enqueue(any(), any(), any(), any(), any())).thenReturn(Mono.just("report-id"));
 
         job().runSweep(PERIOD_START, PERIOD_END).block();
 
-        verify(reportPublisher).enqueue(withTraces.projectId(), workspaceId, PERIOD_START, PERIOD_END);
-        verify(reportPublisher, never()).enqueue(eq(withoutTraces.projectId()), any(), any(), any());
+        verify(reportPublisher).enqueue(withTraces.projectId(), workspaceId, PERIOD_START, PERIOD_END, "scheduled");
+        verify(reportPublisher, never()).enqueue(eq(withoutTraces.projectId()), any(), any(), any(), any());
     }
 
     @Test
@@ -85,14 +85,14 @@ class AgentInsightsReportJobTest {
         when(agentInsightsJobService.findAllEnabled()).thenReturn(List.of(jobA, jobB));
         when(traceService.getProjectsWithTracesInRange(any(), any(), any()))
                 .thenReturn(Mono.just(Set.of(jobA.projectId(), jobB.projectId())));
-        when(reportPublisher.enqueue(any(), any(), any(), any())).thenReturn(Mono.just("report-id"));
+        when(reportPublisher.enqueue(any(), any(), any(), any(), any())).thenReturn(Mono.just("report-id"));
 
         job().runSweep(PERIOD_START, PERIOD_END).block();
 
         // Exactly one trace query for the whole enabled set (no per-workspace loop).
         verify(traceService).getProjectsWithTracesInRange(any(), eq(PERIOD_START), eq(PERIOD_END));
-        verify(reportPublisher).enqueue(jobA.projectId(), workspaceA, PERIOD_START, PERIOD_END);
-        verify(reportPublisher).enqueue(jobB.projectId(), workspaceB, PERIOD_START, PERIOD_END);
+        verify(reportPublisher).enqueue(jobA.projectId(), workspaceA, PERIOD_START, PERIOD_END, "scheduled");
+        verify(reportPublisher).enqueue(jobB.projectId(), workspaceB, PERIOD_START, PERIOD_END, "scheduled");
     }
 
     @Test
@@ -104,13 +104,13 @@ class AgentInsightsReportJobTest {
         when(agentInsightsJobService.findAllEnabled()).thenReturn(List.of(jobA, jobB));
         when(traceService.getProjectsWithTracesInRange(any(), any(), any()))
                 .thenReturn(Mono.just(Set.of(jobA.projectId(), jobB.projectId())));
-        when(reportPublisher.enqueue(eq(jobA.projectId()), any(), any(), any()))
+        when(reportPublisher.enqueue(eq(jobA.projectId()), any(), any(), any(), any()))
                 .thenReturn(Mono.error(new RuntimeException("redis down")));
-        when(reportPublisher.enqueue(eq(jobB.projectId()), any(), any(), any()))
+        when(reportPublisher.enqueue(eq(jobB.projectId()), any(), any(), any(), any()))
                 .thenReturn(Mono.just("report-id"));
 
         job().runSweep(PERIOD_START, PERIOD_END).block();
 
-        verify(reportPublisher).enqueue(jobB.projectId(), workspaceId, PERIOD_START, PERIOD_END);
+        verify(reportPublisher).enqueue(jobB.projectId(), workspaceId, PERIOD_START, PERIOD_END, "scheduled");
     }
 }

@@ -205,8 +205,7 @@ async function authenticateAndPersist(env: EnvConfig): Promise<void> {
   }
 
   // Auth lives at the root Comet domain, not under /opik — strip any trailing
-  // /opik path segment before hitting /api/auth/login. This mirrors the legacy
-  // tests_end_to_end/typescript-tests/ pattern.
+  // /opik path segment before hitting /api/auth/login.
   const rootBase = env.baseUrl.replace(/\/opik$/, '');
   const loginUrl = `${rootBase}/api/auth/login`;
   console.log(`[global-setup] authenticating at ${loginUrl}`);

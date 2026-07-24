@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.1.5](https://img.shields.io/badge/Version-2.1.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.1.5](https://img.shields.io/badge/AppVersion-2.1.5-informational?style=flat-square)
+![Version: 2.2.5](https://img.shields.io/badge/Version-2.2.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.5](https://img.shields.io/badge/AppVersion-2.2.5-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -149,7 +149,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
 | clickhouse.configuration.files."conf.d/memory.xml" | string | `"<yandex>\n  <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>\n</yandex>\n"` |  |
-| clickhouse.configuration.files."conf.d/profiles.xml" | string | `"<clickhouse>\n  <profiles>\n    <default>\n        <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>\n        <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>\n        <!-- CH 25.8 made the experimental Time type opt-in; required for fresh installs to replay migration 000030. -->\n        <enable_time_time64_type>1</enable_time_time64_type>\n    </default>\n  </profiles>\n</clickhouse>\n"` |  |
+| clickhouse.configuration.files."conf.d/profiles.xml" | string | `"<clickhouse>\n  <profiles>\n    <default>\n        <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>\n        <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>\n        <!-- CH 25.8 made the experimental Time type opt-in; required for fresh installs to replay migration 000030. -->\n        <enable_time_time64_type>1</enable_time_time64_type>\n        <!-- the new CH 25.x default (1) makes FINAL reads on skip-indexed tables over-read massively; our queries already prune on the PK/project_id, so exact mode isn't needed. -->\n        <use_skip_indexes_if_final_exact_mode>0</use_skip_indexes_if_final_exact_mode>\n    </default>\n  </profiles>\n</clickhouse>\n"` |  |
 | clickhouse.configuration.files."conf.d/system_tables.xml" | string | `"<clickhouse>\n  <opentelemetry_span_log remove=\"1\"/>\n  <asynchronous_metric_log remove=\"1\"/>\n  <processors_profile_log remove=\"1\"/>\n  <text_log remove=\"1\"/>\n  <trace_log remove=\"1\"/>\n  <blob_storage_log remove=\"1\"/>\n  <error_log>\n      <engine>\n          ENGINE MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>error_log</table>\n  </error_log>\n  <latency_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>latency_log</table>\n  </latency_log>\n  <metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>metric_log</table>\n  </metric_log>\n  <query_metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>query_metric_log</table>\n  </query_metric_log>\n</clickhouse>\n"` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.extraPodTemplates | list | `[]` |  |
@@ -157,7 +157,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
 | clickhouse.extraVolumeMounts | list | `[]` | Additional volume mounts for the ClickHouse server container. Use this to mount volumes that ClickHouse server needs direct access to, such as a backup disk for embedded backups (BACKUP TO Disk(...)). The mount name can reference a CHI volumeClaimTemplate defined in `clickhouse.extraVolumeClaimTemplates` (matched by name automatically by the ClickHouse operator), or a volume defined in `clickhouse.extraVolumes`. |
 | clickhouse.extraVolumes | list | `[]` | Additional pod-level volumes for the ClickHouse pod, independent of the backup server sidecar. Use this for non-PVC volume types (configMap, secret, emptyDir, hostPath, etc.) that should be available to the ClickHouse server container. For persistent storage, prefer defining a CHI-managed PVC via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in `extraVolumeMounts` above. |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.8.16.10002.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:26.3.16.10001.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
@@ -205,6 +205,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.templates.replicaServiceTemplate | string | `"clickhouse-replica-svc-template"` |  |
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
+| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until a migration attaches the `tiered_replicated` policy to a table, so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
@@ -371,6 +372,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.enabled | bool | `false` |  |
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
+| component.frontend.keepaliveRequests | int | `100` |  |
+| component.frontend.keepaliveTimeout | string | `"60s"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.podDisruptionBudget.enabled | bool | `false` |  |
@@ -439,6 +442,13 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
+| component.python-backend.waitForRedis.enabled | bool | `true` |  |
+| component.python-backend.waitForRedis.image.registry | string | `"docker.io"` |  |
+| component.python-backend.waitForRedis.image.repository | string | `"busybox"` |  |
+| component.python-backend.waitForRedis.image.tag | string | `"1.36"` |  |
+| component.python-backend.waitForRedis.redis.host | string | `""` |  |
+| component.python-backend.waitForRedis.redis.port | int | `6379` |  |
+| component.python-backend.waitForRedis.resources | object | `{}` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | global.argocd | bool | `false` |  |

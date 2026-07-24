@@ -306,23 +306,32 @@ export const parseChatTemplateToLLMMessages = (
 
 /**
  * Resolve the value for one template variable in an LLM-as-judge / Python-metric
- * rule. Existing user-supplied mapping wins; otherwise on trace scope a `spans`
- * variable auto-fills to its sentinel value (so {{spans}} works without the user
- * picking a path); otherwise empty. Centralized so the four rule-detail editors
- * (v1+v2 × {LLMJudge, PythonCode}) stay in sync — adding a new reserved trace
- * variable to {@link RESERVED_TRACE_EVALUATOR_VARIABLES} propagates here.
+ * rule. Existing user-supplied mapping wins; otherwise on trace or span scope a
+ * reserved variable auto-fills to its sentinel value (so {{spans}} / {{trace}} on
+ * trace scope and {{span}} on span scope work without the user picking a path);
+ * otherwise empty. Centralized so the rule-detail editors stay in sync.
+ *
+ * <p>{@code reservedVariables} defaults to the shared {@code spans}-only set; the
+ * LLM-judge editors pass the scope-appropriate set —
+ * {@link RESERVED_TRACE_LLM_JUDGE_VARIABLES} (adds {@code trace}) on trace scope and
+ * {@link RESERVED_SPAN_LLM_JUDGE_VARIABLES} ({@code span}) on span scope. The
+ * Python-metric editors keep the default, because the Python scorer backend only
+ * injects `spans`.
  *
  * <p>The auto-fill is gated by {@code agenticToolsEnabled} (FT
- * {@code agentic_tools_enabled}). When the feature is off, `spans` behaves like
- * any other variable — no sentinel is filled in, leaving the user free to map
- * it to a real path. Mirrors the BE: `shouldFetchSpans` and the `{{spans}}`
- * substitution are also gated by the same toggle.
+ * {@code agentic_tools_enabled}). When the feature is off, reserved names behave
+ * like any other variable — no sentinel is filled in, leaving the user free to map
+ * to a real path. Mirrors the BE: `shouldFetchSpans` and the `{{spans}}` /
+ * `{{trace}}` substitution are also gated by the same toggle.
  */
 export const resolveTraceEvaluatorVariableDefault = (
   variableName: string,
   currentMapping: string | undefined,
   scope: EVALUATORS_RULE_SCOPE,
   agenticToolsEnabled: boolean,
+  reservedVariables: Readonly<
+    Record<string, string>
+  > = RESERVED_TRACE_EVALUATOR_VARIABLES,
 ): string => {
   // Preserve any value the user already set — including an explicit empty
   // string. Treating `""` as "not set" and re-applying the sentinel auto-fill
@@ -331,8 +340,12 @@ export const resolveTraceEvaluatorVariableDefault = (
   if (currentMapping !== undefined) {
     return currentMapping;
   }
-  if (agenticToolsEnabled && scope === EVALUATORS_RULE_SCOPE.trace) {
-    return RESERVED_TRACE_EVALUATOR_VARIABLES[variableName] ?? "";
+  if (
+    agenticToolsEnabled &&
+    (scope === EVALUATORS_RULE_SCOPE.trace ||
+      scope === EVALUATORS_RULE_SCOPE.span)
+  ) {
+    return reservedVariables[variableName] ?? "";
   }
   return "";
 };

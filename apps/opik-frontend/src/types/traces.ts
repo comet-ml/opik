@@ -18,6 +18,9 @@ export enum FEEDBACK_SCORE_TYPE {
 export enum TRACE_VISIBILITY_MODE {
   default = "default",
   hidden = "hidden",
+  // Sentinel for entity-scoped views (experiment/playground/trial logs): show traces of every
+  // visibility. Never sent to the backend — it maps to "no visibility filter" (see generateVisibilityFilters).
+  all = "all",
 }
 
 export enum LOGS_SOURCE {
@@ -25,6 +28,7 @@ export enum LOGS_SOURCE {
   experiment = "experiment",
   playground = "playground",
   optimization = "optimization",
+  evaluator = "evaluator",
 }
 
 export type FeedbackScoreValueByAuthorMap = Record<

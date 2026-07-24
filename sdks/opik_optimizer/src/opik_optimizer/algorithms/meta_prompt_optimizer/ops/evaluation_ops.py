@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from ....api_objects import chat_prompt
 from ....utils import display as display_utils
+from ....utils.scoring import improves_over
 from .. import reporting
 from . import result_ops
 
@@ -78,7 +79,7 @@ def score_candidate_prompts(
                 context.extra_params.pop("suppress_evaluation_progress", None)
             reporter.set_final_score(current_round_best_score, prompt_score)
 
-        if prompt_score > current_round_best_score:
+        if improves_over(prompt_score, current_round_best_score):
             current_round_best_score = prompt_score
 
         prompt_scores.append((candidate, prompt_score))

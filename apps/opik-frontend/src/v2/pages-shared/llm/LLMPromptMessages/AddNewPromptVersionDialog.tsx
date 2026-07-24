@@ -88,12 +88,12 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const activeProjectId = useActiveProjectId();
 
   const {
-    permissions: { canCreatePrompts },
+    permissions: { canCreatePrompts, canEditPrompts },
   } = usePermissions();
 
   const [promptId, setPromptId] = useState<string | undefined>(prompt?.id);
   const [saveMode, setSaveMode] = useState<SaveMode>(
-    prompt?.id ? "update" : "new",
+    prompt?.id && canEditPrompts ? "update" : "new",
   );
   const isEdit = saveMode === "update" && Boolean(promptId);
 
@@ -122,8 +122,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   useEffect(() => {
     setPromptId(prompt?.id);
-    setSaveMode(prompt?.id ? "update" : "new");
-  }, [prompt?.id]);
+    setSaveMode(prompt?.id && canEditPrompts ? "update" : "new");
+  }, [prompt?.id, canEditPrompts]);
 
   useEffect(() => {
     // Reset name when dialog opens or save mode changes:
@@ -221,7 +221,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           <DialogTitle>Save to prompt library</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
-          {prompt && canCreatePrompts && (
+          {prompt && canCreatePrompts && canEditPrompts && (
             <div className="flex flex-col gap-2 pb-4">
               <ToggleGroup
                 type="single"

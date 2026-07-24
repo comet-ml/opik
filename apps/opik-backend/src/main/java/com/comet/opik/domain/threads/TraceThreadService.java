@@ -56,7 +56,7 @@ public interface TraceThreadService {
             int limit);
 
     Mono<Void> processProjectWithTraceThreadsPendingClosure(UUID projectId, Instant now,
-            Duration defaultTimeoutToMarkThreadAsInactive);
+            Duration defaultTimeoutToMarkThreadAsInactive, Duration minLookback);
 
     Mono<Boolean> addToPendingQueue(UUID projectId);
 
@@ -277,7 +277,14 @@ class TraceThreadServiceImpl implements TraceThreadService {
     public Flux<ProjectWithPendingClosureTraceThreads> getProjectsWithPendingClosureThreads(
             @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive,
             Duration minLookback, int limit) {
-        return getMaxTimeoutMarkThreadAsInactive(defaultTimeoutToMarkThreadAsInactive)
+        return getPendingClosureLookbackBound(now, defaultTimeoutToMarkThreadAsInactive, minLookback)
+                .flatMapMany(cachedMaxInactivePeriod -> traceThreadDAO
+                        .findProjectsWithPendingClosureThreads(now, defaultTimeoutToMarkThreadAsInactive,
+                                cachedMaxInactivePeriod, limit));
+    }
+
+    private Mono<Instant> getPendingClosureLookbackBound(Instant now, Duration defaultTimeout, Duration minLookback) {
+        return getMaxTimeoutMarkThreadAsInactive(defaultTimeout)
                 .map(maxTimeout -> {
                     // max(coalesce(maxTimeout, defaultTimeout) + 1h, 1 day)
                     // Floor at 1 day: cheap enough (minmax index keeps it fast) and covers
@@ -291,10 +298,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                         lookbackPeriod = minLookback;
                     }
                     return now.minus(lookbackPeriod);
-                })
-                .flatMapMany(cachedMaxInactivePeriod -> traceThreadDAO
-                        .findProjectsWithPendingClosureThreads(now, defaultTimeoutToMarkThreadAsInactive,
-                                cachedMaxInactivePeriod, limit));
+                });
     }
 
     private Mono<Duration> getMaxTimeoutMarkThreadAsInactive(Duration defaultTimeout) {
@@ -311,20 +315,32 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
-            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive) {
+            @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive, Duration minLookback) {
         return Mono.deferContextual(
-                contextView -> closeThreadWith(projectId, now, defaultTimeoutToMarkThreadAsInactive,
+                contextView -> closeThreadWith(projectId, now, defaultTimeoutToMarkThreadAsInactive, minLookback,
                         contextView))
                 .then();
     }
 
     private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration defaultTimeoutToMarkThreadAsInactive,
-            ContextView ctx) {
+            Duration minLookback, ContextView ctx) {
 
         String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
+        // The lookback bound must be at least as wide as any window the enqueuing scan
+        // (getProjectsWithPendingClosureThreads) may have used, so minLookback here should be the
+        // cold-start lookback: a thread visible to the enqueuer but outside this window would be
+        // re-enqueued on every job run and never closed. Both scans read the same Redis-backed
+        // cached max timeout, so their windows stay consistent; the clamp below additionally
+        // guarantees a well-formed window (lookback before cutoff) even if that cached value lags
+        // a workspace timeout increase for up to its TTL.
         return getWorkspaceTimeout(now, defaultTimeoutToMarkThreadAsInactive)
-                .flatMapMany(lastUpdatedAt -> traceThreadDAO.streamPendingClosureThreads(projectId, lastUpdatedAt))
+                .zipWith(getPendingClosureLookbackBound(now, defaultTimeoutToMarkThreadAsInactive, minLookback))
+                .flatMapMany(bounds -> {
+                    Instant lastUpdatedAt = bounds.getT1();
+                    Instant lookbackBound = bounds.getT2().isBefore(lastUpdatedAt) ? bounds.getT2() : lastUpdatedAt;
+                    return traceThreadDAO.streamPendingClosureThreads(projectId, lastUpdatedAt, lookbackBound);
+                })
                 .flatMap(threads -> {
 
                     if (threads.isEmpty()) {

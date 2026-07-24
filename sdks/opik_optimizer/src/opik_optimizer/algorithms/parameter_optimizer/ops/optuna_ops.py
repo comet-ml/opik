@@ -21,6 +21,7 @@ from ....core import runtime
 from ....core.state import OptimizationContext
 from ....utils import display as display_utils
 from ....utils.logging import debug_log, _sanitize_debug_value
+from ....utils.scoring import improves_over
 from .search_ops import ParameterSearchSpace
 from .sensitivity_ops import sensitivity_analysis
 from .. import reporting
@@ -302,12 +303,14 @@ def select_best_trial(
     best_trial = max(completed_trials, key=lambda t: t.value)  # type: ignore[arg-type]
     if best_trial.value is not None:
         best_value = float(best_trial.value)
-        if best_value > best_score:
+        # OPIK-7038: strict tie policy. Only adopt a trial that STRICTLY beats
+        # the incumbent (routed through the shared ``improves_over`` helper). A
+        # tie keeps the incumbent — on the first call that incumbent is the
+        # baseline (empty ``best_parameters`` + baseline model kwargs), so a
+        # tied trial no longer leaks its parameters into the returned payload
+        # while the ``reused_baseline`` flag still reports "kept the original".
+        if improves_over(best_value, best_score):
             best_score = best_value
-            best_parameters = best_trial.user_attrs.get("parameters", {})
-            best_model_kwargs = best_trial.user_attrs.get("model_kwargs", {})
-            best_model = best_trial.user_attrs.get("model", best_model)
-        elif best_value == best_score and not best_parameters:
             best_parameters = best_trial.user_attrs.get("parameters", {})
             best_model_kwargs = best_trial.user_attrs.get("model_kwargs", {})
             best_model = best_trial.user_attrs.get("model", best_model)

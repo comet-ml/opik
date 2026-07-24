@@ -3,7 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { DropdownOption } from "@/types/shared";
 import { Checkbox } from "@/ui/checkbox";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
-import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import SideDialog from "@/shared/SideDialog/SideDialog";
 import { SheetTopBar } from "@/ui/sheet";

@@ -13,6 +13,8 @@ export interface AgentInsightsIssue {
     tracesQuery?: string;
     /** SUM(count) over the requested window */
     totalOccurrences?: number;
+    /** Occurrences on the latest report day in the window only. The issue's description/cause narrate that most recent run, so this is the count consistent with them; totalOccurrences instead sums every day in the window. */
+    latestCount?: number;
     /** SUM(total_count) over the requested window */
     total?: number;
     /** SUM(users_impacted) over the requested window */

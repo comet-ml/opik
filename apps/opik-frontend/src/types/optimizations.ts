@@ -1,5 +1,5 @@
 import { AggregatedFeedbackScore } from "@/types/shared";
-import { PROVIDER_MODEL_TYPE } from "./providers";
+import { BaseTraceDataErrorInfo } from "@/types/traces";
 
 export enum OPTIMIZATION_STATUS {
   RUNNING = "running",
@@ -19,7 +19,9 @@ export interface StudioPrompt {
 }
 
 export interface StudioLlmModel {
-  model: PROVIDER_MODEL_TYPE;
+  // Model ids come from the dynamic backend registry, not the legacy
+  // PROVIDER_MODEL_TYPE enum (which OPIK-5022 removes), so keep this a string.
+  model: string;
   parameters?: Record<string, unknown>;
 }
 
@@ -57,6 +59,12 @@ export interface NumericalSimilarityMetricParameters {
 
 export interface CodeMetricParameters {
   code: string;
+  // Rename-capable map from a `score()` parameter name to a dataset column
+  // name. Consumed by the backend `_build_code_metric` arguments contract:
+  // each entry exposes `dataset_item[column]` under `param` in the score()
+  // kwargs. `output` is always injected by the backend and never mapped here.
+  // Empty/absent → the backend splats the whole dataset item (back-compat).
+  arguments?: Record<string, string>;
 }
 
 export type MetricParameters =
@@ -66,6 +74,13 @@ export type MetricParameters =
   | LevenshteinMetricParameters
   | NumericalSimilarityMetricParameters
   | CodeMetricParameters;
+
+// Per-field validation errors for metric params, keyed by param name
+// (e.g. reference_key, task_introduction). Rendered inline by each metric form.
+export type MetricParamErrors = Record<
+  string,
+  { message?: string } | undefined
+>;
 
 export interface StudioMetric {
   type: METRIC_TYPE;
@@ -134,14 +149,41 @@ export interface OptimizationStudioConfig {
   optimizer: StudioOptimizer;
 }
 
+/**
+ * Exact scoring-health counts persisted by the backend into the `metadata`
+ * JSON column (OPIK-7159 Wave 2). Both fields are always present together; if
+ * the backend hasn't written this yet (older runs / older SDK) the whole key
+ * is absent.
+ */
+export interface OptimizationScoringHealth {
+  failed_count: number;
+  total_count: number;
+}
+
+/**
+ * Typed shape of the `metadata` JSON column on an Optimization row. All fields
+ * are optional because:
+ *  - `optimizer` / `model` are only written for SDK runs (Studio runs use
+ *    `studio_config`).
+ *  - `scoring_health` is written by the worker on run completion (it forwards
+ *    the count the SDK reports); older rows and older SDK versions omit it.
+ */
+export interface OptimizationMetadata {
+  optimizer?: string;
+  model?: string;
+  scoring_health?: OptimizationScoringHealth;
+  [key: string]: unknown;
+}
+
 export interface Optimization {
   id: string;
   name: string;
   project_id?: string;
   dataset_id: string;
   dataset_name: string;
-  metadata?: object;
+  metadata?: OptimizationMetadata;
   studio_config?: OptimizationStudioConfig;
+  error_info?: BaseTraceDataErrorInfo;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];
   num_trials: number;

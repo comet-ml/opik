@@ -32,11 +32,13 @@ from tests import llm_constants
 #   canonical "doesn't call tools" failure mode (see
 #   `SupportedJudgeProvider.java`), so don't swap it in here without
 #   re-validating tool-use tests by hand.
-# - Anthropic `claude-haiku-4-5` (native `AnthropicChatModel`): the
-#   cheap+fast Claude tier. Sonnet would also work but the per-call
-#   latency hurts CI throughput given the agentic loop's multi-round
-#   nature.
-# - Anthropic `claude-haiku-4-5` *via LiteLLM* (`litellm_anthropic`):
+# - Anthropic `claude-sonnet-4-6` (native `AnthropicChatModel`): the
+#   Claude tier we run the agentic judge against. Haiku is cheaper but
+#   on the agentic path (tools in the request, so `response_format` is
+#   best-effort) it narrates in prose and wraps the verdict in a
+#   ```json fence rather than emitting the bare object the parser
+#   expects; Sonnet follows the structured-output contract reliably.
+# - Anthropic `claude-sonnet-4-6` *via LiteLLM* (`litellm_anthropic`):
 #   identical model string as the native row, but routed through the
 #   LiteLLM adapter by forcing `_should_use_anthropic_native=False`.
 #   This is the only parametrize entry that exercises Anthropic-by-
@@ -51,11 +53,11 @@ from tests import llm_constants
 _JUDGE_MODEL_PARAMS: List[Tuple[str, List[str]]] = [
     (llm_constants.OPENAI_GPT_4O_MINI, ["_skip_unless_openai_configured"]),
     (
-        f"{llm_constants.ANTHROPIC_CLAUDE_HAIKU}",
+        f"{llm_constants.ANTHROPIC_CLAUDE_SONNET}",
         ["_skip_unless_anthropic_configured"],
     ),
     (
-        f"{llm_constants.LITELLM_ANTHROPIC_CLAUDE_HAIKU}",
+        f"{llm_constants.LITELLM_ANTHROPIC_CLAUDE_SONNET}",
         ["_skip_unless_anthropic_configured", "_force_litellm_path"],
     ),
 ]

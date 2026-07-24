@@ -1,5 +1,6 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.api.Source;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -53,6 +54,14 @@ public class ValidationUtils {
         if (StringUtils.isBlank(projectName) && projectId == null) {
             throw new BadRequestException("Either 'project_name' or 'project_id' query params must be provided");
         }
+    }
+
+    public static Source parseLogsSource(String source) {
+        if (StringUtils.isBlank(source)) {
+            return null;
+        }
+        return Source.fromString(source)
+                .orElseThrow(() -> new BadRequestException("Invalid source '%s'".formatted(source)));
     }
 
     public static void validateTimeRangeParameters(Instant startTime, Instant endTime) {

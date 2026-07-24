@@ -43,7 +43,10 @@ export interface AgentInsightsIssue {
   status: AGENT_INSIGHTS_ISSUE_STATUS;
   severity?: AGENT_INSIGHTS_ISSUE_SEVERITY;
   traces_query?: string;
+  // Cross-day sum over the window (overall scale).
   total_occurrences: number;
+  // Count on the most recent report day — matches the issue prose.
+  latest_count: number;
   total: number;
   users_impacted: number;
   total_users: number;
@@ -93,6 +96,10 @@ export interface AgentInsightsJob {
   // When a diagnostic report was last generated (incl. "all clear"); unaffected
   // by resolving/reopening issues. Used for the "Last scan" header.
   last_scan_at?: string;
+  // Set when a run fails, cleared on the next successful report.
+  last_failure_reason?: string;
+  last_failure_detail?: string;
+  last_failed_at?: string;
   created_at?: string;
   created_by?: string;
   last_updated_at?: string;

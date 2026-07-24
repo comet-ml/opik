@@ -11,8 +11,7 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 
 const DAILY_RUN_TIME_LABEL = "00:05 UTC";
 
-// TODO: point at the dedicated Diagnostics docs page once it ships.
-const DIAGNOSTICS_DOCS_URL = buildDocsUrl();
+const DIAGNOSTICS_DOCS_URL = buildDocsUrl("/tracing/diagnostics");
 
 type TurnOnDiagnosticDialogProps = {
   open: boolean;

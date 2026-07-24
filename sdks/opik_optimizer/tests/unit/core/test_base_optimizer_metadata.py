@@ -129,6 +129,14 @@ class TestBuildOptimizationMetadata:
 
         assert metadata["name"] == "my-optimization"
 
+    def test_includes_model(self) -> None:
+        """Should include the optimizer's model so the UI can show a pill."""
+        optimizer = ConcreteOptimizer(model="gpt-4")
+
+        metadata = state_utils.build_optimization_metadata(optimizer)
+
+        assert metadata["model"] == "gpt-4"
+
     def test_includes_agent_class_when_provided(self) -> None:
         """Should include agent class name when provided."""
         optimizer = ConcreteOptimizer(model="gpt-4")

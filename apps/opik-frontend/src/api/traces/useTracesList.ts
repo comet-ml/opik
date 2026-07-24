@@ -7,7 +7,7 @@ import {
   generateVisibilityFilters,
   processFilters,
 } from "@/lib/filters";
-import { LOGS_SOURCE } from "@/types/traces";
+import { LOGS_SOURCE, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 
@@ -24,6 +24,7 @@ type UseTracesListParams = {
   toTime?: string;
   exclude?: string[];
   logsSource?: LOGS_SOURCE;
+  visibilityMode?: TRACE_VISIBILITY_MODE;
   annotationQueueId?: string;
 };
 
@@ -48,11 +49,12 @@ const getTracesList = async (
     toTime,
     exclude,
     logsSource,
+    visibilityMode = TRACE_VISIBILITY_MODE.default,
     annotationQueueId,
   }: UseTracesListParams,
 ) => {
   const additionalFilters = [
-    ...generateVisibilityFilters(),
+    ...generateVisibilityFilters(visibilityMode),
     ...(logsSource ? generateLogsSourceFilter(logsSource) : []),
   ];
 

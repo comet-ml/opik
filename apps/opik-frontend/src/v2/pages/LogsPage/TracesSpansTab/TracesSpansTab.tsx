@@ -27,6 +27,7 @@ import {
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
 
+import useTracesOrSpansExist from "@/hooks/useTracesOrSpansExist";
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
@@ -1210,20 +1211,21 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
     );
 
-  const { data: existenceData } = useTracesOrSpansList(
+  // Cheap "does this project have any SDK-logged traces/spans?" probe for the empty-state decision.
+  // Scoped to source=sdk to match the sdk-scoped list above, so a project whose only data is non-sdk
+  // (experiment/playground/optimization/evaluator) reports false and correctly shows the SDK onboarding.
+  // Hits the LIMIT-1 existence endpoint instead of a size:1 list query, which builds full-project
+  // trace/span/cost/feedback aggregations in ClickHouse regardless of the selected time range.
+  const { exists: hasProjectData } = useTracesOrSpansExist(
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
-      page: 1,
-      size: 1,
-      stripAttachments: true,
-      logsSource: LOGS_SOURCE.sdk,
+      source: LOGS_SOURCE.sdk,
     },
     {
       enabled: isTableDataEnabled,
     },
   );
-  const hasProjectData = (existenceData?.total ?? 0) > 0;
 
   const isTableLoading =
     isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending;

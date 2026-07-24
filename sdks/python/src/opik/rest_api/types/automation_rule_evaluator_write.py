@@ -7,6 +7,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWriteAction
+from .automation_rule_evaluator_write_trigger_scope import AutomationRuleEvaluatorWriteTriggerScope
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
 from .span_filter_write import SpanFilterWrite
 from .span_llm_as_judge_code_write import SpanLlmAsJudgeCodeWrite
@@ -32,6 +33,11 @@ class Base(UniversalBaseModel):
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None
+    trigger_scope: typing.Optional[AutomationRuleEvaluatorWriteTriggerScope] = pydantic.Field(default=None)
+    """
+    Controls whether the rule fires on production traces, experiment traces, or both. Defaults to 'production' if omitted.
+    """
+
     action: AutomationRuleEvaluatorWriteAction
 
     if IS_PYDANTIC_V2:

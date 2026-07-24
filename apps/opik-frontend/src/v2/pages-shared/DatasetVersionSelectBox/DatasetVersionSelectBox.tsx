@@ -1,29 +1,20 @@
-import { KeyboardEvent, useMemo, useRef, useState } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/ui/select";
+import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Select, SelectContent, SelectTrigger, SelectValue } from "@/ui/select";
 import { Button } from "@/ui/button";
-import { Input } from "@/ui/input";
 import {
-  Check,
   ChevronRight,
   Database,
   GitCommitVertical,
   Info,
   ListChecks,
   Plus,
-  Search,
-  X,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { ListAction } from "@/ui/list-action";
 import { Separator } from "@/ui/separator";
 import { Spinner } from "@/ui/spinner";
 import { cn } from "@/lib/utils";
+import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import useDatasetVersionSelect, {
@@ -34,10 +25,13 @@ import { useFetchDataset } from "@/api/datasets/useDatasetById";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog";
+import DropdownEmptyState from "@/v2/pages-shared/DropdownEmptyState/DropdownEmptyState";
 import {
   parseDatasetVersionKey,
   formatDatasetVersionKey,
 } from "@/utils/datasetVersionStorage";
+import emptyDatasetOrSuiteLightUrl from "/images/empty-dataset-or-suite-light.svg";
+import emptyDatasetOrSuiteDarkUrl from "/images/empty-dataset-or-suite-dark.svg";
 
 export interface DatasetVersionData {
   hash: string;
@@ -49,23 +43,9 @@ interface DatasetVersionSelectBoxProps {
   versionName?: string;
   onChange: (value: string | null) => void;
   projectId?: string | null;
-  disabled?: boolean;
-  showClearButton?: boolean;
-  buttonClassName?: string;
   datasetType?: DATASET_TYPE;
-}
-
-function DatasetEmptyState({ typeLabel }: { typeLabel: string }) {
-  return (
-    <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
-      <div className="comet-body-s-accented pb-1 text-foreground">
-        No {typeLabel}s available
-      </div>
-      <div className="comet-body-s text-muted-slate">
-        Create a {typeLabel} with examples to evaluate your prompt on.
-      </div>
-    </div>
-  );
+  autoOpen?: boolean;
+  onDismiss?: () => void;
 }
 
 function DatasetVersionSelectBox({
@@ -73,17 +53,17 @@ function DatasetVersionSelectBox({
   versionName,
   onChange,
   projectId,
-  disabled = false,
-  showClearButton = true,
-  buttonClassName,
   datasetType,
+  autoOpen = false,
+  onDismiss,
 }: DatasetVersionSelectBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const resetDialogKeyRef = useRef(0);
+  const selectedInSessionRef = useRef(false);
 
   const [search, setSearch] = useState("");
   const [openDatasetId, setOpenDatasetId] = useState<string | null>(null);
-  const [isSelectOpen, setIsSelectOpen] = useState(false);
+  const [isSelectOpen, setIsSelectOpen] = useState(autoOpen);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const {
@@ -145,6 +125,7 @@ function DatasetVersionSelectBox({
         dataset.id,
         dataset.latest_version.id,
       );
+      selectedInSessionRef.current = true;
       onChange(formattedValue);
       setIsSelectOpen(false);
       setOpenDatasetId(null);
@@ -162,28 +143,33 @@ function DatasetVersionSelectBox({
         <div
           key={dataset.id}
           className={cn(
-            "comet-body-s group relative flex h-auto min-h-10 w-full gap-1 rounded-sm p-px",
+            "comet-body-s group relative flex h-auto min-h-8 w-full gap-1 rounded-sm p-px pr-1.5",
             isEmpty && "opacity-50",
           )}
         >
           <div
             onClick={() => !isEmpty && handleSelectLatestVersion(dataset)}
             className={cn(
-              "flex flex-1 items-start gap-2 rounded px-2 py-2",
+              "flex min-w-0 flex-1 items-center gap-2 rounded px-3 py-1",
               isEmpty
                 ? "cursor-not-allowed"
                 : "cursor-pointer group-hover:bg-primary-foreground",
               isHighlighted && !isEmpty && "bg-primary-foreground",
             )}
           >
-            <div className="mt-0.5 size-4 shrink-0">
-              {isSelected && <Check className="size-4 text-muted-slate" />}
-            </div>
             <TooltipWrapper content={dataset.name}>
-              <div className="flex flex-col gap-0.5">
-                <span className="max-w-[220px] truncate">{dataset.name}</span>
+              <div className="flex min-w-0 flex-col">
+                <div className="flex min-w-0 items-center gap-1">
+                  <span className="min-w-0 truncate">{dataset.name}</span>
+                  {dataset.latest_version && (
+                    <span className="flex shrink-0 items-center text-muted-slate">
+                      <GitCommitVertical className="size-3.5" />
+                      {dataset.latest_version.version_name}
+                    </span>
+                  )}
+                </div>
                 {dataset.description && (
-                  <span className="comet-body-s max-w-[220px] text-light-slate">
+                  <span className="comet-body-s truncate text-light-slate">
                     {dataset.description}
                   </span>
                 )}
@@ -192,7 +178,7 @@ function DatasetVersionSelectBox({
           </div>
 
           {isEmpty ? (
-            <div className="relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3">
+            <div className="relative flex w-8 shrink-0 items-center justify-center self-stretch rounded">
               <TooltipWrapper content={`This ${typeLabel} is empty`}>
                 <Info className="size-3.5 text-light-slate" />
               </TooltipWrapper>
@@ -204,7 +190,7 @@ function DatasetVersionSelectBox({
                   onMouseEnter={() => setOpenDatasetId(dataset.id)}
                   onMouseLeave={() => setOpenDatasetId(null)}
                   className={cn(
-                    "relative flex w-8 shrink-0 cursor-pointer justify-center self-stretch rounded pt-3",
+                    "relative flex w-8 shrink-0 cursor-pointer items-center justify-center self-stretch rounded",
                     isHighlighted && "bg-primary-foreground",
                   )}
                 >
@@ -216,7 +202,7 @@ function DatasetVersionSelectBox({
                 side="right"
                 align="start"
                 sideOffset={0}
-                className="max-h-[400px] overflow-y-auto p-0.5"
+                className="max-h-[200px] max-w-[180px] overflow-y-auto overflow-x-hidden p-1"
                 onMouseEnter={() => setOpenDatasetId(dataset.id)}
                 onMouseLeave={() => setOpenDatasetId(null)}
               >
@@ -225,7 +211,7 @@ function DatasetVersionSelectBox({
                     <Spinner />
                   </div>
                 ) : versions.length === 0 ? (
-                  <div className="comet-body-s flex min-w-40 items-center justify-center py-2 text-muted-slate">
+                  <div className="comet-body-s flex items-center justify-center p-1 text-muted-slate">
                     No versions
                   </div>
                 ) : (
@@ -256,27 +242,28 @@ function DatasetVersionSelectBox({
     }
 
     if (filteredDatasets.length === 0) {
-      if (search) {
-        return (
-          <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
-            No search results
-          </div>
-        );
-      }
-      return <DatasetEmptyState typeLabel={typeLabel} />;
+      return (
+        <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
+          No search results
+        </div>
+      );
     }
 
     return (
-      <div className="max-h-[30vh] space-y-[3px] overflow-y-auto overflow-x-hidden">
+      <div className="min-h-0 flex-1 space-y-[3px] overflow-y-auto overflow-x-hidden">
         {renderNestedList()}
         {hasMore && (
           <>
-            <SelectSeparator />
-            <div className="flex items-center justify-between border-t border-border px-4 py-2">
+            <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
               <div className="comet-body-s text-light-slate">
                 Showing first {DEFAULT_LOADED_DATASETS} items.
               </div>
-              <Button variant="link" onClick={loadMore} type="button">
+              <Button
+                variant="link"
+                onClick={loadMore}
+                type="button"
+                className="p-0"
+              >
                 Load more
               </Button>
             </div>
@@ -286,13 +273,21 @@ function DatasetVersionSelectBox({
     );
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key.length === 1) {
-      event.preventDefault();
-      setSearch((prev) => prev + event.key);
-      inputRef.current?.focus();
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Escape") {
+      event.stopPropagation();
     }
   };
+
+  const isEmptyState =
+    !isLoadingDatasets && !search && filteredDatasets.length === 0;
+
+  // Radix Select focuses the list on open; move focus to the search instead.
+  useEffect(() => {
+    if (!isSelectOpen) return;
+    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(id);
+  }, [isSelectOpen]);
 
   return (
     <>
@@ -300,49 +295,54 @@ function DatasetVersionSelectBox({
         <Select
           value={value || ""}
           onValueChange={(selectedValue) => {
+            selectedInSessionRef.current = true;
             onChange(selectedValue);
             setIsSelectOpen(false);
             setOpenDatasetId(null);
           }}
           onOpenChange={(open) => {
-            if (!open) {
+            if (open) {
+              selectedInSessionRef.current = false;
+            } else {
               setSearch("");
               setOpenDatasetId(null);
+              if (!selectedInSessionRef.current) onDismiss?.();
             }
             setIsSelectOpen(open);
           }}
           open={isSelectOpen}
-          disabled={disabled}
         >
-          <TooltipWrapper content={displayValue ?? `Select a ${typeLabel}`}>
+          <TooltipWrapper content={displayValue} hoverOnly>
             <SelectTrigger
               className={cn(
-                "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0 [&>span]:min-w-0 [&>span]:flex-1",
-                {
-                  "rounded-r-none": !!value && showClearButton,
-                },
-                buttonClassName,
+                "h-full w-auto min-w-0 max-w-[210px] gap-1 rounded-none border-0 bg-transparent px-2 py-0 text-xs shadow-none hover:shadow-none focus:border-0 [&>span]:min-w-0 [&>span]:flex-1 [&>svg]:transition-transform",
+                isSelectOpen
+                  ? "text-foreground"
+                  : value
+                    ? "group text-foreground hover:text-primary group-hover:[&>svg]:text-primary"
+                    : "text-light-slate hover:text-foreground",
+                { "[&>svg]:rotate-180": isSelectOpen },
               )}
             >
               <SelectValue
                 placeholder={
-                  <div className="flex w-full items-center text-light-slate">
-                    <TypeIcon className="mr-2 size-4 text-library-loaded" />
+                  <div className="flex w-full items-center">
+                    <TypeIcon className="mr-2 size-3 text-[#6bdf93]" />
                     <span className="truncate font-normal">
-                      Select a {typeLabel}
+                      Select {typeLabel}
                     </span>
                   </div>
                 }
               >
-                <div className="flex w-full items-center justify-between gap-2 text-foreground">
+                <div className="flex w-full items-center justify-between gap-1">
                   <div className="flex min-w-0 items-center gap-2">
-                    <TypeIcon className="size-4 shrink-0 text-library-loaded" />
+                    <TypeIcon className="size-3 shrink-0 text-[#6bdf93]" />
                     <span className="min-w-0 truncate">
                       {selectedDataset?.name}
                     </span>
                   </div>
-                  <div className="flex shrink-0 items-center text-muted-slate">
-                    <GitCommitVertical className="size-4" />
+                  <div className="flex shrink-0 items-center text-muted-slate group-hover:text-primary">
+                    <GitCommitVertical className="size-3" />
                     <span>{versionName ?? ""}</span>
                   </div>
                 </div>
@@ -350,53 +350,67 @@ function DatasetVersionSelectBox({
             </SelectTrigger>
           </TooltipWrapper>
 
-          <SelectContent
-            onKeyDown={handleKeyDown}
-            className="max-h-[700px] p-0"
-          >
-            <div className="flex h-full flex-col">
-              <div className="relative flex h-10 items-center justify-center gap-1 pl-6">
-                <Search className="absolute left-2 size-4 text-light-slate" />
-                <Input
-                  ref={inputRef}
-                  className="outline-0"
-                  placeholder={`Search ${typeLabel}s`}
-                  value={search}
-                  variant="ghost"
-                  onChange={(e) => setSearch(e.target.value)}
+          <SelectContent sideOffset={6} className="w-[275px] p-0">
+            <div className="flex max-h-[250px] flex-col">
+              {isEmptyState ? (
+                <DropdownEmptyState
+                  lightImageUrl={emptyDatasetOrSuiteLightUrl}
+                  darkImageUrl={emptyDatasetOrSuiteDarkUrl}
+                  title={
+                    isDatasetMode ? "No datasets yet" : "No test suites yet"
+                  }
+                  ctaLabel={
+                    canCreateDatasets
+                      ? isDatasetMode
+                        ? "Create dataset"
+                        : "Create test suite"
+                      : undefined
+                  }
+                  onCreate={
+                    canCreateDatasets
+                      ? () => {
+                          setIsSelectOpen(false);
+                          setIsDialogOpen(true);
+                        }
+                      : undefined
+                  }
                 />
-              </div>
-              <SelectSeparator />
-              {renderOptions()}
-              {canCreateDatasets && (
+              ) : (
                 <>
-                  <Separator className="my-1" />
-                  <ListAction
-                    onClick={() => {
-                      setIsSelectOpen(false);
-                      setIsDialogOpen(true);
-                    }}
-                  >
-                    <Plus className="size-3.5 shrink-0" />
-                    Add new
-                  </ListAction>
+                  <div className="shrink-0" onKeyDown={handleSearchKeyDown}>
+                    <SearchInput
+                      ref={inputRef}
+                      searchText={search}
+                      setSearchText={setSearch}
+                      variant="ghost"
+                      dimension="sm"
+                      disableDebounce
+                    />
+                  </div>
+                  <Separator className="my-1 shrink-0" />
+                  {renderOptions()}
+                  {canCreateDatasets && (
+                    <>
+                      <Separator className="my-1 shrink-0" />
+                      <ListAction
+                        variant="default"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => {
+                          setIsSelectOpen(false);
+                          setIsDialogOpen(true);
+                        }}
+                      >
+                        <Plus className="size-3.5 shrink-0" />
+                        New {typeLabel}
+                      </ListAction>
+                    </>
+                  )}
                 </>
               )}
             </div>
           </SelectContent>
         </Select>
-
-        {value && showClearButton && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="rounded-l-none border-l-0"
-            onClick={() => onChange(null)}
-            disabled={disabled}
-          >
-            <X className="text-light-slate" />
-          </Button>
-        )}
       </div>
       {isDatasetMode ? (
         <AddEditDatasetDialog

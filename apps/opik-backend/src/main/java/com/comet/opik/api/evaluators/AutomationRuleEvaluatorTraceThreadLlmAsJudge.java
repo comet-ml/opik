@@ -7,12 +7,14 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -37,14 +39,22 @@ public final class AutomationRuleEvaluatorTraceThreadLlmAsJudge
             @JsonView({
                     View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeMessage> messages,
-            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema) {
+            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema,
+            @JsonView({View.Public.class, View.Write.class}) @Positive BigDecimal maxCostUsd) {
 
         public static final String CONTEXT_VARIABLE_NAME = "context";
+
+        // Optional per-evaluation spend limit; overload preserves the prior positional shape
+        // (maxCostUsd = null = no limit).
+        public TraceThreadLlmAsJudgeCode(LlmAsJudgeModelParameters model, List<LlmAsJudgeMessage> messages,
+                List<LlmAsJudgeOutputSchema> schema) {
+            this(model, messages, schema, null);
+        }
 
     }
 
     @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",
-            "enabled", "filters", "code",
+            "enabled", "triggerScope", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
@@ -52,12 +62,14 @@ public final class AutomationRuleEvaluatorTraceThreadLlmAsJudge
             SortedSet<ProjectReference> projects,
             Set<UUID> projectIds,
             @NotBlank String name,
-            float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
+            float samplingRate, boolean enabled, EvalTriggerScope triggerScope,
+            List<TraceThreadFilter> filters,
             @NotNull TraceThreadLlmAsJudgeCode code,
             Instant createdAt,
             String createdBy,
             Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, projects, projectIds, name, samplingRate, enabled, filters, code,
+        super(id, projectId, projectName, projects, projectIds, name, samplingRate, enabled, triggerScope, filters,
+                code,
                 createdAt, createdBy,
                 lastUpdatedAt,
                 lastUpdatedBy);

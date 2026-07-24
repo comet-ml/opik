@@ -1,6 +1,9 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentInsightsJob;
+import com.comet.opik.api.AgentInsightsReport;
+import com.comet.opik.api.ReportFailure;
+import com.comet.opik.api.ReportFailureType;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -13,7 +16,9 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AgentInsightsJobResourceClient;
+import com.comet.opik.api.resources.utils.resources.AgentInsightsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.ReportFailureResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
 import com.comet.opik.domain.AgentInsightsReportClient;
@@ -31,6 +36,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -40,9 +48,11 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -65,13 +75,15 @@ class AgentInsightsJobsResourceTest {
     private static final String WORKSPACE_NAME_2 = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String USER_2 = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
-    private record Trigger(UUID projectId, String workspaceId, Instant periodStart, Instant periodEnd) {
+    private record Trigger(UUID projectId, String workspaceId, Instant periodStart, Instant periodEnd,
+            String triggerSource) {
     }
 
     // Recording client bound in place of the platform default, to capture triggers fired via the queue.
     private static final List<Trigger> TRIGGERS = new CopyOnWriteArrayList<>();
     private static final AgentInsightsReportClient RECORDING_CLIENT = (reportId, projectId, workspaceId,
-            periodStart, periodEnd) -> TRIGGERS.add(new Trigger(projectId, workspaceId, periodStart, periodEnd));
+            periodStart, periodEnd, triggerSource) -> TRIGGERS.add(
+                    new Trigger(projectId, workspaceId, periodStart, periodEnd, triggerSource));
 
     // Full stack: creating projects via the API exercises ClickHouse, so analytics containers are required.
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -124,6 +136,8 @@ class AgentInsightsJobsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private AgentInsightsJobResourceClient jobsClient;
+    private AgentInsightsResourceClient insightsClient;
+    private ReportFailureResourceClient reportFailuresClient;
     private AgentInsightsReportJob reportJob;
 
     @BeforeAll
@@ -134,6 +148,8 @@ class AgentInsightsJobsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.jobsClient = new AgentInsightsJobResourceClient(client, baseURI);
+        this.insightsClient = new AgentInsightsResourceClient(client);
+        this.reportFailuresClient = new ReportFailureResourceClient(client);
         this.reportJob = injector.getInstance(AgentInsightsReportJob.class);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -285,6 +301,122 @@ class AgentInsightsJobsResourceTest {
         var trigger = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow();
         assertThat(trigger.workspaceId()).isEqualTo(WORKSPACE_ID);
         assertThat(trigger.periodStart()).isBefore(trigger.periodEnd());
+        assertThat(trigger.triggerSource()).isEqualTo("manual");
+    }
+
+    // Failures are recorded through the report-failures endpoint (type=agent_insights, project_id=project),
+    // exactly as Ollie does; the job then surfaces the latest one via its query.
+    private ReportFailure agentInsightsFailure(UUID projectId, String reason, String detail) {
+        return ReportFailure.builder()
+                .type(ReportFailureType.AGENT_INSIGHTS)
+                .projectId(projectId)
+                .reason(reason)
+                .detail(detail)
+                .build();
+    }
+
+    @Test
+    @DisplayName("Run failure is surfaced on the job and cleared by the next successful report")
+    void runFailure__recordedThenClearedOnSuccess() {
+        var projectId = createProject();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+
+        reportFailuresClient.create(
+                agentInsightsFailure(projectId, "out_of_credits", "anthropic 402: insufficient credits"),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+
+        try (var afterFailure = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(afterFailure.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var job = afterFailure.readEntity(AgentInsightsJob.class);
+            assertThat(job.lastFailureReason()).isEqualTo("out_of_credits");
+            assertThat(job.lastFailureDetail()).isEqualTo("anthropic 402: insufficient credits");
+            assertThat(job.lastFailedAt()).isNotNull();
+        }
+
+        // An all-clear report is a successful run; it advances last_scan_at and supersedes the failure.
+        insightsClient.reportIssues(
+                AgentInsightsReport.builder().projectId(projectId).reportDay(LocalDate.now()).issues(List.of())
+                        .build(),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+
+        try (var afterSuccess = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(afterSuccess.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var job = afterSuccess.readEntity(AgentInsightsJob.class);
+            assertThat(job.lastScanAt()).isNotNull();
+            assertThat(job.lastFailureReason()).isNull();
+            assertThat(job.lastFailureDetail()).isNull();
+            assertThat(job.lastFailedAt()).isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("Failures accumulate as history; the job surfaces the most recent one")
+    void runFailure__multipleFailures__latestSurfaced() {
+        var projectId = createProject();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+
+        reportFailuresClient.create(agentInsightsFailure(projectId, "rate_limited", "429 first"),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+        reportFailuresClient.create(agentInsightsFailure(projectId, "out_of_credits", "402 latest"),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+
+        // Both rows are appended to report_failures (history); the job surfaces the latest.
+        try (var resp = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            var job = resp.readEntity(AgentInsightsJob.class);
+            assertThat(job.lastFailureReason()).isEqualTo("out_of_credits");
+            assertThat(job.lastFailureDetail()).isEqualTo("402 latest");
+        }
+        assertThat(reportFailuresClient.find("agent_insights", projectId, API_KEY, WORKSPACE_NAME).total())
+                .isEqualTo(2);
+    }
+
+    private static Stream<Arguments> invalidReportFailures() {
+        return Stream.of(
+                Arguments.of("missing type",
+                        ReportFailure.builder().projectId(UUID.randomUUID()).reason("x").build()),
+                Arguments.of("missing project id",
+                        ReportFailure.builder().type(ReportFailureType.AGENT_INSIGHTS).reason("x").build()),
+                Arguments.of("blank reason",
+                        ReportFailure.builder().type(ReportFailureType.AGENT_INSIGHTS).projectId(UUID.randomUUID())
+                                .reason("")
+                                .build()));
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @MethodSource("invalidReportFailures")
+    @DisplayName("Report failure with an invalid body fails validation (422)")
+    void reportFailure__invalidBody__returns422(String name, ReportFailure body) {
+        reportFailuresClient.create(body, API_KEY, WORKSPACE_NAME, 422);
+    }
+
+    @Test
+    @DisplayName("Report failure with an unsupported type is rejected (400) before hitting the DB enum")
+    void reportFailure__unsupportedType__returns400() {
+        // Raw JSON: the typed DTO can't express an invalid enum, so post an unknown `type` directly.
+        var body = """
+                {"type": "not_a_real_type", "project_id": "%s", "reason": "x"}""".formatted(UUID.randomUUID());
+        reportFailuresClient.createRaw(body, API_KEY, WORKSPACE_NAME, HttpStatus.SC_BAD_REQUEST);
+    }
+
+    @Test
+    @DisplayName("Report failures are listed for the project, most recent first")
+    void reportFailure__createAndRead() {
+        var projectId = createProject();
+
+        reportFailuresClient.create(agentInsightsFailure(projectId, "rate_limited", "first"),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+        reportFailuresClient.create(agentInsightsFailure(projectId, "out_of_credits", "latest"),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+
+        var page = reportFailuresClient.find("agent_insights", projectId, API_KEY, WORKSPACE_NAME);
+        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.content()).hasSize(2);
+        var latest = page.content().getFirst();
+        assertThat(latest.type()).isEqualTo(ReportFailureType.AGENT_INSIGHTS);
+        assertThat(latest.projectId()).isEqualTo(projectId);
+        assertThat(latest.reason()).isEqualTo("out_of_credits");
+        assertThat(latest.detail()).isEqualTo("latest");
+        assertThat(latest.createdAt()).isNotNull();
     }
 
     @Test
@@ -306,5 +438,7 @@ class AgentInsightsJobsResourceTest {
 
         await().atMost(10, SECONDS).untilAsserted(() -> assertThat(
                 TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(1));
+        var trigger = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow();
+        assertThat(trigger.triggerSource()).isEqualTo("scheduled");
     }
 }

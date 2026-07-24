@@ -5,5 +5,6 @@ export const TraceSource = {
     Experiment: "experiment",
     Playground: "playground",
     Optimization: "optimization",
+    Evaluator: "evaluator",
 } as const;
 export type TraceSource = (typeof TraceSource)[keyof typeof TraceSource];

@@ -3,13 +3,23 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.SpanField;
+import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.metrics.BreakdownConfig;
+import com.comet.opik.api.metrics.BreakdownField;
+import com.comet.opik.api.metrics.MetricType;
+import com.comet.opik.api.metrics.ProjectMetricRequest;
+import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
+import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -20,6 +30,7 @@ import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -47,7 +58,9 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -65,6 +78,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -81,6 +95,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Workspace Metrics Resource Test")
@@ -124,6 +139,7 @@ class WorkspacesResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private WorkspaceResourceClient workspaceResourceClient;
+    private ProjectMetricsResourceClient projectMetricsResourceClient;
     private IdGenerator idGenerator;
 
     @BeforeAll
@@ -135,6 +151,7 @@ class WorkspacesResourceTest {
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.workspaceResourceClient = new WorkspaceResourceClient(client, baseURI, factory);
+        this.projectMetricsResourceClient = new ProjectMetricsResourceClient(client, baseURI);
         this.idGenerator = idGenerator;
 
         ClientSupportUtils.config(client);
@@ -514,6 +531,312 @@ class WorkspacesResourceTest {
                         .isEqualTo(expectedMetricsSummary);
             }
         }
+    }
+
+    @Nested
+    @DisplayName("Span metrics")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanMetricsTest {
+
+        @Test
+        void spanTokenUsage_matchesPerProjectEndpoint() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            createSpansWithUsage(projectName, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai", "anthropic", "openai"));
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            var perProject = projectMetricsResourceClient.getProjectMetrics(projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.SPAN_TOKEN_USAGE)
+                            .interval(TimeInterval.HOURLY)
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .build(),
+                    Number.class, apiKey, workspaceName);
+
+            // Explicit project subset must match the per-project endpoint exactly (the "exact copy" contract)
+            var workspaceSubset = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, Set.of(projectId), startTime, endTime, null), apiKey,
+                    workspaceName);
+            assertSeriesMatch(seriesFromWorkspace(workspaceSubset.results()),
+                    seriesFromProject(perProject.results()));
+
+            // No project ids => all projects. Workspace has only this project, so it must also match.
+            var workspaceAll = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, endTime, null), apiKey, workspaceName);
+            assertSeriesMatch(seriesFromWorkspace(workspaceAll.results()), seriesFromProject(perProject.results()));
+        }
+
+        @Test
+        void spanTokenUsage_withProviderBreakdown_matchesPerProjectEndpoint() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            // Seed spans with a known usage key and providers so the token-usage breakdown is deterministic
+            createSpansWithUsage(projectName, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai", "anthropic", "openai"));
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+            var breakdown = BreakdownConfig.builder()
+                    .field(BreakdownField.PROVIDER)
+                    .subMetric("completion_tokens")
+                    .build();
+
+            var perProject = projectMetricsResourceClient.getProjectMetrics(projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.SPAN_TOKEN_USAGE)
+                            .interval(TimeInterval.HOURLY)
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .breakdown(breakdown)
+                            .build(),
+                    Number.class, apiKey, workspaceName);
+
+            var workspace = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, Set.of(projectId), startTime, endTime, breakdown),
+                    apiKey, workspaceName);
+
+            assertThat(workspace.results()).isNotEmpty();
+            assertSeriesMatch(seriesFromWorkspace(workspace.results()), seriesFromProject(perProject.results()));
+        }
+
+        @Test
+        void allProjects_matchSelectedProjects_whenWorkspaceContainsOnlyThose() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String projectName1 = RandomStringUtils.randomAlphabetic(10);
+            String projectName2 = RandomStringUtils.randomAlphabetic(10);
+            var projectId1 = projectResourceClient.createProject(projectName1, apiKey, workspaceName);
+            var projectId2 = projectResourceClient.createProject(projectName2, apiKey, workspaceName);
+
+            createSpansWithUsage(projectName1, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai", "anthropic"));
+            createSpansWithUsage(projectName2, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai"));
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            var all = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, endTime, null), apiKey, workspaceName);
+            var selected = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, Set.of(projectId1, projectId2), startTime, endTime, null),
+                    apiKey, workspaceName);
+
+            assertThat(sumValues(all.results())).isPositive();
+            assertSeriesMatch(seriesFromWorkspace(all.results()), seriesFromWorkspace(selected.results()));
+        }
+
+        @Test
+        void allProjects_returnsEmpty_whenWorkspaceHasNoData() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            // "All projects" resolves the project set server-side; with no span data it must return nothing rather
+            // than falling back to an unconstrained workspace-wide scan.
+            var all = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, endTime, null), apiKey, workspaceName);
+
+            assertThat(sumValues(all.results())).isZero();
+        }
+
+        @Test
+        void workspaceMetric_isolatesByWorkspace() {
+            var workspaceA = UUID.randomUUID().toString();
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceA, UUID.randomUUID().toString());
+            var workspaceB = UUID.randomUUID().toString();
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceB, UUID.randomUUID().toString());
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, apiKeyA, workspaceA);
+            createSpansWithUsage(projectName, apiKeyA, workspaceA, Instant.now(), "completion_tokens",
+                    List.of("openai", "anthropic"));
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+            var request = spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, endTime, null);
+
+            assertThat(
+                    sumValues(workspaceResourceClient.getWorkspaceSpanMetric(request, apiKeyA, workspaceA).results()))
+                    .isPositive();
+            assertThat(
+                    sumValues(workspaceResourceClient.getWorkspaceSpanMetric(request, apiKeyB, workspaceB).results()))
+                    .isZero();
+        }
+
+        @Test
+        void spanTokenUsage_withFilter_matchesPerProjectEndpoint() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            // Two openai spans and one anthropic span, each with 10 completion tokens, so a provider filter must
+            // narrow the total to the two openai spans => 20 tokens.
+            createSpansWithUsage(projectName, apiKey, workspaceName, Instant.now(), "completion_tokens",
+                    List.of("openai", "anthropic", "openai"));
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+            List<SpanFilter> filters = List.of(SpanFilter.builder()
+                    .field(SpanField.PROVIDER)
+                    .operator(Operator.EQUAL)
+                    .value("openai")
+                    .build());
+
+            var perProject = projectMetricsResourceClient.getProjectMetrics(projectId,
+                    ProjectMetricRequest.builder()
+                            .metricType(MetricType.SPAN_TOKEN_USAGE)
+                            .interval(TimeInterval.HOURLY)
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .spanFilters(filters)
+                            .build(),
+                    Number.class, apiKey, workspaceName);
+
+            var workspace = workspaceResourceClient.getWorkspaceSpanMetric(
+                    WorkspaceSpanMetricRequest.builder()
+                            .metricType(MetricType.SPAN_TOKEN_USAGE)
+                            .interval(TimeInterval.HOURLY)
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(Set.of(projectId))
+                            .filters(filters)
+                            .build(),
+                    apiKey, workspaceName);
+
+            assertThat(sumValues(workspace.results())).isEqualTo(20d);
+            assertSeriesMatch(seriesFromWorkspace(workspace.results()), seriesFromProject(perProject.results()));
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"   "})
+        void tokenUsageBreakdown_withoutSubMetric_returnsBadRequest(String subMetric) {
+            var startTime = Instant.now().minus(Duration.ofDays(1));
+            var breakdown = BreakdownConfig.builder().field(BreakdownField.PROVIDER).subMetric(subMetric).build();
+            var request = spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, Instant.now(), breakdown);
+
+            try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        // Only SPAN_TOKEN_USAGE is supported across projects; everything else (including other span metrics) is 400.
+        @ParameterizedTest
+        @EnumSource(value = MetricType.class, names = {"SPAN_COUNT", "SPAN_COST", "SPAN_DURATION", "TRACE_COUNT"})
+        void unsupportedMetricType_returnsBadRequest(MetricType metricType) {
+            var startTime = Instant.now().minus(Duration.ofDays(1));
+            var request = spanRequest(metricType, null, startTime, Instant.now(), null);
+
+            try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        void missingMetricType_returnsBadRequest() {
+            var startTime = Instant.now().minus(Duration.ofDays(1));
+            var request = spanRequest(null, null, startTime, Instant.now(), null);
+
+            try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+    }
+
+    private WorkspaceSpanMetricRequest spanRequest(MetricType metricType, Set<UUID> projectIds, Instant startTime,
+            Instant endTime, BreakdownConfig breakdown) {
+        return WorkspaceSpanMetricRequest.builder()
+                .metricType(metricType)
+                .interval(TimeInterval.HOURLY)
+                .intervalStart(startTime)
+                .intervalEnd(endTime)
+                .projectIds(projectIds)
+                .breakdown(breakdown)
+                .build();
+    }
+
+    // Compares two sets of series as name -> (bucket -> value) maps, so the WorkspaceMetricResponse shape can be
+    // checked against the per-project ProjectMetricResponse (parity) or against another workspace response.
+    private void assertSeriesMatch(Map<String, Map<String, Double>> actual,
+            Map<String, Map<String, Double>> expected) {
+        assertThat(actual.keySet()).containsExactlyInAnyOrderElementsOf(expected.keySet());
+        actual.forEach((name, points) -> {
+            var expectedPoints = expected.get(name);
+            assertThat(points.keySet()).containsExactlyInAnyOrderElementsOf(expectedPoints.keySet());
+            points.forEach((bucket, value) -> assertThat(value == null ? 0d : value)
+                    .isCloseTo(expectedPoints.get(bucket) == null ? 0d : expectedPoints.get(bucket), within(1e-6)));
+        });
+    }
+
+    private Map<String, Map<String, Double>> seriesFromWorkspace(List<WorkspaceMetricResponse.Result> results) {
+        return results.stream()
+                .collect(Collectors.toMap(WorkspaceMetricResponse.Result::name, result -> pointsToMap(result.data())));
+    }
+
+    private Map<String, Map<String, Double>> seriesFromProject(List<ProjectMetricResponse.Results<Number>> results) {
+        return results.stream()
+                .collect(Collectors.toMap(ProjectMetricResponse.Results::name, result -> pointsToMap(result.data())));
+    }
+
+    private Map<String, Double> pointsToMap(List<? extends DataPoint<? extends Number>> data) {
+        return data.stream().collect(
+                HashMap::new,
+                (map, point) -> map.put(point.time().toString(),
+                        point.value() == null ? null : point.value().doubleValue()),
+                HashMap::putAll);
+    }
+
+    private double sumValues(List<WorkspaceMetricResponse.Result> results) {
+        return results.stream()
+                .flatMap(result -> result.data().stream())
+                .map(DataPoint::value)
+                .filter(value -> value != null)
+                .mapToDouble(Number::doubleValue)
+                .sum();
+    }
+
+    private List<Span> createSpansWithUsage(String projectName, String apiKey, String workspaceName, Instant time,
+            String usageKey, List<String> providers) {
+        var spans = providers.stream()
+                .map(provider -> factory.manufacturePojo(Span.class).toBuilder()
+                        .startTime(time)
+                        .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                        .projectId(null)
+                        .projectName(projectName)
+                        .provider(provider)
+                        .usage(Map.of(usageKey, 10))
+                        .feedbackScores(null)
+                        .build())
+                .toList();
+
+        spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+        return spans;
     }
 
     private List<Span> createSpans(String projectName, String apiKey,

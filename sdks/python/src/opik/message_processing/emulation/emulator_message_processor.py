@@ -51,7 +51,15 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
 
     def __init__(self, active: bool, merge_duplicates: bool) -> None:
         self.merge_duplicates = merge_duplicates
-        self._active = active
+        # Ref-counted activation: callers acquire/release so concurrent users
+        # (e.g. several evaluate() runs sharing one connection's processing
+        # chain) coordinate instead of the first to finish deactivating the
+        # emulator out from under the others.
+        self._active_count = 1 if active else 0
+        # Single-slot guard for record_traces_locally(), independent of
+        # evaluate()'s activation so a running evaluation doesn't spuriously
+        # block recording.
+        self._recording_context_active = False
 
         self._register_handlers()
 
@@ -110,11 +118,49 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
 
     def is_active(self) -> bool:
         with self._rlock:
-            return self._active
+            return self._active_count > 0
 
     def set_active(self, active: bool) -> None:
+        # Hard set, kept for non-ref-counted callers/tests.
         with self._rlock:
-            self._active = active
+            self._active_count = 1 if active else 0
+
+    def acquire(self, reset: bool = True) -> None:
+        """Ref-counted activation. The first acquire activates the emulator
+        (optionally resetting stale state); concurrent acquirers share it."""
+        with self._rlock:
+            if self._active_count == 0 and reset:
+                self.reset()
+            self._active_count += 1
+
+    def release(self, reset: bool = True) -> None:
+        """Release one activation. The last release deactivates the emulator
+        (optionally clearing state); earlier releases keep it active for the
+        remaining holders."""
+        with self._rlock:
+            if self._active_count == 0:
+                return
+            self._active_count -= 1
+            if self._active_count == 0 and reset:
+                self.reset()
+
+    def begin_recording_context(self) -> bool:
+        """Claim the single record_traces_locally() slot for this emulator.
+
+        Returns True if the slot was claimed, False if a recording context is
+        already active (so the caller should refuse nested/overlapping
+        recording). Independent of ``acquire``/``release`` so a running
+        evaluation does not block recording.
+        """
+        with self._rlock:
+            if self._recording_context_active:
+                return False
+            self._recording_context_active = True
+            return True
+
+    def end_recording_context(self) -> None:
+        with self._rlock:
+            self._recording_context_active = False
 
     def get_trace(self, trace_id: str) -> Optional[models.TraceModel]:
         """Return the stored trace by id, or None if not present.

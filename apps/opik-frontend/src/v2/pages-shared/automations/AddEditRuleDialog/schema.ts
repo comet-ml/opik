@@ -5,6 +5,7 @@ import {
   EVALUATORS_RULE_SCOPE,
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
+  EVAL_TRIGGER_SCOPE,
 } from "@/types/automations";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { updateProviderConfig } from "@/lib/modelUtils";
@@ -204,6 +205,11 @@ const LLMJudgeBaseSchema = z.object({
       },
       { message: "All score definition names should be unique" },
     ),
+  maxCostUsd: z
+    .number()
+    .positive({ message: "Budget must be a positive amount" })
+    .optional()
+    .nullable(),
 });
 
 export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
@@ -213,11 +219,11 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       .string()
       .min(1, { message: "Key is required" })
       // Allow the standard JSONPath form (input/output/metadata.[...]) OR a reserved
-      // bare sentinel like `spans` — see RESERVED_TRACE_EVALUATOR_VARIABLES. The
-      // backend's OnlineScoringEngine substitutes the sentinel with the JSON-
-      // serialized spans list at render time.
-      .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
-        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
+      // bare sentinel like `spans` / `trace` — see RESERVED_TRACE_LLM_JUDGE_VARIABLES.
+      // The backend's OnlineScoringEngine substitutes `spans` with the JSON-serialized
+      // spans list and `trace` with the trace skeleton (ids + attachments) at render time.
+      .regex(/^(input|output|metadata)(\.|$)|^spans$|^trace$/, {
+        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), the reserved word "spans" to inject the trace's spans list, or "trace" to inject the trace skeleton with attachments`,
       }),
   ),
 }).superRefine((data, ctx) => {
@@ -267,8 +273,12 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
     z
       .string()
       .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+      // Allow the standard JSONPath form (input/output/metadata.[...]) OR the reserved
+      // bare sentinel `span` — see RESERVED_SPAN_LLM_JUDGE_VARIABLES. The backend's
+      // OnlineScoringEngine substitutes `span` with the span structure (span id +
+      // attachment file_names) at render time.
+      .regex(/^(input|output|metadata)(\.|$)|^span$/, {
+        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "span" to inject the span with its attachments`,
       }),
   ),
 }).superRefine((data, ctx) => {
@@ -403,6 +413,9 @@ export const BaseEvaluationRuleFormSchema = z.object({
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
   enabled: z.boolean().default(true),
+  triggerScope: z
+    .nativeEnum(EVAL_TRIGGER_SCOPE)
+    .default(EVAL_TRIGGER_SCOPE.production),
   filters: FiltersSchema.default([]),
 });
 
@@ -526,6 +539,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     variables: data.variables ?? {},
     parsingVariablesError: false,
     schema: data.schema,
+    maxCostUsd: data.max_cost_usd ?? null,
   };
 };
 
@@ -557,5 +571,6 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     messages: convertLLMToProviderMessages(data.messages),
     variables: data.variables,
     schema: data.schema,
+    max_cost_usd: data.maxCostUsd ?? null,
   };
 };

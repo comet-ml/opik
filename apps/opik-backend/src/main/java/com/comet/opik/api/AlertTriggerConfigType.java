@@ -14,7 +14,8 @@ public enum AlertTriggerConfigType {
     THRESHOLD_FEEDBACK_SCORE("threshold:feedback_score"),
     THRESHOLD_COST("threshold:cost"),
     THRESHOLD_LATENCY("threshold:latency"),
-    THRESHOLD_ERRORS("threshold:errors");
+    THRESHOLD_ERRORS("threshold:errors"),
+    FILTER_GUARDRAIL_TYPE("filter:guardrail_type");
 
     @JsonValue
     private final String value;

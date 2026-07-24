@@ -154,6 +154,24 @@ public final class TraceToolContext {
     }
 
     /**
+     * Build a context for a span-scoped evaluation — the judge scores a single span and may load its
+     * attachments via {@code get_attachment(type=span, ...)}. Like {@link #forThread} there is no active
+     * <em>trace</em> (so {@link #hasActiveTrace()} stays false and {@code get_trace_spans} is correctly
+     * unavailable); the session {@code projectId} is taken from the span. The caller pre-seeds the span
+     * JSON into the cache via {@link #cache} under {@code EntityRef(SPAN, spanId)} so
+     * {@code read}/{@code jq} resolve it without a re-fetch.
+     */
+    public static TraceToolContext forActiveSpan(@NonNull Span span,
+            @NonNull String workspaceId, @NonNull String userName) {
+        return forActiveSpan(span, workspaceId, userName, DEFAULT_MAX_INJECTED_BYTES);
+    }
+
+    public static TraceToolContext forActiveSpan(@NonNull Span span,
+            @NonNull String workspaceId, @NonNull String userName, long maxInjectedBytes) {
+        return new TraceToolContext(null, null, workspaceId, userName, span.projectId(), maxInjectedBytes);
+    }
+
+    /**
      * True for trace-scoped evaluations (built via the public constructor), false
      * for thread-scoped ones (built via {@link #forThread}). Tools that need the
      * active trace ({@link GetTraceSpansTool}) should branch on this rather than

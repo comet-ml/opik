@@ -10,5 +10,7 @@ export {
   type FeedbackScoreRef,
   type TraceDetail,
   type AutomationRuleRef,
+  type AnnotationQueueDetail,
+  type AnnotationQueueReviewerRef,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';

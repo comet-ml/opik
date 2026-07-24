@@ -19,6 +19,7 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     () => ({
       isPending: false,
       hasAccess: true,
+      isOrganizationAdmin: true,
       spendWorkspaceName: "default",
       organizationName: "local",
       isSpendWorkspaceActive: true,

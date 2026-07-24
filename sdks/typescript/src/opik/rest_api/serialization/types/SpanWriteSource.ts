@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const SpanWriteSource: core.serialization.Schema<serializers.SpanWriteSource.Raw, OpikApi.SpanWriteSource> =
-    core.serialization.enum_(["sdk", "experiment", "playground", "optimization"]);
+    core.serialization.enum_(["sdk", "experiment", "playground", "optimization", "evaluator"]);
 
 export declare namespace SpanWriteSource {
-    export type Raw = "sdk" | "experiment" | "playground" | "optimization";
+    export type Raw = "sdk" | "experiment" | "playground" | "optimization" | "evaluator";
 }

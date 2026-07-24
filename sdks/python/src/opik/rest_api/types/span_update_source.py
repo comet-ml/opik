@@ -2,4 +2,6 @@
 
 import typing
 
-SpanUpdateSource = typing.Union[typing.Literal["sdk", "experiment", "playground", "optimization"], typing.Any]
+SpanUpdateSource = typing.Union[
+    typing.Literal["sdk", "experiment", "playground", "optimization", "evaluator"], typing.Any
+]

@@ -2,4 +2,6 @@
 
 import typing
 
-SpanWriteSource = typing.Union[typing.Literal["sdk", "experiment", "playground", "optimization"], typing.Any]
+SpanWriteSource = typing.Union[
+    typing.Literal["sdk", "experiment", "playground", "optimization", "evaluator"], typing.Any
+]

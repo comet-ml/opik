@@ -89,7 +89,8 @@ public class OnlineScoringSpanSampler {
         // fetch automation rules per project
         spansByProject.forEach((projectId, spans) -> {
             // Only score spans from SDK logging source. Non-SDK spans (playground, experiment,
-            // optimization) are skipped from online evaluation.
+            // optimization, and the engine's own evaluator monitoring spans) are skipped from online
+            // evaluation.
             var scorableSpans = spans.stream().filter(span -> Source.isLoggingSource(span.source())).toList();
             if (scorableSpans.isEmpty()) {
                 log.info("No scorable spans: source is not SDK, projectId '{}', workspaceId '{}'",

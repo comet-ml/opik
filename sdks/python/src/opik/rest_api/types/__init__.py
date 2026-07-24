@@ -99,6 +99,9 @@ from .automation_rule_evaluator_object_object_public import (
     AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_object_object_public_action import AutomationRuleEvaluatorObjectObjectPublicAction
+from .automation_rule_evaluator_object_object_public_trigger_scope import (
+    AutomationRuleEvaluatorObjectObjectPublicTriggerScope,
+)
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
@@ -110,6 +113,7 @@ from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_public_action import AutomationRuleEvaluatorPublicAction
+from .automation_rule_evaluator_public_trigger_scope import AutomationRuleEvaluatorPublicTriggerScope
 from .automation_rule_evaluator_span_llm_as_judge import AutomationRuleEvaluatorSpanLlmAsJudge
 from .automation_rule_evaluator_span_llm_as_judge_public import AutomationRuleEvaluatorSpanLlmAsJudgePublic
 from .automation_rule_evaluator_span_llm_as_judge_write import AutomationRuleEvaluatorSpanLlmAsJudgeWrite
@@ -136,6 +140,7 @@ from .automation_rule_evaluator_trace_thread_user_defined_metric_python_public i
 from .automation_rule_evaluator_trace_thread_user_defined_metric_python_write import (
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite,
 )
+from .automation_rule_evaluator_trigger_scope import AutomationRuleEvaluatorTriggerScope
 from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate,
     AutomationRuleEvaluatorUpdate_LlmAsJudge,
@@ -157,6 +162,7 @@ from .automation_rule_evaluator_update_trace_thread_llm_as_judge import (
 from .automation_rule_evaluator_update_trace_thread_user_defined_metric_python import (
     AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython,
 )
+from .automation_rule_evaluator_update_trigger_scope import AutomationRuleEvaluatorUpdateTriggerScope
 from .automation_rule_evaluator_update_user_defined_metric_python import (
     AutomationRuleEvaluatorUpdateUserDefinedMetricPython,
 )
@@ -177,6 +183,7 @@ from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWriteAction
+from .automation_rule_evaluator_write_trigger_scope import AutomationRuleEvaluatorWriteTriggerScope
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
 from .batch_delete_by_project import BatchDeleteByProject
@@ -191,6 +198,8 @@ from .boolean_feedback_detail import BooleanFeedbackDetail
 from .boolean_feedback_detail_create import BooleanFeedbackDetailCreate
 from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
 from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
+from .breakdown_config import BreakdownConfig
+from .breakdown_config_field import BreakdownConfigField
 from .breakdown_config_public import BreakdownConfigPublic
 from .breakdown_config_public_field import BreakdownConfigPublicField
 from .bridge_command import BridgeCommand
@@ -312,6 +321,7 @@ from .execution_policy import ExecutionPolicy
 from .execution_policy_compare import ExecutionPolicyCompare
 from .execution_policy_public import ExecutionPolicyPublic
 from .execution_policy_write import ExecutionPolicyWrite
+from .existence_response import ExistenceResponse
 from .experiment import Experiment
 from .experiment_evaluation_method import ExperimentEvaluationMethod
 from .experiment_execution_response import ExperimentExecutionResponse
@@ -413,12 +423,10 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
-from .harness_entry import HarnessEntry
 from .ids_holder import IdsHolder
 from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
-from .item import Item
 from .item_lock_info import ItemLockInfo
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
@@ -434,7 +442,6 @@ from .json_schema import JsonSchema
 from .kpi_card_response import KpiCardResponse
 from .kpi_metric import KpiMetric
 from .kpi_metric_type import KpiMetricType
-from .lane import Lane
 from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -477,7 +484,6 @@ from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
 from .message import Message
-from .model_tiers import ModelTiers
 from .multipart_upload_part import MultipartUploadPart
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
@@ -569,6 +575,9 @@ from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
+from .report_failure import ReportFailure
+from .report_failure_page import ReportFailurePage
+from .report_failure_type import ReportFailureType
 from .report_preference import ReportPreference
 from .reported_issue import ReportedIssue
 from .reported_issue_severity import ReportedIssueSeverity
@@ -583,7 +592,6 @@ from .retention_rule_public_retention import RetentionRulePublicRetention
 from .score_name import ScoreName
 from .score_name_public import ScoreNamePublic
 from .service_toggles_config import ServiceTogglesConfig
-from .side import Side
 from .span import Span
 from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
@@ -615,13 +623,6 @@ from .span_write import SpanWrite
 from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
-from .spend_breakdown_response import SpendBreakdownResponse
-from .spend_breakdowns_response import SpendBreakdownsResponse
-from .spend_composition_response import SpendCompositionResponse
-from .spend_metric_request import SpendMetricRequest
-from .spend_summary_response import SpendSummaryResponse
-from .spend_user_page import SpendUserPage
-from .spend_user_row import SpendUserRow
 from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
 from .studio_evaluation import StudioEvaluation
@@ -807,6 +808,7 @@ __all__ = [
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
     "AutomationRuleEvaluatorObjectObjectPublic",
     "AutomationRuleEvaluatorObjectObjectPublicAction",
+    "AutomationRuleEvaluatorObjectObjectPublicTriggerScope",
     "AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanUserDefinedMetricPython",
@@ -816,6 +818,7 @@ __all__ = [
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublicAction",
+    "AutomationRuleEvaluatorPublicTriggerScope",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanUserDefinedMetricPython",
@@ -834,6 +837,7 @@ __all__ = [
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite",
+    "AutomationRuleEvaluatorTriggerScope",
     "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateAction",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
@@ -841,6 +845,7 @@ __all__ = [
     "AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython",
+    "AutomationRuleEvaluatorUpdateTriggerScope",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_LlmAsJudge",
     "AutomationRuleEvaluatorUpdate_SpanLlmAsJudge",
@@ -853,6 +858,7 @@ __all__ = [
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWriteAction",
+    "AutomationRuleEvaluatorWriteTriggerScope",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanLlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython",
@@ -879,6 +885,8 @@ __all__ = [
     "BooleanFeedbackDetailCreate",
     "BooleanFeedbackDetailPublic",
     "BooleanFeedbackDetailUpdate",
+    "BreakdownConfig",
+    "BreakdownConfigField",
     "BreakdownConfigPublic",
     "BreakdownConfigPublicField",
     "BridgeCommand",
@@ -1000,6 +1008,7 @@ __all__ = [
     "ExecutionPolicyCompare",
     "ExecutionPolicyPublic",
     "ExecutionPolicyWrite",
+    "ExistenceResponse",
     "Experiment",
     "ExperimentEvaluationMethod",
     "ExperimentExecutionResponse",
@@ -1094,12 +1103,10 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
-    "HarnessEntry",
     "IdsHolder",
     "ImageUrl",
     "ImageUrlPublic",
     "ImageUrlWrite",
-    "Item",
     "ItemLockInfo",
     "JsonListString",
     "JsonListStringCompare",
@@ -1115,7 +1122,6 @@ __all__ = [
     "KpiCardResponse",
     "KpiMetric",
     "KpiMetricType",
-    "Lane",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1158,7 +1164,6 @@ __all__ = [
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
     "Message",
-    "ModelTiers",
     "MultipartUploadPart",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
@@ -1248,6 +1253,9 @@ __all__ = [
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
+    "ReportFailure",
+    "ReportFailurePage",
+    "ReportFailureType",
     "ReportPreference",
     "ReportedIssue",
     "ReportedIssueSeverity",
@@ -1262,7 +1270,6 @@ __all__ = [
     "ScoreName",
     "ScoreNamePublic",
     "ServiceTogglesConfig",
-    "Side",
     "Span",
     "SpanBatch",
     "SpanEnrichmentOptions",
@@ -1294,13 +1301,6 @@ __all__ = [
     "SpanWriteSource",
     "SpanWriteType",
     "SpansCountResponse",
-    "SpendBreakdownResponse",
-    "SpendBreakdownsResponse",
-    "SpendCompositionResponse",
-    "SpendMetricRequest",
-    "SpendSummaryResponse",
-    "SpendUserPage",
-    "SpendUserRow",
     "StartMultipartUploadResponse",
     "StreamOptions",
     "StudioEvaluation",

@@ -344,6 +344,111 @@ class SpansResourceTest {
                         "UUID after window"));
     }
 
+    // Referenced ids (traceId, parentSpanId) use the not-in-future policy: non-v7 and future-dated are
+    // rejected, but past ids are allowed (spans are commonly attached to older traces), so unlike
+    // invalidIds() there is no TOO_OLD case here. Each argument sets exactly one referenced id to an
+    // invalid value on the span builder and pairs it with the expected validation message, so trace and
+    // parent cases share a single test body.
+    static Stream<Arguments> invalidReferencedIds() {
+        var future = Instant.now().plus(Duration.ofHours(25)).toEpochMilli();
+        var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'";
+        var expectedWindow = Duration.ofHours(24);
+        return Stream.of(
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder.traceId(UUID.randomUUID()),
+                        "Span trace id must be a version 7 UUID",
+                        "traceId not v7"),
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder
+                                .traceId(generator.construct(future)),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(future), expectedWindow, Reason.TOO_FAR_FUTURE.getValue()),
+                        "traceId after window"),
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder
+                                .parentSpanId(UUID.randomUUID()),
+                        "Span parent id must be a version 7 UUID",
+                        "parentSpanId not v7"));
+    }
+
+    @Nested
+    @DisplayName("Spans existence probe")
+    class SpansExistence {
+
+        @Test
+        @DisplayName("returns true when the project has spans and false when it only has traces")
+        void existsByProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spanProject = "span-exists-" + UUID.randomUUID();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(spanProject)
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            assertThat(spanResourceClient.existsSpans(spanProject, apiKey, workspaceName)).isTrue();
+
+            // A project that has traces but no spans must report no spans (span existence is not trace existence).
+            var traceOnlyProject = "span-empty-" + UUID.randomUUID();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(traceOnlyProject)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            assertThat(spanResourceClient.existsSpans(traceOnlyProject, apiKey, workspaceName)).isFalse();
+        }
+
+        @Test
+        @DisplayName("resolves the project by project_id as well as by project_name")
+        void existsByProjectIdParam() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "span-id-form-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            assertThat(spanResourceClient.existsSpans(projectId, apiKey, workspaceName)).isTrue();
+        }
+
+        @Test
+        @DisplayName("source scope matches the sdk-logged spans the Logs list shows, incl. legacy unknown")
+        void existsSourceScoped() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // sdk-sourced project -> present under source=sdk
+            var sdkProject = "span-sdk-" + UUID.randomUUID();
+            spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(sdkProject).source(Source.SDK).build(), apiKey, workspaceName);
+
+            // non-sdk (experiment)-only project -> absent under source=sdk, present without the scope
+            var experimentProject = "span-experiment-" + UUID.randomUUID();
+            spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(experimentProject).source(Source.EXPERIMENT).build(), apiKey, workspaceName);
+
+            // legacy project (unknown source, predates source tracking) -> counts as sdk via legacy fallback
+            var legacyProject = "span-legacy-" + UUID.randomUUID();
+            spanResourceClient.createSpan(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(legacyProject).source(null).build(), apiKey, workspaceName);
+
+            assertThat(spanResourceClient.existsSpans(sdkProject, Source.SDK, apiKey, workspaceName)).isTrue();
+            assertThat(spanResourceClient.existsSpans(experimentProject, Source.SDK, apiKey, workspaceName)).isFalse();
+            assertThat(spanResourceClient.existsSpans(experimentProject, null, apiKey, workspaceName)).isTrue();
+            assertThat(spanResourceClient.existsSpans(legacyProject, Source.SDK, apiKey, workspaceName)).isTrue();
+        }
+    }
+
     @Nested
     @DisplayName("Required permissions")
     class RequiredPermissionsTest {
@@ -1722,6 +1827,40 @@ class SpansResourceTest {
             }
         }
 
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidReferencedIds")
+        @ParameterizedTest(name = "Create span with invalid referenced id throws bad request: {2}")
+        void createWithInvalidReferencedIdThrowsBadRequest(
+                Function<Span.SpanBuilder, Span.SpanBuilder> spanCustomizer, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var span = spanCustomizer.apply(podamFactory.manufacturePojo(Span.class).toBuilder()).build();
+            try (var response = spanResourceClient.createSpan(
+                    span, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
+        @Test
+        @DisplayName("Create span with an old (past) v7 traceId succeeds — late spans on old traces are valid")
+        void createWithOldTraceIdSucceeds() {
+            var old = Instant.now().minus(Duration.ofDays(30)).toEpochMilli();
+            var oldTraceId = generator.construct(old);
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(oldTraceId)
+                    .parentSpanId(null)
+                    .build();
+
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            assertThat(id).isNotNull();
+
+            // Round-trip: the old traceId must be persisted verbatim (not rewritten) and parentSpanId stays null.
+            var retrievedSpan = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedSpan.traceId()).isEqualTo(oldTraceId);
+            assertThat(retrievedSpan.parentSpanId()).isNull();
+        }
+
         @Test
         @DisplayName("when span is fetched with different truncate and strip_attachments flags, then response varies accordingly")
         void getByList__whenFetchedWithDifferentFlags__thenResponseVariesAccordingly() throws Exception {
@@ -2206,6 +2345,21 @@ class SpansResourceTest {
             var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
                     HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
             var span = podamFactory.manufacturePojo(Span.class).toBuilder().id(id).build();
+            try (var response = spanResourceClient.callBatchCreateSpans(
+                    List.of(span), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidReferencedIds")
+        @ParameterizedTest(name = "Batch create span with invalid referenced id throws bad request: {2}")
+        void batchCreateWithInvalidReferencedIdThrowsBadRequest(
+                Function<Span.SpanBuilder, Span.SpanBuilder> spanCustomizer, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var span = spanCustomizer.apply(podamFactory.manufacturePojo(Span.class).toBuilder()).build();
             try (var response = spanResourceClient.callBatchCreateSpans(
                     List.of(span), API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);

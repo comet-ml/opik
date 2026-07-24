@@ -221,6 +221,8 @@ class RemoteAuthService implements AuthService {
                 .path("auth-by-username")
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
+                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                .acceptEncoding("identity")
                 .header(OAUTH_USERNAME_HEADER, token.userName())
                 .post(Entity.json(AuthRequest.builder()
                         .workspaceName(token.workspaceName())
@@ -244,6 +246,8 @@ class RemoteAuthService implements AuthService {
                 .path("auth-session")
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
+                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                .acceptEncoding("identity")
                 .cookie(sessionToken)
                 .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).build()))) {
             var authResponse = verifyResponse(response);
@@ -301,6 +305,8 @@ class RemoteAuthService implements AuthService {
                 .path("auth-session")
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
+                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                .acceptEncoding("identity")
                 .cookie(sessionToken)
                 .post(Entity.json(AuthRequest.builder()
                         .workspaceName(workspaceName)
@@ -339,6 +345,8 @@ class RemoteAuthService implements AuthService {
                     .path("auth")
                     .request()
                     .accept(MediaType.APPLICATION_JSON)
+                    // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                    .acceptEncoding("identity")
                     .header(HttpHeaders.AUTHORIZATION,
                             apiKey)
                     .post(Entity.json(AuthRequest.builder()
@@ -419,6 +427,8 @@ class RemoteAuthService implements AuthService {
                 .path("workspace-id")
                 .queryParam("name", workspaceName)
                 .request()
+                // avoids gzip double-decompression issue, same as in listEligibleWorkspaces
+                .acceptEncoding("identity")
                 .get()) {
 
             return getWorkspaceIdFromResponse(response);

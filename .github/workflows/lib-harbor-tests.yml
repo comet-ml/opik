@@ -35,18 +35,21 @@ jobs:
         with:
           python-version: ${{matrix.python_version}}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+
       - name: Install opik
-        run: pip install .
+        run: uv pip install --system .
 
       - name: Install test tools
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+          uv pip install --system -r test_requirements.txt
 
       - name: Install lib
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r library_integration/harbor/requirements.txt
+          uv pip install --system -r library_integration/harbor/requirements.txt
 
       - name: Run tests
         run: |

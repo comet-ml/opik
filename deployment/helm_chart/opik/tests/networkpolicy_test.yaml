@@ -1,0 +1,95 @@
+suite: python-backend network policy
+
+# Render assertions for the python-backend egress NetworkPolicy
+# (templates/networkpolicies.yaml). It renders only when both the component and
+# its networkPolicy are enabled, always emits DNS + backend + frontend egress,
+# and chooses between the legacy `engineEgress` block and `additionalRules`.
+templates:
+  - templates/networkpolicies.yaml
+
+tests:
+  - it: is not rendered by default (networkPolicy disabled)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the baseline egress rules when enabled
+    set:
+      component.python-backend.networkPolicy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: metadata.name
+          value: opik-python-backend-egress
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Egress
+      # DNS (kube-dns) egress is always present.
+      - equal:
+          path: spec.egress[0].ports[0].port
+          value: 53
+      # Egress to the backend on 8080 and frontend on 5173.
+      - equal:
+          path: spec.egress[1].to[0].podSelector.matchLabels.component
+          value: opik-backend
+      - equal:
+          path: spec.egress[1].ports[0].port
+          value: 8080
+      - equal:
+          path: spec.egress[2].to[0].podSelector.matchLabels.component
+          value: opik-frontend
+      - equal:
+          path: spec.egress[2].ports[0].port
+          value: 5173
+
+  - it: emits the legacy engineEgress ipBlock with its except list
+    set:
+      component.python-backend.networkPolicy.enabled: true
+      component.python-backend.networkPolicy.engineEgress:
+        ipBlock: 10.0.0.0/8
+        except:
+          - 10.1.0.0/16
+    asserts:
+      - equal:
+          path: spec.egress[3].to[0].ipBlock.cidr
+          value: 10.0.0.0/8
+      - equal:
+          path: spec.egress[3].to[0].ipBlock.except
+          value:
+            - 10.1.0.0/16
+
+  - it: defaults the engineEgress cidr to 0.0.0.0/0 when ipBlock is omitted
+    set:
+      component.python-backend.networkPolicy.enabled: true
+      # engineEgress is truthy (has a key) but no ipBlock — cidr falls to default.
+      component.python-backend.networkPolicy.engineEgress:
+        except:
+          - 169.254.169.254/32
+    asserts:
+      - equal:
+          path: spec.egress[3].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+      - equal:
+          path: spec.egress[3].to[0].ipBlock.except
+          value:
+            - 169.254.169.254/32
+
+  - it: emits additionalRules when engineEgress is not set
+    set:
+      component.python-backend.networkPolicy.enabled: true
+      component.python-backend.networkPolicy.additionalRules:
+        - to:
+            - ipBlock:
+                cidr: 192.168.0.0/16
+          ports:
+            - protocol: TCP
+              port: 443
+    asserts:
+      - equal:
+          path: spec.egress[3].to[0].ipBlock.cidr
+          value: 192.168.0.0/16
+      - equal:
+          path: spec.egress[3].ports[0].port
+          value: 443

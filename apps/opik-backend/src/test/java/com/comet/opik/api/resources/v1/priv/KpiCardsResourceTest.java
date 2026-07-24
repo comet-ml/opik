@@ -191,6 +191,52 @@ class KpiCardsResourceTest {
         }
     }
 
+    @Test
+    @DisplayName("trace TOTAL_COST sums every span belonging to a trace")
+    void traceCostSumsAllSpansOfTrace() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        Instant now = Instant.now();
+
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(idGenerator.generateId(now))
+                .projectName(projectName)
+                .startTime(now)
+                .endTime(now.plus(DURATION_1, ChronoUnit.MILLIS))
+                .errorInfo(null)
+                .threadId(null)
+                .build();
+
+        List<Span> spans = List.of(COST_1, COST_2, COST_3).stream()
+                .map(cost -> factory.manufacturePojo(Span.class).toBuilder()
+                        .id(idGenerator.generateId(now.plus(1, ChronoUnit.MILLIS)))
+                        .traceId(trace.id())
+                        .projectName(projectName)
+                        .startTime(now)
+                        .endTime(now.plus(50, ChronoUnit.MILLIS))
+                        .totalEstimatedCost(BigDecimal.valueOf(cost))
+                        .errorInfo(null)
+                        .build())
+                .toList();
+
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.TRACES)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertMetric(response, KpiMetricType.COUNT, 1.0, 0.0);
+        assertMetric(response, KpiMetricType.TOTAL_COST, COST_1 + COST_2 + COST_3, 0.0);
+    }
+
     @ParameterizedTest
     @EnumSource(EntityType.class)
     @DisplayName("returns metrics only for current period when no previous data exists")

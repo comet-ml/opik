@@ -134,7 +134,7 @@ def replay_all_versions(
     rest_client: OpikApi,
     *,
     source_dataset_id: str,
-    source_name_after_rename: str,
+    source_name: str,
     source_project_name: Optional[str],
     dest_dataset_id: str,
     dest_name: str,
@@ -186,7 +186,7 @@ def replay_all_versions(
             progress_callback(index, total, label)
         curr_items_by_id = _load_version_items(
             rest_client,
-            source_name_after_rename=source_name_after_rename,
+            source_name=source_name,
             source_project_name=source_project_name,
             version_hash=source_version.version_hash,
         )
@@ -613,14 +613,19 @@ def _stream_version_items_raw(
 def _load_version_items(
     rest_client: OpikApi,
     *,
-    source_name_after_rename: str,
+    source_name: str,
     source_project_name: Optional[str],
     version_hash: Optional[str],
 ) -> Dict[str, _SourceItem]:
-    """Stream every item at ``version_hash`` and key by stable id."""
+    """Stream every item at ``version_hash`` and key by stable id.
+
+    Reads from the source's *original* name: under the OPIK-7162 ordering
+    the source is not renamed until after the copy completes, so its name
+    is stable for the whole replay.
+    """
     items = _stream_version_items_raw(
         rest_client,
-        dataset_name=source_name_after_rename,
+        dataset_name=source_name,
         project_name=source_project_name,
         version_hash=version_hash,
     )

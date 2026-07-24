@@ -13,6 +13,7 @@ from .core.results import (
     build_candidate_entry,
 )
 from .core.state import AlgorithmResult, OptimizationContext
+from .core.exceptions import ScoringFailedError
 from .core.llm_calls import build_llm_call_metadata, requested_multiple_candidates
 from .algorithms import (
     GepaOptimizer,
@@ -72,4 +73,6 @@ __all__ = [
     "MultiMetricObjective",
     # Datasets
     "datasets",
+    # Exceptions
+    "ScoringFailedError",
 ]

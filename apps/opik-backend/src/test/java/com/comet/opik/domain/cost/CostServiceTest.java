@@ -81,6 +81,50 @@ class CostServiceTest {
                         "original_usage.prompt_tokens_details.audio_tokens", "0.00027"));
     }
 
+    /**
+     * Covers every branch of the new audio-completion handling in
+     * {@link SpanCostCalculator#textGenerationCost}:
+     * <ul>
+     *   <li>{@code gpt-4o-audio-preview} publishes {@code output_cost_per_audio_token} (8e-5),
+     *       which is 8x the standard output rate (1e-5). The Python SDK
+     *       ({@code openai_chat_completions_usage.CompletionTokensDetails.audio_tokens}) flattens
+     *       the count under {@code original_usage.completion_tokens_details.audio_tokens}; the
+     *       bare OTel key {@code completion_tokens_details.audio_tokens} is the documented
+     *       fallback.</li>
+     *   <li>{@code gpt-4o-mini} has no {@code output_cost_per_audio_token}, so
+     *       {@code outputAudioRate == 0} and the audio token key in usage is ignored — every
+     *       completion token bills at the standard output rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0} with key={1}")
+    @MethodSource("provideAudioCompletionTokenCases")
+    void calculateCostBillsAudioCompletionTokensAtTheConfiguredRate(
+            String model, String audioUsageKey, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 200,
+                "completion_tokens", 500,
+                audioUsageKey, 200);
+
+        BigDecimal cost = CostService.calculateCost(model, "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAudioCompletionTokenCases() {
+        // gpt-4o-audio-preview: input 2.5e-6, output 1e-5, output_audio 8e-5
+        // non-audio completion = 500 - 200 = 300
+        // 200 * 2.5e-6 + 300 * 1e-5 + 200 * 8e-5 = 0.0005 + 0.003 + 0.016 = 0.0195
+        // gpt-4o-mini: input 1.5e-7, output 6e-7 (no audio rate; audio key is ignored)
+        // 200 * 1.5e-7 + 500 * 6e-7 = 0.00003 + 0.0003 = 0.00033
+        return Stream.of(
+                Arguments.of("gpt-4o-audio-preview",
+                        "original_usage.completion_tokens_details.audio_tokens", "0.0195"),
+                Arguments.of("gpt-4o-audio-preview",
+                        "completion_tokens_details.audio_tokens", "0.0195"),
+                Arguments.of("gpt-4o-mini",
+                        "original_usage.completion_tokens_details.audio_tokens", "0.00033"));
+    }
+
     @Test
     void calculateCostUsesAnthropicCacheCalculatorForClaudeOnVertexAI() {
         // Claude models hosted on Google Vertex AI ship under the litellm_provider
@@ -133,6 +177,68 @@ class CostServiceTest {
                 Arguments.of("at threshold uses base rate", 200_000, "0.26"),
                 // 300_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.75 + 0.015 = 0.765
                 Arguments.of("above threshold uses tier rate", 300_000, "0.765"));
+    }
+
+    /**
+     * Whole-prompt tier semantics for {@code *_above_128k_tokens} rates: once the prompt strictly
+     * exceeds 128K every token bills at the tier rate; exactly at the threshold the base rate
+     * still applies. {@code gemini-1.5-flash} is the reachable model at this threshold (input
+     * 7.5e-8 base, 1.5e-7 above 128k — 2x).
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGeminiAbove128kTierCases")
+    void calculateCostAppliesAbove128kTierPricingForGemini(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_token_count", promptTokens,
+                "original_usage.candidates_token_count", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gemini/gemini-1.5-flash", "google_ai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGeminiAbove128kTierCases() {
+        // gemini-1.5-flash base: input 7.5e-8 / output 0; above_128k: input 1.5e-7 (output stays 0).
+        return Stream.of(
+                // 128_000 * 7.5e-8 + 1_000 * 0 = 0.0096
+                Arguments.of("at threshold uses base rate", 128_000, "0.0096"),
+                // 200_000 * 1.5e-7 + 1_000 * 0 = 0.030
+                Arguments.of("above threshold uses tier rate", 200_000, "0.030"));
+    }
+
+    /**
+     * Whole-prompt tier semantics for {@code *_above_272k_tokens} rates: once the prompt strictly
+     * exceeds 272K every token bills at the tier rate. Reachable models include the OpenAI GPT-5.4
+     * and GPT-5.5 families (and their Azure-hosted twins). {@code gpt-5.4} publishes cache rates
+     * too, so it routes through {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} —
+     * confirming that the effective-rate helpers cover the OpenAI cache path, not just the Google
+     * and Anthropic ones.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGpt54Above272kTierCases")
+    void calculateCostAppliesAbove272kTierPricingForOpenAI(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_tokens", promptTokens,
+                "original_usage.completion_tokens", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gpt-5.4", "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGpt54Above272kTierCases() {
+        // gpt-5.4 base: input 2.5e-6 / output 1.5e-5; above_272k: input 5e-6 / output 2.25e-5.
+        return Stream.of(
+                // 272_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.68 + 0.015 = 0.695
+                Arguments.of("at threshold uses base rate", 272_000, "0.695"),
+                // 300_000 * 5e-6 + 1_000 * 2.25e-5 = 1.5 + 0.0225 = 1.5225
+                Arguments.of("above threshold uses tier rate", 300_000, "1.5225"));
     }
 
     @Test
@@ -297,6 +403,28 @@ class CostServiceTest {
     }
 
     /**
+     * Online evaluation resolves models to LlmProvider serialized values ("gemini", "vertex-ai") that
+     * differ from the canonical price-table vocabulary ("google_ai", "google_vertexai"). calculateCost
+     * must map them so every provider selectable for online evaluation is cost-tracked instead of
+     * silently pricing at zero.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void calculateCost_mapsOnlineEvaluationProviderNames(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> calculateCost_mapsOnlineEvaluationProviderNames() {
+        return Stream.of(
+                Arguments.of("gemini-2.5-flash", "gemini"), // -> google_ai
+                Arguments.of("vertex_ai/gemini-2.5-flash", "vertex-ai")); // -> google_vertexai
+    }
+
+    /**
      * Overrides file: alias entries should resolve to the target's pricing.
      */
     @ParameterizedTest
@@ -416,6 +544,249 @@ class CostServiceTest {
         BigDecimal cost = CostService.calculateCost("multilingual-e5-large", "azure", usage, null);
 
         assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    /**
+     * Covers both branches of registering {@code azure} as a canonical provider so that the 199
+     * Azure-tagged entries in {@code model_prices_and_context_window.json} (e.g. {@code azure/gpt-4.1},
+     * {@code azure/command-r-plus}, all {@code azure/gpt-4o*} and {@code azure/gpt-5*} variants) are
+     * no longer silently dropped at load time:
+     * <ul>
+     *   <li>Azure model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Azure model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Azure-hosted OpenAI models share
+     *       the OpenAI usage shape, so cached_tokens are subtracted from prompt_tokens before billing the
+     *       remainder at the standard input rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideAzureProviderCases")
+    void calculateCostHandlesAzureHostedModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "azure", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAzureProviderCases() {
+        // azure/command-r-plus: input 3e-6, output 1.5e-5 (no cache rates) -> textGenerationCost
+        // 1000 * 3e-6 + 200 * 1.5e-5 = 0.003 + 0.003 = 0.006
+        // azure/gpt-4.1: input 2e-6, output 8e-6, cache_read 5e-7 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 2e-6 + 200 * 8e-6 + 300 * 5e-7 = 0.0014 + 0.0016 + 0.00015 = 0.00315
+        return Stream.of(
+                Arguments.of("plain text-generation route", "azure/command-r-plus",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.006"),
+                Arguments.of("cache-aware route via OpenAI calc", "azure/gpt-4.1",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00315"));
+    }
+
+    /**
+     * Covers both branches of registering {@code xai} as a canonical provider so that the 40
+     * xai-tagged entries in {@code model_prices_and_context_window.json} (the full grok-2, grok-3,
+     * grok-4 and grok-code families) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>xai model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>xai model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
+     *       LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
+     *       {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic
+     *       used for OpenAI/Azure applies unchanged here.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideXaiProviderCases")
+    void calculateCostHandlesXaiModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "xai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideXaiProviderCases() {
+        // xai/grok-2: input 2e-6, output 1e-5 (no cache rates) -> textGenerationCost
+        // 1000 * 2e-6 + 200 * 1e-5 = 0.002 + 0.002 = 0.004
+        // xai/grok-3: input 3e-6, output 1.5e-5, cache_read 7.5e-7 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 7.5e-7 = 0.0021 + 0.003 + 0.000225 = 0.005325
+        return Stream.of(
+                Arguments.of("plain text-generation route", "xai/grok-2",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.004"),
+                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-3",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.005325"));
+    }
+
+    /**
+     * Covers both branches of registering {@code deepseek} as a canonical provider so that the 12
+     * deepseek-tagged entries in {@code model_prices_and_context_window.json} (the
+     * {@code deepseek-chat} / {@code deepseek-reasoner} / {@code deepseek/deepseek-v3} /
+     * {@code deepseek/deepseek-v4-*} families) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>DeepSeek model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>DeepSeek model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — DeepSeek's cost calculator
+     *       in LiteLLM ({@code litellm/llms/deepseek/cost_calculator.py}) delegates to
+     *       {@code generic_cost_per_token}, so its usage payload follows the same OpenAI shape
+     *       (cached tokens flattened under {@code prompt_tokens_details.cached_tokens}).</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideDeepseekProviderCases")
+    void calculateCostHandlesDeepseekModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "deepseek", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideDeepseekProviderCases() {
+        // deepseek/deepseek-coder: input 1.4e-7, output 2.8e-7 (no cache rates) -> textGenerationCost
+        // 1000 * 1.4e-7 + 200 * 2.8e-7 = 0.00014 + 0.000056 = 0.000196
+        // deepseek/deepseek-chat: input 2.8e-7, output 4.2e-7, cache_read 2.8e-8 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 2.8e-7 + 200 * 4.2e-7 + 300 * 2.8e-8 = 0.000196 + 0.000084 + 0.0000084 = 0.0002884
+        return Stream.of(
+                Arguments.of("plain text-generation route", "deepseek/deepseek-coder",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.000196"),
+                Arguments.of("cache-aware route via OpenAI calc", "deepseek/deepseek-chat",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.0002884"));
+    }
+
+    /**
+     * Covers registering {@code perplexity} as a canonical provider so that the 16 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "perplexity"} (the {@code sonar} family and legacy
+     * {@code perplexity/llama-*} / {@code perplexity/codellama-*} models) are no longer silently
+     * dropped at load time. No Perplexity model publishes cache rates today, so all Perplexity
+     * requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("providePerplexityProviderCases")
+    void calculateCostHandlesPerplexityModels(String model, Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "perplexity", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> providePerplexityProviderCases() {
+        // perplexity/sonar: input 1e-6, output 1e-6
+        // 1000 * 1e-6 + 200 * 1e-6 = 0.001 + 0.0002 = 0.0012
+        // perplexity/sonar-pro: input 3e-6, output 1.5e-5 (distinct rates for the two dimensions)
+        // 1000 * 3e-6 + 200 * 1.5e-5 = 0.003 + 0.003 = 0.006
+        return Stream.of(
+                Arguments.of("perplexity/sonar",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0012"),
+                Arguments.of("perplexity/sonar-pro",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.006"));
+    }
+
+    /**
+     * Covers both branches of registering {@code fireworks_ai} as a canonical provider so that the
+     * ~260 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "fireworks_ai"} (the {@code accounts/fireworks/models/*} catalog) are
+     * no longer silently dropped at load time:
+     * <ul>
+     *   <li>Fireworks model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Fireworks model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Fireworks' cost calculator
+     *       in LiteLLM ({@code litellm/llms/fireworks_ai/cost_calculator.py}) delegates to
+     *       {@code generic_cost_per_token}, so its usage payload follows the same OpenAI shape
+     *       (cached tokens flattened under {@code prompt_tokens_details.cached_tokens}).</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideFireworksProviderCases")
+    void calculateCostHandlesFireworksModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "fireworks_ai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideFireworksProviderCases() {
+        // fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct: input 9e-7, output 9e-7
+        // (no cache rates) -> textGenerationCost
+        // 1000 * 9e-7 + 200 * 9e-7 = 0.0009 + 0.00018 = 0.00108
+        // fireworks_ai/accounts/fireworks/models/kimi-k2p5: input 6e-7, output 3e-6, cache_read 1e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 6e-7 + 200 * 3e-6 + 300 * 1e-7 = 0.00042 + 0.0006 + 0.00003 = 0.00105
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00108"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "fireworks_ai/accounts/fireworks/models/kimi-k2p5",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00105"));
+    }
+
+    /**
+     * Covers the provider-prefix fallback in {@link CostService#findModelPrice}. Callers that
+     * route a model through an aggregator ({@link com.comet.opik.api.resources.v1.events.BudgetGuard}
+     * calls {@code CostService.calculateCost} via {@code LlmProviderFactoryImpl.getResolvedModelInfo},
+     * which enumerates {@code perplexity/*} under OpenRouter and therefore returns
+     * {@code provider="openrouter"}) still get the correct pricing row that lives under the
+     * model's actual origin provider. Same rate math as the direct {@code perplexity} call —
+     * only the routing changes.
+     */
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @MethodSource("provideAggregatorRoutedPerplexityCases")
+    void calculateCostFindsPerplexityViaAggregatorProviderPrefix(String model, String provider,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAggregatorRoutedPerplexityCases() {
+        return Stream.of(
+                // aggregator that we don't register as a canonical provider (openrouter): prefix
+                // fallback kicks in and the perplexity row is found.
+                Arguments.of("perplexity/sonar", "openrouter", "0.0012"),
+                Arguments.of("perplexity/sonar-pro", "openrouter", "0.006"),
+                // custom-llm and empty-adjacent providers hit the same fallback path.
+                Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
+    }
+
+    /**
+     * Test for issue #5130: Bedrock model names carry a version-pin suffix like
+     * "anthropic.claude-opus-4-6-v1:0" while the pricing database stores the base name
+     * "anthropic.claude-opus-4-6-v1". Stripping the ":N" pin lets these price correctly.
+     */
+    @ParameterizedTest
+    @MethodSource("provideBedrockModelNamesWithVersionSuffix")
+    void calculateCost_shouldStripVersionSuffix_issue5130(String modelName) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, "bedrock", usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideBedrockModelNamesWithVersionSuffix() {
+        return Stream.of(
+                // Base key stored without ":0"; Bedrock appends the version pin.
+                Arguments.of("anthropic.claude-opus-4-6-v1:0"),
+                Arguments.of("us.anthropic.claude-opus-4-6-v1:0"),
+                // Provider prefix + version pin: prefix stripped first, then version suffix removed.
+                Arguments.of("bedrock/anthropic.claude-opus-4-6-v1:0"));
     }
 
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {

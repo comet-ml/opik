@@ -35,6 +35,7 @@ public sealed interface AutomationRule permits AutomationRuleEvaluator {
     AutomationRuleAction getAction();
     float getSamplingRate();
     boolean isEnabled();
+    EvalTriggerScope getTriggerScope();
 
     Instant getCreatedAt();
     String getCreatedBy();

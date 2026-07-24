@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { StringParam, useQueryParam } from "use-query-params";
-import { ChevronDown, Inbox, PartyPopper, Radar, Undo2 } from "lucide-react";
+import {
+  ChevronDown,
+  Clock,
+  Inbox,
+  PartyPopper,
+  Radar,
+  RotateCcw,
+  TriangleAlert,
+  Undo2,
+} from "lucide-react";
 import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AgentInsightsIssue,
@@ -31,6 +40,8 @@ import IssueListItem from "@/v2/pages/SignalsPage/IssuesTab/IssueListItem";
 import IssueDetail from "@/v2/pages/SignalsPage/IssuesTab/IssueDetail";
 import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBadge";
 import IssuesSkeleton from "@/v2/pages/SignalsPage/IssuesTab/IssuesSkeleton";
+import { getRunFailureCopy } from "@/v2/pages/SignalsPage/runFailureCopy";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const SORT_OPTIONS: { value: string; label: string; sorting: Sorting }[] = [
   {
@@ -116,6 +127,115 @@ const RunningBar: React.FC = () => (
   </div>
 );
 
+// Raw backend failure detail (job.last_failure_detail), as regular muted text.
+const FailureDetailText: React.FC<{ detail?: string; className?: string }> = ({
+  detail,
+  className,
+}) =>
+  detail ? (
+    <p
+      className={cn(
+        "comet-body-xs whitespace-pre-wrap break-words text-muted-slate",
+        className,
+      )}
+    >
+      {detail}
+    </p>
+  ) : null;
+
+const TryAgainButton: React.FC<{ onClick?: () => void }> = ({ onClick }) =>
+  onClick ? (
+    <Button
+      variant="link"
+      size="2xs"
+      onClick={onClick}
+      className="h-auto select-none gap-1 self-start px-0"
+    >
+      <RotateCcw className="size-3" />
+      Try again
+    </Button>
+  ) : null;
+
+// Banner above an existing issue list: inline "Show details" + Try again.
+const FailedBanner: React.FC<{
+  reason?: string;
+  detail?: string;
+  onRetry?: () => void;
+}> = ({ reason, detail, onRetry }) => {
+  const { title, description } = getRunFailureCopy(reason);
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex items-start gap-3 border-b border-border bg-[#F146681A] px-4 py-3">
+      <IconTile className="bg-[#F14668]">
+        <TriangleAlert className="size-4 text-white" />
+      </IconTile>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="comet-body-s-accented text-foreground">{title}</span>
+          <span className="comet-body-xs text-muted-slate">
+            {description}
+            {detail && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={() => setOpen((o) => !o)}
+                  className="text-muted-slate underline underline-offset-2 hover:opacity-80"
+                >
+                  {open ? "Hide details" : "Show details"}
+                </button>
+              </>
+            )}
+          </span>
+          {open && <FailureDetailText detail={detail} className="mt-1" />}
+        </div>
+        <TryAgainButton onClick={onRetry} />
+      </div>
+    </div>
+  );
+};
+
+// Rounds down to a "+" bucket for large counts (e.g. 4123 -> "4,100+").
+const formatTraceCount = (n: number): string =>
+  n >= 100 ? `${(Math.floor(n / 100) * 100).toLocaleString()}+` : `${n}`;
+
+// Shown when the last scan is old — surfaces how many last-24h traces a re-run
+// would analyze.
+const StaleResultsBanner: React.FC<{
+  days: number;
+  traceCount: number;
+  onRun?: () => void;
+}> = ({ days, traceCount, onRun }) => (
+  <div className="flex items-start gap-3 border-b border-border bg-[#FB923C1A] px-4 py-3">
+    <IconTile className="bg-[#FB923C]">
+      <Clock className="size-4 text-white" />
+    </IconTile>
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
+        <span className="comet-body-s-accented text-foreground">
+          Results might be outdated
+        </span>
+        <span className="comet-body-xs text-muted-slate">
+          Last diagnostic ran over {days} {days === 1 ? "day" : "days"} ago. Run
+          a new one to analyze {formatTraceCount(traceCount)}{" "}
+          {traceCount === 1 ? "trace" : "traces"} from the last 24 hours.
+        </span>
+      </div>
+      {onRun && (
+        <Button
+          variant="link"
+          size="2xs"
+          onClick={onRun}
+          className="h-auto select-none gap-1.5 self-start px-0"
+        >
+          <Radar className="size-3" />
+          Run diagnostic
+        </Button>
+      )}
+    </div>
+  </div>
+);
+
 const ListEmptyState: React.FC<{
   icon: React.ReactNode;
   title: string;
@@ -143,7 +263,7 @@ const DetailPlaceholder: React.FC = () => {
       : EmptyIssueDetailsIcon;
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-      <Icon className="h-[68px] w-[63px] text-[#F3F4FE]" />
+      <Icon className="h-[68px] w-[63px] text-toggle-outline-active" />
       <div className="flex flex-col gap-1">
         <span className="comet-body-s-accented text-foreground">
           Your issue details will appear here
@@ -160,6 +280,11 @@ type IssuesTabProps = {
   projectId: string;
   showResolved?: boolean;
   isRunning?: boolean;
+  failedReason?: string;
+  failedDetail?: string;
+  isStale?: boolean;
+  staleTraceCount?: number;
+  staleDays?: number;
   canConfigure?: boolean;
   onRunDiagnostic?: () => void;
   onShowOpenIssues?: () => void;
@@ -169,6 +294,11 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   projectId,
   showResolved = false,
   isRunning = false,
+  failedReason,
+  failedDetail,
+  isStale = false,
+  staleTraceCount = 0,
+  staleDays = 0,
   canConfigure = false,
   onRunDiagnostic,
   onShowOpenIssues,
@@ -176,6 +306,13 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   const status = showResolved
     ? AGENT_INSIGHTS_ISSUE_STATUS.resolved
     : AGENT_INSIGHTS_ISSUE_STATUS.open;
+  const handleTryAgain = () => {
+    trackEvent(OpikEvent.DIAGNOSTICS_TRY_AGAIN_CLICKED, {
+      project_id: projectId,
+      reason: failedReason,
+    });
+    onRunDiagnostic?.();
+  };
   const [sortValue, setSortValue] = useState<string>(SORT_OPTIONS[0].value);
   const [activeIssueId, setActiveIssueId] = useQueryParam(
     "issue",
@@ -255,12 +392,31 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   }
 
   const hasIssues = issues.length > 0;
+  // Run status shows only on the open-issues view, never on Resolved.
+  // Precedence: running/failed take over; stale is a softer nudge.
+  const running = isRunning && !showResolved;
+  const isFailed = !showResolved && Boolean(failedReason) && !isRunning;
+  const stale = isStale && !showResolved && !running && !isFailed;
 
   const renderListBody = () => {
     if (hasIssues) {
       return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {isRunning && (
+          {isFailed && (
+            <FailedBanner
+              reason={failedReason}
+              detail={failedDetail}
+              onRetry={handleTryAgain}
+            />
+          )}
+          {stale && (
+            <StaleResultsBanner
+              days={staleDays}
+              traceCount={staleTraceCount}
+              onRun={onRunDiagnostic}
+            />
+          )}
+          {running && (
             <div className="flex items-start gap-3 border-b border-border bg-primary-50 px-4 py-3">
               <IconTile className="bg-[#A78BFA]">
                 <Radar className="size-4 text-black dark:text-white" />
@@ -290,7 +446,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       );
     }
 
-    if (isRunning) {
+    if (running) {
       return (
         <ListEmptyState
           className="bg-[#C4B5FD1A]"
@@ -307,12 +463,31 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       );
     }
 
+    if (isFailed) {
+      const { title, description } = getRunFailureCopy(failedReason);
+      return (
+        <ListEmptyState
+          className="bg-[#F146681A]"
+          icon={
+            <IconTile className="bg-[#F14668]">
+              <TriangleAlert className="size-4 text-white" />
+            </IconTile>
+          }
+          title={title}
+          description={description}
+        >
+          <FailureDetailText detail={failedDetail} />
+          <TryAgainButton onClick={onRunDiagnostic} />
+        </ListEmptyState>
+      );
+    }
+
     if (showResolved) {
       return (
         <ListEmptyState
           className="bg-[#89DEFF1A]"
           icon={
-            <IconTile className="bg-[#89DEFF] dark:bg-[#1E3A47]">
+            <IconTile className="bg-[var(--upload-chip-icon-bg)]">
               <Inbox className="size-3.5 text-black dark:text-white" />
             </IconTile>
           }
@@ -336,7 +511,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
 
     return (
       <ListEmptyState
-        className="bg-[#BAE6FD1A]"
+        className="bg-[var(--upload-chip-bg)]"
         icon={
           <IconTile className="bg-[#89DEFF] dark:bg-[#1E3A47]">
             <PartyPopper className="size-3.5 text-black dark:text-white" />
@@ -381,6 +556,24 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
 
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-2">
+        {isFailed && (
+          <div className="shrink-0 overflow-hidden rounded-md border bg-background">
+            <FailedBanner
+              reason={failedReason}
+              detail={failedDetail}
+              onRetry={handleTryAgain}
+            />
+          </div>
+        )}
+        {stale && (
+          <div className="shrink-0 overflow-hidden rounded-md border bg-background">
+            <StaleResultsBanner
+              days={staleDays}
+              traceCount={staleTraceCount}
+              onRun={onRunDiagnostic}
+            />
+          </div>
+        )}
         <DropdownMenu open={listOpen} onOpenChange={setListOpen} modal={false}>
           <DropdownMenuTrigger asChild>
             <Button

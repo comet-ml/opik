@@ -23,6 +23,7 @@ import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 import { generateTracesURL } from "@/lib/annotation-queues";
+import { generateExperimentIdsFilter } from "@/lib/filters";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
@@ -82,15 +83,40 @@ const PlaygroundOutputCell: React.FunctionComponent<
 
   const handleTraceLinkClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (traceId && activeProjectId) {
-      const url = generateTracesURL(
-        workspaceName,
-        activeProjectId,
-        "traces",
-        traceId,
-      );
+    if (!traceId || !activeProjectId) return;
+
+    // For dataset/experiment runs, open the trace in the experiment logs view (scoped by
+    // experiment_id) — the same destination as the experiment page's "Go to logs" — so the
+    // surrounding list holds the experiment's traces. The main project Logs list filters to
+    // source=sdk and would exclude them by design.
+    if (experimentId && plainDatasetId) {
+      const search = new URLSearchParams({
+        experiments: JSON.stringify([experimentId]),
+        tls_open: "1",
+        tls_filters: JSON.stringify(
+          generateExperimentIdsFilter([experimentId]),
+        ),
+        tls_trace: traceId,
+      }).toString();
+      const basePath = import.meta.env.VITE_BASE_URL || "/";
+      const normalizedBasePath =
+        basePath === "/" ? "" : basePath.replace(/\/$/, "");
+      const relativePath = `${workspaceName}/projects/${activeProjectId}/experiments/${plainDatasetId}/compare?${search}`;
+      const url = new URL(
+        `${normalizedBasePath}/${relativePath}`,
+        window.location.origin,
+      ).toString();
       window.open(url, "_blank");
+      return;
     }
+
+    const url = generateTracesURL(
+      workspaceName,
+      activeProjectId,
+      "traces",
+      traceId,
+    );
+    window.open(url, "_blank");
   };
 
   const hasOutput =

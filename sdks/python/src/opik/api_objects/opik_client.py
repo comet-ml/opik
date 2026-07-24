@@ -1,12 +1,14 @@
-import atexit
 import contextvars
 import copy
 import datetime
 import functools
 import json
 import logging
+import threading
+import weakref
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
@@ -17,9 +19,8 @@ from typing import (
     overload,
 )
 
-import httpx
-
 from . import (
+    connection_resources,
     constants,
     dashboard,
     dataset,
@@ -28,6 +29,7 @@ from . import (
     helpers,
     opik_query_language,
     rest_helpers,
+    rest_stream_parser,
     search_helpers,
     span as span_module,
     trace as trace_module,
@@ -66,19 +68,13 @@ from .. import (
     httpx_client,
     id_helpers,
     llm_usage,
-    rest_client_configurator,
     url_helpers,
 )
-from ..healthcheck import connection_monitor, connection_probe
 from ..message_processing import (
+    data_loss,
     messages,
-    streamer_constructors,
-    message_queue,
-    permissions,
 )
 from ..message_processing.batching import sequence_splitter
-from ..message_processing.processors import message_processors_chain
-from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
 from ..rest_api import errors as rest_api_errors
 from ..rest_api.core.api_error import ApiError
@@ -101,7 +97,6 @@ from ..types import (
     TraceSource,
 )
 from .. import context_storage
-from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -159,10 +154,7 @@ class Opik:
         self._project_name_most_recent_trace: Optional[str] = None
         self._use_batching = batching or _use_batching
 
-        self._initialize_streamer(
-            use_batching=self._use_batching,
-        )
-        atexit.register(self.end, timeout=self._flush_timeout)
+        self._acquire_shared_resources()
 
     @property
     def config(self) -> opik_config.OpikConfig:
@@ -197,77 +189,37 @@ class Opik:
         """
         return self._project_name
 
-    def _initialize_streamer(
-        self,
-        use_batching: bool,
-    ) -> None:
-        self._httpx_client = httpx_client.get(
-            workspace=self._workspace,
-            api_key=self._config.api_key,
-            check_tls_certificate=self._config.check_tls_certificate,
-            compress_json_requests=self._config.enable_json_request_compression,
+    def _acquire_shared_resources(self) -> None:
+        self._lease = connection_resources.MANAGER.acquire(
+            self._config,
+            use_batching=self._use_batching,
         )
-        self._rest_client = rest_api_client.OpikApi(
-            base_url=self._config.url_override,
-            httpx_client=self._httpx_client,
-        )
-        self._rest_client._client_wrapper._timeout = (
-            httpx.USE_CLIENT_DEFAULT
-        )  # See https://github.com/fern-api/fern/issues/5321
-        rest_client_configurator.configure(self._rest_client)
+        self._resources = self._lease.resources
+        self._bind_resources()
 
-        max_queue_size = message_queue.calculate_max_queue_size(
-            maximal_queue_size=self._config.maximal_queue_size,
-            batch_factor=self._config.maximal_queue_size_batch_factor,
+        # ``self._lease.release`` is a bound method of the lease, so the finalizer
+        # captures the lease (and through it the manager), never ``self``. A
+        # dropped handle therefore releases its reference on GC without the
+        # atexit strong-ref pin that caused OPIK-7127.
+        #
+        # ``close_on_zero=False``: a finalizer must do nothing risky, so the GC
+        # path only decrements the bundle's refcount. It never closes (thread
+        # joins, network flush) — that is left to an explicit ``end()`` or to the
+        # atexit ``close_all``.
+        self._finalizer = weakref.finalize(
+            self, self._lease.release, self._flush_timeout, close_on_zero=False
         )
 
-        file_uploader = upload_manager.FileUploadManager(
-            rest_client=self._rest_client,
-            httpx_client=self._httpx_client,
-            worker_count=self._config.file_upload_background_workers,
-        )
-
-        fallback_replay = self._create_replay_manager()
-
-        self.__internal_api__message_processor__ = message_processors_chain.create_message_processors_chain(
-            rest_client=self._rest_client,
-            file_upload_manager=file_uploader,
-            fallback_replay_manager=fallback_replay,
-            unauthorized_message_types_registry=permissions.UnauthorizedMessageTypeRegistry(
-                retry_interval_seconds=self._config.unauthorized_message_type_retry_interval,
-                max_retry_count=self._config.unauthorized_message_type_max_retry_count,
-            ),
-        )
-        self._streamer = streamer_constructors.construct_online_streamer(
-            file_uploader=file_uploader,
-            n_consumers=self._config.background_workers,
-            use_batching=use_batching,
-            use_attachment_extraction=self._config.is_attachment_extraction_active,
-            min_base64_embedded_attachment_size=self._config.min_base64_embedded_attachment_size,
-            max_queue_size=max_queue_size,
-            message_processor=self.__internal_api__message_processor__,
-            url_override=self._config.url_override,
-            fallback_replay_manager=fallback_replay,
-        )
-
-    def _create_replay_manager(self) -> replay_manager.ReplayManager:
-        probe = connection_probe.ConnectionProbe(
-            base_url=self._config.url_override,
-            client=self._httpx_client,
-        )
-        monitor = connection_monitor.OpikConnectionMonitor(
-            ping_interval=self._config.connection_monitor_ping_interval,
-            check_timeout=self._config.connection_monitor_check_timeout,
-            probe=probe,
-        )
-
-        fallback_replay = replay_manager.ReplayManager(
-            monitor=monitor,
-            batch_size=self._config.replay_batch_size,
-            batch_replay_delay=self._config.replay_batch_replay_delay,
-            tick_interval_seconds=self._config.replay_tick_interval,
-        )
-        return fallback_replay
+    def _bind_resources(self) -> None:
+        # Expose the bundle's objects as attributes so the rest of the client
+        # (and external callers of ``__internal_api__message_processor__``)
+        # delegate to the shared connection resources unchanged.
+        self._httpx_client = self._resources.httpx_client
+        self._rest_client = self._resources.rest_client
+        self.__internal_api__message_processor__ = self._resources.message_processor
+        self._streamer = self._resources.streamer
+        self._flush_reporter = self._resources.flush_reporter
+        self._last_flush_result: Optional[data_loss.FlushResult] = None
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
         project_url = url_helpers.get_project_url_by_trace_id(
@@ -283,12 +235,36 @@ class Opik:
             )
             self._project_name_most_recent_trace = project_name
 
-    def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
-        dataset_url = url_helpers.get_dataset_url_by_id(
-            dataset_id, self._config.url_override
-        )
+    def _log_created_resource_url(
+        self,
+        *,
+        kind: str,
+        name: str,
+        project_name: str,
+        build_url: Callable[[str, str], str],
+    ) -> None:
+        """Log the direct, project-scoped URL of a just-created resource.
 
-        LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
+        Best-effort: the resource is already persisted by the time this runs,
+        so a failure to resolve the project or workspace must not turn a
+        successful creation into an error. ``build_url`` receives the resolved
+        ``(workspace, project_id)``.
+        """
+        try:
+            project_id = rest_helpers.resolve_project_id_by_name(
+                self._rest_client, project_name
+            )
+            url = build_url(self._dereferenced_workspace(), project_id)
+        except Exception:
+            LOGGER.debug(
+                "Could not resolve the URL for the created %s %r",
+                kind,
+                name,
+                exc_info=True,
+            )
+            return
+
+        LOGGER.info(f'Created a "{name}" {kind} at {url}.')
 
     def auth_check(self) -> None:
         """
@@ -529,7 +505,7 @@ class Opik:
 
         Args:
             trace_id: The unique identifier for the trace. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
-            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
+            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
             parent_span_id: The unique identifier for the parent span.
             name: The name of the span.
             type: The type of the span. Default is "general".
@@ -1319,7 +1295,17 @@ class Opik:
             client=self,
         )
 
-        self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
+        self._log_created_resource_url(
+            kind="dataset",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: url_helpers.get_dataset_url_by_id(
+                base_url=self._config.url_override,
+                workspace=workspace,
+                project_id=project_id,
+                dataset_id=result.id,
+            ),
+        )
 
         return result
 
@@ -1538,7 +1524,7 @@ class Opik:
         )
 
         project_name = self._resolve_project_name(project_name)
-        rest_operations.create_test_suite_dataset(
+        suite_id = rest_operations.create_test_suite_dataset(
             rest_client=self._rest_client,
             dataset_name=name,
             project_name=project_name,
@@ -1554,6 +1540,20 @@ class Opik:
             rest_client=self._rest_client,
             dataset_items_count=0,
             client=self,
+        )
+
+        self._log_created_resource_url(
+            kind="test suite",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: (
+                url_helpers.get_test_suite_url_by_id(
+                    base_url=self._config.url_override,
+                    workspace=workspace,
+                    project_id=project_id,
+                    test_suite_id=suite_id,
+                )
+            ),
         )
 
         return test_suite.TestSuite(
@@ -1729,6 +1729,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         dataset_version_id: Optional[str] = None,
         project_name: Optional[str] = None,
+        experiment_id: Optional[str] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -1745,11 +1746,14 @@ class Opik:
             tags: Optional list of tags to associate with the experiment.
             dataset_version_id: Optional ID of the dataset version to associate with the experiment.
             project_name: Optional name of the project to associate the experiment with.
+            experiment_id: Optional explicit id for the experiment. When None a fresh id is
+                generated. Callers that must know the id before creation (e.g. the migrate
+                cascade, which records it for crash-safe cleanup) can supply their own.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
-        id = id_helpers.generate_id()
+        id = experiment_id or id_helpers.generate_id()
 
         checked_prompts = experiment_helpers.handle_prompt_args(
             prompt=prompt,
@@ -1926,9 +1930,20 @@ class Opik:
             project_name=experiment_public.project_name,
         )
 
-    def end(self, timeout: Optional[int] = None, *, flush: bool = True) -> None:
+    def end(
+        self, timeout: Optional[int] = None, *, flush: bool = True
+    ) -> Optional[data_loss.FlushResult]:
         """
-        End the Opik session and submit all pending messages.
+        End the Opik session, releasing this client's connection reference. When
+        ``flush`` is True (the default), all pending messages are submitted
+        first; when ``flush`` is False, anything still queued is dropped.
+
+        Connection resources are shared and ref-counted across clients with a
+        matching configuration: this releases the current client's reference.
+        The underlying streamer/threads are torn down only when the last client
+        sharing them is ended (or garbage-collected). When ``flush`` is True the
+        flush drains the *shared* queue, so pending data from other clients on
+        the same connection is delivered too.
 
         Args:
             timeout (Optional[int]): The timeout for closing the streamer. Once
@@ -1943,24 +1958,108 @@ class Opik:
                 flight — useful in per-test teardown where assertions have
                 already polled the backend during the test body.
 
+        After ``end()`` the client must not be used again. Calling ``trace()``,
+        ``span()``, ``flush()``, etc. on an ended client is unsupported and its
+        behavior is undefined: it may silently no-op, or — because the transport
+        is shared — it may still succeed by riding another live client's
+        resources. Do not rely on either outcome; create a new client instead.
+
+        The outcome is also available afterwards via :attr:`last_flush_result`.
+
         Returns:
-            None
+            The flush outcome (including any data-loss detail) when ``flush`` is
+            True; ``None`` when ``flush`` is False (nothing was flushed).
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        self._streamer.close(timeout, flush=flush)
+        marker = self._flush_reporter.marker()
+        # Explicit teardown on a user thread, so close on the last reference
+        # (close_on_zero=True). Releasing is idempotent, so the detached GC
+        # finalizer cannot double-decrement. release() returns the authoritative
+        # flush outcome computed inside the drain (streamer.flush) — the same
+        # source flush() uses — rather than the weaker queue_size()==0 proxy,
+        # which can read empty on the pop-vs-processed race and while file
+        # uploads are still in flight.
+        flushed = self._lease.release(timeout, flush=flush, close_on_zero=True)
+        self._finalizer.detach()
+        if not flush:
+            return None
+        if flushed is None:
+            # No drain ran on this call — e.g. a repeated end() after the client
+            # was already released. Keep the outcome from the release that did
+            # the work rather than overwriting it with a spurious not-flushed
+            # result, so end() is idempotent.
+            return self._last_flush_result
+        self._last_flush_result = self._flush_reporter.build_result(
+            marker, flushed=flushed
+        )
+        return self._last_flush_result
 
     def flush(self, timeout: Optional[int] = None) -> bool:
         """
         Flush the streamer to ensure all messages are sent.
 
+        Attachment/file upload *failures* are not counted in the data-loss
+        detail (``dropped_*`` / ``failures``), but an incomplete upload still
+        makes the flush report as not fully flushed — so ``flushed`` (and hence
+        the returned bool) does reflect uploads. Never raises and never blocks
+        beyond ``timeout``: an observability SDK must not disrupt the app it
+        instruments. Detailed outcome — including any data that was dropped — is
+        available via :attr:`last_flush_result`.
+
         Args:
             timeout (Optional[int]): The timeout for flushing the streamer. Once the timeout is reached, the flush method will return regardless of whether all messages have been sent.
 
         Returns:
-            True if all messages have been sent within specified timeout, False otherwise.
+            True if all messages were delivered within the timeout with no data
+            loss; False if the timeout was hit or any message was dropped.
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        return self._streamer.flush(timeout)
+        try:
+            marker = self._flush_reporter.marker()
+            flushed = self._streamer.flush(timeout)
+            self._last_flush_result = self._flush_reporter.build_result(
+                marker, flushed=flushed
+            )
+            return self._last_flush_result.success
+        except Exception:
+            # An observability SDK must not disrupt the app it instruments: a
+            # failure inside flush is reported as "not flushed", never raised.
+            # Record a failed outcome so last_flush_result reflects this attempt
+            # rather than keeping a stale prior success. Built directly (not via
+            # build_result, which may itself be what raised) so it cannot re-raise.
+            LOGGER.error("Opik flush failed unexpectedly", exc_info=True)
+            self._last_flush_result = data_loss.FlushResult(
+                flushed=False,
+                remaining_queue_size=0,
+                dropped_messages=0,
+                dropped_items=0,
+                failures=(),
+            )
+            return False
+
+    @property
+    def last_flush_result(self) -> Optional[data_loss.FlushResult]:
+        """Outcome of the most recent ``flush()``/``end()`` on this client.
+
+        ``None`` until the first flush.
+        """
+        return self._last_flush_result
+
+    def get_errors_report(self) -> data_loss.ErrorsReport:
+        """Report of messages the background sender terminally dropped.
+
+        Unlike :attr:`last_flush_result`, which is scoped to a single flush, this
+        reports the sender's retained data-loss history — including drops that
+        happened before or between flushes.
+
+        The report is **capped**: the total counts are exact, but the per-drop
+        ``failures`` list keeps only the most recent entries (bounded, drop-oldest)
+        so it never grows without bound — see :class:`~opik.ErrorsReport`.
+
+        The sender is shared across clients with a matching configuration, so
+        the report may include drops from sibling clients on the same connection.
+        """
+        return self._flush_reporter.build_errors_report()
 
     def __internal_api__drain_to_processors__(
         self, timeout: Optional[float] = None
@@ -1990,6 +2089,7 @@ class Opik:
         exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
+        max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
@@ -2044,6 +2144,11 @@ class Opik:
             exclude: Fields to exclude from the response. For example, ["feedback_scores"]
             wait_for_at_least: The minimum number of traces to wait for before returning.
             wait_for_timeout: The timeout for waiting for traces.
+            max_batch_size: The maximum number of traces requested per page from the backend
+                (default 2000). The backend buffers a page in memory before streaming it, so a
+                large page of heavy traces (e.g. with inline attachments) can spike server memory;
+                lower this to bound per-request memory. On a connection/timeout error the page size
+                is automatically halved and the page retried.
 
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
@@ -2064,6 +2169,7 @@ class Opik:
             max_results=max_results,
             truncate=truncate,
             exclude=exclude,
+            max_batch_size=max_batch_size,
         )
 
         if wait_for_at_least is None:
@@ -2093,6 +2199,7 @@ class Opik:
         exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
+        max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
@@ -2149,6 +2256,11 @@ class Opik:
             exclude: List of fields to exclude from the response (e.g., ["feedback_scores", "input", "output"])
             wait_for_at_least: The minimum number of spans to wait for before returning.
             wait_for_timeout: The timeout for waiting for spans.
+            max_batch_size: The maximum number of spans requested per page from the backend
+                (default 2000). The backend buffers a page in memory before streaming it, so a
+                large page of heavy spans (e.g. with inline attachments) can spike server memory;
+                lower this to bound per-request memory. On a connection/timeout error the page size
+                is automatically halved and the page retried.
 
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
@@ -2169,6 +2281,7 @@ class Opik:
             max_results=max_results,
             truncate=truncate,
             exclude=exclude,
+            max_batch_size=max_batch_size,
         )
 
         if wait_for_at_least is None:
@@ -2235,17 +2348,22 @@ class Opik:
             str: URL
         """
 
-        dereferenced_workspace = self._workspace
-        if dereferenced_workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
-            dereferenced_workspace = (
-                self._rest_client.check.get_workspace_name().workspace_name
-            )
-
         project_name = self._resolve_project_name(project_name)
 
         return url_helpers.get_project_url_by_workspace(
-            workspace=dereferenced_workspace, project_name=project_name
+            workspace=self._dereferenced_workspace(), project_name=project_name
         )
+
+    def _dereferenced_workspace(self) -> str:
+        """Resolve the configured workspace to the concrete workspace name.
+
+        The self-hosted default ``"default"`` placeholder is looked up against
+        the backend so URLs point at the actual workspace.
+        """
+        if self._workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
+            return self._rest_client.check.get_workspace_name().workspace_name
+
+        return self._workspace
 
     def get_threads_client(self) -> threads_client.ThreadsClient:
         """
@@ -2621,30 +2739,32 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
 
         Example:
-            # Get all versions of a prompt
-            versions = client.get_prompt_history(name="my-prompt", project_name="my-project")
+            .. code-block:: python
 
-            # Filter by tags (versions containing "production" tag)
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                filter_string='tags contains "production"'
-            )
+                # Get all versions of a prompt
+                versions = client.get_prompt_history(name="my-prompt", project_name="my-project")
 
-            # Search for specific text in template or change description fields
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                search="customer"
-            )
+                # Filter by tags (versions containing "production" tag)
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    filter_string='tags contains "production"'
+                )
 
-            # Combine search and filtering
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                search="customer",
-                filter_string='tags contains "production"'
-            )
+                # Search for specific text in template or change description fields
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    search="customer"
+                )
+
+                # Combine search and filtering
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    search="customer",
+                    filter_string='tags contains "production"'
+                )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
@@ -2713,30 +2833,32 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
 
         Example:
-            # Get all versions of a chat prompt
-            versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")
+            .. code-block:: python
 
-            # Filter by tags (versions containing "production" tag)
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                filter_string='tags contains "production"'
-            )
+                # Get all versions of a chat prompt
+                versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")
 
-            # Search for specific text in template or change description fields
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                search="helpful assistant"
-            )
+                # Filter by tags (versions containing "production" tag)
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    filter_string='tags contains "production"'
+                )
 
-            # Combine search and filtering
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                search="helpful assistant",
-                filter_string='tags contains "production"'
-            )
+                # Search for specific text in template or change description fields
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    search="helpful assistant"
+                )
+
+                # Combine search and filtering
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    search="helpful assistant",
+                    filter_string='tags contains "production"'
+                )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
@@ -2921,11 +3043,13 @@ class Opik:
             An instance of the PromptClient initialized with a cached REST client.
 
         Example:
-            prompts_client = client.get_prompts_client()
-            prompts_client.batch_update_prompt_version_tags(
-                version_ids=["version-id-1", "version-id-2"],
-                tags=["production", "v2"]
-            )
+            .. code-block:: python
+
+                prompts_client = client.get_prompts_client()
+                prompts_client.batch_update_prompt_version_tags(
+                    version_ids=["version-id-1", "version-id-2"],
+                    tags=["production", "v2"]
+                )
         """
         return prompt_client.PromptClient(self._rest_client)
 
@@ -3324,6 +3448,9 @@ _context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.Contex
     "_context_client_var", default=None
 )
 _global_singleton: Optional[Opik] = None
+# Serializes lazy creation of the global singleton so concurrent cold-start
+# callers share one client instead of racing to build several.
+_global_singleton_lock = threading.Lock()
 
 
 def get_current_client_raw() -> Optional[Opik]:
@@ -3354,8 +3481,16 @@ def get_global_client() -> Opik:
         return client
 
     global _global_singleton
-    _global_singleton = Opik()
-    return _global_singleton
+    # Re-check under the lock: without it, concurrent cold-start callers (e.g. one
+    # tracer shared by parallel pipelines) each build a client and its full
+    # transport stack, and all but one are immediately discarded — wasteful, and
+    # it races the shared connection-resource manager's build path.
+    with _global_singleton_lock:
+        client = get_current_client_raw()
+        if client is not None:
+            return client
+        _global_singleton = Opik()
+        return _global_singleton
 
 
 def set_global_client(client: Opik, context_wise: bool = False) -> None:

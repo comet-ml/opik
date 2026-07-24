@@ -8,6 +8,7 @@ import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.SentinelTranslation;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Result;
@@ -207,7 +208,7 @@ public class DatasetItemResultMapper {
     }
 
     static Instant nullIfEpoch(Instant instant) {
-        return instant == null || instant.equals(Instant.EPOCH) ? null : instant;
+        return SentinelTranslation.epochToNull(instant);
     }
 
     private static final TypeReference<List<EvaluatorItem>> EVALUATOR_LIST_TYPE = new TypeReference<>() {

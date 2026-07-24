@@ -18,7 +18,7 @@ export type MenuItem = {
   path?: string;
   type: MENU_ITEM_TYPE;
   icon: React.ComponentType<{ className?: string }>;
-  label: string;
+  label: string | React.ReactElement;
   disabled?: boolean;
   muted?: boolean;
   exact?: boolean;

@@ -27,6 +27,8 @@ public sealed interface AutomationRuleUpdate permits AutomationRuleEvaluatorUpda
 
     boolean isEnabled();
 
+    EvalTriggerScope getTriggerScope();
+
     <E extends Filter> List<E> getFilters();
 
     UUID getProjectId(); // Legacy field for backward compatibility

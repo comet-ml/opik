@@ -19,6 +19,7 @@ import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import { useOptimizationScores } from "@/v2/pages-shared/experiments/useOptimizationScores";
 import { AggregatedCandidate } from "@/types/optimizations";
+import { getOptimizationRefetchInterval } from "./optimizationOverviewHelpers";
 
 export const useOptimizationExperiments = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -38,7 +39,9 @@ export const useOptimizationExperiments = () => {
     {
       placeholderData: keepPreviousData,
       enabled: !!optimizationId,
-      refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
+      // Poll only while the run is active (reads the freshest status).
+      refetchInterval: (query) =>
+        getOptimizationRefetchInterval(query.state.data?.status),
     },
   );
 
@@ -61,7 +64,7 @@ export const useOptimizationExperiments = () => {
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
+      refetchInterval: getOptimizationRefetchInterval(optimization?.status),
     },
   );
 
@@ -176,6 +179,20 @@ export const useOptimizationExperiments = () => {
     }, undefined);
   }, [candidates]);
 
+  // Mirror the SDK tie policy (OPIK-7038, utils/scoring.improves_over): a
+  // candidate must STRICTLY beat the baseline to count as an improvement — a
+  // tie keeps the seed/original prompt as the result. Compare best vs baseline
+  // on the SAME aggregated-candidate path (not the experiment-derived
+  // `baseScore`, which defaults to 0 and can diverge), so an unscored baseline
+  // reads as `undefined` ("not comparable yet") rather than a real 0. When this
+  // is `false` the best-scoring trial did NOT win: the original prompt was kept.
+  const improvedOverBaseline = useMemo<boolean | undefined>(() => {
+    const bestScore = bestCandidate?.score;
+    const baselineScore = baselineCandidate?.score;
+    if (bestScore == null || baselineScore == null) return undefined;
+    return bestScore > baselineScore;
+  }, [bestCandidate, baselineCandidate]);
+
   const baselineExperiment = useMemo(() => {
     if (!experiments.length) return undefined;
     const sortedRows = experiments
@@ -200,6 +217,7 @@ export const useOptimizationExperiments = () => {
     baseScore,
     bestExperiment: bestExperiment,
     bestCandidate,
+    improvedOverBaseline,
     baselineCandidate,
     baselineExperiment,
     inProgressInfo,

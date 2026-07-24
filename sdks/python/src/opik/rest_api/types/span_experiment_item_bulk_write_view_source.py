@@ -3,5 +3,5 @@
 import typing
 
 SpanExperimentItemBulkWriteViewSource = typing.Union[
-    typing.Literal["sdk", "experiment", "playground", "optimization"], typing.Any
+    typing.Literal["sdk", "experiment", "playground", "optimization", "evaluator"], typing.Any
 ]

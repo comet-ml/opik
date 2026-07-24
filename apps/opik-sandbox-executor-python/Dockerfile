@@ -4,21 +4,25 @@
 #######################################################################
 FROM python:3.12.13-slim AS builder
 
+# uv is a drop-in faster pip; the binary is copied from the official distroless
+# image (pinned) and used only in this builder stage — it never reaches runtime.
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /usr/local/bin/uv
+
 WORKDIR /build
 
 # Install deps first so editing scoring_runner.py doesn't bust this cache layer.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Compile to bytecode (-o 2 strips asserts/docstrings, -b = fastest legacy
 # layout), drop source/stubs, and remove package managers from the sandbox.
+# uv installs no pip; the rm below removes the base image's bundled pip/setuptools/wheel.
 # *.dist-info is kept: litellm/opik/tiktoken read it via importlib.metadata.
 RUN set -eux; \
     PYTHONNODEBUGRANGES=1 python -m compileall -o 2 -b /usr/local/lib/python3.12/site-packages; \
     find /usr/local/lib/python3.12/site-packages -name '*.py' -delete; \
     find /usr/local/lib/python3.12/site-packages -type d -name '__pycache__' -prune -exec rm -rf {} +; \
     find /usr/local/lib/python3.12/site-packages -name '*.pyi' -delete; \
-    pip uninstall -y pip setuptools wheel ensurepip || true; \
     rm -rf /usr/local/lib/python3.12/site-packages/pip* \
            /usr/local/lib/python3.12/site-packages/setuptools* \
            /usr/local/lib/python3.12/site-packages/wheel* \

@@ -4,8 +4,17 @@
 #######################################################################
 FROM docker:29.5.1 AS builder
 
+# Alpine base ships /bin/ash, not bash; ash honors -o pipefail for the RUN
+# below whose pipe into xargs would otherwise mask a failing find.
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+
 # Toolchain only for compiling native wheels (rust/cargo for pydantic-core).
+# hadolint ignore=DL3018
 RUN apk add --no-cache python3 py3-pip build-base python3-dev musl-dev gcc libffi-dev rust cargo
+
+# uv is a drop-in faster pip; the binary is copied from the official distroless
+# image (pinned) and used only in this builder stage — it never reaches runtime.
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /usr/local/bin/uv
 
 WORKDIR /opt/opik-python-backend
 
@@ -13,7 +22,7 @@ WORKDIR /opt/opik-python-backend
 COPY requirements.txt .
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --python /opt/venv/bin/python --no-cache -r requirements.txt
 
 # Bytecode-only deps (-o 2, -b = fastest layout); strip source/stubs + package
 # managers. src/ keeps its .py; *.dist-info kept for importlib.metadata.
@@ -26,7 +35,7 @@ RUN set -eux; \
     find "$PY_SITE" \
          -path "$PY_SITE/datasets/*" -prune -o \
          -path "$PY_SITE/opik_optimizer/*" -prune -o \
-         -name '*.py' -type f -print | xargs -r rm -f; \
+         -name '*.py' -type f -print0 | xargs -0 -r rm -f; \
     find "$PY_SITE" -type d -name '__pycache__' -prune -exec rm -rf {} +; \
     find "$PY_SITE" -name '*.pyi' -delete; \
     pip uninstall -y pip setuptools wheel || true; \
@@ -37,10 +46,11 @@ RUN set -eux; \
 #######################################################################
 FROM docker:29.5.1
 
-# Upgrade libexpat to the latest available version to mitigate CVEs.
-RUN apk add --no-cache --upgrade libexpat
-# Runtime-only OS deps: tini (PID 1 reaper) + python3 interpreter.
-RUN apk add --no-cache tini python3
+# libexpat --upgrade mitigates CVEs; tini (PID 1 reaper) + python3 are the
+# runtime-only OS deps.
+# hadolint ignore=DL3018
+RUN apk add --no-cache --upgrade libexpat && \
+    apk add --no-cache tini python3
 
 WORKDIR /opt/opik-python-backend
 

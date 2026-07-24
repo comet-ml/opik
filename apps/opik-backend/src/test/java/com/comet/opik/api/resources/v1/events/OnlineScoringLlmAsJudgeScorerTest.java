@@ -19,6 +19,8 @@ import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
+import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
@@ -38,6 +40,8 @@ import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -59,11 +63,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -98,6 +104,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
     @Mock
     private OpikConfiguration opikConfiguration;
     @Mock
+    private OnlineEvaluationRecorder onlineEvaluationRecorder;
+    @Mock
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -129,10 +137,15 @@ class OnlineScoringLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getPendingMessageDuration()).thenReturn(Duration.minutes(10));
         lenient().when(onlineScoringConfig.getMaxRetries()).thenReturn(3);
         lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
+        lenient().when(onlineScoringConfig.getMaxPromptFieldChars()).thenReturn(4_000);
+        lenient().when(onlineScoringConfig.getAttachmentFetchMaxRetries()).thenReturn(5);
+        lenient().when(onlineScoringConfig.getAttachmentFetchRetryDelay()).thenReturn(Duration.milliseconds(300));
 
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(GetTraceSpansTool.NAME, "{}"),
                 stubTool(ReadTool.NAME, "{}")));
+        AgenticScoringService agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig,
+                toolRegistry);
         TraceCompressor traceCompressor = new TraceCompressor();
 
         scorer = new OnlineScoringLlmAsJudgeScorer(
@@ -145,10 +158,11 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 testSuiteAssertionCounterService,
                 llmProviderFactory,
                 spanService,
-                toolRegistry,
+                agenticScoringService,
                 traceCompressor,
                 workspaceNameService,
                 opikConfiguration,
+                onlineEvaluationRecorder,
                 attachmentService);
     }
 
@@ -276,17 +290,17 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 "false, true,  60000, 50000, OLLAMA,  false, false",
                 // no preconditions met
                 "false, false, 0,     50000, OPEN_AI, false, false",
-                // attachment-driven path (OPIK-6555): toggle on + provider supports tools + below size
+                // {{trace}}-driven path: toggle on + provider supports tools + below size
                 // threshold → tools fire so the judge can call get_attachment
                 "false, true,  0,     50000, OPEN_AI, true,  true",
-                // attachments but toggle off → inline (whole agentic feature is gated by the toggle)
+                // references {{trace}} but toggle off → inline (whole agentic feature is gated by the toggle)
                 "false, false, 0,     50000, OPEN_AI, true,  false",
-                // attachments but provider can't do tools → inline (internal warn, attachments unusable)
+                // references {{trace}} but provider can't do tools → inline (internal warn)
                 "false, true,  0,     50000, OLLAMA,  true,  false",
         })
         void gateMatchesTruthTable(
                 boolean hasExperimentId, boolean toggleEnabled, int estimatedTokens,
-                int thresholdTokens, LlmProvider provider, boolean hasAttachments, boolean expectedUseTools) {
+                int thresholdTokens, LlmProvider provider, boolean referencesTrace, boolean expectedUseTools) {
             String modelName = "gpt-test";
             TraceToScoreLlmAsJudge message = hasExperimentId
                     ? newMessage(UUID.randomUUID())
@@ -295,7 +309,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(thresholdTokens);
             lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
 
-            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName, hasAttachments);
+            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName, referencesTrace);
 
             assertThat(useTools).isEqualTo(expectedUseTools);
         }
@@ -314,10 +328,11 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .parameters(params)
                 .build();
 
-        ChatRequest withTools = OnlineScoringEngine.addToolSpecs(original, ToolChoice.REQUIRED,
+        AgenticScoringService agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig,
                 new ToolRegistry(Set.of(
                         stubTool(GetTraceSpansTool.NAME, "{}"),
                         stubTool(ReadTool.NAME, "{}"))));
+        ChatRequest withTools = agenticScoringService.addToolSpecs(original, ToolChoice.REQUIRED);
 
         // Tool specs come from the registry (sorted alphabetically by ToolRegistry).
         assertThat(withTools.toolSpecifications())
@@ -347,7 +362,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
         TraceToScoreLlmAsJudge message = newMessage(UUID.randomUUID());
 
         ChatResponse result = scorer
-                .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of())
+                .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
+                        EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED)
                 .block();
 
         assertThat(result).isSameAs(plainResponse);
@@ -390,7 +406,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message,
-                List.of(), null, Map.of()).block();
+                List.of(), null, Map.of(), EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block();
 
         assertThat(result).isSameAs(finalResponse);
 
@@ -466,7 +482,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         org.assertj.core.api.Assertions
                 .assertThatThrownBy(() -> scorer.handleToolCalls(
-                        initialResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of()).block())
+                        initialResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
+                        EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block())
                 .isSameAs(providerFailure);
 
         // Exactly one provider call attempted; the loop did not swallow + continue.
@@ -519,7 +536,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(
-                toolCallingResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of()).block();
+                toolCallingResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
+                EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block();
 
         // Result is the wrap-up structured response — wrap-up still fires when the cap is hit.
         assertThat(result).isSameAs(finalResponse);
@@ -552,7 +570,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var error = new RuntimeException("original error");
             var logger = mock(Logger.class);
 
-            assertThatThrownBy(() -> OnlineScoringBaseScorer.surfaceInjectedMediaFailure(
+            assertThatThrownBy(() -> AgenticScoringServiceImpl.surfaceInjectedMediaFailure(
                     error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
                     .isSameAs(error);
             verifyNoInteractions(logger);
@@ -570,10 +588,10 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var error = new RuntimeException("model rejected media");
             var logger = mock(Logger.class);
 
-            assertThatThrownBy(() -> OnlineScoringBaseScorer.surfaceInjectedMediaFailure(
+            assertThatThrownBy(() -> AgenticScoringServiceImpl.surfaceInjectedMediaFailure(
                     error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
                     .isSameAs(error);
-            verify(logger, times(1)).error(anyString(), any(), any(), any());
+            verify(logger, times(1)).error(anyString(), any(), any(), any(), any());
         }
     }
 
@@ -586,6 +604,22 @@ class OnlineScoringLlmAsJudgeScorerTest {
                   "model": { "name": "gpt-test", "temperature": 0.3 },
                   "messages": [
                     { "role": "USER", "content": "Score this trace: {{context}}" }
+                  ],
+                  "schema": [
+                    { "name": "Quality", "type": "DOUBLE", "description": "Quality score" }
+                  ],
+                  "variables": {}
+                }
+                """;
+
+        // Evaluator whose prompt references {{trace}} — the declarative agentic trigger. No variable
+        // binds it, so the backend's implicit detection (messagesReferenceTraceDirectly) injects the
+        // trace structure.
+        private static final String EVALUATOR_JSON_WITH_TRACE = """
+                {
+                  "model": { "name": "gpt-test", "temperature": 0.3 },
+                  "messages": [
+                    { "role": "USER", "content": "Score this trace: {{trace}}" }
                   ],
                   "schema": [
                     { "name": "Quality", "type": "DOUBLE", "description": "Quality score" }
@@ -617,25 +651,263 @@ class OnlineScoringLlmAsJudgeScorerTest {
         }
 
         @Test
-        void attachmentFetchErrorFallsBackToEmptyListAndScoringProceeds() {
-            var code = JsonUtils.readValue(EVALUATOR_JSON, LlmAsJudgeCode.class);
+        void traceVariableInjectsStructureWithTraceAndSpanAttachments() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_TRACE, LlmAsJudgeCode.class);
             var message = buildScoringMessage(code);
 
+            UUID spanId = UUID.randomUUID();
+            // The {{trace}} structure surfaces attachments at BOTH levels: the trace's own and each
+            // span's, so the judge can call get_attachment for any of them.
+            String traceFileName = "trace-doc-" + RandomUtils.secure().randomInt(1, 99999999) + ".pdf";
+            String spanFileName = "input-attachment-" + RandomUtils.secure().randomInt(1, 99999999)
+                    + "-1782579409975-sdk.jpg";
+            Span span = Span.builder()
+                    .id(spanId)
+                    .projectId(message.trace().projectId())
+                    .traceId(message.trace().id())
+                    .name("span-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .startTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\":\"hi\"}"))
+                    .build();
+            var traceAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+                    .entityId(message.trace().id())
+                    .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
+                    .fileName(traceFileName)
+                    .build();
+            var spanAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+                    .entityId(spanId)
+                    .entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+                    .fileName(spanFileName)
+                    .build();
+
             when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
+            when(attachmentService.getAttachmentInfoByEntity(
+                    any(), eq(com.comet.opik.api.attachment.EntityType.TRACE), any()))
+                    .thenReturn(Mono.just(List.of(traceAttachment)));
+            when(attachmentService.getAttachmentInfoByEntityIds(
+                    eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                    .thenReturn(Mono.just(List.of(spanAttachment)));
+            // Plain (no tool calls) response so handleToolCalls returns immediately.
+            ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
+            when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            // {{trace}} engaged the agentic-tools path: the scoring request carries tool specs.
+            assertThat(requestCaptor.getValue().toolSpecifications()).isNotEmpty();
+            // The injected structure carries the REAL trace id, span id, and BOTH attachment file_names
+            // (trace-level + span-level), so the judge can call get_attachment with correct values.
+            String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
+            assertThat(prompt).contains(message.trace().id().toString());
+            assertThat(prompt).contains(spanId.toString());
+            assertThat(prompt).contains(traceFileName);
+            assertThat(prompt).contains(spanFileName);
+        }
+
+        @Test
+        void traceStructureKeepsBodyReferencedTransientSpanAttachmentAlongsideUnrelatedPersistentOne() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_TRACE, LlmAsJudgeCode.class);
+            var message = buildScoringMessage(code);
+
+            UUID spanId = UUID.randomUUID();
+            // The span body references a transient (auto-stripped) attachment; the span also carries an
+            // UNRELATED persistent attachment. The persistent one must not cause the referenced transient
+            // to be dropped from the {{trace}} structure (regression for the entity-wide-gate bug).
+            String transientFileName = "input-attachment-1-1699999999999.png";
+            Span span = Span.builder()
+                    .id(spanId)
+                    .projectId(message.trace().projectId())
+                    .traceId(message.trace().id())
+                    .name("span-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .startTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\":\"see [" + transientFileName + "]\"}"))
+                    .build();
+            var transientAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+                    .entityId(spanId)
+                    .entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+                    .fileName(transientFileName)
+                    .build();
+            var persistentAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+                    .entityId(spanId)
+                    .entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+                    .fileName("diagram.png")
+                    .build();
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
+            when(attachmentService.getAttachmentInfoByEntity(
+                    any(), eq(com.comet.opik.api.attachment.EntityType.TRACE), any()))
+                    .thenReturn(Mono.just(List.of()));
+            when(attachmentService.getAttachmentInfoByEntityIds(
+                    eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                    .thenReturn(Mono.just(List.of(persistentAttachment, transientAttachment)));
+            ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
+            when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            // Both file_names survive into the injected {{trace}} structure — the unrelated persistent
+            // attachment does not evict the body-referenced transient.
+            String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
+            assertThat(prompt).contains(transientFileName);
+            assertThat(prompt).contains("diagram.png");
+        }
+
+        @Test
+        void traceVariableAttachmentFetchErrorStillScoresWithStructure() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_TRACE, LlmAsJudgeCode.class);
+            var message = buildScoringMessage(code);
+
+            UUID spanId = UUID.randomUUID();
+            Span span = Span.builder()
+                    .id(spanId)
+                    .projectId(message.trace().projectId())
+                    .traceId(message.trace().id())
+                    .name("span-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .startTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\":\"hi\"}"))
+                    .build();
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
+            // Trace-attachment listing fails — onErrorReturn(List.of()) degrades to a structure without
+            // attachment entries rather than blocking scoring.
+            when(attachmentService.getAttachmentInfoByEntity(
+                    any(), eq(com.comet.opik.api.attachment.EntityType.TRACE), any()))
+                    .thenReturn(Mono.error(new RuntimeException("DB unavailable")));
+            when(attachmentService.getAttachmentInfoByEntityIds(
+                    eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                    .thenReturn(Mono.just(List.of()));
+            ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
+            when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verify(aiProxyService, times(1)).scoreTrace(any(), any(), any());
+            // Structure still injected (trace id + span id), just without attachment entries.
+            String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
+            assertThat(prompt).contains(message.trace().id().toString());
+            assertThat(prompt).contains(spanId.toString());
+        }
+
+        @Test
+        void traceAttachmentUploadRaceRetriesUntilPersistentCopyAppears() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_TRACE, LlmAsJudgeCode.class);
+            // Trace body references the attachment, so the scorer retries the listing until the persistent
+            // (-sdk) copy lands instead of giving up on the first empty result.
+            String fileName = "input-attachment-86584937-1782579409975-sdk.jpg";
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .name(UUID.randomUUID().toString())
+                    .startTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"q\":\"see [" + fileName + "]\"}"))
+                    .build();
+            var message = new TraceToScoreLlmAsJudge(
+                    trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
+                    UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
+                    PromptType.MUSTACHE, null, null);
+            var traceAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+                    .entityId(trace.id())
+                    .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
+                    .fileName(fileName)
+                    .build();
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
             when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
             when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
                     .thenReturn(new ToolCallingStrategy());
             when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
-            when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
-                    .thenReturn(Mono.error(new RuntimeException("DB unavailable")));
-            when(aiProxyService.scoreTrace(any(), any(), any()))
+            // Cold lookup: first subscription sees the not-yet-uploaded state (empty), the retry sees it land.
+            AtomicInteger subscriptions = new AtomicInteger();
+            when(attachmentService.getAttachmentInfoByEntity(
+                    any(), eq(com.comet.opik.api.attachment.EntityType.TRACE), any()))
+                    .thenReturn(Mono.defer(() -> Mono.just(subscriptions.getAndIncrement() == 0
+                            ? List.<com.comet.opik.api.attachment.AttachmentInfo>of()
+                            : List.of(traceAttachment))));
+            ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
+            when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
                     .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
             when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
 
-            // onErrorReturn(List.of()) swallows the attachment error; scoring proceeds normally.
             scorer.score(message).block();
 
-            verify(aiProxyService, times(1)).scoreTrace(any(), any(), any());
+            // First listing was empty (upload not landed); the retry resubscribed and picked up the attachment.
+            assertThat(subscriptions.get()).isGreaterThanOrEqualTo(2);
+            String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
+            assertThat(prompt).contains(fileName);
+        }
+
+        @Test
+        void spanAttachmentUploadRaceInTraceStructureRetriesUntilSpanCopyAppears() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_TRACE, LlmAsJudgeCode.class);
+            var message = buildScoringMessage(code);
+
+            UUID spanId = UUID.randomUUID();
+            String spanFileName = "input-attachment-86584937-1782579409975-sdk.jpg";
+            // Span body references the attachment, so the trace structure waits for the span's persistent
+            // copy to become visible before it's built (the batched lookup races attachment visibility).
+            Span span = Span.builder()
+                    .id(spanId)
+                    .projectId(message.trace().projectId())
+                    .traceId(message.trace().id())
+                    .name("span-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .startTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"q\":\"see [" + spanFileName + "]\"}"))
+                    .build();
+            var spanAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+                    .entityId(spanId)
+                    .entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+                    .fileName(spanFileName)
+                    .build();
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
+            when(attachmentService.getAttachmentInfoByEntity(
+                    any(), eq(com.comet.opik.api.attachment.EntityType.TRACE), any()))
+                    .thenReturn(Mono.just(List.of()));
+            // Cold batched span lookup: first subscription empty (not yet persisted), the retry sees it land.
+            AtomicInteger subscriptions = new AtomicInteger();
+            when(attachmentService.getAttachmentInfoByEntityIds(
+                    eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                    .thenReturn(Mono.defer(() -> Mono.just(subscriptions.getAndIncrement() == 0
+                            ? List.<com.comet.opik.api.attachment.AttachmentInfo>of()
+                            : List.of(spanAttachment))));
+            ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
+            when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            // First batched listing was empty; the retry resubscribed and the span's attachment surfaced.
+            assertThat(subscriptions.get()).isGreaterThanOrEqualTo(2);
+            String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
+            assertThat(prompt).contains(spanFileName);
         }
 
         private TraceToScoreLlmAsJudge buildScoringMessage(LlmAsJudgeCode code) {

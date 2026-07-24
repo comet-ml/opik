@@ -117,7 +117,6 @@ response.txt
 .playwright-mcp/
 tests_end_to_end/visual-tests/node_modules/
 tests_end_to_end/visual-tests/test-results/
-tests_end_to_end/typescript-tests/test-results/
 tests_end_to_end/visual-tests/visual-report/
 tests_end_to_end/visual-tests/.auth/
 tests_end_to_end/visual-tests/.test-state.json

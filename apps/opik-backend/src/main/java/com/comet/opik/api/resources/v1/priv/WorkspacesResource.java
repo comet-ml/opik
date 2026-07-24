@@ -8,6 +8,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
+import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
 import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.domain.WorkspaceMetricsService;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
@@ -146,6 +147,29 @@ public class WorkspacesResource {
         log.info("Retrieved workspace cost data by days for projectIds '{}', on workspace_id '{}'",
                 request.projectIds(),
                 workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
+
+    @POST
+    @Path("/metrics/spans")
+    @Operation(operationId = "getWorkspaceSpanMetric", summary = "Get workspace span metric", description = "Gets a span metric time series aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.", responses = {
+            @ApiResponse(responseCode = "200", description = "Workspace span metric", content = @Content(schema = @Schema(implementation = WorkspaceMetricResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
+    public Response getWorkspaceSpanMetric(
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceSpanMetricRequest.class))) @NotNull @Valid WorkspaceSpanMetricRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve workspace span metric '{}' for projectIds '{}', on workspace_id '{}'", request.metricType(),
+                request.projectIds(), workspaceId);
+        WorkspaceMetricResponse response = workspaceMetricsService.getWorkspaceSpanMetric(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved workspace span metric '{}' for projectIds '{}', on workspace_id '{}'", request.metricType(),
+                request.projectIds(), workspaceId);
 
         return Response.ok().entity(response).build();
     }

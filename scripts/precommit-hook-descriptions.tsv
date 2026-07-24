@@ -1,0 +1,35 @@
+# Single source of truth for per-hook descriptions shown in the Code Quality
+# timing comment. Both precommit-timing-table.sh (ran hooks) and
+# precommit-skipped-table.sh (skipped hooks) read this so the two tables agree.
+# Format: <keyword>\t<description>. The keyword is matched as a substring of the
+# hook display name; order matters — most specific first (some names share
+# substrings, e.g. "ruff-format" before "ruff"). Lines starting with # ignored.
+trim trailing whitespace	Strip trailing whitespace
+fix end of files	Ensure files end in a newline
+ruff-format	Format Python code (ruff)
+ruff	Lint + autofix Python (ruff)
+mypy	Static type check
+pyupgrade	Modernize Python syntax
+check yaml	Validate YAML syntax
+check json	Validate JSON syntax
+check toml	Validate TOML syntax
+added large files	Block large files (>1MB)
+detect private key	Block committed private keys
+merge conflicts	Block merge-conflict markers
+case conflicts	Block case-only name clashes
+nbstripout	Strip notebook output
+markdownlint	Lint Markdown
+codespell	Fix common misspellings
+radon cc	Cyclomatic-complexity gate
+radon raw	Raw size metrics gate
+xenon	Fail on complexity thresholds
+lizard	Cyclomatic-complexity gate
+vulture	Find dead code
+helm-docs	Regenerate Helm chart README
+actionlint	Lint GitHub Actions workflows
+hadolint	Lint Dockerfiles
+spotless	Format Java code
+eslint	Lint + autofix JS/TS
+typecheck	Whole-project tsc type check
+non-public FE plugins	Block non-public FE plugins
+wrapper smoke tests	Self-test the wrapper scripts

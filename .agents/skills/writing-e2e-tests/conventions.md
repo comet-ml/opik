@@ -100,3 +100,5 @@ test.describe('Dataset CRUD — smoke', { tag: ['@t1-smoke', '@datasets'] }, () 
 ```
 
 Pick the tier by what the test costs and how core it is; pick the feature tag to match the page family (`@datasets`, `@trace-explore`, `@experiments`, …).
+
+**Exception — release-gate specs.** Dev-authored release-gate tests are the one case that does *not* follow the rules above: they live at `tests/_release-gate/<lead-ticket>.spec.ts` (not `tests/<feature>/`) and carry `@release-gate` + `@release-gate:<version>` instead of a tier tag, so they stay out of the curated `@t1-smoke`/`@t2-cuj`/`@t3-nightly` suites. They are governed by `.agents/skills/explore-feature/release-gate-contract.md`, not this file. If you're following these conventions, treat a spec under `_release-gate/` as intentional, not a violation.

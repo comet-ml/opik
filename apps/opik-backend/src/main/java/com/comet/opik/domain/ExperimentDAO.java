@@ -1776,6 +1776,12 @@ public class ExperimentDAO {
      * (the natural unit for the dominant pick, since one trace lives in one project) and
      * neutralizes join-output inflation from transient ReplacingMergeTree row versions on
      * either side.
+     *
+     * <p>The {@code t.id IN (SELECT trace_id FROM experiment_items WHERE workspace_id = :workspace_id)}
+     * predicate prunes the traces read to the referenced trace ids. The hash join alone would scan the
+     * whole workspace trace slice into the hash table; this IN set is implied by the join
+     * ({@code ei.trace_id = t.id}), so it adds an {@code id} primary-key condition that bounds the
+     * traces scan without changing the result.
      */
     private static final String COMPUTE_EXPERIMENT_PROJECT_MAPPING = """
             WITH per_experiment_ranked AS (
@@ -1800,6 +1806,7 @@ public class ExperimentDAO {
                     INNER JOIN traces t
                         ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
                     WHERE ei.workspace_id = :workspace_id
+                    AND t.id IN (SELECT trace_id FROM experiment_items WHERE workspace_id = :workspace_id)
                     GROUP BY ei.experiment_id, project_id
                     HAVING project_id != ''
                 )
@@ -1829,6 +1836,10 @@ public class ExperimentDAO {
      * <p>Assumption: {@code experiments} has no {@code MATERIALIZED} or {@code ALIAS} columns.
      * Adding one would require updating this query (the INSERT would fail loudly at execution
      * time, surfacing the issue rather than corrupting data silently).
+     *
+     * <p>The idempotency guard {@code project_id = ''} sits inside the subquery, not on the outer
+     * statement: CH 26.3's analyzer would resolve an outer {@code project_id} to the REPLACE alias
+     * (the new value) instead of the source column, matching nothing and writing zero rows.
      */
     private static final String BATCH_SET_PROJECT_ID = """
             INSERT INTO experiments
@@ -1842,10 +1853,10 @@ public class ExperimentDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND id IN :experiment_ids
+                AND project_id = ''
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
-            WHERE project_id = ''
             SETTINGS log_comment = '<log_comment>'
             """;
 

@@ -64,20 +64,27 @@ test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@pl
       const apiKey = process.env[provider.api_key_env_var];
       test.skip(!apiKey, `${provider.api_key_env_var} not set in this env`);
 
-      await test.step(`Ensure ${provider.provider_name} provider key is configured`, async () => {
-        const cfg = new ConfigurationPage(page);
-        await cfg.gotoAiProviders();
-        if (provider.provider_type === 'custom') {
-          await cfg.ensureCustomProviderConfigured({
-            providerName: provider.provider_name,
-            baseUrl: provider.base_url,
-            apiKey: apiKey!,
-            models: provider.models.map((m) => m.name).join(','),
-          });
-        } else {
-          await cfg.ensureProviderConfigured(provider.provider_name, apiKey!);
-        }
-      });
+      const offered = await test.step(
+        `Ensure ${provider.provider_name} provider key is configured`,
+        async () => {
+          const cfg = new ConfigurationPage(page);
+          await cfg.gotoAiProviders();
+          if (provider.provider_type === 'custom') {
+            return cfg.ensureCustomProviderConfigured({
+              providerName: provider.provider_name,
+              baseUrl: provider.base_url,
+              apiKey: apiKey!,
+              models: provider.models.map((m) => m.name).join(','),
+            });
+          }
+          return cfg.ensureProviderConfigured(provider.provider_name, apiKey!);
+        },
+      );
+
+      // This deployment doesn't offer the provider under test (its feature
+      // toggle is off), so there is no model to run against — skip rather than
+      // fail on a model selection that can never resolve.
+      test.skip(!offered, `${provider.provider_name} is not offered by this deployment`);
 
       await test.step(`Run a simple prompt against ${model.ui_selector} with options ${JSON.stringify(
         model.options ?? {},

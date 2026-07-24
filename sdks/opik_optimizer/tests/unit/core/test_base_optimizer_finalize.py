@@ -32,7 +32,10 @@ class TestFinalizeOptimization:
 
         optimizer._finalize_optimization(context, status="completed")
 
-        mock_optimization.update.assert_called_with(status="completed")
+        # error_info defaults to None on the success path (only failures pass a
+        # reason); it is threaded through so the graceful-error path can persist
+        # one (OPIK-7172).
+        mock_optimization.update.assert_called_with(status="completed", error_info=None)
 
     def test_handles_none_optimization(self, optimizer) -> None:
         """Should not raise when optimization is None."""
@@ -179,3 +182,76 @@ class TestBuildFinalResultStoppedEarly:
         assert result.details["stop_reason"] == expected_reason
         if finish_reason == "max_trials":
             assert result.details["finish_reason"] == expected_reason
+
+
+class TestBuildFinalResultReusedBaseline:
+    """OPIK-7038: canonical reused_baseline flag in _build_final_result."""
+
+    @pytest.fixture
+    def optimizer(self) -> ConcreteOptimizer:
+        return ConcreteOptimizer(model="gpt-4")
+
+    def _make_context(
+        self, simple_chat_prompt: ChatPrompt, baseline_score: float | None
+    ) -> OptimizationContext:
+        dataset = make_mock_dataset(dataset_id="ds-123")
+        metric = MagicMock(__name__="test_metric")
+        return make_optimization_context(
+            simple_chat_prompt,
+            dataset=dataset,
+            metric=metric,
+            optimization_id="opt-123",
+            baseline_score=baseline_score,
+        )
+
+    @pytest.mark.parametrize(
+        "best_score,baseline_score,expected",
+        [
+            (0.80, 0.50, False),  # strict improvement -> not reused
+            (0.50, 0.50, True),  # exact tie -> original kept
+            (0.30, 0.50, True),  # below baseline -> original kept
+            (0.50, None, False),  # no baseline -> can't claim reuse
+        ],
+    )
+    def test_reused_baseline_flag(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt: ChatPrompt,
+        best_score: float,
+        baseline_score: float | None,
+        expected: bool,
+    ) -> None:
+        from opik_optimizer.core.state import AlgorithmResult
+
+        context = self._make_context(simple_chat_prompt, baseline_score)
+        algorithm_result = AlgorithmResult(
+            best_prompts={"main": simple_chat_prompt},
+            best_score=best_score,
+            history=[],
+            metadata={},
+        )
+
+        result = optimizer._build_final_result(algorithm_result, context)
+
+        assert result.details["reused_baseline"] is expected
+
+    def test_reused_baseline_overrides_optimizer_metadata(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt: ChatPrompt,
+    ) -> None:
+        """The canonical flag must win over any per-optimizer metadata key
+        (it is applied AFTER details.update(algorithm_result.metadata))."""
+        from opik_optimizer.core.state import AlgorithmResult
+
+        context = self._make_context(simple_chat_prompt, baseline_score=0.50)
+        algorithm_result = AlgorithmResult(
+            best_prompts={"main": simple_chat_prompt},
+            best_score=0.80,  # strict improvement -> canonical flag is False
+            history=[],
+            metadata={"reused_baseline": True},  # stale/wrong per-optimizer value
+        )
+
+        result = optimizer._build_final_result(algorithm_result, context)
+
+        assert result.details["reused_baseline"] is False

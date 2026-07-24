@@ -3,6 +3,6 @@
     "dev": "cd fern && fern docs dev"
   },
   "dependencies": {
-    "fern-api": "4.71.5"
+    "fern-api": "5.67.1"
   }
 }

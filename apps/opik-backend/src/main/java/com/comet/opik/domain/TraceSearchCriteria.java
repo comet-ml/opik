@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingField;
@@ -13,6 +14,7 @@ import java.util.UUID;
 public record TraceSearchCriteria(
         String projectName,
         UUID projectId,
+        Source source,
         List<? extends Filter> filters,
         List<SortingField> sortingFields,
         UUID lastReceivedId,

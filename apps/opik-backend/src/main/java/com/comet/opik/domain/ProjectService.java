@@ -28,6 +28,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
@@ -76,6 +77,8 @@ public interface ProjectService {
     Page<Project> find(int page, int size, ProjectCriteria criteria, List<SortingField> sortingFields);
 
     List<Project> findByIds(String workspaceId, Set<UUID> ids);
+
+    Mono<Set<UUID>> findProjectIdsByWorkspace();
 
     List<Project> findByNames(String workspaceId, List<String> names);
 
@@ -401,6 +404,15 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public Mono<Set<UUID>> findProjectIdsByWorkspace() {
+        return Mono.deferContextual(ctx -> Mono
+                .fromCallable(() -> template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(ProjectDAO.class)
+                                .findIdsByWorkspaceId(ctx.get(RequestContext.WORKSPACE_ID))))
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    @Override
     public List<Project> findByNames(@NonNull String workspaceId, @NonNull List<String> names) {
 
         if (names.isEmpty()) {
@@ -560,7 +572,11 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+    public void recordLastUpdatedTrace(@NonNull String workspaceId,
+            Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+        if (CollectionUtils.isEmpty(lastUpdatedTraces)) {
+            return;
+        }
         template.inTransaction(WRITE,
                 handle -> handle.attach(ProjectDAO.class).recordLastUpdatedTrace(workspaceId, lastUpdatedTraces));
     }

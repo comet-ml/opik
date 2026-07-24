@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { getEnvironmentConfig } from '../../typescript-tests/config/env.config';
+import { getEnvironmentConfig } from '../config/env.config';
 import { ProjectsPage } from '../page-objects/projects.page';
 import { LogsPage } from '../page-objects/logs.page';
 import { DatasetsPage } from '../page-objects/datasets.page';

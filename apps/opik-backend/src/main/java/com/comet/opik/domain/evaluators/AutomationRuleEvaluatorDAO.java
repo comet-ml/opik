@@ -50,7 +50,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
      */
     @SqlQuery("""
             SELECT rule.id, rule.project_id AS legacy_project_id,
-                   rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters,
+                   rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.trigger_scope, rule.filters,
                    evaluator.type, evaluator.code,
                    evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
             FROM automation_rules rule

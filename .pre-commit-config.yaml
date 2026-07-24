@@ -1,9 +1,231 @@
 ---
+# Single source of truth for Opik's pre-commit checks across the monorepo.
+# Each scope is gated by `files:` so a commit only runs the hooks for the paths
+# it touches. Local commits and the unified lint CI workflow both drive off this.
+#
+# Versions of remote linters are pinned per `rev:` (the framework's design — it
+# provisions each tool in an isolated env so contributors need no Python/JS/Java
+# install to run the Python hooks). Keep them fresh with `pre-commit autoupdate`.
 repos:
+  # ---------------------------------------------------------------------------
+  # Python SDK  (sdks/python)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: 🐍 trim trailing whitespace — python sdk
+        files: ^sdks/python
+        exclude: "(sdks/python/src/opik/rest_api/)"
+      - id: end-of-file-fixer
+        name: 🐍 fix end of files — python sdk
+        files: ^sdks/python
+        exclude: "(sdks/python/src/opik/rest_api/)"
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        name: 🐍 ruff — python sdk
+        args: [--fix, --show-fixes]
+        files: ^sdks/python
+        exclude: "(sdks/python/src/opik/rest_api/)"
+      - id: ruff-format
+        name: 🐍 ruff-format — python sdk
+        files: ^sdks/python
+        exclude: "(sdks/python/src/opik/rest_api/)"
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        name: 🐍 mypy — python sdk
+        files: ^sdks/python
+        # `exclude` option will work only from here.
+        # The rest of mypy configuration can be moved to pyproject.toml
+        exclude: "(sdks/python/tests/)|(sdks/python/examples/)|(sdks/python/src/opik/rest_api/)|(sdks/python/.cursor/)"
+        args:
+          [
+            --config-file,
+            sdks/python/pyproject.toml,
+            --disable-error-code,
+            misc,
+          ]
+
+  # ---------------------------------------------------------------------------
+  # Optimizer SDK  (sdks/opik_optimizer)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: 🤖 trim trailing whitespace — optimizer
+        files: ^sdks/opik_optimizer
+      - id: end-of-file-fixer
+        name: 🤖 fix end of files — optimizer
+        files: ^sdks/opik_optimizer
+      - id: check-yaml
+        name: 🤖 check yaml — optimizer
+        files: ^sdks/opik_optimizer
+      - id: check-json
+        name: 🤖 check json — optimizer
+        files: ^sdks/opik_optimizer
+      - id: check-toml
+        name: 🤖 check toml — optimizer
+        files: ^sdks/opik_optimizer
+      - id: check-added-large-files
+        name: 🤖 check for added large files — optimizer
+        args: ['--maxkb=1000']
+        files: ^sdks/opik_optimizer
+      - id: detect-private-key
+        name: 🔐 detect private key — optimizer
+        files: ^sdks/opik_optimizer
+      - id: check-merge-conflict
+        name: 🤖 check for merge conflicts — optimizer
+        files: ^sdks/opik_optimizer
+      - id: check-case-conflict
+        name: 🤖 check for case conflicts — optimizer
+        files: ^sdks/opik_optimizer
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.21.2
+    hooks:
+      - id: pyupgrade
+        name: 🤖 pyupgrade — optimizer
+        args: [--py310-plus]
+        files: ^sdks/opik_optimizer
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        name: 🤖 ruff — optimizer
+        args: [ --fix, --show-fixes]
+        files: ^sdks/opik_optimizer
+      - id: ruff-format
+        name: 🤖 ruff-format — optimizer
+        files: ^sdks/opik_optimizer
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        name: 🤖 mypy — optimizer
+        files: ^sdks/opik_optimizer
+        exclude: '(sdks/opik_optimizer/scripts/benchmarks/|sdks/opik_optimizer/benchmarks/benchmark_results/)'
+        args: [--config-file, sdks/opik_optimizer/pyproject.toml, --install-types, --non-interactive]
+        additional_dependencies: [types-requests, types-PySocks, types-Pygments, types-pexpect, types-protobuf, types-setuptools, types-ujson, pytest, pyrate_limiter, modal]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.0
+    hooks:
+      - id: nbstripout
+        name: 📓 nbstripout — optimizer notebooks
+        files: ^sdks/opik_optimizer/.*\.ipynb$
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.47.0
+    hooks:
+      - id: markdownlint
+        name: 📝 markdownlint — optimizer
+        files: ^sdks/opik_optimizer/.*\.md$
+        exclude: '^sdks/opik_optimizer/scripts/arc_agi/prompts/.*\.md$'
+        args: ['--disable=MD013', '--disable=MD033', '--disable=MD060']
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        name: 🔤 codespell — optimizer
+        files: ^sdks/opik_optimizer
+        exclude: '(\.ipynb$)|(\.json$)|(\.jsonl$)|(benchmark_results/)'
+        args: ['--skip=*.ipynb,*.json,*.jsonl','--write-changes']
+
+  - repo: local
+    hooks:
+      - id: radon-cc
+        name: 📊 radon cc — optimizer
+        entry: radon cc -s -a -n C sdks/opik_optimizer/src
+        language: python
+        types: [python]
+        files: ^sdks/opik_optimizer/src/
+        pass_filenames: false
+        additional_dependencies: [radon==6.0.1]
+      - id: radon-raw
+        name: 📊 radon raw — optimizer
+        entry: radon raw -s
+        language: python
+        types: [python]
+        files: ^sdks/opik_optimizer/src/
+        pass_filenames: true
+        additional_dependencies: [radon==6.0.1]
+      - id: xenon
+        name: 📊 xenon — optimizer
+        entry: bash -c 'set -o pipefail; xenon --max-absolute D --max-average C --max-modules C sdks/opik_optimizer/src | head -n 200'
+        language: python
+        types: [python]
+        files: ^sdks/opik_optimizer/src/
+        pass_filenames: false
+        additional_dependencies: [xenon==0.9.3]
+      - id: lizard
+        name: 📊 lizard — optimizer
+        entry: bash -c 'set -o pipefail; lizard -C 25 -l python -w sdks/opik_optimizer/src | head -n 200'
+        language: python
+        types: [python]
+        files: ^sdks/opik_optimizer/src/
+        pass_filenames: false
+        additional_dependencies: [lizard==1.19.0]
+
+  - repo: https://github.com/jendrikseipp/vulture
+    rev: v2.14
+    hooks:
+      - id: vulture
+        name: 🧹 vulture — optimizer
+        files: ^sdks/opik_optimizer
+        args: ['sdks/opik_optimizer/src', 'sdks/opik_optimizer/benchmarks', '--min-confidence=80', '--exclude=benchmarks/.venv']
+
+  # ---------------------------------------------------------------------------
+  # Guardrails backend  (apps/opik-guardrails-backend)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: 🛡️ trim trailing whitespace — guardrails
+        files: ^apps/opik-guardrails-backend
+      - id: end-of-file-fixer
+        name: 🛡️ fix end of files — guardrails
+        files: ^apps/opik-guardrails-backend
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        name: 🛡️ ruff — guardrails
+        args: [ --fix, --show-fixes]
+        files: ^apps/opik-guardrails-backend
+      - id: ruff-format
+        name: 🛡️ ruff-format — guardrails
+        files: ^apps/opik-guardrails-backend
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        name: 🛡️ mypy — guardrails
+        files: ^apps/opik-guardrails-backend
+        # `exclude` option will work only from here.
+        # The rest of mypy configuration can be moved to pyproject.toml
+        exclude: '(^apps/opik-guardrails-backend/tests/)|(^apps/opik-guardrails-backend/scripts/)'
+        args: [--config-file, apps/opik-guardrails-backend/pyproject.toml]
+
+  # ---------------------------------------------------------------------------
+  # Helm chart docs
+  # ---------------------------------------------------------------------------
   - repo: local
     hooks:
       - id: helm-docs
-        name: helm-docs
+        name: ⚓ helm-docs
         language: docker_image
         entry: jnorwood/helm-docs:v1.14.2
         args:
@@ -17,4 +239,98 @@ repos:
         files: ^apps/opik-frontend/src/plugins/
         pass_filenames: false
 
+  # ---------------------------------------------------------------------------
+  # Backend (Java) — Spotless, on changed files only (language: system → uses
+  # the repo's own Maven/JDK; only triggers for commits that touch .java).
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: spotless
+        name: ☕ spotless — java backend
+        entry: scripts/precommit-spotless.sh
+        language: system
+        files: ^apps/opik-backend/.*\.java$
+        require_serial: true
+
+  # ---------------------------------------------------------------------------
+  # Self-check: smoke-test the pre-commit wrapper scripts when any of them change,
+  # so a broken wrapper (regex/routing/flags) is caught before it ships.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: precommit-wrapper-tests
+        name: 🧪 pre-commit wrapper smoke tests
+        entry: scripts/test_precommit_wrappers.sh
+        language: system
+        files: ^scripts/precommit-.*\.sh$|^scripts/test_precommit_wrappers\.sh$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
+  # Frontend (apps/opik-frontend) — eslint --fix on changed files; whole-project
+  # typecheck (tsc can't be per-file: path aliases + cross-file inference).
+  # language: system → uses the repo's own node_modules; files-gated to src.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: fe-eslint
+        name: 🌐 eslint — frontend
+        entry: scripts/precommit-fe-lint.sh
+        language: system
+        files: ^apps/opik-frontend/src/.*\.(ts|tsx|js|jsx|css|scss|sass)$
+      - id: fe-typecheck
+        name: 🌐 typecheck — frontend
+        entry: npm --prefix apps/opik-frontend run typecheck
+        language: system
+        files: ^apps/opik-frontend/src/.*\.(ts|tsx)$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
+  # TypeScript SDK (sdks/typescript) — eslint + whole-project typecheck.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: ts-sdk-eslint
+        name: 📘 eslint — typescript sdk
+        entry: scripts/precommit-ts-sdk-lint.sh
+        language: system
+        files: ^sdks/typescript/.*\.(ts|tsx)$
+      - id: ts-sdk-typecheck
+        name: 📘 typecheck — typescript sdk
+        entry: npm --prefix sdks/typescript run typecheck
+        language: system
+        files: ^sdks/typescript/.*\.(ts|tsx)$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions workflows / composite actions — actionlint. Runs at the default
+  # info+ severity (no SHELLCHECK_OPTS), matching the floor set by OPIK-6584. The
+  # `language: golang` hook builds actionlint from the pinned source, so this hook
+  # (run by code_quality.yml) replaces the standalone actionlint.yml as the SSOT.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+        name: ⚙️ actionlint — github workflows
+        # Workflows only — actionlint cannot lint composite `action.yml` files
+        # directly (they have no `jobs:`/`on:`); those are validated transitively
+        # when a workflow that `uses:` them is linted. Matches actionlint's own
+        # default files pattern.
+        files: ^\.github/workflows/.+\.(yml|yaml)$
+
+  # ---------------------------------------------------------------------------
+  # Dockerfiles — hadolint. The docker-image hook needs only Docker (no local
+  # binary), matching CI runners. Runs hadolint's default rule set (failure
+  # threshold `info`); the few deliberate exceptions are `# hadolint ignore=`
+  # comments inline in the Dockerfiles, so no repo-level config file is needed.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.14.0
+    hooks:
+      - id: hadolint-docker
+        name: 🐳 hadolint — dockerfiles
+        # Explicit files: regex (not the upstream `types: [dockerfile]`) so the
+        # CI matrix builder in scripts/precommit-detect-hooks.py can route a
+        # changed Dockerfile to this leg — it matches on paths, not content type.
+        files: (^|/)Dockerfile(\..+)?$
 ...

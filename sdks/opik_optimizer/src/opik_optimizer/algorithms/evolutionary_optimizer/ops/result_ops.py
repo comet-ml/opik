@@ -16,6 +16,7 @@ from ....core import runtime
 from . import pareto_ops
 from ....core.state import AlgorithmResult, OptimizationContext
 from ....utils.logging import debug_log
+from ....utils.scoring import improves_over
 
 if TYPE_CHECKING:  # pragma: no cover
     from ...evolutionary_optimizer import EvolutionaryOptimizer
@@ -29,6 +30,27 @@ def _require_deap() -> None:
             "DEAP is required for EvolutionaryOptimizer. "
             "Install the optimizer extras that include DEAP."
         ) from _DEAP_IMPORT_ERROR
+
+
+def reconcile_winner_with_baseline(
+    *,
+    final_best_prompts: dict[str, Any],
+    final_primary_score: float,
+    seed_prompts: dict[str, Any],
+    baseline_score: float,
+) -> tuple[dict[str, Any], float]:
+    """Keep-original-on-tie reconciliation (OPIK-7038).
+
+    The HOF/Pareto selection in ``build_algorithm_result`` is not reconciled
+    against the baseline, so it can surface a candidate that did not STRICTLY
+    beat the seed. If the evolved winner did not beat the baseline, return the
+    seed prompt at the baseline score, so the user-facing winner obeys the tie
+    policy and stays consistent with the score-derived ``reused_baseline`` flag.
+    ``baseline_score`` is ``context.baseline_score`` (same scale as fitness).
+    """
+    if not improves_over(final_primary_score, baseline_score):
+        return seed_prompts, baseline_score
+    return final_best_prompts, final_primary_score
 
 
 def build_algorithm_result(
@@ -149,6 +171,15 @@ def build_algorithm_result(
     metadata.update(final_details)
     if all_final_tools:
         metadata["final_tools"] = all_final_tools
+
+    # Tie policy (OPIK-7038): gate the user-facing winner against the baseline.
+    # The best explored candidate remains visible under metadata["final_prompts"].
+    final_best_prompts, final_primary_score = reconcile_winner_with_baseline(
+        final_best_prompts=final_best_prompts,
+        final_primary_score=final_primary_score,
+        seed_prompts=optimizable_prompts,
+        baseline_score=initial_primary_score,
+    )
 
     history_entries = optimizer.get_history_entries()
     if not history_entries:

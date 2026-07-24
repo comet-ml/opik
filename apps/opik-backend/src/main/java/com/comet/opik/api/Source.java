@@ -23,6 +23,7 @@ public enum Source {
     EXPERIMENT("experiment"),
     PLAYGROUND("playground"),
     OPTIMIZATION("optimization"),
+    EVALUATOR("evaluator"),
     ;
 
     /** The ClickHouse storage value for rows that predate source tracking. Not an ingestion option. */

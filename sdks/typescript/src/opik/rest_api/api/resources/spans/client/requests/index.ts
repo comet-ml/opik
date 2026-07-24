@@ -10,5 +10,6 @@ export type { GetSpansByProjectRequest } from "./GetSpansByProjectRequest.js";
 export type { SpanBatchUpdate } from "./SpanBatchUpdate.js";
 export type { SpanBatchWrite } from "./SpanBatchWrite.js";
 export type { SpanSearchStreamRequestPublic } from "./SpanSearchStreamRequestPublic.js";
+export type { SpansExistRequest } from "./SpansExistRequest.js";
 export type { UpdateSpanCommentRequest } from "./UpdateSpanCommentRequest.js";
 export type { UpdateSpanRequest } from "./UpdateSpanRequest.js";

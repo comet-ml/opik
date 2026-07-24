@@ -164,9 +164,10 @@ def evaluate(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default), 2 - outputs are enabled and detailed statistics
@@ -673,26 +674,30 @@ def _evaluate_test_suite_task(
     start_time = time.time()
 
     # Activate the local emulator so suite-level LLMJudge assertions get
-    # access to the full trace tree via the agentic tool loop. The
-    # emulator caches every trace/span logged in-process; it stays
-    # inactive at idle. We toggle for the duration of the suite run and
-    # restore prior state in `finally` so concurrent (foreign) uses of
-    # the emulator aren't disturbed.
+    # access to the full trace tree via the agentic tool loop. The emulator
+    # caches every trace/span logged in-process; it stays inactive at idle.
+    # Activation is ref-counted (acquire here, release in `finally`), so when
+    # this connection's processing chain is shared by several concurrent
+    # evaluate() runs the emulator stays active until the last one finishes.
     # `getattr` with a default keeps this MagicMock-friendly:
     # MagicMock auto-rejects attribute names that look like dunders
     # (start and end with `__`), so plain attribute access raises
     # AttributeError on mocked clients used by unit tests. Production
     # clients always have this attribute, so the default never fires.
     chain = getattr(client, "__internal_api__message_processor__", None)
-    emulator_was_active = False
-    if chain is not None:
-        emulator = message_processors_chain.get_local_emulator_message_processor(chain)
-        if emulator is not None:
-            emulator_was_active = emulator.is_active()
-            if not emulator_was_active:
-                message_processors_chain.toggle_local_emulator_message_processor(
-                    active=True, chain=chain, reset=True
-                )
+    emulator = (
+        message_processors_chain.get_local_emulator_message_processor(chain)
+        if chain is not None
+        else None
+    )
+    if chain is not None and emulator is not None:
+        # Ref-counted activation: concurrent evaluate() runs that share this
+        # connection's processing chain each acquire/release, so the emulator
+        # stays active until the last run finishes (instead of the first to
+        # exit deactivating it and starving the others' agentic judges).
+        message_processors_chain.toggle_local_emulator_message_processor(
+            active=True, chain=chain, reset=True
+        )
 
     try:
         with asyncio_support.async_http_connections_expire_immediately():
@@ -722,7 +727,7 @@ def _evaluate_test_suite_task(
                 show_scores_in_progress_bar=False,
             )
     finally:
-        if chain is not None and not emulator_was_active:
+        if chain is not None and emulator is not None:
             message_processors_chain.toggle_local_emulator_message_processor(
                 active=False, chain=chain, reset=True
             )
@@ -779,9 +784,10 @@ def evaluate_experiment(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
@@ -999,9 +1005,10 @@ def evaluate_prompt(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
             but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
@@ -1250,9 +1257,10 @@ def evaluate_optimization_trial(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
                     but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
@@ -1615,8 +1623,9 @@ def evaluate_on_dict_items(
 
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function accepts predefined arguments:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
 
         project_name: The name of the project for logging traces.
 
@@ -1719,7 +1728,7 @@ def _wrap_scoring_functions(
             scoring_functions, project_name=project_name
         )
         if scoring_metrics:
-            scoring_metrics.extend(function_metrics)
+            scoring_metrics = [*scoring_metrics, *function_metrics]
         else:
             scoring_metrics = function_metrics
 

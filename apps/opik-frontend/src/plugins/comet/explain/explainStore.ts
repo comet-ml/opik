@@ -264,7 +264,14 @@ const useExplainStore = create<ExplainState>((set, get) => {
   ) => {
     const entry = cellOf(get(), explainId);
     if (!entry) return;
-    trackEvent(OpikEvent.EXPLAIN_ERRORED, { kind: entry.kind });
+    // `message` is the resolved display copy: for known codes it's the static
+    // ERROR_COPY line, for unknown codes it's the raw upstream error — the
+    // diagnostic detail dashboards need. Truncated: upstream text is unbounded.
+    trackEvent(OpikEvent.EXPLAIN_ERRORED, {
+      kind: entry.kind,
+      code: code ?? "unknown",
+      message: message.slice(0, 300),
+    });
     mutate((c) =>
       patchStream(
         c,

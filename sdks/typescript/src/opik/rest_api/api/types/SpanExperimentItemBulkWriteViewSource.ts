@@ -5,6 +5,7 @@ export const SpanExperimentItemBulkWriteViewSource = {
     Experiment: "experiment",
     Playground: "playground",
     Optimization: "optimization",
+    Evaluator: "evaluator",
 } as const;
 export type SpanExperimentItemBulkWriteViewSource =
     (typeof SpanExperimentItemBulkWriteViewSource)[keyof typeof SpanExperimentItemBulkWriteViewSource];

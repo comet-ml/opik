@@ -12,6 +12,7 @@ export type BackButtonProps = {
   search?: LinkProps["search"];
   tooltip: string;
   className?: string;
+  iconClassName?: string;
 };
 
 const BackButton: React.FunctionComponent<BackButtonProps> = ({
@@ -20,6 +21,7 @@ const BackButton: React.FunctionComponent<BackButtonProps> = ({
   search,
   tooltip,
   className,
+  iconClassName,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
@@ -41,7 +43,7 @@ const BackButton: React.FunctionComponent<BackButtonProps> = ({
           className,
         )}
       >
-        <ArrowLeft className="size-4" />
+        <ArrowLeft className={cn("size-4", iconClassName)} />
       </Link>
     </TooltipWrapper>
   );

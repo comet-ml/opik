@@ -1,16 +1,12 @@
 import React, { useCallback } from "react";
 import { ArrowUpRight, ListTree } from "lucide-react";
-import {
-  BooleanParam,
-  JsonParam,
-  StringParam,
-  useQueryParam,
-} from "use-query-params";
 
-import { Tag } from "@/ui/tag";
+import { cn } from "@/lib/utils";
+import { Tag, type TagTextSize } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import TraceLogsSidebar, { TLS_QUERY_PREFIX } from "./TraceLogsSidebar";
+import TraceLogsSidebar, { TraceLogsViewConfig } from "./TraceLogsSidebar";
+import { useTraceLogsSidebarControls } from "./useTraceLogsSidebarControls";
 import { LOGS_SOURCE } from "@/types/traces";
 import { Filter } from "@/types/filters";
 
@@ -18,49 +14,58 @@ type TraceLogsSidebarButtonProps = {
   projectId: string;
   logsSource?: LOGS_SOURCE;
   sourceFilters?: Filter[];
-  variant?: "tag" | "icon";
+  // When true, sourceFilters become a locked scope: applied to the query but not user-editable or
+  // removable via the filter bar (e.g. the per-evaluator Evaluation traces sidebar). scopeLabel is
+  // shown as a read-only indicator of what the view is locked to.
+  lockScope?: boolean;
+  scopeLabel?: string;
+  // "tag": green icon + label transparent tag. "nav": bordered nav pill with a
+  // trailing arrow (matches the sibling dataset NavigationTag). "icon": icon-only.
+  variant?: "tag" | "nav" | "icon";
+  textSize?: TagTextSize;
   title?: string;
+  label?: string;
+  viewConfig?: TraceLogsViewConfig;
+  // When false, render only the trigger and let a single page-level <TraceLogsSidebar /> handle
+  // display. Used by per-row triggers (e.g. the online-evaluation rules table) so the sidebar is
+  // mounted once for the page instead of once per row (which would race on the shared tls_* state).
+  renderSidebar?: boolean;
 };
 
 const TraceLogsSidebarButton: React.FunctionComponent<
   TraceLogsSidebarButtonProps
-> = ({ projectId, logsSource, sourceFilters, variant = "tag", title }) => {
-  const [open = false, setOpen] = useQueryParam(
-    `${TLS_QUERY_PREFIX}open`,
-    BooleanParam,
-    { updateType: "replaceIn" },
-  );
-  const [, setTlsFilters] = useQueryParam(
-    `${TLS_QUERY_PREFIX}filters`,
-    JsonParam,
-    { updateType: "replaceIn" },
-  );
-  const [, setTlsTrace] = useQueryParam(
-    `${TLS_QUERY_PREFIX}trace`,
-    StringParam,
-    { updateType: "replaceIn" },
-  );
-  const [, setTlsSpan] = useQueryParam(`${TLS_QUERY_PREFIX}span`, StringParam, {
-    updateType: "replaceIn",
-  });
+> = ({
+  projectId,
+  logsSource,
+  sourceFilters,
+  lockScope = false,
+  scopeLabel,
+  variant = "tag",
+  textSize = "s",
+  title,
+  label = "Go to logs",
+  viewConfig,
+  renderSidebar = true,
+}) => {
+  const { open, openSidebar, closeSidebar } = useTraceLogsSidebarControls();
 
-  const handleOpen = useCallback(() => {
-    if (sourceFilters?.length) {
-      setTlsFilters(sourceFilters);
-    }
-    setOpen(true);
-  }, [sourceFilters, setTlsFilters, setOpen]);
+  const handleOpen = useCallback(
+    () =>
+      openSidebar(
+        sourceFilters,
+        lockScope ? { locked: true, label: scopeLabel } : undefined,
+      ),
+    [openSidebar, sourceFilters, lockScope, scopeLabel],
+  );
 
-  const handleClose = useCallback(() => {
-    setOpen(undefined);
-    setTlsFilters(undefined);
-    setTlsTrace(undefined);
-    setTlsSpan(undefined);
-  }, [setOpen, setTlsFilters, setTlsTrace, setTlsSpan]);
+  const labelClassName = cn(
+    "truncate",
+    textSize === "xs" ? "comet-body-xs-accented" : "comet-body-s-accented",
+  );
 
   const trigger =
     variant === "icon" ? (
-      <TooltipWrapper content="Go to logs">
+      <TooltipWrapper content={label}>
         <Button
           data-testid="playground-logs-sidebar-button"
           variant="outline"
@@ -70,30 +75,48 @@ const TraceLogsSidebarButton: React.FunctionComponent<
           <ListTree />
         </Button>
       </TooltipWrapper>
+    ) : variant === "nav" ? (
+      <TooltipWrapper content={label}>
+        <Tag
+          size="md"
+          variant="transparent"
+          className="flex shrink-0 cursor-pointer items-center gap-1 rounded-md hover:bg-primary-foreground hover:text-foreground active:bg-primary-100 active:text-foreground"
+          onClick={handleOpen}
+        >
+          <div className={cn(labelClassName, "text-foreground")}>{label}</div>
+          <ArrowUpRight className="size-3 shrink-0 text-foreground" />
+        </Tag>
+      </TooltipWrapper>
     ) : (
-      <Tag
-        size="md"
-        variant="transparent"
-        className="flex shrink-0 cursor-pointer items-center gap-1 hover:bg-primary-foreground hover:text-foreground active:bg-primary-100 active:text-foreground"
-        onClick={handleOpen}
-      >
-        <div className="comet-body-s-accented truncate text-foreground">
-          Logs
-        </div>
-        <ArrowUpRight className="size-3 shrink-0 text-foreground" />
-      </Tag>
+      <TooltipWrapper content={label}>
+        <Tag
+          size="md"
+          variant="transparent"
+          className="flex shrink-0 cursor-pointer items-center gap-1 hover:bg-primary-foreground hover:text-foreground active:bg-primary-100 active:text-foreground"
+          onClick={handleOpen}
+        >
+          <ListTree
+            className="size-3 shrink-0"
+            style={{ color: "var(--color-green)" }}
+          />
+          <div className={cn(labelClassName, "text-muted-slate")}>{label}</div>
+        </Tag>
+      </TooltipWrapper>
     );
 
   return (
     <>
       {trigger}
-      <TraceLogsSidebar
-        open={Boolean(open)}
-        onClose={handleClose}
-        projectId={projectId}
-        logsSource={logsSource}
-        title={title}
-      />
+      {renderSidebar && (
+        <TraceLogsSidebar
+          open={open}
+          onClose={closeSidebar}
+          projectId={projectId}
+          logsSource={logsSource}
+          title={title}
+          viewConfig={viewConfig}
+        />
+      )}
     </>
   );
 };

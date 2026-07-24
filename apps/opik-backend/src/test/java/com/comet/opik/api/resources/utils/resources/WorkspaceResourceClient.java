@@ -6,6 +6,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
+import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -84,6 +85,26 @@ public class WorkspaceResourceClient {
 
             return response.readEntity(WorkspaceMetricResponse.class);
         }
+    }
+
+    public WorkspaceMetricResponse getWorkspaceSpanMetric(WorkspaceSpanMetricRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = callGetWorkspaceSpanMetric(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(WorkspaceMetricResponse.class);
+        }
+    }
+
+    public Response callGetWorkspaceSpanMetric(WorkspaceSpanMetricRequest request, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/metrics/spans")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
     }
 
     public void upsertWorkspaceConfiguration(WorkspaceConfiguration configuration, String apiKey,

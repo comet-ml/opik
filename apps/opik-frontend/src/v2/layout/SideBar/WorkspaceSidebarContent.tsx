@@ -33,7 +33,7 @@ const WorkspaceSidebarContent: React.FC<WorkspaceSidebarContentProps> = ({
   const workspaceSelector = SidebarWorkspaceSelectorComponent ? (
     <SidebarWorkspaceSelectorComponent expanded={expanded} />
   ) : expanded ? (
-    <div className="flex items-center gap-2 px-2 py-1">
+    <div className="flex items-center gap-1.5 px-1 py-0.5">
       <span className="comet-body-xs-accented flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-slate">
         {initial}
       </span>

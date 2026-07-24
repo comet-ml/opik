@@ -11,7 +11,7 @@ from unittest import mock
 import pytest
 
 from opik import context_storage
-from opik.api_objects import opik_client
+from opik.api_objects import connection_resources, opik_client
 from opik.healthcheck import connection_monitor, connection_probe
 from opik.message_processing import streamer_constructors
 from opik.message_processing.replay import replay_manager
@@ -34,6 +34,12 @@ def clear_context_storage():
 def shutdown_cached_client_after_test():
     yield
     opik_client.reset_global_client(end_client=False)
+    # Drop any shared connection bundle so the process-wide cache doesn't leak a
+    # streamer/emulator from one test into the next. Critical with fake_backend,
+    # which installs a fresh emulator-backed streamer per test: without this, a
+    # reused bundle keeps the previous test's (closed) streamer and the new
+    # emulator records nothing. Fire-and-forget: no flush, no network.
+    connection_resources.MANAGER.close_all(flush=False)
 
 
 @pytest.fixture(autouse=True)
@@ -285,6 +291,14 @@ def ensure_anthropic_configured():
 
     if "ANTHROPIC_API_KEY" not in os.environ:
         raise Exception("Anthropic not configured!")
+
+
+@pytest.fixture(scope="session")
+def ensure_mistral_configured():
+    # don't use assertion here to prevent printing os.environ with all env variables
+
+    if "MISTRAL_API_KEY" not in os.environ:
+        raise Exception("Mistral not configured!")
 
 
 @pytest.fixture(scope="session")

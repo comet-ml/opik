@@ -13,6 +13,7 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const {
     isPending,
     hasAccess,
+    isOrganizationAdmin,
     spendWorkspaceName,
     isSpendWorkspaceActive,
     organization,
@@ -43,7 +44,7 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       setPreviousWorkspaceName(activeWorkspaceName);
     }
     navigate({
-      to: "/$workspaceName/ai-spend/home",
+      to: "/$workspaceName/ai-spend",
       params: { workspaceName: spendWorkspaceName },
     });
   }, [
@@ -58,6 +59,7 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     () => ({
       isPending,
       hasAccess,
+      isOrganizationAdmin,
       spendWorkspaceName,
       isSpendWorkspaceActive,
       organizationName: organization?.name,
@@ -66,6 +68,7 @@ const AiSpendProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     [
       isPending,
       hasAccess,
+      isOrganizationAdmin,
       spendWorkspaceName,
       isSpendWorkspaceActive,
       organization?.name,

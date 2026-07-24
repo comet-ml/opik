@@ -1,32 +1,9 @@
 import { test, expect } from '@e2e/fixtures';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 import { LogsPage } from '@e2e/pom/logs.page';
-import { ConfigurationPage } from '@e2e/pom/configuration.page';
+import { ensureModelAvailable } from '@e2e/pom/model-availability';
 
 const MODERATION_SCORE_NAME = 'Moderation'; // canned template's schema name
-
-/**
- * Pick an Anthropic-or-OpenAI model from env; provision the matching provider
- * key via the UI if it isn't already configured. Returns the model display
- * name to use with the LLM-as-judge dialog. Mirrors the OPIK-6137 test-suites
- * pattern so the test runs everywhere — local builds, staging, CI, prod.
- */
-async function ensureModelAvailable(page: import('@playwright/test').Page): Promise<string> {
-  const anthropic = process.env.ANTHROPIC_API_KEY;
-  const openai = process.env.OPENAI_API_KEY;
-  if (!anthropic && !openai) {
-    test.skip(true, 'Neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set');
-    return '';
-  }
-  const cfg = new ConfigurationPage(page);
-  await cfg.gotoAiProviders();
-  if (anthropic) {
-    await cfg.ensureProviderConfigured('Anthropic', anthropic);
-    return 'Claude Haiku 4.5';
-  }
-  await cfg.ensureProviderConfigured('OpenAI', openai!);
-  return 'GPT 4o Mini';
-}
 
 interface ContentTrace {
   id: string;

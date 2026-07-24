@@ -78,7 +78,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const activeProjectId = useActiveProjectId();
 
   const {
-    permissions: { canCreatePrompts },
+    permissions: { canViewPrompts, canCreatePrompts, canEditPrompts },
   } = usePermissions();
 
   const resetKeyRef = useRef(0);
@@ -224,7 +224,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     [onChangeMessage],
   );
 
-  const saveDisabled = !hasContent || !canCreatePrompts;
+  const saveDisabled =
+    !hasContent ||
+    (promptId ? !canEditPrompts && !canCreatePrompts : !canCreatePrompts);
   // Compare against the actually-loaded version when available; fall back to
   // `latest_version` only when no specific version is referenced.
   const baselineVersion =
@@ -363,31 +365,33 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           )}
         </div>
 
-        <PromptsSelectBox
-          compact
-          enableVersionSelect
-          projectId={activeProjectId!}
-          refetchOnMount
-          value={promptId}
-          onValueChange={(id, versionId) => {
-            if (id !== promptId || versionId !== promptVersionId) {
-              if (content === "" || isUndefined(id)) {
-                handleUpdateExternalPromptId(id, versionId);
-              } else {
-                setOpen("load");
-                resetKeyRef.current = resetKeyRef.current + 1;
-                tempPromptIdRef.current = id;
-                tempVersionIdRef.current = versionId;
+        {canViewPrompts && (
+          <PromptsSelectBox
+            compact
+            enableVersionSelect
+            projectId={activeProjectId!}
+            refetchOnMount
+            value={promptId}
+            onValueChange={(id, versionId) => {
+              if (id !== promptId || versionId !== promptVersionId) {
+                if (content === "" || isUndefined(id)) {
+                  handleUpdateExternalPromptId(id, versionId);
+                } else {
+                  setOpen("load");
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                  tempPromptIdRef.current = id;
+                  tempVersionIdRef.current = versionId;
+                }
               }
-            }
-          }}
-          onOpenChange={onPromptSelectBoxOpenChange}
-          onClear={handleDetachPrompt}
-          filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
-          hasUnsavedChanges={saveWarning}
-          promptName={promptData?.name}
-          loadedVersionId={message.promptVersionId}
-        />
+            }}
+            onOpenChange={onPromptSelectBoxOpenChange}
+            onClear={handleDetachPrompt}
+            filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
+            hasUnsavedChanges={saveWarning}
+            promptName={promptData?.name}
+            loadedVersionId={message.promptVersionId}
+          />
+        )}
 
         {!saveDisabled && (
           <div className="shrink-0">
@@ -400,6 +404,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                   resetKeyRef.current = resetKeyRef.current + 1;
                   setOpen("save");
                 }}
+                type="button"
               >
                 <Save />
               </Button>
