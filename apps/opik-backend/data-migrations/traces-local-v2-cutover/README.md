@@ -52,8 +52,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 
 ## Prerequisites (do not start without these)
 
-1. **24h UUIDv7 ingestion validation** live for **≥ one full retention cycle**. Without it a stray future-dated UUID
-   creates an out-of-range weekly partition on the destination.
+1. **24h UUIDv7 ingestion validation** live long enough that no un-validated future-dated ids land in newly ingested
+   weeks. This is not tied to a retention cycle (retention never runs — prereq 8). Pre-validation bad-id rows already in
+   the table are *not* blocked by this: they are copied by the `created_at` slice and surfaced by the far-future audit
+   query below — this prereq only ensures no *new* out-of-range partitions are created mid-cutover.
 2. **`traces_local_v2` exists and is empty** (migration 000101).
 3. **Successor storage/TTL parity.** `traces_local_v2` must resolve the **same `storage_policy` and TTL-to-cold rules**
    as `traces` (tiering is configured per environment, not in the base DDL). If `traces` tiers hot→cold but the
@@ -158,6 +160,11 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > `Distributed` wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`). To roll the wrap
 > back, use `rollback.sh --stage C`.
 >
+> The wrap is a non-atomic `RENAME`→`CREATE`, so `traces` is **briefly absent** (INSERT/SELECT fail with "Table doesn't
+> exist" during that window; `ON CLUSTER` widens it per node). The same-run path is covered by the still-raised EXCHANGE
+> buffer; for the deferred `--wrap-only` path, **re-raise `asyncInsertBusyTimeoutMaxMs` (or quiesce ingestion / take a
+> maintenance window) first** so the wrap runs under the same buffered conditions.
+>
 > **Wrap flags** (`exchange_and_wrap.sh`, mutually exclusive; default is EXCHANGE-only): omit them (or pass
 > `--skip-wrap`, an explicit alias) to run the EXCHANGE and stop; `--with-wrap` to also apply the wrap in the same run;
 > `--wrap-only` to apply just the deferred wrap later.
@@ -259,9 +266,12 @@ and it does **not** decide where a row lands on the destination: that is always 
   the original), so a row never migrates between weekly slices mid-backfill — none is copied twice or skipped.
   `last_updated_at` would *not* be safe here (it moves on every upsert, and is client-settable).
 
-**On adding an `id` index (and destination write locality).** An `id` skip index on the source is *not* needed — the
-delta uses the `created_at`/`last_updated_at` skip indexes, and the replay uses the primary key (full-key match). It
-would not rescue `id`-slicing either (the ~2201 span is a *data* problem, not an index one). Destination write locality
+**On adding an `id` index (and destination write locality).** An `id` skip index on the source is *not* needed. The
+delta uses the `created_at`/`last_updated_at` skip indexes, and the replay's outer DELETE matches the full primary key.
+Its resurrection-guard subquery does read the source `traces` by bare `id` (which has **no** skip index — 000088 indexes
+only `created_at`/`last_updated_at`; the `id` minmax/bloom indexes exist only on `traces_local_v2` per 000101), but the
+`id IN (deleted-ids since anchor)` set is tiny (retention off → user-scale deletes), so it is a bounded id-filtered read,
+not a full-table scan. An index still would not rescue `id`-slicing (the ~2201 span is a *data* problem, not an index one). Destination write locality
 is naturally good with `created_at` slicing (`id_at ≈ created_at` once validation holds); slicing by *workspace* would
 instead scatter each insert across every weekly partition that workspace spans → a small-part explosion on a 4 TB table.
 
@@ -574,8 +584,9 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       production **topology**, not just data shape — same replica count and tiered-storage policy — since the
       multi-replica settle gates, storage/TTL parity, and buffer-flush timing are otherwise untested until production.
 - [ ] **Deletion test green** — `TracesLocalV2CutoverTest` passes; **0 deletion leaks** confirmed on staging.
-- [ ] **Replay duration fits inside the buffer window with margin** — measured replay wall time < the widened
-      `asyncInsertBusyTimeoutMaxMs`.
+- [ ] **Final-delta→EXCHANGE gap fits inside the buffer hold with margin** — the binding invariant is the gap between
+      the final delta and the EXCHANGE completing (≈ replay wall time + EXCHANGE), staying within the buffer hold and
+      accounting for size-triggered flushes — **not** "replay < buffer window" alone (see "The final cutover window").
 - [ ] **Far-future partitions quantified** — run the bad-`id` audit query above; remediated or explicitly accepted.
 - [ ] **`EXCHANGE TABLES ... ON CLUSTER` works end-to-end** — or the fallback `RENAME` sequence is documented for the
       variant that needs it.

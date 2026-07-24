@@ -83,7 +83,8 @@ SELECT
 FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
 WHERE created_at >= toDateTime64('${BACKFILL_START}', 6)
    OR last_updated_at >= toDateTime64('${BACKFILL_START}', 6)
-SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE};
+SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
+         log_comment = 'traces_local_v2_cutover:delta_insert';
 
 -- Step 4: Deletion replay — remove from the destination every row that was deleted on the source since backfill_start
 -- AND is still deleted there. Two branches, mirroring the product's two delete paths (TraceService.delete): a delete
@@ -97,8 +98,15 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE};
 -- during the window (client-supplied ids; the delete is a mask, a newer insert wins under FINAL). Such an id is bridged
 -- as deleted but is LIVE again on the source, and the backfill/delta already copied its live version. Deleting it by key
 -- would drop a row that is live on the source — silent data loss. So each branch deletes only ids that are NOT currently
--- live on the source (mask-honored). The `id IN (deleted_ids since anchor)` bound keeps the source lookup pruned to the
--- window's deletes (id skip index), not a full scan.
+-- live on the source (mask-honored). The `id IN (deleted_ids since anchor)` bound keeps the deleted-id set tiny
+-- (retention is off, so these are user-scale deletes); `traces` has no id skip index (000088 indexes only
+-- created_at/last_updated_at — id minmax/bloom indexes exist only on traces_local_v2), so this source lookup is a
+-- bounded id-filtered read of that tiny set, not a value-indexed prune of the ~4 TB table.
+-- KNOWN RESIDUAL (workspace-scoped arm only): its guard keys on (workspace_id, id), so an id live in ONE project shields
+-- the deletion of that id's now-deleted copies in OTHER projects (ids are not globally unique). Requires cross-project id
+-- reuse + a workspace-scoped delete + a resurrection in the window — rare. The 000005 FINAL fingerprint flags it as an
+-- extra destination row (ok=0) rather than passing silently. OPIK-7483 removes the workspace-scoped delete path at the
+-- source (deletes always carry project_id), retiring this arm and the residual.
 -- allow_nondeterministic_mutations: a lightweight DELETE with cross-table subqueries is flagged nondeterministic, but
 -- deletion_events_local and traces are replicated and identical on every node and the window predicate is fixed, so the
 -- subqueries resolve to the same set on every replica. Idempotent (never masks a live-on-source id, so re-runs converge).
@@ -158,7 +166,8 @@ OR (
     )
 )
 SETTINGS allow_nondeterministic_mutations = 1,
-         lightweight_deletes_sync = 2;
+         lightweight_deletes_sync = 2,
+         log_comment = 'traces_local_v2_cutover:deletion_replay';
 
 -- Step 5: Measure the replay. Compare its wall time against the buffer window (must fit with margin — acceptance
 -- criterion). Re-run steps 3-4 if new rows/deletes accumulated during the replay itself; convergence is fast because

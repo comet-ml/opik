@@ -8,6 +8,11 @@
 --
 -- rollback.sh runs the reverse-replay (000004_rollback_reverse_replay.sql) right after this so deletes since
 -- cutover_start do not resurrect, and asserts the post-wrap topology (traces = Distributed) before running it.
+--
+-- Note: between the DROP and the RENAME the name `traces` does not resolve on any node, so a read/insert hitting
+-- `traces` in that brief window fails with "Table doesn't exist" (the RENAME itself is atomic, but the preceding DROP is
+-- not gapless like stage B's EXCHANGE). Acceptable within the rollback maintenance window — the wrapper holds no data and
+-- the wrap has already disrupted the product's delete paths, so `traces` is not fully serving anyway.
 DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' SYNC;
 
 RENAME TABLE

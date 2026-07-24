@@ -184,6 +184,14 @@ if [[ "$WRAP_ONLY" == "1" ]]; then
     # Deferred second half: the EXCHANGE already happened in a prior --skip-wrap run, so `traces` is the live
     # partitioned data. Do not re-EXCHANGE (that would swap the parked original back in) and do not capture a new
     # cutover_start (the data cutover is already done). Just apply the Distributed wrap.
+    #
+    # The wrap is two non-atomic statements (RENAME traces -> traces_local, then CREATE Distributed traces); between them
+    # `traces` does not exist, so concurrent INSERT/SELECT fails with "Table traces doesn't exist" (ON CLUSTER widens the
+    # window per-node). The same-run path is covered by the still-raised EXCHANGE buffer, but --wrap-only runs later
+    # against live, unbuffered ingestion. PRECONDITION: re-raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs (or quiesce
+    # ingestion / assert a maintenance window) so the wrap runs under the same buffered conditions as the EXCHANGE.
+    echo "PRECONDITION: the wrap briefly makes 'traces' unavailable (non-atomic RENAME->CREATE). Re-raise the async-insert"
+    echo "buffer (asyncInsertBusyTimeoutMaxMs) or quiesce ingestion / assert a maintenance window before continuing."
     run_block wrap
     echo "Distributed wrap done: 'traces' fronts 'traces_local' via sipHash64(project_id). (EXCHANGE was a prior step.)"
     exit 0
