@@ -64,19 +64,23 @@ jobs:
     steps:
       - name: Generate build and merge matrices
         id: set-matrix
+        env:
+          BUILD_COMET_IMAGE: ${{ inputs.build_comet_image }}
+          BUILD_ARM64: ${{ inputs.build_arm64 }}
+          IMAGE: ${{ inputs.image }}
         run: |
           # Build 2D matrix: image_type x platform
           BUILD_MATRIX='{"image_type":["regular","comet"],"platform":["amd64","arm64"],"exclude":[]}'
           MERGE_MATRIX='{"image_type":["regular","comet"],"exclude":[]}'
-          
+
           # Exclude comet if build_comet_image is false
-          if [[ "${{ inputs.build_comet_image }}" != "true" ]]; then
+          if [[ "${BUILD_COMET_IMAGE}" != "true" ]]; then
             BUILD_MATRIX=$(echo "$BUILD_MATRIX" | jq '.exclude += [{"image_type":"comet"}]')
             MERGE_MATRIX=$(echo "$MERGE_MATRIX" | jq '.exclude += [{"image_type":"comet"}]')
           fi
-          
+
           # Exclude arm64 when the caller opts out, or for guardrails backend
-          if [[ "${{ inputs.build_arm64 }}" != "true" ]] || [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
+          if [[ "${BUILD_ARM64}" != "true" ]] || [[ "${IMAGE}" == "opik-guardrails-backend" ]]; then
             BUILD_MATRIX=$(echo "$BUILD_MATRIX" | jq '.exclude += [{"platform":"arm64"}]')
           fi
           
@@ -108,11 +112,14 @@ jobs:
     steps:
       - name: Set image variables
         id: set_vars
+        env:
+          IMAGE_TYPE: ${{ matrix.image_type }}
+          IMAGE: ${{ inputs.image }}
         run: |
-          if [[ "${{ matrix.image_type }}" == "comet" ]]; then
-            IMAGE_NAME="${{ inputs.image }}-comet"
+          if [[ "${IMAGE_TYPE}" == "comet" ]]; then
+            IMAGE_NAME="${IMAGE}-comet"
           else
-            IMAGE_NAME="${{ inputs.image }}"
+            IMAGE_NAME="${IMAGE}"
           fi
           echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
 
@@ -123,15 +130,18 @@ jobs:
 
       - name: Save opik-sandbox-executor-python
         if: inputs.image == 'opik-python-backend'
+        env:
+          IS_ADHOC: ${{ inputs.is_adhoc }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           # Use latest tag if adhoc build, otherwise use the specific version
-          if [[ "${{ inputs.is_adhoc }}" == "true" ]]; then
+          if [[ "${IS_ADHOC}" == "true" ]]; then
             TAG="latest"
           else
-            TAG="${{inputs.version}}"
+            TAG="${INPUT_VERSION}"
           fi
-          docker pull "${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:$TAG"
-          docker save "${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:$TAG" | gzip > apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
+          docker pull "${DOCKER_REGISTRY}/opik-sandbox-executor-python:$TAG"
+          docker save "${DOCKER_REGISTRY}/opik-sandbox-executor-python:$TAG" | gzip > apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
 
       - name: Checkout ai-spend plugin (private)
         if: inputs.image == 'opik-frontend' && matrix.image_type == 'comet'
@@ -217,11 +227,14 @@ jobs:
     steps:
       - name: Set image variables
         id: set_vars
+        env:
+          IMAGE_TYPE: ${{ matrix.image_type }}
+          IMAGE: ${{ inputs.image }}
         run: |
-          if [[ "${{ matrix.image_type }}" == "comet" ]]; then
-            IMAGE_NAME="${{ inputs.image }}-comet"
+          if [[ "${IMAGE_TYPE}" == "comet" ]]; then
+            IMAGE_NAME="${IMAGE}-comet"
           else
-            IMAGE_NAME="${{ inputs.image }}"
+            IMAGE_NAME="${IMAGE}"
           fi
           echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
 
@@ -298,13 +311,19 @@ jobs:
           docker buildx imagetools create $TAG_ARGS $DIGESTS
 
       - name: Write Build Summary
+        env:
+          IMAGE_NAME: ${{ steps.set_vars.outputs.image_name }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE: ${{ inputs.image }}
+          BUILD_ARM64: ${{ inputs.build_arm64 }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          echo "### Docker images pushed: ${{ steps.set_vars.outputs.image_name }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]] || [[ "${{ inputs.build_arm64 }}" != "true" ]]; then
+          echo "### Docker images pushed: ${IMAGE_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${META_TAGS}" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${IMAGE}" == "opik-guardrails-backend" ]] || [[ "${BUILD_ARM64}" != "true" ]]; then
             echo "Built for platforms: linux/amd64" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Built for platforms: linux/amd64, linux/arm64" >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik%2F${{ steps.set_vars.outputs.image_name }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [View on GitHub Container Registry](https://github.com/${REPOSITORY}/pkgs/container/opik%2F${IMAGE_NAME})" >> "$GITHUB_STEP_SUMMARY"
 

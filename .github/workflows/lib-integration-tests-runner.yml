@@ -265,9 +265,12 @@ jobs:
 
       - name: Determine trigger type
         id: trigger
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
         run: |
-          if [ "${{ github.event_name }}" == "schedule" ]; then
-            TYPE=$([[ "${{ github.event.schedule }}" == "0 0 * * 0" ]] && echo "Weekly Schedule" || echo "Daily Schedule")
+          if [ "${EVENT_NAME}" == "schedule" ]; then
+            TYPE=$([[ "${EVENT_SCHEDULE}" == "0 0 * * 0" ]] && echo "Weekly Schedule" || echo "Daily Schedule")
           else
             TYPE="Manual Dispatch"
           fi

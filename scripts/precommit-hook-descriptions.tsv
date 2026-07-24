@@ -27,6 +27,7 @@ lizard	Cyclomatic-complexity gate
 vulture	Find dead code
 helm-docs	Regenerate Helm chart README
 actionlint	Lint GitHub Actions workflows
+zizmor	Security-scan GitHub Actions workflows
 hadolint	Lint Dockerfiles
 spotless	Format Java code
 eslint	Lint + autofix JS/TS

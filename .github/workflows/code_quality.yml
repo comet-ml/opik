@@ -33,9 +33,6 @@ concurrency:
 
 permissions:
   contents: read
-  # Needed by the summary job to post/update the sticky timing comment on PRs.
-  # On fork PRs the token is read-only regardless, so that step is guarded.
-  pull-requests: write
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -228,6 +225,12 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Needed to post/update the sticky timing comment on PRs. On fork PRs the
+    # token is read-only regardless, so that step is guarded. Scoped to this
+    # job rather than the workflow default (least privilege).
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6

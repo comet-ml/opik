@@ -23,8 +23,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 jobs:
     # Automatically classify tests as unit/integration and split integration
@@ -53,6 +51,12 @@ jobs:
         name: ${{ matrix.name }}
         runs-on: ubuntu-latest
         timeout-minutes: ${{ matrix.timeout }}
+        # Only the "Publish Test Report" step needs these; keep them off the
+        # workflow-level default (least privilege).
+        permissions:
+          contents: read
+          checks: write
+          pull-requests: write
         defaults:
           run:
             working-directory: apps/opik-backend/

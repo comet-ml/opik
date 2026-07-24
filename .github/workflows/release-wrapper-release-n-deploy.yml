@@ -43,40 +43,56 @@ jobs:
           
       - name: Notify Release-n-Deploy-Agent
         if: ${{ inputs.resumeUrl != '' }}
+        env:
+          INPUTS_JSON: ${{ toJSON(inputs) }}
+          RESUME_URL: ${{ inputs.resumeUrl }}
+          RELEASE_VERSION: ${{ needs.trigger-release.outputs.version }}
+          RELEASE_STATUS: ${{ steps.status.outputs.status }}
+          RELEASE_CONCLUSION: ${{ steps.status.outputs.conclusion }}
+          RUN_ID: ${{ github.run_id }}
+          TRACKING_ID: ${{ inputs.trackingId }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_RUN_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_RUN_STARTED_AT: ${{ github.event.workflow_run.run_started_at }}
+          WORKFLOW_RUN_UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
         run: |
-          echo "All inputs: ${{ toJSON(inputs) }}"
-          echo "resumeUrl input: '${{ inputs.resumeUrl }}'"
-          
-          # Get actual release outputs
-          VERSION="${{ needs.trigger-release.outputs.version }}"
-          STATUS="${{ steps.status.outputs.status }}"
-          CONCLUSION="${{ steps.status.outputs.conclusion }}"
-          
-          echo "📦 Release completed with version: $VERSION"
-          echo "Status: $STATUS, Conclusion: $CONCLUSION"
-          
+          echo "All inputs: ${INPUTS_JSON}"
+          echo "resumeUrl input: '${RESUME_URL}'"
+
+          echo "📦 Release completed with version: ${RELEASE_VERSION}"
+          echo "Status: ${RELEASE_STATUS}, Conclusion: ${RELEASE_CONCLUSION}"
+
+          # Build the JSON payload with jq so every value is passed as data
+          # (never interpolated into shell or JSON syntax).
+          PAYLOAD=$(jq -n \
+            --arg run_id "${RUN_ID}" \
+            --arg release_tag "${RELEASE_VERSION}" \
+            --arg tracking_id "${TRACKING_ID}" \
+            --arg wr_id "${WORKFLOW_RUN_ID}" \
+            --arg wr_name "${WORKFLOW_RUN_NAME}" \
+            --arg status "${RELEASE_STATUS}" \
+            --arg conclusion "${RELEASE_CONCLUSION}" \
+            --arg started_at "${WORKFLOW_RUN_STARTED_AT}" \
+            --arg updated_at "${WORKFLOW_RUN_UPDATED_AT}" \
+            --arg html_url "${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}" \
+            --arg full_name "${REPOSITORY}" \
+            --arg login "${ACTOR}" \
+            '{
+              release: { id: $run_id, releaseTag: $release_tag },
+              trackingId: $tracking_id,
+              workflow_run: {
+                id: $wr_id, name: $wr_name, status: $status,
+                conclusion: $conclusion, run_started_at: $started_at,
+                updated_at: $updated_at, html_url: $html_url
+              },
+              repository: { full_name: $full_name },
+              sender: { login: $login }
+            }')
+
           curl -X POST \
             -H "Content-Type: application/json" \
-            -d '{
-              "release": {
-                "id": "${{ github.run_id }}",
-                "releaseTag": "'$VERSION'"
-              },
-              "trackingId": "${{ inputs.trackingId }}",
-              "workflow_run": {
-                "id": "${{ github.event.workflow_run.id  }}",
-                "name": "${{ github.event.workflow_run.name }}",
-                "status": "'$STATUS'",
-                "conclusion": "'$CONCLUSION'",
-                "run_started_at": "${{ github.event.workflow_run.run_started_at }}",
-                "updated_at": "${{ github.event.workflow_run.updated_at }}",
-                "html_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-              },
-              "repository": {
-                "full_name": "${{ github.repository }}"
-              },
-              "sender": {
-                "login": "${{ github.actor }}"
-              }
-            }' \
-            ${{ inputs.resumeUrl }}
+            -d "$PAYLOAD" \
+            "${RESUME_URL}"

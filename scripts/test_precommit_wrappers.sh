@@ -97,6 +97,27 @@ check "ruff-format wins over ruff"  "$(printf 'ruff-format — optimizer\tFormat
 check "ruff maps to lint"           "$(printf 'ruff — python sdk\tLint + autofix Python')"      "$out"
 check "spotless maps to java"       "$(printf 'spotless — java backend\tFormat Java code')"      "$out"
 
+echo "hook-description coverage:"
+# Every hook name in .pre-commit-config.yaml must resolve to a non-empty
+# description, or it shows blank in the Code Quality timing comment. This is the
+# guard for "added a hook but forgot its precommit-hook-descriptions.tsv entry".
+# python reads the config directly (yaml) so a new hook can't slip the net.
+missing=$(python3 - <<'PY'
+import subprocess, sys, yaml
+cfg = yaml.safe_load(open(".pre-commit-config.yaml"))
+names = [h.get("name", h["id"]) for r in cfg.get("repos", []) for h in r.get("hooks", [])]
+resolved = subprocess.run(
+    ["python3", "scripts/precommit-hook-desc.py"],
+    input="\n".join(names), capture_output=True, text=True, check=True,
+).stdout.splitlines()
+for line in resolved:
+    name, _, desc = line.partition("\t")
+    if name and not desc:
+        print(name)
+PY
+)
+check_empty "every configured hook has a description" "$missing"
+
 echo "precommit-skipped-table.sh:"
 check_empty "empty skipped → no output"  "$(scripts/precommit-skipped-table.sh '[]')"
 sk=$(scripts/precommit-skipped-table.sh '[{"name":"☕ spotless — java backend","id":"spotless"}]')

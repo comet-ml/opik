@@ -139,21 +139,25 @@ jobs:
       - name: Push changes and tags
         if: ${{ env.IS_RELEASE }}
         run: |
-          git push origin ${{ github.ref }}
+          git push origin "${REF}"
           git push origin "configure-v${{ env.VERSION }}"
         env:
+          REF: ${{ github.ref }}
           GITHUB_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
       - name: Workflow summary
         if: always()
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
         run: |
           exec >> "$GITHUB_STEP_SUMMARY"
           echo "## Workflow Summary"
           echo ""
           echo "- **Version**: ${{ env.VERSION }}"
           echo "- **Is Release**: ${{ env.IS_RELEASE }}"
-          echo "- **Branch**: ${{ github.ref_name }}"
-          echo "- **Triggered by**: @${{ github.actor }}"
+          echo "- **Branch**: ${REF_NAME}"
+          echo "- **Triggered by**: @${ACTOR}"
           echo ""
           if [ "${{ env.IS_RELEASE }}" == "true" ]; then
             echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})"
