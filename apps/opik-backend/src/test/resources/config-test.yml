@@ -409,6 +409,12 @@ onlineScoring:
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
   agenticToolsMaxInjectedBytes: 52428800
+  # Default: 32
+  # Description: Hard heap cap (in MB) on the trace-thread span preload used to size the
+  #   inline-vs-agentic-tools routing decision. Spans stream under this cap; once crossed, the thread
+  #   routes to the agentic-tools path (which drills per-trace on demand) instead of being buffered in
+  #   full. Lower on memory-constrained deployments. See OPIK-7454.
+  agenticToolsMaxPreloadMb: 32
   agenticToolsS3PresignTtlSeconds: 120
   # Per-variable substitution cap (chars) for the {{trace}}/{{span}} structure-injection / agentic paths.
   maxPromptFieldChars: 4000
