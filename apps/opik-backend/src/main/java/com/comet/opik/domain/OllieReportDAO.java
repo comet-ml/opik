@@ -12,6 +12,7 @@ import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -65,9 +66,21 @@ interface OllieReportDAO {
     long countByProjectId(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
+    @SqlQuery("""
+            SELECT created_at FROM ollie_reports
+            WHERE id = :id AND workspace_id = :workspaceId
+            """)
+    Instant getCreatedAt(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("""
+            SELECT workspace_id FROM ollie_reports
+            WHERE status = 'pending' AND created_at < DATE_SUB(NOW(), INTERVAL :staleMinutes MINUTE)
+            """)
+    List<String> findStalePendingWorkspaceIds(@Bind("staleMinutes") int staleMinutes);
+
     @SqlUpdate("""
             UPDATE ollie_reports SET status = 'failed'
-            WHERE status = 'pending' AND created_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+            WHERE status = 'pending' AND created_at < DATE_SUB(NOW(), INTERVAL :staleMinutes MINUTE)
             """)
-    int failStaleReports();
+    int failStaleReports(@Bind("staleMinutes") int staleMinutes);
 }
