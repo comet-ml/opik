@@ -64,7 +64,7 @@ public class UuidV7TimestampValidator {
      * disabled or the id is acceptable. Used by the creation path. {@code resource} (trace/span) and
      * {@code workspaceId} are attached to the audit metric.
      */
-    public void validate(@NonNull UUID id, @NonNull String resource, String workspaceId) {
+    public void validate(@NonNull UUID id, String resource, String workspaceId) {
         evaluate(id).ifPresent(rejection -> handle(rejection, resource, workspaceId));
     }
 
@@ -73,7 +73,7 @@ public class UuidV7TimestampValidator {
      * ids are accepted, so updating a long-lived entity (e.g. created months ago) is never flagged. Used
      * by the update path.
      */
-    public void validateNotInFuture(@NonNull UUID id, @NonNull String resource, String workspaceId) {
+    public void validateNotInFuture(@NonNull UUID id, String resource, String workspaceId) {
         evaluate(id)
                 .filter(rejection -> rejection.getLeft() == Reason.TOO_FAR_FUTURE)
                 .ifPresent(rejection -> handle(rejection, resource, workspaceId));

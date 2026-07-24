@@ -104,10 +104,10 @@ class IdGeneratorImpl implements IdGenerator {
 
     @Override
     public Mono<UUID> validateIdAsync(@NonNull UUID id, String resource) {
-        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
+        return Mono.deferContextual(ctx -> {
             validateId(id, resource, workspaceId(ctx));
-            return id;
-        }));
+            return Mono.just(id);
+        });
     }
 
     @Override
@@ -121,11 +121,11 @@ class IdGeneratorImpl implements IdGenerator {
 
     @Override
     public Mono<UUID> validateIdNotInFutureAsync(@NonNull UUID id, String resource) {
-        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
+        return Mono.deferContextual(ctx -> {
             IdGenerator.validateVersion(id, resource);
             uuidV7TimestampValidator.validateNotInFuture(id, resource, workspaceId(ctx));
-            return id;
-        }));
+            return Mono.just(id);
+        });
     }
 
     /**

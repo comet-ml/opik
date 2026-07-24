@@ -29,13 +29,13 @@ class IdGeneratorAsyncValidationTest {
     private static final Duration WINDOW = Duration.hours(24);
 
     // Reject mode: enabled=true, auditOnly=false (config-test default).
-    private final IdGenerator rejectGenerator = TestIdGeneratorFactory.create();
+    private static final IdGenerator REJECT_GENERATOR = TestIdGeneratorFactory.create();
     // Audit mode: enabled=true, auditOnly=true.
-    private final IdGenerator auditGenerator = new IdGeneratorImpl(TestUuidV7TimestampValidatorFactory.create(
+    private static final IdGenerator AUDIT_GENERATOR = new IdGeneratorImpl(TestUuidV7TimestampValidatorFactory.create(
             UuidValidationConfig.builder().enabled(true).auditOnly(true).window(WINDOW).build()));
 
     private UUID idAt(Instant instant) {
-        return rejectGenerator.getTimeOrderedEpoch(instant.toEpochMilli());
+        return REJECT_GENERATOR.getTimeOrderedEpoch(instant.toEpochMilli());
     }
 
     private UUID inWindowId() {
@@ -54,7 +54,7 @@ class IdGeneratorAsyncValidationTest {
     @DisplayName("reject: validateIdAsync passes an in-window id through (workspace in context)")
     void rejectAsyncAcceptsInWindow() {
         var id = inWindowId();
-        StepVerifier.create(rejectGenerator.validateIdAsync(id, RESOURCE).contextWrite(withWorkspace()))
+        StepVerifier.create(REJECT_GENERATOR.validateIdAsync(id, RESOURCE).contextWrite(withWorkspace()))
                 .expectNext(id)
                 .verifyComplete();
     }
@@ -62,7 +62,7 @@ class IdGeneratorAsyncValidationTest {
     @Test
     @DisplayName("reject: validateIdAsync rejects a too-far-future id (workspace in context)")
     void rejectAsyncRejectsFuture() {
-        StepVerifier.create(rejectGenerator.validateIdAsync(tooFarFutureId(), RESOURCE).contextWrite(withWorkspace()))
+        StepVerifier.create(REJECT_GENERATOR.validateIdAsync(tooFarFutureId(), RESOURCE).contextWrite(withWorkspace()))
                 .expectError(InvalidUUIDException.class)
                 .verify();
     }
@@ -70,7 +70,7 @@ class IdGeneratorAsyncValidationTest {
     @Test
     @DisplayName("reject: validateIdAsync still rejects when the context has no workspace id")
     void rejectAsyncRejectsFutureWithoutContext() {
-        StepVerifier.create(rejectGenerator.validateIdAsync(tooFarFutureId(), RESOURCE))
+        StepVerifier.create(REJECT_GENERATOR.validateIdAsync(tooFarFutureId(), RESOURCE))
                 .expectError(InvalidUUIDException.class)
                 .verify();
     }
@@ -79,11 +79,11 @@ class IdGeneratorAsyncValidationTest {
     @DisplayName("reject: validateIdNotInFutureAsync rejects only too-far-future, accepts old ids")
     void rejectForUpdateAsync() {
         var oldId = idAt(Instant.now().minus(48, ChronoUnit.HOURS));
-        StepVerifier.create(rejectGenerator.validateIdNotInFutureAsync(oldId, RESOURCE).contextWrite(withWorkspace()))
+        StepVerifier.create(REJECT_GENERATOR.validateIdNotInFutureAsync(oldId, RESOURCE).contextWrite(withWorkspace()))
                 .expectNext(oldId)
                 .verifyComplete();
         StepVerifier
-                .create(rejectGenerator.validateIdNotInFutureAsync(tooFarFutureId(), RESOURCE)
+                .create(REJECT_GENERATOR.validateIdNotInFutureAsync(tooFarFutureId(), RESOURCE)
                         .contextWrite(withWorkspace()))
                 .expectError(InvalidUUIDException.class)
                 .verify();
@@ -93,12 +93,12 @@ class IdGeneratorAsyncValidationTest {
     @DisplayName("audit: validateIdAsync passes a too-far-future id through, with and without workspace context")
     void auditAsyncNeverRejects() {
         var withCtxId = tooFarFutureId();
-        StepVerifier.create(auditGenerator.validateIdAsync(withCtxId, RESOURCE).contextWrite(withWorkspace()))
+        StepVerifier.create(AUDIT_GENERATOR.validateIdAsync(withCtxId, RESOURCE).contextWrite(withWorkspace()))
                 .expectNext(withCtxId)
                 .verifyComplete();
 
         var noCtxId = tooFarFutureId();
-        StepVerifier.create(auditGenerator.validateIdAsync(noCtxId, RESOURCE))
+        StepVerifier.create(AUDIT_GENERATOR.validateIdAsync(noCtxId, RESOURCE))
                 .expectNext(noCtxId)
                 .verifyComplete();
     }
@@ -107,7 +107,7 @@ class IdGeneratorAsyncValidationTest {
     @DisplayName("audit: validateIdNotInFutureAsync passes a too-far-future id through")
     void auditForUpdateAsyncNeverRejects() {
         var id = tooFarFutureId();
-        StepVerifier.create(Mono.defer(() -> auditGenerator.validateIdNotInFutureAsync(id, RESOURCE)))
+        StepVerifier.create(Mono.defer(() -> AUDIT_GENERATOR.validateIdNotInFutureAsync(id, RESOURCE)))
                 .expectNext(id)
                 .verifyComplete();
     }
