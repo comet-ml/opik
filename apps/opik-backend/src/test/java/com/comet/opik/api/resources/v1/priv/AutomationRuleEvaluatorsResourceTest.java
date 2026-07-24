@@ -764,6 +764,187 @@ class AutomationRuleEvaluatorsResourceTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Duplicate name handling")
+    class DuplicateNameHandling {
+
+        private String createRuleAndGetName(String name, UUID projectId) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+            try (var response = evaluatorsResourceClient.getEvaluator(id, projectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                return response.readEntity(AutomationRuleEvaluator.class).getName();
+            }
+        }
+
+        @Test
+        @DisplayName("when a rule name already exists in the same project, then auto-append a numeric suffix")
+        void whenNameCollidesInSameProject__thenSuffixIsAppended() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Hallucination " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name);
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name + "-1");
+            assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name + "-2");
+        }
+
+        @Test
+        @DisplayName("when the same rule name is used in different projects, then no suffix is appended")
+        void whenNameCollidesInDifferentProject__thenNoSuffix() {
+            var projectId1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var projectId2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Relevance " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(name, projectId1)).isEqualTo(name);
+            assertThat(createRuleAndGetName(name, projectId2)).isEqualTo(name);
+        }
+
+        private String createLlmRuleAndGetName(String name, Set<UUID> projectIds, UUID readProjectId) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(projectIds)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+            try (var response = evaluatorsResourceClient.getEvaluator(id, readProjectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                return response.readEntity(AutomationRuleEvaluator.class).getName();
+            }
+        }
+
+        @Test
+        @DisplayName("when a multi-project rule shares a project with an existing same-named rule, then suffix")
+        void whenNameCollidesViaSharedProject__thenSuffixIsAppended() {
+            var p1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var p2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var p3 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Coherence " + UUID.randomUUID();
+
+            // Rule on {p1, p2}
+            assertThat(createLlmRuleAndGetName(name, Set.of(p1, p2), p1)).isEqualTo(name);
+            // Rule on {p2, p3} collides through the shared project p2
+            assertThat(createLlmRuleAndGetName(name, Set.of(p2, p3), p3)).isEqualTo(name + "-1");
+            // Rule on {p3} only: the base name is still free on p3 (only "name-1" lives there), so no suffix
+            assertThat(createLlmRuleAndGetName(name, Set.of(p3), p3)).isEqualTo(name);
+        }
+
+        @Test
+        @DisplayName("collision is detected across different evaluator types in the same project")
+        void whenNameCollidesAcrossTypes__thenSuffixIsAppended() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Toxicity " + UUID.randomUUID();
+
+            var llmJudge = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            evaluatorsResourceClient.createEvaluator(llmJudge, WORKSPACE_NAME, API_KEY);
+
+            var spanJudge = factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(spanJudge, WORKSPACE_NAME, API_KEY);
+            try (var response = evaluatorsResourceClient.getEvaluator(id, projectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                assertThat(response.readEntity(AutomationRuleEvaluator.class).getName()).isEqualTo(name + "-1");
+            }
+        }
+
+        private UUID createLlmRule(String name, UUID projectId) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            return evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+        }
+
+        private String getName(UUID id, UUID projectId) {
+            try (var response = evaluatorsResourceClient.getEvaluator(id, projectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                return response.readEntity(AutomationRuleEvaluator.class).getName();
+            }
+        }
+
+        private void updateRule(UUID id, String newName, Set<UUID> projectIds) {
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .name(newName)
+                    .projectIds(projectIds)
+                    .build();
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+        }
+
+        private void renameRule(UUID id, String newName, UUID projectId) {
+            updateRule(id, newName, Set.of(projectId));
+        }
+
+        @Test
+        @DisplayName("when a rule is renamed to a name that already exists in the project, then suffix (self excluded)")
+        void whenRenamedToExistingName__thenSuffixIsAppended() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var nameA = "Bias " + UUID.randomUUID();
+            var nameB = "Drift " + UUID.randomUUID();
+
+            createLlmRule(nameA, projectId);
+            var idB = createLlmRule(nameB, projectId);
+
+            // Rename B to A's name: collides with A -> suffixed
+            renameRule(idB, nameA, projectId);
+            assertThat(getName(idB, projectId)).isEqualTo(nameA + "-1");
+
+            // Rename B to its own current name: self is excluded, so no spurious suffix
+            renameRule(idB, nameA + "-1", projectId);
+            assertThat(getName(idB, projectId)).isEqualTo(nameA + "-1");
+        }
+
+        @Test
+        @DisplayName("a non-name edit does not rename the rule even if the name now collides in the scope")
+        void whenNonNameEditIntroducesCollision__thenNameIsUnchanged() {
+            var p1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var p2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var name = "Grounding " + UUID.randomUUID();
+
+            createLlmRule(name, p1); // rule A: name in p1
+            var idB = createLlmRule(name, p2); // rule B: same name but in p2 -> stays un-suffixed
+            assertThat(getName(idB, p2)).isEqualTo(name);
+
+            // Non-name edit: attach B to p1 as well (name unchanged). B now shares p1 with A, but because the
+            // name did not change it must NOT be renamed to name-1.
+            updateRule(idB, name, Set.of(p1, p2));
+            assertThat(getName(idB, p1)).isEqualTo(name);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"metric_score", "cost 50%", "path\\to\\rule"})
+        @DisplayName("collision is detected for names containing LIKE metacharacters (prefix is escaped)")
+        void whenNameHasLikeMetacharacters__thenSuffixIsAppended(String name) {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var uniqueName = name + " " + UUID.randomUUID();
+
+            assertThat(createRuleAndGetName(uniqueName, projectId)).isEqualTo(uniqueName);
+            assertThat(createRuleAndGetName(uniqueName, projectId)).isEqualTo(uniqueName + "-1");
+        }
+
+        @Test
+        @DisplayName("updating a non-existent rule returns 404 (name lookup tolerates the missing row)")
+        void whenUpdatingNonExistentRule__thenNotFound() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .name("Ghost " + UUID.randomUUID())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(UUID.randomUUID(), WORKSPACE_NAME, update,
+                    API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindEvaluator {
 
         Stream<Class<? extends AutomationRuleEvaluator<?, ?>>> find() {
