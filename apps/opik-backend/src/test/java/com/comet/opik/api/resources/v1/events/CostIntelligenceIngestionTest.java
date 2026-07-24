@@ -403,6 +403,11 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().filesDeleted()).isEqualTo(1);
                 assertThat(row.get().linesAdded()).isEqualTo(40);
                 assertThat(row.get().linesDeleted()).isEqualTo(5);
+                // rolling usage windows (nested five_hour/seven_day objects)
+                assertThat(row.get().fiveHourUtilization()).isEqualTo(88.5);
+                assertThat(row.get().fiveHourResetsAt()).isEqualTo("2026-07-23T18:00:00Z");
+                assertThat(row.get().sevenDayUtilization()).isEqualTo(42.0);
+                assertThat(row.get().sevenDayResetsAt()).isEqualTo("2026-07-28T00:00:00Z");
 
                 assertThat(getUserMappings(email)).containsExactly(userUuid);
             });
@@ -618,7 +623,9 @@ class CostIntelligenceIngestionTest {
                         "display_name": "%s",
                         "billing_mode": "subscription",
                         "plan": "max",
-                        "plan_usage_status": "within"
+                        "plan_usage_status": "within",
+                        "five_hour": {"utilization": 88.5, "resets_at": "2026-07-23T18:00:00Z"},
+                        "seven_day": {"utilization": 42, "resets_at": "2026-07-28T00:00:00Z"}
                       }
                     }
                   }
@@ -714,7 +721,8 @@ class CostIntelligenceIngestionTest {
                     user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
                     billing_mode, plan, plan_usage_status,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
-                    files_added, files_deleted, lines_added, lines_deleted
+                    files_added, files_deleted, lines_added, lines_deleted,
+                    five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
@@ -744,7 +752,11 @@ class CostIntelligenceIngestionTest {
                             row.get("files_added", Integer.class),
                             row.get("files_deleted", Integer.class),
                             row.get("lines_added", Integer.class),
-                            row.get("lines_deleted", Integer.class)))));
+                            row.get("lines_deleted", Integer.class),
+                            row.get("five_hour_utilization", Double.class),
+                            row.get("five_hour_resets_at", String.class),
+                            row.get("seven_day_utilization", Double.class),
+                            row.get("seven_day_resets_at", String.class)))));
         }).blockOptional();
     }
 
@@ -786,6 +798,8 @@ class CostIntelligenceIngestionTest {
             String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
             String billingMode, String plan, String planUsageStatus,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,
-            Integer filesAdded, Integer filesDeleted, Integer linesAdded, Integer linesDeleted) {
+            Integer filesAdded, Integer filesDeleted, Integer linesAdded, Integer linesDeleted,
+            Double fiveHourUtilization, String fiveHourResetsAt, Double sevenDayUtilization,
+            String sevenDayResetsAt) {
     }
 }

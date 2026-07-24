@@ -61,7 +61,11 @@ public class CipxTraceIdentityDAO {
             int filesAdded,
             int filesDeleted,
             int linesAdded,
-            int linesDeleted) {
+            int linesDeleted,
+            double fiveHourUtilization,
+            @NonNull String fiveHourResetsAt,
+            double sevenDayUtilization,
+            @NonNull String sevenDayResetsAt) {
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode session = metadata.path("cipx").path("session");
@@ -71,6 +75,10 @@ public class CipxTraceIdentityDAO {
             if (userUuid.isEmpty()) {
                 userUuid = identity.path("user_id").asText("");
             }
+            // Rolling rate-limit windows are nested objects (five_hour/seven_day) — the only nested
+            // identity fields. Absent objects yield utilization 0 and resets_at "" via path() defaults.
+            JsonNode fiveHour = identity.path("five_hour");
+            JsonNode sevenDay = identity.path("seven_day");
             return TraceIdentityRow.builder()
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
@@ -94,6 +102,10 @@ public class CipxTraceIdentityDAO {
                     .filesDeleted(repository.path("files_deleted").asInt(0))
                     .linesAdded(repository.path("lines_added").asInt(0))
                     .linesDeleted(repository.path("lines_deleted").asInt(0))
+                    .fiveHourUtilization(fiveHour.path("utilization").asDouble(0))
+                    .fiveHourResetsAt(fiveHour.path("resets_at").asText(""))
+                    .sevenDayUtilization(sevenDay.path("utilization").asDouble(0))
+                    .sevenDayResetsAt(sevenDay.path("resets_at").asText(""))
                     .build();
         }
     }
@@ -106,7 +118,8 @@ public class CipxTraceIdentityDAO {
                  user_email, user_display_name, repository, session_id, harness, schema_version,
                  billing_mode, plan, plan_usage_status,
                  branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
-                 files_added, files_deleted, lines_added, lines_deleted)
+                 files_added, files_deleted, lines_added, lines_deleted,
+                 five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -133,7 +146,11 @@ public class CipxTraceIdentityDAO {
                         :files_added<item.index>,
                         :files_deleted<item.index>,
                         :lines_added<item.index>,
-                        :lines_deleted<item.index>
+                        :lines_deleted<item.index>,
+                        :five_hour_utilization<item.index>,
+                        :five_hour_resets_at<item.index>,
+                        :seven_day_utilization<item.index>,
+                        :seven_day_resets_at<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -163,7 +180,7 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 22 parameters per row tuple in template order.
+        // (repeats dedup), then 26 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
@@ -188,7 +205,11 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.filesAdded())
                     .bind(index++, row.filesDeleted())
                     .bind(index++, row.linesAdded())
-                    .bind(index++, row.linesDeleted());
+                    .bind(index++, row.linesDeleted())
+                    .bind(index++, row.fiveHourUtilization())
+                    .bind(index++, row.fiveHourResetsAt())
+                    .bind(index++, row.sevenDayUtilization())
+                    .bind(index++, row.sevenDayResetsAt());
         }
 
         return statement.execute();
