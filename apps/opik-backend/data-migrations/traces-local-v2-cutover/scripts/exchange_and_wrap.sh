@@ -29,6 +29,10 @@
 #   --force           skip the replication-settle gate. By default the swap aborts while any replica still
 #                     has replication-queue backlog or an unfinished mutation on traces / traces_local_v2, since a
 #                     behind replica would swap in an incomplete table. Use only if settlement is confirmed out of band.
+#   --confirm-maintenance  REQUIRED with --wrap-only. The wrap is a non-atomic RENAME->CREATE that briefly makes `traces`
+#                     unavailable; unlike the same-run --with-wrap path (still buffered from the EXCHANGE), --wrap-only
+#                     runs later against live, unbuffered ingestion. This flag asserts the async-insert buffer is
+#                     re-raised (or ingestion quiesced / a maintenance window is in effect); the wrap refuses without it.
 
 set -euo pipefail
 
@@ -40,6 +44,7 @@ SKIP_WRAP=0
 WITH_WRAP=0
 WRAP_ONLY=0
 FORCE=0
+CONFIRM_MAINTENANCE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -48,6 +53,7 @@ while [[ $# -gt 0 ]]; do
         --with-wrap) WITH_WRAP=1; shift ;;
         --wrap-only) WRAP_ONLY=1; shift ;;
         --force) FORCE=1; shift ;;
+        --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -59,6 +65,14 @@ done
 # At most one wrap mode. Default (none set) is EXCHANGE only.
 if (( SKIP_WRAP + WITH_WRAP + WRAP_ONLY > 1 )); then
     echo "ERROR: --skip-wrap, --with-wrap and --wrap-only are mutually exclusive" >&2; exit 2
+fi
+# The deferred wrap briefly makes `traces` unavailable (non-atomic RENAME->CREATE) and runs against live, unbuffered
+# ingestion — unlike the same-run --with-wrap path, which is still buffered from the EXCHANGE. Refuse (fail fast, before
+# touching ClickHouse) unless the operator asserts the buffer is re-raised / ingestion quiesced / a maintenance window.
+if [[ "$WRAP_ONLY" == "1" && "$CONFIRM_MAINTENANCE" != "1" ]]; then
+    echo "ERROR: --wrap-only requires --confirm-maintenance. Re-raise asyncInsertBusyTimeoutMaxMs (or quiesce ingestion /" >&2
+    echo "       take a maintenance window) first — the wrap briefly makes 'traces' unavailable — then re-run with it." >&2
+    exit 2
 fi
 
 ch() {
@@ -190,8 +204,7 @@ if [[ "$WRAP_ONLY" == "1" ]]; then
     # window per-node). The same-run path is covered by the still-raised EXCHANGE buffer, but --wrap-only runs later
     # against live, unbuffered ingestion. PRECONDITION: re-raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs (or quiesce
     # ingestion / assert a maintenance window) so the wrap runs under the same buffered conditions as the EXCHANGE.
-    echo "PRECONDITION: the wrap briefly makes 'traces' unavailable (non-atomic RENAME->CREATE). Re-raise the async-insert"
-    echo "buffer (asyncInsertBusyTimeoutMaxMs) or quiesce ingestion / assert a maintenance window before continuing."
+    # --confirm-maintenance was already enforced up front (the wrap briefly makes `traces` unavailable).
     run_block wrap
     echo "Distributed wrap done: 'traces' fronts 'traces_local' via sipHash64(project_id). (EXCHANGE was a prior step.)"
     exit 0
