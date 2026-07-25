@@ -1,6 +1,6 @@
-# Floored for the same reason as requirements_legacy_adk_1_3_0.txt: an unbounded
-# spec lets a resolver backtrack all the way to the 0.0.1 stub. 1.3.0 is also the
-# boundary that keeps this suite disjoint from the legacy one.
+# 1.3.0 is the minimum the integration supports; the floor is also load-bearing
+# against resolution, since google-adk 0.0.1 is a dependency-free "hello world"
+# stub that an unbounded spec lets a backtrack silently select.
 google-adk>=1.3.0
 python-multipart; python_version < "3.10"
 opentelemetry-api

@@ -1,7 +1,6 @@
 import logging
 from typing import Optional
 
-from opik import semantic_version
 from opik.types import DistributedTraceHeadersDict
 from . import llm_response_wrapper
 from . import litellm_wrappers
@@ -19,10 +18,9 @@ def patch_adk(
     distributed_headers: Optional[DistributedTraceHeadersDict] = None,
 ) -> None:
     _patch_adk_lite_llm()
-    if semantic_version.SemanticVersion.parse(google.adk.__version__) >= "1.3.0":  # type: ignore
-        _patch_adk_opentelemetry_tracers(
-            distributed_headers=distributed_headers,
-        )
+    _patch_adk_opentelemetry_tracers(
+        distributed_headers=distributed_headers,
+    )
 
 
 def _patch_adk_lite_llm() -> None:
