@@ -1,2 +1,6 @@
-google-adk<1.3.0
+# The floor is load-bearing: google-adk 0.0.1 is a dependency-free "hello world"
+# stub, so it is the one release that satisfies any resolve. Without a floor a
+# backtrack silently installs it and the suite fails later with a confusing
+# "No module named 'google'". 1.2.1 is the newest release below 1.3.0.
+google-adk>=1.2.1,<1.3.0
 python-multipart; python_version < "3.10"

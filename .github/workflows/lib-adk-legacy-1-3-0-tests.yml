@@ -64,6 +64,12 @@ jobs:
           cd ./tests
           uv pip install --system -r library_integration/adk/requirements_legacy_adk_1_3_0.txt
 
+      - name: Verify ADK is importable
+        # A resolver backtrack can install the dependency-free google-adk 0.0.1
+        # stub, which succeeds silently and only fails much later during test
+        # collection. Fail here instead, with the resolved version in the log.
+        run: python -c "import importlib.metadata as m, google.adk; print('google-adk', m.version('google-adk'))"
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
