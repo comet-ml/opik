@@ -1941,6 +1941,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     //     copy_from_dataset_id differs from the destination, the read source is a different dataset
     //     (e.g. migrate replay reads from the source workspace's dataset and writes into the
     //     destination workspace's dataset), so the inserted rows must carry the destination dataset_id.
+    //
+    // OPIK-7488: a copy-forward of many large-payload rows peaks ~1 GiB and OOMs the 2.55 GiB server
+    //   budget mid-upload (Code 241). Two things drive the peak, both proportional to cumulative rows:
+    //   the window (row_number) + ORDER BY buffer the full result set at the read-block granularity,
+    //   and the destination's MATERIALIZED column_types (an arrayMap over JSONType(data[key])) is
+    //   recomputed per inserted row. max_block_size shrinks the upstream read/sort blocks;
+    //   min_insert_block_size_bytes caps the downstream insert squash. Both are required — insert-block
+    //   tuning alone barely moves the peak because the window/sort buffer is upstream of it. Measured
+    //   on a 9,000 x 10KB workload: ~905 MiB (insert-block only) vs ~340 MiB (both) — a ~3x drop that
+    //   clears the ceiling, with no correctness change and no schema/migration.
     private static final String COPY_VERSION_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -2012,6 +2022,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ) AS deduped
             ) AS src
             ORDER BY src.id DESC
+            SETTINGS max_block_size = 1000, min_insert_block_size_bytes = 10485760, min_insert_block_size_rows = 0
             """;
 
     private static final String RESOLVE_DATASET_ID_FROM_ITEM_ID = """
