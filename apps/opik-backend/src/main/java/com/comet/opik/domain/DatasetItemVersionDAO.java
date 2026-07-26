@@ -1835,7 +1835,23 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         :userName as last_updated_by,
                         src.workspace_id
                     FROM (
-                        SELECT *
+                        SELECT
+                            id,
+                            dataset_item_id,
+                            dataset_id,
+                            dataset_version_id,
+                            data,
+                            description,
+                            metadata,
+                            source,
+                            trace_id,
+                            span_id,
+                            tags,
+                            evaluators,
+                            execution_policy,
+                            item_created_at,
+                            item_created_by,
+                            workspace_id
                         FROM dataset_item_versions
                         WHERE workspace_id = :workspace_id
                         AND dataset_id = :datasetId
@@ -1904,7 +1920,23 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 {userName:String} as last_updated_by,
                 src.workspace_id
             FROM (
-                SELECT *
+                SELECT
+                    id,
+                    dataset_item_id,
+                    dataset_id,
+                    dataset_version_id,
+                    data,
+                    description,
+                    metadata,
+                    source,
+                    trace_id,
+                    span_id,
+                    tags,
+                    evaluators,
+                    execution_policy,
+                    item_created_at,
+                    item_created_by,
+                    workspace_id
                 FROM dataset_item_versions
                 WHERE workspace_id = {workspace_id:String}
                 AND dataset_id = {sourceDatasetId:String}
@@ -1993,10 +2025,43 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.workspace_id
             FROM (
                 SELECT
-                    *,
+                    id,
+                    dataset_item_id,
+                    data,
+                    description,
+                    metadata,
+                    source,
+                    trace_id,
+                    span_id,
+                    tags,
+                    evaluators,
+                    execution_policy,
+                    item_created_at,
+                    item_last_updated_at,
+                    item_created_by,
+                    item_last_updated_by,
+                    workspace_id,
                     row_number() OVER (ORDER BY id DESC) AS rn
                 FROM (
-                    SELECT *
+                    SELECT
+                        id,
+                        dataset_item_id,
+                        dataset_id,
+                        dataset_version_id,
+                        data,
+                        description,
+                        metadata,
+                        source,
+                        trace_id,
+                        span_id,
+                        tags,
+                        evaluators,
+                        execution_policy,
+                        item_created_at,
+                        item_last_updated_at,
+                        item_created_by,
+                        item_last_updated_by,
+                        workspace_id
                     FROM dataset_item_versions
                     WHERE dataset_id = {sourceDatasetId:String}
                     AND dataset_version_id = {sourceVersionId:String}
