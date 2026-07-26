@@ -20,6 +20,14 @@ Counts = Dict[Any, Tuple[int, int, int]]
 MetricFn = Callable[[int, int, int], float]
 
 
+def _is_hashable(value: Any) -> bool:
+    try:
+        hash(value)
+    except TypeError:
+        return False
+    return True
+
+
 def _validate(
     output_key: str,
     reference_key: str,
@@ -41,6 +49,11 @@ def _validate(
         raise ValueError(
             f"positive_label only applies when average is 'binary', "
             f"got average={average!r}"
+        )
+    if positive_label is not None and not _is_hashable(positive_label):
+        raise ValueError(
+            f"positive_label must be hashable to name a class, got "
+            f"{type(positive_label).__name__}"
         )
 
 
@@ -99,9 +112,7 @@ def _first_unhashable(pairs: List[Tuple[Any, Any]]) -> Any:
     # compute_experiment_scores swallows - the metric would vanish silently.
     for pair in pairs:
         for label in pair:
-            try:
-                hash(label)
-            except TypeError:
+            if not _is_hashable(label):
                 return label
     return None
 

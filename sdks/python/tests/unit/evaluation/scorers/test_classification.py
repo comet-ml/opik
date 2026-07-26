@@ -266,6 +266,18 @@ def test_binary_without_positive_label__raises_at_construction(factory):
 
 
 @pytest.mark.parametrize("factory", ALL_FACTORIES)
+@pytest.mark.parametrize("unhashable", [["spam"], {"label": "spam"}])
+def test_unhashable_positive_label__raises_at_construction(factory, unhashable):
+    with pytest.raises(ValueError, match="positive_label"):
+        factory(
+            output_key="predicted_label",
+            reference_key="label",
+            average="binary",
+            positive_label=unhashable,
+        )
+
+
+@pytest.mark.parametrize("factory", ALL_FACTORIES)
 @pytest.mark.parametrize("average", ["macro", "micro", "weighted"])
 def test_positive_label_with_non_binary_average__raises_at_construction(
     factory, average
@@ -300,6 +312,16 @@ def test_binary_positive_label_absent_from_data__scoring_failed():
     assert score.scoring_failed is True
     assert score.value == 0.0
     assert "urgent" in score.reason
+
+
+# True == 1 and False == 0 in Python, so they tally as one class. numpy and
+# scikit-learn collapse them the same way; diverging here would surprise anyone
+# comparing against sklearn.
+def test_boolean_and_integer_labels__count_as_one_class():
+    score = _score(classification.f1_score, [(True, 1), (False, 0)], average="macro")
+
+    assert score.value == pytest.approx(1.0)
+    assert score.metadata["labels"] == [False, True]
 
 
 def test_metadata_labels__total_order_across_types_that_stringify_alike():
