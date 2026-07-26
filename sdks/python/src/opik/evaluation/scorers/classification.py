@@ -25,11 +25,14 @@ def _validate(
     reference_key: str,
     average: str,
     positive_label: Optional[Any],
+    name: Optional[str],
 ) -> None:
     if not isinstance(output_key, str) or not output_key.strip():
         raise ValueError("output_key must be a non-empty string")
     if not isinstance(reference_key, str) or not reference_key.strip():
         raise ValueError("reference_key must be a non-empty string")
+    if name is not None and (not isinstance(name, str) or not name.strip()):
+        raise ValueError("name must be a non-empty string")
     if average not in _AVERAGES:
         raise ValueError(f"average must be one of {_AVERAGES}, got {average!r}")
     if average == "binary" and positive_label is None:
@@ -90,6 +93,19 @@ def _class_counts(pairs: List[Tuple[Any, Any]]) -> Counts:
     return {label: (tp, fp, fn) for label, (tp, fp, fn) in tallies.items()}
 
 
+def _first_unhashable(pairs: List[Tuple[Any, Any]]) -> Any:
+    # A list or dict here means the task emitted a structured blob instead of a
+    # class. Left alone it raises TypeError from the tally lookup, which
+    # compute_experiment_scores swallows - the metric would vanish silently.
+    for pair in pairs:
+        for label in pair:
+            try:
+                hash(label)
+            except TypeError:
+                return label
+    return None
+
+
 def _label_sort_key(label: Any) -> Tuple[str, str]:
     # repr alone ties for values that stringify alike (1 vs "1"), which would
     # leave the order at the mercy of dict insertion.
@@ -130,11 +146,13 @@ def _build(
     positive_label: Optional[Any],
     name: Optional[str],
 ) -> "types.ExperimentScoreFunction":
-    _validate(output_key, reference_key, average, positive_label)
+    _validate(output_key, reference_key, average, positive_label, name)
     if name:
         score_name = name
     elif average == "binary":
-        # Without the label, two binary scorers on the same metric collide.
+        # The label keeps two binary scorers on one metric apart. Labels that
+        # stringify alike (1 vs "1") still collide - `name` is the escape hatch,
+        # as it is for any two scorers that would share a default name.
         score_name = f"{metric_name}_{average}_{positive_label}"
     else:
         score_name = f"{metric_name}_{average}"
@@ -143,14 +161,29 @@ def _build(
         test_results: List["test_result.TestResult"],
     ) -> score_result.ScoreResult:
         pairs, skipped = _extract_pairs(test_results, output_key, reference_key)
-        counts = _class_counts(pairs)
-        labels = sorted(counts, key=_label_sort_key)
-        metadata = {
+        metadata: Dict[str, Any] = {
             "average": average,
             "n_samples": len(pairs),
             "n_skipped": skipped,
-            "labels": labels,
         }
+
+        unhashable = _first_unhashable(pairs)
+        if unhashable is not None:
+            return score_result.ScoreResult(
+                name=score_name,
+                value=0.0,
+                reason=(
+                    f"Label {unhashable!r} is not hashable, so it cannot name a "
+                    f"class: '{output_key}' and '{reference_key}' must hold "
+                    f"scalar labels."
+                ),
+                metadata=metadata,
+                scoring_failed=True,
+            )
+
+        counts = _class_counts(pairs)
+        labels = sorted(counts, key=_label_sort_key)
+        metadata["labels"] = labels
 
         if not pairs:
             return score_result.ScoreResult(

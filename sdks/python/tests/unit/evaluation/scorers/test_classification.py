@@ -144,6 +144,14 @@ def test_score_name__defaults_to_metric_and_average():
     assert score.name == "f1_score_macro"
 
 
+def test_custom_name__overrides_the_default():
+    score = _score(
+        classification.f1_score, THREE_CLASS, average="macro", name="router_f1"
+    )
+
+    assert score.name == "router_f1"
+
+
 # "c" is truth for one row but never predicted: tp=0, fp=0, so precision's
 # denominator is zero.
 NEVER_PREDICTED = [("a", "a"), ("b", "b"), ("c", "a")]
@@ -189,6 +197,16 @@ def test_all_rows_missing__scoring_failed():
     assert score.value == 0.0
 
 
+@pytest.mark.parametrize("malformed", [["spam"], {"label": "spam"}])
+def test_unhashable_prediction__scoring_failed(malformed):
+    score = _score(
+        classification.f1_score, [("spam", malformed), ("ham", "ham")], average="macro"
+    )
+
+    assert score.scoring_failed is True
+    assert score.value == 0.0
+
+
 def test_metadata__reports_average_labels_and_counts():
     score = _score(classification.recall, THREE_CLASS, average="weighted")
 
@@ -226,6 +244,13 @@ def test_blank_output_key__raises_at_construction(factory, blank):
 def test_blank_reference_key__raises_at_construction(factory, blank):
     with pytest.raises(ValueError, match="reference_key"):
         factory(output_key="predicted_label", reference_key=blank)
+
+
+@pytest.mark.parametrize("factory", ALL_FACTORIES)
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_name__raises_at_construction(factory, blank):
+    with pytest.raises(ValueError, match="name"):
+        factory(output_key="predicted_label", reference_key="label", name=blank)
 
 
 @pytest.mark.parametrize("factory", ALL_FACTORIES)

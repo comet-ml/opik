@@ -762,7 +762,7 @@ classification.f1_score(
 
 </CodeBlocks>
 
-Each scorer returns one `ScoreResult` named `<metric>_<average>`, for example `f1_score_macro`, so several averages of the same metric can coexist in one experiment. Rows missing either key are skipped and the count is reported in the score's `reason`.
+Each scorer returns one `ScoreResult`. The default name is `<metric>_<average>`, for example `f1_score_macro`, so several averages of the same metric can coexist in one experiment. `binary` appends the positive label, so the example above is named `f1_score_binary_spam`. Pass `name` to set the name yourself, which you need when two scorers in one experiment would otherwise share a default name. Rows missing either key are skipped and the count is reported in the score's `reason`.
 
 <Tip>
 Invalid configuration raises as soon as you build the scorer rather than during evaluation. Experiment score functions that raise mid-run are only logged as warnings, so failing early stops a mistyped key from silently producing no score.
