@@ -254,6 +254,40 @@ def test_positive_label_with_non_binary_average__raises_at_construction(
         )
 
 
+def test_binary_score_name__includes_positive_label():
+    score = _score(
+        classification.f1_score, BINARY, average="binary", positive_label="spam"
+    )
+
+    assert score.name == "f1_score_binary_spam"
+
+
+def test_binary_positive_label_absent_from_data__scoring_failed():
+    scorer = classification.f1_score(
+        output_key="predicted_label",
+        reference_key="label",
+        average="binary",
+        positive_label="urgent",
+    )
+
+    score = scorer(_results(BINARY))
+
+    assert score.scoring_failed is True
+    assert score.value == 0.0
+    assert "urgent" in score.reason
+
+
+def test_metadata_labels__total_order_across_types_that_stringify_alike():
+    score = _score(classification.f1_score, [(1, 1), ("1", "1")], average="macro")
+
+    assert score.metadata["labels"] == [1, "1"]
+
+
+@pytest.mark.parametrize("factory", ALL_FACTORIES)
+def test_public_factories__document_their_contract(factory):
+    assert factory.__doc__
+
+
 def test_scorers_package__exposes_classification():
     assert "classification" in scorers.__all__
 

@@ -75,14 +75,25 @@ def _extract_pairs(
 
 
 def _class_counts(pairs: List[Tuple[Any, Any]]) -> Counts:
-    labels = {label for pair in pairs for label in pair}
-    counts: Counts = {}
-    for label in labels:
-        tp = sum(1 for truth, pred in pairs if truth == label and pred == label)
-        fp = sum(1 for truth, pred in pairs if pred == label and truth != label)
-        fn = sum(1 for truth, pred in pairs if truth == label and pred != label)
-        counts[label] = (tp, fp, fn)
-    return counts
+    # Single pass: a per-label rescan would be O(rows x labels), and the label
+    # count is unbounded when a model emits malformed predictions.
+    tallies: Dict[Any, List[int]] = {}
+    for truth, pred in pairs:
+        for label in (truth, pred):
+            if label not in tallies:
+                tallies[label] = [0, 0, 0]
+        if truth == pred:
+            tallies[truth][0] += 1
+        else:
+            tallies[pred][1] += 1
+            tallies[truth][2] += 1
+    return {label: (tp, fp, fn) for label, (tp, fp, fn) in tallies.items()}
+
+
+def _label_sort_key(label: Any) -> Tuple[str, str]:
+    # repr alone ties for values that stringify alike (1 vs "1"), which would
+    # leave the order at the mercy of dict insertion.
+    return type(label).__name__, repr(label)
 
 
 def _reduce(
@@ -92,7 +103,7 @@ def _reduce(
     positive_label: Optional[Any],
 ) -> float:
     if average == "binary":
-        return metric_fn(*counts.get(positive_label, (0, 0, 0)))
+        return metric_fn(*counts[positive_label])
 
     if average == "micro":
         pooled = tuple(sum(column) for column in zip(*counts.values()))
@@ -120,19 +131,25 @@ def _build(
     name: Optional[str],
 ) -> "types.ExperimentScoreFunction":
     _validate(output_key, reference_key, average, positive_label)
-    score_name = name or f"{metric_name}_{average}"
+    if name:
+        score_name = name
+    elif average == "binary":
+        # Without the label, two binary scorers on the same metric collide.
+        score_name = f"{metric_name}_{average}_{positive_label}"
+    else:
+        score_name = f"{metric_name}_{average}"
 
     def score(
         test_results: List["test_result.TestResult"],
     ) -> score_result.ScoreResult:
         pairs, skipped = _extract_pairs(test_results, output_key, reference_key)
         counts = _class_counts(pairs)
+        labels = sorted(counts, key=_label_sort_key)
         metadata = {
             "average": average,
             "n_samples": len(pairs),
             "n_skipped": skipped,
-            # Labels may be a mix of types, so sort by their string form.
-            "labels": sorted(counts, key=str),
+            "labels": labels,
         }
 
         if not pairs:
@@ -142,6 +159,19 @@ def _build(
                 reason=(
                     f"No rows to score: all {skipped} were missing "
                     f"'{output_key}' or '{reference_key}'."
+                ),
+                metadata=metadata,
+                scoring_failed=True,
+            )
+
+        if average == "binary" and positive_label not in counts:
+            return score_result.ScoreResult(
+                name=score_name,
+                value=0.0,
+                reason=(
+                    f"positive_label {positive_label!r} never appears among the "
+                    f"reference or predicted labels {labels}, so the score is "
+                    f"undefined rather than zero."
                 ),
                 metadata=metadata,
                 scoring_failed=True,
@@ -172,6 +202,12 @@ def precision(
     positive_label: Optional[Any] = None,
     name: Optional[str] = None,
 ) -> "types.ExperimentScoreFunction":
+    """Experiment-level precision, for ``evaluate(experiment_scoring_functions=...)``.
+
+    ``average`` is one of ``binary``, ``macro``, ``micro`` or ``weighted``, and
+    ``binary`` requires ``positive_label``. Rows whose task output or dataset item
+    lacks the requested key are skipped and counted in the result's ``reason``.
+    """
     return _build(
         "precision",
         _precision,
@@ -191,6 +227,12 @@ def recall(
     positive_label: Optional[Any] = None,
     name: Optional[str] = None,
 ) -> "types.ExperimentScoreFunction":
+    """Experiment-level recall, for ``evaluate(experiment_scoring_functions=...)``.
+
+    ``average`` is one of ``binary``, ``macro``, ``micro`` or ``weighted``, and
+    ``binary`` requires ``positive_label``. Rows whose task output or dataset item
+    lacks the requested key are skipped and counted in the result's ``reason``.
+    """
     return _build(
         "recall", _recall, output_key, reference_key, average, positive_label, name
     )
@@ -204,6 +246,12 @@ def f1_score(
     positive_label: Optional[Any] = None,
     name: Optional[str] = None,
 ) -> "types.ExperimentScoreFunction":
+    """Experiment-level F1, for ``evaluate(experiment_scoring_functions=...)``.
+
+    ``average`` is one of ``binary``, ``macro``, ``micro`` or ``weighted``, and
+    ``binary`` requires ``positive_label``. Rows whose task output or dataset item
+    lacks the requested key are skipped and counted in the result's ``reason``.
+    """
     return _build(
         "f1_score", _f1, output_key, reference_key, average, positive_label, name
     )
