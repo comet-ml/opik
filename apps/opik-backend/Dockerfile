@@ -4,7 +4,7 @@ WORKDIR /opt/opik-backend
 
 # Copy parent POM first for dependency caching
 COPY pom.xml spotless.xml ./
-RUN mvn dependency:go-offline
+RUN mvn -T 1C dependency:go-offline
 
 # Copy source code
 COPY src ./src
@@ -13,7 +13,7 @@ COPY src ./src
 ARG OPIK_VERSION
 ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
 RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
-    mvn clean package -DskipTests -Dspotless.skip=true
+    mvn -T 1C clean package -DskipTests -Dspotless.skip=true
 
 ###############################
 FROM amazoncorretto:25.0.3-al2023
