@@ -1,0 +1,93 @@
+---
+description: Track TokenLab model calls with Opik through the OpenAI-compatible API.
+headline: TokenLab
+og:description: Configure Opik tracing for TokenLab using the OpenAI-compatible base URL.
+og:site_name: Opik Documentation
+og:title: Integrate TokenLab with Opik
+title: Observability for TokenLab with Opik
+---
+
+TokenLab provides an OpenAI-compatible API at `https://api.tokenlab.sh/v1`. Opik can trace TokenLab calls by wrapping the OpenAI Python SDK client with the existing `track_openai` integration — no additional runtime code is required.
+
+## Install the dependencies
+
+Install Opik and the OpenAI SDK:
+
+```bash
+pip install opik openai
+```
+
+Configure Opik for your deployment:
+
+```bash
+opik configure
+```
+
+Set your TokenLab API key:
+
+```bash
+export TOKENLAB_API_KEY="<TOKENLAB_API_KEY>"
+```
+
+## Track TokenLab calls
+
+Wrap the OpenAI client with `track_openai` and point it at the TokenLab base URL:
+
+```python
+import os
+
+from openai import OpenAI
+from opik.integrations.openai import track_openai
+
+client = OpenAI(
+    api_key=os.environ["TOKENLAB_API_KEY"],
+    base_url="https://api.tokenlab.sh/v1",
+)
+client = track_openai(client, project_name="tokenlab-demo")
+
+response = client.chat.completions.create(
+    model="<MODEL_ID>",
+    messages=[{"role": "user", "content": "Explain observability in one sentence."}],
+)
+
+print(response.choices[0].message.content)
+```
+
+## Discover available models
+
+TokenLab exposes its model list through the standard OpenAI models endpoint. You can retrieve available model IDs before running tracked calls:
+
+```python
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["TOKENLAB_API_KEY"],
+    base_url="https://api.tokenlab.sh/v1",
+)
+
+models = client.models.list()
+for model in models.data:
+    print(model.id)
+```
+
+Alternatively, query the endpoint directly:
+
+```bash
+curl https://api.tokenlab.sh/v1/models \
+  -H "Authorization: Bearer $TOKENLAB_API_KEY"
+```
+
+For the full list of supported models and pricing, see the [TokenLab documentation](https://docs.tokenlab.sh/).
+
+## What gets traced
+
+The `track_openai` wrapper records the full request and response for each call, including:
+
+- Prompt and completion content
+- Token usage (prompt, completion, total)
+- Model identifier
+- Latency
+
+All traces appear in your Opik project dashboard under the project name passed to `track_openai`.
