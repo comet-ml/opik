@@ -845,7 +845,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Route to versioned or legacy based on toggle
         if (featureFlags.isDatasetVersioningEnabled()) {
             log.info("Saving batch with versioning for dataset '{}', itemCount '{}'", datasetId, items.size());
-            return saveItemsWithVersion(batch, datasetId, null)
+            // Mutate the latest version rather than minting one per batch: a multi-batch upload
+            // (e.g. a large CSV/JSON file split into chunks) must land in a single version, matching
+            // the null-batch_group_id contract the array API honors via save(DatasetItemBatch).
+            return Mono.deferContextual(ctx -> mutateLatestVersionWithInsert(batch, datasetId,
+                    ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.USER_NAME)))
                     .map(version -> (long) items.size())
                     .defaultIfEmpty((long) items.size());
         }
