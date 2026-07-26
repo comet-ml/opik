@@ -44,7 +44,7 @@ class RedisStreamCodecTest {
     @BeforeAll
     void setUpAll() {
         // Configure JsonUtils with 100MB limit (simulating OpikApplication startup)
-        JsonUtils.configure(CONFIGURED_LIMIT);
+        JsonUtils.configure(CONFIGURED_LIMIT, -1L);
         log.info("JsonUtils configured with 100MB limit");
 
         // Start Redis container
@@ -86,7 +86,7 @@ class RedisStreamCodecTest {
     @DisplayName("Should use configured JsonUtils mapper with 100MB limit")
     void shouldUseConfiguredMapper() throws Exception {
         // Given: Configure JsonUtils with 100MB limit (simulating OpikApplication.run())
-        JsonUtils.configure(CONFIGURED_LIMIT);
+        JsonUtils.configure(CONFIGURED_LIMIT, -1L);
 
         // Verify configuration was applied
         ObjectMapper configuredMapper = JsonUtils.getMapper();
@@ -118,7 +118,7 @@ class RedisStreamCodecTest {
     @DisplayName("Should fail if using old 20MB mapper but succeed with configured lazy codec")
     void shouldFailWithOldMapperButSucceedWithConfigured() throws Exception {
         // Given: Configure JsonUtils with 100MB limit
-        JsonUtils.configure(CONFIGURED_LIMIT);
+        JsonUtils.configure(CONFIGURED_LIMIT, -1L);
 
         // Create a string that's larger than 20MB but smaller than 100MB
         int testStringSize = 25 * MB;
@@ -155,7 +155,7 @@ class RedisStreamCodecTest {
     @DisplayName("Should memoize codec instance (same instance returned on multiple calls)")
     void shouldMemoizeCodecInstance() throws Exception {
         // Given: Configure JsonUtils
-        JsonUtils.configure(CONFIGURED_LIMIT);
+        JsonUtils.configure(CONFIGURED_LIMIT, -1L);
 
         // When: Get codec multiple times
         Codec codec1 = RedisStreamCodec.JAVA.getCodec();
