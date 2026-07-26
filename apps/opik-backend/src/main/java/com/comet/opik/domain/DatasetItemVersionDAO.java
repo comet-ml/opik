@@ -1941,6 +1941,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     //     copy_from_dataset_id differs from the destination, the read source is a different dataset
     //     (e.g. migrate replay reads from the source workspace's dataset and writes into the
     //     destination workspace's dataset), so the inserted rows must carry the destination dataset_id.
+    //
+    // OPIK-7488: the destination's MATERIALIZED column_types (an arrayMap over JSONType(data[key]))
+    //   is recomputed for every inserted row. ClickHouse squashes inserts up to the default
+    //   min_insert_block_size_bytes (256 MiB) before evaluating that expression, so a copy-forward of
+    //   many large-payload rows evaluates it over one huge block and peaks ~1 GiB, OOMing the 2.55 GiB
+    //   server budget mid-upload. Capping the block to 10 MiB evaluates the expression over small
+    //   blocks instead, dropping the peak ~7x (measured 861 -> 120 MiB) with no correctness change.
     private static final String COPY_VERSION_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -2012,6 +2019,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ) AS deduped
             ) AS src
             ORDER BY src.id DESC
+            SETTINGS min_insert_block_size_bytes = 10485760, min_insert_block_size_rows = 0
             """;
 
     private static final String RESOLVE_DATASET_ID_FROM_ITEM_ID = """
