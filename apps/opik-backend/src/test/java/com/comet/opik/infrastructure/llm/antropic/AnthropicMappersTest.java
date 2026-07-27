@@ -3,6 +3,9 @@ package com.comet.opik.infrastructure.llm.antropic;
 import com.comet.opik.podam.PodamFactoryUtils;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicMessage;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicRole;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicTextContent;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
@@ -146,15 +149,23 @@ public class AnthropicMappersTest {
                 Double expectedTopP) {
             var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
 
-            // The gate only affects temperature/top_p; assert the full payload so a collateral change to any
-            // other mapped field is caught too. The expected payload is the mapping of the same request with the
-            // sampling params forced to what the gate should produce.
-            var expected = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
-            expected.setTemperature(expectedTemperature);
-            expected.setTopP(expectedTopP);
+            // Build the expected payload independently of the mapper (not by re-calling it), so a regression in
+            // any collateral field — model, messages, max_tokens, etc. — can't hide by changing actual and
+            // expected identically. Every case uses the same fixture: one "hi" user message, no system, no
+            // explicit max_tokens (defaults to 4096) and no stream/stop. Only temperature/top_p vary per the gate.
+            var expected = AnthropicCreateMessageRequest.builder()
+                    .model(request.model())
+                    .stream(false)
+                    .temperature(expectedTemperature)
+                    .topP(expectedTopP)
+                    .maxTokens(LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS)
+                    .messages(List.of(AnthropicMessage.builder()
+                            .role(AnthropicRole.USER)
+                            .content(List.of(new AnthropicTextContent("hi")))
+                            .build()))
+                    .system(List.of())
+                    .build();
 
-            assertThat(actual.getTemperature()).isEqualTo(expectedTemperature);
-            assertThat(actual.getTopP()).isEqualTo(expectedTopP);
             assertThat(actual).usingRecursiveComparison().isEqualTo(expected);
         }
 
