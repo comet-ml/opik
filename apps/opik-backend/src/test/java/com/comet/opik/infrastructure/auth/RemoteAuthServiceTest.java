@@ -74,6 +74,7 @@ class RemoteAuthServiceTest {
     private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String NOT_LOGGED_USER = "Please login first";
+    private static final String DROPWIZARD_UNAUTHORIZED_BODY = "Credentials are required to access this resource.";
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -411,6 +412,62 @@ class RemoteAuthServiceTest {
                         .build()))
                 .isExactlyInstanceOf(expectedExceptionClass)
                 .hasMessage(expectedMessage);
+    }
+
+    static Stream<Arguments> nonJsonErrorBodyArgs() {
+        return Stream.of(
+                // Dropwizard's default UnauthorizedHandler, used by the @Auth filter guarding /opik/auth-session
+                arguments(HttpStatus.SC_UNAUTHORIZED, "text/plain", DROPWIZARD_UNAUTHORIZED_BODY, NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_UNAUTHORIZED, "text/html", "<html><body>401</body></html>", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_UNAUTHORIZED, "text/plain", "", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_BAD_REQUEST, "text/plain", "Bad Request", MISSING_WORKSPACE));
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonJsonErrorBodyArgs")
+    void testSessionAuth__whenRemoteErrorBodyIsNotJson__thenClientErrorInsteadOfServerError(
+            int remoteAuthStatusCode, String contentType, String body, String expectedMessage) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .willReturn(aResponse().withStatus(remoteAuthStatusCode)
+                        .withHeader("Content-Type", contentType)
+                        .withBody(body)));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""),
+                sessionCookie(sessionTokenValue),
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(expectedMessage)
+                .satisfies(throwable -> assertThat(((ClientErrorException) throwable).getResponse().getStatus())
+                        .isEqualTo(remoteAuthStatusCode));
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonJsonErrorBodyArgs")
+    void testAuth__whenRemoteErrorBodyIsNotJson__thenClientErrorInsteadOfServerError(
+            int remoteAuthStatusCode, String contentType, String body, String expectedMessage) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(aResponse().withStatus(remoteAuthStatusCode)
+                        .withHeader("Content-Type", contentType)
+                        .withBody(body)));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, apiKey), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(expectedMessage)
+                .satisfies(throwable -> assertThat(((ClientErrorException) throwable).getResponse().getStatus())
+                        .isEqualTo(remoteAuthStatusCode));
     }
 
     @Test

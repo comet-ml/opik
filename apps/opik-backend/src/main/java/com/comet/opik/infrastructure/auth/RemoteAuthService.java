@@ -293,6 +293,44 @@ class RemoteAuthService implements AuthService {
         }
     }
 
+    /**
+     * Extracts the error message from a non-successful react-service response without assuming the body is JSON.
+     * <p>
+     * The react service does not always answer with a {@link ReactServiceErrorResponse}: endpoints guarded by
+     * Dropwizard's {@code @Auth} filter (for example {@code /opik/auth-session}) reject an expired or invalid session
+     * cookie through the default {@code UnauthorizedHandler}, which replies {@code 401} with a {@code text/plain} body.
+     * Reading such a response as {@link ReactServiceErrorResponse} makes Jersey raise
+     * {@code MessageBodyProviderNotFoundException}, a {@code ProcessingException} that is not a
+     * {@link ClientErrorException} and therefore escapes the auth filter and surfaces as a {@code 500} instead of the
+     * intended client error.
+     * <p>
+     * Only a JSON body is treated as a message intended for the caller. Any other content type is a framework-level
+     * response rather than an application error, so it is logged and the caller-facing {@code fallback} is used instead
+     * of leaking the remote framework's wording. The entity is read at most once, since a client response stream
+     * cannot be consumed twice.
+     *
+     * @param fallback message used when the body is absent, not JSON, unreadable or empty
+     */
+    private static String readErrorMessage(Response response, String fallback) {
+        if (!response.hasEntity()) {
+            return fallback;
+        }
+        var mediaType = response.getMediaType();
+        if (mediaType == null || !MediaType.APPLICATION_JSON_TYPE.isCompatible(mediaType)) {
+            log.warn("React service replied status {} with non-JSON content type '{}', body: '{}'",
+                    response.getStatus(), mediaType, readBodySafely(response));
+            return fallback;
+        }
+        try {
+            var message = response.readEntity(ReactServiceErrorResponse.class).msg();
+            return StringUtils.isBlank(message) ? fallback : message.strip();
+        } catch (RuntimeException e) {
+            log.warn("Failed to read react service error response, status: {}, error: {}",
+                    response.getStatus(), e.getMessage());
+            return fallback;
+        }
+    }
+
     private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path,
             List<String> requiredPermissions) {
         if (isDefaultWorkspace(workspaceName)) {
@@ -371,15 +409,15 @@ class RemoteAuthService implements AuthService {
             }
             return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
-            throw new ClientErrorException(errorResponse.msg(), Response.Status.UNAUTHORIZED);
+            throw new ClientErrorException(readErrorMessage(response, NOT_LOGGED_USER),
+                    Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             // EM never returns FORBIDDEN as of now
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
-            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
+            throw new ClientErrorException(readErrorMessage(response, MISSING_WORKSPACE),
+                    Response.Status.BAD_REQUEST);
         }
         throw unexpectedRemoteError("authenticating user", response);
     }
@@ -439,9 +477,9 @@ class RemoteAuthService implements AuthService {
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
             return response.readEntity(String.class);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
-            log.error("Not found workspace by name : {}", errorResponse.msg());
-            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
+            var message = readErrorMessage(response, MISSING_WORKSPACE);
+            log.error("Not found workspace by name : {}", message);
+            throw new ClientErrorException(message, Response.Status.BAD_REQUEST);
         }
 
         throw unexpectedRemoteError("getting workspace id", response);
