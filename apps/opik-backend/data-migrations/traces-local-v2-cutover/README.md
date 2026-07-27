@@ -344,7 +344,8 @@ second with an **empty `project_id`** (`DeletionEventDAO`: "project_id is empty 
 replay mirrors both: full-key events delete by `(workspace_id, project_id, id)` (exact; prunes on the destination primary
 key — correct even though trace ids are not globally unique), and empty-project events delete by `(workspace_id, id)`.
 The second branch is a **mirror, not an over-delete**: the workspace-scoped fallback fires only for ids the resolver
-found no live row for in any project, and the source delete it replays already removed every `(workspace_id, id)` row.
+found no live row for in any project, and the source deletion that it replays already removed every `(workspace_id, id)`
+row.
 Without it, those deletions would **silently leak** across the swap. It is faithful in the common case, with **one known
 residual** (see 000002): because its resurrection guard keys on `(workspace_id, id)` (no project), an id that is live in
 one project shields the delete of the *same reused id* in another — leaving an extra destination row. It needs id reuse
