@@ -44,6 +44,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * steps an operator runs from the {@code data-migrations/traces-local-v2-cutover} runbook — and pins the properties
  * the cutover's correctness depends on.
  *
+ * <p><b>Inline SQL, by design.</b> This gate reimplements the cutover statements inline rather than executing the
+ * reference {@code .sql} files the drivers ship, so it can interleave seeding, per-step assertions, and the negative
+ * controls below — a deliberate choice. It is an independent validation of the cutover <i>logic</i>, not the
+ * single-source path: the driver scripts read the single-source reference SQL (that "no copy-paste drift" property is
+ * about the operator tools), and the shipped SQL itself is exercised end-to-end by running those drivers against a
+ * full-volume prod clone in the QA gate (OPIK-7405). The inline statements here are kept aligned with the reference SQL
+ * — identical functions, precision, and {@code 'UTC'} — so this gate and the shipped SQL stay in step.
+ *
  * <p><b>Deletions must survive the swap (the core property).</b> A lightweight DELETE flips a hidden row mask; it does
  * not bump {@code last_updated_at} (the {@code ReplacingMergeTree} version column), so the version-based delta-insert is
  * blind to deletes that land while the table is being copied — the already-copied row stays alive on the destination
@@ -859,6 +867,8 @@ class TracesLocalV2CutoverTest {
                         WHERE source_table = 'traces'
                           AND event_time >= toDateTime64(:backfill_start, 6)
                           AND project_id != ''
+                          AND length(project_id) = 36
+                          AND length(deleted_id) = 36
                     )
                     AND (workspace_id, project_id, id) NOT IN (
                         SELECT
@@ -871,6 +881,7 @@ class TracesLocalV2CutoverTest {
                             FROM deletion_events_local
                             WHERE source_table = 'traces'
                               AND event_time >= toDateTime64(:backfill_start, 6)
+                              AND length(deleted_id) = 36
                         )
                     )
                 )
@@ -883,6 +894,7 @@ class TracesLocalV2CutoverTest {
                         WHERE source_table = 'traces'
                           AND event_time >= toDateTime64(:backfill_start, 6)
                           AND project_id = ''
+                          AND length(deleted_id) = 36
                     )
                     AND (workspace_id, id) NOT IN (
                         SELECT
@@ -894,6 +906,7 @@ class TracesLocalV2CutoverTest {
                             FROM deletion_events_local
                             WHERE source_table = 'traces'
                               AND event_time >= toDateTime64(:backfill_start, 6)
+                              AND length(deleted_id) = 36
                         )
                     )
                 )
@@ -997,6 +1010,8 @@ class TracesLocalV2CutoverTest {
                     WHERE source_table = 'traces'
                       AND event_time >= toDateTime64(:cutover_start, 6)
                       AND project_id != ''
+                      AND length(project_id) = 36
+                      AND length(deleted_id) = 36
                 )
                 OR (workspace_id, id) IN (
                     SELECT
@@ -1006,6 +1021,7 @@ class TracesLocalV2CutoverTest {
                     WHERE source_table = 'traces'
                       AND event_time >= toDateTime64(:cutover_start, 6)
                       AND project_id = ''
+                      AND length(deleted_id) = 36
                 )
                 SETTINGS allow_nondeterministic_mutations = 1,
                          lightweight_deletes_sync = 2

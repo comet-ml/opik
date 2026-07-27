@@ -40,6 +40,10 @@
 #   --min-free-factor F       abort at startup unless node free disk >= F x the current `traces` on-disk size (the
 #                             backfill writes a full second copy). Default 2.0. Pass 0 to skip the check. This is a
 #                             whole-node floor; on tiered storage validate per-volume (hot) headroom separately.
+#   --confirm-tiered-headroom  REQUIRED when the destination storage_policy is tiered (multi-volume) or differs from the
+#                             source's. The whole-node --min-free-factor check cannot see per-volume headroom, and new
+#                             parts land on the hot volume before they tier; this asserts the operator validated hot
+#                             headroom out of band. (No effect on a single-volume/default policy.)
 #   --state-file PATH         file the captured backfill_start is written to and reused from. On resume the ORIGINAL
 #                             anchor is kept; re-minting a later one would miss deletes that fired during the first run
 #                             against already-copied rows. Default ./traces_cutover_backfill_start.
@@ -67,6 +71,7 @@ DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled wi
 PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 at ~4 TB peak.
 MIN_FREE_FACTOR="2.0"     # multiple of the current traces on-disk size that node free space must clear before starting.
 STATE_FILE="./traces_cutover_backfill_start"  # backfill_start is persisted here and reused on resume (keeps one anchor).
+CONFIRM_TIERED_HEADROOM=0 # required when the destination storage_policy is tiered/mismatched (see preflight_capacity).
 
 # Floor on adaptive splitting: never divide a window shorter than this. Guards against splitting forever on a single
 # hot instant; such a window is inserted whole (memory is still bounded by block squashing).
@@ -83,6 +88,7 @@ while [[ $# -gt 0 ]]; do
         --divergence) DIVERGENCE="${2:?"$1 requires a value"}"; shift 2 ;;
         --pause-seconds) PAUSE_SECONDS="${2:?"$1 requires a value"}"; shift 2 ;;
         --min-free-factor) MIN_FREE_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
+        --confirm-tiered-headroom) CONFIRM_TIERED_HEADROOM=1; shift ;;
         --state-file) STATE_FILE="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -138,6 +144,20 @@ preflight_capacity() {
     dst_policy="$(ch "SELECT storage_policy FROM system.tables WHERE database = '$DATABASE' AND name = '$DST_TABLE'")"
     if [[ "$src_policy" != "$dst_policy" ]]; then
         log "WARNING: storage_policy differs ($SRC_TABLE='$src_policy', $DST_TABLE='$dst_policy'). If $SRC_TABLE tiers to cold and $DST_TABLE does not, the whole backfill lands on the hot volume. Confirm this is intended." >&2
+    fi
+    # Tiered/mismatched storage_policy: the whole-node check above CANNOT see per-volume headroom (new parts land on the
+    # hot volume before they tier, so the node total can pass while hot fills mid-backfill — the likeliest prod failure).
+    # An accurate hot-headroom check isn't feasible in a preflight (it depends on tiering-vs-write rate), so require an
+    # explicit operator acknowledgment that per-volume headroom was validated out of band, rather than proceed silently.
+    local dst_volumes
+    dst_volumes="$(ch "SELECT uniqExact(volume_name) FROM system.storage_policies WHERE policy_name = '$dst_policy'")"
+    dst_volumes="${dst_volumes:-1}"
+    if [[ "$dst_volumes" -gt 1 || "$src_policy" != "$dst_policy" ]]; then
+        if [[ "$CONFIRM_TIERED_HEADROOM" != "1" ]]; then
+            log "ABORT: $DST_TABLE uses a tiered/mismatched storage_policy ('$dst_policy', $dst_volumes volume(s)). The whole-node free-space gate cannot see per-volume headroom — validate the HOT volume has room for the backfill out of band, then re-run with --confirm-tiered-headroom." >&2
+            exit 1
+        fi
+        log "Tiered/mismatched storage_policy acknowledged via --confirm-tiered-headroom (hot-volume headroom validated out of band)."
     fi
 }
 

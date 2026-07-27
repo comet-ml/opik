@@ -116,6 +116,10 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- Uses ${BACKFILL_START}. Retention is disabled everywhere (see step 6), so this is user-scale volume — a single
 -- mutation. If it is ever large (e.g. retention enabled), bound each mutation by a partition predicate and loop the
 -- weeks, e.g. AND toMonday(id_at) = toDate('<week>').
+-- length(...) = 36 guards: toFixedString(x, 36) THROWS on a value longer than 36 bytes, which would abort the whole
+-- replay on a single malformed bridge row. For source_table='traces' the ids are 36-char UUIDs, so this is latent — but
+-- a malformed (non-36-char) deleted_id/project_id can't match a real trace id anyway, so skipping it via the length
+-- guard loses nothing and turns a hard abort mid-cutover into a benign no-op. Same guards in the reverse-replay.
 DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2
 WHERE (
     (workspace_id, project_id, id) IN (
@@ -127,6 +131,8 @@ WHERE (
         WHERE source_table = 'traces'
           AND event_time >= toDateTime64('${BACKFILL_START}', 6)
           AND project_id != ''
+          AND length(project_id) = 36
+          AND length(deleted_id) = 36
     )
     AND (workspace_id, project_id, id) NOT IN (
         SELECT
@@ -139,6 +145,7 @@ WHERE (
             FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
             WHERE source_table = 'traces'
               AND event_time >= toDateTime64('${BACKFILL_START}', 6)
+              AND length(deleted_id) = 36
         )
     )
 )
@@ -151,6 +158,7 @@ OR (
         WHERE source_table = 'traces'
           AND event_time >= toDateTime64('${BACKFILL_START}', 6)
           AND project_id = ''
+          AND length(deleted_id) = 36
     )
     AND (workspace_id, id) NOT IN (
         SELECT
@@ -162,6 +170,7 @@ OR (
             FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
             WHERE source_table = 'traces'
               AND event_time >= toDateTime64('${BACKFILL_START}', 6)
+              AND length(deleted_id) = 36
         )
     )
 )

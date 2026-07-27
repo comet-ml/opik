@@ -96,6 +96,13 @@ compare_window() {
     clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block compare "$1" "$2")"
 }
 
+# Count of old-table keys in the window whose last_updated_at has more ns-distinct values than us-distinct — i.e. rows
+# where the ns->us truncation could make the successor pick a different ReplacingMergeTree version than source FINAL, a
+# divergence the microsecond fingerprint cannot see. 0 => version selection is truncation-safe for the window.
+version_check_window() {
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block version-check "$1" "$2")"
+}
+
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
 drill_down_window() {
     clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block drill-down "$1" "$2")"
@@ -118,6 +125,7 @@ log "Verify: $OLD_TABLE vs $NEW_TABLE | weeks [$FROM_WEEK..$TO_WEEK] stride $WEE
 
 mismatches=0
 checked=0
+version_collapse=0
 for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
     LO="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $week))") 00:00:00"
     HI="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $((week + 1))))") 00:00:00"
@@ -140,10 +148,21 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
             log "  re-run with --drill-down to list the differing keys for this window" >&2
         fi
     fi
+
+    # ns->us version-selection guard (does not affect pass/fail — the fingerprint can't see it, so it is reported
+    # separately for the operator to investigate rather than silently trusted).
+    collapse_out="$(version_check_window "$LO" "$HI")"
+    if [[ -n "$collapse_out" && "$collapse_out" != "0" ]]; then
+        version_collapse=$((version_collapse + collapse_out))
+        log "  NOTE week $week: $collapse_out key(s) on $OLD_TABLE have sub-microsecond-distinct last_updated_at — the ns->us truncation may pick a different version than source FINAL for them; the fingerprint cannot detect it. Investigate." >&2
+    fi
 done
 
+if [[ "$version_collapse" != "0" ]]; then
+    log "WARNING: $version_collapse key(s) across the checked weeks have sub-microsecond-distinct last_updated_at on $OLD_TABLE. The microsecond fingerprint cannot see version-selection differences for them, so investigate those keys before trusting a PASS as zero-loss." >&2
+fi
 if [[ "$mismatches" != "0" ]]; then
     log "FAILED: $mismatches of $checked windows mismatched." >&2
     exit 1
 fi
-log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD)."
+log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD). Version-collapse keys: $version_collapse."

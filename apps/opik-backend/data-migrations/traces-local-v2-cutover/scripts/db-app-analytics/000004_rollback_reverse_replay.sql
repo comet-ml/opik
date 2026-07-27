@@ -21,6 +21,8 @@ WHERE (workspace_id, project_id, id) IN (
     WHERE source_table = 'traces'
       AND event_time >= toDateTime64('${CUTOVER_START}', 6)
       AND project_id != ''
+      AND length(project_id) = 36
+      AND length(deleted_id) = 36
 )
 OR (workspace_id, id) IN (
     SELECT
@@ -30,6 +32,7 @@ OR (workspace_id, id) IN (
     WHERE source_table = 'traces'
       AND event_time >= toDateTime64('${CUTOVER_START}', 6)
       AND project_id = ''
+      AND length(deleted_id) = 36
 )
 -- lightweight_deletes_sync = 2: wait for the mutation on every replica so the restored `traces` is consistent
 -- cluster-wide before the rollback is declared done (see 000002 for the rationale).

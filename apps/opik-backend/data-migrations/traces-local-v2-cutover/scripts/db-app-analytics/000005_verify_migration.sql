@@ -186,3 +186,21 @@ WHERE src_hash != dst_hash
 LIMIT 100
 SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- >>> END drill-down
+
+-- >>> BEGIN version-check
+-- ns->us version-selection guard. The successor's last_updated_at is DateTime64(6) but the source is DateTime64(9), and
+-- last_updated_at is the ReplacingMergeTree version. Two source part-versions of the same key that differ ONLY in
+-- sub-microsecond digits collapse to one version on the successor, which may then keep different column values than
+-- source FINAL (which keeps the ns-max) — a divergence the microsecond-normalized fingerprint above cannot detect. This
+-- surfaces the PRECONDITION: old-schema keys in the window with more distinct ns last_updated_at values than us ones.
+-- 0 => the truncation cannot change version selection (safe). > 0 => investigate those keys before trusting the compare.
+SELECT count() AS collapse_keys
+FROM (
+    SELECT workspace_id, project_id, id
+    FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
+    WHERE created_at >= toDateTime64('${WINDOW_LO}', 9)
+      AND created_at <  toDateTime64('${WINDOW_HI}', 9)
+    GROUP BY workspace_id, project_id, id
+    HAVING uniqExact(last_updated_at) > uniqExact(toDateTime64(last_updated_at, 6))
+);
+-- >>> END version-check
