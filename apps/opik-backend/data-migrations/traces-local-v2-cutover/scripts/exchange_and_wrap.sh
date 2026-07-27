@@ -19,6 +19,10 @@
 #
 # Options:
 #   --database NAME   analytics database (e.g. opik). Required.
+#   --backfill-start TS  the anchor printed by backfill.sh. REQUIRED for every EXCHANGE path (not --wrap-only): just
+#                     before the swap this runs a final deletion replay from that anchor, so deletes bridged since the
+#                     last delta_replay.sh don't leak live across the EXCHANGE (they'd be covered by neither the forward
+#                     replay nor the rollback reverse-replay otherwise).
 #   (default)         run ONLY the EXCHANGE (the data cutover), then stop — leaves `traces` a MergeTree where deletes
 #                     still work. The Distributed wrap is deferred (see above).
 #   --with-wrap       also apply the Distributed wrap in the same run (EXCHANGE + wrap). Use only once the delete/read
@@ -48,8 +52,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_FILE="$SCRIPT_DIR/db-app-analytics/000003_exchange_and_wrap.sql"
+DELTA_SQL_FILE="$SCRIPT_DIR/db-app-analytics/000002_delta_and_deletion_replay.sql"
 
 DATABASE=""
+BACKFILL_START=""
 SKIP_WRAP=0
 WITH_WRAP=0
 WRAP_ONLY=0
@@ -61,6 +67,7 @@ CONFIRM_BUFFER_RAISED=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --backfill-start) BACKFILL_START="${2:?"$1 requires a value"}"; shift 2 ;;
         --skip-wrap) SKIP_WRAP=1; shift ;;
         --with-wrap) WITH_WRAP=1; shift ;;
         --wrap-only) WRAP_ONLY=1; shift ;;
@@ -76,6 +83,9 @@ done
 # --database is interpolated into the reference SQL; require a plain ClickHouse identifier so it cannot alter the query.
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
+[[ -f "$DELTA_SQL_FILE" ]] || { echo "ERROR: cannot find $DELTA_SQL_FILE" >&2; exit 2; }
+# --backfill-start (the anchor printed by backfill.sh) is interpolated into the final deletion replay; validate its shape.
+[[ -z "$BACKFILL_START" || "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --backfill-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 # At most one wrap mode. Default (none set) is EXCHANGE only.
 if (( SKIP_WRAP + WITH_WRAP + WRAP_ONLY > 1 )); then
     echo "ERROR: --skip-wrap, --with-wrap and --wrap-only are mutually exclusive" >&2; exit 2
@@ -106,6 +116,12 @@ if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_BUFFER_RAISED" != "1" ]]; then
     echo "ERROR: the EXCHANGE requires --confirm-buffer-raised. Raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs on" >&2
     echo "       every backend instance first — it holds writes across the swap; at the default, writes in the final" >&2
     echo "       window can commit to the old table and be lost after the EXCHANGE — then re-run with the flag." >&2
+    exit 2
+fi
+# The EXCHANGE runs a final deletion replay first (see below), to mask deletes bridged since the last delta_replay so
+# they don't leak live across the swap — that needs the same backfill_start anchor delta_replay.sh used.
+if [[ "$WRAP_ONLY" != "1" && -z "$BACKFILL_START" ]]; then
+    echo "ERROR: the EXCHANGE requires --backfill-start (the anchor printed by backfill.sh) for the final deletion replay." >&2
     exit 2
 fi
 
@@ -233,6 +249,20 @@ run_block() {
     clickhouse-client --database "$DATABASE" --multiquery --query "$sql"
 }
 
+# Final deletion replay before the EXCHANGE. delta_replay.sh (step 2) replayed deletes only up to when it ran; cutover_start
+# is captured HERE, so a delete bridged in that final gap would be covered by neither the forward replay nor the rollback
+# reverse-replay (which starts at cutover_start) and would leak live across the swap. Re-running the deletion-replay block
+# (from the single-source 000002) right after capturing cutover_start extends forward coverage to it — the arm is
+# idempotent and user-scale (retention off), so it is cheap. Deletions only: writes in the gap are held by the async
+# buffer and flush onto the successor after the swap.
+run_final_deletion_replay() {
+    local sql
+    sql="$(awk -v begin="-- >>> BEGIN deletion-replay" -v end="-- >>> END deletion-replay" '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$DELTA_SQL_FILE")"
+    sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap:final_deletion_replay' --multiquery --query "$sql"
+}
+
 if [[ "$WRAP_ONLY" == "1" ]]; then
     # Deferred second half: the EXCHANGE already happened in a prior --skip-wrap run, so `traces` is the live
     # partitioned data. Do not re-EXCHANGE (that would swap the parked original back in) and do not capture a new
@@ -251,6 +281,9 @@ fi
 
 CUTOVER_START="$(clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6))")"
 echo "RECORD cutover_start=$CUTOVER_START  (pass to rollback.sh --cutover-start if you roll back after this point)"
+
+echo "Final deletion replay: masking deletes bridged since the last delta_replay so none leak across the swap..."
+run_final_deletion_replay
 
 run_block exchange
 echo "EXCHANGE done: 'traces' is now the partitioned data; the old data is parked as 'traces_pre_cutover_backup'."

@@ -204,3 +204,14 @@ FROM (
     HAVING uniqExact(last_updated_at) > uniqExact(toDateTime64(last_updated_at, 6))
 );
 -- >>> END version-check
+
+-- >>> BEGIN version-check-drill
+-- Up to 100 of the keys behind a non-zero version-check, for investigation (verify.sh --drill-down).
+SELECT workspace_id, project_id, id
+FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE}
+WHERE created_at >= toDateTime64('${WINDOW_LO}', 9)
+  AND created_at <  toDateTime64('${WINDOW_HI}', 9)
+GROUP BY workspace_id, project_id, id
+HAVING uniqExact(last_updated_at) > uniqExact(toDateTime64(last_updated_at, 6))
+LIMIT 100;
+-- >>> END version-check-drill

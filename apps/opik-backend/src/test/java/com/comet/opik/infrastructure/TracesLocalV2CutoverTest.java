@@ -732,6 +732,48 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
+     * A delete bridged AFTER the main (step-2) replay but before the EXCHANGE must be masked by the final deletion replay
+     * that {@code exchange_and_wrap.sh} runs right after capturing {@code cutover_start}. Otherwise it is covered by
+     * neither the forward replay (already ran) nor the rollback reverse-replay ({@code event_time >= cutover_start}) and
+     * leaks live across the swap. This pins that final-replay step (mirrors the driver's fold-in of the 000002
+     * deletion-replay block into the exchange step).
+     */
+    @Test
+    void finalReplayBeforeExchangeMasksDeletesBridgedAfterTheMainReplay() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        var gapDeleted = mintIds(3); // deleted in the [main replay, EXCHANGE] gap
+        seedTraces(survivors, workspaceId, projectId);
+        seedTraces(gapDeleted, workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        deltaInsert(backfillStart);
+        replayDeletions(backfillStart); // step 2 (delta_replay.sh) — runs before the gap delete below
+
+        // A delete lands AFTER the main replay. Without a final replay before the swap it leaks onto the successor.
+        recordDeletionEvents(idStrings(gapDeleted), workspaceId, projectId.toString(), "user_request");
+        lightweightDelete(idStrings(gapDeleted), workspaceId);
+        assertThat(liveCount("traces_local_v2", idStrings(gapDeleted), workspaceId))
+                .as("negative control: the gap delete has leaked onto the successor before the final replay")
+                .isEqualTo(gapDeleted.size());
+
+        // exchange_and_wrap.sh runs this final deletion replay right after capturing cutover_start, before the EXCHANGE.
+        replayDeletions(backfillStart);
+        exchangeTables();
+
+        assertThat(liveCount("traces", idStrings(gapDeleted), workspaceId))
+                .as("final deletion replay masks the gap delete — 0 leaks across the swap")
+                .isZero();
+        assertThat(liveCount("traces", idStrings(survivors), workspaceId))
+                .as("survivors intact after the final replay + EXCHANGE")
+                .isEqualTo(survivors.size());
+    }
+
+    /**
      * Schema-drift guard. The cutover copies a fixed column list, and the fidelity fingerprint also lists fixed
      * columns — so a base column added to {@code traces} by a future migration would be silently left uncopied, with no
      * existing check failing. This asserts the cutover's {@link #COPIED_COLUMNS} equals the live stored columns of

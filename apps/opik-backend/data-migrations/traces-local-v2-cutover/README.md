@@ -198,12 +198,17 @@ and the `EXCHANGE` completing must stay within the buffer hold**. So run the tai
 2. Do the QA verify on an **earlier** pass (it can take minutes on a large table — do not let it be the last thing
    before the swap).
 3. Run a **final** `delta_replay.sh` as the last write-facing step.
-4. Run `exchange_and_wrap.sh` **immediately** after it (the settle gate + `EXCHANGE` are fast and metadata-only).
+4. Run `exchange_and_wrap.sh --backfill-start '<anchor>' …` **immediately** after it (the settle gate + `EXCHANGE` are
+   fast and metadata-only). It captures `cutover_start`, then runs a **final deletion replay** from `backfill_start`
+   right before the swap — so deletes bridged in the `[final delta_replay, cutover_start)` gap are masked on the
+   successor rather than leaking (that gap is covered by neither the earlier forward replay nor the rollback
+   reverse-replay, which starts at `cutover_start`). Deletions only; the buffer carries the writes.
 5. Restore the buffer ceiling; parked inserts flush into the successor.
 
-Keep step 3→4 short. If load is high enough that a size-triggered flush is plausible in that gap, re-run the final delta
-once more right before the swap. Everything up to `cutover_start` is covered by the delta+replay; the buffer covers the
-instant of the flip.
+Keep step 3→4 short. **Deletes** up to `cutover_start` are covered by step 4's final deletion replay; **writes** in the
+gap are covered by the buffer (which flushes into the successor after the flip). The one residual is a delete whose
+bridge row commits after that final replay's read but with `event_time < cutover_start` — the same inherent micro-window
+as a size-triggered buffer flush; if delete load is high, quiesce user deletes for the final seconds.
 
 **The `traceColumnsNonNullable` flip (mandatory, and why it goes first).** The successor stores `end_time`/`ttft` as
 non-nullable epoch/NaN sentinels; the app must bind those sentinels — not `null` — the moment that schema is live under

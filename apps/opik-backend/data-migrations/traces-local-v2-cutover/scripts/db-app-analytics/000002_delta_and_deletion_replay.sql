@@ -32,6 +32,7 @@
 --   (a) created_at >= backfill_start                                  -- batch by created_at sub-windows
 --   (b) last_updated_at >= backfill_start AND created_at < backfill_start  -- the updates-to-old-rows arm; batch by
 --       last_updated_at sub-windows. (a) ∪ (b) equals the OR below, with no overlap.
+-- >>> BEGIN delta-insert
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,
     workspace_id,
@@ -86,6 +87,7 @@ WHERE created_at >= toDateTime64('${BACKFILL_START}', 6)
    OR last_updated_at >= toDateTime64('${BACKFILL_START}', 6)
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          log_comment = 'traces_local_v2_cutover:delta_insert';
+-- >>> END delta-insert
 
 -- Step 4: Deletion replay — remove from the destination every row that was deleted on the source since backfill_start
 -- AND is still deleted there. Two branches, mirroring the product's two delete paths (TraceService.delete): a delete
@@ -121,6 +123,7 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- replay on a single malformed bridge row. For source_table='traces' the ids are 36-char UUIDs, so this is latent — but
 -- a malformed (non-36-char) deleted_id/project_id can't match a real trace id anyway, so skipping it via the length
 -- guard loses nothing and turns a hard abort mid-cutover into a benign no-op. Same guards in the reverse-replay.
+-- >>> BEGIN deletion-replay
 DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2
 WHERE (
     (workspace_id, project_id, id) IN (
@@ -178,6 +181,7 @@ OR (
 SETTINGS allow_nondeterministic_mutations = 1,
          lightweight_deletes_sync = 2,
          log_comment = 'traces_local_v2_cutover:deletion_replay';
+-- >>> END deletion-replay
 
 -- Step 5: Measure the replay. Compare its wall time against the buffer window (must fit with margin — acceptance
 -- criterion). Re-run steps 3-4 if new rows/deletes accumulated during the replay itself; convergence is fast because
