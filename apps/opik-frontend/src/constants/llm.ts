@@ -158,6 +158,10 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
     }
   >
 > = {
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8]: {
     supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],

@@ -16277,6 +16277,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17932,6 +17935,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17991,6 +17997,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -20867,7 +20876,6 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
-      - agentInsightsEnabled
       - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
@@ -20945,8 +20953,6 @@ components:
         projectHomepageEnabled:
           type: boolean
         agenticToolsEnabled:
-          type: boolean
-        agentInsightsEnabled:
           type: boolean
         onlineScoringTracingEnabled:
           type: boolean
@@ -21874,6 +21880,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
