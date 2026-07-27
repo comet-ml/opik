@@ -79,6 +79,12 @@ describe("supportsSamplingParams", () => {
       false,
     );
   });
+
+  it("returns false for Claude Opus 5", () => {
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5)).toBe(
+      false,
+    );
+  });
 });
 
 describe("updateProviderConfig — Anthropic", () => {
