@@ -10,6 +10,7 @@ const authFile = path.join(__dirname, AUTH_STATE_FILE);
 // Fixed names — no timestamp suffix so screenshots are identical across runs
 const PROJECT_NAME = 'visual-project';
 const EMPTY_PROJECT_NAME = 'visual-empty-project';
+const SIDEBAR_PROJECT_NAME = 'visual-sidebar-project';
 const DATASET_NAME = 'visual-dataset';
 const TEST_SUITE_NAME = 'visual-testsuite';
 
@@ -73,6 +74,10 @@ async function globalSetup(_config: FullConfig) {
     await client.deleteProject(EMPTY_PROJECT_NAME);
     await client.waitForProjectDeleted(EMPTY_PROJECT_NAME, 30);
   } catch { /* ignore */ }
+  try {
+    await client.deleteProject(SIDEBAR_PROJECT_NAME);
+    await client.waitForProjectDeleted(SIDEBAR_PROJECT_NAME, 30);
+  } catch { /* ignore */ }
 
   console.log('Creating projects...');
   await client.createProject(PROJECT_NAME);
@@ -81,10 +86,14 @@ async function globalSetup(_config: FullConfig) {
   await client.createProject(EMPTY_PROJECT_NAME);
   await client.waitForProjectVisible(EMPTY_PROJECT_NAME, 15);
 
+  await client.createProject(SIDEBAR_PROJECT_NAME);
+  await client.waitForProjectVisible(SIDEBAR_PROJECT_NAME, 15);
+
   process.env.VISUAL_PROJECT_NAME = PROJECT_NAME;
   process.env.VISUAL_EMPTY_PROJECT_NAME = EMPTY_PROJECT_NAME;
+  process.env.VISUAL_SIDEBAR_PROJECT_NAME = SIDEBAR_PROJECT_NAME;
 
-  console.log(`Projects ready: ${PROJECT_NAME}, ${EMPTY_PROJECT_NAME}`);
+  console.log(`Projects ready: ${PROJECT_NAME}, ${EMPTY_PROJECT_NAME}, ${SIDEBAR_PROJECT_NAME}`);
 }
 
 export default globalSetup;

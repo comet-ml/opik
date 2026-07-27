@@ -12,6 +12,7 @@ export interface OptimizationPublic {
     status: OpikApi.OptimizationPublicStatus;
     metadata?: OpikApi.JsonListStringPublic;
     studioConfig?: OpikApi.OptimizationStudioConfigPublic;
+    errorInfo?: OpikApi.ErrorInfoPublic;
     datasetId?: string;
     numTrials?: number;
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];

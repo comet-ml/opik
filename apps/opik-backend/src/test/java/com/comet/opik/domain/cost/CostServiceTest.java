@@ -690,6 +690,94 @@ class CostServiceTest {
     }
 
     /**
+     * Covers both branches of registering {@code fireworks_ai} as a canonical provider so that the
+     * ~260 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "fireworks_ai"} (the {@code accounts/fireworks/models/*} catalog) are
+     * no longer silently dropped at load time:
+     * <ul>
+     *   <li>Fireworks model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Fireworks model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Fireworks' cost calculator
+     *       in LiteLLM ({@code litellm/llms/fireworks_ai/cost_calculator.py}) delegates to
+     *       {@code generic_cost_per_token}, so its usage payload follows the same OpenAI shape
+     *       (cached tokens flattened under {@code prompt_tokens_details.cached_tokens}).</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideFireworksProviderCases")
+    void calculateCostHandlesFireworksModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "fireworks_ai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideFireworksProviderCases() {
+        // fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct: input 9e-7, output 9e-7
+        // (no cache rates) -> textGenerationCost
+        // 1000 * 9e-7 + 200 * 9e-7 = 0.0009 + 0.00018 = 0.00108
+        // fireworks_ai/accounts/fireworks/models/kimi-k2p5: input 6e-7, output 3e-6, cache_read 1e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 6e-7 + 200 * 3e-6 + 300 * 1e-7 = 0.00042 + 0.0006 + 0.00003 = 0.00105
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00108"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "fireworks_ai/accounts/fireworks/models/kimi-k2p5",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00105"));
+    }
+
+    /**
+     * Covers both branches of registering {@code moonshot} as a canonical provider so that the
+     * 22 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "moonshot"} (the {@code moonshot-v1-*} legacy models and the
+     * {@code kimi-*} family) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>Moonshot model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Moonshot model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Moonshot's API is
+     *       OpenAI-compatible and its LiteLLM cost calculator delegates to
+     *       {@code generic_cost_per_token}, so cached tokens are flattened under
+     *       {@code prompt_tokens_details.cached_tokens}, matching the OpenAI/Azure/xAI/DeepSeek/
+     *       Fireworks routing.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideMoonshotProviderCases")
+    void calculateCostHandlesMoonshotModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "moonshot", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideMoonshotProviderCases() {
+        // moonshot/moonshot-v1-8k: input 2e-7, output 2e-6 (no cache rates) -> textGenerationCost
+        // 1000 * 2e-7 + 200 * 2e-6 = 0.0002 + 0.0004 = 0.0006
+        // moonshot/kimi-k2-0711-preview: input 6e-7, output 2.5e-6, cache_read 1.5e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 6e-7 + 200 * 2.5e-6 + 300 * 1.5e-7 = 0.00042 + 0.0005 + 0.000045 = 0.000965
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "moonshot/moonshot-v1-8k",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0006"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "moonshot/kimi-k2-0711-preview",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.000965"));
+    }
+
+    /**
      * Covers the provider-prefix fallback in {@link CostService#findModelPrice}. Callers that
      * route a model through an aggregator ({@link com.comet.opik.api.resources.v1.events.BudgetGuard}
      * calls {@code CostService.calculateCost} via {@code LlmProviderFactoryImpl.getResolvedModelInfo},
@@ -717,6 +805,44 @@ class CostServiceTest {
                 Arguments.of("perplexity/sonar-pro", "openrouter", "0.006"),
                 // custom-llm and empty-adjacent providers hit the same fallback path.
                 Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
+    }
+
+    /**
+     * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
+     * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
+     * {@code MOONSHOTAI_*} entries in {@code OpenRouterModelName}. Without a
+     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDERS_MAPPING}, the
+     * provider-prefix fallback returns null and the aggregator-routed request resolves to
+     * {@code DEFAULT_COST}, silently under-charging every Kimi call routed through OpenRouter.
+     * With the alias, the fallback maps {@code moonshotai} to the canonical {@code moonshot}
+     * and the pricing row is found. Mirrors the existing {@code microsoft -> azure} override
+     * pattern in the same map.
+     */
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @MethodSource("provideAggregatorRoutedMoonshotCases")
+    void calculateCostFindsMoonshotViaAggregatorProviderPrefix(String model, String provider,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAggregatorRoutedMoonshotCases() {
+        // moonshot/kimi-k2-0711-preview: input 6e-7, output 2.5e-6 (cache rates ignored here
+        // because usage carries no cached_tokens key -> textGenerationCost path)
+        // 1000 * 6e-7 + 200 * 2.5e-6 = 0.0006 + 0.0005 = 0.0011
+        // moonshot/moonshot-v1-8k: input 2e-7, output 2e-6
+        // 1000 * 2e-7 + 200 * 2e-6 = 0.0002 + 0.0004 = 0.0006
+        return Stream.of(
+                // OpenRouter-style routing: model carries the moonshotai/ prefix and caller
+                // passes provider="openrouter" (or any non-canonical). Alias makes the lookup
+                // find the underlying moonshot/ price row.
+                Arguments.of("moonshotai/kimi-k2-0711-preview", "openrouter", "0.0011"),
+                Arguments.of("moonshotai/moonshot-v1-8k", "openrouter", "0.0006"),
+                // custom-llm and other pass-through providers hit the same fallback.
+                Arguments.of("moonshotai/kimi-k2-0711-preview", "custom-llm", "0.0011"));
     }
 
     /**

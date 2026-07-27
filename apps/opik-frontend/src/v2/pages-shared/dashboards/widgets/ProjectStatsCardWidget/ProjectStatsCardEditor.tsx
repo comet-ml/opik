@@ -23,7 +23,7 @@ import {
   FormMessage,
 } from "@/ui/form";
 import SelectBox from "@/shared/SelectBox/SelectBox";
-import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import {
   useDashboardStore,
   selectRuntimeConfig,

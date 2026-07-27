@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+#
+# Driver for rolling the buffered traces cutover back (runbook: ../README.md).
+#
+# Runs the db-app-analytics/000004_rollback_* file(s) that match how far the cutover got. Pick the stage by the last
+# step that completed:
+#   --stage A   backfill/delta ran but the EXCHANGE did not — discard the shadow (live `traces` is untouched).
+#   --stage B   the EXCHANGE ran but not the wrap — swap the tables back, then reverse-replay.
+#   --stage C   the wrap ran — drop the wrapper, promote the parked original, then reverse-replay.
+# Or --reverse-replay-only: re-apply just the reverse deletion replay against the current live `traces`. Use it when a
+# stage B/C run's promote succeeded but its reverse-replay was interrupted — the promote leaves `traces` in the restored
+# canonical shape, so re-running the stage is (correctly) rejected by the topology guard, which would otherwise strand
+# the post-cutover deletes unreplayed and let them resurrect. The replay is idempotent, so this is always safe to re-run.
+# Stages B and C need --cutover-start (printed by exchange_and_wrap.sh) to bound the reverse-replay,
+# --confirm-retention-paused (retention deletes bypass the bridge, so a retention sweep in the rollback window would
+# resurrect a deleted row from the backup), and --accept-post-cutover-write-loss (see below). Keep the deletion bridge
+# enabled through the rollback so no delete is lost.
+#
+# POST-CUTOVER WRITES: stages B/C promote the frozen pre-cutover backup back to live `traces`, so traces WRITTEN to the
+# successor after cutover_start stop being live. They are NOT destroyed — the successor is parked as traces_local_v2 and
+# retained until finalize.sh, so they can be recovered from there during the soak — but the live table no longer serves
+# them. This is inherent to promoting a point-in-time backup and cannot be "fixed" (auto-merging the successor's writes
+# would re-import the very data the rollback is discarding); --accept-post-cutover-write-loss makes the operator
+# acknowledge it before the promote.
+#
+# SAFETY: the stages are mutually exclusive and each lives in its OWN file, so no single file mixes a TRUNCATE with an
+# EXCHANGE/DROP — running any file does exactly one stage. Before running, this asserts the live `traces` topology matches
+# the requested stage and aborts otherwise, so a wrong-stage run cannot destroy data. No data-bearing table is dropped;
+# every stage ends in the canonical state (traces = original data live, traces_local_v2 = successor data parked). The
+# parked backup is dropped only later by finalize.sh, after the soak.
+#
+# Connection: clickhouse-client env vars (CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SQL_DIR="$SCRIPT_DIR/db-app-analytics"
+
+DATABASE=""
+STAGE=""
+CUTOVER_START=""
+CONFIRM_RETENTION_PAUSED=0
+ACCEPT_WRITE_LOSS=0
+REVERSE_REPLAY_ONLY=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --stage) STAGE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --cutover-start) CUTOVER_START="${2:?"$1 requires a value"}"; shift 2 ;;
+        --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
+        --accept-post-cutover-write-loss) ACCEPT_WRITE_LOSS=1; shift ;;
+        --reverse-replay-only) REVERSE_REPLAY_ONLY=1; shift ;;
+        *) echo "Unknown argument: $1" >&2; exit 2 ;;
+    esac
+done
+
+[[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
+# --database and --cutover-start are interpolated into the reference SQL; validate their shapes so neither can alter it.
+[[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
+[[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
+# Exactly one of --stage / --reverse-replay-only.
+if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
+    [[ -z "$STAGE" ]] || { echo "ERROR: --reverse-replay-only cannot be combined with --stage." >&2; exit 2; }
+else
+    case "$STAGE" in
+        A|B|C) ;;
+        *) echo "ERROR: --stage must be A, B or C (or pass --reverse-replay-only)" >&2; exit 2 ;;
+    esac
+fi
+# The reverse-replay runs for stages B/C and for --reverse-replay-only, and — like the forward replay — only re-applies
+# bridged deletes. Retention deletes (deleteForRetention*) bypass the bridge, so a retention sweep during the rollback
+# window would restore a legitimately deleted row from the backup and resurrect it. Retention is a backend setting the
+# script can't read; require the operator to assert it is paused. Stage A does no reverse-replay, so it is exempt.
+if [[ ( "$STAGE" == "B" || "$STAGE" == "C" || "$REVERSE_REPLAY_ONLY" == "1" ) && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
+    echo "ERROR: this rollback runs the reverse-replay and requires --confirm-retention-paused. It re-applies only" >&2
+    echo "       bridged deletes; a retention sweep in the rollback window would resurrect a deleted row from the backup." >&2
+    echo "       Pause retention (RETENTION_ENABLED=false on every backend), then re-run with the flag." >&2
+    exit 2
+fi
+# Stages B/C promote the frozen pre-cutover backup, so writes the successor accepted after cutover_start stop being live
+# (they are preserved in the parked traces_local_v2 until finalize.sh, recoverable during the soak). This is unavoidable
+# when promoting a point-in-time backup — require the operator to acknowledge it, unlike a precondition they could fix.
+if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$ACCEPT_WRITE_LOSS" != "1" ]]; then
+    echo "ERROR: rollback --stage $STAGE requires --accept-post-cutover-write-loss. Promoting the frozen backup makes" >&2
+    echo "       traces written to the successor after cutover_start non-live. They are NOT destroyed — the successor is" >&2
+    echo "       parked as traces_local_v2 until finalize.sh, so recover them from there during the soak — but the live" >&2
+    echo "       table will no longer serve them. Re-run with the flag once you accept this." >&2
+    exit 2
+fi
+
+ch() {
+    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_rollback' --query "$1"
+}
+
+# Single scalar (or empty string if the object does not exist). Used by the topology guards below.
+traces_engine() {
+    ch "SELECT engine FROM system.tables WHERE database = '$DATABASE' AND name = '$1'"
+}
+traces_endtime_type() {
+    ch "SELECT type FROM system.columns WHERE database = '$DATABASE' AND table = '$1' AND name = 'end_time'"
+}
+
+# The migration walks traces through three shapes; a stage is only valid in one of them:
+#   pre-EXCHANGE       -> traces is a *MergeTree with Nullable end_time (the original schema)      -> stage A
+#   post-EXCHANGE      -> traces is a *MergeTree with non-Nullable end_time (the successor schema) -> stage B
+#   post-wrap          -> traces is a Distributed table                                           -> stage C
+# Asserting the shape makes a wrong-stage run (which is where a TRUNCATE/DROP would be catastrophic) abort with no change.
+assert_topology() {
+    local engine end_time
+    engine="$(traces_engine traces)"
+    end_time="$(traces_endtime_type traces)"
+    [[ -n "$engine" ]] || { echo "ERROR: no 'traces' table found in database '$DATABASE'." >&2; exit 1; }
+
+    case "$STAGE" in
+        A)
+            [[ "$engine" != "Distributed" && "$end_time" == Nullable* ]] || {
+                echo "ERROR: stage A expects the pre-EXCHANGE state (traces = original schema), but traces is engine='$engine' end_time='$end_time'." >&2
+                echo "       The EXCHANGE has already run — truncating the shadow now would destroy the parked original. Use stage B or C." >&2
+                exit 1
+            }
+            [[ -n "$(traces_engine traces_local_v2)" ]] || { echo "ERROR: shadow table 'traces_local_v2' not found; nothing to discard." >&2; exit 1; }
+            ;;
+        B)
+            [[ "$engine" != "Distributed" ]] || {
+                echo "ERROR: stage B expects the post-EXCHANGE, pre-wrap state, but traces is Distributed (the wrap ran). Use stage C." >&2
+                exit 1
+            }
+            [[ "$end_time" != Nullable* ]] || {
+                echo "ERROR: stage B expects traces to hold the successor schema, but end_time is Nullable (the EXCHANGE has not run). Nothing to roll back; use stage A to discard the shadow." >&2
+                exit 1
+            }
+            if [[ -z "$(traces_engine traces_pre_cutover_backup)" ]]; then
+                if [[ -n "$(traces_engine traces_local_v2)" ]]; then
+                    # State X: the forward EXCHANGE succeeded but its post-swap RENAME did not, so the parked original is
+                    # still under traces_local_v2. Finish that RENAME (the same remediation exchange_and_wrap.sh prints),
+                    # then stage B proceeds normally. Not auto-completed here: rollback does exactly one thing per run.
+                    echo "ERROR: 'traces_pre_cutover_backup' not found but 'traces_local_v2' still exists — the forward" >&2
+                    echo "       EXCHANGE's post-swap RENAME did not complete, so the parked original is still under" >&2
+                    echo "       'traces_local_v2'. Finish that RENAME, then re-run stage B:" >&2
+                    echo "         clickhouse-client --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
+                else
+                    echo "ERROR: 'traces_pre_cutover_backup' (parked original) not found; cannot swap back." >&2
+                fi
+                exit 1
+            fi
+            ;;
+        C)
+            [[ "$engine" == "Distributed" ]] || {
+                echo "ERROR: stage C expects the post-wrap state (traces = Distributed), but traces is engine='$engine'. The wrap was not applied — use stage B." >&2
+                exit 1
+            }
+            [[ -n "$(traces_engine traces_local)" ]] || { echo "ERROR: 'traces_local' (successor data) not found; topology is not a clean post-wrap state." >&2; exit 1; }
+            [[ -n "$(traces_engine traces_pre_cutover_backup)" ]] || { echo "ERROR: 'traces_pre_cutover_backup' (parked original) not found; topology is not a clean post-wrap state." >&2; exit 1; }
+            ;;
+    esac
+}
+
+# Run one rollback .sql file wholesale, substituting the placeholders. Each file is exactly one stage's statements.
+run_file() {
+    local file="$SQL_DIR/$1" sql
+    [[ -f "$file" ]] || { echo "ERROR: cannot find $file" >&2; exit 2; }
+    sql="$(cat "$file")"
+    sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
+    sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
+    clickhouse-client --database "$DATABASE" --multiquery --query "$sql"
+}
+
+# Recovery mode: re-apply only the reverse-replay against the current live `traces`. The promote (stage B/C) already ran,
+# so `traces` is the restored original MergeTree; the replay is idempotent, so re-running it just re-masks any deletes it
+# missed. Assert `traces` is present and NOT Distributed (a lightweight DELETE is unsupported on Distributed, and the
+# replay only makes sense on the restored original — a Distributed `traces` means the wrap is still up; roll it back with
+# stage C first).
+if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
+    [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for --reverse-replay-only" >&2; exit 2; }
+    reverse_replay_engine="$(traces_engine traces)"
+    [[ -n "$reverse_replay_engine" ]] || { echo "ERROR: no 'traces' table found in database '$DATABASE'." >&2; exit 1; }
+    [[ "$reverse_replay_engine" != "Distributed" ]] || {
+        echo "ERROR: 'traces' is Distributed, so the wrap is still applied — the reverse-replay runs on the restored" >&2
+        echo "       original MergeTree. Roll the wrap back first with --stage C." >&2
+        exit 1
+    }
+    echo "NOTE: re-applying the reverse deletion replay only (no table swap) for deletes since cutover_start" >&2
+    echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
+    run_file 000004_rollback_reverse_replay.sql
+    echo "Reverse-replay-only done: bridged deletes since cutover_start re-applied to the live 'traces'."
+    exit 0
+fi
+
+assert_topology
+
+if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
+    echo "NOTE: promoting the frozen backup now. Traces the successor accepted after cutover_start ($CUTOVER_START) will" >&2
+    echo "      stop being live; recover them from the parked traces_local_v2 (kept until finalize.sh) if needed." >&2
+fi
+
+case "$STAGE" in
+    A)
+        run_file 000004_rollback_stage_a_discard_shadow.sql
+        echo "Stage A done: shadow discarded. Live 'traces' was untouched."
+        ;;
+    B)
+        [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }
+        run_file 000004_rollback_stage_b_exchange_back.sql
+        run_file 000004_rollback_reverse_replay.sql
+        echo "Stage B done: tables swapped back and deletes since cutover_start re-applied."
+        ;;
+    C)
+        [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage C" >&2; exit 2; }
+        run_file 000004_rollback_stage_c_promote_original.sql
+        run_file 000004_rollback_reverse_replay.sql
+        echo "Stage C done: wrapper dropped, original promoted, deletes since cutover_start re-applied."
+        ;;
+esac
+
+echo "Now in the canonical state: traces = original data (live), traces_local_v2 = successor data (parked)."
+echo "Verify (README 'Verifying the migration'), then drop the parked backup with finalize.sh once healthy."

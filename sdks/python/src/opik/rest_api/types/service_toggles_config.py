@@ -37,7 +37,6 @@ class ServiceTogglesConfig(UniversalBaseModel):
     ollie_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollieEnabled")]
     project_homepage_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="projectHomepageEnabled")]
     agentic_tools_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="agenticToolsEnabled")]
-    agent_insights_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="agentInsightsEnabled")]
     online_scoring_tracing_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="onlineScoringTracingEnabled")
     ]

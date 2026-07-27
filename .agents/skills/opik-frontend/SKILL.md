@@ -52,6 +52,16 @@ const selectedEntity = useEntityStore(state => state.selectedEntity);
 const { selectedEntity, filters } = useEntityStore();
 ```
 
+### Browser Translation Safety (Google Translate)
+Many users auto-translate the page; the translator wraps text nodes in `<font>` elements, so React throws `NotFoundError: removeChild` when it reconciles a **bare dynamic text node** it re-parented. Wrap dynamic/conditional strings in their own element instead of rendering bare text.
+```typescript
+// ❌ bare dynamic text → crash under translation
+<button>{icon}{label}</button>
+// ✅ wrap it → React swaps a stable element, stays translatable
+<button>{icon}<span>{label}</span></button>
+```
+For timer-driven text (typewriter/counter), also avoid per-tick `setState` — write into a ref'd node's `textContent` (React never reconciles it), or mark a decorative node `translate="no"`. Ref: [facebook/react#11538](https://github.com/facebook/react/issues/11538) (OPIK-7428, OPIK-7435).
+
 ## Layer Architecture
 
 ### Shared layers (used by all versions)

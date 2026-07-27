@@ -13,6 +13,7 @@ export const AlertTriggerConfigType: core.serialization.Schema<
     "threshold:cost",
     "threshold:latency",
     "threshold:errors",
+    "filter:guardrail_type",
 ]);
 
 export declare namespace AlertTriggerConfigType {
@@ -21,5 +22,6 @@ export declare namespace AlertTriggerConfigType {
         | "threshold:feedback_score"
         | "threshold:cost"
         | "threshold:latency"
-        | "threshold:errors";
+        | "threshold:errors"
+        | "filter:guardrail_type";
 }

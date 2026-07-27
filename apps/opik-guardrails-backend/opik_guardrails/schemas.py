@@ -7,6 +7,8 @@ import pydantic
 class ValidationType(str, enum.Enum):
     PII = "PII"
     TOPIC = "TOPIC"
+    PROMPT_INJECTION = "PROMPT_INJECTION"
+    CUSTOM_CLASSIFIER = "CUSTOM_CLASSIFIER"
 
 
 class ValidationConfig(pydantic.BaseModel):
@@ -42,6 +44,41 @@ class PIIValidationConfig(ValidationConfig):
     threshold: float = pydantic.Field(
         0.5, description="A threshold value for PII detector"
     )
+
+
+class PromptInjectionValidationConfig(ValidationConfig):
+    threshold: float = pydantic.Field(
+        0.5, description="Injection-probability threshold above which validation fails"
+    )
+
+
+class CustomClassifierValidationConfig(ValidationConfig):
+    model_name: str = pydantic.Field(
+        description="Name of the locally-stored custom guardrail model to run"
+    )
+    threshold: float = pydantic.Field(
+        0.5, description="Score threshold above which validation fails"
+    )
+
+
+class CustomGuardrailExample(pydantic.BaseModel):
+    text: str
+    label: int = pydantic.Field(
+        ge=0, le=1, description="1 = metric holds, 0 = does not"
+    )
+
+
+class CustomGuardrailTrainingRequest(pydantic.BaseModel):
+    name: str = pydantic.Field(description="Model name used to serve the guardrail")
+    description: str = pydantic.Field(
+        description='Completes "Determine whether it ...", e.g. "contains toxic language"'
+    )
+    examples: List[CustomGuardrailExample] = pydantic.Field(
+        min_length=10, max_length=50000
+    )
+    base_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
+    epochs: float = 3.0
+    overwrite: bool = False
 
 
 class ValidationDescriptor(pydantic.BaseModel):

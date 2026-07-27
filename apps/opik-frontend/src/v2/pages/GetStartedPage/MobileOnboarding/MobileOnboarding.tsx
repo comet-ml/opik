@@ -32,6 +32,14 @@ const MobileOnboarding: React.FC = () => {
     { defaultValue: false },
   );
 
+  // ConnectStep form state lives here so it survives the panel remounts that
+  // replay step entrance animations. Only what the user typed is stored
+  // (null = untouched); the effective value falls back to the store's email,
+  // which may resolve after mount.
+  const [typedEmail, setTypedEmail] = useState<string | null>(null);
+  const [connectEmailSent, setConnectEmailSent] = useState(false);
+  const connectEmail = typedEmail ?? userEmail ?? "";
+
   const stepRef = useRef(1);
   const completedRef = useRef(completed);
 
@@ -91,6 +99,12 @@ const MobileOnboarding: React.FC = () => {
     }
   }, [step]);
 
+  // Swipe navigation: the shell reports the step the user scrolled to.
+  const handleStepChange = useCallback((next: number) => {
+    stepRef.current = next;
+    setStep(next);
+  }, []);
+
   if (completed) {
     return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
   }
@@ -103,13 +117,19 @@ const MobileOnboarding: React.FC = () => {
       totalSteps={STEP_CONFIG.length}
       onBack={step > 1 ? handleBack : undefined}
       onNext={handleNext}
+      onStepChange={handleStepChange}
       nextLabel={config.nextLabel}
       nextVariant={config.nextVariant}
     >
-      {step === 1 && <WelcomeStep onNext={handleNext} />}
-      {step === 2 && <TraceStep onNext={handleNext} />}
-      {step === 3 && <IssuesStep />}
-      {step === 4 && <ConnectStep userEmail={userEmail} />}
+      <WelcomeStep onNext={handleNext} active={step === 1} />
+      <TraceStep onNext={handleNext} />
+      <IssuesStep />
+      <ConnectStep
+        email={connectEmail}
+        onEmailChange={setTypedEmail}
+        emailSent={connectEmailSent}
+        onEmailSentChange={setConnectEmailSent}
+      />
     </MobileOnboardingShell>
   );
 };

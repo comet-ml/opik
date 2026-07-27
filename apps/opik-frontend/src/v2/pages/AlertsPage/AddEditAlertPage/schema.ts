@@ -1,5 +1,6 @@
 import { z, RefinementCtx } from "zod";
 import { ALERT_EVENT_TYPE, ALERT_TYPE } from "@/types/alerts";
+import { GuardrailTypes } from "@/types/guardrails";
 
 export const HeaderSchema = z.object({
   key: z.string().min(1, { message: "Header key is required" }),
@@ -69,6 +70,7 @@ export const TriggerSchema = z
     name: z.string().optional(), // Feedback score name (deprecated, use groups)
     operator: z.string().optional(), // Operator for comparison (deprecated, use groups)
     groups: z.array(FeedbackScoreConditionGroupSchema).optional(), // AND within a group, OR between groups
+    guardrailTypes: z.array(z.nativeEnum(GuardrailTypes)).optional(), // Guardrail types to alert on; empty = all
   })
   .superRefine((data, ctx) => {
     if (FEEDBACK_SCORE_TRIGGERS.has(data.eventType)) {

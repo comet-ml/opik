@@ -6,7 +6,7 @@ from unittest.mock import sentinel, patch
 import pytest
 
 from opik.file_upload import upload_manager
-from opik.message_processing import messages, streamer, streamer_constructors
+from opik.message_processing import data_loss, messages, streamer, streamer_constructors
 from opik.message_processing.processors import online_message_processor
 
 NOT_USED = sentinel.NOT_USED
@@ -31,6 +31,7 @@ def streamer_with_file_upload_manager(
             file_upload_manager=file_upload_manager,
             fallback_replay_manager=mock.Mock(),
             unauthorized_message_types_registry=mock.Mock(),
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
         streamer_ = streamer_constructors.construct_streamer(
             message_processor=online,

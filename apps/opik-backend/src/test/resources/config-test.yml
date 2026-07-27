@@ -118,6 +118,10 @@ uuidValidation:
   #  Description: Operational kill-switch. When false, ids are not checked against the window (the
   #   window is still validated to be a sane value).
   enabled: true
+  #  Default: false for tests
+  #  Description: Audit (shadow / log-only) mode. When true, out-of-window ids are counted and logged
+  #   but not rejected. Tests default to false so the validator rejects.
+  auditOnly: false
   #  Default: 24h
   #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
   #   embedded timestamp more than this far in the past or future are rejected.
@@ -126,7 +130,7 @@ uuidValidation:
 # Description: credentials for the Agent Insights read-only free-form SQL user. The connection params are reused
 #   from databaseAnalytics (overridden to the test container). The username/password match the production-shape user
 #   provisioned globally on the test ClickHouse container via src/test/resources/users.xml (mirrors
-#   provision_agent_insights_readonly_user.sh) — so any test enabling serviceToggles.agentInsightsEnabled exercises
+#   provision_agent_insights_readonly_user.sh) — so any test enabling serviceToggles.ollieEnabled exercises
 #   the real readonly=1 profile (max_execution_time pinned, only SQL_workspace_id/SQL_project_id changeable in readonly).
 databaseAnalyticsReadOnlyFreeFormSql:
   username: comet_readonly_freeform_sql_user
@@ -303,6 +307,21 @@ jacksonConfig:
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: 262144000
+  # Test-only caps, deliberately small so the LargePayloadTests below trip the guards on modest
+  # payloads (253MB string, 280MB doc, 51MB request) rather than production-sized bodies. They
+  # exercise the 413 rejection mechanism; JacksonConfigTest verifies the real shipped defaults.
+  # Description: Maximum size of an entire JSON document (the whole decompressed batch). Unlike
+  #   maxStringLength (a single string value), this caps the whole document, so it catches an
+  #   oversized batch built from many small values. Aborts mid-parse with a 413 before a multi-GB
+  #   node tree is materialized. Must stay above maxStringLength so a single max-size string parses.
+  maxDocumentLength: 268435456
+  # Intentionally BELOW maxDocumentLength so the ~51MB LargePayloadTests request trips the 413
+  #   pre-parse guard cheaply. Request size (compressed) and document length (decompressed) are
+  #   independent axes -- do NOT raise this to match maxDocumentLength.
+  # Description: Maximum incoming request body size, checked against the Content-Length header and
+  #   rejected with 413 before the body is read. Requests without a Content-Length (e.g. chunked)
+  #   fall through and are bounded by maxDocumentLength during parsing.
+  maxRequestSizeBytes: 52428800
 
 # Configuration for batch operations
 batchOperations:
@@ -409,6 +428,12 @@ onlineScoring:
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
   agenticToolsMaxInjectedBytes: 52428800
+  # Default: 32
+  # Description: Hard heap cap (in MB) on the trace-thread span preload used to size the
+  #   inline-vs-agentic-tools routing decision. Spans stream under this cap; once crossed, the thread
+  #   routes to the agentic-tools path (which drills per-trace on demand) instead of being buffered in
+  #   full. Lower on memory-constrained deployments. See OPIK-7454.
+  agenticToolsMaxPreloadMb: 32
   agenticToolsS3PresignTtlSeconds: 120
   # Per-variable substitution cap (chars) for the {{trace}}/{{span}} structure-injection / agentic paths.
   maxPromptFieldChars: 4000
@@ -760,7 +785,9 @@ serviceToggles:
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: "true"
   # Default: false
-  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  # Description: Whether or not the Ollie AI assistant integration is enabled. Also gates the Agent Insights
+  #   freeform SQL path and the clickhouse-readonly-freeform-sql health check. Tests flip this on when exercising
+  #   the read-only ClickHouse client.
   ollieEnabled: "false"
   # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
@@ -768,10 +795,6 @@ serviceToggles:
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"
-  # Default: false
-  # Description: Whether or not the Agent Insights freeform SQL path is enabled. Tests flip this on when exercising
-  #   the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.
-  agentInsightsEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
@@ -902,6 +925,7 @@ datasetVersioning:
     maxAttempts: 3
     minBackoff: 100ms
     maxBackoff: 500ms
+  lockLease: 60s
 
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).

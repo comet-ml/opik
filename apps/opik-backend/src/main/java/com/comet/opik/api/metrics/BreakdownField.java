@@ -27,7 +27,8 @@ public enum BreakdownField {
     ERROR_TYPE("error_type", "Error Type", false),
     MODEL("model", "Model", false),
     PROVIDER("provider", "Provider", false),
-    TYPE("type", "Span Type", false);
+    TYPE("type", "Span Type", false),
+    GUARDRAIL_NAME("guardrail_name", "Guardrail name", false);
 
     @JsonValue
     private final String value;
@@ -79,6 +80,7 @@ public enum BreakdownField {
             case METADATA, NAME, ERROR_INFO, ERROR_TYPE -> TRACE_METRICS.contains(metricType)
                     || SPAN_METRICS.contains(metricType);
             case MODEL, PROVIDER, TYPE -> SPAN_METRICS.contains(metricType);
+            case GUARDRAIL_NAME -> metricType == MetricType.GUARDRAILS_FAILED_COUNT;
             default -> false;
         };
     }
@@ -92,6 +94,7 @@ public enum BreakdownField {
             case TAGS -> "Trace, Span, and Thread metrics";
             case METADATA, NAME, ERROR_INFO, ERROR_TYPE -> "Trace and Span metrics";
             case MODEL, PROVIDER, TYPE -> "Span metrics only";
+            case GUARDRAIL_NAME -> "the Failed guardrails metric only";
         };
     }
 }

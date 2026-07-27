@@ -164,9 +164,10 @@ def evaluate(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default), 2 - outputs are enabled and detailed statistics
@@ -783,9 +784,10 @@ def evaluate_experiment(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
@@ -1003,9 +1005,10 @@ def evaluate_prompt(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
             but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
@@ -1239,12 +1242,18 @@ def evaluate_optimization_trial(
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
+    experiment_type: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
 
     Args:
         optimization_id: The ID of the optimization associated with the experiment.
+
+        experiment_type: The experiment type recorded for this trial. Optimizers use
+            "mini-batch" for small-sample candidate screening evaluations and "trial"
+            (default) for full evaluations, so that mini-batch scores are excluded
+            from best-score aggregations.
 
         dataset: An Opik Dataset or DatasetVersion instance
 
@@ -1254,9 +1263,10 @@ def evaluate_optimization_trial(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
                     but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
@@ -1378,7 +1388,7 @@ def evaluate_optimization_trial(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=checked_prompts,
-        type="trial",
+        type=experiment_type or "trial",
         optimization_id=optimization_id,
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),
@@ -1619,8 +1629,9 @@ def evaluate_on_dict_items(
 
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function accepts predefined arguments:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
 
         project_name: The name of the project for logging traces.
 
@@ -1723,7 +1734,7 @@ def _wrap_scoring_functions(
             scoring_functions, project_name=project_name
         )
         if scoring_metrics:
-            scoring_metrics.extend(function_metrics)
+            scoring_metrics = [*scoring_metrics, *function_metrics]
         else:
             scoring_metrics = function_metrics
 

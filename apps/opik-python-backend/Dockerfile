@@ -12,13 +12,17 @@ SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 # hadolint ignore=DL3018
 RUN apk add --no-cache python3 py3-pip build-base python3-dev musl-dev gcc libffi-dev rust cargo
 
+# uv is a drop-in faster pip; the binary is copied from the official distroless
+# image (pinned) and used only in this builder stage — it never reaches runtime.
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /usr/local/bin/uv
+
 WORKDIR /opt/opik-python-backend
 
 # Install deps into a venv that we copy whole into the runtime stage.
 COPY requirements.txt .
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --python /opt/venv/bin/python --no-cache -r requirements.txt
 
 # Bytecode-only deps (-o 2, -b = fastest layout); strip source/stubs + package
 # managers. src/ keeps its .py; *.dist-info kept for importlib.metadata.

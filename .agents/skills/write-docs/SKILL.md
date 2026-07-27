@@ -271,7 +271,7 @@ Keep it user-facing: avoid implementation detail unless it affects how someone u
 
 ## Internationalized READMEs
 
-`readme_CN.md`, `readme_JP.md`, `readme_KO.md`, `readme_PT_BR.md`, `readme_AR.md`, `readme_DE.md`, `readme_ES.md`, `readme_FR.md` are AI machine-translated from the English `README.md`.
+`readme_CN.md`, `readme_ES.md`, `readme_FR.md`, `readme_DE.md` are AI machine-translated from the English `README.md`.
 
 - Each non-English README has a blockquote notice at the top warning that it is AI-translated and welcoming improvements. Keep it.
 - When the English README changes meaningfully, re-translate the affected files. Do not hand-edit translated READMEs for content changes — update the English source and re-translate.

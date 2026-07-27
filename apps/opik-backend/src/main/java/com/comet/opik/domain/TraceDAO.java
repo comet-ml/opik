@@ -33,6 +33,7 @@ import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -468,6 +469,11 @@ class TraceDAOImpl implements TraceDAO {
      * Key format: {@code author} + optional {@code _queueId} + optional {@code _spanId} (ensures uniqueness across
      * queues/spans). Value tuple: (value, reason, category_name, source, last_updated_at, span_type, span_id,
      * source_queue_id, author).
+     *
+     * <p>experiments_agg collapses to a single canonical row per trace_id (the most recent experiment,
+     * by UUIDv7-ordered id) so the trace-by-id LEFT JOIN cannot fan a trace that belongs to multiple
+     * experiments into multiple rows — which surfaced as an IndexOutOfBoundsException 500 on GET by id
+     * and non-deterministic experiment metadata (OPIK-7396).
      */
     private static final String SELECT_BY_IDS = """
             WITH target_spans AS (
@@ -678,7 +684,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND trace_id IN :ids
                 GROUP BY trace_id
             ), experiments_agg AS (
-                SELECT DISTINCT
+                SELECT
                     ei.trace_id,
                     if(div.id != '', div.dataset_item_id, ei.dataset_item_id) AS experiment_dataset_item_id,
                     e.id AS experiment_id,
@@ -706,6 +712,8 @@ class TraceDAOImpl implements TraceDAO {
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) e ON ei.experiment_id = e.id
+                ORDER BY trace_id, experiment_id DESC
+                LIMIT 1 BY trace_id
             )
             SELECT
                 t.*,
@@ -3451,7 +3459,25 @@ class TraceDAOImpl implements TraceDAO {
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         return findByIds(List.of(id), connection)
-                .singleOrEmpty();
+                .collectList()
+                .flatMap(traces -> Mono.deferContextual(ctx -> Mono.justOrEmpty(
+                        firstOrLogFanOut(traces, id, ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown")))));
+    }
+
+    /**
+     * Reduce the rows returned for a single trace id to at most one {@link Trace}. A get-by-id
+     * query can fan out to more than one row over its join CTEs (e.g. un-merged/duplicated rows);
+     * returning the first row avoids the {@code IndexOutOfBoundsException} ("Source emitted more
+     * than one item") that a strict single-item reducer throws, which surfaces as a 500. The empty
+     * case is preserved (-> 404). A fan-out is logged so the underlying duplication stays visible.
+     */
+    @VisibleForTesting
+    static Optional<Trace> firstOrLogFanOut(@NonNull List<Trace> traces, UUID id, String workspaceId) {
+        if (traces.size() > 1) {
+            log.warn("Trace get-by-id resolved to multiple rows; returning the first. workspaceId '{}', traceId '{}'",
+                    workspaceId, id);
+        }
+        return traces.stream().findFirst();
     }
 
     @Override

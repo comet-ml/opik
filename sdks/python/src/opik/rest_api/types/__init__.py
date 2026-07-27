@@ -99,6 +99,9 @@ from .automation_rule_evaluator_object_object_public import (
     AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_object_object_public_action import AutomationRuleEvaluatorObjectObjectPublicAction
+from .automation_rule_evaluator_object_object_public_trigger_scope import (
+    AutomationRuleEvaluatorObjectObjectPublicTriggerScope,
+)
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
@@ -110,6 +113,7 @@ from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_public_action import AutomationRuleEvaluatorPublicAction
+from .automation_rule_evaluator_public_trigger_scope import AutomationRuleEvaluatorPublicTriggerScope
 from .automation_rule_evaluator_span_llm_as_judge import AutomationRuleEvaluatorSpanLlmAsJudge
 from .automation_rule_evaluator_span_llm_as_judge_public import AutomationRuleEvaluatorSpanLlmAsJudgePublic
 from .automation_rule_evaluator_span_llm_as_judge_write import AutomationRuleEvaluatorSpanLlmAsJudgeWrite
@@ -136,6 +140,7 @@ from .automation_rule_evaluator_trace_thread_user_defined_metric_python_public i
 from .automation_rule_evaluator_trace_thread_user_defined_metric_python_write import (
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite,
 )
+from .automation_rule_evaluator_trigger_scope import AutomationRuleEvaluatorTriggerScope
 from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate,
     AutomationRuleEvaluatorUpdate_LlmAsJudge,
@@ -157,6 +162,7 @@ from .automation_rule_evaluator_update_trace_thread_llm_as_judge import (
 from .automation_rule_evaluator_update_trace_thread_user_defined_metric_python import (
     AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython,
 )
+from .automation_rule_evaluator_update_trigger_scope import AutomationRuleEvaluatorUpdateTriggerScope
 from .automation_rule_evaluator_update_user_defined_metric_python import (
     AutomationRuleEvaluatorUpdateUserDefinedMetricPython,
 )
@@ -177,6 +183,7 @@ from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWriteAction
+from .automation_rule_evaluator_write_trigger_scope import AutomationRuleEvaluatorWriteTriggerScope
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
 from .batch_delete_by_project import BatchDeleteByProject
@@ -801,6 +808,7 @@ __all__ = [
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
     "AutomationRuleEvaluatorObjectObjectPublic",
     "AutomationRuleEvaluatorObjectObjectPublicAction",
+    "AutomationRuleEvaluatorObjectObjectPublicTriggerScope",
     "AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanUserDefinedMetricPython",
@@ -810,6 +818,7 @@ __all__ = [
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublicAction",
+    "AutomationRuleEvaluatorPublicTriggerScope",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanUserDefinedMetricPython",
@@ -828,6 +837,7 @@ __all__ = [
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite",
+    "AutomationRuleEvaluatorTriggerScope",
     "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateAction",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
@@ -835,6 +845,7 @@ __all__ = [
     "AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython",
+    "AutomationRuleEvaluatorUpdateTriggerScope",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_LlmAsJudge",
     "AutomationRuleEvaluatorUpdate_SpanLlmAsJudge",
@@ -847,6 +858,7 @@ __all__ = [
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWriteAction",
+    "AutomationRuleEvaluatorWriteTriggerScope",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanLlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython",

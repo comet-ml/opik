@@ -1,6 +1,6 @@
 import { useReducer } from "react";
 import { GuardrailsState, guardrailsDefaultState } from "./guardrailsConfig";
-import { GuardrailTypes } from "@/types/guardrails";
+import { QuickConfigGuardrailType } from "@/types/guardrails";
 
 enum ActionType {
   UPDATE_THRESHOLD = "UPDATE_THRESHOLD",
@@ -11,15 +11,15 @@ enum ActionType {
 type GuardrailAction =
   | {
       type: ActionType.UPDATE_THRESHOLD;
-      payload: { guardrailType: GuardrailTypes; threshold: number };
+      payload: { guardrailType: QuickConfigGuardrailType; threshold: number };
     }
   | {
       type: ActionType.UPDATE_ENTITIES;
-      payload: { guardrailType: GuardrailTypes; entities: string[] };
+      payload: { guardrailType: QuickConfigGuardrailType; entities: string[] };
     }
   | {
       type: ActionType.TOGGLE_ENABLED;
-      payload: { guardrailType: GuardrailTypes };
+      payload: { guardrailType: QuickConfigGuardrailType };
     };
 
 const guardrailReducer = (
@@ -64,7 +64,7 @@ export const useGuardrailConfigState = (
   const [state, dispatch] = useReducer(guardrailReducer, initialState);
 
   const updateThreshold = (
-    guardrailType: GuardrailTypes,
+    guardrailType: QuickConfigGuardrailType,
     threshold: number,
   ) => {
     dispatch({
@@ -74,7 +74,7 @@ export const useGuardrailConfigState = (
   };
 
   const updateEntities = (
-    guardrailType: GuardrailTypes,
+    guardrailType: QuickConfigGuardrailType,
     entities: string[],
   ) => {
     dispatch({
@@ -83,17 +83,17 @@ export const useGuardrailConfigState = (
     });
   };
 
-  const toggleEnabled = (guardrailType: GuardrailTypes) => {
+  const toggleEnabled = (guardrailType: QuickConfigGuardrailType) => {
     dispatch({
       type: ActionType.TOGGLE_ENABLED,
       payload: { guardrailType },
     });
   };
 
-  const getEnabledGuardrailTypes = (): GuardrailTypes[] => {
+  const getEnabledGuardrailTypes = (): QuickConfigGuardrailType[] => {
     return Object.keys(state).filter(
-      (key) => state[key as GuardrailTypes].enabled,
-    ) as GuardrailTypes[];
+      (key) => state[key as QuickConfigGuardrailType].enabled,
+    ) as QuickConfigGuardrailType[];
   };
 
   return {

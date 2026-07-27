@@ -1,7 +1,22 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
+
+export type ExplainKind = 'error' | 'duration' | 'cost';
+
+// Maps an explain kind to the Traces table column id (used in data-cell-id)
+// and the owl trigger's aria-label, per apps/opik-frontend/src/plugins/comet/explain/registry.ts.
+const EXPLAIN_COLUMN: Record<ExplainKind, string> = {
+  error: 'error_info',
+  duration: 'duration',
+  cost: 'total_estimated_cost',
+};
+const EXPLAIN_LABEL: Record<ExplainKind, string> = {
+  error: 'Explain error',
+  duration: 'Explain duration',
+  cost: 'Explain cost',
+};
 
 export class LogsPage {
   private projectId: string | null = null;
@@ -114,6 +129,80 @@ export class LogsPage {
 
   get traceRows(): Locator {
     return this.page.locator('tr[data-row-id]');
+  }
+
+  /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */
+  explainCell(traceId: string, kind: ExplainKind): Locator {
+    return this.page.locator(`[data-cell-id="${traceId}_${EXPLAIN_COLUMN[kind]}"]`);
+  }
+
+  /**
+   * Hover a trace's Errors/Duration/Estimated cost cell and click its Ollie
+   * "Explain" owl trigger, opening the popover. The trigger only renders once
+   * the Ollie assistant bridge handshake (mounted via the page's assistant
+   * sidebar) completes, which can lag a beat after the table itself is
+   * interactive — so this polls hover+lookup rather than asserting once.
+   */
+  async openExplain(traceId: string, kind: ExplainKind, timeoutMs = 60_000): Promise<void> {
+    return test.step(`open Ollie explain (${kind}) for trace ${traceId}`, async () => {
+      const cell = this.explainCell(traceId, kind);
+      const button = cell.getByRole('button', { name: EXPLAIN_LABEL[kind] });
+      await expect
+        .poll(
+          async () => {
+            await cell.hover();
+            return button.count();
+          },
+          { timeout: timeoutMs, intervals: [500, 1000, 2000] },
+        )
+        .toBeGreaterThan(0);
+      await button.click();
+    });
+  }
+
+  /**
+   * Wait for the open Ollie explain popover to settle (loading -> done/error)
+   * and return its rendered text. Scoped to the last `[role="status"]` live
+   * region on the page — Radix unmounts a closed popover's content, so only
+   * the currently-open one's region should be present.
+   */
+  async readExplanation(timeoutMs = 60_000): Promise<string> {
+    return test.step('wait for Ollie explain popover to settle', async () => {
+      const status = this.page.locator('[role="status"]').last();
+      await expect(status).toHaveAttribute('aria-busy', 'false', { timeout: timeoutMs });
+      const text = ((await status.textContent()) ?? '').trim();
+      if (!text) {
+        throw new Error('Ollie explain popover settled but rendered no text');
+      }
+      return text;
+    });
+  }
+
+  /** Close the open Ollie explain popover. */
+  async closeExplain(): Promise<void> {
+    return test.step('close Ollie explain popover', async () => {
+      await this.page.keyboard.press('Escape');
+    });
+  }
+
+  /**
+   * The "Continue conversation" link in the currently open Ollie explain
+   * popover. Only rendered once the popover has settled with text (see
+   * ExplainPopover.tsx) — call after `readExplanation()`.
+   */
+  continueConversationButton(): Locator {
+    return this.page.getByRole('button', { name: 'Continue conversation' });
+  }
+
+  /**
+   * Click "Continue conversation" to hand the explain popover's question +
+   * cached answer off to the Ollie sidebar chat. This closes the popover as
+   * a side effect (see ExplainPopover's onContinue).
+   */
+  async continueConversation(): Promise<void> {
+    return test.step('continue the Ollie explain conversation in the sidebar', async () => {
+      await this.continueConversationButton().click();
+    });
   }
 
   // --- Threads tab ---

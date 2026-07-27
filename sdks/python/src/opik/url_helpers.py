@@ -112,4 +112,6 @@ def is_aws_presigned_url(url: str) -> bool:
 
 
 def get_user_permissions_url(url_override: str) -> str:
-    return urllib.parse.urljoin(url_override, "v1/private/workspace-permissions")
+    return urllib.parse.urljoin(
+        ensure_ending_slash(url_override), "v1/private/workspace-permissions"
+    )

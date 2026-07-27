@@ -112,6 +112,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
+  CLAUDE_OPUS_5 = "claude-opus-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -155,6 +156,8 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_OPUS_4_7_FAST = "anthropic/claude-opus-4.7-fast",
   ANTHROPIC_CLAUDE_OPUS_4_8 = "anthropic/claude-opus-4.8",
   ANTHROPIC_CLAUDE_OPUS_4_8_FAST = "anthropic/claude-opus-4.8-fast",
+  ANTHROPIC_CLAUDE_OPUS_5 = "anthropic/claude-opus-5",
+  ANTHROPIC_CLAUDE_OPUS_5_FAST = "anthropic/claude-opus-5-fast",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ANTHROPIC_CLAUDE_SONNET_4_6 = "anthropic/claude-sonnet-4.6",
@@ -246,6 +249,8 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = "google/gemini-3.1-pro-preview-customtools",
   GOOGLE_GEMINI_3_5_FLASH = "google/gemini-3.5-flash",
+  GOOGLE_GEMINI_3_5_FLASH_LITE = "google/gemini-3.5-flash-lite",
+  GOOGLE_GEMINI_3_6_FLASH = "google/gemini-3.6-flash",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_3_12B_IT = "google/gemma-3-12b-it",
@@ -273,6 +278,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_2_6_1T_FREE = "inclusionai/ling-2.6-1t:free",
   INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
+  INCLUSIONAI_LING_3_0_FLASH_FREE = "inclusionai/ling-3.0-flash:free",
   INCLUSIONAI_RING_2_6_1T = "inclusionai/ring-2.6-1t",
   INCLUSIONAI_RING_2_6_1T_FREE = "inclusionai/ring-2.6-1t:free",
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
@@ -512,6 +518,8 @@ export enum PROVIDER_MODEL_TYPE {
   PERPLEXITY_SONAR_REASONING_PRO = "perplexity/sonar-reasoning-pro",
   POOLSIDE_LAGUNA_M_1 = "poolside/laguna-m.1",
   POOLSIDE_LAGUNA_M_1_FREE = "poolside/laguna-m.1:free",
+  POOLSIDE_LAGUNA_S_2_1 = "poolside/laguna-s-2.1",
+  POOLSIDE_LAGUNA_S_2_1_FREE = "poolside/laguna-s-2.1:free",
   POOLSIDE_LAGUNA_XS_2_1 = "poolside/laguna-xs-2.1",
   POOLSIDE_LAGUNA_XS_2_1_FREE = "poolside/laguna-xs-2.1:free",
   POOLSIDE_LAGUNA_XS_2 = "poolside/laguna-xs.2",
@@ -690,6 +698,8 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
   GEMINI_3_5_FLASH = "gemini-3.5-flash",
+  GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite",
+  GEMINI_3_6_FLASH = "gemini-3.6-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
   GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
@@ -713,6 +723,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_PRO = "vertex_ai/gemini-3-pro-preview",
   VERTEX_AI_GEMINI_3_1_PRO = "vertex_ai/gemini-3.1-pro-preview",
   VERTEX_AI_GEMINI_3_5_FLASH = "vertex_ai/gemini-3.5-flash",
+  VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
 }
 
 export interface ProviderModelsMap {

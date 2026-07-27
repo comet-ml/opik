@@ -14,6 +14,7 @@ export interface Optimization {
     status: OpikApi.OptimizationStatus;
     metadata?: OpikApi.JsonListString;
     studioConfig?: OpikApi.OptimizationStudioConfig;
+    errorInfo?: OpikApi.ErrorInfo;
     datasetId?: string;
     numTrials?: number;
     feedbackScores?: OpikApi.FeedbackScoreAverage[];

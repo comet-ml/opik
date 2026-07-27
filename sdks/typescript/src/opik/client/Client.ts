@@ -144,8 +144,30 @@ export class OpikClient {
       ? 24 * 60 * 60 * 1000
       : this.config.batchDelayMs;
 
-    this.spanBatchQueue = new SpanBatchQueue(this.api, delay);
-    this.traceBatchQueue = new TraceBatchQueue(this.api, delay);
+    const attachmentUploadConfig = this.config.isAttachmentExtractionActive
+      ? {
+          minSizeBytes:
+            this.config.minBase64EmbeddedAttachmentSize ??
+            DEFAULT_CONFIG.minBase64EmbeddedAttachmentSize,
+          apiUrl: this.config.apiUrl!,
+          workspaceName: this.config.workspaceName,
+          apiKey: this.config.apiKey || undefined,
+          extraHeaders: explicitConfig?.headers,
+        }
+      : undefined;
+
+    this.spanBatchQueue = new SpanBatchQueue(
+      this.api,
+      delay,
+      this.config.maxPayloadSizeMb,
+      attachmentUploadConfig
+    );
+    this.traceBatchQueue = new TraceBatchQueue(
+      this.api,
+      delay,
+      this.config.maxPayloadSizeMb,
+      attachmentUploadConfig
+    );
     this.spanFeedbackScoresBatchQueue = new SpanFeedbackScoresBatchQueue(
       this.api,
       delay

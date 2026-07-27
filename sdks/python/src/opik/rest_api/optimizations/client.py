@@ -6,6 +6,7 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.error_info import ErrorInfo
+from ..types.error_info_write import ErrorInfoWrite
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.optimization_page_public import OptimizationPagePublic
@@ -108,6 +109,7 @@ class OptimizationsClient:
         project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -136,6 +138,8 @@ class OptimizationsClient:
 
         studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
+        error_info : typing.Optional[ErrorInfoWrite]
+
         last_updated_at : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
@@ -161,6 +165,7 @@ class OptimizationsClient:
             project_id=project_id,
             metadata=metadata,
             studio_config=studio_config,
+            error_info=error_info,
             last_updated_at=last_updated_at,
             request_options=request_options,
         )
@@ -178,6 +183,7 @@ class OptimizationsClient:
         project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -206,6 +212,8 @@ class OptimizationsClient:
 
         studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
+        error_info : typing.Optional[ErrorInfoWrite]
+
         last_updated_at : typing.Optional[dt.datetime]
 
         request_options : typing.Optional[RequestOptions]
@@ -231,6 +239,7 @@ class OptimizationsClient:
             project_id=project_id,
             metadata=metadata,
             studio_config=studio_config,
+            error_info=error_info,
             last_updated_at=last_updated_at,
             request_options=request_options,
         )
@@ -328,12 +337,7 @@ class OptimizationsClient:
         client.optimizations.update_optimizations_by_id(id='id', )
         """
         _response = self._raw_client.update_optimizations_by_id(
-            id,
-            name=name,
-            status=status,
-            error_info=error_info,
-            metadata=metadata,
-            request_options=request_options,
+            id, name=name, status=status, error_info=error_info, metadata=metadata, request_options=request_options
         )
         return _response.data
 
@@ -456,6 +460,7 @@ class AsyncOptimizationsClient:
         project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -483,6 +488,8 @@ class AsyncOptimizationsClient:
         metadata : typing.Optional[JsonListStringWrite]
 
         studio_config : typing.Optional[OptimizationStudioConfigWrite]
+
+        error_info : typing.Optional[ErrorInfoWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -512,6 +519,7 @@ class AsyncOptimizationsClient:
             project_id=project_id,
             metadata=metadata,
             studio_config=studio_config,
+            error_info=error_info,
             last_updated_at=last_updated_at,
             request_options=request_options,
         )
@@ -529,6 +537,7 @@ class AsyncOptimizationsClient:
         project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
+        error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -556,6 +565,8 @@ class AsyncOptimizationsClient:
         metadata : typing.Optional[JsonListStringWrite]
 
         studio_config : typing.Optional[OptimizationStudioConfigWrite]
+
+        error_info : typing.Optional[ErrorInfoWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -585,6 +596,7 @@ class AsyncOptimizationsClient:
             project_id=project_id,
             metadata=metadata,
             studio_config=studio_config,
+            error_info=error_info,
             last_updated_at=last_updated_at,
             request_options=request_options,
         )
@@ -691,12 +703,7 @@ class AsyncOptimizationsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_optimizations_by_id(
-            id,
-            name=name,
-            status=status,
-            error_info=error_info,
-            metadata=metadata,
-            request_options=request_options,
+            id, name=name, status=status, error_info=error_info, metadata=metadata, request_options=request_options
         )
         return _response.data
 

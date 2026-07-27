@@ -119,6 +119,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
+      label: "Claude Opus 5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
       label: "Claude Sonnet 5",
     },
@@ -324,6 +328,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8_FAST,
       label: "anthropic/claude-opus-4.8-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_5,
+      label: "anthropic/claude-opus-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_5_FAST,
+      label: "anthropic/claude-opus-5-fast",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
@@ -688,6 +700,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3.5-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_5_FLASH_LITE,
+      label: "google/gemini-3.5-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
+      label: "google/gemini-3.6-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
       label: "google/gemma-2-27b-it",
     },
@@ -794,6 +814,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
       label: "inclusionai/ling-2.6-flash:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FREE,
+      label: "inclusionai/ling-3.0-flash:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
@@ -1753,6 +1777,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "poolside/laguna-m.1:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1,
+      label: "poolside/laguna-s-2.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1_FREE,
+      label: "poolside/laguna-s-2.1:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
       label: "poolside/laguna-xs-2.1",
     },
@@ -2372,8 +2404,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.GEMINI]: [
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
+      label: "Gemini 3.6 Flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
       label: "Gemini 3.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+      label: "Gemini 3.5 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
@@ -2426,6 +2466,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
+      label: "Gemini 3.6 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
       label: "Gemini 3.5 Flash",

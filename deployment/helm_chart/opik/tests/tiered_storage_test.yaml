@@ -1,0 +1,87 @@
+suite: clickhouse tiered storage (conf.d/storage.xml + cache PVC)
+
+# tieredStorage renders the hot -> cold storage policy and a per-node S3 cache
+# PVC, gated by clickhouse.tieredStorage.enabled. It stays inert by default and
+# fails fast on invalid config (empty endpoint, non-DNS-label cache volumeName).
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: renders no tiered-storage config by default (disabled)
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "conf.d/storage.xml"
+      - notMatchRegexRaw:
+          pattern: "cold_s3"
+      - notMatchRegexRaw:
+          pattern: "s3-cache-vc-template"
+
+  - it: renders the storage policy, disks and cache PVC when enabled with an endpoint
+    set:
+      clickhouse.tieredStorage.enabled: true
+      clickhouse.tieredStorage.cold.s3.endpoint: https://opik-ch-cold.s3.us-east-1.amazonaws.com
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<tiered_replicated>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<endpoint>https://opik-ch-cold\\.s3\\.us-east-1\\.amazonaws\\.com/clickhouse-cold/</endpoint>"
+      - equal:
+          path: spec.templates.volumeClaimTemplates[1].name
+          value: s3-cache-vc-template
+      # Hot tier is ClickHouse's built-in `default` disk. Defining a custom local
+      # disk at the server data path is rejected by CH 26.x at startup ("Disk path
+      # cannot be equal to <path>. Use <default> disk instead."), so the hot volume
+      # must reference `default` and there must be no custom <hot> disk under <disks>.
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<hot>\\s*<disk>default</disk>\\s*</hot>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<default>\\s*<keep_free_space_bytes>"
+      # Negative guards: the custom <hot> DISK stanza (a <hot> wrapping
+      # keep_free_space_bytes or path) must never render — that is the exact
+      # shape CH 26.x rejects. Only the <hot> VOLUME (<hot><disk>default</disk>)
+      # is allowed, which the positive assertion above already pins.
+      - notMatchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<hot>\\s*<keep_free_space_bytes>"
+      - notMatchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<hot>\\s*<path>"
+
+  - it: omits <read_only> by default so the cold tier is writable
+    set:
+      clickhouse.tieredStorage.enabled: true
+      clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
+    asserts:
+      - notMatchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<read_only>"
+
+  - it: emits <read_only> only when explicitly opted in
+    set:
+      clickhouse.tieredStorage.enabled: true
+      clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
+      clickhouse.tieredStorage.cold.s3.readOnly: true
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<read_only>true</read_only>"
+
+  - it: fails the render when enabled without a cold S3 endpoint
+    set:
+      clickhouse.tieredStorage.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: clickhouse.tieredStorage.cold.s3.endpoint must be set to the cold bucket's S3 URL when tiered storage is enabled
+
+  - it: fails the render when the cache volumeName is not a DNS label
+    set:
+      clickhouse.tieredStorage.enabled: true
+      clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
+      clickhouse.tieredStorage.cold.cache.volumeName: S3_cache
+    asserts:
+      - failedTemplate: {}
