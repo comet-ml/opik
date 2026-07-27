@@ -144,10 +144,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    leaving `traces` a `MergeTree` where deletes still work); the `RENAME` + `Distributed` wrap runs only with
    `--with-wrap`. Restore the buffer ceiling and verify.
    ```bash
-   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik --confirm-buffer-raised
+   CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
+       --backfill-start '<anchor from backfill.sh>' --confirm-buffer-raised --confirm-retention-paused
    ```
-   `--confirm-buffer-raised` is required on every EXCHANGE path: it asserts the async-insert buffer is raised so writes in
-   the final window survive the swap (add `--with-wrap --confirm-daos-retargeted` only once the DAOs target `traces_local`).
+   Every EXCHANGE path requires: `--backfill-start` (for the final deletion replay), `--confirm-buffer-raised` (writes in
+   the final window survive the swap), and `--confirm-retention-paused` (retention deletes bypass the bridge, so a
+   retention sweep in the window would leak across the swap). Add `--with-wrap --confirm-daos-retargeted` only once the
+   DAOs target `traces_local`.
 
 > **HARD PREREQUISITE for the wrap (step 4, part 2): the delete/mutation DAO must target `traces_local` first.** A
 > `Distributed` table supports `SELECT` and `INSERT` but **not** mutations. Verified on ClickHouse 26.3:
@@ -613,7 +616,10 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 - [ ] **Async-insert ceiling confirmed** — raising `asyncInsertBusyTimeoutMaxMs` demonstrably widens the adaptive buffer
       under load, not just the cap. `exchange_and_wrap.sh` enforces the acknowledgment via `--confirm-buffer-raised`, but
       that is an assertion only — this checklist item is the actual "it took effect under load" verification.
-- [ ] **Data Retention confirmed disabled** for the cutover window (`RETENTION_ENABLED=false`).
+- [ ] **Data Retention confirmed disabled** for the cutover window (`RETENTION_ENABLED=false`). Retention deletes bypass
+      the deletion bridge, so a sweep in the window would leak/resurrect across the swap; `exchange_and_wrap.sh` and
+      `rollback.sh` (stages B/C) enforce `--confirm-retention-paused`, but that is an assertion — this item is the real
+      "it is actually paused on every backend" verification.
 - [ ] **Reconciliation clean** — per-window source/dest counts within 0.01% across the whole backfill.
 - [ ] **Replication settled before the EXCHANGE** — `replication_queue` empty and the deletion-replay mutation
       `is_done` on **all** replicas (`exchange_and_wrap.sh` gates on this; do not `--force` past it in production).

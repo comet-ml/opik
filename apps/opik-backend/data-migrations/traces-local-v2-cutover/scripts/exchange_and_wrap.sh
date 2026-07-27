@@ -47,6 +47,10 @@
 #                     writes across the swap so they land on the new table; at the default, a write in the final window
 #                     can commit to the old table and be lost after the EXCHANGE. It's a backend setting the script can't
 #                     read, so the operator must assert it.
+#   --confirm-retention-paused  REQUIRED for every EXCHANGE path. Retention deletes (deleteForRetention*) bypass the
+#                     deletion bridge and are never replayed onto the successor, so a retention sweep during the cutover
+#                     window leaks live across the swap. Asserts retention is paused (RETENTION_ENABLED=false on every
+#                     backend) for the whole window — a backend setting the script can't read.
 
 set -euo pipefail
 
@@ -63,6 +67,7 @@ FORCE=0
 CONFIRM_MAINTENANCE=0
 CONFIRM_DAOS_RETARGETED=0
 CONFIRM_BUFFER_RAISED=0
+CONFIRM_RETENTION_PAUSED=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -75,6 +80,7 @@ while [[ $# -gt 0 ]]; do
         --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
         --confirm-daos-retargeted) CONFIRM_DAOS_RETARGETED=1; shift ;;
         --confirm-buffer-raised) CONFIRM_BUFFER_RAISED=1; shift ;;
+        --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -122,6 +128,16 @@ fi
 # they don't leak live across the swap — that needs the same backfill_start anchor delta_replay.sh used.
 if [[ "$WRAP_ONLY" != "1" && -z "$BACKFILL_START" ]]; then
     echo "ERROR: the EXCHANGE requires --backfill-start (the anchor printed by backfill.sh) for the final deletion replay." >&2
+    exit 2
+fi
+# Retention deletes (TraceDAO.deleteForRetention*) bypass the deletion bridge, so they are never replayed onto the
+# successor — if any backend still has RETENTION_ENABLED=true, a retention sweep in the cutover window leaks live across
+# the swap. Retention is a backend setting the script can't read, so require the operator to assert it is paused for the
+# whole window. Applies to every EXCHANGE path (not --wrap-only, which does no data cutover).
+if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
+    echo "ERROR: the EXCHANGE requires --confirm-retention-paused. Retention deletes bypass the deletion bridge, so a" >&2
+    echo "       retention sweep during the cutover window would leak live across the swap. Pause retention" >&2
+    echo "       (RETENTION_ENABLED=false on every backend) for the whole window, then re-run with the flag." >&2
     exit 2
 fi
 

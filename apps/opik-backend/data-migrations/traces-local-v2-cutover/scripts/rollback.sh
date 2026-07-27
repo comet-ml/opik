@@ -7,8 +7,9 @@
 #   --stage A   backfill/delta ran but the EXCHANGE did not — discard the shadow (live `traces` is untouched).
 #   --stage B   the EXCHANGE ran but not the wrap — swap the tables back, then reverse-replay.
 #   --stage C   the wrap ran — drop the wrapper, promote the parked original, then reverse-replay.
-# Stages B and C need --cutover-start (printed by exchange_and_wrap.sh) to bound the reverse-replay. Keep the deletion
-# bridge enabled through the rollback so no delete is lost.
+# Stages B and C need --cutover-start (printed by exchange_and_wrap.sh) to bound the reverse-replay, and
+# --confirm-retention-paused (retention deletes bypass the bridge, so a retention sweep in the rollback window would
+# resurrect a deleted row from the backup). Keep the deletion bridge enabled through the rollback so no delete is lost.
 #
 # SAFETY: the stages are mutually exclusive and each lives in its OWN file, so no single file mixes a TRUNCATE with an
 # EXCHANGE/DROP — running any file does exactly one stage. Before running, this asserts the live `traces` topology matches
@@ -26,12 +27,14 @@ SQL_DIR="$SCRIPT_DIR/db-app-analytics"
 DATABASE=""
 STAGE=""
 CUTOVER_START=""
+CONFIRM_RETENTION_PAUSED=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --stage) STAGE="${2:?"$1 requires a value"}"; shift 2 ;;
         --cutover-start) CUTOVER_START="${2:?"$1 requires a value"}"; shift 2 ;;
+        --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -44,6 +47,16 @@ case "$STAGE" in
     A|B|C) ;;
     *) echo "ERROR: --stage must be A, B or C" >&2; exit 2 ;;
 esac
+# Stages B/C run the reverse-replay, which — like the forward replay — only re-applies bridged deletes. Retention deletes
+# (deleteForRetention*) bypass the bridge, so a retention sweep during the rollback window would restore a legitimately
+# deleted row from the backup and resurrect it. Retention is a backend setting the script can't read; require the
+# operator to assert it is paused. Stage A does no reverse-replay, so it is exempt.
+if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
+    echo "ERROR: rollback --stage $STAGE requires --confirm-retention-paused. The reverse-replay only re-applies bridged" >&2
+    echo "       deletes; a retention sweep in the rollback window would resurrect a deleted row from the backup." >&2
+    echo "       Pause retention (RETENTION_ENABLED=false on every backend), then re-run with the flag." >&2
+    exit 2
+fi
 
 ch() {
     clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_rollback' --query "$1"

@@ -7,6 +7,11 @@ deletion-events bridge and must be replayed onto the destination — otherwise i
 It pulls a pool of existing trace ids via search and deletes them at the target rate, refilling as it drains. Run it
 during or after the backfill so the traces it deletes have already been copied — that is the leak the bridge prevents.
 
+This is a best-effort TRAFFIC GENERATOR (deletes newest-first for the run's --duration), NOT a guaranteed full-drain:
+search returns the newest page, so during delete-mask visibility lag a refill can transiently return only ids already
+in `seen`/`pool`; the loop tolerates a few such empty refills (EMPTY_REFILL_LIMIT) before concluding the project is
+drained. It does not assert every trace was deleted — its job is to exercise the deletion bridge, not to empty the table.
+
 Prerequisites: `OPIK_URL_OVERRIDE` pointing at the local install. Run `python delete_traffic.py --help` for options.
 """
 
@@ -20,8 +25,12 @@ from _common import LOGGER, DEFAULT_PROJECT, make_opik_client
 _stop = False
 
 # Consecutive empty refills tolerated before concluding the project is drained. An empty refill can be a transient
-# delete-mask-visibility lag (the just-deleted top ids not yet hidden from search), not a truly empty project.
-EMPTY_REFILL_LIMIT = 3
+# delete-mask-visibility lag (the just-deleted top ids not yet hidden from search), not a truly empty project — so give
+# the mask several beats to propagate before stopping.
+EMPTY_REFILL_LIMIT = 5
+# Newest-page size to pull per refill. Larger reaches past the just-deleted (still-visible) top ids to undeleted ones
+# during mask lag, so the run keeps finding work instead of stopping early.
+REFILL_FETCH = 2000
 
 
 def _handle_sigint(_signum, _frame):
@@ -61,7 +70,7 @@ def main(project, tps, duration, batch):
         tick = time.time()
         if len(pool) < batch:
             # Exclude both already-deleted ids and those still queued in `pool`, so a refill can't requeue an in-flight id.
-            fetched = _fetch_ids(client, project, want=500, exclude=seen | set(pool))
+            fetched = _fetch_ids(client, project, want=REFILL_FETCH, exclude=seen | set(pool))
             if fetched is None:
                 # transient search failure — back off and retry rather than mistaking it for "no more traces".
                 time.sleep(interval if interval > 0 else 0.5)
