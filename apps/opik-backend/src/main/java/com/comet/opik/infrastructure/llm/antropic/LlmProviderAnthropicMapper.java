@@ -102,7 +102,7 @@ interface LlmProviderAnthropicMapper {
         }
         return thinking.get("type") instanceof String type
                 && StringUtils.isNotBlank(type)
-                && !"disabled".equals(type);
+                && !"disabled".equalsIgnoreCase(type);
     }
 
     @Named("resolveMaxTokens")

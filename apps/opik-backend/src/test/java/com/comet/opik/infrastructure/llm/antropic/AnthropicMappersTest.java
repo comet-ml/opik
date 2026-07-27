@@ -16,7 +16,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -140,108 +139,64 @@ public class AnthropicMappersTest {
     @DisplayName("Sampling params gating")
     class SamplingParamsGating {
 
-        @ParameterizedTest
-        @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-7", "claude-opus-4-8"})
-        void dropsTemperatureAndTopPForAdaptiveThinkingModels(String model) {
-            var request = ChatCompletionRequest.builder()
-                    .model(model)
-                    .addUserMessage("hi")
-                    .temperature(0.7)
-                    .topP(0.9)
-                    .build();
-
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("samplingGatingCases")
+        void gatesSamplingParams(String description, ChatCompletionRequest request, Double expectedTemperature,
+                Double expectedTopP) {
             var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
 
-            assertThat(actual.temperature).isNull();
-            assertThat(actual.topP).isNull();
+            assertThat(actual.getTemperature()).isEqualTo(expectedTemperature);
+            assertThat(actual.getTopP()).isEqualTo(expectedTopP);
         }
 
-        @Test
-        void forwardsTemperatureForModelsThatSupportSamplingParams() {
-            var request = ChatCompletionRequest.builder()
-                    .model("claude-3-7-sonnet-20250219")
-                    .addUserMessage("hi")
-                    .temperature(0.7)
-                    .build();
-
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
-
-            assertThat(actual.temperature).isEqualTo(0.7);
+        Stream<Arguments> samplingGatingCases() {
+            return Stream.of(
+                    // Adaptive-thinking models drop both sampling params regardless of what was requested.
+                    adaptiveDropsBoth("claude-sonnet-5"),
+                    adaptiveDropsBoth("claude-opus-4-7"),
+                    adaptiveDropsBoth("claude-opus-4-8"),
+                    // Sampling-capable model: params forwarded, with temperature winning over top_p.
+                    Arguments.of("sampling-capable forwards temperature",
+                            samplingCapable().temperature(0.7).build(), 0.7, null),
+                    Arguments.of("sampling-capable forwards top_p when temperature absent",
+                            samplingCapable().topP(0.9).build(), null, 0.9),
+                    Arguments.of("sampling-capable drops top_p when temperature also set",
+                            samplingCapable().temperature(0.7).topP(0.9).build(), 0.7, null),
+                    // Thinking enabled (any non-blank type other than "disabled", case-insensitive) drops both.
+                    thinkingDropsBoth("enabled"),
+                    thinkingDropsBoth("ENABLED"),
+                    thinkingDropsBoth("adaptive"),
+                    thinkingDropsBoth("some-future-mode"),
+                    // Thinking disabled / blank / absent leaves sampling params untouched.
+                    thinkingForwards("thinking disabled forwards", Map.of("thinking", Map.of("type", "disabled"))),
+                    thinkingForwards("thinking DISABLED (case-insensitive) forwards",
+                            Map.of("thinking", Map.of("type", "DISABLED"))),
+                    thinkingForwards("thinking blank type forwards", Map.of("thinking", Map.of("type", " "))),
+                    thinkingForwards("thinking block absent forwards", Map.of("max_tokens", 2048)));
         }
 
-        @Test
-        void forwardsTopPWhenTemperatureAbsentOnSamplingCapableModel() {
-            var request = ChatCompletionRequest.builder()
-                    .model("claude-3-7-sonnet-20250219")
-                    .addUserMessage("hi")
-                    .topP(0.9)
-                    .build();
-
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
-
-            assertThat(actual.temperature).isNull();
-            assertThat(actual.topP).isEqualTo(0.9);
+        private Arguments adaptiveDropsBoth(String model) {
+            return Arguments.of("adaptive model %s drops both".formatted(model),
+                    ChatCompletionRequest.builder().model(model).addUserMessage("hi")
+                            .temperature(0.7).topP(0.9).build(),
+                    null, null);
         }
 
-        @Test
-        void temperatureWinsOverTopPWhenBothSetOnSamplingCapableModel() {
-            var request = ChatCompletionRequest.builder()
-                    .model("claude-3-7-sonnet-20250219")
-                    .addUserMessage("hi")
-                    .temperature(0.7)
-                    .topP(0.9)
-                    .build();
-
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
-
-            assertThat(actual.temperature).isEqualTo(0.7);
-            assertThat(actual.topP).isNull();
+        private Arguments thinkingDropsBoth(String thinkingType) {
+            return Arguments.of("thinking type '%s' drops both".formatted(thinkingType),
+                    samplingCapable().temperature(0.7).topP(0.9)
+                            .customParameters(Map.of("thinking", Map.of("type", thinkingType, "budget_tokens", 1024)))
+                            .build(),
+                    null, null);
         }
 
-        @ParameterizedTest
-        @ValueSource(strings = {"enabled", "adaptive", "some-future-mode"})
-        void dropsSamplingParamsWhenThinkingEnabledOnSamplingCapableModel(String thinkingType) {
-            var request = ChatCompletionRequest.builder()
-                    .model("claude-3-7-sonnet-20250219")
-                    .addUserMessage("hi")
-                    .temperature(0.7)
-                    .topP(0.9)
-                    .customParameters(Map.of("thinking", Map.of("type", thinkingType, "budget_tokens", 1024)))
-                    .build();
-
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
-
-            assertThat(actual.temperature).isNull();
-            assertThat(actual.topP).isNull();
+        private Arguments thinkingForwards(String description, Map<String, Object> customParameters) {
+            return Arguments.of(description,
+                    samplingCapable().temperature(0.7).customParameters(customParameters).build(), 0.7, null);
         }
 
-        @ParameterizedTest
-        @ValueSource(strings = {"disabled", "", " "})
-        void forwardsTemperatureWhenThinkingDisabledOrBlankOnSamplingCapableModel(String thinkingType) {
-            var request = ChatCompletionRequest.builder()
-                    .model("claude-3-7-sonnet-20250219")
-                    .addUserMessage("hi")
-                    .temperature(0.7)
-                    .customParameters(Map.of("thinking", Map.of("type", thinkingType)))
-                    .build();
-
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
-
-            assertThat(actual.temperature).isEqualTo(0.7);
-        }
-
-        @Test
-        void forwardsTemperatureWhenThinkingBlockAbsentOnSamplingCapableModel() {
-            var request = ChatCompletionRequest.builder()
-                    .model("claude-3-7-sonnet-20250219")
-                    .addUserMessage("hi")
-                    .temperature(0.7)
-                    .customParameters(Map.of("max_tokens", 2048))
-                    .build();
-
-            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
-
-            assertThat(actual.temperature).isEqualTo(0.7);
+        private ChatCompletionRequest.Builder samplingCapable() {
+            return ChatCompletionRequest.builder().model("claude-3-7-sonnet-20250219").addUserMessage("hi");
         }
     }
 
