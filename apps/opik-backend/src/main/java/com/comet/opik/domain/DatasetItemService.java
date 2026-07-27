@@ -853,9 +853,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Saving batch with versioning for dataset '{}', itemCount '{}'", datasetId, items.size());
             // Unlike the other callers of saveItemsWithVersion, this public overload has no prior
             // dataset-existence read, so guard here (under the lock) to fail fast on a missing dataset.
+            // Mutate the latest version rather than minting one per batch: a multi-batch upload
+            // (e.g. a large CSV/JSON file split into chunks) must land in a single version, matching
+            // the null-batch_group_id contract the array API honors via save(DatasetItemBatch).
             return withDatasetVersionLock(datasetId, Mono.deferContextual(ctx -> {
                 datasetService.findById(datasetId, ctx.get(RequestContext.WORKSPACE_ID), null);
-                return saveItemsWithVersion(batch, datasetId, null);
+                return mutateLatestVersionWithInsert(batch, datasetId,
+                        ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.USER_NAME));
             })
                     .map(version -> (long) items.size())
                     .defaultIfEmpty((long) items.size()));

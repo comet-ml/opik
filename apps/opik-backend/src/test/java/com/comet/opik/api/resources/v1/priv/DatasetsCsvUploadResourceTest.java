@@ -244,6 +244,11 @@ class DatasetsCsvUploadResourceTest {
                             TEST_WORKSPACE);
                     assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
+
+        // A multi-batch upload (2500 rows → 3 server-side batches) must produce a single version,
+        // not one per batch: all batches append into the same latest version.
+        var versions = datasetResourceClient.listVersions(createdDatasetId, API_KEY, TEST_WORKSPACE);
+        assertThat(versions.total()).isEqualTo(1);
     }
 
     @Test
