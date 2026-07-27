@@ -2,7 +2,9 @@
 
 Operator runbook for the buffered cutover of the ClickHouse `traces` table: it migrates the live, unpartitioned
 `traces` table to `traces_local_v2` (weekly-partitioned, denullified, `is_deleted`-ready) with **near-zero downtime**
-and **zero deletion loss**, then wraps it in a sharding-ready `Distributed` table.
+and **near-zero deletion loss** — the deletion bridge replays every captured delete before the swap, leaving only a
+bounded residual micro-window (see "The final cutover window" below, which also gives the mitigation) — then wraps it
+in a sharding-ready `Distributed` table.
 
 The mechanism is **backfill + delta + deletion replay + EXCHANGE**, using the ingestion async-insert buffer to absorb
 the brief cutover window instead of a dual-write path.

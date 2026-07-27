@@ -82,5 +82,18 @@ def discover_workspace_and_project(
     finally:
         try:
             opik_client.rest_client.traces.delete_traces(ids=[anchor_id])
+            # delete_traces returns before ClickHouse applies the delete mask; poll until the anchor is actually gone so
+            # the seeder that runs next doesn't count it and skew backfill/delete/fidelity assertions (best-effort).
+            cleanup_deadline = time.time() + timeout_s
+            while time.time() < cleanup_deadline:
+                still_present = ch.query(
+                    "SELECT 1 FROM traces WHERE id = {id:String} LIMIT 1",
+                    parameters={"id": anchor_id},
+                ).result_rows
+                if not still_present:
+                    break
+                time.sleep(0.5)
+            else:
+                LOGGER.warning("cutover-anchor trace %s still visible %ss after delete; may skew counts", anchor_id, timeout_s)
         except Exception as exc:  # noqa: BLE001
             LOGGER.warning("could not delete cutover-anchor trace %s: %s", anchor_id, exc)

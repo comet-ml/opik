@@ -728,7 +728,10 @@ class TracesLocalV2CutoverTest {
         // wins under FINAL), so it is live again on the source in B and caught by the delta's last_updated_at arm.
         recordDeletionEvents(Set.of(reusedId.toString()), workspaceId, "", "user_request");
         lightweightDelete(Set.of(reusedId.toString()), workspaceId);
-        insertRows(reused, workspaceId, projectB, "resurrected", _ -> Instant.now());
+        // Server-clock last_updated_at (a later now64(6), so >= backfillStart) — NOT the JVM clock, whose skew vs the
+        // container could put it below backfillStart and make the delta's last_updated_at arm miss the resurrection.
+        var resurrectedAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        insertRows(reused, workspaceId, projectB, "resurrected", _ -> resurrectedAt);
 
         deltaInsert(backfillStart);
         replayDeletions(backfillStart);
