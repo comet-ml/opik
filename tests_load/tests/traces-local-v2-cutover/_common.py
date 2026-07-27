@@ -62,15 +62,25 @@ def discover_workspace_and_project(
     opik_client.trace(id=anchor_id, name="cutover-anchor", project_name=project_name, input={"anchor": True}).end()
     opik_client.flush()
 
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        rows = ch.query(
-            "SELECT workspace_id, toString(project_id) FROM traces WHERE id = {id:String} LIMIT 1",
-            parameters={"id": anchor_id},
-        ).result_rows
-        if rows:
-            workspace_id, project_id = rows[0]
-            LOGGER.info("Resolved project '%s': workspace_id=%s project_id=%s", project_name, workspace_id, project_id)
-            return workspace_id, project_id
-        time.sleep(0.5)
-    raise TimeoutError(f"anchor trace for project '{project_name}' did not appear in ClickHouse within {timeout_s}s")
+    # Always remove the anchor: leaving it behind would add one live trace to the target project and skew seeded
+    # counts and delete/cutover verification. Cleanup failures are logged, not raised, so they don't mask a real error.
+    try:
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            rows = ch.query(
+                "SELECT workspace_id, toString(project_id) FROM traces WHERE id = {id:String} LIMIT 1",
+                parameters={"id": anchor_id},
+            ).result_rows
+            if rows:
+                workspace_id, project_id = rows[0]
+                LOGGER.info(
+                    "Resolved project '%s': workspace_id=%s project_id=%s", project_name, workspace_id, project_id
+                )
+                return workspace_id, project_id
+            time.sleep(0.5)
+        raise TimeoutError(f"anchor trace for project '{project_name}' did not appear in ClickHouse within {timeout_s}s")
+    finally:
+        try:
+            opik_client.rest_client.traces.delete_traces(ids=[anchor_id])
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("could not delete cutover-anchor trace %s: %s", anchor_id, exc)

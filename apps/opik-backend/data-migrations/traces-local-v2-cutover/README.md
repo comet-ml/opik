@@ -629,8 +629,11 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 - [ ] **Schema-parity guards green** — `cutoverCopiesEveryBaseColumn` and `successorMaterializedColumnsMatchSource` pass
       on the release, so the cutover copies every base column of `traces` and the two tables' base and materialized
       columns match.
-- [ ] **Fidelity verified** — `verify.sh` passes (full, or a documented representative sample) between source and
-      destination before the EXCHANGE. Re-run `delta_replay.sh` then `verify.sh` until it PASSES: while the buffer holds
+- [ ] **Fidelity verified** — `verify.sh` passes between source and destination before the EXCHANGE. This gate MUST be a
+      **full compare** (`--sample-mod 1 --weeks-stride 1`, no `--from-week`/`--to-week` narrowing): a cross-project
+      workspace-scoped residual row is a single key, so any sampling (`--sample-mod > 1`), week stride, or week narrowing
+      can hash it out or skip its week and still report `ok=1`. Reserve sampling/ranged runs for follow-up confidence
+      *after* the full gate passes. Re-run `delta_replay.sh` then `verify.sh` until it PASSES: while the buffer holds
       writes (or, on a rehearsal without it, once traffic is quiescent) the last delta must catch every in-flight write.
 - [ ] **`Distributed` wrap gated on app-readiness** — apply the wrap (step 4, part 2) only when the delete/read DAOs are
       sharding-aware; otherwise stop after the `EXCHANGE`, since a lightweight `DELETE` against a `Distributed` `traces`

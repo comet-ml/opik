@@ -210,9 +210,13 @@ insert_window() {
     src="$(count_src_uniq "$lo" "$hi")"
     dst="$(count_dst_uniq "$lo" "$hi")"
 
-    # Resume: destination already has this window (exact, ahead due to concurrent deletes, or within tolerance).
-    if [[ "$dst" != "0" ]] \
-        && [[ "$(awk -v s="$src" -v d="$dst" -v p="$DIVERGENCE" 'BEGIN { print (d >= s || (s - d) / s <= p) ? 1 : 0 }')" == "1" ]]; then
+    # Resume: skip only when the destination already holds at least as many logical rows as the source (exact, or ahead
+    # because concurrent deletes shrank the source). DIVERGENCE is NOT a resume criterion: a partially-copied window can
+    # sit a hair short of src yet within tolerance, and skipping it would leave those rows missing forever — the delta
+    # step only re-copies rows at/after backfill_start, so a pre-anchor gap is unrepairable. The backfill INSERT is
+    # idempotent (ReplacingMergeTree, mask-honoring), so re-copying a short window is safe and cheap. DIVERGENCE governs
+    # only the post-copy abort below.
+    if [[ "$dst" != "0" && "$dst" -ge "$src" ]]; then
         log "$label ($lo .. $hi): already present (src_uniq=$src dst_uniq=$dst), skipping"
         return
     fi

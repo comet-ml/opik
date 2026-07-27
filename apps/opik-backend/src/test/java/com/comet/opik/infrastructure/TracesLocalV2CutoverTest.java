@@ -987,10 +987,11 @@ class TracesLocalV2CutoverTest {
     // need not exist yet), then one atomic multi-target RENAME rotates the data to traces_local and the wrapper into
     // traces (the name freed by the first clause), so traces is never absent on a node.
     private void wrapInDistributed() {
-        execute(("CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces "
-                + "ENGINE = Distributed('{cluster}', '" + DATABASE_NAME + "', 'traces_local', sipHash64(project_id))"),
-                _ -> {
-                });
+        execute("""
+                CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
+                ENGINE = Distributed('{cluster}', '%s', 'traces_local', sipHash64(project_id))
+                """.formatted(DATABASE_NAME), _ -> {
+        });
         execute("""
                 RENAME TABLE
                     traces TO traces_local,

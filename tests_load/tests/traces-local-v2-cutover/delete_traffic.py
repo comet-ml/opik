@@ -77,9 +77,9 @@ def main(project, tps, duration, batch):
                 continue
             pool.extend(fetched)
             if not pool:
-                # An empty refill can be transient: the delete mask may not be visible to search yet, so the newest 500
-                # ids can all still be in `seen`/`pool`. Only stop after several consecutive empty refills, so a mask-lag
-                # blip doesn't end the run while thousands of lower-id traces remain undeleted.
+                # An empty refill can be transient: the delete mask may not be visible to search yet, so the newest
+                # REFILL_FETCH ids can all still be in `seen`/`pool`. Only stop after several consecutive empty refills,
+                # so a mask-lag blip doesn't end the run while thousands of lower-id traces remain undeleted.
                 empty_refills += 1
                 if empty_refills >= EMPTY_REFILL_LIMIT:
                     LOGGER.info("no more traces to delete after %d empty refills; stopping", empty_refills)
