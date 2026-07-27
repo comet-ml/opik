@@ -207,6 +207,31 @@ def test_unhashable_prediction__scoring_failed(malformed):
     assert score.value == 0.0
 
 
+@pytest.mark.parametrize("position", ["prediction", "reference"])
+def test_nan_label__scoring_failed(position):
+    nan = float("nan")
+    pairs = [("spam", nan)] if position == "prediction" else [(nan, "spam")]
+
+    score = _score(classification.f1_score, pairs + [("ham", "ham")], average="macro")
+
+    assert score.scoring_failed is True
+    assert score.value == 0.0
+
+
+def test_repeated_nan_labels__do_not_tally_as_separate_classes():
+    # Each float("nan") is a distinct object that never equals itself, so an
+    # unguarded tally grows one class per row and sinks the macro average.
+    # Built in a loop on purpose: `[pair] * 10` would reuse one NaN object.
+    pairs = [("spam", "spam"), ("ham", "ham")]
+    pairs += [("spam", float("nan")) for _ in range(10)]
+
+    score = _score(classification.precision, pairs, average="macro")
+
+    assert score.scoring_failed is True
+    assert score.metadata["n_samples"] == 12
+    assert "nan" in score.reason
+
+
 def test_metadata__reports_average_labels_and_counts():
     score = _score(classification.recall, THREE_CLASS, average="weighted")
 

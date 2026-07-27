@@ -106,14 +106,18 @@ def _class_counts(pairs: List[Tuple[Any, Any]]) -> Counts:
     return {label: (tp, fp, fn) for label, (tp, fp, fn) in tallies.items()}
 
 
-def _first_unhashable(pairs: List[Tuple[Any, Any]]) -> Any:
+def _first_unusable(pairs: List[Tuple[Any, Any]]) -> Optional[Tuple[Any, str]]:
     # A list or dict here means the task emitted a structured blob instead of a
     # class. Left alone it raises TypeError from the tally lookup, which
     # compute_experiment_scores swallows - the metric would vanish silently.
+    # NaN is hashable but never equals itself, so it slips past that check and
+    # instead tallies one class per occurrence, quietly sinking the average.
     for pair in pairs:
         for label in pair:
             if not _is_hashable(label):
-                return label
+                return label, "is not hashable"
+            if label != label:
+                return label, "does not equal itself"
     return None
 
 
@@ -178,15 +182,16 @@ def _build(
             "n_skipped": skipped,
         }
 
-        unhashable = _first_unhashable(pairs)
-        if unhashable is not None:
+        unusable = _first_unusable(pairs)
+        if unusable is not None:
+            label, cause = unusable
             return score_result.ScoreResult(
                 name=score_name,
                 value=0.0,
                 reason=(
-                    f"Label {unhashable!r} is not hashable, so it cannot name a "
-                    f"class: '{output_key}' and '{reference_key}' must hold "
-                    f"scalar labels."
+                    f"Label {label!r} {cause}, so it cannot name a class: "
+                    f"'{output_key}' and '{reference_key}' must hold scalar "
+                    f"labels."
                 ),
                 metadata=metadata,
                 scoring_failed=True,
