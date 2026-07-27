@@ -1919,6 +1919,39 @@ class GetTracesByProjectResourceTest {
         }
 
         @ParameterizedTest
+        @ValueSource(strings = {"$..test", "$[abc]", "$.key with space", "[", "]", "[..]"})
+        @DisplayName("a malformed or non-matching metadata path returns an empty page rather than failing")
+        void whenFilterMetadataPathIsMalformedOrNonMatching__thenReturnEmptyPage(String key) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build())
+                    .toList();
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key(key)
+                    .value("gpt-4")
+                    .build());
+
+            var actualPage = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName, filters, null,
+                    traces.size(), Map.of());
+
+            assertThat(actualPage.content()).isEmpty();
+            assertThat(actualPage.total()).isZero();
+        }
+
+        @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterMetadataEqualString__thenReturnTracesFiltered(String endpoint,
                 Operator operator,

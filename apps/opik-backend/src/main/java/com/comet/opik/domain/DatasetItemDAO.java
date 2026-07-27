@@ -1423,7 +1423,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                     .doFinally(signalType -> endSegment(segmentContent))
                                     .flatMap(DatasetItemResultMapper::mapItem)
                                     .collectList()
-                                    .onErrorResume(e -> handleSqlError(e, List.of()))
+                                    .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, List.of()))
                                     .flatMap(
                                             items -> Mono
                                                     .just(new DatasetItemPage(items, page, items.size(), total, columns,
@@ -1459,7 +1459,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Flux.from(statement.execute())
                     .flatMap(DatasetItemResultMapper::mapCount)
                     .reduce(0L, Long::sum)
-                    .onErrorResume(e -> handleSqlError(e, 0L))
+                    .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, 0L))
                     .doFinally(signalType -> endSegment(segment));
         }));
     }
@@ -1477,14 +1477,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "data"));
         }))
                 .doFinally(signalType -> endSegment(segment));
-    }
-
-    private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
-        // A user-supplied malformed JSON path is rejected by ClickHouse; treat it as an empty result.
-        if (ErrorUtils.isMalformedJsonPath(e)) {
-            return Mono.just(defaultValue);
-        }
-        return Mono.error(e);
     }
 
     @WithSpan
