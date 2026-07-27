@@ -65,7 +65,9 @@ ch() {
 # Physical rows to copy (count() honors the deleted-row mask, so masked rows are excluded — as the backfill excludes
 # them) and the projected window count: each week splits until every sub-window is <= MAX_ROWS, so a week of `cnt` rows
 # yields ~ceil(cnt / MAX_ROWS) inserts. Both come from one grouped scan.
-read -r TOTAL_ROWS EST_WINDOWS WEEKS <<< "$(ch "
+# Capture first so set -e catches a clickhouse-client failure, rather than a swallowed here-string substitution leaving
+# TOTAL_ROWS empty and mislabeling the run as "table is empty".
+sizing="$(ch "
     SELECT
         sum(cnt),
         sum(if(cnt = 0, 0, toUInt64(ceil(cnt / $MAX_ROWS)))),
@@ -79,6 +81,7 @@ read -r TOTAL_ROWS EST_WINDOWS WEEKS <<< "$(ch "
     )
     FORMAT TSV
 ")"
+read -r TOTAL_ROWS EST_WINDOWS WEEKS <<< "$sizing"
 
 if [[ -z "$TOTAL_ROWS" || "$TOTAL_ROWS" == "0" ]]; then
     echo "Source table 'traces' is empty — nothing to backfill."

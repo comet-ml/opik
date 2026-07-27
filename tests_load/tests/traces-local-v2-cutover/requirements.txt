@@ -1,3 +1,6 @@
-opik
+# NOTE: `opik` is intentionally NOT listed here. The README installs it editable from the local checkout
+# (`pip install -e sdks/python`) so the rehearsal runs against the unreleased cutover SDK; listing it here would let
+# `pip install -r requirements.txt` re-resolve it from PyPI and shadow that local install.
 click
-clickhouse-connect
+# clickhouse-connect had breaking get_client(...) changes across earlier minors; pin a floor with the current signature.
+clickhouse-connect>=0.7

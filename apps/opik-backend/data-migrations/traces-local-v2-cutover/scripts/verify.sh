@@ -122,7 +122,11 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
     LO="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $week))") 00:00:00"
     HI="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $((week + 1))))") 00:00:00"
 
-    read -r src_rows dst_rows src_checksum dst_checksum ok <<< "$(compare_window "$LO" "$HI")"
+    # Capture first (not read <<< "$(...)"): a here-string command substitution is exempt from set -e, so a
+    # clickhouse-client failure here would be swallowed, leaving `ok` empty and the week mislabeled as a MISMATCH. A
+    # plain assignment IS caught by set -e, so an infra blip aborts with the real error instead of a false fidelity fail.
+    compare_out="$(compare_window "$LO" "$HI")"
+    read -r src_rows dst_rows src_checksum dst_checksum ok <<< "$compare_out"
     checked=$((checked + 1))
     if [[ "$ok" == "1" ]]; then
         log "week $week ($LO .. $HI): OK (rows=$src_rows)"

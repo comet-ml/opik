@@ -19,6 +19,10 @@ from _common import LOGGER, DEFAULT_PROJECT, make_opik_client
 
 _stop = False
 
+# Consecutive empty refills tolerated before concluding the project is drained. An empty refill can be a transient
+# delete-mask-visibility lag (the just-deleted top ids not yet hidden from search), not a truly empty project.
+EMPTY_REFILL_LIMIT = 3
+
 
 def _handle_sigint(_signum, _frame):
     global _stop
@@ -48,6 +52,7 @@ def main(project, tps, duration, batch):
     seen: set[str] = set()
     pool: list[str] = []
     deleted = 0
+    empty_refills = 0
     started = time.time()
     LOGGER.info("delete traffic: project='%s' tps=%.2f batch=%d duration=%ss (Ctrl-C to stop)",
                 project, tps, batch, duration or "∞")
@@ -63,8 +68,16 @@ def main(project, tps, duration, batch):
                 continue
             pool.extend(fetched)
             if not pool:
-                LOGGER.info("no more traces to delete; stopping")
-                break
+                # An empty refill can be transient: the delete mask may not be visible to search yet, so the newest 500
+                # ids can all still be in `seen`/`pool`. Only stop after several consecutive empty refills, so a mask-lag
+                # blip doesn't end the run while thousands of lower-id traces remain undeleted.
+                empty_refills += 1
+                if empty_refills >= EMPTY_REFILL_LIMIT:
+                    LOGGER.info("no more traces to delete after %d empty refills; stopping", empty_refills)
+                    break
+                time.sleep(interval if interval > 0 else 0.5)
+                continue
+            empty_refills = 0
         ids = [pool.pop(0) for _ in range(min(batch, len(pool)))]
         seen.update(ids)
         client.rest_client.traces.delete_traces(ids=ids)

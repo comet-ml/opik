@@ -336,11 +336,14 @@ class TracesLocalV2CutoverTest {
         // Reused-id delete scoped to projectId only — the copy under otherProjectId must survive.
         recordDeletionEvents(Set.of(reusedId.toString()), workspaceId, projectId.toString(), "user_request");
         lightweightDeleteScoped(Set.of(reusedId.toString()), workspaceId, projectId);
+        // During-window instant from the SAME server clock as backfillStart (a later now64(6), so >= backfillStart) —
+        // NOT the JVM host clock, whose skew vs the container could put these below backfillStart and flake the delta.
+        var duringWindow = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
         // Concurrent upserts: a newer version of a subset of survivors — caught by the delta's last_updated_at arm.
         var deltaUpserted = survivors.subList(0, DELTA_UPSERTS);
-        insertRows(deltaUpserted, workspaceId, projectId, deltaName(), _ -> Instant.now());
+        insertRows(deltaUpserted, workspaceId, projectId, deltaName(), _ -> duringWindow);
         // Rows created during the window with a client-backdated last_updated_at — caught ONLY by the created_at arm.
-        var deltaLateCreated = mintNowIds(DELTA_LATE_CREATED);
+        var deltaLateCreated = mintIdsAt(DELTA_LATE_CREATED, duringWindow);
         insertRows(deltaLateCreated, workspaceId, projectId, "late", _ -> BACKDATED);
 
         // Delta-insert: created_at OR last_updated_at since backfill_start (see class Javadoc).
@@ -802,8 +805,8 @@ class TracesLocalV2CutoverTest {
                 SELECT
                 %s
                 FROM traces
-                WHERE created_at >= parseDateTime64BestEffort(:week_lo, 9)
-                  AND created_at < parseDateTime64BestEffort(:week_hi, 9)
+                WHERE created_at >= toDateTime64(:week_lo, 9, 'UTC')
+                  AND created_at < toDateTime64(:week_hi, 9, 'UTC')
                 SETTINGS max_insert_block_size = 100000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("week_lo", weekLo).bind("week_hi", weekHi));
@@ -822,8 +825,8 @@ class TracesLocalV2CutoverTest {
                 SELECT
                 %s
                 FROM traces
-                WHERE created_at >= parseDateTime64BestEffort(:backfill_start, 6)
-                   OR last_updated_at >= parseDateTime64BestEffort(:backfill_start, 6)
+                WHERE created_at >= toDateTime64(:backfill_start, 6)
+                   OR last_updated_at >= toDateTime64(:backfill_start, 6)
                 SETTINGS max_insert_block_size = 100000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("backfill_start", backfillStart));
@@ -854,7 +857,7 @@ class TracesLocalV2CutoverTest {
                             toFixedString(deleted_id, 36)
                         FROM deletion_events_local
                         WHERE source_table = 'traces'
-                          AND event_time >= parseDateTime64BestEffort(:backfill_start, 6)
+                          AND event_time >= toDateTime64(:backfill_start, 6)
                           AND project_id != ''
                     )
                     AND (workspace_id, project_id, id) NOT IN (
@@ -867,7 +870,7 @@ class TracesLocalV2CutoverTest {
                             SELECT toFixedString(deleted_id, 36)
                             FROM deletion_events_local
                             WHERE source_table = 'traces'
-                              AND event_time >= parseDateTime64BestEffort(:backfill_start, 6)
+                              AND event_time >= toDateTime64(:backfill_start, 6)
                         )
                     )
                 )
@@ -878,7 +881,7 @@ class TracesLocalV2CutoverTest {
                             toFixedString(deleted_id, 36)
                         FROM deletion_events_local
                         WHERE source_table = 'traces'
-                          AND event_time >= parseDateTime64BestEffort(:backfill_start, 6)
+                          AND event_time >= toDateTime64(:backfill_start, 6)
                           AND project_id = ''
                     )
                     AND (workspace_id, id) NOT IN (
@@ -890,7 +893,7 @@ class TracesLocalV2CutoverTest {
                             SELECT toFixedString(deleted_id, 36)
                             FROM deletion_events_local
                             WHERE source_table = 'traces'
-                              AND event_time >= parseDateTime64BestEffort(:backfill_start, 6)
+                              AND event_time >= toDateTime64(:backfill_start, 6)
                         )
                     )
                 )
@@ -992,7 +995,7 @@ class TracesLocalV2CutoverTest {
                         toFixedString(deleted_id, 36)
                     FROM deletion_events_local
                     WHERE source_table = 'traces'
-                      AND event_time >= parseDateTime64BestEffort(:cutover_start, 6)
+                      AND event_time >= toDateTime64(:cutover_start, 6)
                       AND project_id != ''
                 )
                 OR (workspace_id, id) IN (
@@ -1001,7 +1004,7 @@ class TracesLocalV2CutoverTest {
                         toFixedString(deleted_id, 36)
                     FROM deletion_events_local
                     WHERE source_table = 'traces'
-                      AND event_time >= parseDateTime64BestEffort(:cutover_start, 6)
+                      AND event_time >= toDateTime64(:cutover_start, 6)
                       AND project_id = ''
                 )
                 SETTINGS allow_nondeterministic_mutations = 1,
@@ -1441,10 +1444,9 @@ class TracesLocalV2CutoverTest {
     }
 
     /** Ids created "now" — used for rows written during the window, so their created_at is >= backfill_start. */
-    private List<CategorizedId> mintNowIds(int count) {
+    private List<CategorizedId> mintIdsAt(int count, Instant createdAt) {
         var ids = new ArrayList<CategorizedId>();
         for (int i = 0; i < count; i++) {
-            var createdAt = Instant.now();
             ids.add(CategorizedId.builder().id(ID_GENERATOR.generateId(createdAt)).createdAt(createdAt).build());
         }
         return ids;
