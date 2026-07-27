@@ -10,6 +10,7 @@ import com.comet.opik.utils.template.TemplateUtils;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -213,6 +214,15 @@ class TracesLocalV2CutoverTest {
         MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
         template = TransactionTemplateAsync.create(
                 ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer, DATABASE_NAME).build());
+    }
+
+    // Dedicated (non-reused) containers, so tear them down explicitly rather than relying only on the Ryuk reaper —
+    // keeps reruns and a shared JVM from accumulating stopped-but-lingering resources. PER_CLASS lets this be non-static.
+    @AfterAll
+    void stopContainers() {
+        clickHouseContainer.stop();
+        zookeeperContainer.stop();
+        network.close();
     }
 
     /**
@@ -666,7 +676,10 @@ class TracesLocalV2CutoverTest {
         lightweightDelete(idStrings(resurrected), workspaceId);
         recordDeletionEvents(idStrings(stayDeleted), workspaceId, captureProject, "user_request");
         lightweightDelete(idStrings(stayDeleted), workspaceId);
-        insertRows(resurrected, workspaceId, projectId, "resurrected", _ -> Instant.now());
+        // Recreate with a server-clock last_updated_at (a later now64(6), so >= backfillStart) — NOT the JVM clock,
+        // whose skew vs the container could put it below backfillStart and make the delta miss the resurrection path.
+        var resurrectedAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
+        insertRows(resurrected, workspaceId, projectId, "resurrected", _ -> resurrectedAt);
 
         deltaInsert(backfillStart);
         // Run the replay twice: it must be idempotent (re-runnable to convergence) and must not drop the resurrected
