@@ -14,10 +14,12 @@ updates:
        update-types: ["version-update:semver-patch"]
    open-pull-requests-limit: 5
 
- # CI / test-tooling only. A bad bump here breaks a test job (caught pre-merge),
- # never a shipped image. Production-image manifests (apps/**) and SDK release
- # manifests (sdks/**) are deliberately NOT watched — those are bumped and tested
- # deliberately. See OPIK-7494.
+ # CI / test-tooling only, and scoped to manifests a pull_request workflow
+ # actually installs and runs — so a bad bump surfaces as a red check pre-merge,
+ # never in a shipped image. Production-image manifests (apps/**) and SDK release
+ # manifests (sdks/**) are deliberately NOT watched. Other test dirs (tests_load,
+ # visual-tests, test-helper-service) are omitted because no pull_request workflow
+ # exercises them today — watching them would produce unverified bumps. See OPIK-7494.
 
  - package-ecosystem: "github-actions"
    directory: "/"
@@ -30,42 +32,8 @@ updates:
      github-actions-minor:
        update-types: ["minor", "patch"]
 
- - package-ecosystem: "pip"
-   directory: "/tests_load"
-   schedule:
-     interval: "weekly"
-   ignore:
-     - dependency-name: "*"
-       update-types: ["version-update:semver-patch"]
-   open-pull-requests-limit: 5
-   groups:
-     tests-load:
-       patterns: ["*"]
-
- - package-ecosystem: "pip"
-   directory: "/tests_load/suite/python_sdk"
-   schedule:
-     interval: "weekly"
-   ignore:
-     - dependency-name: "*"
-       update-types: ["version-update:semver-patch"]
-   open-pull-requests-limit: 5
-   groups:
-     tests-load-python-sdk:
-       patterns: ["*"]
-
- - package-ecosystem: "pip"
-   directory: "/tests_end_to_end/test-helper-service"
-   schedule:
-     interval: "weekly"
-   ignore:
-     - dependency-name: "*"
-       update-types: ["version-update:semver-patch"]
-   open-pull-requests-limit: 5
-   groups:
-     test-helper-service:
-       patterns: ["*"]
-
+ # end2end_suites_v2.yml runs on pull_request for tests_end_to_end/e2e/** and
+ # does `npm ci` + Playwright there, so these bumps are exercised pre-merge.
  - package-ecosystem: "npm"
    directory: "/tests_end_to_end/e2e"
    schedule:
@@ -76,16 +44,4 @@ updates:
    open-pull-requests-limit: 5
    groups:
      e2e:
-       patterns: ["*"]
-
- - package-ecosystem: "npm"
-   directory: "/tests_end_to_end/visual-tests"
-   schedule:
-     interval: "weekly"
-   ignore:
-     - dependency-name: "*"
-       update-types: ["version-update:semver-patch"]
-   open-pull-requests-limit: 5
-   groups:
-     visual-tests:
        patterns: ["*"]
