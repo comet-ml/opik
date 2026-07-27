@@ -172,7 +172,7 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 22 parameters per row tuple in template order.
+        // (repeats dedup), then 25 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
