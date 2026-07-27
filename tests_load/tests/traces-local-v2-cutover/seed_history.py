@@ -172,7 +172,10 @@ def main(project, weeks, per_week, bad_ids, batch, workspace_id, project_id):
     LOGGER.info("Per-week seeded (created_at week -> count): %s",
                 {k: per_week_counts[k] for k in sorted(per_week_counts)})
     if bad_ids:
-        LOGGER.info("Plus %d far-future-id rows (id_at ~2201) to exercise the bad-id partition path.", bad_ids)
+        LOGGER.info(
+            "Plus %d far-future-id rows (litellm UUIDv7 ~2201) to exercise the bad-id partition path. NOTE: the "
+            "successor's 32-bit DateTime id_at wraps ~2201 to ~2065, so look for these rows in the ~2065 weekly "
+            "partition, not 2201.", bad_ids)
 
 
 if __name__ == "__main__":

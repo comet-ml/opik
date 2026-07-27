@@ -1228,7 +1228,7 @@ class TracesLocalV2CutoverTest {
         }
         var sql = """
                 SELECT uniqExact(id) AS c
-                FROM %s
+                FROM %s FINAL
                 WHERE workspace_id = :workspace_id
                   AND id IN :ids
                 """.formatted(table);
@@ -1245,7 +1245,7 @@ class TracesLocalV2CutoverTest {
     private long liveCountScoped(String table, Set<String> ids, String workspaceId, UUID projectId) {
         var sql = """
                 SELECT uniqExact(id) AS c
-                FROM %s
+                FROM %s FINAL
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND id IN :ids

@@ -110,8 +110,15 @@ drill_down_window() {
 
 ROWS="$(ch "SELECT count() FROM $OLD_TABLE")"
 if [[ "$ROWS" == "0" ]]; then
-    log "Old-schema table '$OLD_TABLE' is empty — nothing to verify."
-    exit 0
+    # An empty old table is only "nothing to verify" if the new table is ALSO empty. If the successor has rows the
+    # source doesn't, that's an unexplained divergence (extra destination rows) — fail rather than declare success.
+    NEW_ROWS="$(ch "SELECT count() FROM $NEW_TABLE")"
+    if [[ "$NEW_ROWS" == "0" ]]; then
+        log "Both '$OLD_TABLE' and '$NEW_TABLE' are empty — nothing to verify."
+        exit 0
+    fi
+    log "FAILED: '$OLD_TABLE' is empty but '$NEW_TABLE' has $NEW_ROWS row(s) — the successor holds data the source does not." >&2
+    exit 1
 fi
 
 # Week range from the old table's created_at (bounded and real; covers rows whose id_at is far-future from the bad-id bug
