@@ -21,6 +21,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -393,6 +394,10 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().billingMode()).isEqualTo("subscription");
                 assertThat(row.get().plan()).isEqualTo("max");
                 assertThat(row.get().planUsageStatus()).isEqualTo("within");
+                // seat-pricing fields parsed from cipx.session.identity (org seat class + cadence)
+                assertThat(row.get().organizationType()).isEqualTo("team");
+                assertThat(row.get().seatTier()).isEqualTo("priority");
+                assertThat(row.get().billingType()).isEqualTo("stripe_subscription_contracted");
                 // git info + per-turn committed delta parsed from cipx.session.repository (OPIK-7345)
                 assertThat(row.get().branch()).isEqualTo("main");
                 assertThat(row.get().headShaStart()).isEqualTo("aaaa1111");
@@ -618,7 +623,10 @@ class CostIntelligenceIngestionTest {
                         "display_name": "%s",
                         "billing_mode": "subscription",
                         "plan": "max",
-                        "plan_usage_status": "within"
+                        "plan_usage_status": "within",
+                        "organization_type": "team",
+                        "seat_tier": "priority",
+                        "billing_type": "stripe_subscription_contracted"
                       }
                     }
                   }
@@ -712,7 +720,7 @@ class CostIntelligenceIngestionTest {
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
-                    billing_mode, plan, plan_usage_status,
+                    billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted
                 FROM cipx_trace_identities FINAL
@@ -723,28 +731,32 @@ class CostIntelligenceIngestionTest {
                     .bind("workspace_id", workspaceId)
                     .bind("trace_id", traceId.toString());
             return Mono.from(statement.execute())
-                    .flatMap(result -> Mono.from(result.map((row, meta) -> new CipxIdentityRow(
-                            row.get("project_id", String.class),
-                            row.get("start_ms", Long.class),
-                            row.get("user_uuid", String.class),
-                            row.get("user_email", String.class),
-                            row.get("user_display_name", String.class),
-                            row.get("repository", String.class),
-                            row.get("session_id", String.class),
-                            row.get("harness", String.class),
-                            row.get("schema_version", Integer.class),
-                            row.get("billing_mode", String.class),
-                            row.get("plan", String.class),
-                            row.get("plan_usage_status", String.class),
-                            row.get("branch", String.class),
-                            row.get("head_sha_start", String.class),
-                            row.get("head_sha_end", String.class),
-                            row.get("dirty", Boolean.class),
-                            row.get("commits_in_trace", Integer.class),
-                            row.get("files_added", Integer.class),
-                            row.get("files_deleted", Integer.class),
-                            row.get("lines_added", Integer.class),
-                            row.get("lines_deleted", Integer.class)))));
+                    .flatMap(result -> Mono.from(result.map((row, meta) -> CipxIdentityRow.builder()
+                            .projectId(row.get("project_id", String.class))
+                            .startMs(row.get("start_ms", Long.class))
+                            .userUuid(row.get("user_uuid", String.class))
+                            .userEmail(row.get("user_email", String.class))
+                            .userDisplayName(row.get("user_display_name", String.class))
+                            .repository(row.get("repository", String.class))
+                            .sessionId(row.get("session_id", String.class))
+                            .harness(row.get("harness", String.class))
+                            .schemaVersion(row.get("schema_version", Integer.class))
+                            .billingMode(row.get("billing_mode", String.class))
+                            .plan(row.get("plan", String.class))
+                            .planUsageStatus(row.get("plan_usage_status", String.class))
+                            .organizationType(row.get("organization_type", String.class))
+                            .seatTier(row.get("seat_tier", String.class))
+                            .billingType(row.get("billing_type", String.class))
+                            .branch(row.get("branch", String.class))
+                            .headShaStart(row.get("head_sha_start", String.class))
+                            .headShaEnd(row.get("head_sha_end", String.class))
+                            .dirty(row.get("dirty", Boolean.class))
+                            .commitsInTrace(row.get("commits_in_trace", Integer.class))
+                            .filesAdded(row.get("files_added", Integer.class))
+                            .filesDeleted(row.get("files_deleted", Integer.class))
+                            .linesAdded(row.get("lines_added", Integer.class))
+                            .linesDeleted(row.get("lines_deleted", Integer.class))
+                            .build())));
         }).blockOptional();
     }
 
@@ -782,9 +794,11 @@ class CostIntelligenceIngestionTest {
             String toolUseId, String resource, String kind, String contentSha256, Long startMs) {
     }
 
+    @Builder
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
             String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
-            String billingMode, String plan, String planUsageStatus,
+            String billingMode, String plan, String planUsageStatus, String organizationType, String seatTier,
+            String billingType,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,
             Integer filesAdded, Integer filesDeleted, Integer linesAdded, Integer linesDeleted) {
     }
