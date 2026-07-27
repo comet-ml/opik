@@ -99,6 +99,13 @@ export type EmptyRunCause =
  *
  * The baseline (stepIndex 0) never counts as optimizer output; a scored baseline
  * is expected on every run.
+ *
+ * `candidates` is the page-1 load capped at MAX_EXPERIMENTS_LOADED, sorted by
+ * created_at ascending, so the baseline is always present and only trials past
+ * the cap can be missing. Classifying from `scoring_health` instead is not an
+ * option: those counts are per dataset item, so they cannot tell "the optimizer
+ * generated nothing" from "the candidates failed to score", which is the whole
+ * distinction here.
  */
 export const computeEmptyRunCause = (
   candidates: AggregatedCandidate[],

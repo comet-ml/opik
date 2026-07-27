@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Info, TriangleAlert } from "lucide-react";
+import { Info, LucideIcon, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import { Optimization, OptimizationScoringHealth } from "@/types/optimizations";
@@ -31,7 +31,7 @@ type EmptyRunWarningPanelProps = {
 };
 
 type EmptyRunAppearance = {
-  Icon: typeof Info;
+  Icon: LucideIcon;
   container: string;
   iconColor: string;
   title: string;
