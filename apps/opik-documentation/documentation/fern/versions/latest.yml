@@ -441,6 +441,24 @@ navigation:
               - page: Cookbook - Evaluate moderation metric
                 path: ../docs-v2/evaluation/evaluate_moderation_metric.mdx
                 slug: evaluate_moderation_metric
+      - section: Guardrails
+        slug: /guardrails
+        contents:
+          - page: Overview
+            path: ../docs-v2/guardrails/overview.mdx
+            slug: overview
+          - page: Guardrails
+            path: ../docs-v2/guardrails/guardrails.mdx
+            slug: guardrails
+          - page: Prompt injection model
+            path: ../docs-v2/guardrails/prompt-injection-model.mdx
+            slug: prompt-injection-model
+          - page: Custom guardrails
+            path: ../docs-v2/guardrails/custom-guardrails.mdx
+            slug: custom-guardrails
+          - page: Guardrails server
+            path: ../docs-v2/guardrails/server.mdx
+            slug: server
       - section: Production
         slug: /production
         contents:
@@ -450,15 +468,12 @@ navigation:
               - page: Online Evaluation rules
                 path: ../docs-v2/production/online-evaluation/rules.mdx
                 slug: rules
-          - section: Gateway & Guardrails
+          - section: Gateway
             slug: /gateway-guardrails
             contents:
               - page: Gateway
                 path: ../docs-v2/production/gateway-guardrails/gateway.mdx
                 slug: gateway
-              - page: Guardrails
-                path: ../docs-v2/production/gateway-guardrails/guardrails.mdx
-                slug: guardrails
               - page: Anonymizers
                 path: ../docs-v2/production/gateway-guardrails/anonymizers.mdx
                 slug: anonymizers

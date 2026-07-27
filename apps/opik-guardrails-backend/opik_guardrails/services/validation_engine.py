@@ -4,6 +4,8 @@ from opik_guardrails import schemas
 
 from .validators import pii
 from .validators import topic
+from .validators import prompt_injection
+from .validators import custom_classifier
 from .validators import base_validator
 
 
@@ -12,12 +14,16 @@ _VALIDATION_CONFIG_TYPES_MAPPING: Dict[
 ] = {
     schemas.ValidationType.PII: schemas.PIIValidationConfig,
     schemas.ValidationType.TOPIC: schemas.TopicValidationConfig,
+    schemas.ValidationType.PROMPT_INJECTION: schemas.PromptInjectionValidationConfig,
+    schemas.ValidationType.CUSTOM_CLASSIFIER: schemas.CustomClassifierValidationConfig,
 }
 
 
 _VALIDATORS_MAPPING: Dict[schemas.ValidationType, base_validator.BaseValidator] = {
     schemas.ValidationType.PII: pii.construct_pii_validator(),
     schemas.ValidationType.TOPIC: topic.construct_topic_validator(),
+    schemas.ValidationType.PROMPT_INJECTION: prompt_injection.construct_prompt_injection_validator(),
+    schemas.ValidationType.CUSTOM_CLASSIFIER: custom_classifier.construct_custom_classifier_validator(),
 }
 
 

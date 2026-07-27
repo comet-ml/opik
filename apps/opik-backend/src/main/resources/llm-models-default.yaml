@@ -136,6 +136,8 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-opus-5"
+    label: "Claude Opus 5"
   - id: "claude-sonnet-5"
     label: "Claude Sonnet 5"
     structuredOutput: true
@@ -368,6 +370,10 @@ openrouter:
     label: "anthropic/claude-opus-4.8"
   - id: "anthropic/claude-opus-4.8-fast"
     label: "anthropic/claude-opus-4.8-fast"
+  - id: "anthropic/claude-opus-5"
+    label: "anthropic/claude-opus-5"
+  - id: "anthropic/claude-opus-5-fast"
+    label: "anthropic/claude-opus-5-fast"
   - id: "anthropic/claude-sonnet-4"
     label: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"

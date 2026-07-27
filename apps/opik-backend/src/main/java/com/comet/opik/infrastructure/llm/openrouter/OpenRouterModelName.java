@@ -58,6 +58,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     ANTHROPIC_CLAUDE_OPUS_4_7_FAST("anthropic/claude-opus-4.7-fast"),
     ANTHROPIC_CLAUDE_OPUS_4_8("anthropic/claude-opus-4.8"),
     ANTHROPIC_CLAUDE_OPUS_4_8_FAST("anthropic/claude-opus-4.8-fast"),
+    ANTHROPIC_CLAUDE_OPUS_5("anthropic/claude-opus-5"),
+    ANTHROPIC_CLAUDE_OPUS_5_FAST("anthropic/claude-opus-5-fast"),
     ANTHROPIC_CLAUDE_SONNET_4("anthropic/claude-sonnet-4"),
     ANTHROPIC_CLAUDE_SONNET_4_5("anthropic/claude-sonnet-4.5"),
     ANTHROPIC_CLAUDE_SONNET_4_6("anthropic/claude-sonnet-4.6"),
