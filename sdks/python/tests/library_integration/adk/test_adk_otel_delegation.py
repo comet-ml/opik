@@ -19,10 +19,6 @@ from opik.integrations.adk.patchers import patchers
 from opik.integrations.adk.patchers.adk_otel_tracer.opik_adk_otel_tracer import (
     OpikADKOtelTracer,
 )
-from . import helpers
-
-
-pytestmark = helpers.pytest_skip_for_adk_older_than_1_3_0
 
 
 @pytest.fixture(scope="module")

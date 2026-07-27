@@ -1,4 +1,7 @@
-google-adk
+# 1.3.0 is the minimum the integration supports; the floor is also load-bearing
+# against resolution, since google-adk 0.0.1 is a dependency-free "hello world"
+# stub that an unbounded spec lets a backtrack silently select.
+google-adk>=1.3.0
 python-multipart; python_version < "3.10"
 opentelemetry-api
 opentelemetry-sdk

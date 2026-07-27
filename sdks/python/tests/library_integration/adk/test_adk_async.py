@@ -253,7 +253,6 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
 
-@helpers.pytest_skip_for_adk_older_than_1_3_0
 @pytest.mark.asyncio
 async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
     fake_backend,

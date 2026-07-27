@@ -1,2 +1,0 @@
-google-adk<1.3.0
-python-multipart; python_version < "3.10"

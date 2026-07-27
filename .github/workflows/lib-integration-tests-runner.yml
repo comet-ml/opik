@@ -29,7 +29,6 @@ on:
           - crewai_v1
           - genai
           - adk
-          - adk_legacy_1_3_0
           - metrics
           - bedrock
           - litellm
@@ -197,12 +196,6 @@ jobs:
     uses: ./.github/workflows/lib-adk-tests.yml
     secrets: inherit
 
-  adk_legacy_1_3_0_tests:
-    needs: [init_environment]
-    if: contains(fromJSON('["adk_legacy_1_3_0", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/lib-adk-legacy-1-3-0-tests.yml
-    secrets: inherit
-
   evaluation_metrics_tests:
     needs: [init_environment]
     if: contains(fromJSON('["metrics", "all"]'), needs.init_environment.outputs.LIBS)
@@ -249,7 +242,6 @@ jobs:
       - crewai_v1_tests
       - genai_tests
       - adk_tests
-      - adk_legacy_1_3_0_tests
       - evaluation_metrics_tests
       - bedrock_tests
       - litellm_tests
@@ -294,7 +286,6 @@ jobs:
               "CrewAI v1": "${{ needs.crewai_v1_tests.result }}",
               "GenAI": "${{ needs.genai_tests.result }}",
               "ADK": "${{ needs.adk_tests.result }}",
-              "ADK Legacy 1.3.0": "${{ needs.adk_legacy_1_3_0_tests.result }}",
               "Evaluation Metrics": "${{ needs.evaluation_metrics_tests.result }}",
               "Bedrock": "${{ needs.bedrock_tests.result }}",
               "LiteLLM": "${{ needs.litellm_tests.result }}",

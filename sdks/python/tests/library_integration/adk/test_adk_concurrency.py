@@ -9,8 +9,7 @@ size-bounded so it can't grow without bound when an invocation's
 cancellation).
 
 The cache is unit-tested directly; ``after_agent_callback`` is exercised against
-the modern ``OpikTracer`` (skipped on ADK < 1.3.0, which uses
-``LegacyOpikTracer``). The autouse ``clear_context_storage`` fixture
+``OpikTracer``. The autouse ``clear_context_storage`` fixture
 (tests/conftest.py) resets context storage between tests.
 """
 
@@ -22,8 +21,6 @@ from opik import context_storage
 from opik.api_objects.trace.trace_data import TraceData
 from opik.integrations.adk import OpikTracer
 from opik.integrations.adk.output_cache import LastModelOutputCache
-
-from . import helpers
 
 
 def _callback_context(invocation_id: str) -> types.SimpleNamespace:
@@ -65,7 +62,6 @@ def test_last_model_output_cache__discard_removes_entry():
     cache.discard("missing")  # missing key is a no-op
 
 
-@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_after_agent_callback__stamps_only_its_own_invocations_output():
     tracer = OpikTracer(project_name="adk-test")
 
@@ -87,7 +83,6 @@ def test_after_agent_callback__stamps_only_its_own_invocations_output():
     assert trace_b.output == {"text": "BRAVO"}
 
 
-@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_after_agent_callback__no_cached_output__stamps_none():
     # No model output cached for this invocation (e.g. a failed conversion
     # cleared it): after_agent_callback must stamp None, never a stale value.
@@ -107,7 +102,6 @@ def _model_response(text: str, *, partial: bool) -> LlmResponse:
     )
 
 
-@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_after_model_callback__recovers_output_when_span_detached():
     # ContextCacheConfig (issue #5524) wraps the LLM call in its own OTel span,
     # which forks the async context under SSE streaming — so the span pushed in
@@ -130,7 +124,6 @@ def test_after_model_callback__recovers_output_when_span_detached():
     assert "RECOVERED ANSWER" in str(trace.output)
 
 
-@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_after_model_callback__detached_span__partial_chunk_discards():
     # Partial streaming chunks must not cache — and they clear any prior value for
     # the invocation (discard up front), so a stale earlier output can't leak onto
