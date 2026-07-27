@@ -67,54 +67,97 @@ export const getCompletedRunDurationSeconds = ({
 };
 
 /**
- * Heuristic detector for a "silent COMPLETED" run — the OPIK-7029 gap where a
- * run finishes normally but every evaluation failed to score, so it looks like
- * a plain empty run (dashes, "No data to show") with no error or warning.
- *
- * The rule: the run is terminal-COMPLETED **and** no candidate that actually
- * ran an optimization step produced a usable score. The baseline (stepIndex 0)
- * is deliberately excluded from the "did anything score?" check — a scored
- * baseline is expected on every run and does not mean the optimizer produced
- * anything, so a run whose only score is the baseline is still degenerate.
- * A run with zero non-baseline candidates counts as empty too (the optimizer
- * generated nothing to evaluate).
- *
- * This is a client-only heuristic; it can't tell a genuine all-zero run from an
- * all-failed one (Wave 2 threads exact scoring-health counts from the backend).
- * It only fires on COMPLETED — ERROR runs are already handled by RunErrorPanel,
- * and in-progress runs legitimately have unscored candidates.
+ * Why a COMPLETED run has nothing usable to show. Previously a single boolean,
+ * which made the panel blame the metric even when the metric worked (OPIK-7458).
  */
-export const computeEmptyRunWarning = (
-  candidates: AggregatedCandidate[],
-  status?: OPTIMIZATION_STATUS,
-): boolean => {
-  if (status !== OPTIMIZATION_STATUS.COMPLETED) return false;
+export const EMPTY_RUN_CAUSE = {
+  /** Nothing to surface: the run is unfinished or errored, or something scored. */
+  NONE: "none",
+  /** Nothing was generated beyond the baseline, and the baseline scored. */
+  NO_CANDIDATES: "no-candidates",
+  /**
+   * Nothing produced a usable score: every non-baseline candidate is unscored,
+   * or nothing scored at all. The OPIK-7029 "silent COMPLETED" gap.
+   */
+  SCORING_FAILED: "scoring-failed",
+} as const;
 
-  const nonBaselineCandidates = candidates.filter((c) => c.stepIndex !== 0);
-  // No trials at all, or none of the trials scored → no usable optimization result.
-  return nonBaselineCandidates.every((c) => c.score == null);
-};
+export type EmptyRunCause =
+  (typeof EMPTY_RUN_CAUSE)[keyof typeof EMPTY_RUN_CAUSE];
 
 /**
- * Produces the user-facing body message for the empty-run warning panel and the
- * KPI score-card caption. Two code paths:
+ * Classifies a run that finished with nothing usable on screen, so the copy can
+ * name the real cause.
  *
- *  1. **Exact count** (Wave 2, OPIK-7159): when `scoring_health` is present
- *     and `total_count > 0`, the backend persisted the real numbers. The copy
- *     uses `failed_count` / `total_count` directly and distinguishes:
- *       - all failed  → "All N items failed to score …"
- *       - partial     → "N of M items failed to score …"
- *       - singular    → "1 item" not "1 items"
+ * Order matters, because the checks overlap:
+ *  1. Only COMPLETED runs qualify. ERROR is handled by RunErrorPanel, and
+ *     in-progress runs legitimately have unscored candidates.
+ *  2. No non-baseline candidates, baseline scored: NO_CANDIDATES.
+ *  3. No non-baseline candidates, baseline unscored: SCORING_FAILED, since
+ *     nothing was evaluated at all.
+ *  4. Candidates exist but none scored: SCORING_FAILED.
  *
- *  2. **Heuristic fallback** (Wave 1, no backend data): returns the static
- *     message that was already shown before Wave 2 — exact backward compat.
- *
- * Returns `null` when the health data says nothing failed (failed_count === 0),
- * which lets the caller skip rendering the warning entirely.
+ * The baseline (stepIndex 0) never counts as optimizer output; a scored baseline
+ * is expected on every run.
  */
-export const getEmptyRunWarningMessage = (
+export const computeEmptyRunCause = (
+  candidates: AggregatedCandidate[],
+  status?: OPTIMIZATION_STATUS,
+): EmptyRunCause => {
+  if (status !== OPTIMIZATION_STATUS.COMPLETED) return EMPTY_RUN_CAUSE.NONE;
+
+  const nonBaselineCandidates = candidates.filter((c) => c.stepIndex !== 0);
+
+  if (nonBaselineCandidates.length === 0) {
+    const baselineScored = candidates.some(
+      (c) => c.stepIndex === 0 && c.score != null,
+    );
+    return baselineScored
+      ? EMPTY_RUN_CAUSE.NO_CANDIDATES
+      : EMPTY_RUN_CAUSE.SCORING_FAILED;
+  }
+
+  return nonBaselineCandidates.every((c) => c.score == null)
+    ? EMPTY_RUN_CAUSE.SCORING_FAILED
+    : EMPTY_RUN_CAUSE.NONE;
+};
+
+/** Panel heading. Names the cause instead of always reporting missing scores. */
+export const getEmptyRunTitle = (cause: EmptyRunCause): string =>
+  cause === EMPTY_RUN_CAUSE.NO_CANDIDATES
+    ? "No candidates generated"
+    : "No usable scores";
+
+/**
+ * Body copy for NO_CANDIDATES. Carries no call to action on purpose: the metric
+ * worked and the baseline was kept, so there is nothing to fix or retry.
+ */
+const NO_CANDIDATES_MESSAGE =
+  "The optimizer produced no prompt variants to score, so the baseline prompt was kept. " +
+  "This is common when the original prompt already scores well.";
+
+/**
+ * Body copy for the empty-run panel and the KPI score-card caption.
+ *
+ * NO_CANDIDATES has its own copy and ignores `scoring_health`: the baseline
+ * scored, so per-item failure counts cannot explain it.
+ *
+ * SCORING_FAILED has two paths. When `scoring_health` is present with
+ * `total_count > 0`, use the backend's exact counts (OPIK-7159 Wave 2),
+ * distinguishing all-failed from partial and keeping the noun in agreement with
+ * total_count. Otherwise return the static Wave-1 message unchanged.
+ *
+ * Returns null when there is nothing to say: cause NONE, or health data
+ * reporting no failures.
+ */
+export const getEmptyRunMessage = (
+  cause: EmptyRunCause,
   scoringHealth?: OptimizationScoringHealth,
 ): string | null => {
+  if (cause === EMPTY_RUN_CAUSE.NONE) return null;
+
+  if (cause === EMPTY_RUN_CAUSE.NO_CANDIDATES) return NO_CANDIDATES_MESSAGE;
+
   // --- Exact-count path (backend-provided, OPIK-7159 Wave 2) ---
   if (scoringHealth && scoringHealth.total_count > 0) {
     const { failed_count, total_count } = scoringHealth;
@@ -153,19 +196,22 @@ export const getEmptyRunWarningMessage = (
 };
 
 /**
- * Shortened version of {@link getEmptyRunWarningMessage} for the KPI score-card
- * caption, where space is tight. Returns `null` for the same conditions
- * (nothing failed, or scoring_health absent but `isEmptyRun` is false).
+ * Shortened version of {@link getEmptyRunMessage} for the KPI score-card
+ * caption, where space is tight. Returns null under the same conditions: cause
+ * NONE, or health data reporting no failures.
  *
- * When `isEmptyRun` is false and `scoring_health` is absent, returns null —
- * callers gate on `isEmptyRun` already, so this helper is only called when a
- * warning is appropriate.
+ * The NO_CANDIDATES caption stays neutral, because the score on the card is the
+ * baseline's real score rather than a failure.
  */
 export const getEmptyRunKPICaption = (
-  isEmptyRun: boolean,
+  cause: EmptyRunCause,
   scoringHealth?: OptimizationScoringHealth,
 ): string | null => {
-  if (!isEmptyRun) return null;
+  if (cause === EMPTY_RUN_CAUSE.NONE) return null;
+
+  if (cause === EMPTY_RUN_CAUSE.NO_CANDIDATES) {
+    return "No candidates generated. Baseline prompt kept.";
+  }
 
   if (scoringHealth && scoringHealth.total_count > 0) {
     const { failed_count, total_count } = scoringHealth;
