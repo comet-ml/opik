@@ -14,6 +14,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   lint-pr:
+    # Dependabot PRs have a bot-generated title/body that can't follow the PR
+    # template — skip the linter for them rather than surface a permanent red check.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
