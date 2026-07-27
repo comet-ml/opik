@@ -19,6 +19,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -145,8 +146,16 @@ public class AnthropicMappersTest {
                 Double expectedTopP) {
             var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
 
+            // The gate only affects temperature/top_p; assert the full payload so a collateral change to any
+            // other mapped field is caught too. The expected payload is the mapping of the same request with the
+            // sampling params forced to what the gate should produce.
+            var expected = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+            expected.setTemperature(expectedTemperature);
+            expected.setTopP(expectedTopP);
+
             assertThat(actual.getTemperature()).isEqualTo(expectedTemperature);
             assertThat(actual.getTopP()).isEqualTo(expectedTopP);
+            assertThat(actual).usingRecursiveComparison().isEqualTo(expected);
         }
 
         Stream<Arguments> samplingGatingCases() {
@@ -167,11 +176,12 @@ public class AnthropicMappersTest {
                     thinkingDropsBoth("ENABLED"),
                     thinkingDropsBoth("adaptive"),
                     thinkingDropsBoth("some-future-mode"),
-                    // Thinking disabled / blank / absent leaves sampling params untouched.
+                    // Thinking disabled / blank / null / absent leaves sampling params untouched.
                     thinkingForwards("thinking disabled forwards", Map.of("thinking", Map.of("type", "disabled"))),
                     thinkingForwards("thinking DISABLED (case-insensitive) forwards",
                             Map.of("thinking", Map.of("type", "DISABLED"))),
                     thinkingForwards("thinking blank type forwards", Map.of("thinking", Map.of("type", " "))),
+                    thinkingForwards("thinking null type forwards", nullThinkingTypeParameters()),
                     thinkingForwards("thinking block absent forwards", Map.of("max_tokens", 2048)));
         }
 
@@ -197,6 +207,13 @@ public class AnthropicMappersTest {
 
         private ChatCompletionRequest.Builder samplingCapable() {
             return ChatCompletionRequest.builder().model("claude-3-7-sonnet-20250219").addUserMessage("hi");
+        }
+
+        // Map.of rejects null values, so build the explicit null-type thinking block with a nested HashMap.
+        private Map<String, Object> nullThinkingTypeParameters() {
+            var thinking = new HashMap<String, Object>();
+            thinking.put("type", null);
+            return Map.of("thinking", thinking);
         }
     }
 
