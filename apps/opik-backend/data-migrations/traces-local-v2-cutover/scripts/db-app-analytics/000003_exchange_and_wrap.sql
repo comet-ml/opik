@@ -1,4 +1,5 @@
 -- runbook traces-local-v2-cutover — step 3 of 3: EXCHANGE + Distributed wrap (reference statements)
+-- The gate test TracesLocalV2CutoverTest reimplements these statements inline; keep the two in step (see its Javadoc).
 --
 -- ../exchange_and_wrap.sh drives this: it records cutover_start, runs the `exchange` block, and (unless --skip-wrap)
 -- the `wrap` block. Run it right after step 2's delta + replay, while the async-insert buffer is still holding writes.

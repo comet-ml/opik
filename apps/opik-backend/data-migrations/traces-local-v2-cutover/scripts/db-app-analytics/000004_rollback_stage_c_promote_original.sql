@@ -1,4 +1,5 @@
 -- runbook traces-local-v2-cutover — ROLLBACK stage C: promote the original back (driven by ../rollback.sh --stage C)
+-- The gate test TracesLocalV2CutoverTest reimplements this rollback inline; keep the two in step (see its Javadoc).
 --
 -- Use when the wrap ran. Post-wrap topology: `traces` is a Distributed wrapper over `traces_local` (successor data);
 -- `traces_pre_cutover_backup` parks the original. Promote the original back to `traces` GAPLESSLY with a single atomic

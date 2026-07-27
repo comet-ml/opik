@@ -1,4 +1,5 @@
 -- runbook traces-local-v2-cutover — step 1 of 3: backfill (reference statement)
+-- The gate test TracesLocalV2CutoverTest reimplements this statement inline; keep the two in step (see its Javadoc).
 --
 -- This file is the SINGLE source of the backfill INSERT; ../backfill.sh reads it, substitutes the ${...} placeholders
 -- (database, window bounds, block size) and runs it once per time sub-window — so the script and this reference never

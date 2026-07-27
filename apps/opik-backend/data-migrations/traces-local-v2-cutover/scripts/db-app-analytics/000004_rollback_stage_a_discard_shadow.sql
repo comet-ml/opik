@@ -1,4 +1,5 @@
 -- runbook traces-local-v2-cutover — ROLLBACK stage A: discard the shadow (driven by ../rollback.sh --stage A)
+-- The gate test TracesLocalV2CutoverTest reimplements this rollback inline; keep the two in step (see its Javadoc).
 --
 -- Use when the backfill/delta ran but the EXCHANGE did NOT. The live `traces` was never touched by the backfill, so
 -- there is nothing to restore; this only discards the disposable shadow copy so a re-attempt starts clean. backfill.sh

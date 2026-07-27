@@ -1,4 +1,5 @@
 -- runbook traces-local-v2-cutover — ROLLBACK reverse-replay (driven by ../rollback.sh after stage B or C)
+-- The gate test TracesLocalV2CutoverTest reimplements this statement inline; keep the two in step (see its Javadoc).
 --
 -- Re-applies the deletes that fired on the successor since cutover_start onto the restored original `traces`, so they do
 -- not resurrect. Two branches, like the forward replay in 000002: events with a project match the full key; events from

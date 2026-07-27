@@ -1,4 +1,5 @@
 -- runbook traces-local-v2-cutover — ROLLBACK stage B: swap the tables back (driven by ../rollback.sh --stage B)
+-- The gate test TracesLocalV2CutoverTest reimplements this rollback inline; keep the two in step (see its Javadoc).
 --
 -- Use when the EXCHANGE ran but the wrap did NOT. `traces` holds the successor data and `traces_pre_cutover_backup`
 -- parks the original. A SINGLE atomic multi-target RENAME rotates both names back: the successor (`traces`) returns to

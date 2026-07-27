@@ -1,4 +1,5 @@
 -- runbook traces-local-v2-cutover — step 2 of 3: delta-insert + deletion replay
+-- The gate test TracesLocalV2CutoverTest reimplements these statements inline; keep the two in step (see its Javadoc).
 -- Run this only after the whole backfill (step 1) is complete and reconciled.
 
 -- Step 0: The SQL below (delta-insert + deletion replay) is the single source driven by ../delta_replay.sh, which reads
