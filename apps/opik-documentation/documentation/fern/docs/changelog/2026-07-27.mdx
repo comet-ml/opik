@@ -18,7 +18,7 @@ Online evaluation rules (LLM-as-judge and Python scorers) gained a **Trigger sco
 
 - **Server now rejects oversized ingestion payloads cleanly** — Requests over the configured size limit are now rejected with a **413** before the body is read, and malformed or oversized JSON documents return a clear **400**/**413** instead of an opaque server error.
 
-- **Ingest now rejects non-UUIDv7 referenced ids** — IDs referenced during ingestion (for example a span's `traceId`) must now be valid UUIDv7 values; a non-v7 id now returns a 400 instead of being silently accepted.
+- **Ingest now rejects non-UUIDv7 referenced ids** — IDs referenced during ingestion via the trace/span REST API (for example a span's `traceId`), as well as on feedback scores, comments, attachments, dataset items, and annotation queue items, must now be valid UUIDv7 values; a non-v7 id now returns a 400 instead of being silently accepted. This doesn't apply to OpenTelemetry ingestion's `opik.trace_id`/`opik.parent_span_id` override attributes, which still ignore invalid values with a warning rather than rejecting them.
 
 - **Online scoring rules on Anthropic adaptive-thinking models now run reliably** — Rules using models like `claude-sonnet-5` or `claude-opus-4-7`/`4-8` as an LLM judge no longer fail or return empty output because of those models' `temperature` restrictions.
 
