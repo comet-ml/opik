@@ -419,26 +419,36 @@ as one file per stage (`000004_rollback_stage_a_discard_shadow.sql`, `…_stage_
 `…_stage_c_promote_original.sql`, and the shared `000004_rollback_reverse_replay.sql`) and driven by
 [`scripts/rollback.sh`](scripts/rollback.sh), so no one authors it under pressure.
 
-**No data loss by construction.** The stages are mutually exclusive, so each lives in its **own file** — no single file
-mixes the `TRUNCATE` (stage A only) with the `EXCHANGE`/`DROP` of the others, and running any file does exactly one
-stage. No statement drops a data-bearing table: swaps are atomic `EXCHANGE`/`RENAME`, and the only `DROP` targets the
-`Distributed` wrapper, which stores no data (it is a routing definition over `traces_local`). Before running, `rollback.sh`
-**asserts the live `traces` topology matches the requested stage and aborts otherwise** — so a wrong-stage run (the only
-way a `TRUNCATE`/`DROP` could hit the wrong table) makes no change. Every stage lands in the same **canonical state**:
-`traces` = the original data (live), `traces_local_v2` = the successor data (parked backup). No leftover `*_new` names.
-The parked backup is dropped only later, by `finalize.sh`, after the soak.
+**No data-bearing table is dropped by construction.** The stages are mutually exclusive, so each lives in its **own
+file** — no single file mixes the `TRUNCATE` (stage A only) with the `EXCHANGE`/`DROP` of the others, and running any
+file does exactly one stage. No statement drops a data-bearing table: swaps are atomic `EXCHANGE`/`RENAME`, and the only
+`DROP` targets the `Distributed` wrapper, which stores no data (it is a routing definition over `traces_local`). Before
+running, `rollback.sh` **asserts the live `traces` topology matches the requested stage and aborts otherwise** — so a
+wrong-stage run (the only way a `TRUNCATE`/`DROP` could hit the wrong table) makes no change. Every stage lands in the
+same **canonical state**: `traces` = the original data (live), `traces_local_v2` = the successor data (parked backup).
+No leftover `*_new` names. The parked backup is dropped only later, by `finalize.sh`, after the soak.
+
+> **Stages B/C make post-cutover writes non-live — an accepted, acknowledged trade-off.** Promoting the frozen
+> `traces_pre_cutover_backup` means traces the successor accepted **after** `cutover_start` stop being served by the live
+> table (the reverse-replay carries post-cutover *deletes* forward, but not *writes*). They are **not destroyed**: the
+> successor is parked as `traces_local_v2` and retained until `finalize.sh`, so recover them from there during the soak
+> if the rollback is later judged unnecessary. This is inherent to promoting a point-in-time backup and is *not* auto-repaired
+> — merging the successor's post-cutover writes back would re-import the very data the rollback exists to discard. Because
+> it is irreversible in the moment, stages B/C require `--accept-post-cutover-write-loss`, and `rollback.sh` prints the
+> recovery pointer before the promote.
 
 Pick the stage by how far the cutover got (`cutover_start` is the value `exchange_and_wrap.sh` printed):
 
 - **Stage A — before EXCHANGE:** `./scripts/rollback.sh --database opik --stage A`. Discards the disposable shadow
   `traces_local_v2`; the live `traces` was never touched. (Guarded: aborts unless `traces` is still the original schema.)
-- **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts>'`.
-  `EXCHANGE` `traces_pre_cutover_backup` back to live `traces`, rename the now-parked successor back to
-  `traces_local_v2`, then the reverse replay. (Guarded: aborts if `traces` is `Distributed` — use C.)
-- **Stage C — after wrap:** `./scripts/rollback.sh --database opik --stage C --cutover-start '<ts>'`. Drops the
-  `Distributed` wrapper, then one atomic `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces`
-  and parks the successor under `traces_local_v2`, then the reverse replay. (Guarded: aborts unless `traces` is
-  `Distributed`.)
+- **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts>'
+  --confirm-retention-paused --accept-post-cutover-write-loss`. `EXCHANGE` `traces_pre_cutover_backup` back to live
+  `traces`, rename the now-parked successor back to `traces_local_v2`, then the reverse replay. (Guarded: aborts if
+  `traces` is `Distributed` — use C.)
+- **Stage C — after wrap:** `./scripts/rollback.sh --database opik --stage C --cutover-start '<ts>'
+  --confirm-retention-paused --accept-post-cutover-write-loss`. Drops the `Distributed` wrapper, then one atomic
+  `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces` and parks the successor under
+  `traces_local_v2`, then the reverse replay. (Guarded: aborts unless `traces` is `Distributed`.)
 
 After a stage B or C rollback, `traces` is the Nullable original again — **revert `traceColumnsNonNullable` to `false`
 AND roll-restart every backend instance**. The flag is read from a **startup snapshot** of `OpikConfiguration` (bound via

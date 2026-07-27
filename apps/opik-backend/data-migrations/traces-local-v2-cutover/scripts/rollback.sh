@@ -7,9 +7,17 @@
 #   --stage A   backfill/delta ran but the EXCHANGE did not — discard the shadow (live `traces` is untouched).
 #   --stage B   the EXCHANGE ran but not the wrap — swap the tables back, then reverse-replay.
 #   --stage C   the wrap ran — drop the wrapper, promote the parked original, then reverse-replay.
-# Stages B and C need --cutover-start (printed by exchange_and_wrap.sh) to bound the reverse-replay, and
+# Stages B and C need --cutover-start (printed by exchange_and_wrap.sh) to bound the reverse-replay,
 # --confirm-retention-paused (retention deletes bypass the bridge, so a retention sweep in the rollback window would
-# resurrect a deleted row from the backup). Keep the deletion bridge enabled through the rollback so no delete is lost.
+# resurrect a deleted row from the backup), and --accept-post-cutover-write-loss (see below). Keep the deletion bridge
+# enabled through the rollback so no delete is lost.
+#
+# POST-CUTOVER WRITES: stages B/C promote the frozen pre-cutover backup back to live `traces`, so traces WRITTEN to the
+# successor after cutover_start stop being live. They are NOT destroyed — the successor is parked as traces_local_v2 and
+# retained until finalize.sh, so they can be recovered from there during the soak — but the live table no longer serves
+# them. This is inherent to promoting a point-in-time backup and cannot be "fixed" (auto-merging the successor's writes
+# would re-import the very data the rollback is discarding); --accept-post-cutover-write-loss makes the operator
+# acknowledge it before the promote.
 #
 # SAFETY: the stages are mutually exclusive and each lives in its OWN file, so no single file mixes a TRUNCATE with an
 # EXCHANGE/DROP — running any file does exactly one stage. Before running, this asserts the live `traces` topology matches
@@ -28,6 +36,7 @@ DATABASE=""
 STAGE=""
 CUTOVER_START=""
 CONFIRM_RETENTION_PAUSED=0
+ACCEPT_WRITE_LOSS=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -35,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --stage) STAGE="${2:?"$1 requires a value"}"; shift 2 ;;
         --cutover-start) CUTOVER_START="${2:?"$1 requires a value"}"; shift 2 ;;
         --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
+        --accept-post-cutover-write-loss) ACCEPT_WRITE_LOSS=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -55,6 +65,16 @@ if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$CONFIRM_RETENTION_PAUSED" != "
     echo "ERROR: rollback --stage $STAGE requires --confirm-retention-paused. The reverse-replay only re-applies bridged" >&2
     echo "       deletes; a retention sweep in the rollback window would resurrect a deleted row from the backup." >&2
     echo "       Pause retention (RETENTION_ENABLED=false on every backend), then re-run with the flag." >&2
+    exit 2
+fi
+# Stages B/C promote the frozen pre-cutover backup, so writes the successor accepted after cutover_start stop being live
+# (they are preserved in the parked traces_local_v2 until finalize.sh, recoverable during the soak). This is unavoidable
+# when promoting a point-in-time backup — require the operator to acknowledge it, unlike a precondition they could fix.
+if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$ACCEPT_WRITE_LOSS" != "1" ]]; then
+    echo "ERROR: rollback --stage $STAGE requires --accept-post-cutover-write-loss. Promoting the frozen backup makes" >&2
+    echo "       traces written to the successor after cutover_start non-live. They are NOT destroyed — the successor is" >&2
+    echo "       parked as traces_local_v2 until finalize.sh, so recover them from there during the soak — but the live" >&2
+    echo "       table will no longer serve them. Re-run with the flag once you accept this." >&2
     exit 2
 fi
 
@@ -123,6 +143,11 @@ run_file() {
 }
 
 assert_topology
+
+if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
+    echo "NOTE: promoting the frozen backup now. Traces the successor accepted after cutover_start ($CUTOVER_START) will" >&2
+    echo "      stop being live; recover them from the parked traces_local_v2 (kept until finalize.sh) if needed." >&2
+fi
 
 case "$STAGE" in
     A)
