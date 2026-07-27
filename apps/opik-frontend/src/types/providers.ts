@@ -112,6 +112,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
+  CLAUDE_OPUS_5 = "claude-opus-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -155,6 +156,8 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_OPUS_4_7_FAST = "anthropic/claude-opus-4.7-fast",
   ANTHROPIC_CLAUDE_OPUS_4_8 = "anthropic/claude-opus-4.8",
   ANTHROPIC_CLAUDE_OPUS_4_8_FAST = "anthropic/claude-opus-4.8-fast",
+  ANTHROPIC_CLAUDE_OPUS_5 = "anthropic/claude-opus-5",
+  ANTHROPIC_CLAUDE_OPUS_5_FAST = "anthropic/claude-opus-5-fast",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ANTHROPIC_CLAUDE_SONNET_4_6 = "anthropic/claude-sonnet-4.6",
