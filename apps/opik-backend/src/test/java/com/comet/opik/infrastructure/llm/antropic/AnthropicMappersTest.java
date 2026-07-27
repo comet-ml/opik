@@ -9,6 +9,7 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.shared.Usage;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -18,7 +19,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -129,6 +132,88 @@ public class AnthropicMappersTest {
                     Arguments.of(Boolean.TRUE, true),
                     Arguments.of(Boolean.FALSE, false),
                     Arguments.of(null, false));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Sampling params gating")
+    class SamplingParamsGating {
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("samplingGatingCases")
+        void gatesSamplingParams(String description, ChatCompletionRequest request, Double expectedTemperature,
+                Double expectedTopP) {
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            // The gate only affects temperature/top_p; assert the full payload so a collateral change to any
+            // other mapped field is caught too. The expected payload is the mapping of the same request with the
+            // sampling params forced to what the gate should produce.
+            var expected = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+            expected.setTemperature(expectedTemperature);
+            expected.setTopP(expectedTopP);
+
+            assertThat(actual.getTemperature()).isEqualTo(expectedTemperature);
+            assertThat(actual.getTopP()).isEqualTo(expectedTopP);
+            assertThat(actual).usingRecursiveComparison().isEqualTo(expected);
+        }
+
+        Stream<Arguments> samplingGatingCases() {
+            return Stream.of(
+                    // Adaptive-thinking models drop both sampling params regardless of what was requested.
+                    adaptiveDropsBoth("claude-sonnet-5"),
+                    adaptiveDropsBoth("claude-opus-4-7"),
+                    adaptiveDropsBoth("claude-opus-4-8"),
+                    // Sampling-capable model: params forwarded, with temperature winning over top_p.
+                    Arguments.of("sampling-capable forwards temperature",
+                            samplingCapable().temperature(0.7).build(), 0.7, null),
+                    Arguments.of("sampling-capable forwards top_p when temperature absent",
+                            samplingCapable().topP(0.9).build(), null, 0.9),
+                    Arguments.of("sampling-capable drops top_p when temperature also set",
+                            samplingCapable().temperature(0.7).topP(0.9).build(), 0.7, null),
+                    // Thinking enabled (any non-blank type other than "disabled", case-insensitive) drops both.
+                    thinkingDropsBoth("enabled"),
+                    thinkingDropsBoth("ENABLED"),
+                    thinkingDropsBoth("adaptive"),
+                    thinkingDropsBoth("some-future-mode"),
+                    // Thinking disabled / blank / null / absent leaves sampling params untouched.
+                    thinkingForwards("thinking disabled forwards", Map.of("thinking", Map.of("type", "disabled"))),
+                    thinkingForwards("thinking DISABLED (case-insensitive) forwards",
+                            Map.of("thinking", Map.of("type", "DISABLED"))),
+                    thinkingForwards("thinking blank type forwards", Map.of("thinking", Map.of("type", " "))),
+                    thinkingForwards("thinking null type forwards", nullThinkingTypeParameters()),
+                    thinkingForwards("thinking block absent forwards", Map.of("max_tokens", 2048)));
+        }
+
+        private Arguments adaptiveDropsBoth(String model) {
+            return Arguments.of("adaptive model %s drops both".formatted(model),
+                    ChatCompletionRequest.builder().model(model).addUserMessage("hi")
+                            .temperature(0.7).topP(0.9).build(),
+                    null, null);
+        }
+
+        private Arguments thinkingDropsBoth(String thinkingType) {
+            return Arguments.of("thinking type '%s' drops both".formatted(thinkingType),
+                    samplingCapable().temperature(0.7).topP(0.9)
+                            .customParameters(Map.of("thinking", Map.of("type", thinkingType, "budget_tokens", 1024)))
+                            .build(),
+                    null, null);
+        }
+
+        private Arguments thinkingForwards(String description, Map<String, Object> customParameters) {
+            return Arguments.of(description,
+                    samplingCapable().temperature(0.7).customParameters(customParameters).build(), 0.7, null);
+        }
+
+        private ChatCompletionRequest.Builder samplingCapable() {
+            return ChatCompletionRequest.builder().model("claude-3-7-sonnet-20250219").addUserMessage("hi");
+        }
+
+        // Map.of rejects null values, so build the explicit null-type thinking block with a nested HashMap.
+        private Map<String, Object> nullThinkingTypeParameters() {
+            var thinking = new HashMap<String, Object>();
+            thinking.put("type", null);
+            return Map.of("thinking", thinking);
         }
     }
 
