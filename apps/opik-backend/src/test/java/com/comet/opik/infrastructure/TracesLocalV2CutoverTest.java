@@ -132,8 +132,6 @@ class TracesLocalV2CutoverTest {
     private static final int DELTA_UPSERTS = 20;
     private static final int DELTA_LATE_CREATED = 10;
 
-    private static final int REPLAY_BUDGET_SECONDS = 60;
-
     private static final String[] FIDELITY_SOURCES = {"sdk", "experiment", "playground", "optimization", "evaluator"};
     private static final String[] FIDELITY_ENVIRONMENTS = {"production", "staging", "dev", ""};
 
@@ -381,11 +379,11 @@ class TracesLocalV2CutoverTest {
 
         // Deletion replay: read the bridge for the window and re-issue the deletes against the destination, matched on
         // the full key so a reused id in another project is untouched.
+        // Measured and logged (not asserted): replay wall time is environment-sensitive (container startup, CI
+        // contention), so a hard bound here would be a flaky gate on a non-correctness property. The runbook sizes it
+        // against the buffer window during the cutover rehearsal; correctness is asserted below (the mask is applied).
         var replayMillis = replayDeletions(backfillStart);
         log.info("Deletion replay covered {} ids in {} ms", leakedIds.size() + 1, replayMillis);
-        assertThat(replayMillis)
-                .as("replay wall time smoke bound — the runbook compares this against the buffer window")
-                .isLessThan(REPLAY_BUDGET_SECONDS * 1_000L);
 
         // After replay, the leak is closed on the destination, before the swap.
         assertThat(liveCount("traces_local_v2", leakedIds, workspaceId))

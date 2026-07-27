@@ -343,10 +343,14 @@ resolve fall back to a **workspace-scoped** delete — `TraceDAO.DELETE_BY_ID` w
 second with an **empty `project_id`** (`DeletionEventDAO`: "project_id is empty for workspace-scoped source tables"). The
 replay mirrors both: full-key events delete by `(workspace_id, project_id, id)` (exact; prunes on the destination primary
 key — correct even though trace ids are not globally unique), and empty-project events delete by `(workspace_id, id)`.
-The second branch is a **faithful mirror, not an over-delete**: the workspace-scoped fallback fires only for ids the
-resolver found no live row for in any project, and the source delete it replays already removed every `(workspace_id,
-id)` row — so the destination ends matching the source. Without it, those deletions would **silently leak** across the
-swap.
+The second branch is a **mirror, not an over-delete**: the workspace-scoped fallback fires only for ids the resolver
+found no live row for in any project, and the source delete it replays already removed every `(workspace_id, id)` row.
+Without it, those deletions would **silently leak** across the swap. It is faithful in the common case, with **one known
+residual** (see 000002): because its resurrection guard keys on `(workspace_id, id)` (no project), an id that is live in
+one project shields the delete of the *same reused id* in another — leaving an extra destination row. It needs id reuse
+across projects **plus** a workspace-scoped delete **plus** a resurrection in the window, so it is rare; the `000005`
+`FINAL` fingerprint flags it (`ok=0`) rather than passing silently, and OPIK-7483 retires the arm entirely by making
+deletes always carry `project_id`.
 
 **Resurrection guard.** A trace can be deleted and then re-created/updated under the **same id** during the window
 (ids are client-supplied; the delete is a mask, and a newer insert wins under `FINAL`). Such an id is bridged as deleted
@@ -599,7 +603,8 @@ mismatched window).
   reverse-replays so a post-cutover delete does not resurrect;
 - **wrong-stage rollback guard** — the topology signals `rollback.sh` keys on (the `traces` engine and `end_time`
   nullability) are distinct in each cutover state, so a mis-targeted stage aborts instead of touching the wrong table;
-- the replay wall time is measured and bounded.
+- the replay wall time is measured and logged (not asserted — it is environment-sensitive; the buffer-window sizing is
+  done in the cutover rehearsal, not in CI).
 
 Run it with: `mvn -o test -Dtest=TracesLocalV2CutoverTest` from `apps/opik-backend`.
 
