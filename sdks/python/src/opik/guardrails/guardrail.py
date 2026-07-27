@@ -7,6 +7,7 @@ import httpx
 
 import opik.exceptions as exceptions
 import opik.config as config
+from opik.rest_api import core as rest_api_core
 from opik.api_objects import opik_client
 from opik.message_processing.messages import (
     GuardrailBatchItemMessage,
@@ -94,20 +95,49 @@ class Guardrail:
 
         Raises:
             opik.exceptions.GuardrailValidationFailed: If validation fails
-            httpx.HTTPStatusError: If the API returns an error status code
+            opik.exceptions.GuardrailValidationError: If a guardrail cannot be
+                evaluated (guardrails backend unreachable, timeout, or LLM judge
+                provider failure). Guardrails fail closed, so this blocks the
+                protected code path.
         """
-        result: schemas.ValidationResponse = self._validate(generation=text)  # type: ignore
+        result = self._validate(generation=text)
+
+        if result.error is not None:
+            raise exceptions.GuardrailValidationError(result.error)
 
         return self._parse_result(result)
 
     @GUARDRAIL_DECORATOR.track
     def _validate(self, generation: str) -> schemas.ValidationResponse:
-        validations = []
+        result = schemas.ValidationResponse(validation_passed=True, validations=[])
 
-        for guard in self.guards:
-            validations.extend(guard.get_validation_configs())
+        # Fail-closed errors are captured on the result instead of raised so the
+        # decorated span still records the guardrail output; validate() re-raises them
+        # once the span has been finalized.
+        try:
+            remote_validations = []
+            for guard in self.guards:
+                remote_validations.extend(guard.get_validation_configs())
 
-        result = self._api_client.validate(generation, validations)
+            if remote_validations:
+                result = self._api_client.validate(generation, remote_validations)
+
+            for guard in self.guards:
+                if guard.local:
+                    result.validations.extend(
+                        guard.validate_local(generation, self._client)
+                    )
+        except (httpx.HTTPError, rest_api_core.ApiError) as e:
+            result.error = f"Guardrail could not be evaluated, failing closed: {e}"
+        except exceptions.GuardrailValidationError as e:
+            result.error = str(e)
+
+        if result.error is not None:
+            result.validation_passed = False
+        else:
+            result.validation_passed = all(
+                validation.validation_passed for validation in result.validations
+            )
 
         if not result.validation_passed:
             result.guardrail_result = "failed"

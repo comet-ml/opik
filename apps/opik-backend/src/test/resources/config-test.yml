@@ -118,6 +118,10 @@ uuidValidation:
   #  Description: Operational kill-switch. When false, ids are not checked against the window (the
   #   window is still validated to be a sane value).
   enabled: true
+  #  Default: false for tests
+  #  Description: Audit (shadow / log-only) mode. When true, out-of-window ids are counted and logged
+  #   but not rejected. Tests default to false so the validator rejects.
+  auditOnly: false
   #  Default: 24h
   #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
   #   embedded timestamp more than this far in the past or future are rejected.
@@ -303,6 +307,21 @@ jacksonConfig:
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: 262144000
+  # Test-only caps, deliberately small so the LargePayloadTests below trip the guards on modest
+  # payloads (253MB string, 280MB doc, 51MB request) rather than production-sized bodies. They
+  # exercise the 413 rejection mechanism; JacksonConfigTest verifies the real shipped defaults.
+  # Description: Maximum size of an entire JSON document (the whole decompressed batch). Unlike
+  #   maxStringLength (a single string value), this caps the whole document, so it catches an
+  #   oversized batch built from many small values. Aborts mid-parse with a 413 before a multi-GB
+  #   node tree is materialized. Must stay above maxStringLength so a single max-size string parses.
+  maxDocumentLength: 268435456
+  # Intentionally BELOW maxDocumentLength so the ~51MB LargePayloadTests request trips the 413
+  #   pre-parse guard cheaply. Request size (compressed) and document length (decompressed) are
+  #   independent axes -- do NOT raise this to match maxDocumentLength.
+  # Description: Maximum incoming request body size, checked against the Content-Length header and
+  #   rejected with 413 before the body is read. Requests without a Content-Length (e.g. chunked)
+  #   fall through and are bounded by maxDocumentLength during parsing.
+  maxRequestSizeBytes: 52428800
 
 # Configuration for batch operations
 batchOperations:
@@ -409,6 +428,12 @@ onlineScoring:
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
   agenticToolsMaxInjectedBytes: 52428800
+  # Default: 32
+  # Description: Hard heap cap (in MB) on the trace-thread span preload used to size the
+  #   inline-vs-agentic-tools routing decision. Spans stream under this cap; once crossed, the thread
+  #   routes to the agentic-tools path (which drills per-trace on demand) instead of being buffered in
+  #   full. Lower on memory-constrained deployments. See OPIK-7454.
+  agenticToolsMaxPreloadMb: 32
   agenticToolsS3PresignTtlSeconds: 120
   # Per-variable substitution cap (chars) for the {{trace}}/{{span}} structure-injection / agentic paths.
   maxPromptFieldChars: 4000

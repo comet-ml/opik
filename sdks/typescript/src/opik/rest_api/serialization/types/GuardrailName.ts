@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const GuardrailName: core.serialization.Schema<serializers.GuardrailName.Raw, OpikApi.GuardrailName> =
-    core.serialization.enum_(["TOPIC", "PII"]);
+    core.serialization.enum_(["TOPIC", "PII", "LLM_JUDGE", "PROMPT_INJECTION", "CUSTOM_CLASSIFIER"]);
 
 export declare namespace GuardrailName {
-    export type Raw = "TOPIC" | "PII";
+    export type Raw = "TOPIC" | "PII" | "LLM_JUDGE" | "PROMPT_INJECTION" | "CUSTOM_CLASSIFIER";
 }
