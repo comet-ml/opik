@@ -452,6 +452,19 @@ Pick the stage by how far the cutover got (`cutover_start` is the value `exchang
   `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces` and parks the successor under
   `traces_local_v2`, then the reverse replay. (Guarded: aborts unless `traces` is `Distributed`.)
 
+**Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
+statements, so a failure *between* them needs a restart path:
+
+- **Reverse-replay interrupted (stage B or C).** The promote already restored the original, so `traces` is back in the
+  canonical shape and re-running the stage is (correctly) refused by the topology guard — which would otherwise leave the
+  post-cutover deletes unreplayed and let them resurrect. Re-apply just the replay:
+  `./scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<ts>' --confirm-retention-paused`. It runs
+  only `000004_rollback_reverse_replay.sql` against the live `traces` (asserts it is a non-`Distributed` `MergeTree`) and
+  is idempotent, so it is safe to run once or repeatedly.
+- **Forward EXCHANGE half-done (stage B says the backup is missing).** If the forward `EXCHANGE` succeeded but its
+  post-swap `RENAME` did not, the parked original is still under `traces_local_v2` and stage B aborts pointing at the
+  one-line `RENAME` that finishes it (`traces_local_v2` → `traces_pre_cutover_backup`); run that, then re-run stage B.
+
 After a stage B or C rollback, `traces` is the Nullable original again — **revert `traceColumnsNonNullable` to `false`
 AND roll-restart every backend instance**. The flag is read from a **startup snapshot** of `OpikConfiguration` (bound via
 `toInstance`), so a config change does **not** take effect until each instance restarts — exactly like the forward

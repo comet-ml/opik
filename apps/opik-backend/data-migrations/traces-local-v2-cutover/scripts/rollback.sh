@@ -7,6 +7,10 @@
 #   --stage A   backfill/delta ran but the EXCHANGE did not — discard the shadow (live `traces` is untouched).
 #   --stage B   the EXCHANGE ran but not the wrap — swap the tables back, then reverse-replay.
 #   --stage C   the wrap ran — drop the wrapper, promote the parked original, then reverse-replay.
+# Or --reverse-replay-only: re-apply just the reverse deletion replay against the current live `traces`. Use it when a
+# stage B/C run's promote succeeded but its reverse-replay was interrupted — the promote leaves `traces` in the restored
+# canonical shape, so re-running the stage is (correctly) rejected by the topology guard, which would otherwise strand
+# the post-cutover deletes unreplayed and let them resurrect. The replay is idempotent, so this is always safe to re-run.
 # Stages B and C need --cutover-start (printed by exchange_and_wrap.sh) to bound the reverse-replay,
 # --confirm-retention-paused (retention deletes bypass the bridge, so a retention sweep in the rollback window would
 # resurrect a deleted row from the backup), and --accept-post-cutover-write-loss (see below). Keep the deletion bridge
@@ -37,6 +41,7 @@ STAGE=""
 CUTOVER_START=""
 CONFIRM_RETENTION_PAUSED=0
 ACCEPT_WRITE_LOSS=0
+REVERSE_REPLAY_ONLY=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -45,6 +50,7 @@ while [[ $# -gt 0 ]]; do
         --cutover-start) CUTOVER_START="${2:?"$1 requires a value"}"; shift 2 ;;
         --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
         --accept-post-cutover-write-loss) ACCEPT_WRITE_LOSS=1; shift ;;
+        --reverse-replay-only) REVERSE_REPLAY_ONLY=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -53,17 +59,22 @@ done
 # --database and --cutover-start are interpolated into the reference SQL; validate their shapes so neither can alter it.
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 [[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
-case "$STAGE" in
-    A|B|C) ;;
-    *) echo "ERROR: --stage must be A, B or C" >&2; exit 2 ;;
-esac
-# Stages B/C run the reverse-replay, which — like the forward replay — only re-applies bridged deletes. Retention deletes
-# (deleteForRetention*) bypass the bridge, so a retention sweep during the rollback window would restore a legitimately
-# deleted row from the backup and resurrect it. Retention is a backend setting the script can't read; require the
-# operator to assert it is paused. Stage A does no reverse-replay, so it is exempt.
-if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
-    echo "ERROR: rollback --stage $STAGE requires --confirm-retention-paused. The reverse-replay only re-applies bridged" >&2
-    echo "       deletes; a retention sweep in the rollback window would resurrect a deleted row from the backup." >&2
+# Exactly one of --stage / --reverse-replay-only.
+if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
+    [[ -z "$STAGE" ]] || { echo "ERROR: --reverse-replay-only cannot be combined with --stage." >&2; exit 2; }
+else
+    case "$STAGE" in
+        A|B|C) ;;
+        *) echo "ERROR: --stage must be A, B or C (or pass --reverse-replay-only)" >&2; exit 2 ;;
+    esac
+fi
+# The reverse-replay runs for stages B/C and for --reverse-replay-only, and — like the forward replay — only re-applies
+# bridged deletes. Retention deletes (deleteForRetention*) bypass the bridge, so a retention sweep during the rollback
+# window would restore a legitimately deleted row from the backup and resurrect it. Retention is a backend setting the
+# script can't read; require the operator to assert it is paused. Stage A does no reverse-replay, so it is exempt.
+if [[ ( "$STAGE" == "B" || "$STAGE" == "C" || "$REVERSE_REPLAY_ONLY" == "1" ) && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
+    echo "ERROR: this rollback runs the reverse-replay and requires --confirm-retention-paused. It re-applies only" >&2
+    echo "       bridged deletes; a retention sweep in the rollback window would resurrect a deleted row from the backup." >&2
     echo "       Pause retention (RETENTION_ENABLED=false on every backend), then re-run with the flag." >&2
     exit 2
 fi
@@ -119,7 +130,20 @@ assert_topology() {
                 echo "ERROR: stage B expects traces to hold the successor schema, but end_time is Nullable (the EXCHANGE has not run). Nothing to roll back; use stage A to discard the shadow." >&2
                 exit 1
             }
-            [[ -n "$(traces_engine traces_pre_cutover_backup)" ]] || { echo "ERROR: 'traces_pre_cutover_backup' (parked original) not found; cannot swap back." >&2; exit 1; }
+            if [[ -z "$(traces_engine traces_pre_cutover_backup)" ]]; then
+                if [[ -n "$(traces_engine traces_local_v2)" ]]; then
+                    # State X: the forward EXCHANGE succeeded but its post-swap RENAME did not, so the parked original is
+                    # still under traces_local_v2. Finish that RENAME (the same remediation exchange_and_wrap.sh prints),
+                    # then stage B proceeds normally. Not auto-completed here: rollback does exactly one thing per run.
+                    echo "ERROR: 'traces_pre_cutover_backup' not found but 'traces_local_v2' still exists — the forward" >&2
+                    echo "       EXCHANGE's post-swap RENAME did not complete, so the parked original is still under" >&2
+                    echo "       'traces_local_v2'. Finish that RENAME, then re-run stage B:" >&2
+                    echo "         clickhouse-client --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
+                else
+                    echo "ERROR: 'traces_pre_cutover_backup' (parked original) not found; cannot swap back." >&2
+                fi
+                exit 1
+            fi
             ;;
         C)
             [[ "$engine" == "Distributed" ]] || {
@@ -141,6 +165,27 @@ run_file() {
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
     clickhouse-client --database "$DATABASE" --multiquery --query "$sql"
 }
+
+# Recovery mode: re-apply only the reverse-replay against the current live `traces`. The promote (stage B/C) already ran,
+# so `traces` is the restored original MergeTree; the replay is idempotent, so re-running it just re-masks any deletes it
+# missed. Assert `traces` is present and NOT Distributed (a lightweight DELETE is unsupported on Distributed, and the
+# replay only makes sense on the restored original — a Distributed `traces` means the wrap is still up; roll it back with
+# stage C first).
+if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
+    [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for --reverse-replay-only" >&2; exit 2; }
+    reverse_replay_engine="$(traces_engine traces)"
+    [[ -n "$reverse_replay_engine" ]] || { echo "ERROR: no 'traces' table found in database '$DATABASE'." >&2; exit 1; }
+    [[ "$reverse_replay_engine" != "Distributed" ]] || {
+        echo "ERROR: 'traces' is Distributed, so the wrap is still applied — the reverse-replay runs on the restored" >&2
+        echo "       original MergeTree. Roll the wrap back first with --stage C." >&2
+        exit 1
+    }
+    echo "NOTE: re-applying the reverse deletion replay only (no table swap) for deletes since cutover_start" >&2
+    echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
+    run_file 000004_rollback_reverse_replay.sql
+    echo "Reverse-replay-only done: bridged deletes since cutover_start re-applied to the live 'traces'."
+    exit 0
+fi
 
 assert_topology
 
