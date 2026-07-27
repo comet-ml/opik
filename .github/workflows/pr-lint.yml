@@ -16,7 +16,9 @@ jobs:
   lint-pr:
     # Dependabot PRs have a bot-generated title/body that can't follow the PR
     # template — skip the linter for them rather than surface a permanent red check.
-    if: github.actor != 'dependabot[bot]'
+    # Key off the PR author, not github.actor: a human editing the PR would make
+    # github.actor the human and let the lint run on a Dependabot PR anyway.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
