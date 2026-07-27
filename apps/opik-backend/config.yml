@@ -92,6 +92,18 @@ databaseAnalytics:
   #   Leave unset to keep the queryParameters value untouched. With async_insert_use_adaptive_busy_timeout=1 this is
   #   a ceiling: the adaptive scheduler widens the buffer only while rows are queued.
   asyncInsertBusyTimeoutMaxMs: ${ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS:-}
+  #  Default: unset (inherits the async_insert_busy_timeout_min_ms=100 carried by queryParameters above)
+  #  Description: Optional override (ms) for async_insert_busy_timeout_min_ms in the custom_http_params chain of
+  #   queryParameters above; only applied when that setting is already present there, otherwise it is not injected.
+  #   Leave unset to keep the queryParameters value untouched. With async_insert_use_adaptive_busy_timeout=1 this is
+  #   a floor: the adaptive scheduler starts from it and widens the buffer only while rows are queued.
+  asyncInsertBusyTimeoutMinMs: ${ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS:-}
+  #  Default: unset (async_insert_max_data_size is not carried by queryParameters above, so the ClickHouse/server value applies)
+  #  Description: Optional override (bytes) for async_insert_max_data_size, the buffered size that forces an
+  #   async-insert flush. When set it is injected into the custom_http_params chain; when unset it is not injected and
+  #   the ClickHouse/server-side value is left untouched. Larger values yield fewer, larger parts at the cost of more
+  #   buffer memory.
+  asyncInsertMaxDataSize: ${ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE:-}
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}

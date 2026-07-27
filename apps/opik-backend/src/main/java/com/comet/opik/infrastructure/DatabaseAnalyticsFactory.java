@@ -25,6 +25,8 @@ public class DatabaseAnalyticsFactory {
     private static final String URL_TEMPLATE = "r2dbc:clickhouse:%s://%s:%s@%s:%d/%s%s";
     private static final String CUSTOM_HTTP_PARAMS_KEY = "custom_http_params";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS = "async_insert_busy_timeout_max_ms";
+    private static final String ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS = "async_insert_busy_timeout_min_ms";
+    private static final String ASYNC_INSERT_MAX_DATA_SIZE = "async_insert_max_data_size";
     private static final String KEY_VALUE_FORMAT = "%s=%s";
 
     // Split each `&`/`,`-chunk on the FIRST `=` only — values may themselves contain `=`,
@@ -50,6 +52,21 @@ public class DatabaseAnalyticsFactory {
      * scheduler widens it only while rows are queued.
      */
     private @Min(1) Integer asyncInsertBusyTimeoutMaxMs;
+
+    /**
+     * Optional override (ms) for {@code async_insert_busy_timeout_min_ms} — the floor of the adaptive buffer window;
+     * when unset the value carried by {@code queryParameters} is left untouched. Same override semantics as
+     * {@link #asyncInsertBusyTimeoutMaxMs}.
+     */
+    private @Min(1) Integer asyncInsertBusyTimeoutMinMs;
+
+    /**
+     * Optional override (bytes) for {@code async_insert_max_data_size} — the buffered size that forces an async-insert
+     * flush. Unlike the busy-timeout settings, Opik does not carry this in {@link #queryParameters}, so when set it is
+     * injected into {@code custom_http_params}; when unset it is not injected and the ClickHouse/server-side value is
+     * left untouched. Larger values yield fewer, larger parts under high ingestion at the cost of more buffer memory.
+     */
+    private @Min(1) Long asyncInsertMaxDataSize;
 
     private Duration healthCheckTimeout = Duration.seconds(1);
 
@@ -133,24 +150,42 @@ public class DatabaseAnalyticsFactory {
         var overrides = configurableQueryParameters().entrySet().stream()
                 .filter(override -> parsed.serverSettings().containsKey(override.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        if (overrides.isEmpty()) {
+        var injected = injectedQueryParameters();
+        if (overrides.isEmpty() && injected.isEmpty()) {
             return queryParameters;
         }
         var serverSettings = new LinkedHashMap<>(parsed.serverSettings());
         serverSettings.putAll(overrides);
+        serverSettings.putAll(injected);
         return serialize(parsed.driverOptions(), serverSettings);
     }
 
     /**
      * Server settings whose values come from dedicated config fields, included only when the field is set. Applied
-     * only when already present in {@code custom_http_params}, so settings absent from {@link #queryParameters} are
-     * never injected.
+     * only when already present in {@code custom_http_params}, so settings Opik pins in {@link #queryParameters}
+     * (the async_insert busy-timeout window) are overridden, but a setting absent from the chain is never injected.
      */
     private Map<String, String> configurableQueryParameters() {
-        if (asyncInsertBusyTimeoutMaxMs == null) {
+        var overrides = new LinkedHashMap<String, String>();
+        if (asyncInsertBusyTimeoutMaxMs != null) {
+            overrides.put(ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS, String.valueOf(asyncInsertBusyTimeoutMaxMs));
+        }
+        if (asyncInsertBusyTimeoutMinMs != null) {
+            overrides.put(ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS, String.valueOf(asyncInsertBusyTimeoutMinMs));
+        }
+        return overrides;
+    }
+
+    /**
+     * Server settings injected into {@code custom_http_params} whenever the field is set — even if absent from
+     * {@link #queryParameters}. Used for settings Opik does not pin in the chain ({@code async_insert_max_data_size}),
+     * so that leaving the field unset preserves the ClickHouse/server-side value, while setting it opts in explicitly.
+     */
+    private Map<String, String> injectedQueryParameters() {
+        if (asyncInsertMaxDataSize == null) {
             return Map.of();
         }
-        return Map.of(ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS, String.valueOf(asyncInsertBusyTimeoutMaxMs));
+        return Map.of(ASYNC_INSERT_MAX_DATA_SIZE, String.valueOf(asyncInsertMaxDataSize));
     }
 
     private String serialize(Map<String, String> driverOptions, Map<String, String> serverSettings) {

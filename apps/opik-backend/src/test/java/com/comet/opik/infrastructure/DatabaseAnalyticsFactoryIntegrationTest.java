@@ -59,38 +59,79 @@ class DatabaseAnalyticsFactoryIntegrationTest {
                 // custom_http_params entries are applied as ClickHouse server settings
                 Arguments.of("server settings applied",
                         "custom_http_params=max_query_size=123456789,async_insert=1,wait_for_async_insert=1",
-                        null,
+                        null, null, null,
                         Map.of("max_query_size", "123456789", "async_insert", "1", "wait_for_async_insert", "1")),
                 // top-level driver option coexists with custom_http_params; server settings still apply
                 Arguments.of("mixed driver and server params",
                         "compress=1&custom_http_params=max_query_size=7777777,async_insert=1",
-                        null,
+                        null, null, null,
                         Map.of("max_query_size", "7777777", "async_insert", "1")),
                 // the field overrides async_insert_busy_timeout_max_ms; siblings and driver options are preserved
                 Arguments.of("override applied",
                         "auto_discovery=true&failover=3&custom_http_params=async_insert_busy_timeout_max_ms=250,max_query_size=123456789",
-                        7000,
+                        7000, null, null,
                         Map.of("async_insert_busy_timeout_max_ms", "7000", "max_query_size", "123456789")),
                 // no top-level driver options: the override is serialized as custom_http_params only
                 Arguments.of("override applied without driver options",
                         "custom_http_params=async_insert_busy_timeout_max_ms=250,max_query_size=123456789",
-                        7000,
+                        7000, null, null,
                         Map.of("async_insert_busy_timeout_max_ms", "7000", "max_query_size", "123456789")),
-                // blank queryParameters: nothing to override, ClickHouse keeps its default (200)
+                // blank queryParameters: no custom_http_params is synthesized, ClickHouse keeps its default (200)
                 Arguments.of("blank query parameters",
                         null,
-                        7000,
+                        7000, null, null,
                         Map.of("async_insert_busy_timeout_max_ms", "200")),
-                // field unset: the queryParameters value is kept
-                Arguments.of("value kept",
+                // max field unset: the queryParameters value is kept
+                Arguments.of("max value kept",
                         "custom_http_params=async_insert_busy_timeout_max_ms=250,max_query_size=123456789",
-                        null,
+                        null, null, null,
                         Map.of("async_insert_busy_timeout_max_ms", "250", "max_query_size", "123456789")),
-                // the setting is absent from queryParameters, so the field is not injected and ClickHouse keeps its default (200)
-                Arguments.of("not injected when absent",
+                // max setting absent from queryParameters: not injected, so ClickHouse keeps its default (200)
+                Arguments.of("max not injected when absent",
                         "custom_http_params=max_query_size=123456789",
-                        7000,
-                        Map.of("async_insert_busy_timeout_max_ms", "200", "max_query_size", "123456789")));
+                        7000, null, null,
+                        Map.of("async_insert_busy_timeout_max_ms", "200", "max_query_size", "123456789")),
+                // min field overridden when present, same as the max field
+                Arguments.of("min override applied",
+                        "custom_http_params=async_insert_busy_timeout_min_ms=100,max_query_size=123456789",
+                        null, 30, null,
+                        Map.of("async_insert_busy_timeout_min_ms", "30", "max_query_size", "123456789")),
+                // min field unset: the queryParameters value is kept
+                Arguments.of("min value kept",
+                        "custom_http_params=async_insert_busy_timeout_min_ms=100,max_query_size=123456789",
+                        null, null, null,
+                        Map.of("async_insert_busy_timeout_min_ms", "100", "max_query_size", "123456789")),
+                // min setting absent from queryParameters: not injected, so ClickHouse keeps its default (50)
+                Arguments.of("min not injected when absent",
+                        "custom_http_params=max_query_size=123456789",
+                        null, 30, null,
+                        Map.of("async_insert_busy_timeout_min_ms", "50", "max_query_size", "123456789")),
+                // max_data_size is NOT pinned by Opik, so it is injected whenever the field is set, even if absent
+                Arguments.of("max data size injected when absent",
+                        "custom_http_params=max_query_size=123456789",
+                        null, null, 52428800L,
+                        Map.of("async_insert_max_data_size", "52428800", "max_query_size", "123456789")),
+                // when present in the chain, the field value wins
+                Arguments.of("max data size override applied",
+                        "custom_http_params=async_insert_max_data_size=10485760,max_query_size=123456789",
+                        null, null, 52428800L,
+                        Map.of("async_insert_max_data_size", "52428800", "max_query_size", "123456789")),
+                // present in the chain but field unset: nothing injected, the chain value is preserved (not stripped)
+                Arguments.of("max data size value kept",
+                        "custom_http_params=async_insert_max_data_size=20971520,max_query_size=123456789",
+                        null, null, null,
+                        Map.of("async_insert_max_data_size", "20971520", "max_query_size", "123456789")),
+                // absent and field unset: nothing injected, so ClickHouse keeps its default (10 MiB) — the upgrade-safe case
+                Arguments.of("max data size not injected when unset",
+                        "custom_http_params=max_query_size=123456789",
+                        null, null, null,
+                        Map.of("async_insert_max_data_size", "10485760", "max_query_size", "123456789")),
+                // all overrides together: max/min override values present in the chain, max_data_size injected though absent
+                Arguments.of("all overrides applied",
+                        "custom_http_params=async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100",
+                        7000, 30, 52428800L,
+                        Map.of("async_insert_busy_timeout_max_ms", "7000", "async_insert_busy_timeout_min_ms", "30",
+                                "async_insert_max_data_size", "52428800")));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -99,9 +140,13 @@ class DatabaseAnalyticsFactoryIntegrationTest {
             String name,
             String queryParameters,
             Integer asyncInsertBusyTimeoutMaxMsOverride,
+            Integer asyncInsertBusyTimeoutMinMsOverride,
+            Long asyncInsertMaxDataSizeOverride,
             Map<String, String> expectedSettings) {
         var factory = factoryWith(queryParameters);
         factory.setAsyncInsertBusyTimeoutMaxMs(asyncInsertBusyTimeoutMaxMsOverride);
+        factory.setAsyncInsertBusyTimeoutMinMs(asyncInsertBusyTimeoutMinMsOverride);
+        factory.setAsyncInsertMaxDataSize(asyncInsertMaxDataSizeOverride);
 
         var actualSettings = readSettings(factory.build(), expectedSettings.keySet());
 
@@ -114,9 +159,13 @@ class DatabaseAnalyticsFactoryIntegrationTest {
             String name,
             String queryParameters,
             Integer asyncInsertBusyTimeoutMaxMsOverride,
+            Integer asyncInsertBusyTimeoutMinMsOverride,
+            Long asyncInsertMaxDataSizeOverride,
             Map<String, String> expectedSettings) {
         var factory = factoryWith(queryParameters);
         factory.setAsyncInsertBusyTimeoutMaxMs(asyncInsertBusyTimeoutMaxMsOverride);
+        factory.setAsyncInsertBusyTimeoutMinMs(asyncInsertBusyTimeoutMinMsOverride);
+        factory.setAsyncInsertMaxDataSize(asyncInsertMaxDataSizeOverride);
 
         try (var client = factory.buildClient()) {
             var actualSettings = readSettings(client, expectedSettings.keySet());
