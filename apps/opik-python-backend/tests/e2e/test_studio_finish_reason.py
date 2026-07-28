@@ -20,6 +20,22 @@ from llm_constants import ANTHROPIC_CLAUDE_HAIKU
 
 pytestmark = pytest.mark.e2e
 
+# The SDK half of OPIK-7511 (finish_reason on every stop path, including the
+# baseline-perfect early stop) ships with the same changeset that raised
+# DEFAULT_PERFECT_SCORE to 1.0 — so that constant is an honest feature probe.
+# Until the python-backend's pinned opik_optimizer release contains it, the
+# subprocess can complete without a finish_reason and this test would fail on
+# the pin, not on the backend code under test. It activates automatically on
+# the next optimizer pin bump.
+_sdk_constants = pytest.importorskip("opik_optimizer.constants")
+if _sdk_constants.DEFAULT_PERFECT_SCORE < 1.0:
+    pytestmark = [
+        pytest.mark.e2e,
+        pytest.mark.skip(
+            reason="pinned opik_optimizer predates OPIK-7511 finish_reason support"
+        ),
+    ]
+
 # CI uses the workspace Anthropic key; overridable for local stacks whose
 # workspace has a different provider configured.
 _MODEL = os.getenv("OPTSTUDIO_E2E_MODEL", ANTHROPIC_CLAUDE_HAIKU)
