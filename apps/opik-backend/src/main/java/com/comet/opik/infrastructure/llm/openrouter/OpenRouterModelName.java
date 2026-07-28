@@ -493,6 +493,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     QWEN_QWEN3_6_PLUS("qwen/qwen3.6-plus"),
     QWEN_QWEN3_6_PLUS_PREVIEW_FREE("qwen/qwen3.6-plus-preview:free"),
     QWEN_QWEN3_6_PLUS_FREE("qwen/qwen3.6-plus:free"),
+    QWEN_QWEN3_7_FLASH("qwen/qwen3.7-flash"),
     QWEN_QWEN3_7_MAX("qwen/qwen3.7-max"),
     QWEN_QWEN3_7_PLUS("qwen/qwen3.7-plus"),
     QWEN_QWQ_32B("qwen/qwq-32b"),
