@@ -137,12 +137,12 @@ public class DatabaseAnalyticsFactory {
     }
 
     /**
-     * Returns {@code queryParameters} with every set {@link #configurableQueryParameters() override} applied to
+     * Returns {@code queryParameters} with every set {@link #configurableServerSettings() override} applied to
      * {@code custom_http_params} — overriding a present value, or added when absent (including when
      * {@code queryParameters} is blank). Returned unchanged when no override field is set.
      */
     private String getQueryParametersOverrides(String queryParameters) {
-        var overrides = configurableQueryParameters();
+        var overrides = configurableServerSettings();
         if (overrides.isEmpty()) {
             return queryParameters;
         }
@@ -157,7 +157,7 @@ public class DatabaseAnalyticsFactory {
      * {@code custom_http_params} by {@link #getQueryParametersOverrides(String)} — overriding a present value, or
      * added when absent — so an unset field leaves the {@code queryParameters} / ClickHouse-server value untouched.
      */
-    private Map<String, String> configurableQueryParameters() {
+    private Map<String, String> configurableServerSettings() {
         var overrides = new LinkedHashMap<String, String>();
         if (asyncInsertBusyTimeoutMaxMs != null) {
             overrides.put(ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS, String.valueOf(asyncInsertBusyTimeoutMaxMs));
