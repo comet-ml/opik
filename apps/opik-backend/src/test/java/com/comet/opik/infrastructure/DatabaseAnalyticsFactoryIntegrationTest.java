@@ -76,21 +76,21 @@ class DatabaseAnalyticsFactoryIntegrationTest {
                         "custom_http_params=async_insert_busy_timeout_max_ms=250,max_query_size=123456789",
                         7000, null, null,
                         Map.of("async_insert_busy_timeout_max_ms", "7000", "max_query_size", "123456789")),
-                // blank queryParameters: no custom_http_params is synthesized, ClickHouse keeps its default (200)
+                // blank queryParameters + field set: the override is injected (custom_http_params is synthesized)
                 Arguments.of("blank query parameters",
                         null,
                         7000, null, null,
-                        Map.of("async_insert_busy_timeout_max_ms", "200")),
+                        Map.of("async_insert_busy_timeout_max_ms", "7000")),
                 // max field unset: the queryParameters value is kept
                 Arguments.of("max value kept",
                         "custom_http_params=async_insert_busy_timeout_max_ms=250,max_query_size=123456789",
                         null, null, null,
                         Map.of("async_insert_busy_timeout_max_ms", "250", "max_query_size", "123456789")),
-                // max setting absent from queryParameters: not injected, so ClickHouse keeps its default (200)
-                Arguments.of("max not injected when absent",
+                // max setting absent from the chain: the override is injected (custom_http_params is present)
+                Arguments.of("max injected when absent",
                         "custom_http_params=max_query_size=123456789",
                         7000, null, null,
-                        Map.of("async_insert_busy_timeout_max_ms", "200", "max_query_size", "123456789")),
+                        Map.of("async_insert_busy_timeout_max_ms", "7000", "max_query_size", "123456789")),
                 // min field overridden when present, same as the max field
                 Arguments.of("min override applied",
                         "custom_http_params=async_insert_busy_timeout_min_ms=100,max_query_size=123456789",
@@ -101,11 +101,11 @@ class DatabaseAnalyticsFactoryIntegrationTest {
                         "custom_http_params=async_insert_busy_timeout_min_ms=100,max_query_size=123456789",
                         null, null, null,
                         Map.of("async_insert_busy_timeout_min_ms", "100", "max_query_size", "123456789")),
-                // min setting absent from queryParameters: not injected, so ClickHouse keeps its default (50)
-                Arguments.of("min not injected when absent",
+                // min setting absent from the chain: the override is injected the same way
+                Arguments.of("min injected when absent",
                         "custom_http_params=max_query_size=123456789",
                         null, 30, null,
-                        Map.of("async_insert_busy_timeout_min_ms", "50", "max_query_size", "123456789")),
+                        Map.of("async_insert_busy_timeout_min_ms", "30", "max_query_size", "123456789")),
                 // max_data_size is NOT pinned by Opik, so it is injected whenever the field is set, even if absent
                 Arguments.of("max data size injected when absent",
                         "custom_http_params=max_query_size=123456789",
@@ -126,11 +126,6 @@ class DatabaseAnalyticsFactoryIntegrationTest {
                         "custom_http_params=max_query_size=123456789",
                         null, null, null,
                         Map.of("async_insert_max_data_size", "10485760", "max_query_size", "123456789")),
-                // blank queryParameters + field set: inject-when-set still applies (async_insert may be enabled server-side)
-                Arguments.of("max data size injected when query parameters blank",
-                        null,
-                        null, null, 52428800L,
-                        Map.of("async_insert_max_data_size", "52428800")),
                 // all overrides together: max/min override values present in the chain, max_data_size injected though absent
                 Arguments.of("all overrides applied",
                         "custom_http_params=async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100",

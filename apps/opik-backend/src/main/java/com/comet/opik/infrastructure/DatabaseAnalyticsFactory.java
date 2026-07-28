@@ -45,25 +45,23 @@ public class DatabaseAnalyticsFactory {
     private String queryParameters;
 
     /**
-     * Optional override (ms) for {@code async_insert_busy_timeout_max_ms} in the {@link #queryParameters}
-     * {@code custom_http_params} chain; when unset the value carried by {@code queryParameters} is left untouched.
-     * With {@code async_insert_use_adaptive_busy_timeout=1} this is a ceiling on the buffer window — the adaptive
-     * scheduler widens it only while rows are queued.
+     * Optional override (ms) for {@code async_insert_busy_timeout_max_ms}. When set it is applied to the
+     * {@code custom_http_params} chain — overriding a present value, or added when absent; when unset the
+     * {@code queryParameters} / ClickHouse-server value is left untouched. With
+     * {@code async_insert_use_adaptive_busy_timeout=1} this is the ceiling of the adaptive buffer window.
      */
     private @Min(1) Integer asyncInsertBusyTimeoutMaxMs;
 
     /**
-     * Optional override (ms) for {@code async_insert_busy_timeout_min_ms} — the floor of the adaptive buffer window;
-     * when unset the value carried by {@code queryParameters} is left untouched. Same override semantics as
-     * {@link #asyncInsertBusyTimeoutMaxMs}.
+     * Optional override (ms) for {@code async_insert_busy_timeout_min_ms} — the floor of the adaptive buffer window.
+     * Same semantics as {@link #asyncInsertBusyTimeoutMaxMs}.
      */
     private @Min(1) Integer asyncInsertBusyTimeoutMinMs;
 
     /**
      * Optional override (bytes) for {@code async_insert_max_data_size} — the buffered size that forces an async-insert
-     * flush. Unlike the busy-timeout settings, Opik does not carry this in {@link #queryParameters}, so when set it is
-     * injected into {@code custom_http_params}; when unset it is not injected and the ClickHouse/server-side value is
-     * left untouched. Larger values yield fewer, larger parts under high ingestion at the cost of more buffer memory.
+     * flush. Same semantics as {@link #asyncInsertBusyTimeoutMaxMs}. Larger values yield fewer, larger parts under high
+     * ingestion at the cost of more buffer memory.
      */
     private @Min(1) Long asyncInsertMaxDataSize;
 
@@ -138,30 +136,25 @@ public class DatabaseAnalyticsFactory {
     }
 
     /**
-     * Returns {@code queryParameters} with the configured overrides applied: present-only
-     * {@link #configurableQueryParameters() settings} replace an existing value in {@code custom_http_params}, while
-     * {@link #injectedQueryParameters() inject-when-set settings} are added even when absent (including when
+     * Returns {@code queryParameters} with every set {@link #configurableQueryParameters() override} applied to
+     * {@code custom_http_params} — overriding a present value, or added when absent (including when
      * {@code queryParameters} is blank). Returned unchanged when no override field is set.
      */
     private String getQueryParametersOverrides(String queryParameters) {
-        var parsed = parseQueryParameters(queryParameters);
-        var overrides = configurableQueryParameters().entrySet().stream()
-                .filter(override -> parsed.serverSettings().containsKey(override.getKey()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        var injected = injectedQueryParameters();
-        if (overrides.isEmpty() && injected.isEmpty()) {
+        var overrides = configurableQueryParameters();
+        if (overrides.isEmpty()) {
             return queryParameters;
         }
+        var parsed = parseQueryParameters(queryParameters);
         var serverSettings = new LinkedHashMap<>(parsed.serverSettings());
         serverSettings.putAll(overrides);
-        serverSettings.putAll(injected);
         return serialize(parsed.driverOptions(), serverSettings);
     }
 
     /**
-     * Server settings whose values come from dedicated config fields, included only when the field is set. Applied
-     * only when already present in {@code custom_http_params}, so settings Opik pins in {@link #queryParameters}
-     * (the async_insert busy-timeout window) are overridden, but a setting absent from the chain is never injected.
+     * Server settings from dedicated config fields, included when the field is set. Each is applied to
+     * {@code custom_http_params} by {@link #getQueryParametersOverrides(String)} — overriding a present value, or
+     * added when absent — so an unset field leaves the {@code queryParameters} / ClickHouse-server value untouched.
      */
     private Map<String, String> configurableQueryParameters() {
         var overrides = new LinkedHashMap<String, String>();
@@ -171,19 +164,10 @@ public class DatabaseAnalyticsFactory {
         if (asyncInsertBusyTimeoutMinMs != null) {
             overrides.put(ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS, String.valueOf(asyncInsertBusyTimeoutMinMs));
         }
-        return overrides;
-    }
-
-    /**
-     * Server settings injected into {@code custom_http_params} whenever the field is set — even if absent from
-     * {@link #queryParameters}. Used for settings Opik does not pin in the chain ({@code async_insert_max_data_size}),
-     * so that leaving the field unset preserves the ClickHouse/server-side value, while setting it opts in explicitly.
-     */
-    private Map<String, String> injectedQueryParameters() {
-        if (asyncInsertMaxDataSize == null) {
-            return Map.of();
+        if (asyncInsertMaxDataSize != null) {
+            overrides.put(ASYNC_INSERT_MAX_DATA_SIZE, String.valueOf(asyncInsertMaxDataSize));
         }
-        return Map.of(ASYNC_INSERT_MAX_DATA_SIZE, String.valueOf(asyncInsertMaxDataSize));
+        return overrides;
     }
 
     private String serialize(Map<String, String> driverOptions, Map<String, String> serverSettings) {
