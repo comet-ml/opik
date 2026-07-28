@@ -70,6 +70,17 @@ export const isInProgressTrialStatus = (status: TrialStatus): boolean =>
   IN_PROGRESS_TRIAL_STATUSES.includes(status);
 
 /**
+ * Statuses a dataset run shows in their own colour rather than collapsing into
+ * an outcome — the in-progress pair plus "failed", which getTrialDotColor
+ * already keeps red. Every one of these needs a legend entry when present, or
+ * the chart carries a colour the legend does not explain.
+ */
+const DATASET_UNCOLLAPSED_STATUSES: readonly TrialStatus[] = [
+  ...IN_PROGRESS_TRIAL_STATUSES,
+  "failed",
+] as const;
+
+/**
  * Fill colour for a trial dot on the progress chart:
  * - the best trial always wins, in its own darkest fuchsia;
  * - test-suite runs colour every status (their legend distinguishes all states);
@@ -228,6 +239,42 @@ export type CandidateDataPoint = {
   name: string;
 };
 
+export type TrialLegendItem = { color: string; label: string };
+
+/**
+ * Legend for the progress chart, listing only statuses actually plotted.
+ *
+ * Test-suite runs distinguish every status, so the legend mirrors the full
+ * status order. Dataset runs collapse outcomes to passed vs discarded — those
+ * two are always listed, since the trend line is read against them — and then
+ * add each uncollapsed status that is present, so no dot on the chart carries a
+ * colour the legend leaves unexplained (OPIK-7460).
+ *
+ * Pure and exported so the mapping is unit-testable without mounting recharts.
+ */
+export const buildTrialLegendItems = (
+  chartData: CandidateDataPoint[],
+  isTestSuite?: boolean,
+): TrialLegendItem[] => {
+  const present = (s: TrialStatus) => chartData.some((d) => d.status === s);
+
+  if (isTestSuite) {
+    return TRIAL_STATUS_ORDER.filter(present).map((s) => ({
+      color: TRIAL_STATUS_COLORS[s],
+      label: TRIAL_STATUS_LABELS[s],
+    }));
+  }
+
+  return [
+    { color: TRIAL_STATUS_COLORS.passed, label: "Passed trial" },
+    { color: TRIAL_STATUS_COLORS.pruned, label: "Discarded trial" },
+    ...DATASET_UNCOLLAPSED_STATUSES.filter(present).map((s) => ({
+      color: TRIAL_STATUS_COLORS[s],
+      label: `${TRIAL_STATUS_LABELS[s]} trial`,
+    })),
+  ];
+};
+
 export type ParentChildEdge = {
   parentCandidateId: string;
   childCandidateId: string;
@@ -296,14 +343,67 @@ const isStillEvaluating = (
 ): boolean =>
   expectedItemCount > 0 && c.totalDatasetItemCount < expectedItemCount;
 
+/**
+ * Candidates eligible to be "the best trial".
+ *
+ * A partial average is not a result, so it must not win — and must not become
+ * the `bestScore` threshold other trials are pruned against. Without this
+ * filter a candidate three items into its evaluation could top the run on an
+ * easy sample, take the "Best trial" badge, and prune the genuinely-best
+ * *completed* trial down to "Discarded" — reintroducing the very symptom the
+ * status gate removes, sourced from a different row (OPIK-7460).
+ *
+ * Falls back to the unfiltered set when nothing has completed yet (or counts
+ * are unknown), so a run never loses its best marker: with a scored baseline
+ * the filtered set is non-empty by construction, since the baseline is what
+ * defines the denominator.
+ */
+const getBestEligibleCandidates = (
+  candidates: AggregatedCandidate[],
+  expectedItemCount: number,
+): AggregatedCandidate[] => {
+  const completed = candidates.filter(
+    (c) => !isStillEvaluating(c, expectedItemCount),
+  );
+  return completed.length ? completed : candidates;
+};
+
+/** Highest-scoring candidate, earliest-created winning a tie. */
+const reduceBestCandidate = (
+  pool: AggregatedCandidate[],
+): AggregatedCandidate | undefined =>
+  pool.reduce<AggregatedCandidate | undefined>((best, c) => {
+    if (c.score == null) return best;
+    if (!best || best.score == null) return c;
+    if (c.score > best.score) return c;
+    if (c.score === best.score && c.created_at < best.created_at) return c;
+    return best;
+  }, undefined);
+
+/**
+ * The run's best trial, ignoring trials that have not finished evaluating.
+ *
+ * Exported so the page-level "best trial" (badge, best-prompt panel,
+ * improved-over-baseline) is derived exactly the same way as the chart's — these
+ * were two independent reduces before, and only one of them applying the
+ * completion filter would put the table and the header in disagreement.
+ */
+export const selectBestCandidate = (
+  candidates: AggregatedCandidate[],
+): AggregatedCandidate | undefined =>
+  reduceBestCandidate(
+    getBestEligibleCandidates(candidates, getExpectedItemCount(candidates)),
+  );
+
 const buildCandidateLookups = (
   candidates: AggregatedCandidate[],
   inProgressInfo?: InProgressInfo,
 ): CandidateLookups => {
   const hasChildren = new Set<string>();
   const parentSiblings = new Map<string, string[]>();
-  let bestScore: number | undefined;
 
+  // Topology is derived from every candidate — an unfinished trial still has a
+  // real parent and real siblings.
   for (const c of candidates) {
     for (const pid of c.parentCandidateIds) {
       hasChildren.add(pid);
@@ -313,10 +413,6 @@ const buildCandidateLookups = (
     const siblings = parentSiblings.get(parentKey) ?? [];
     siblings.push(c.candidateId);
     parentSiblings.set(parentKey, siblings);
-
-    if (c.score != null && (bestScore == null || c.score > bestScore)) {
-      bestScore = c.score;
-    }
   }
 
   if (inProgressInfo) {
@@ -325,23 +421,25 @@ const buildCandidateLookups = (
     }
   }
 
-  const bestCandidate = candidates.reduce<AggregatedCandidate | undefined>(
-    (best, c) => {
-      if (c.score == null) return best;
-      if (!best || best.score == null) return c;
-      if (c.score > best.score) return c;
-      if (c.score === best.score && c.created_at < best.created_at) return c;
-      return best;
-    },
-    undefined,
-  );
+  // Scores are not. bestScore is the threshold trials get pruned against, so
+  // letting a partial average set it would prune finished trials against a
+  // number that is not a result yet.
+  const expectedItemCount = getExpectedItemCount(candidates);
+  const bestPool = getBestEligibleCandidates(candidates, expectedItemCount);
+
+  let bestScore: number | undefined;
+  for (const c of bestPool) {
+    if (c.score != null && (bestScore == null || c.score > bestScore)) {
+      bestScore = c.score;
+    }
+  }
 
   return {
     hasChildren,
     parentSiblings,
     bestScore,
-    bestCandidate,
-    expectedItemCount: getExpectedItemCount(candidates),
+    bestCandidate: reduceBestCandidate(bestPool),
+    expectedItemCount,
   };
 };
 

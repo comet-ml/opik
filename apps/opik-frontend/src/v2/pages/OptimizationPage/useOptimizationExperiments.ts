@@ -18,7 +18,7 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import { useOptimizationScores } from "@/v2/pages-shared/experiments/useOptimizationScores";
-import { AggregatedCandidate } from "@/types/optimizations";
+import { selectBestCandidate } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import { getOptimizationRefetchInterval } from "./optimizationOverviewHelpers";
 
 export const useOptimizationExperiments = () => {
@@ -169,15 +169,13 @@ export const useOptimizationExperiments = () => {
     [candidates],
   );
 
-  const bestCandidate = useMemo(() => {
-    if (!candidates.length) return undefined;
-
-    return candidates.reduce<AggregatedCandidate | undefined>((best, c) => {
-      if (c.score == null) return best;
-      if (!best || best.score == null || c.score > best.score) return c;
-      return best;
-    }, undefined);
-  }, [candidates]);
+  // Shares the chart's selection so the badge, the best-prompt panel and the
+  // trials table cannot disagree — and so a trial that has not finished
+  // evaluating never wins on a partial average (OPIK-7460).
+  const bestCandidate = useMemo(
+    () => selectBestCandidate(candidates),
+    [candidates],
+  );
 
   // Mirror the SDK tie policy (OPIK-7038, utils/scoring.improves_over): a
   // candidate must STRICTLY beat the baseline to count as an improvement — a

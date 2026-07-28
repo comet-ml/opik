@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   computeCandidateStatuses,
   buildCandidateChartData,
+  buildTrialLegendItems,
+  selectBestCandidate,
   buildTrendLineEdges,
   buildTrialCardModel,
   buildEdgePath,
@@ -499,6 +501,108 @@ describe("computeCandidateStatuses", () => {
     });
   });
 
+  // OPIK-7460 follow-up: the gate alone stopped an unfinished trial being
+  // pruned, but a partial average could still WIN — taking "Best trial" and
+  // becoming the bestScore threshold that prunes the genuinely-best finished
+  // trial to "Discarded". Same defect, opposite direction.
+  describe("in-progress candidates never win the run", () => {
+    // baseline 30/30 @ 0.50 · candA 30/30 @ 0.60 (real winner)
+    // candB 3/30 @ 0.95 (three easy items, still evaluating)
+    const partialLeaderRun = () => [
+      makeCandidate({
+        candidateId: "baseline",
+        stepIndex: 0,
+        score: 0.5,
+        totalDatasetItemCount: 30,
+        created_at: "2025-01-01T00:00:00Z",
+      }),
+      makeCandidate({
+        candidateId: "cand-a",
+        stepIndex: 1,
+        score: 0.6,
+        parentCandidateIds: ["baseline"],
+        totalDatasetItemCount: 30,
+        created_at: "2025-01-01T00:01:00Z",
+      }),
+      makeCandidate({
+        candidateId: "cand-b",
+        stepIndex: 1,
+        score: 0.95,
+        parentCandidateIds: ["baseline"],
+        totalDatasetItemCount: 3,
+        created_at: "2025-01-01T00:02:00Z",
+      }),
+    ];
+
+    it("does not let a partial average take the best-trial slot", () => {
+      expect(selectBestCandidate(partialLeaderRun())?.candidateId).toBe(
+        "cand-a",
+      );
+    });
+
+    it("does not prune the finished winner against a partial average", () => {
+      const result = computeCandidateStatuses(partialLeaderRun(), true, true);
+      // Without the completion filter cand-b's 0.95 became bestScore and
+      // cand-a's real 0.60 was pruned against it.
+      expect(result.get("cand-a")).toBe("passed");
+      expect(result.get("cand-b")).toBe("evaluating");
+    });
+
+    it("falls back to the unfiltered set when nothing has completed", () => {
+      // No baseline → expectedItemCount 0 → every candidate stays eligible,
+      // preserving the previous behaviour rather than losing the best marker.
+      const candidates = [
+        makeCandidate({
+          candidateId: "x",
+          stepIndex: 1,
+          score: 0.4,
+          totalDatasetItemCount: 4,
+        }),
+        makeCandidate({
+          candidateId: "y",
+          stepIndex: 1,
+          score: 0.7,
+          totalDatasetItemCount: 6,
+        }),
+      ];
+      expect(selectBestCandidate(candidates)?.candidateId).toBe("y");
+    });
+
+    it("still picks the earliest candidate on a tie", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "baseline",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 10,
+        }),
+        makeCandidate({
+          candidateId: "late",
+          stepIndex: 1,
+          score: 0.8,
+          totalDatasetItemCount: 10,
+          created_at: "2025-01-03T00:00:00Z",
+        }),
+        makeCandidate({
+          candidateId: "early",
+          stepIndex: 1,
+          score: 0.8,
+          totalDatasetItemCount: 10,
+          created_at: "2025-01-02T00:00:00Z",
+        }),
+      ];
+      expect(selectBestCandidate(candidates)?.candidateId).toBe("early");
+    });
+
+    it("returns undefined when no candidate has a score", () => {
+      expect(
+        selectBestCandidate([
+          makeCandidate({ candidateId: "a", stepIndex: 0 }),
+        ]),
+      ).toBeUndefined();
+    });
+  });
+
   describe("completed test suite", () => {
     it("should mark candidate with descendants as passed", () => {
       const candidates = [
@@ -925,5 +1029,65 @@ describe("findNearestDot", () => {
       ["over", { cx: 0, cy: 0 }],
     ];
     expect(findNearestDot(tie, 0, 0, 22)?.candidateId).toBe("over");
+  });
+});
+
+describe("buildTrialLegendItems", () => {
+  const points = (...statuses: CandidateDataPoint["status"][]) =>
+    statuses.map((status, i) =>
+      makePoint({ candidateId: `c${i}`, stepIndex: i, status }),
+    );
+
+  it("mirrors the status order for test-suite runs, listing only what is plotted", () => {
+    const items = buildTrialLegendItems(points("baseline", "pruned"), true);
+    expect(items.map((i) => i.label)).toEqual(["Baseline", "Discarded"]);
+  });
+
+  it("always lists both outcomes on a dataset run", () => {
+    const items = buildTrialLegendItems(points("passed", "pruned"), false);
+    expect(items.map((i) => i.label)).toEqual([
+      "Passed trial",
+      "Discarded trial",
+    ]);
+  });
+
+  it("adds an Evaluating entry once such a trial is on the chart", () => {
+    const items = buildTrialLegendItems(points("passed", "evaluating"), false);
+    expect(items.map((i) => i.label)).toContain("Evaluating trial");
+    expect(items.find((i) => i.label === "Evaluating trial")?.color).toBe(
+      TRIAL_STATUS_COLORS.evaluating,
+    );
+  });
+
+  // getTrialDotColor keeps a failed trial red on dataset runs, so the legend
+  // has to explain that colour too — it did not before (OPIK-7460).
+  it("adds a Failed entry so the red dot is not unlabelled", () => {
+    const items = buildTrialLegendItems(points("passed", "failed"), false);
+    expect(items.map((i) => i.label)).toContain("Failed trial");
+    expect(items.find((i) => i.label === "Failed trial")?.color).toBe(
+      TRIAL_STATUS_COLORS.failed,
+    );
+  });
+
+  it("every dataset-run colour the chart can paint has a legend entry", () => {
+    const all = points(
+      "baseline",
+      "passed",
+      "pruned",
+      "evaluating",
+      "running",
+      "failed",
+    );
+    const legendColors = new Set(
+      buildTrialLegendItems(all, false).map((i) => i.color),
+    );
+    for (const p of all) {
+      const dot = getTrialDotColor({
+        status: p.status,
+        isBest: false,
+        isTestSuite: false,
+      });
+      expect(legendColors.has(dot)).toBe(true);
+    }
   });
 });

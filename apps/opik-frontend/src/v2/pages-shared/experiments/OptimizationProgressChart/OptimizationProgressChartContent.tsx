@@ -17,11 +17,9 @@ import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig"
 import { AggregatedCandidate } from "@/types/optimizations";
 import ChartTooltip from "./ChartTooltip";
 import {
-  TRIAL_STATUS_COLORS,
-  TRIAL_STATUS_LABELS,
-  TRIAL_STATUS_ORDER,
-  IN_PROGRESS_TRIAL_STATUSES,
   CandidateDataPoint,
+  TrialLegendItem,
+  buildTrialLegendItems,
   buildTrendLineEdges,
   getUniqueSteps,
   findNearestDot,
@@ -90,29 +88,10 @@ const OptimizationProgressChartContent: React.FC<
   // Test-suite runs distinguish every status (only those actually present);
   // dataset runs collapse to a fixed Passed/Discarded pair (matching the dot
   // colours from getTrialDotColor).
-  const legendItems = useMemo<{ color: string; label: string }[]>(() => {
-    if (isTestSuite) {
-      return TRIAL_STATUS_ORDER.filter((s) =>
-        chartData.some((d) => d.status === s),
-      ).map((s) => ({
-        color: TRIAL_STATUS_COLORS[s],
-        label: TRIAL_STATUS_LABELS[s],
-      }));
-    }
-    // Dataset runs label the two outcomes, plus any in-progress state actually
-    // present — getTrialDotColor keeps those in their own colour, so omitting
-    // them here would leave an unlabelled dot colour on the chart (OPIK-7460).
-    return [
-      { color: TRIAL_STATUS_COLORS.passed, label: "Passed trial" },
-      { color: TRIAL_STATUS_COLORS.pruned, label: "Discarded trial" },
-      ...IN_PROGRESS_TRIAL_STATUSES.filter((s) =>
-        chartData.some((d) => d.status === s),
-      ).map((s) => ({
-        color: TRIAL_STATUS_COLORS[s],
-        label: `${TRIAL_STATUS_LABELS[s]} trial`,
-      })),
-    ];
-  }, [isTestSuite, chartData]);
+  const legendItems = useMemo<TrialLegendItem[]>(
+    () => buildTrialLegendItems(chartData, isTestSuite),
+    [isTestSuite, chartData],
+  );
 
   const positionedData = useMemo(() => {
     return chartData.map((d) => ({
