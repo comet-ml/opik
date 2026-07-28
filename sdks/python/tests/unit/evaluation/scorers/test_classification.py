@@ -232,6 +232,30 @@ def test_repeated_nan_labels__do_not_tally_as_separate_classes():
     assert "nan" in score.reason
 
 
+class _AmbiguousLabel:
+    # Hashable, but any comparison raises. pandas' NA is the real-world case:
+    # `NA != NA` is NA, and taking its truth value raises.
+    __hash__ = object.__hash__
+
+    def __eq__(self, other):
+        raise TypeError("boolean value of NA is ambiguous")
+
+    def __repr__(self):
+        return "<NA>"
+
+
+@pytest.mark.parametrize("position", ["prediction", "reference"])
+def test_label_comparison_raises__scoring_failed(position):
+    label = _AmbiguousLabel()
+    pairs = [("spam", label)] if position == "prediction" else [(label, "spam")]
+
+    score = _score(classification.f1_score, pairs + [("ham", "ham")], average="macro")
+
+    assert score.scoring_failed is True
+    assert score.value == 0.0
+    assert "<NA>" in score.reason
+
+
 def test_metadata__reports_average_labels_and_counts():
     score = _score(classification.recall, THREE_CLASS, average="weighted")
 

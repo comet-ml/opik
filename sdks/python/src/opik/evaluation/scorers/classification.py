@@ -112,11 +112,17 @@ def _first_unusable(pairs: List[Tuple[Any, Any]]) -> Optional[Tuple[Any, str]]:
     # compute_experiment_scores swallows - the metric would vanish silently.
     # NaN is hashable but never equals itself, so it slips past that check and
     # instead tallies one class per occurrence, quietly sinking the average.
+    # The comparison itself can raise too - pandas' NA is hashable, and taking
+    # the truth value of `NA != NA` raises rather than returning a bool.
     for pair in pairs:
         for label in pair:
             if not _is_hashable(label):
                 return label, "is not hashable"
-            if label != label:
+            try:
+                differs = bool(label != label)
+            except Exception:
+                return label, "raises when compared"
+            if differs:
                 return label, "does not equal itself"
     return None
 
