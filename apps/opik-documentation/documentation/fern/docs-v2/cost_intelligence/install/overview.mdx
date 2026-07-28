@@ -69,6 +69,36 @@ Which one fits:
   **macOS app** only when neither path can deliver client configuration.
 </Tip>
 
+## Try it on your own machine first
+
+Before pushing anything to a fleet, install it on your own machine. It takes a minute, it proves your workspace credentials actually work, and it gives you a known-good reference to compare against if a fleet rollout later looks wrong.
+
+From inside Claude Code:
+
+```
+/plugin marketplace add comet-ml/cost-intelligence-proxy
+/plugin install opik-cipx@opik-enterprise
+```
+
+Point it at your workspace with the values from the [configuration reference](#configuration-reference) below, in `~/.opik-cipx/config.toml`, then restart Claude Code. The session hook starts the daemon and routes the agent through it.
+
+Run a short session, then check what happened:
+
+```bash
+opik-cipx status   # daemon state, effective config, spans shipped
+opik-cipx logs     # tail the daemon log
+opik-cipx viewer   # local UI: every capture, and where each byte was attributed
+```
+
+<Tip>
+  `opik-cipx viewer` is the fastest way to answer "is it capturing what I
+  expect?". It renders each captured request with every region coloured by the
+  cost bucket it landed in, on your own machine, before anything ships. It is
+  also the first place to look if numbers in the dashboard ever look wrong.
+</Tip>
+
+Finally, confirm the traces arrived in your Opik workspace. Once you have seen that work once, a fleet rollout is the same configuration delivered by a different mechanism.
+
 ## What you'll need
 
 Before starting any path:
