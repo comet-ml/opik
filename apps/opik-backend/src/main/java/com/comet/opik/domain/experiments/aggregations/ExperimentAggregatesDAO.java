@@ -131,6 +131,13 @@ public interface ExperimentAggregatesDAO {
      * experiments reachable from that project. Reachability follows the project of the experiment itself and the
      * projects of the traces its items reference.
      * <p>
+     * The restriction applies to the non-aggregated count only, and must not be hoisted into the outer filter. The
+     * two branches decide project membership differently: the raw branch from traces and {@code project_id}, the
+     * aggregated branch from {@code experiment_aggregates.project_id}. Aggregated experiments exist whose stored
+     * project is no longer reachable from their traces, because those traces were deleted after aggregation.
+     * Filtering every row by the raw branch's notion of reachability would drop such experiments from the
+     * aggregated count, and with it the aggregated branch that returns them.
+     * <p>
      * The trace lookup is deliberately restricted to trace ids that appear in {@code experiment_items}. A project
      * can hold tens of millions of traces while a workspace holds under a million experiment items, so driving the
      * lookup from the project alone builds an enormous set: measured against a seven-million-trace project it read
@@ -1448,7 +1455,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     private static final String SELECT_EXPERIMENT_AGGREGATION_COUNTS = """
             SELECT
-                count() AS total,
                 countIf(has_aggregated) AS aggregated,
                 countIf(NOT has_aggregated AND in_project_scope) AS not_aggregated
             FROM (
