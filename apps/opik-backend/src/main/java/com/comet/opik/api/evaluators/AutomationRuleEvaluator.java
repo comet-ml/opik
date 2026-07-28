@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -74,7 +75,9 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     private final Set<UUID> projectIds;
 
     @JsonView({View.Public.class, View.Write.class})
-    @NotBlank private final String name;
+    // Bounded to match the automation_rules.name VARCHAR(150) column, so an over-long name is rejected at
+    // the API boundary instead of failing the insert (OPIK-7371).
+    @NotBlank @Size(max = 150, message = "cannot exceed 150 characters") private final String name;
 
     @JsonView({View.Public.class, View.Write.class})
     private final float samplingRate;
