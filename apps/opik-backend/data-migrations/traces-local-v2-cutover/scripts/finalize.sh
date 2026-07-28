@@ -18,8 +18,9 @@
 # Detection is CLUSTER-WIDE (via clusterAllReplicas, like exchange_and_wrap.sh's settle gate): because finalize is the one
 # irreversible step and production is multi-replica, a name present on only SOME replicas means an ON CLUSTER DDL has not
 # finished propagating, so acting on the connected node's partial view could recycle/drop mid-transition — it refuses
-# loudly instead. It also refuses if the live `traces` is empty while the backup is not (the live table may be unhealthy
-# and the "backup" the only copy), if BOTH parked names exist (an ambiguous state a human must resolve), and — before a
+# loudly instead. It also refuses if the live `traces` is empty ACROSS THE CLUSTER (max rows over replicas) while the
+# backup is not (the live table may be unhealthy and the "backup" the only copy), if BOTH parked names exist (an
+# ambiguous state a human must resolve), and — before a
 # recycle — if `traces_local_v2` already exists (recycle renames the backup INTO that name; a stray shadow means a retry
 # cutover started before the rollback was finalized).
 #
@@ -76,6 +77,14 @@ classify() {
     fi
 }
 
+# Row counts as the MAX across replicas (per-host via clusterAllReplicas), so the emptiness guard below reflects the whole
+# cluster, not just the connected node — consistent with classify. A Replicated table returns a full copy per replica, so
+# group by host and take the most-caught-up one; the post-cutover DROP path's Distributed `traces` already aggregates the
+# cluster and this still yields its true total. Fail-loud on a down replica, like classify.
+max_rows() {
+    ch "SELECT max(c) FROM (SELECT count() AS c FROM clusterAllReplicas('$CLUSTER', $DATABASE.$1) GROUP BY hostName())"
+}
+
 classify traces
 [[ "$CLUSTER_HAS" == "1" ]] || { echo "ERROR: live 'traces' table not found on all replicas in '$DATABASE'." >&2; exit 1; }
 
@@ -97,10 +106,10 @@ else
     exit 0
 fi
 
-LIVE_ROWS="$(ch "SELECT count() FROM traces")"
-BACKUP_ROWS="$(ch "SELECT count() FROM $BACKUP")"
+LIVE_ROWS="$(max_rows traces)"
+BACKUP_ROWS="$(max_rows "$BACKUP")"
 
-# Refuse the dangerous case: a live table that looks empty while the backup holds data.
+# Refuse the dangerous case: a live table that looks empty across the cluster while the backup holds data.
 if [[ "$LIVE_ROWS" == "0" && "$BACKUP_ROWS" != "0" ]]; then
     echo "ERROR: live 'traces' is empty but '$BACKUP' has $BACKUP_ROWS rows. Refusing to drop the backup —" >&2
     echo "       verify the live table is the healthy one before finalizing." >&2
