@@ -6,8 +6,12 @@
 -- `traces_post_rollback_backup` (a retained backup, dropped only by finalize.sh — NOT the disposable `traces_local_v2`
 -- shadow), and the original (`traces_pre_cutover_backup`) returns to `traces` (the name freed by the first clause) —
 -- restoring the canonical state: traces = original live, traces_post_rollback_backup = successor parked. Gapless and with
--- no orphan risk: because it is one atomic statement, there is no window where a partial failure could strand the
--- successor under a wrong name (the flaw of a separate EXCHANGE + RENAME). Non-destructive.
+-- no orphan risk: the multi-target RENAME is one statement, atomic PER HOST (all clauses apply or none), so on any node
+-- there is no window where a partial failure strands the successor under a wrong name — the flaw of a separate
+-- EXCHANGE + RENAME, which has that window even on a single host. ACROSS hosts, ON CLUSTER is serialized through the DDL
+-- queue and eventually-consistent, NOT globally atomic: a briefly lagging host converges on its own (or the ON CLUSTER
+-- call fails loudly naming it) — the same accepted skew as any ON CLUSTER DDL, and a non-issue in the default single-node
+-- deployment (one host). Non-destructive.
 -- rollback.sh runs the reverse-replay (000004_rollback_reverse_replay.sql) right after this so deletes since
 -- cutover_start do not resurrect. rollback.sh asserts the post-EXCHANGE, pre-wrap topology (traces = successor schema,
 -- not Distributed) before running it.

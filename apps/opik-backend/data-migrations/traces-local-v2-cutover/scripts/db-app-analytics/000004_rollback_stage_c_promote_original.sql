@@ -2,12 +2,15 @@
 -- The gate test TracesLocalV2CutoverTest reimplements this rollback inline; keep the two in step (see its Javadoc).
 --
 -- Use when the wrap ran. Post-wrap topology: `traces` is a Distributed wrapper over `traces_local` (successor data);
--- `traces_pre_cutover_backup` parks the original. Promote the original back to `traces` GAPLESSLY with a single atomic
--- multi-target RENAME that rotates all three names at once: the data-less Distributed wrapper (`traces`) moves to an
--- explicit temp name, the original (`traces_pre_cutover_backup`) becomes live `traces` (the name freed by the first
--- clause), and the successor shard (`traces_local`) parks as `traces_post_rollback_backup` (a retained backup, dropped
--- only by finalize.sh — NOT the disposable `traces_local_v2` shadow) — ending in the canonical state (traces = original
--- live, traces_post_rollback_backup = successor parked). `traces` is never absent on a node.
+-- `traces_pre_cutover_backup` parks the original. Promote the original back to `traces` GAPLESSLY with a single
+-- multi-target RENAME, atomic PER HOST (all clauses apply or none), that rotates all three names at once: the data-less
+-- Distributed wrapper (`traces`) moves to an explicit temp name, the original (`traces_pre_cutover_backup`) becomes live
+-- `traces` (the name freed by the first clause), and the successor shard (`traces_local`) parks as
+-- `traces_post_rollback_backup` (a retained backup, dropped only by finalize.sh — NOT the disposable `traces_local_v2`
+-- shadow) — ending in the canonical state (traces = original live, traces_post_rollback_backup = successor parked). So
+-- `traces` is never absent on a node. ACROSS hosts, as for any ON CLUSTER DDL, the rename is eventually-consistent (a
+-- lagging host converges on its own, or the call fails loudly naming it), NOT globally atomic — a non-issue in the
+-- default single-node deployment (one host).
 --
 -- Then drop the ex-wrapper. It is dropped under `traces_dist_old` — a fresh name that ONLY the data-less wrapper ever
 -- occupied — so the DROP cannot hit the original data regardless of per-replica DDL timing (the concern with dropping a
