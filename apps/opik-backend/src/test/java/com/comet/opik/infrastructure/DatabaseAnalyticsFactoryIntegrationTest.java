@@ -76,9 +76,14 @@ class DatabaseAnalyticsFactoryIntegrationTest {
                         "custom_http_params=async_insert_busy_timeout_max_ms=250,max_query_size=123456789",
                         7000, null, null,
                         Map.of("async_insert_busy_timeout_max_ms", "7000", "max_query_size", "123456789")),
-                // blank queryParameters + field set: the override is injected (custom_http_params is synthesized)
-                Arguments.of("blank query parameters",
+                // null queryParameters + field set: the override is injected (custom_http_params is synthesized)
+                Arguments.of("null query parameters",
                         null,
+                        7000, null, null,
+                        Map.of("async_insert_busy_timeout_max_ms", "7000")),
+                // blank (whitespace) queryParameters + field set: treated like null — the override is injected
+                Arguments.of("blank query parameters",
+                        "   ",
                         7000, null, null,
                         Map.of("async_insert_busy_timeout_max_ms", "7000")),
                 // max field unset: the queryParameters value is kept

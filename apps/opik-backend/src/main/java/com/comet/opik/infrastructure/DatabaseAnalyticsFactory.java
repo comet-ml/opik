@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -202,7 +203,7 @@ public class DatabaseAnalyticsFactory {
      * </ul>
      */
     static ParsedQueryParameters parseQueryParameters(String queryParameters) {
-        if (queryParameters == null || queryParameters.isBlank()) {
+        if (StringUtils.isBlank(queryParameters)) {
             return new ParsedQueryParameters(Map.of(), Map.of());
         }
         Map<String, String> driverOptions = new LinkedHashMap<>();
