@@ -138,6 +138,7 @@ openai:
 anthropic:
   - id: "claude-opus-5"
     label: "Claude Opus 5"
+    structuredOutput: true
   - id: "claude-sonnet-5"
     label: "Claude Sonnet 5"
     structuredOutput: true
@@ -1330,6 +1331,8 @@ openrouter:
     label: "qwen/qwen3.6-plus-preview:free"
   - id: "qwen/qwen3.6-plus:free"
     label: "qwen/qwen3.6-plus:free"
+  - id: "qwen/qwen3.7-flash"
+    label: "qwen/qwen3.7-flash"
   - id: "qwen/qwen3.7-max"
     label: "qwen/qwen3.7-max"
   - id: "qwen/qwen3.7-plus"

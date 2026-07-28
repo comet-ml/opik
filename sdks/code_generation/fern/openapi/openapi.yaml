@@ -3445,6 +3445,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Concurrent modification - the latest version changed during
+            the restore; retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/retrieve:
     post:
       tags:
