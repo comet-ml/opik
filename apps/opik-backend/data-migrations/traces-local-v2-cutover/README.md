@@ -602,15 +602,17 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > **frozen** snapshot as of `cutover_start`, but live `traces` keeps taking writes the instant the buffer drains — so
 > the **current (live) week will legitimately show a mismatch** (the live table is a superset of the frozen backup by
 > exactly the post-cutover writes). That is expected, not a leak. To use the post-EXCHANGE compare as a real check,
-> either run it **immediately after the swap before writes resume**, or bound it to the **sealed historical weeks**
-> (`--to-week <last-full-week>`), where a mismatch *would* be a genuine problem. A leak shows up as rows present in the
+> either run it **immediately after the swap before writes resume**, or bound it to the **sealed historical weeks** with
+> `--to-week N` (a **0-based week offset** from the anchor Monday, not a date — e.g. `--to-week 3` to stop before the
+> current partial week), where a mismatch *would* be a genuine problem. A leak shows up as rows present in the
 > backup but absent from `traces`; post-cutover writes are the harmless opposite direction.
 
 **Feasibility at scale.** A full pass reads every partition (heavy but bounded per week — run off-peak). When that is
 infeasible, sample and still get high confidence:
 - `--sample-mod N` compares a deterministic 1/N `id` sample — the *same* rows on both sides, so like-for-like.
 - `--weeks-stride S` compares every S-th weekly partition (partition-pruned, so genuinely cheaper).
-- `--from-week` / `--to-week` bound the range (e.g. verify the most recent weeks fully, older weeks sampled).
+- `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;
+  `--to-week` is inclusive) — e.g. verify the most recent weeks fully, older weeks sampled.
 
 `verify.sh` exits non-zero if any window mismatches and prints the window bounds; re-run with `--drill-down` to list the
 keys that differ or exist on one side only (it runs the `drill-down` block of `000005_verify_migration.sql` for each
