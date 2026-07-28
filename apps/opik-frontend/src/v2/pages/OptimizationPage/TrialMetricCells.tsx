@@ -13,8 +13,33 @@ import { calcFormatterAwarePercentage } from "@/lib/percentage";
 import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
 import MetricTrendPill from "@/shared/PercentageTrend/MetricTrendPill";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import {
+  isInProgressTrialStatus,
+  type TrialStatus,
+} from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
 type TrialCellContext = CellContext<AggregatedCandidate, unknown>;
+
+/**
+ * True while this row's evaluation is still in flight.
+ *
+ * Every metric on a mid-evaluation trial is computed over the items scored so
+ * far, so a delta against the (fully evaluated) baseline compares different
+ * denominators — a 5-of-30 partial average read "-75%" against a 30-item
+ * baseline in the OPIK-7460 repro. The provisional value itself is still worth
+ * showing; the comparison is not, so callers drop the trend pill (OPIK-7460).
+ */
+const getIsRowInProgress = (
+  context: TrialCellContext,
+  candidateId: string,
+): boolean => {
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { statusMap } = (custom ?? {}) as {
+    statusMap?: Map<string, TrialStatus>;
+  };
+  const status = statusMap?.get(candidateId);
+  return status !== undefined && isInProgressTrialStatus(status);
+};
 
 // Plain helper (not memoized): call sites pass fresh inline accessors each
 // render, so a useMemo here would never hit its cache — and the calc is a
@@ -99,13 +124,15 @@ export const TrialAccuracyCell = (context: TrialCellContext) => {
     isTestSuite?: boolean;
   };
 
-  const percentage = getBaselinePercentage(
-    baselineCandidate,
-    row.candidateId,
-    row.score,
-    (b) => b.score,
-    formatAsPercentage,
-  );
+  const percentage = getIsRowInProgress(context, row.candidateId)
+    ? undefined
+    : getBaselinePercentage(
+        baselineCandidate,
+        row.candidateId,
+        row.score,
+        (b) => b.score,
+        formatAsPercentage,
+      );
 
   const passRateFraction =
     isTestSuite && isNumber(row.score) && row.totalCount > 0
@@ -135,13 +162,15 @@ export const TrialCandidateCostCell = (context: TrialCellContext) => {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = getBaselinePercentage(
-    baselineCandidate,
-    row.candidateId,
-    row.runtimeCost,
-    (b) => b.runtimeCost,
-    formatAsCurrency,
-  );
+  const percentage = getIsRowInProgress(context, row.candidateId)
+    ? undefined
+    : getBaselinePercentage(
+        baselineCandidate,
+        row.candidateId,
+        row.runtimeCost,
+        (b) => b.runtimeCost,
+        formatAsCurrency,
+      );
 
   return (
     <CellWrapper
@@ -166,13 +195,15 @@ export const TrialCandidateLatencyCell = (context: TrialCellContext) => {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = getBaselinePercentage(
-    baselineCandidate,
-    row.candidateId,
-    row.latencyP50,
-    (b) => b.latencyP50,
-    formatAsDuration,
-  );
+  const percentage = getIsRowInProgress(context, row.candidateId)
+    ? undefined
+    : getBaselinePercentage(
+        baselineCandidate,
+        row.candidateId,
+        row.latencyP50,
+        (b) => b.latencyP50,
+        formatAsDuration,
+      );
 
   return (
     <CellWrapper
