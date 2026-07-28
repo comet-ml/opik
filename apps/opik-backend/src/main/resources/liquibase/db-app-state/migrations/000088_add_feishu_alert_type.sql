@@ -6,4 +6,3 @@ ALTER TABLE alerts
     MODIFY COLUMN alert_type ENUM('general', 'slack', 'pagerduty', 'feishu') NOT NULL DEFAULT 'general';
 
 --rollback empty
-
