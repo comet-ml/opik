@@ -87,7 +87,7 @@ jobs:
             docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
 
         - name: Setup Python ${{matrix.python_version}}
-          uses: actions/setup-python@v5
+          uses: actions/setup-python@v7
           with:
             python-version: ${{matrix.python_version}}
 
