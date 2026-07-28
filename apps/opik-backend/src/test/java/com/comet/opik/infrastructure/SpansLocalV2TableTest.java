@@ -484,7 +484,7 @@ class SpansLocalV2TableTest {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND id = :id
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                     SETTINGS asterisk_include_materialized_columns = 1
                     """)
@@ -507,7 +507,7 @@ class SpansLocalV2TableTest {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND id = :id
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                     """.formatted(column))
                     .bind("workspace_id", span.workspaceId())

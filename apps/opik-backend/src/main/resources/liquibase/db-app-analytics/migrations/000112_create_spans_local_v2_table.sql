@@ -36,10 +36,21 @@
 -- No output_keys column: it is a traces-only column (added by 000044 for the trace output-key filters) and has no
 -- counterpart on spans, so there is nothing for the cutover INSERT to map.
 -- Locked at creation (changing any of these later needs another full table rewrite, so they are fixed now):
---   * ORDER BY / implicit PRIMARY KEY (workspace_id, project_id, trace_id, parent_span_id, id): unchanged from the live
---     `spans` table. It matches every hot query (workspace+project filter, then the spans of one trace, then the
---     children of one span) and is the ReplacingMergeTree dedup key, which must stay identical for the cutover to
---     dedup the same rows the live table does.
+--   * ORDER BY / implicit PRIMARY KEY (workspace_id, project_id, trace_id, id): the live `spans` key without
+--     parent_span_id. It matches the hot queries (workspace+project filter, then the spans of one trace, then a span by
+--     id) and is the ReplacingMergeTree dedup key. Dropping parent_span_id is safe and wanted:
+--       - Nothing filters on it. It is not exposed as a SpanField, so it cannot be filtered through the API, and no
+--         query in a 7-day prod sample carries a parent_span_id predicate (0 of 162,172) while 94,238 filter trace_id.
+--         With ~1.7 distinct parents per trace it barely subdivided a trace's ~4.5 spans anyway.
+--       - Dedup identity is unchanged, since id alone is unique per span; the trailing key columns never separated two
+--         rows that (workspace_id, project_id, trace_id, id) would merge.
+--       - It removes a hazard. parent_span_id is mutable, and a mutable sort-key column breaks ReplacingMergeTree
+--         dedup: two versions of a span with different parents sort to different keys and never merge. That is what
+--         forces the deliberate CAST(leftPad(..., 40, '*') AS FixedString(19)) poison pill in SpanDAO's upsert; out of
+--         the key, a changing parent is harmless.
+--     The child-of-a-span access path is kept by a bloom filter on the column instead (see the indexes below).
+--     The cutover has to swap the (workspace_id, project_id, trace_id, parent_span_id, id) tiebreakers in SpanDAO's
+--     LIMIT 1 BY reads to the new key; they still target the live table here, so they are untouched.
 --   * PARTITION BY toMonday(id_at) (weekly, see above).
 --   * ReplicatedReplacingMergeTree version (last_updated_at) + is_deleted meta-columns: the engine and its
 --     parameters are immutable after creation. The live table has no is_deleted, so this is the one engine-parameter
@@ -133,6 +144,10 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ON CLUST
     INDEX idx_spans_id_minmax id TYPE minmax GRANULARITY 1,
     INDEX idx_spans_id_bf id TYPE bloom_filter(0.01) GRANULARITY 1,
     INDEX idx_spans_id_at id_at TYPE minmax GRANULARITY 1,  -- granule-level pruning on id_at within a partition
+    -- parent_span_id is out of the sort key, so the children-of-a-span lookup needs its own index. A bloom filter, as
+    -- for id: the column is a UUID or the empty sentinel, so equality is the only useful predicate on it (minmax cannot
+    -- prune UUIDs sharing a week's prefix, and a set index would blow up on the cardinality).
+    INDEX idx_spans_parent_span_id_bf parent_span_id TYPE bloom_filter(0.01) GRANULARITY 1,
     -- Carried over from `spans` so the successor keeps the same read performance.
     INDEX idx_spans_source source TYPE set(0) GRANULARITY 1,
     INDEX idx_spans_environment environment TYPE set(0) GRANULARITY 1,
@@ -145,7 +160,7 @@ ENGINE = ReplicatedReplacingMergeTree(
     last_updated_at,
     is_deleted)
 PARTITION BY toMonday(id_at)
-ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id)
+ORDER BY (workspace_id, project_id, trace_id, id)
 -- ~40 MiB per granule so a granule fills toward the 8192-row target on these wide rows, making skip indexes prune effectively.
 SETTINGS index_granularity = 8192, index_granularity_bytes = 41943040;
 
