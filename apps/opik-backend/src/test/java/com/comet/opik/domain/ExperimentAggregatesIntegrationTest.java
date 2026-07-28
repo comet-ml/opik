@@ -574,6 +574,106 @@ class ExperimentAggregatesIntegrationTest {
         assertExperimentMatches(rawExperiment, experimentFromAggregates, projectA.id(), projectB.id());
     }
 
+    /**
+     * The aggregated/non-aggregated counts decide which branches of FIND are rendered, and they are narrowed by
+     * the requested project. A non-aggregated experiment reachable from that project must keep the raw branch
+     * alive, otherwise it disappears from the response. This is the data-loss case, and it exercises the
+     * trace-derived binding: the experiment reaches the project through the traces its items point at, which is
+     * how most experiments are bound to a project.
+     */
+    @Test
+    @DisplayName("A project-scoped find returns non-aggregated experiments belonging to that project")
+    void projectScopedFindReturnsNonAggregatedExperimentsOfThatProject() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+        var aggregatedExperiment = createExperiment(dataset, apiKey, workspaceName);
+        createExperimentItemWithData(
+                aggregatedExperiment.id(), dataset.id(), project.name(), feedbackScores, apiKey, workspaceName);
+
+        var nonAggregatedExperiment = createExperiment(dataset, apiKey, workspaceName);
+        createExperimentItemWithData(
+                nonAggregatedExperiment.id(), dataset.id(), project.name(), feedbackScores, apiKey, workspaceName);
+
+        experimentAggregatesService.populateAggregations(aggregatedExperiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var page = findByProject(project.id(), workspaceId);
+
+        assertThat(page).isNotNull();
+        assertThat(page.content().stream().map(Experiment::id).toList())
+                .as("both the aggregated and the non-aggregated experiment of the requested project must be returned")
+                .contains(aggregatedExperiment.id(), nonAggregatedExperiment.id());
+    }
+
+    /**
+     * The mirror case: an experiment reachable only from another project must not appear in this project's
+     * listing. Before the counts were narrowed by project such an experiment also forced the raw branch to be
+     * rendered for every request in the workspace, which is the cost this narrowing removes.
+     */
+    @Test
+    @DisplayName("A project-scoped find excludes non-aggregated experiments of other projects")
+    void projectScopedFindExcludesNonAggregatedExperimentsOfOtherProjects() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var requestedProject = createProject(apiKey, workspaceName);
+        var otherProject = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+        var aggregatedExperiment = createExperiment(dataset, apiKey, workspaceName);
+        createExperimentItemWithData(
+                aggregatedExperiment.id(), dataset.id(), requestedProject.name(), feedbackScores, apiKey,
+                workspaceName);
+
+        var unrelatedNonAggregated = createExperiment(dataset, apiKey, workspaceName);
+        createExperimentItemWithData(
+                unrelatedNonAggregated.id(), dataset.id(), otherProject.name(), feedbackScores, apiKey,
+                workspaceName);
+
+        experimentAggregatesService.populateAggregations(aggregatedExperiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var page = findByProject(requestedProject.id(), workspaceId);
+
+        assertThat(page).isNotNull();
+        assertThat(page.content().stream().map(Experiment::id).toList())
+                .as("the experiment of the requested project must be returned")
+                .contains(aggregatedExperiment.id());
+        assertThat(page.content().stream().map(Experiment::id).toList())
+                .as("an experiment reachable only from another project must not leak into this listing")
+                .doesNotContain(unrelatedNonAggregated.id());
+    }
+
+    private Experiment.ExperimentPage findByProject(UUID projectId, String workspaceId) {
+        var searchCriteria = ExperimentSearchCriteria.builder()
+                .projectId(projectId)
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build();
+
+        return experimentService.find(1, 100, searchCriteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+    }
+
     @ParameterizedTest(name = "Group by {0}")
     @MethodSource("groupingTestCases")
     @DisplayName("ExperimentAggregatesService.findGroups matches ExperimentService.findGroups (raw)")
