@@ -642,17 +642,53 @@ describe("getTrialDotColor", () => {
     ).toBe(TRIAL_STATUS_COLORS.pruned);
   });
 
-  it("collapses dataset runs to discarded vs passed", () => {
+  it("collapses dataset-run outcomes to discarded vs passed", () => {
     expect(
       getTrialDotColor({ status: "pruned", isBest: false, isTestSuite: false }),
     ).toBe(TRIAL_STATUS_COLORS.pruned);
+    expect(
+      getTrialDotColor({ status: "passed", isBest: false, isTestSuite: false }),
+    ).toBe(TRIAL_STATUS_COLORS.passed);
+    expect(
+      getTrialDotColor({
+        status: "baseline",
+        isBest: false,
+        isTestSuite: false,
+      }),
+    ).toBe(TRIAL_STATUS_COLORS.passed);
+  });
+
+  // OPIK-7460: an in-progress trial is not an outcome. Collapsing it into the
+  // solid "passed" fuchsia made the chart assert a pass for the very trial the
+  // trials table labelled "Evaluating".
+  it("keeps in-progress trials out of the passed colour on dataset runs", () => {
     expect(
       getTrialDotColor({
         status: "evaluating",
         isBest: false,
         isTestSuite: false,
       }),
-    ).toBe(TRIAL_STATUS_COLORS.passed);
+    ).toBe(TRIAL_STATUS_COLORS.evaluating);
+    expect(
+      getTrialDotColor({
+        status: "running",
+        isBest: false,
+        isTestSuite: false,
+      }),
+    ).toBe(TRIAL_STATUS_COLORS.running);
+    // Neither may equal the passed colour, or the chart claims a result.
+    expect(TRIAL_STATUS_COLORS.evaluating).not.toBe(TRIAL_STATUS_COLORS.passed);
+    expect(TRIAL_STATUS_COLORS.running).not.toBe(TRIAL_STATUS_COLORS.passed);
+  });
+
+  it("still lets the best trial win over an in-progress status", () => {
+    expect(
+      getTrialDotColor({
+        status: "evaluating",
+        isBest: true,
+        isTestSuite: false,
+      }),
+    ).toBe(TRIAL_BEST_COLOR);
   });
 
   it("keeps a failed trial red on dataset runs (never collapsed to passed)", () => {

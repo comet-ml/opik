@@ -20,6 +20,7 @@ import {
   TRIAL_STATUS_COLORS,
   TRIAL_STATUS_LABELS,
   TRIAL_STATUS_ORDER,
+  IN_PROGRESS_TRIAL_STATUSES,
   CandidateDataPoint,
   buildTrendLineEdges,
   getUniqueSteps,
@@ -98,9 +99,18 @@ const OptimizationProgressChartContent: React.FC<
         label: TRIAL_STATUS_LABELS[s],
       }));
     }
+    // Dataset runs label the two outcomes, plus any in-progress state actually
+    // present — getTrialDotColor keeps those in their own colour, so omitting
+    // them here would leave an unlabelled dot colour on the chart (OPIK-7460).
     return [
       { color: TRIAL_STATUS_COLORS.passed, label: "Passed trial" },
       { color: TRIAL_STATUS_COLORS.pruned, label: "Discarded trial" },
+      ...IN_PROGRESS_TRIAL_STATUSES.filter((s) =>
+        chartData.some((d) => d.status === s),
+      ).map((s) => ({
+        color: TRIAL_STATUS_COLORS[s],
+        label: `${TRIAL_STATUS_LABELS[s]} trial`,
+      })),
     ];
   }, [isTestSuite, chartData]);
 

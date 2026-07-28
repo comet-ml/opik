@@ -57,11 +57,24 @@ export const TRIAL_BEST_COLOR = "var(--trial-best)";
 export const TRIAL_BEST_RING_COLOR = "var(--trial-best-ring)";
 
 /**
+ * Statuses a trial holds while its evaluation is still in flight. These are not
+ * outcomes, so the chart must never paint them in an outcome colour — see
+ * {@link getTrialDotColor} and the dataset-run legend.
+ */
+export const IN_PROGRESS_TRIAL_STATUSES: readonly TrialStatus[] = [
+  "evaluating",
+  "running",
+] as const;
+
+export const isInProgressTrialStatus = (status: TrialStatus): boolean =>
+  IN_PROGRESS_TRIAL_STATUSES.includes(status);
+
+/**
  * Fill colour for a trial dot on the progress chart:
  * - the best trial always wins, in its own darkest fuchsia;
  * - test-suite runs colour every status (their legend distinguishes all states);
- * - dataset runs only distinguish passed vs discarded, so every non-pruned
- *   status collapses to the solid "passed" colour.
+ * - dataset runs collapse *outcomes* to passed vs discarded, but keep the
+ *   in-progress states in their own colours (see below).
  */
 export const getTrialDotColor = ({
   status,
@@ -78,6 +91,11 @@ export const getTrialDotColor = ({
   // red (it scored nothing — it is not a passing trial) and pruned stays faded.
   if (status === "pruned") return TRIAL_STATUS_COLORS.pruned;
   if (status === "failed") return TRIAL_STATUS_COLORS.failed;
+  // An in-progress trial is not an outcome. Collapsing it into the solid
+  // "passed" fuchsia made the chart assert a pass for a trial the trials table
+  // simultaneously labelled "Evaluating" — the chart claimed a result that did
+  // not exist yet. Keep the orange/yellow so both surfaces agree (OPIK-7460).
+  if (isInProgressTrialStatus(status)) return TRIAL_STATUS_COLORS[status];
   return TRIAL_STATUS_COLORS.passed;
 };
 
