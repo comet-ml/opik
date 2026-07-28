@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset petrot:000111_add_origin_to_cipx_spend_blocks
+--changeset petrot:000112_add_origin_to_cipx_spend_blocks
 --comment: Persist the per-block origin (which variant of its category a block is) on cipx_spend_blocks
 --
 -- Category-scoped value set, mirroring cipx wire.Block.Origin:
