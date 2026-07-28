@@ -1,0 +1,148 @@
+---
+headline: Installing Cost Intelligence
+og:description: Choose a rollout path for Cost Intelligence (Claude Code managed
+  settings, MDM-delivered configuration, or the macOS capture app), plus the
+  full inventory of data collected.
+og:site_name: Opik Documentation
+og:title: Installing Cost Intelligence - Opik
+title: Installation overview
+---
+
+Cost Intelligence is delivered as a Claude Code plugin that runs a local proxy on each developer machine. Rolling it out means doing two things: getting the plugin enabled, and pointing it at your Opik workspace.
+
+Nothing needs to be installed on a server, and there is no per-developer manual step in any of the supported paths.
+
+## Choose a rollout path
+
+<CardGroup cols={3}>
+  <Card
+    title="MDM"
+    icon="fa-regular fa-laptop-mobile"
+    href="/cost-intelligence/install/mdm"
+  >
+    **Recommended.** Push config with the tooling you already run (Jamf,
+    Kandji, Intune, JumpCloud) and choose exactly which devices or groups get
+    it, so you can pilot and stage the rollout.
+  </Card>
+  <Card
+    title="Managed settings"
+    icon="fa-regular fa-cloud"
+    href="/cost-intelligence/install/managed-settings"
+  >
+    **Simplest.** One JSON paste in the Claude admin console, but it applies to
+    **every** authenticated user in the org, all at once.
+  </Card>
+  <Card
+    title="macOS app"
+    icon="fa-regular fa-shield-halved"
+    href="/cost-intelligence/install/macos-app"
+  >
+    Transparent capture via a system extension, for when no client
+    configuration can be delivered at all.
+  </Card>
+</CardGroup>
+
+Which one fits:
+
+| | MDM | Managed settings | macOS app |
+| --- | --- | --- | --- |
+| **Requires** | Any MDM / provisioning tool | Claude for Teams or Enterprise | MDM + macOS |
+| **Platforms** | macOS, Linux, Windows | macOS, Linux, Windows | macOS only |
+| **Who receives it** | Whichever devices or groups you target | Every authenticated user in the org | Targeted devices |
+| **Staged / pilot rollout** | Yes | No, all users at once | Yes |
+| **Client config needed** | Yes (delivered for you) | Yes (delivered for you) | None, transparent |
+| **Intercepts TLS** | No | No | Yes, locally |
+| **User can disable it** | No, enforced | No, enforced | No, enforced |
+| **Effort** | Low | Lowest | Highest |
+
+<Tip>
+  **We recommend MDM for most organizations.** It uses the device tooling admins
+  already run day to day, and it lets you decide *who* gets the rollout: start
+  with one team, confirm data is landing the way you expect, then widen. Managed
+  settings has no targeting: it applies to every authenticated user in the
+  organization the moment you save it, which makes a pilot impossible and a
+  mistake org-wide.
+
+  Choose **managed settings** when you have Claude for Teams or Enterprise, want
+  the fastest possible path, and are happy enabling everyone at once, or when
+  your developers' machines aren't centrally managed at all. Reach for the
+  **macOS app** only when neither path can deliver client configuration.
+</Tip>
+
+## What you'll need
+
+Before starting any path:
+
+<Steps>
+
+### An Opik workspace for coding-agent data
+
+Use a dedicated workspace rather than a shared one. It keeps fleet-wide agent
+traffic isolated from individual developers' own Opik projects.
+
+### A workspace-scoped API key
+
+Create a **service-account** key scoped to ingest, not a personal token. In
+every rollout path the key is readable on the developer's device, so it should
+carry no permission beyond writing traces. Rotate it by re-deploying the
+configuration.
+
+### Your Opik base URL
+
+`https://www.comet.com/opik/api` for Opik Cloud, or your own origin if you
+self-host.
+
+</Steps>
+
+<Tip>
+  **You don't have to assemble this yourself.** Email
+  [sales@comet.com](mailto:sales@comet.com) with the rollout path you're taking
+  and we'll send back the exact configuration snippet for your workspace,
+  filled in and ready to paste into your admin console or MDM. It's the fastest
+  way to get a first pilot running, and it removes the most common source of
+  rollout errors.
+</Tip>
+
+## Configuration reference
+
+Every path sets the same four values; only the delivery mechanism differs.
+
+| Variable | Purpose |
+| --- | --- |
+| `OPIK_CIPX_BASE_URL` | Opik installation to ship traces to |
+| `OPIK_CIPX_WORKSPACE` | Target workspace |
+| `OPIK_CIPX_API_KEY` | Workspace-scoped service-account key |
+| `OPIK_CIPX_PROJECT` | Opik project the traces land in |
+
+Optional:
+
+| Variable | Purpose |
+| --- | --- |
+| `OPIK_CIPX_UPSTREAM_BASE_URL` | Send traffic to your own gateway instead of the provider directly (corporate LLM gateway, LiteLLM, Bedrock access gateway) |
+| `CIPX_CAPTURE_CONTENT` | Content capture. Defaults to off; set `false` explicitly to prevent any user from enabling it |
+| `CIPX_SENTRY` | Set `off` to disable error telemetry |
+
+## Data collected
+
+Only counts, costs, and structural metadata are reported. Prompt and response content is **not** collected unless content capture is explicitly enabled, and an organization can pin that off so no individual user can turn it on.
+
+<Card
+  title="Data, privacy and security"
+  icon="fa-regular fa-shield-check"
+  href="/cost-intelligence/data-privacy-security"
+>
+  The full field-by-field inventory, an example payload, the content capture
+  control, where data goes, and how it is protected in transit and on disk.
+</Card>
+
+
+## Verify a rollout
+
+On a target device, in a fresh Claude Code session:
+
+```bash
+opik-cipx status          # daemon state, effective config, spans shipped
+claude plugin list        # opik-cipx@opik-enterprise -> enabled / managed
+```
+
+Then confirm traces are arriving in the target Opik workspace. That last check is the one that matters: a device can look fully installed and still be shipping nothing if the workspace credentials didn't land.
