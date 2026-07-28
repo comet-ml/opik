@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
  * trials table would contradict the overview's best-trial panel on the same
  * page: one showing `{question}` and the other `{{question}}`.
  */
-const getPromptFromExperiment = (experiment: Experiment): unknown => {
+export const getPromptFromExperiment = (experiment: Experiment): unknown => {
   const metadata = experiment.metadata;
   if (!metadata || !isObject(metadata)) return null;
   const config = get(metadata, "configuration");
