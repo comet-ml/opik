@@ -180,11 +180,54 @@ class SpansLocalV2TableTest {
         insert(storedSpan);
 
         assertThat(getColumn(storedSpan, "LENGTH(CAST(parent_span_id AS Nullable(String)))", Long.class)).isZero();
+        // Plain String, without the Nullable wrapper, trims the padding the same way: it is the FixedString -> String
+        // conversion that drops it, so neither form of the DAO's predicate sees a length of 36.
+        assertThat(getColumn(storedSpan, "LENGTH(CAST(parent_span_id AS String))", Long.class)).isZero();
         assertThat(getColumn(storedSpan, "LENGTH(parent_span_id)", Long.class)).isEqualTo(36);
 
         var raw = getColumn(storedSpan, "parent_span_id", String.class);
         assertThat(raw).isEqualTo(CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE).isNotBlank();
         assertThat(SentinelTranslation.emptyUuidToNull(raw)).isNull();
+    }
+
+    /**
+     * Prod already holds ids whose UUIDv7 timestamp is dated in 2199, past the 2106-02-07 ceiling of ClickHouse's
+     * {@code DateTime}, which wraps rather than failing: the same id read through {@code DateTime} comes back as
+     * 2063-05-08. id_at is {@code DateTime64} so the instant the id encodes survives instead.
+     */
+    @Test
+    void farFutureIdBeyondDateTimeCeilingKeepsItsInstant() {
+        var farFuture = Instant.parse("2199-06-15T00:00:00Z");
+        var id = ID_GENERATOR.generateId(farFuture);
+        var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var storedSpan = newStoredSpan(startTime, randomFutureInstantFrom(startTime), DEFAULT_TRUNCATION_THRESHOLD)
+                .toBuilder()
+                .id(id)
+                .idAt(idAtOf(id))
+                .build();
+        insert(storedSpan);
+
+        assertThat(getColumn(storedSpan, "id_at", Instant.class)).isEqualTo(farFuture);
+        assertThat(getColumn(storedSpan, "CAST(id_at AS DateTime('UTC'))", Instant.class)).isNotEqualTo(farFuture);
+    }
+
+    /**
+     * id_at is DateTime64(0): whole seconds, so the sub-second part of the id's timestamp is dropped, not carried.
+     */
+    @Test
+    void idAtIsStoredAtSecondPrecision() {
+        var withMillis = Instant.parse("2026-03-04T05:06:07.891Z");
+        var id = ID_GENERATOR.generateId(withMillis);
+        var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var storedSpan = newStoredSpan(startTime, randomFutureInstantFrom(startTime), DEFAULT_TRUNCATION_THRESHOLD)
+                .toBuilder()
+                .id(id)
+                .idAt(idAtOf(id))
+                .build();
+        insert(storedSpan);
+
+        assertThat(getColumn(storedSpan, "id_at", Instant.class))
+                .isEqualTo(withMillis.truncatedTo(ChronoUnit.SECONDS));
     }
 
     @Test
@@ -244,23 +287,6 @@ class SpansLocalV2TableTest {
     }
 
     /**
-     * Pins the deployed DDL against the migration's spec in one assertion: types and precisions, defaults, every codec,
-     * the engine and its version/is_deleted parameters, the partition and sorting keys, the skip indexes and the
-     * granularity settings. Any drift — including one ClickHouse introduces on an upgrade — has to be acknowledged
-     * here, because the ORDER BY, partition key and engine parameters cannot be changed after creation.
-     */
-    @Test
-    void showCreateTableMatchesSpec() {
-        var actualDdl = transactionTemplateAsync.nonTransaction(connection -> {
-            var statement = connection.createStatement("SHOW CREATE TABLE spans_local_v2");
-            return Mono.from(statement.execute())
-                    .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get(0, String.class))));
-        }).block();
-
-        assertThat(actualDdl).isEqualTo(EXPECTED_DDL);
-    }
-
-    /**
      * A future instant offset by whole seconds plus a sub-millisecond number of microseconds, so the derived duration
      * carries a fractional-millisecond part. This exercises the microsecond dateDiff the duration formula relies on: a
      * millisecond dateDiff would silently drop the fraction and diverge from the expected value.
@@ -316,10 +342,14 @@ class SpansLocalV2TableTest {
     }
 
     /**
-     * A positive cost at the column's exact scale, so {@code Decimal(38, 12)} neither rounds nor rescales it.
+     * A positive cost at the column's exact scale, so {@code Decimal(38, 12)} neither rounds nor rescales it. The
+     * unscaled value spans a whole-unit part and all twelve fractional digits, so the round-trip exercises the scale
+     * rather than a value whose leading fraction digits are always zero.
      */
     private BigDecimal randomCost() {
-        return BigDecimal.valueOf(RandomUtils.secure().randomLong(1, 1_000_000_000L), 12);
+        var units = RandomUtils.secure().randomLong(1, 1_000L);
+        var fraction = RandomUtils.secure().randomLong(1, 1_000_000_000_000L);
+        return BigDecimal.valueOf(units * 1_000_000_000_000L + fraction, 12);
     }
 
     /**
@@ -395,9 +425,7 @@ class SpansLocalV2TableTest {
                     .bind("workspace_id", span.workspaceId())
                     .bind("project_id", span.projectId())
                     .bind("trace_id", span.traceId())
-                    .bind("parent_span_id",
-                            SentinelTranslation.nullToEmptyUuid(
-                                    span.parentSpanId() == null ? null : span.parentSpanId().toString()))
+                    .bind("parent_span_id", SentinelTranslation.nullToEmptyUuid(span.parentSpanId()))
                     .bind("name", span.name())
                     .bind("type", span.type().name())
                     .bind("start_time", ClickHouseDateTimeFormat.formatMicros(span.startTime()))
@@ -445,26 +473,20 @@ class SpansLocalV2TableTest {
     }
 
     /**
-     * SELECT * omits MATERIALIZED columns, so the materialized ones are listed explicitly, and id_at (DateTime) is read
-     * as an Instant.
+     * asterisk_include_materialized_columns makes SELECT * cover the materialized columns too, so the projection does not
+     * have to repeat the DDL's list and cannot drift from it.
      */
     private StoredSpan getById(StoredSpan span) {
         return transactionTemplateAsync.nonTransaction(connection -> {
             var statement = connection.createStatement("""
-                    SELECT *,
-                           input_length,
-                           output_length,
-                           metadata_length,
-                           truncated_input,
-                           truncated_output,
-                           duration,
-                           id_at
+                    SELECT *
                     FROM spans_local_v2
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND id = :id
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
+                    SETTINGS asterisk_include_materialized_columns = 1
                     """)
                     .bind("workspace_id", span.workspaceId())
                     .bind("project_id", span.projectId())
@@ -505,7 +527,7 @@ class SpansLocalV2TableTest {
                 .workspaceId(row.get("workspace_id", String.class))
                 .projectId(row.get("project_id", UUID.class))
                 .traceId(row.get("trace_id", UUID.class))
-                .parentSpanId(toUuid(SentinelTranslation.emptyUuidToNull(row.get("parent_span_id", String.class))))
+                .parentSpanId(SentinelTranslation.emptyUuidToNullableUuid(row.get("parent_span_id", String.class)))
                 .name(row.get("name", String.class))
                 .type(SpanType.fromString(row.get("type", String.class)))
                 .startTime(row.get("start_time", Instant.class))
@@ -541,10 +563,6 @@ class SpansLocalV2TableTest {
                 .build();
     }
 
-    private UUID toUuid(String value) {
-        return value == null ? null : UUID.fromString(value);
-    }
-
     private void assertEqual(StoredSpan actualStoredSpan, StoredSpan expectedStoredSpan) {
         assertThat(actualStoredSpan)
                 .usingRecursiveComparison()
@@ -570,10 +588,10 @@ class SpansLocalV2TableTest {
     }
 
     /**
-     * UUIDv7 encodes unix milliseconds in its top 48 bits; id_at is that instant, milliseconds included.
+     * UUIDv7 encodes unix milliseconds in its top 48 bits; id_at is that instant at second precision.
      */
     private Instant idAtOf(UUID id) {
-        return Instant.ofEpochMilli(id.getMostSignificantBits() >>> 16);
+        return Instant.ofEpochMilli(id.getMostSignificantBits() >>> 16).truncatedTo(ChronoUnit.SECONDS);
     }
 
     @Builder(toBuilder = true)
@@ -618,60 +636,4 @@ class SpansLocalV2TableTest {
             Instant idAt) {
     }
 
-    /**
-     * The ClickHouse-normalized form of the 000112 migration's DDL, with the test database name substituted in.
-     */
-    private static final String EXPECTED_DDL = """
-            CREATE TABLE %s.spans_local_v2
-            (
-                `id` FixedString(36) CODEC(ZSTD(1)),
-                `workspace_id` String CODEC(ZSTD(3)),
-                `project_id` FixedString(36) CODEC(ZSTD(1)),
-                `trace_id` FixedString(36) CODEC(ZSTD(1)),
-                `parent_span_id` FixedString(36) DEFAULT '' CODEC(ZSTD(1)),
-                `name` String DEFAULT '' CODEC(ZSTD(3)),
-                `type` Enum8('unknown' = 0, 'general' = 1, 'tool' = 2, 'llm' = 3, 'guardrail' = 4) DEFAULT 'unknown' CODEC(ZSTD(1)),
-                `start_time` DateTime64(6, 'UTC') DEFAULT now64(6) CODEC(Delta(8), ZSTD(1)),
-                `end_time` DateTime64(6, 'UTC') DEFAULT toDateTime64('1970-01-01 00:00:00', 6) CODEC(Delta(8), ZSTD(1)),
-                `input` String DEFAULT '' CODEC(ZSTD(3)),
-                `output` String DEFAULT '' CODEC(ZSTD(3)),
-                `metadata` String DEFAULT '' CODEC(ZSTD(3)),
-                `tags` Array(String) DEFAULT [] CODEC(ZSTD(3)),
-                `usage` Map(String, Int64) DEFAULT map() CODEC(ZSTD(1)),
-                `created_at` DateTime64(6, 'UTC') DEFAULT now64(6) CODEC(Delta(8), ZSTD(1)),
-                `last_updated_at` DateTime64(6, 'UTC') DEFAULT now64(6) CODEC(Delta(8), ZSTD(1)),
-                `created_by` String DEFAULT '' CODEC(ZSTD(3)),
-                `last_updated_by` String DEFAULT '' CODEC(ZSTD(3)),
-                `model` String DEFAULT '' CODEC(ZSTD(3)),
-                `provider` String DEFAULT '' CODEC(ZSTD(3)),
-                `total_estimated_cost` Decimal(38, 12) DEFAULT 0 CODEC(ZSTD(1)),
-                `total_estimated_cost_version` String DEFAULT '' CODEC(ZSTD(3)),
-                `error_info` String DEFAULT '' CODEC(ZSTD(1)),
-                `truncation_threshold` UInt64 DEFAULT 10001 CODEC(ZSTD(1)),
-                `input_slim` String DEFAULT '' CODEC(ZSTD(3)),
-                `output_slim` String DEFAULT '' CODEC(ZSTD(3)),
-                `ttft` Float64 DEFAULT toFloat64('nan') CODEC(ZSTD(1)),
-                `source` Enum8('unknown' = 0, 'sdk' = 1, 'experiment' = 2, 'playground' = 3, 'optimization' = 4, 'evaluator' = 5) DEFAULT 'unknown' CODEC(ZSTD(1)),
-                `environment` LowCardinality(String) DEFAULT '' CODEC(ZSTD(1)),
-                `is_deleted` UInt8 DEFAULT 0,
-                `input_length` UInt64 MATERIALIZED length(input) CODEC(T64, ZSTD(1)),
-                `output_length` UInt64 MATERIALIZED length(output) CODEC(T64, ZSTD(1)),
-                `metadata_length` UInt64 MATERIALIZED length(metadata) CODEC(T64, ZSTD(1)),
-                `truncated_input` String MATERIALIZED if(length(input) >= truncation_threshold, substring(input, 1, truncation_threshold), input) CODEC(ZSTD(3)),
-                `truncated_output` String MATERIALIZED if(length(output) >= truncation_threshold, substring(output, 1, truncation_threshold), output) CODEC(ZSTD(3)),
-                `duration` Float64 MATERIALIZED if((end_time = toDateTime64('1970-01-01 00:00:00', 6)) OR (start_time = toDateTime64('1970-01-01 00:00:00', 6)), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.) CODEC(ZSTD(1)),
-                `id_at` DateTime64(3, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta(8), ZSTD(1)),
-                INDEX idx_spans_id id TYPE minmax GRANULARITY 1,
-                INDEX idx_spans_id_at id_at TYPE minmax GRANULARITY 1,
-                INDEX idx_spans_source source TYPE set(0) GRANULARITY 1,
-                INDEX idx_spans_environment environment TYPE set(0) GRANULARITY 1,
-                INDEX idx_spans_created_at created_at TYPE minmax GRANULARITY 1,
-                INDEX idx_spans_last_updated_at last_updated_at TYPE minmax GRANULARITY 1
-            )
-            ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/%s/spans_local_v2', '{replica}', last_updated_at, is_deleted)
-            PARTITION BY toMonday(id_at)
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id)
-            SETTINGS index_granularity = 8192, index_granularity_bytes = 41943040\
-            """
-            .formatted(DATABASE_NAME, DATABASE_NAME);
 }

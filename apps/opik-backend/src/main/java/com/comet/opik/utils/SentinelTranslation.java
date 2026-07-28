@@ -4,6 +4,7 @@ import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
@@ -63,6 +64,20 @@ public class SentinelTranslation {
                 : value;
     }
 
+    /**
+     * As {@link #emptyUuidToNull(String)}, parsed to a {@link UUID}: the single call a read path needs for a
+     * {@code FixedString(36)} column holding a UUID or the empty sentinel. Going through the sentinel check first is what
+     * makes it safe — the driver surfaces the sentinel as 36 NUL characters, which are not blank, so parsing the raw
+     * value directly (behind an {@code isBlank} guard, say) throws instead of reading as absent.
+     *
+     * @return {@code null} when the value is absent, otherwise the parsed UUID.
+     * @throws IllegalArgumentException when the value is present but not a UUID.
+     */
+    public static UUID emptyUuidToNullableUuid(String value) {
+        var present = emptyUuidToNull(value);
+        return present == null ? null : UUID.fromString(present);
+    }
+
     // Inbound: API null → ClickHouse sentinel.
 
     public static Instant nullToEpoch(Instant value) {
@@ -80,5 +95,13 @@ public class SentinelTranslation {
      */
     public static String nullToEmptyUuid(String value) {
         return StringUtils.isBlank(value) ? EMPTY_UUID_SENTINEL : value;
+    }
+
+    /**
+     * As {@link #nullToEmptyUuid(String)} for a {@link UUID}, so a write path binding a {@code FixedString(36)} column
+     * does not have to spell out the null check around {@link UUID#toString()}.
+     */
+    public static String nullToEmptyUuid(UUID value) {
+        return value == null ? EMPTY_UUID_SENTINEL : value.toString();
     }
 }

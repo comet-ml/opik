@@ -12,8 +12,9 @@
 --   * Event timestamps stored at microsecond precision (DateTime64(6)); nothing ingested needs finer resolution. This
 --     narrows start_time/end_time/created_at from the DateTime64(9) the live table uses (last_updated_at is already
 --     microseconds); sub-microsecond digits are truncated, never rounded, so a row cannot shift a microsecond.
---     id_at is the exception, at DateTime64(3): that is what UUIDv7ToDateTime returns, so the id's millisecond is
---     stored as-is instead of being cast down (the live spans column is DateTime, whole seconds).
+--     id_at is DateTime64(0), whole seconds: that is all a weekly partition and the id-range filters need. The type
+--     is DateTime64 rather than DateTime for range, not precision — DateTime tops out at 2106-02-07 and silently
+--     saturates there, and prod already holds ids whose UUIDv7 timestamp is dated in 2199.
 --   * end_time, ttft and duration are non-Nullable, using epoch / NaN sentinels, dropping the per-column
 --     null-mask overhead on hot reads. Same three columns as traces_local_v2, and the same sentinels, so
 --     SentinelTranslation covers both tables.
@@ -51,10 +52,10 @@
 -- so this table skips the three refinement passes traces needed:
 --   * FixedString(36) UUIDv7 ids (id, project_id, trace_id, parent_span_id): ZSTD(1). Higher levels did not improve
 --     (and slightly hurt) the ratio, and they are immune to the 26.3 regression below.
---   * Small, repetitive, variable-length String/Array (workspace_id, name, tags, created_by, last_updated_by, and the
---     spans-only model, provider and total_estimated_cost_version): ZSTD(3). ClickHouse 26.3 (the LTS this table is
---     deployed on) regressed ZSTD level 1 on exactly this shape, making ZSTD(1) larger than the LZ4 default; ZSTD(3)
---     is unaffected and smallest on both 25.8 and 26.3, at codec-level-independent decode (no read penalty).
+--   * Small, repetitive, variable-length String/Array (workspace_id, name, tags, created_by, last_updated_by):
+--     ZSTD(3). ClickHouse 26.3 (the LTS this table is deployed on) regressed ZSTD level 1 on exactly this shape,
+--     making ZSTD(1) larger than the LZ4 default; ZSTD(3) is unaffected and smallest on both 25.8 and 26.3, at
+--     codec-level-independent decode (no read penalty).
 --   * Long/structured text (input, output, metadata and their slim/truncated forms): ZSTD(3).
 --   * Timestamps (start_time, end_time, created_at, last_updated_at, id_at): Delta + ZSTD(1). Monotonic enough in the
 --     storage order on real data for Delta to win, including end_time and last_updated_at (a synthetic slice had
@@ -62,15 +63,16 @@
 --   * The *_length counters: T64 + ZSTD(1) (narrow integers).
 --   * ttft and duration: ZSTD(1). They are not correlated float series, so Gorilla/FPC never help regardless of how
 --     much of the column is the NaN sentinel.
---   * Enum8 (type, source), LowCardinality (environment) and the constant truncation_threshold: ZSTD(1), which
---     compresses ~2x better than the LZ4 default on these tiny columns at equal decode cost.
+--   * Enum8 (type, source), LowCardinality (environment, model, provider, total_estimated_cost_version) and the
+--     constant truncation_threshold: ZSTD(1), which compresses ~2x better than the LZ4 default on these tiny
+--     columns at equal decode cost.
 --   * is_deleted: server default, matching traces_local_v2.
--- Of the spans-only columns, the four with no traces analogue of the same shape fall out of the rules above: the
--- FixedString(36) ids (trace_id, parent_span_id) take the id codec, the Enum8 type takes the Enum8 codec, and
--- model/provider/total_estimated_cost_version take the 26.3-safe ZSTD(3) for small repetitive text. That leaves
--- usage (Map(String, Int64), a composite of repetitive string keys and narrow-integer values, which no single-column
--- rule covers) and total_estimated_cost (Decimal128) on ZSTD(1) as best guesses, for the spans codec benchmark to
--- settle against real spans data.
+-- The spans-only columns fall out of the rules above: the FixedString(36) ids (trace_id, parent_span_id) take the id
+-- codec, and type/model/provider/total_estimated_cost_version take the Enum8/LowCardinality codec. model, provider
+-- and total_estimated_cost_version are LowCardinality because they are: measured on a 4M-row prod sample they hold
+-- 53, 14 and 2 distinct values, far inside the dictionary's range. That leaves usage (Map(String, Int64), a
+-- composite of repetitive string keys and narrow-integer values, which no single-column rule covers) and
+-- total_estimated_cost (Decimal128) on ZSTD(1) as best guesses, for the spans codec benchmark to settle.
 -- The engine uses its own ZooKeeper path ('.../spans_local_v2'): two replicated tables cannot share a replica
 -- path, so it must differ from `spans` while both exist. A replica path is independent of the table name, so
 -- it stays valid after a later rename/swap.
@@ -96,10 +98,10 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ON CLUST
     last_updated_at              DateTime64(6, 'UTC')   DEFAULT now64(6) CODEC(Delta, ZSTD(1)),
     created_by                   String                 DEFAULT ''       CODEC(ZSTD(3)),
     last_updated_by              String                 DEFAULT ''       CODEC(ZSTD(3)),
-    model                        String                 DEFAULT ''       CODEC(ZSTD(3)),
-    provider                     String                 DEFAULT ''       CODEC(ZSTD(3)),
+    model                        LowCardinality(String) DEFAULT ''       CODEC(ZSTD(1)),
+    provider                     LowCardinality(String) DEFAULT ''       CODEC(ZSTD(1)),
     total_estimated_cost         Decimal(38, 12)        DEFAULT 0        CODEC(ZSTD(1)),
-    total_estimated_cost_version String                 DEFAULT ''       CODEC(ZSTD(3)),
+    total_estimated_cost_version LowCardinality(String) DEFAULT ''       CODEC(ZSTD(1)),
     error_info                   String                 DEFAULT ''       CODEC(ZSTD(1)),
     truncation_threshold         UInt64                 DEFAULT 10001    CODEC(ZSTD(1)),   -- 10 KB + 1 byte, threshold for the truncated_* columns
     input_slim                   String                 DEFAULT ''       CODEC(ZSTD(3)),
@@ -123,10 +125,13 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ON CLUST
             dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
     -- Partition input, see header. DateTime64(3) is what UUIDv7ToDateTime returns, so the millisecond the id encodes is
     -- kept as-is rather than cast down to whole seconds; 8 bytes instead of 4, but Delta leaves little of that on disk.
-    id_at                        DateTime64(3, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1)),
-    -- id-only lookups (project and trace unknown) can't use the primary key, where id is the fifth column.
-    -- Carried over from `spans`: minmax prunes the id-range predicates the retention/read paths use (id >= .. AND id < ..).
-    INDEX idx_spans_id id TYPE minmax GRANULARITY 1,
+    id_at                        DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1)),
+    -- id-only lookups (project and trace unknown) can't use the primary key, where id is the last key column. Two
+    -- complementary indexes, as traces_local_v2 has: minmax for the id-range predicates the retention/read paths use
+    -- (id >= .. AND id < ..), and a bloom filter for the exact-match / IN lookups minmax cannot prune within a week's
+    -- shared UUIDv7 prefix.
+    INDEX idx_spans_id_minmax id TYPE minmax GRANULARITY 1,
+    INDEX idx_spans_id_bf id TYPE bloom_filter(0.01) GRANULARITY 1,
     INDEX idx_spans_id_at id_at TYPE minmax GRANULARITY 1,  -- granule-level pruning on id_at within a partition
     -- Carried over from `spans` so the successor keeps the same read performance.
     INDEX idx_spans_source source TYPE set(0) GRANULARITY 1,
