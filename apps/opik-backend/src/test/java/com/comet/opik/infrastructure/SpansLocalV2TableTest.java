@@ -570,10 +570,10 @@ class SpansLocalV2TableTest {
     }
 
     /**
-     * UUIDv7 encodes unix milliseconds in its top 48 bits; id_at is that instant at second precision.
+     * UUIDv7 encodes unix milliseconds in its top 48 bits; id_at is that instant, milliseconds included.
      */
     private Instant idAtOf(UUID id) {
-        return Instant.ofEpochMilli(id.getMostSignificantBits() >>> 16).truncatedTo(ChronoUnit.SECONDS);
+        return Instant.ofEpochMilli(id.getMostSignificantBits() >>> 16);
     }
 
     @Builder(toBuilder = true)
@@ -660,7 +660,7 @@ class SpansLocalV2TableTest {
                 `truncated_input` String MATERIALIZED if(length(input) >= truncation_threshold, substring(input, 1, truncation_threshold), input) CODEC(ZSTD(3)),
                 `truncated_output` String MATERIALIZED if(length(output) >= truncation_threshold, substring(output, 1, truncation_threshold), output) CODEC(ZSTD(3)),
                 `duration` Float64 MATERIALIZED if((end_time = toDateTime64('1970-01-01 00:00:00', 6)) OR (start_time = toDateTime64('1970-01-01 00:00:00', 6)), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.) CODEC(ZSTD(1)),
-                `id_at` DateTime('UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta(4), ZSTD(1)),
+                `id_at` DateTime64(3, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta(8), ZSTD(1)),
                 INDEX idx_spans_id id TYPE minmax GRANULARITY 1,
                 INDEX idx_spans_id_at id_at TYPE minmax GRANULARITY 1,
                 INDEX idx_spans_source source TYPE set(0) GRANULARITY 1,

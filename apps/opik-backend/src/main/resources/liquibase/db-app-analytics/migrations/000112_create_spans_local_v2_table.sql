@@ -119,7 +119,9 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ON CLUST
         if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6),
             toFloat64('nan'),
             dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
-    id_at                        DateTime('UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1)),  -- partition input, see header
+    -- Partition input, see header. DateTime64(3) is what UUIDv7ToDateTime returns, so the millisecond the id encodes is
+    -- kept as-is rather than cast down to whole seconds; 8 bytes instead of 4, but Delta leaves little of that on disk.
+    id_at                        DateTime64(3, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1)),
     -- id-only lookups (project and trace unknown) can't use the primary key, where id is the fifth column.
     -- Carried over from `spans`: minmax prunes the id-range predicates the retention/read paths use (id >= .. AND id < ..).
     INDEX idx_spans_id id TYPE minmax GRANULARITY 1,
