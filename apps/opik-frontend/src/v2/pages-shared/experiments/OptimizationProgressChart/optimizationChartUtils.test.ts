@@ -304,6 +304,201 @@ describe("computeCandidateStatuses", () => {
     });
   });
 
+  // OPIK-7460: mid-evaluation, an experiment's feedback score is a partial
+  // average over the items scored so far, so an unfinished trial shows a low
+  // provisional score. It must not read as "Discarded" on that basis. The
+  // denominator is the step-0 baseline's item count — the counts the API reports
+  // are completed-only, so there is no planned count to compare against.
+  describe("in-progress item-completion gate", () => {
+    it("should not prune a trial that is still mid-evaluation with a partial score below best", () => {
+      const candidates = [
+        // Baseline: full evaluation over all 30 dataset items.
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+        // c is still evaluating: 5 of 30 items scored, provisional score below best.
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 5,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("evaluating");
+    });
+
+    it("should still prune a finished trial whose score is below best", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+        // c covered every item and genuinely lost — the gate must not fire.
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("pruned");
+    });
+
+    it("should not prune an unfinished trial whose sibling has children", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+        // Same score as best, so the sibling-progress branch is what would
+        // prune c — the gate has to sit ahead of that branch too.
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 12,
+        }),
+        makeCandidate({
+          candidateId: "d",
+          stepIndex: 2,
+          score: 0.9,
+          parentCandidateIds: ["b"],
+          totalDatasetItemCount: 30,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("evaluating");
+    });
+
+    it("should keep a trial with children passed even when its item count is short", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.6,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 20,
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 2,
+          score: 0.9,
+          parentCandidateIds: ["b"],
+          totalDatasetItemCount: 30,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("b")).toBe("passed");
+    });
+
+    it("should fall back to the previous behaviour when no item counts are reported", () => {
+      const candidates = [
+        makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["a"],
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("pruned");
+    });
+
+    it("should fall back to the previous behaviour when there is no baseline candidate", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["b"],
+          totalDatasetItemCount: 5,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("pruned");
+    });
+
+    it("should not leave a short-count trial evaluating once the run is terminal", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 5,
+        }),
+      ];
+      // isInProgress = false → the gate is not consulted, statuses are final.
+      const result = computeCandidateStatuses(candidates, true, false);
+      expect(result.get("c")).toBe("pruned");
+    });
+  });
+
   describe("completed test suite", () => {
     it("should mark candidate with descendants as passed", () => {
       const candidates = [
