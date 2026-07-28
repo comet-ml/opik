@@ -341,6 +341,37 @@ available on Comet Cloud only — on self-hosted those calls fail at dispatch;
 use `read` / `list` / `write` directly.
 </Tip>
 
+## Skills for coding agents
+
+Beyond the tools, Opik ships a set of **skills** — Markdown guides that teach a
+coding agent _how_ to use Opik for real tasks: tracing, evaluation, the SDK, and
+an end-to-end `instrument` routine. Unlike ubiquitous CLIs, a model doesn't know
+Opik from training, so the skills are what let it use Opik without fumbling.
+
+The skills live in
+[`opik-mcp/skills`](https://github.com/comet-ml/opik-mcp/tree/main/src/opik_mcp/skills)
+and reach your agent two ways:
+
+- **With the MCP** — the agent pulls a skill on demand with `read_skill`; nothing
+  to install:
+
+  ```text
+  read_skill("opik")                 # overview + reference list
+  read_skill("opik/tracing-python")  # one reference file
+  ```
+
+- **Without the MCP** — install them onto disk from the
+  [opik-skills front door](https://github.com/comet-ml/opik-skills):
+
+  ```bash
+  # shallow clone + copy (works with any agent that reads skills from disk)
+  git clone --depth 1 https://github.com/comet-ml/opik-mcp.git
+  cp -r opik-mcp/src/opik_mcp/skills/* ~/.claude/skills/
+
+  # or, if you already have the package:
+  uvx opik-mcp skills install --dir ~/.claude/skills
+  ```
+
 ## Using the MCP server
 
 ### The tools at a glance
