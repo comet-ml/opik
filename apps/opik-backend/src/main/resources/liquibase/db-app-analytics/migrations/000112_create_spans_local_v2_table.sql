@@ -11,7 +11,7 @@
 --     ReplacingMergeTree upserts.
 --   * Timestamps stored at microsecond precision (DateTime64(6)); nothing ingested needs finer resolution. This
 --     narrows start_time/end_time/created_at from the DateTime64(9) the live table uses (last_updated_at is already
---     microseconds); no ingestion path produces sub-microsecond values, so the cast is lossless in practice.
+--     microseconds); sub-microsecond digits are truncated, never rounded, so a row cannot shift a microsecond.
 --   * end_time, ttft and duration are non-Nullable, using epoch / NaN sentinels, dropping the per-column
 --     null-mask overhead on hot reads. Same three columns as traces_local_v2, and the same sentinels, so
 --     SentinelTranslation covers both tables.
