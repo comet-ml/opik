@@ -13,16 +13,28 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptDiff from "@/shared/CodeDiff/PromptDiff";
 import { extractMessages } from "@/lib/optimization-config";
+import { restorePromptVariableFormat } from "@/lib/optimizations";
 import { cn } from "@/lib/utils";
 
+/**
+ * Read a trial's prompt off its experiment configuration.
+ *
+ * Single-experiment sibling of {@link getCandidatePrompt} in ./candidatePrompt —
+ * and, like it, restores the authored `{{variable}}` syntax for display (the
+ * stored value uses the optimizer's single-brace form). Both the cell preview
+ * and the "Diff vs baseline" hover card render from here, so without this the
+ * trials table would contradict the overview's best-trial panel on the same
+ * page: one showing `{question}` and the other `{{question}}`.
+ */
 const getPromptFromExperiment = (experiment: Experiment): unknown => {
   const metadata = experiment.metadata;
   if (!metadata || !isObject(metadata)) return null;
   const config = get(metadata, "configuration");
   if (!config || !isObject(config)) return null;
   const c = config as Record<string, unknown>;
-  if ("prompt" in c) return c["prompt"];
-  if ("prompt_messages" in c) return c["prompt_messages"];
+  if ("prompt" in c) return restorePromptVariableFormat(c["prompt"]);
+  if ("prompt_messages" in c)
+    return restorePromptVariableFormat(c["prompt_messages"]);
   return null;
 };
 
