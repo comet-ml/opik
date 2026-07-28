@@ -12,8 +12,12 @@ COPY src ./src
 # Build artifact
 ARG OPIK_VERSION
 ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
+# The image only needs the shaded main jar. maven.test.skip drops test
+# compilation (nothing consumes a test-jar), and source/javadoc skip drops
+# artifacts the runtime image never uses — trimming the package stage without
+# changing what ships. (-T is a no-op here: single-module build, no reactor.)
 RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
-    mvn clean package -DskipTests -Dspotless.skip=true
+    mvn clean package -Dmaven.test.skip=true -Dmaven.source.skip=true -Dmaven.javadoc.skip=true -Dspotless.skip=true
 
 ###############################
 FROM amazoncorretto:25.0.3-al2023

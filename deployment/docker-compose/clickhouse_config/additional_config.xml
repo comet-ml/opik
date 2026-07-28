@@ -1,7 +1,7 @@
 <clickhouse>
     <!-- Permits SQL_-prefixed custom settings (SQL_workspace_id / SQL_project_id) used by the Agent Insights
          read-only user's settings profile and row policies. Inert unless that user/profile is provisioned
-         (dev-runner with TOGGLE_AGENT_INSIGHTS_ENABLED=true, or prod via OPIK-6846). No effect otherwise. -->
+         (dev-runner with TOGGLE_OLLIE_ENABLED=true, or prod via OPIK-6846). No effect otherwise. -->
     <custom_settings_prefixes>SQL_</custom_settings_prefixes>
 
     <macros>

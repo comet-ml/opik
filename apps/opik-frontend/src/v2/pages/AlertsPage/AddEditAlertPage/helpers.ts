@@ -14,6 +14,7 @@ import {
   AlertTriggerConfig,
   Alert,
 } from "@/types/alerts";
+import { GuardrailTypes } from "@/types/guardrails";
 import {
   TriggerFormType,
   FeedbackScoreConditionType,
@@ -209,6 +210,44 @@ const createThresholdTriggerConfig = ({
   return [config];
 };
 
+const GUARDRAIL_TYPES_CONFIG_KEY = "guardrail_types";
+
+const getGuardrailTypesFromTriggerConfigs = (
+  triggerConfigs?: AlertTriggerConfig[],
+): GuardrailTypes[] => {
+  if (!triggerConfigs) return [];
+
+  const validTypes = new Set<string>(Object.values(GuardrailTypes));
+  // Collect every filter:guardrail_type config (not just the first) and de-duplicate,
+  // so reopening then saving an alert never drops types from additional configs.
+  const seen = new Set<GuardrailTypes>();
+  triggerConfigs
+    .filter(
+      (c) => c.type === ALERT_TRIGGER_CONFIG_TYPE["filter:guardrail_type"],
+    )
+    .flatMap((c) =>
+      (c.config_value?.[GUARDRAIL_TYPES_CONFIG_KEY] ?? "").split(","),
+    )
+    .map((value) => value.trim().toUpperCase())
+    .filter((value): value is GuardrailTypes => validTypes.has(value))
+    .forEach((value) => seen.add(value));
+
+  return [...seen];
+};
+
+const createGuardrailTypesTriggerConfig = (
+  guardrailTypes?: GuardrailTypes[],
+): AlertTriggerConfig[] => {
+  if (!guardrailTypes || guardrailTypes.length === 0) return [];
+
+  return [
+    {
+      type: ALERT_TRIGGER_CONFIG_TYPE["filter:guardrail_type"],
+      config_value: { [GUARDRAIL_TYPES_CONFIG_KEY]: guardrailTypes.join(",") },
+    },
+  ];
+};
+
 export const alertTriggersToFormTriggers = (
   triggers: AlertTrigger[],
 ): TriggerFormType[] => {
@@ -233,10 +272,16 @@ export const alertTriggersToFormTriggers = (
           )
         : [];
 
+    const guardrailTypes =
+      trigger.event_type === ALERT_EVENT_TYPE.trace_guardrails_triggered
+        ? getGuardrailTypesFromTriggerConfigs(trigger.trigger_configs)
+        : [];
+
     return {
       eventType: trigger.event_type,
       ...thresholdData,
       ...(groups.length > 0 ? { groups } : {}),
+      ...(guardrailTypes.length > 0 ? { guardrailTypes } : {}),
     };
   });
 };
@@ -276,6 +321,12 @@ export const formTriggersToAlertTriggers = (
           );
         });
       });
+    } else if (
+      trigger.eventType === ALERT_EVENT_TYPE.trace_guardrails_triggered
+    ) {
+      configs.push(
+        ...createGuardrailTypesTriggerConfig(trigger.guardrailTypes),
+      );
     }
 
     return {

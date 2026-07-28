@@ -17,6 +17,7 @@ export const BreakdownConfigPublicField: core.serialization.Schema<
     "model",
     "provider",
     "type",
+    "guardrail_name",
 ]);
 
 export declare namespace BreakdownConfigPublicField {
@@ -29,5 +30,6 @@ export declare namespace BreakdownConfigPublicField {
         | "error_type"
         | "model"
         | "provider"
-        | "type";
+        | "type"
+        | "guardrail_name";
 }

@@ -136,6 +136,9 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-opus-5"
+    label: "Claude Opus 5"
+    structuredOutput: true
   - id: "claude-sonnet-5"
     label: "Claude Sonnet 5"
     structuredOutput: true
@@ -233,6 +236,10 @@ gemini:
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
 vertex-ai:
+  - id: "gemini-3.6-flash"
+    qualifiedName: "vertex_ai/gemini-3.6-flash"
+    label: "Gemini 3.6 Flash"
+    structuredOutput: true
   - id: "gemini-3.5-flash"
     qualifiedName: "vertex_ai/gemini-3.5-flash"
     label: "Gemini 3.5 Flash"
@@ -364,6 +371,10 @@ openrouter:
     label: "anthropic/claude-opus-4.8"
   - id: "anthropic/claude-opus-4.8-fast"
     label: "anthropic/claude-opus-4.8-fast"
+  - id: "anthropic/claude-opus-5"
+    label: "anthropic/claude-opus-5"
+  - id: "anthropic/claude-opus-5-fast"
+    label: "anthropic/claude-opus-5-fast"
   - id: "anthropic/claude-sonnet-4"
     label: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
@@ -633,6 +644,8 @@ openrouter:
     label: "inclusionai/ling-2.6-flash"
   - id: "inclusionai/ling-2.6-flash:free"
     label: "inclusionai/ling-2.6-flash:free"
+  - id: "inclusionai/ling-3.0-flash:free"
+    label: "inclusionai/ling-3.0-flash:free"
   - id: "inclusionai/ring-2.6-1t"
     label: "inclusionai/ring-2.6-1t"
   - id: "inclusionai/ring-2.6-1t:free"
@@ -1318,6 +1331,8 @@ openrouter:
     label: "qwen/qwen3.6-plus-preview:free"
   - id: "qwen/qwen3.6-plus:free"
     label: "qwen/qwen3.6-plus:free"
+  - id: "qwen/qwen3.7-flash"
+    label: "qwen/qwen3.7-flash"
   - id: "qwen/qwen3.7-max"
     label: "qwen/qwen3.7-max"
   - id: "qwen/qwen3.7-plus"

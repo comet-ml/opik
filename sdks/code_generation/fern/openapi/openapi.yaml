@@ -3445,6 +3445,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Concurrent modification - the latest version changed during
+            the restore; retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/retrieve:
     post:
       tags:
@@ -10452,6 +10459,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10528,6 +10536,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10676,6 +10685,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -16274,6 +16284,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17929,6 +17942,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17988,6 +18004,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -19697,6 +19716,7 @@ components:
           - model
           - provider
           - type
+          - guardrail_name
         metadata_key:
           type: string
         sub_metric:
@@ -20863,7 +20883,6 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
-      - agentInsightsEnabled
       - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
@@ -20941,8 +20960,6 @@ components:
         projectHomepageEnabled:
           type: boolean
         agenticToolsEnabled:
-          type: boolean
-        agentInsightsEnabled:
           type: boolean
         onlineScoringTracingEnabled:
           type: boolean
@@ -21870,6 +21887,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -22487,6 +22507,7 @@ components:
           - model
           - provider
           - type
+          - guardrail_name
         metadata_key:
           type: string
         sub_metric:

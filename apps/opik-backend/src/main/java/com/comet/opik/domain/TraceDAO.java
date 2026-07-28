@@ -28,6 +28,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
+import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -3740,7 +3741,9 @@ class TraceDAOImpl implements TraceDAO {
                         .flatMapMany(result1 -> mapToDto(result1, traceSearchCriteria.exclude()))
                         .collectList()
                         .map(traces -> new TracePage(page, traces.size(), total, traces,
-                                sortingFactory.getSortableFields())));
+                                sortingFactory.getSortableFields())))
+                .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e,
+                        TracePage.empty(page, sortingFactory.getSortableFields())));
     }
 
     @Override
@@ -4289,7 +4292,8 @@ class TraceDAOImpl implements TraceDAO {
                     });
 
                     return StatsMerger.zipAndMerge(tracesSpansMono, feedbackMono);
-                }));
+                }))
+                .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, ProjectStats.empty()));
     }
 
     /**
@@ -4660,7 +4664,8 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMap(result -> mapToDto(result, Set.of()))
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
-                .flatMap(Flux::fromIterable);
+                .flatMap(Flux::fromIterable)
+                .onErrorResume(ErrorUtils::isMalformedJsonPath, e -> Flux.empty());
     }
 
     @Override

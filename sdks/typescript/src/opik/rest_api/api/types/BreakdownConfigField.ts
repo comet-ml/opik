@@ -10,5 +10,6 @@ export const BreakdownConfigField = {
     Model: "model",
     Provider: "provider",
     Type: "type",
+    GuardrailName: "guardrail_name",
 } as const;
 export type BreakdownConfigField = (typeof BreakdownConfigField)[keyof typeof BreakdownConfigField];

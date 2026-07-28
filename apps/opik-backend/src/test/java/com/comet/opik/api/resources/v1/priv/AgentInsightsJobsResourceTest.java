@@ -120,7 +120,7 @@ class AgentInsightsJobsResourceTest {
                 .isMinIO(true)
                 // Enable the Agent Insights feature so the publisher publishes and the subscriber consumes.
                 .customConfigs(List.of(
-                        new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.agentInsightsEnabled",
+                        new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.ollieEnabled",
                                 "true")))
                 .modules(List.of(new AbstractModule() {
                     @Override
