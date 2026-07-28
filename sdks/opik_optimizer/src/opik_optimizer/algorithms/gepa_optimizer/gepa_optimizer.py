@@ -485,15 +485,21 @@ class GepaOptimizer(BaseOptimizer):
 
         # Surface why the search ended so the run doesn't silently look like a
         # full budget burn. finish_reason flows into result metadata/logs via
-        # the base class (runtime.build_final_result).
+        # the base class (runtime.build_final_result). The gepa engine only
+        # exits via its stop callbacks, so when neither of ours fired the
+        # metric-call budget (max_metric_calls = max_trials * n_samples) ran
+        # out — that is "max_trials", not "completed": GEPA's trials_completed
+        # only counts Opik-side evaluate() calls, so the base-class fallback
+        # would otherwise mislabel every budget-exhausted run.
         gepa_finish_reason = _resolve_gepa_finish_reason(
             val_scores=val_scores,
             perfect_score=self.perfect_score,
             no_improvement_stopper=no_improvement_stopper,
             no_improvement_iterations=no_improvement_iterations,
         )
-        if gepa_finish_reason is not None:
-            context.finish_reason = context.finish_reason or gepa_finish_reason
+        context.finish_reason = (
+            context.finish_reason or gepa_finish_reason or "max_trials"
+        )
 
         # Filter duplicate candidates based on content
         (

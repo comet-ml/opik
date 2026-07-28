@@ -27,6 +27,7 @@ def assert_baseline_early_stop(
     Assert the standard BaseOptimizer early-stop contract when baseline >= perfect_score.
     """
     assert result.details["stopped_early"] is True
+    assert result.details["finish_reason"] == "perfect_score"
     assert result.details["stop_reason"] == "baseline_score_met_threshold"
     assert result.details["perfect_score"] == perfect_score
     assert result.initial_score == result.score

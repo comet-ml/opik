@@ -418,6 +418,7 @@ class ParameterOptimizer(BaseOptimizer):
                 "parameter_importance": {},
                 "parameter_precision": 6,
                 "stopped_early": True,
+                "finish_reason": "perfect_score",
                 "stop_reason": "baseline_score_met_threshold",
                 "perfect_score": self.perfect_score,
                 "skip_perfect_score": self.skip_perfect_score,

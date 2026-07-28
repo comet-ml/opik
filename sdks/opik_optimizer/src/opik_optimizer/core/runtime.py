@@ -533,6 +533,9 @@ def build_early_stop_details(
     early_stop_details = {
         "initial_score": baseline_score,
         "stopped_early": True,
+        # finish_reason is the canonical machine-readable signal (same key as
+        # build_final_result); stop_reason keeps the legacy descriptive value.
+        "finish_reason": context.finish_reason or "perfect_score",
         "stop_reason": "baseline_score_met_threshold",
         "stop_reason_details": {"best_score": baseline_score},
         "perfect_score": optimizer.perfect_score,

@@ -45,7 +45,12 @@ DEFAULT_SCORING_FAILURE_THRESHOLD = 1.0
 DEFAULT_NUM_THREADS = 12
 DEFAULT_SEED = 42
 DEFAULT_MODEL = "openai/gpt-5-nano"
-DEFAULT_PERFECT_SCORE = 0.95
+# perfect_score does double duty: it is the baseline/iteration skip threshold
+# AND (for GEPA) the run-level stop threshold via ScoreThresholdStopper. It must
+# mean "nothing left to optimize" — anything below 1.0 makes a strong-but-
+# imperfect baseline end the run with zero candidates (OPIK-7511). Matches the
+# gepa package's own default.
+DEFAULT_PERFECT_SCORE = 1.0
 DEFAULT_SKIP_PERFECT_SCORE = True
 DEFAULT_ENABLE_CONTEXT_LEARNING = True
 DEFAULT_TOOL_CALL_MAX_ITERATIONS = 5

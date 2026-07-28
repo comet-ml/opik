@@ -282,6 +282,7 @@ def main():
         from opik_backend.studio.types import (
             OptimizationConfig,
             OptimizationRunResult,
+            extract_finish_reason,
             extract_scoring_health,
         )
         from opik_backend.studio.helpers import (
@@ -362,20 +363,25 @@ def main():
                 else:
                     output["optimized_prompt"] = str(result.prompt)
 
-            # Extract scoring_health from the SDK result and forward it to the
-            # backend as metadata.scoring_health so the UI can show an exact
-            # failed/total count. The helper returns None for older SDKs or
-            # malformed data and never raises.
+            # Extract scoring_health and finish_reason from the SDK result and
+            # forward them to the backend as metadata.scoring_health /
+            # metadata.finish_reason so the UI can show an exact failed/total
+            # count and the authoritative stop cause (OPIK-7511/OPIK-7458).
+            # Both helpers return None for older SDKs or malformed data and
+            # never raise.
+            completion_metadata = {}
             scoring_health = extract_scoring_health(result)
             if scoring_health is not None:
                 output["scoring_health"] = scoring_health
-                status_manager.set_completion_metadata(
-                    {"scoring_health": scoring_health}
-                )
+                completion_metadata["scoring_health"] = scoring_health
+            finish_reason = extract_finish_reason(result)
+            if finish_reason is not None:
+                output["finish_reason"] = finish_reason
+                completion_metadata["finish_reason"] = finish_reason
+            if completion_metadata:
+                status_manager.set_completion_metadata(completion_metadata)
                 logger.debug(
-                    "Queued scoring_health metadata for completion: failed=%d total=%d",
-                    scoring_health["failed_count"],
-                    scoring_health["total_count"],
+                    "Queued completion metadata: %s", sorted(completion_metadata)
                 )
 
         # Output result as JSON on last line of stdout

@@ -33,6 +33,7 @@ def _run_optimize(
     sample_metric,
     *,
     gepa_result: MagicMock | None = None,
+    on_gepa_optimize: Any = None,
     **optimize_kwargs: Any,
 ) -> tuple[Any, dict[str, Any]]:
     """Run optimize_prompt with gepa.optimize mocked; return (result, captured kwargs)."""
@@ -48,6 +49,8 @@ def _run_optimize(
 
     def fake_optimize(**kwargs: Any) -> MagicMock:
         captured.update(kwargs)
+        if on_gepa_optimize is not None:
+            on_gepa_optimize(kwargs)
         return gepa_result if gepa_result is not None else _make_mock_gepa_result()
 
     monkeypatch.setattr("gepa.optimize", fake_optimize)
@@ -61,6 +64,15 @@ def _run_optimize(
         **optimize_kwargs,
     )
     return result, captured
+
+
+class TestPerfectScoreDefault:
+    def test_default_perfect_score_is_full_marks(self) -> None:
+        """perfect_score doubles as GEPA's iteration-skip gate AND the run-level
+        stop threshold; below 1.0 a strong baseline ends runs with zero
+        candidates (OPIK-7511). Must match the gepa package's own default."""
+        assert constants.DEFAULT_PERFECT_SCORE == 1.0
+        assert GepaOptimizer(model="gpt-4o-mini").perfect_score == 1.0
 
 
 class TestGepaStopCallbackWiring:
@@ -208,6 +220,75 @@ class TestGepaFinishReason:
         )
 
         assert result.details["finish_reason"] != "perfect_score"
+
+    def test_budget_exhaustion_sets_max_trials_finish_reason(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """The gepa engine only exits via its stop callbacks; when neither the
+        threshold nor the stall stopper fired, the metric-call budget ran out
+        and finish_reason must say so — never 'completed' (OPIK-7511)."""
+        gepa_result = _make_mock_gepa_result(
+            candidates=[], val_aggregate_scores=[0.3, 0.5]
+        )
+        result, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            gepa_result=gepa_result,
+        )
+
+        assert result.details["finish_reason"] == "max_trials"
+        assert result.details["stop_reason"] == "max_trials"
+
+    def test_no_improvement_stall_sets_finish_reason(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """When the wired NoImprovementStopper trips, the run must report
+        'no_improvement', not a budget burn."""
+
+        def stall_the_stopper(kwargs: dict[str, Any]) -> None:
+            # Drive the wired stopper the way the gepa engine would: one call
+            # per iteration with a stagnant full-eval score until it trips.
+            stopper = next(
+                s
+                for s in kwargs["stop_callbacks"]
+                if isinstance(s, NoImprovementStopper)
+            )
+            state = SimpleNamespace(program_full_scores_val_set=[0.5])
+            while not stopper(state):
+                pass
+
+        gepa_result = _make_mock_gepa_result(
+            candidates=[], val_aggregate_scores=[0.5]
+        )
+        result, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            gepa_result=gepa_result,
+            on_gepa_optimize=stall_the_stopper,
+            no_improvement_iterations=3,
+        )
+
+        assert result.details["finish_reason"] == "no_improvement"
 
 
 class TestStopperSemantics:

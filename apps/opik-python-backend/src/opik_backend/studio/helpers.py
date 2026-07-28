@@ -7,7 +7,12 @@ from typing import Any, Callable, Optional
 import opik
 from opik_optimizer import ChatPrompt
 
-from .config import OPIK_URL, OPTIMIZER_RUNTIME_PARAMS
+from .config import (
+    DATASET_SAMPLES,
+    OPIK_URL,
+    OPTIMIZER_RUNTIME_PARAMS,
+    resolve_reflection_minibatch_size,
+)
 from .types import OptimizationJobContext
 from .exceptions import (
     DatasetNotFoundError,
@@ -128,6 +133,20 @@ def run_optimization(
     )
     optimize_prompts = present_roles or "system"
 
+    # GEPA's reflection mini-batch scales with the effective (sampled) dataset
+    # size — a fixed size starves coarse 0/1 metrics of resolution (OPIK-7511).
+    # Ignored by non-GEPA optimizers, like the other GEPA-specific params.
+    effective_dataset_size = min(len(dataset.get_items()), DATASET_SAMPLES)
+    reflection_minibatch_size = resolve_reflection_minibatch_size(
+        dataset_size=effective_dataset_size,
+        max_trials=OPTIMIZER_RUNTIME_PARAMS["max_trials"],
+    )
+    logger.debug(
+        "Resolved reflection_minibatch_size=%d (dataset_size=%d)",
+        reflection_minibatch_size,
+        effective_dataset_size,
+    )
+
     result = optimizer.optimize_prompt(
         optimization_id=optimization_id,
         prompt=prompt,
@@ -135,6 +154,7 @@ def run_optimization(
         metric=metric_fn,
         project_name=project_name,
         optimize_prompts=optimize_prompts,
+        reflection_minibatch_size=reflection_minibatch_size,
         **OPTIMIZER_RUNTIME_PARAMS,
     )
 

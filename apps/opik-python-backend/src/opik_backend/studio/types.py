@@ -46,6 +46,41 @@ def extract_scoring_health(result: Any) -> Optional[ScoringHealth]:
     return None
 
 
+# Mirrors the SDK's FinishReason literal (opik_optimizer/core/state.py). Kept
+# as a validation allowlist so a malformed details dict can't push arbitrary
+# strings into the optimization's metadata.
+KNOWN_FINISH_REASONS = frozenset(
+    {
+        "completed",
+        "perfect_score",
+        "max_trials",
+        "no_improvement",
+        "error",
+        "cancelled",
+    }
+)
+
+
+def extract_finish_reason(result: Any) -> Optional[str]:
+    """Pull ``finish_reason`` off an SDK ``OptimizationResult``.
+
+    Reads ``result.details["finish_reason"]`` — the SDK's authoritative record
+    of why the run ended (perfect score, no improvement, budget exhausted, …).
+    Forwarded to the Java backend as ``metadata.finish_reason`` so the UI can
+    render the real stop cause instead of a heuristic (OPIK-7511/OPIK-7458).
+    Returns ``None`` when absent or not a known reason (older SDKs), and never
+    raises — the completion path must not fail over a missing reason.
+    """
+    try:
+        details = getattr(result, "details", None) or {}
+        raw = details.get("finish_reason") if isinstance(details, dict) else None
+        if isinstance(raw, str) and raw in KNOWN_FINISH_REASONS:
+            return raw
+    except Exception as exc:  # pragma: no cover - defensive; never break completion
+        logger.warning("Failed to extract finish_reason from result: %s", exc)
+    return None
+
+
 class OptimizationRunResult(TypedDict):
     """Successful result emitted by ``optimizer_runner`` and returned by
     ``process_optimizer_job``."""
@@ -60,6 +95,9 @@ class OptimizationRunResult(TypedDict):
     # Scoring-health counters from the SDK result; absent when the SDK did not
     # attach them (older SDK versions).
     scoring_health: NotRequired[ScoringHealth]
+    # Why the run ended (SDK FinishReason); absent when the SDK did not attach
+    # it (older SDK versions).
+    finish_reason: NotRequired[str]
 
 
 class OptimizationErrorResult(TypedDict):
