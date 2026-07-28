@@ -74,7 +74,8 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
         dataset_name: Name of the dataset to load
 
     Returns:
-        Loaded dataset object
+        Tuple of (dataset, item_count). The count is returned so callers can
+        size dataset-dependent parameters without re-fetching every item.
 
     Raises:
         DatasetNotFoundError: If dataset not found or inaccessible
@@ -93,7 +94,7 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
         raise EmptyDatasetError(dataset_name)
 
     logger.debug(f"Dataset has {len(dataset_items)} items")
-    return dataset
+    return dataset, len(dataset_items)
 
 
 def run_optimization(
@@ -103,6 +104,7 @@ def run_optimization(
     dataset,
     metric_fn: Callable,
     project_name: Optional[str] = None,
+    dataset_size: Optional[int] = None,
 ) -> Any:
     """Run the optimization process.
 
@@ -115,6 +117,9 @@ def run_optimization(
         project_name: Optional Opik project name. When set, trial experiments
             and traces produced by the optimizer are attached to this project
             instead of the optimizer SDK default ("Optimization").
+        dataset_size: Item count of ``dataset`` when the caller already knows
+            it (load_and_validate_dataset returns it); avoids re-fetching the
+            whole dataset here. Falls back to fetching when omitted.
 
     Returns:
         Optimization result object
@@ -136,7 +141,9 @@ def run_optimization(
     # GEPA's reflection mini-batch scales with the effective (sampled) dataset
     # size — a fixed size starves coarse 0/1 metrics of resolution (OPIK-7511).
     # Ignored by non-GEPA optimizers, like the other GEPA-specific params.
-    effective_dataset_size = min(len(dataset.get_items()), DATASET_SAMPLES)
+    if dataset_size is None:
+        dataset_size = len(dataset.get_items())
+    effective_dataset_size = min(dataset_size, DATASET_SAMPLES)
     reflection_minibatch_size = resolve_reflection_minibatch_size(
         dataset_size=effective_dataset_size,
         max_trials=OPTIMIZER_RUNTIME_PARAMS["max_trials"],

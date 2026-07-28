@@ -17,6 +17,7 @@ import opik
 from opik import synchronization
 
 from llm_constants import ANTHROPIC_CLAUDE_HAIKU
+from opik_backend.studio.types import KNOWN_FINISH_REASONS
 
 pytestmark = pytest.mark.e2e
 
@@ -39,17 +40,6 @@ if _sdk_constants.DEFAULT_PERFECT_SCORE < 1.0:
 # CI uses the workspace Anthropic key; overridable for local stacks whose
 # workspace has a different provider configured.
 _MODEL = os.getenv("OPTSTUDIO_E2E_MODEL", ANTHROPIC_CLAUDE_HAIKU)
-
-# Mirrors the SDK's FinishReason literal / the backend's KNOWN_FINISH_REASONS.
-_ALLOWED_FINISH_REASONS = {
-    "completed",
-    "perfect_score",
-    "max_trials",
-    "no_improvement",
-    "error",
-    "cancelled",
-}
-
 
 def _metadata_field(optimization: Any, name: str) -> Any:
     """Read a metadata key off the fetched optimization, tolerating both the
@@ -131,7 +121,7 @@ def test_finish_reason_is_returned_and_persisted(
 
     # The subprocess result carries the stop cause (optimizer_runner output).
     finish_reason = result.get("finish_reason")
-    assert finish_reason in _ALLOWED_FINISH_REASONS, (
+    assert finish_reason in KNOWN_FINISH_REASONS, (
         f"subprocess result carries no valid finish_reason: {finish_reason!r}"
     )
 

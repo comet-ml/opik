@@ -282,8 +282,7 @@ def main():
         from opik_backend.studio.types import (
             OptimizationConfig,
             OptimizationRunResult,
-            extract_finish_reason,
-            extract_scoring_health,
+            extract_completion_metadata,
         )
         from opik_backend.studio.helpers import (
             initialize_opik_client,
@@ -319,7 +318,9 @@ def main():
         # Run optimization with lifecycle management
         with optimization_lifecycle(status_manager):
             # Load dataset
-            dataset = load_and_validate_dataset(client, config.dataset_name)
+            dataset, dataset_size = load_and_validate_dataset(
+                client, config.dataset_name
+            )
 
             # Build the optimizer + prompt: resolves the gateway-routed prompt
             # (task) model and the optimizer (algorithm) model, each with their
@@ -343,6 +344,7 @@ def main():
                 dataset=dataset,
                 metric_fn=metric_fn,
                 project_name=context.project_name,
+                dataset_size=dataset_size,
             )
 
             # Build result dict
@@ -363,21 +365,13 @@ def main():
                 else:
                     output["optimized_prompt"] = str(result.prompt)
 
-            # Extract scoring_health and finish_reason from the SDK result and
-            # forward them to the backend as metadata.scoring_health /
-            # metadata.finish_reason so the UI can show an exact failed/total
-            # count and the authoritative stop cause (OPIK-7511/OPIK-7458).
-            # Both helpers return None for older SDKs or malformed data and
-            # never raise.
-            completion_metadata = {}
-            scoring_health = extract_scoring_health(result)
-            if scoring_health is not None:
-                output["scoring_health"] = scoring_health
-                completion_metadata["scoring_health"] = scoring_health
-            finish_reason = extract_finish_reason(result)
-            if finish_reason is not None:
-                output["finish_reason"] = finish_reason
-                completion_metadata["finish_reason"] = finish_reason
+            # Forward scoring_health and finish_reason from the SDK result to
+            # the backend as metadata.scoring_health / metadata.finish_reason
+            # so the UI can show an exact failed/total count and the
+            # authoritative stop cause (OPIK-7511/OPIK-7458). The extractor
+            # returns {} for older SDKs or malformed data and never raises.
+            completion_metadata = extract_completion_metadata(result)
+            output.update(completion_metadata)
             if completion_metadata:
                 status_manager.set_completion_metadata(completion_metadata)
                 logger.debug(

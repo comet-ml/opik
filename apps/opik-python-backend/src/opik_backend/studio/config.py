@@ -1,7 +1,10 @@
 """Configuration for Optimization Studio."""
 
+import logging
 import math
 import os
+
+logger = logging.getLogger(__name__)
 
 # Opik Configuration
 OPIK_URL = os.getenv("OPIK_URL_OVERRIDE")
@@ -65,7 +68,17 @@ def resolve_reflection_minibatch_size(dataset_size: int, max_trials: int) -> int
     """Return the GEPA reflection mini-batch size for a run's dataset size."""
     override = os.getenv(GEPA_REFLECTION_MINIBATCH_ENV)
     if override is not None and override.strip():
-        return max(1, int(override))
+        # A malformed operator value must not fail every optimization run —
+        # warn and fall back to the dataset-scaled policy instead.
+        try:
+            return max(1, int(override))
+        except ValueError:
+            logger.warning(
+                "Invalid %s=%r; ignoring the override and using the "
+                "dataset-scaled policy.",
+                GEPA_REFLECTION_MINIBATCH_ENV,
+                override,
+            )
     scaled = max(
         GEPA_REFLECTION_MINIBATCH_MIN,
         math.ceil(dataset_size * GEPA_REFLECTION_MINIBATCH_FRACTION),

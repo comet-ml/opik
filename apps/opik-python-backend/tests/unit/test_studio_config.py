@@ -53,6 +53,15 @@ class TestResolveReflectionMinibatchSize:
         monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "  ")
         assert resolve_reflection_minibatch_size(dataset_size=50, max_trials=10) == 10
 
+    def test_invalid_env_falls_back_to_policy(self, monkeypatch):
+        # A malformed operator value must not fail every optimization run.
+        monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "five")
+        assert resolve_reflection_minibatch_size(dataset_size=50, max_trials=10) == 10
+
+    def test_float_env_falls_back_to_policy(self, monkeypatch):
+        monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "7.5")
+        assert resolve_reflection_minibatch_size(dataset_size=50, max_trials=10) == 10
+
     def test_never_below_one(self, monkeypatch):
         monkeypatch.delenv(GEPA_REFLECTION_MINIBATCH_ENV, raising=False)
         assert resolve_reflection_minibatch_size(dataset_size=0, max_trials=10) == 1

@@ -4,7 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from opik_backend.studio.types import extract_finish_reason, extract_scoring_health
+from opik_backend.studio.types import (
+    extract_completion_metadata,
+    extract_finish_reason,
+    extract_scoring_health,
+)
 
 
 def _result(details):
@@ -101,3 +105,46 @@ class TestExtractFinishReason:
                 raise RuntimeError("boom")
 
         assert extract_finish_reason(Boom()) is None
+
+
+class TestExtractCompletionMetadata:
+    """The combined payload the runner forwards on mark_completed."""
+
+    def test_both_fields_present(self):
+        metadata = extract_completion_metadata(
+            _result(
+                {
+                    "scoring_health": {"failed_count": 1, "total_count": 4},
+                    "finish_reason": "max_trials",
+                }
+            )
+        )
+        assert metadata == {
+            "scoring_health": {"failed_count": 1, "total_count": 4},
+            "finish_reason": "max_trials",
+        }
+
+    def test_finish_reason_only(self):
+        # Older partial results must still forward what they have.
+        metadata = extract_completion_metadata(
+            _result({"finish_reason": "perfect_score"})
+        )
+        assert metadata == {"finish_reason": "perfect_score"}
+
+    def test_scoring_health_only(self):
+        metadata = extract_completion_metadata(
+            _result({"scoring_health": {"failed_count": 0, "total_count": 2}})
+        )
+        assert metadata == {
+            "scoring_health": {"failed_count": 0, "total_count": 2}
+        }
+
+    def test_neither_returns_empty_dict(self):
+        assert extract_completion_metadata(_result({})) == {}
+        assert extract_completion_metadata(SimpleNamespace()) == {}
+
+    def test_invalid_values_dropped(self):
+        metadata = extract_completion_metadata(
+            _result({"scoring_health": "oops", "finish_reason": "gremlins"})
+        )
+        assert metadata == {}

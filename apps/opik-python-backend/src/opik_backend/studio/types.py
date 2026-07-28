@@ -74,11 +74,37 @@ def extract_finish_reason(result: Any) -> Optional[str]:
     try:
         details = getattr(result, "details", None) or {}
         raw = details.get("finish_reason") if isinstance(details, dict) else None
-        if isinstance(raw, str) and raw in KNOWN_FINISH_REASONS:
-            return raw
+        if isinstance(raw, str):
+            if raw in KNOWN_FINISH_REASONS:
+                return raw
+            # Loud, not silent: an SDK that starts emitting a new reason should
+            # surface in logs, not quietly lose the feature until someone digs.
+            logger.warning(
+                "Dropping unknown finish_reason %r (not in the allowlist); "
+                "update KNOWN_FINISH_REASONS if the SDK added a new reason.",
+                raw,
+            )
     except Exception as exc:  # pragma: no cover - defensive; never break completion
         logger.warning("Failed to extract finish_reason from result: %s", exc)
     return None
+
+
+def extract_completion_metadata(result: Any) -> Dict[str, Any]:
+    """Collect the completion metadata payload off an SDK ``OptimizationResult``.
+
+    Combines ``extract_scoring_health`` and ``extract_finish_reason`` into the
+    dict forwarded to the Java backend on ``mark_completed`` (and merged into
+    the runner's output). Returns ``{}`` when neither field is available
+    (older SDKs), and never raises.
+    """
+    metadata: Dict[str, Any] = {}
+    scoring_health = extract_scoring_health(result)
+    if scoring_health is not None:
+        metadata["scoring_health"] = scoring_health
+    finish_reason = extract_finish_reason(result)
+    if finish_reason is not None:
+        metadata["finish_reason"] = finish_reason
+    return metadata
 
 
 class OptimizationRunResult(TypedDict):
