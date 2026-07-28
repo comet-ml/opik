@@ -496,6 +496,16 @@ class TracesLocalV2CutoverTest {
         assertThat(tableExists("traces_post_rollback_backup"))
                 .as("rollback ends in the canonical state: successor data parked as traces_post_rollback_backup")
                 .isTrue();
+        assertThat(liveCount("traces_post_rollback_backup", postWrapDeleted, workspaceId))
+                .as("parked backup keeps the successor's post-wrap delete masked (not resurrected in the backup)")
+                .isZero();
+        assertThat(liveCount("traces_post_rollback_backup", idStrings(survivors.subList(1, survivors.size())),
+                workspaceId))
+                .as("parked backup actually holds the successor data (survivors), not an empty or wrong table")
+                .isEqualTo(survivors.size() - 1);
+        assertThat(columnType("traces_post_rollback_backup", "end_time"))
+                .as("parked backup carries the successor's non-Nullable schema, confirming the right table was parked")
+                .doesNotStartWith("Nullable");
         assertThat(tableExists("traces_local_v2"))
                 .as("the disposable shadow name is free after rollback (so stage A cannot truncate the backup)")
                 .isFalse();
@@ -591,6 +601,19 @@ class TracesLocalV2CutoverTest {
         assertThat(tableExists("traces_post_rollback_backup"))
                 .as("canonical state: successor parked as traces_post_rollback_backup")
                 .isTrue();
+        assertThat(liveCount("traces_post_rollback_backup", postCutoverDeleted, workspaceId))
+                .as("parked backup keeps the post-cutover delete masked (not resurrected in the backup)")
+                .isZero();
+        assertThat(liveCount("traces_post_rollback_backup", idStrings(windowDeleted), workspaceId))
+                .as("parked backup does not resurrect window deletes")
+                .isZero();
+        assertThat(liveCount("traces_post_rollback_backup", idStrings(survivors.subList(1, survivors.size())),
+                workspaceId))
+                .as("parked backup actually holds the successor data (survivors), not an empty or wrong table")
+                .isEqualTo(survivors.size() - 1);
+        assertThat(columnType("traces_post_rollback_backup", "end_time"))
+                .as("parked backup carries the successor's non-Nullable schema")
+                .doesNotStartWith("Nullable");
         assertThat(tableExists("traces_local_v2"))
                 .as("the disposable shadow name is free after rollback (so stage A cannot truncate the backup)")
                 .isFalse();

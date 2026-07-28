@@ -14,9 +14,14 @@
 #                                   the exact 000101 shadow — schema, codecs (000106/000107) and replica path — so the
 #                                   estate matches the applied Liquibase state and a retry starts from a clean shadow.
 # Both are `*_backup` names — retained until this script runs; the working `traces_local_v2` shadow is never detected as a
-# backup. This detects whichever parked table is present and never touches the live `traces` / `traces_local` shard. It
-# refuses if the live `traces` is empty while the backup is not (the live table may be unhealthy and the "backup" the only
-# copy), and if BOTH parked names exist (an ambiguous, unexpected state that a human must resolve).
+# backup. This detects whichever parked table is present and never touches the live `traces` / `traces_local` shard.
+# Detection is CLUSTER-WIDE (via clusterAllReplicas, like exchange_and_wrap.sh's settle gate): because finalize is the one
+# irreversible step and production is multi-replica, a name present on only SOME replicas means an ON CLUSTER DDL has not
+# finished propagating, so acting on the connected node's partial view could recycle/drop mid-transition — it refuses
+# loudly instead. It also refuses if the live `traces` is empty while the backup is not (the live table may be unhealthy
+# and the "backup" the only copy), if BOTH parked names exist (an ambiguous state a human must resolve), and — before a
+# recycle — if `traces_local_v2` already exists (recycle renames the backup INTO that name; a stray shadow means a retry
+# cutover started before the rollback was finalized).
 #
 # Connection: clickhouse-client env vars (CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD).
 #
@@ -45,16 +50,39 @@ ch() {
     clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:finalize' --query "$1"
 }
 
-exists() {
-    ch "SELECT count() FROM system.tables WHERE database = '$DATABASE' AND name = '$1'"
+# Cluster-wide detection. finalize is the one irreversible step and production is multi-replica, so a table's presence is
+# resolved across ALL replicas (clusterAllReplicas, mirroring exchange_and_wrap.sh's settle gate), not just the connected
+# node. Resolve the cluster and its replica count once; a down replica makes clusterAllReplicas throw — correct here,
+# since finalizing against an estate we cannot fully see would be unsafe.
+CLUSTER="$(ch "SELECT getMacro('cluster')")"
+[[ -n "$CLUSTER" ]] || { echo "ERROR: could not resolve the '{cluster}' macro (getMacro('cluster') was empty)." >&2; exit 1; }
+REPLICAS="$(ch "SELECT count() FROM clusterAllReplicas('$CLUSTER', system.one)")"
+
+# Classify a table across the cluster: sets CLUSTER_HAS=1 if present on ALL replicas, 0 if on none, and refuses loudly on
+# a mixed (present on some) state — an unfinished ON CLUSTER propagation the connected-node view would hide. Call it
+# directly (NOT in "$(...)"), so its refuse-exit stops the whole script rather than only a subshell.
+CLUSTER_HAS=0
+classify() {
+    local n
+    n="$(ch "SELECT count() FROM clusterAllReplicas('$CLUSTER', system.tables) WHERE database = '$DATABASE' AND name = '$1'")"
+    if [[ "$n" == "0" ]]; then
+        CLUSTER_HAS=0
+    elif [[ "$n" == "$REPLICAS" ]]; then
+        CLUSTER_HAS=1
+    else
+        echo "ERROR: '$1' exists on $n of $REPLICAS replicas — an ON CLUSTER DDL has not finished propagating." >&2
+        echo "       Refusing to finalize a mid-transition cluster; let it settle (or fix the unfinished host), then re-run." >&2
+        exit 1
+    fi
 }
 
-[[ "$(exists traces)" != "0" ]] || { echo "ERROR: live 'traces' table not found in '$DATABASE'." >&2; exit 1; }
+classify traces
+[[ "$CLUSTER_HAS" == "1" ]] || { echo "ERROR: live 'traces' table not found on all replicas in '$DATABASE'." >&2; exit 1; }
 
 # Detect the parked backup by name: traces_pre_cutover_backup (post-successful-cutover) or traces_post_rollback_backup
 # (post-rollback). They never co-exist in a clean flow; if both are present the estate is ambiguous — refuse.
-HAS_PRECUTOVER="$([[ "$(exists traces_pre_cutover_backup)" != "0" ]] && echo 1 || echo 0)"
-HAS_POST_ROLLBACK="$([[ "$(exists traces_post_rollback_backup)" != "0" ]] && echo 1 || echo 0)"
+classify traces_pre_cutover_backup;   HAS_PRECUTOVER="$CLUSTER_HAS"
+classify traces_post_rollback_backup; HAS_POST_ROLLBACK="$CLUSTER_HAS"
 
 if [[ "$HAS_PRECUTOVER" == "1" && "$HAS_POST_ROLLBACK" == "1" ]]; then
     echo "ERROR: both 'traces_pre_cutover_backup' and 'traces_post_rollback_backup' exist — ambiguous state." >&2
@@ -94,6 +122,17 @@ if [[ "$BACKUP" == "traces_post_rollback_backup" ]]; then
     # naming a laggard that then converges via the DDL queue), NOT globally atomic. Both statements touch only the parked
     # backup / disposable shadow — never the live `traces` — so unlike the rollback promote and the wrap (which rename live
     # `traces`) the brief cross-replica skew is invisible to readers, and finalize needs no maintenance window.
+    #
+    # Guard the destination first: recycle renames the backup INTO `traces_local_v2`, and ClickHouse RENAME fails on an
+    # existing target. A stray `traces_local_v2` here means a retry cutover started before this rollback was finalized —
+    # refuse (cluster-wide) BEFORE truncating, so we fail early with a clear message instead of after the TRUNCATE.
+    classify traces_local_v2
+    if [[ "$CLUSTER_HAS" != "0" ]]; then
+        echo "ERROR: 'traces_local_v2' already exists — cannot recycle '$BACKUP' into it (RENAME will not overwrite)." >&2
+        echo "       This usually means a retry cutover began before the rollback was finalized. Resolve the estate" >&2
+        echo "       (inspect/drop 'traces_local_v2') before recycling." >&2
+        exit 1
+    fi
     if [[ "$CONFIRM" != "1" ]]; then
         echo "DRY RUN: would recycle $DATABASE.$BACKUP into an empty $DATABASE.traces_local_v2 (TRUNCATE + RENAME)."
         echo "         Re-run with --confirm."
