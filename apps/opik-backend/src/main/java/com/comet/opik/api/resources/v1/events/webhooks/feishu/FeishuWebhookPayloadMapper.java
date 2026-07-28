@@ -8,6 +8,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.common.AlertWebhookUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -36,9 +37,8 @@ import java.util.stream.Collectors;
 @UtilityClass
 public class FeishuWebhookPayloadMapper {
 
-    // Feishu limits interactive card request bodies to 30 KB. Keep the content below that limit
-    // so the header, actions, URLs and JSON framing have sufficient room.
-    private static final int MAX_CONTENT_BYTES = 25_000;
+    // Feishu limits interactive card request bodies to 30 KB.
+    private static final int MAX_PAYLOAD_BYTES = 30_000;
     private static final String TRUNCATION_SUFFIX = "\n\n_Content truncated. Use \"View in Opik\" to see all events._";
     private static final String METRICS_ALERT_DETAILS_TEMPLATE = "- **Current <type>:** <valuePrefix><metricValue><valueSuffix>\n"
             + "  **Threshold:** <valuePrefix><threshold><valueSuffix>\n"
@@ -50,14 +50,22 @@ public class FeishuWebhookPayloadMapper {
     public static FeishuWebhookPayload toFeishuPayload(@NonNull WebhookEvent<Map<String, Object>> event) {
         log.debug("Mapping webhook event to Feishu payload: eventType='{}'", event.getEventType());
 
-        var elements = new ArrayList<FeishuCardElement>();
-
-        // Add content div with summary + details
         String content = buildContent(event);
+        String actionUrl = buildActionUrl(event);
+
+        FeishuWebhookPayload payload = buildPayload(event, content, actionUrl);
+        if (serializedSize(payload) <= MAX_PAYLOAD_BYTES) {
+            return payload;
+        }
+
+        return truncatePayloadToFit(event, content, actionUrl);
+    }
+
+    private static FeishuWebhookPayload buildPayload(
+            WebhookEvent<Map<String, Object>> event, String content, String actionUrl) {
+        var elements = new ArrayList<FeishuCardElement>();
         elements.add(FeishuCardElement.div(FeishuText.larkMd(content)));
 
-        // Add "View in Opik" button if applicable
-        String actionUrl = buildActionUrl(event);
         if (actionUrl != null) {
             elements.add(FeishuCardElement.action(
                     List.of(FeishuAction.primaryButton("View in Opik", actionUrl))));
@@ -73,6 +81,33 @@ public class FeishuWebhookPayloadMapper {
                         .elements(elements)
                         .build())
                 .build();
+    }
+
+    private static FeishuWebhookPayload truncatePayloadToFit(
+            WebhookEvent<Map<String, Object>> event, String content, String actionUrl) {
+        int low = 0;
+        int high = content.codePointCount(0, content.length());
+        FeishuWebhookPayload bestFit = buildPayload(event, TRUNCATION_SUFFIX, actionUrl);
+
+        while (low <= high) {
+            int prefixLength = low + (high - low) / 2;
+            int endIndex = content.offsetByCodePoints(0, prefixLength);
+            FeishuWebhookPayload candidate = buildPayload(
+                    event, content.substring(0, endIndex) + TRUNCATION_SUFFIX, actionUrl);
+
+            if (serializedSize(candidate) <= MAX_PAYLOAD_BYTES) {
+                bestFit = candidate;
+                low = prefixLength + 1;
+            } else {
+                high = prefixLength - 1;
+            }
+        }
+
+        return bestFit;
+    }
+
+    private static int serializedSize(FeishuWebhookPayload payload) {
+        return JsonUtils.writeValueAsString(payload).getBytes(StandardCharsets.UTF_8).length;
     }
 
     private static String buildContent(@NonNull WebhookEvent<Map<String, Object>> event) {
@@ -103,43 +138,7 @@ public class FeishuWebhookPayloadMapper {
                     "No latency alerts triggered");
         };
 
-        return truncateContent(summary + "\n\n" + details);
-    }
-
-    private static String truncateContent(String content) {
-        if (content.getBytes(StandardCharsets.UTF_8).length <= MAX_CONTENT_BYTES) {
-            return content;
-        }
-
-        int byteBudget = MAX_CONTENT_BYTES - TRUNCATION_SUFFIX.getBytes(StandardCharsets.UTF_8).length;
-        int byteCount = 0;
-        int endIndex = 0;
-
-        while (endIndex < content.length()) {
-            int codePoint = content.codePointAt(endIndex);
-            int codePointBytes = utf8Length(codePoint);
-            if (byteCount + codePointBytes > byteBudget) {
-                break;
-            }
-
-            byteCount += codePointBytes;
-            endIndex += Character.charCount(codePoint);
-        }
-
-        return content.substring(0, endIndex) + TRUNCATION_SUFFIX;
-    }
-
-    private static int utf8Length(int codePoint) {
-        if (codePoint <= 0x7F) {
-            return 1;
-        }
-        if (codePoint <= 0x7FF) {
-            return 2;
-        }
-        if (codePoint <= 0xFFFF) {
-            return 3;
-        }
-        return 4;
+        return summary + "\n\n" + details;
     }
 
     private static String buildActionUrl(@NonNull WebhookEvent<Map<String, Object>> event) {

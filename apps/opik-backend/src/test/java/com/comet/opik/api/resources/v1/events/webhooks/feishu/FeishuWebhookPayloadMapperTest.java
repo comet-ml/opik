@@ -9,6 +9,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.common.AlertWebhookUtils;
+import com.comet.opik.utils.JsonUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -459,18 +460,28 @@ class FeishuWebhookPayloadMapperTest {
                     - Trace Errors alert (unable to parse details)""");
         }
 
-        @Test
-        void truncatesLargeContentWithinFeishuCardLimit() {
+        static Stream<Arguments> oversizedContentProvider() {
+            return Stream.of(
+                    Arguments.of("JSON-escaped content", "\"\\\n".repeat(10_000)),
+                    Arguments.of("ASCII boundary content", "a".repeat(30_000)),
+                    Arguments.of("supplementary Unicode content", "😀".repeat(10_000)));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("oversizedContentProvider")
+        void keepsSerializedPayloadWithinFeishuCardLimit(String caseName, String metricValue) {
             var event = buildEvent(AlertEventType.TRACE_ERRORS, List.of(MetricsAlertPayload.builder()
-                    .metricValue("飞".repeat(10_000))
+                    .metricValue(metricValue)
                     .threshold("10")
                     .windowSeconds(3_600)
                     .build()));
 
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
             String content = payload.card().elements().get(0).text().content();
+            byte[] serializedPayload = JsonUtils.writeValueAsString(payload).getBytes(StandardCharsets.UTF_8);
 
-            assertThat(content.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(25_000);
+            assertThat(serializedPayload).hasSizeLessThanOrEqualTo(30_000);
+            assertThat(StandardCharsets.UTF_8.newEncoder().canEncode(content)).isTrue();
             assertThat(content).endsWith("\n\n_Content truncated. Use \"View in Opik\" to see all events._");
         }
     }
