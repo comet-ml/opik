@@ -76,6 +76,10 @@ public class CipxSpendBlockDAO {
             @NonNull String toolUseId,
             @NonNull String resource,
             @NonNull String kind,
+            /** Which variant of `category` the block is (memory: auto_memory vs project_instructions
+             * vs rule vs user_global). '' = unknown, incl. every block written before cipx emitted
+             * it -- consumers must treat it as "can't tell", not as a default value. */
+            @NonNull String origin,
             @NonNull String tier,
             @NonNull String lane,
             @NonNull String bdLane,
@@ -185,6 +189,7 @@ public class CipxSpendBlockDAO {
                     .toolUseId(block.path("tool_use_id").asText(""))
                     .resource(resource)
                     .kind(kind)
+                    .origin(block.path("origin").asText(""))
                     .tier(tier >= 0 ? tierName(tier, writeTier) : "")
                     .lane(lane(category, toolServer))
                     .bdLane(bdLane(category, toolServer))
@@ -209,6 +214,7 @@ public class CipxSpendBlockDAO {
                     .toolUseId("")
                     .resource("")
                     .kind("")
+                    .origin("")
                     .tier(tierName(tier, writeTier))
                     .lane("unattributed")
                     .bdLane("")
@@ -312,7 +318,7 @@ public class CipxSpendBlockDAO {
     /**
      * Bulk insert via the ClickHouse v2 HTTP client using JSONEachRow, NOT the R2DBC statement path
      * the sibling cipx DAOs use. One span event fans out to hundreds of block rows (~350/span, so a
-     * 200-span batch is ~70k rows x 24 columns), and the R2DBC driver resolves every named bind with
+     * 200-span batch is ~70k rows x 26 columns), and the R2DBC driver resolves every named bind with
      * a linear scan over the statement's parameter list — O(n^2) over ~1.7M parameters, hours of CPU
      * for a single event (see ExperimentAggregatesDAO.insertExperimentItems for the same trade-off).
      * The JSONEachRow payload is one HTTP body with no per-parameter work at all.
@@ -381,6 +387,7 @@ public class CipxSpendBlockDAO {
         node.put("tool_use_id", row.toolUseId());
         node.put("resource", row.resource());
         node.put("kind", row.kind());
+        node.put("origin", row.origin());
         node.put("tier", row.tier());
         node.put("lane", row.lane());
         node.put("bd_lane", row.bdLane());
