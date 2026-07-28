@@ -287,7 +287,7 @@ Clients calling `POST /api/v1/private/spans/batch` (or `/traces/batch`) receive 
 </Callout>
 
 <Callout intent="info">
-  A production Opik runs ClickHouse as a replicated cluster, so the commands below use the cluster-wide form: the `{cluster}` macro and the default schema `opik` (configurable via `ANALYTICS_DB_DATABASE_NAME`). Substitute your own cluster name / schema if you changed them — verify with `SELECT * FROM system.macros` and `SHOW DATABASES`. On a single-node install, drop the `clusterAllReplicas(...)` wrapper (query the `system.*` table directly) and the `ON CLUSTER '{cluster}'` clause.
+  A production Opik runs ClickHouse as a replicated cluster, so the commands below use the cluster-wide form and two placeholders: `{cluster}` (the cluster macro) and `<database_name>` (the analytics schema — default `opik`, set via `ANALYTICS_DB_DATABASE_NAME`). Substitute your own before running — find them with `SELECT * FROM system.macros` and `SHOW DATABASES`. On a single-node install, drop the `clusterAllReplicas(...)` wrapper (query the `system.*` table directly) and the `ON CLUSTER '{cluster}'` clause.
 </Callout>
 
 #### Diagnose first
@@ -296,13 +296,13 @@ Clients calling `POST /api/v1/private/spans/batch` (or `/traces/batch`) receive 
 -- Active parts per node and table: is the count high and growing?
 SELECT hostName() AS host, table, count() AS active_parts
 FROM clusterAllReplicas('{cluster}', system.parts)
-WHERE active AND database = 'opik'
+WHERE active AND database = '<database_name>'
 GROUP BY host, table ORDER BY active_parts DESC;
 
 -- Is a merge stuck? Look for a queue entry with a rising num_tries and a repeating exception.
 SELECT hostName() AS host, database, table, type, num_tries, new_part_name, last_exception
 FROM clusterAllReplicas('{cluster}', system.replication_queue)
-WHERE database = 'opik'
+WHERE database = '<database_name>'
 ORDER BY num_tries DESC;
 
 -- How many merges are actually running per node vs. the pool size?
@@ -367,7 +367,7 @@ Work from least to most invasive: the threshold bump (step 1) and diagnosis (ste
     **Restore ingestion immediately (reversible, no data loss).** Temporarily raise the throw threshold so inserts succeed while you fix the root cause:
 
     ```sql
-    ALTER TABLE opik.spans ON CLUSTER '{cluster}' MODIFY SETTING parts_to_throw_insert = 20000, parts_to_delay_insert = 20000;
+    ALTER TABLE <database_name>.spans ON CLUSTER '{cluster}' MODIFY SETTING parts_to_throw_insert = 20000, parts_to_delay_insert = 20000;
     ```
 
     On a Distributed deployment, target the underlying per-shard ReplacingMergeTree table, not the Distributed proxy. This is a safe, reversible stopgap — no data is deleted — so revert to the defaults once the backlog has drained.
@@ -379,25 +379,25 @@ Work from least to most invasive: the threshold bump (step 1) and diagnosis (ste
     **Identify the failing merge and its corrupt source parts** from the `system.replication_queue.last_exception` values (the `CANNOT_OPEN_FILE` messages name the offending part directories).
   </Step>
   <Step>
-    **`DETACH` (never `DROP`) the corrupt source parts** on the affected node, so ClickHouse abandons the doomed merge without editing ZooKeeper; detached parts are preserved under the table's `detached/` directory for later inspection:
+    **Try to recover the corrupt source parts.** If a part is still intact on another replica, `DETACH` the corrupt local copy (never `DROP`) — ClickHouse then re-fetches the good copy from a healthy replica, which lets the blocked merge complete. Detached parts are preserved under the table's `detached/` directory.
 
     ```sql
-    ALTER TABLE opik.spans DETACH PART 'all_1_100_5';
+    ALTER TABLE <database_name>.spans DETACH PART 'all_1_100_5';
     -- repeat for each corrupt part named in the exception
     ```
 
     <Callout intent="warning">
-      This is a data-affecting, expert operation — do it with ClickHouse expertise on hand. A part that is still intact on another replica can be recovered by re-fetching rather than detached; only if it is corrupt on **all** replicas does detaching drop that part's rows (a small, bounded window, acceptable for observability data). Always `DETACH` (recoverable), never `DROP`.
+      Data-affecting, expert operation — do it with ClickHouse expertise on hand. On a `ReplicatedMergeTree` the queued merge entry references its source parts by name, so `DETACH` does **not** by itself remove that entry: it only helps when the part is intact elsewhere and can be re-fetched. If the part is corrupt on **all** replicas there is nothing to re-fetch — the entry keeps retrying and you must proceed to step 6 to clear it (and removing the part also drops its rows, a small bounded window for observability data). Always `DETACH` (recoverable), never `DROP`.
     </Callout>
   </Step>
   <Step>
-    **Re-check the queue.** If the stuck entry is gone and merges resume, the backlog will drain on its own. A `SYSTEM RESTART REPLICA opik.spans` can help a node re-read its queue.
+    **Re-check the queue.** If the stuck entry is gone and merges resume, the backlog will drain on its own. A `SYSTEM RESTART REPLICA <database_name>.spans` can help a node re-read its queue.
   </Step>
   <Step>
-    **Last resort — remove the stuck queue entry from ZooKeeper.** Only if steps 4–5 fail, and ideally with ClickHouse expertise on hand. Delete the specific stuck `queue-XXXXXXXXXX` node under **every** replica path, then restart the replicas:
+    **Last resort — remove the stuck queue entry from ZooKeeper.** When re-fetch/`DETACH` can't clear it (steps 4–5), removing the poison entry directly is the reliable fix — but it is dangerous, so do it only after 4–5 and ideally with ClickHouse expertise on hand. Delete the specific stuck `queue-XXXXXXXXXX` node under **every** replica path, then restart the replicas:
 
     ```
-    /clickhouse/tables/<shard>/opik/spans/replicas/<replica>/queue/queue-XXXXXXXXXX
+    /clickhouse/tables/<shard>/<database_name>/spans/replicas/<replica>/queue/queue-XXXXXXXXXX
     ```
 
     <Callout intent="warning">
