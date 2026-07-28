@@ -127,7 +127,7 @@ def _prefetch_opik_mcp() -> None:
     # while, and hiding its logs leaves the user staring at a frozen prompt.
     try:
         result = subprocess.run([uv_executable, "tool", "install", "opik-mcp"], timeout=120)
-    except OSError as error:
+    except (OSError, subprocess.TimeoutExpired) as error:
         LOGGER.warning(
             "Could not pre-fetch opik-mcp: %s. Your AI host will download it on "
             "first use instead.",

@@ -47,7 +47,7 @@ _BLOCKLIST = [
     re.compile(
         r"\brm\b[^|;]*-[a-zA-Z]*f[a-zA-Z]*[^|;]*-[a-zA-Z]*r[a-zA-Z]*[^|;]*\s+\S"
     ),
-    re.compile(r"\brm\s+-[a-zA-Z]*rf[a-zA-Z]*\s+\S"),
+    re.compile(r"\brm\s+-[a-zA-Z]*(?:rf|fr)[a-zA-Z]*\s+\S"),
     re.compile(r":\(\)\s*\{.*:\|:.*\}"),
     re.compile(r"\bdd\s+if="),
     re.compile(r"\bmkfs\b"),
