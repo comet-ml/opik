@@ -27,7 +27,9 @@ class TestTemplateContract:
 
     def test_output_format_instruction_stays_last(self) -> None:
         """gepa extracts the candidate from ``` blocks, so this must survive."""
-        assert TEMPLATE.rstrip().endswith("Provide the new instructions within ``` blocks.")
+        assert TEMPLATE.rstrip().endswith(
+            "Provide the new instructions within ``` blocks."
+        )
 
 
 class TestAdditiveOverUpstreamDefault:

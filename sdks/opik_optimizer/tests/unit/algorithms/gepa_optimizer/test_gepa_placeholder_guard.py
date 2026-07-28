@@ -78,7 +78,9 @@ class TestEnforcePlaceholderPreservation:
 
     def test_keeps_edit_that_preserves_the_variable(self) -> None:
         original = [{"role": "user", "content": "Answer {question}"}]
-        new = [{"role": "user", "content": "Think step by step, then answer {question}"}]
+        new = [
+            {"role": "user", "content": "Think step by step, then answer {question}"}
+        ]
         guarded, reverted = candidate_ops.enforce_placeholder_preservation(
             original_messages=original, new_messages=new, prompt_name="p"
         )
@@ -167,7 +169,9 @@ class TestRebuildAppliesGuard:
             {"p_user_0": "Answer concisely: {question}"}
         )
 
-        assert rebuilt["p"].get_messages()[0]["content"] == "Answer concisely: {question}"
+        assert (
+            rebuilt["p"].get_messages()[0]["content"] == "Answer concisely: {question}"
+        )
         assert adapter._last_placeholder_reverts == []
 
     def test_guarded_prompt_still_substitutes_the_dataset_value(self) -> None:

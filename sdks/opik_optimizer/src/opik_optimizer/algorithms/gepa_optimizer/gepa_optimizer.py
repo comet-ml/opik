@@ -248,6 +248,7 @@ class GepaOptimizer(BaseOptimizer):
                 "(e.g., output style inference, prompt generation). "
                 "Provide overrides on the prompt itself if you need precise control."
             )
+
     def _resolve_reflection_prompt_template(self) -> str:
         """Return the reflection template to hand gepa.optimize(), validated.
 
