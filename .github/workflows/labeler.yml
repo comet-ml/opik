@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Apply and Sync Labels
-        uses: actions/labeler@v6
+        uses: actions/labeler@v7
         with:
           sync-labels: true # Remove labels if the file paths no longer match
           configuration-path: .github/labeler.yml
