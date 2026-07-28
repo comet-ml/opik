@@ -1,5 +1,6 @@
 import pytest
 
+from opik.api_objects import opik_client
 from opik.evaluation.resume import checkpoint as resume_checkpoint
 
 
@@ -35,4 +36,20 @@ def _isolate_resume_checkpoint_writes(monkeypatch):
     """
     monkeypatch.setattr(
         resume_checkpoint, "write_checkpoint", lambda *args, **kwargs: None
+    )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_dereferenced_workspace(monkeypatch):
+    """
+    Prevent evaluator unit tests from resolving the workspace over the network.
+
+    ``Opik._dereferenced_workspace()`` calls the real REST API
+    (``check.get_workspace_name()``) whenever the client's configured workspace
+    is still the "default" placeholder, which every evaluator test client is.
+    Without this, logging the experiment URL after evaluate() triggers a live,
+    unauthenticated request that fails with a 401.
+    """
+    monkeypatch.setattr(
+        opik_client.Opik, "_dereferenced_workspace", lambda self: self._workspace
     )
