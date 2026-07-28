@@ -1019,6 +1019,34 @@ class AutomationRuleEvaluatorsResourceTest {
             assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name);
             assertThat(createRuleAndGetName(name, projectId)).isEqualTo(name + "-1");
         }
+
+        @Test
+        @DisplayName("renaming to a name containing LIKE metacharacters still detects the collision")
+        void whenRenamedToMetacharacterName__thenSuffixIsAppended() {
+            var projectId = createProject();
+            var takenName = "cost 50% " + UUID.randomUUID();
+
+            createLlmRule(takenName, projectId);
+            var idB = createLlmRule("Other " + UUID.randomUUID(), projectId);
+
+            // The rename path shares resolveUniqueName with create, but this locks the escaping end-to-end
+            // for update too: an unescaped '%' would either over-match or miss the collision entirely.
+            renameRule(idB, takenName, projectId);
+            assertThat(getName(idB, projectId)).isEqualTo(takenName + "-1");
+        }
+
+        @Test
+        @DisplayName("accented and unaccented variants collide end-to-end (column collation drives the fetch)")
+        void whenNameCollidesAccentInsensitively__thenSuffixIsAppended() {
+            var projectId = createProject();
+            var marker = UUID.randomUUID();
+
+            // The unit test covers the in-Java canonical-key fold; this locks the other half of the claim:
+            // the LIKE prefix fetch runs under the column's utf8mb4_unicode_ci collation, so the unaccented
+            // request must find the accented stored name as a candidate in the first place.
+            assertThat(createRuleAndGetName("Café " + marker, projectId)).isEqualTo("Café " + marker);
+            assertThat(createRuleAndGetName("Cafe " + marker, projectId)).isEqualTo("Cafe " + marker + "-1");
+        }
     }
 
     @Nested
