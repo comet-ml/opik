@@ -470,6 +470,46 @@ class RemoteAuthServiceTest {
                         .isEqualTo(remoteAuthStatusCode));
     }
 
+    /**
+     * The content type claims JSON but the body is not parseable, so the JSON branch is entered and
+     * {@code readEntity} fails. Pins the client-facing outcome of that recovery path: a client error carrying the
+     * fallback message, never a server error. The path also re-reads the raw body for diagnostics, which is what the
+     * up-front buffering enables; the logged body itself is not asserted here.
+     */
+    @ParameterizedTest
+    @MethodSource("malformedJsonErrorBodyArgs")
+    void testSessionAuth__whenRemoteErrorBodyIsMalformedJson__thenClientErrorAndBodyReReadForDiagnostics(
+            int remoteAuthStatusCode, String body, String expectedMessage) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .willReturn(aResponse().withStatus(remoteAuthStatusCode)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(body)));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""),
+                sessionCookie(sessionTokenValue),
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(expectedMessage)
+                .satisfies(throwable -> assertThat(((ClientErrorException) throwable).getResponse().getStatus())
+                        .isEqualTo(remoteAuthStatusCode));
+    }
+
+    static Stream<Arguments> malformedJsonErrorBodyArgs() {
+        return Stream.of(
+                arguments(HttpStatus.SC_UNAUTHORIZED, "not json at all", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_UNAUTHORIZED, "{\"msg\":", NOT_LOGGED_USER),
+                // valid JSON, but no usable message for the caller
+                arguments(HttpStatus.SC_UNAUTHORIZED, "{\"msg\":\"   \"}", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_UNAUTHORIZED, "{}", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_BAD_REQUEST, "not json at all", MISSING_WORKSPACE));
+    }
+
     @Test
     void testListEligibleWorkspaces__filtersDefaultWorkspaceAndMapsToWorkspaceInfo() throws JsonProcessingException {
         var sessionTokenValue = "session-" + UUID.randomUUID();

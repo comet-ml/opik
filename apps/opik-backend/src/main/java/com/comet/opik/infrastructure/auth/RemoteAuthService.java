@@ -286,10 +286,27 @@ class RemoteAuthService implements AuthService {
 
     private static String readBodySafely(Response response) {
         try {
-            return response.hasEntity() ? response.readEntity(String.class) : "";
+            if (!response.hasEntity()) {
+                return "";
+            }
+            bufferEntitySafely(response);
+            return response.readEntity(String.class);
         } catch (RuntimeException e) {
-            log.warn("Failed to read remote response body for debugging: {}", e.getMessage());
+            log.warn("Failed to read remote response body for debugging", e);
             return "";
+        }
+    }
+
+    /**
+     * Buffers the response entity so it can be read more than once. A client response entity is backed by a single-shot
+     * input stream, so without buffering the first reader consumes it and every later read fails. Buffering is
+     * idempotent, so callers do not need to track whether it already happened.
+     */
+    private static void bufferEntitySafely(Response response) {
+        try {
+            response.bufferEntity();
+        } catch (RuntimeException e) {
+            log.warn("Failed to buffer remote response entity, status: '{}'", response.getStatus(), e);
         }
     }
 
@@ -306,8 +323,9 @@ class RemoteAuthService implements AuthService {
      * <p>
      * Only a JSON body is treated as a message intended for the caller. Any other content type is a framework-level
      * response rather than an application error, so it is logged and the caller-facing {@code fallback} is used instead
-     * of leaking the remote framework's wording. The entity is read at most once, since a client response stream
-     * cannot be consumed twice.
+     * of leaking the remote framework's wording. The entity is buffered up front so that both the diagnostic logging
+     * here and any later reader of the same response can read it, rather than relying on being the first to consume the
+     * single-shot entity stream.
      *
      * @param fallback message used when the body is absent, not JSON, unreadable or empty
      */
@@ -315,18 +333,21 @@ class RemoteAuthService implements AuthService {
         if (!response.hasEntity()) {
             return fallback;
         }
+        bufferEntitySafely(response);
         var mediaType = response.getMediaType();
         if (mediaType == null || !MediaType.APPLICATION_JSON_TYPE.isCompatible(mediaType)) {
-            log.warn("React service replied status {} with non-JSON content type '{}', body: '{}'",
+            log.warn("React service replied with a non-JSON error body, status: '{}', contentType: '{}', body: '{}'",
                     response.getStatus(), mediaType, readBodySafely(response));
             return fallback;
         }
         try {
-            var message = response.readEntity(ReactServiceErrorResponse.class).msg();
-            return StringUtils.isBlank(message) ? fallback : message.strip();
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            return errorResponse == null || StringUtils.isBlank(errorResponse.msg())
+                    ? fallback
+                    : errorResponse.msg().strip();
         } catch (RuntimeException e) {
-            log.warn("Failed to read react service error response, status: {}, error: {}",
-                    response.getStatus(), e.getMessage());
+            log.warn("Failed to read react service error response, status: '{}', body: '{}'",
+                    response.getStatus(), readBodySafely(response), e);
             return fallback;
         }
     }
@@ -478,7 +499,7 @@ class RemoteAuthService implements AuthService {
             return response.readEntity(String.class);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
             var message = readErrorMessage(response, MISSING_WORKSPACE);
-            log.error("Not found workspace by name : {}", message);
+            log.error("Workspace not found by name: '{}'", message);
             throw new ClientErrorException(message, Response.Status.BAD_REQUEST);
         }
 
