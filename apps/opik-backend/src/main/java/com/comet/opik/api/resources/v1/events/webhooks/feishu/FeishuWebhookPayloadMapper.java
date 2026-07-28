@@ -36,6 +36,10 @@ import java.util.stream.Collectors;
 @UtilityClass
 public class FeishuWebhookPayloadMapper {
 
+    // Feishu limits interactive card request bodies to 30 KB. Keep the content below that limit
+    // so the header, actions, URLs and JSON framing have sufficient room.
+    private static final int MAX_CONTENT_BYTES = 25_000;
+    private static final String TRUNCATION_SUFFIX = "\n\n_Content truncated. Use \"View in Opik\" to see all events._";
     private static final String METRICS_ALERT_DETAILS_TEMPLATE = "- **Current <type>:** <valuePrefix><metricValue><valueSuffix>\n"
             + "  **Threshold:** <valuePrefix><threshold><valueSuffix>\n"
             + "  **Time Window:** <windowDuration>\n"
@@ -99,7 +103,43 @@ public class FeishuWebhookPayloadMapper {
                     "No latency alerts triggered");
         };
 
-        return summary + "\n\n" + details;
+        return truncateContent(summary + "\n\n" + details);
+    }
+
+    private static String truncateContent(String content) {
+        if (content.getBytes(StandardCharsets.UTF_8).length <= MAX_CONTENT_BYTES) {
+            return content;
+        }
+
+        int byteBudget = MAX_CONTENT_BYTES - TRUNCATION_SUFFIX.getBytes(StandardCharsets.UTF_8).length;
+        int byteCount = 0;
+        int endIndex = 0;
+
+        while (endIndex < content.length()) {
+            int codePoint = content.codePointAt(endIndex);
+            int codePointBytes = utf8Length(codePoint);
+            if (byteCount + codePointBytes > byteBudget) {
+                break;
+            }
+
+            byteCount += codePointBytes;
+            endIndex += Character.charCount(codePoint);
+        }
+
+        return content.substring(0, endIndex) + TRUNCATION_SUFFIX;
+    }
+
+    private static int utf8Length(int codePoint) {
+        if (codePoint <= 0x7F) {
+            return 1;
+        }
+        if (codePoint <= 0x7FF) {
+            return 2;
+        }
+        if (codePoint <= 0xFFFF) {
+            return 3;
+        }
+        return 4;
     }
 
     private static String buildActionUrl(@NonNull WebhookEvent<Map<String, Object>> event) {
@@ -227,7 +267,7 @@ public class FeishuWebhookPayloadMapper {
             String windowDuration = AlertWebhookUtils.formatWindowDuration(payload.windowSeconds());
 
             String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
-                    ? "*Workspace-wide*"
+                    ? "**Workspace-wide**"
                     : TemplateUtils.newST(PROJECTS_TEMPLATE)
                             .add("projectNames", payload.projectNames())
                             .render();

@@ -1,12 +1,35 @@
 import {
+  applyFieldReplacements,
   alertTriggersToFormTriggers,
   formTriggersToAlertTriggers,
 } from "./helpers";
 import {
   ALERT_EVENT_TYPE,
+  ALERT_TYPE,
   ALERT_TRIGGER_CONFIG_TYPE,
   AlertTriggerConfig,
 } from "@/types/alerts";
+
+describe("applyFieldReplacements", () => {
+  it("keeps the server-side title prefix in the Feishu preview", () => {
+    const example = {
+      card: { header: { title: { content: "Opik Alert: Example" } } },
+    };
+
+    const result = applyFieldReplacements(
+      example,
+      { name: "Production errors" },
+      ALERT_TYPE.feishu,
+    );
+
+    expect(result).toEqual({
+      card: {
+        header: { title: { content: "Opik Alert: Production errors" } },
+      },
+    });
+    expect(example.card.header.title.content).toBe("Opik Alert: Example");
+  });
+});
 
 const fbScore = (
   configValue: Record<string, string>,

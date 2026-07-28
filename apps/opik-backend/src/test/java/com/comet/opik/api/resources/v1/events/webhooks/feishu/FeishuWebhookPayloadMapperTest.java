@@ -15,6 +15,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,8 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class FeishuWebhookPayloadMapperTest {
 
@@ -31,13 +34,18 @@ class FeishuWebhookPayloadMapperTest {
 
     private WebhookEvent<Map<String, Object>> buildEvent(
             AlertEventType eventType, List<?> metadata) {
+        return buildEvent(eventType, metadata, Map.of(AlertWebhookUtils.BASE_URL_METADATA_KEY, BASE_URL));
+    }
+
+    private WebhookEvent<Map<String, Object>> buildEvent(
+            AlertEventType eventType, List<?> metadata, Map<String, String> alertMetadata) {
         return WebhookEvent.<Map<String, Object>>builder()
                 .id("event-" + System.currentTimeMillis())
                 .eventType(eventType)
                 .alertType(AlertType.FEISHU)
                 .alertId(UUID.randomUUID())
                 .alertName(ALERT_NAME)
-                .alertMetadata(Map.of(AlertWebhookUtils.BASE_URL_METADATA_KEY, BASE_URL))
+                .alertMetadata(alertMetadata)
                 .workspaceId("workspace-1")
                 .workspaceName(WORKSPACE_NAME)
                 .userName("test-user")
@@ -62,8 +70,7 @@ class FeishuWebhookPayloadMapperTest {
             assertThat(payload.card()).isNotNull();
             assertThat(payload.card().header()).isNotNull();
             assertThat(payload.card().header().title().tag()).isEqualTo("plain_text");
-            assertThat(payload.card().header().title().content()).contains("Opik Alert:");
-            assertThat(payload.card().header().title().content()).contains(ALERT_NAME);
+            assertThat(payload.card().header().title().content()).isEqualTo("Opik Alert: " + ALERT_NAME);
         }
 
         @Test
@@ -128,10 +135,12 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**1** new Prompt Created event happened");
-            assertThat(content).contains("**Prompts Created:**");
-            assertThat(content).contains(promptId.toString());
-            assertThat(content).contains("[View]");
+            assertThat(content).isEqualTo("""
+                    **1** new Prompt Created event happened
+
+                    **Prompts Created:**
+                    - Prompt `%s` | [View](%s/%s/prompts/%s)"""
+                    .formatted(promptId, BASE_URL, WORKSPACE_NAME, promptId));
         }
 
         @Test
@@ -143,8 +152,10 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Deleted Prompt IDs:**");
-            assertThat(content).contains(promptId.toString());
+            assertThat(content).isEqualTo("""
+                    **1** new Prompt Deleted event happened
+
+                    **Deleted Prompt IDs:** `%s`""".formatted(promptId));
         }
 
         @Test
@@ -157,10 +168,12 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Prompts Committed:**");
-            assertThat(content).contains(promptId.toString());
-            assertThat(content).contains(versionId.toString());
-            assertThat(content).contains("[View]");
+            assertThat(content).isEqualTo("""
+                    **1** new Prompt Committed event happened
+
+                    **Prompts Committed:**
+                    - Prompt `%s` (version `%s`) | [View](%s/%s/prompts/%s?activeVersionId=%s)"""
+                    .formatted(promptId, versionId, BASE_URL, WORKSPACE_NAME, promptId, versionId));
         }
 
         @Test
@@ -175,11 +188,14 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Trace Errors Alert Triggered:**");
-            assertThat(content).contains("**Current Trace Errors:** 15");
-            assertThat(content).contains("**Threshold:** 10");
-            assertThat(content).contains("**Time Window:** 1 hour");
-            assertThat(content).contains("*Workspace-wide*");
+            assertThat(content).isEqualTo("""
+                    **1** new Trace Error Alert event happened
+
+                    **Trace Errors Alert Triggered:**
+                    - **Current Trace Errors:** 15
+                      **Threshold:** 10
+                      **Time Window:** 1 hour
+                      **Scope:** **Workspace-wide**""");
         }
 
         @Test
@@ -197,11 +213,15 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Trace Feedback Score Alert Triggered:**");
-            assertThat(content).contains("0.85");
-            assertThat(content).contains("0.9");
-            assertThat(content).contains("1 day");
-            assertThat(content).contains("`accuracy`");
+            assertThat(content).isEqualTo("""
+                    **1** new Trace Feedback Score event happened
+
+                    **Trace Feedback Score Alert Triggered:**
+                    - **Current Trace Feedback Score:** 0.85
+                      **Threshold:** 0.9
+                      **Time Window:** 1 day
+                      **Feedback Score:** `accuracy`
+                      **Scope:** **Projects:** `My Project`""");
         }
 
         @Test
@@ -217,8 +237,15 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Thread Feedback Score Alert Triggered:**");
-            assertThat(content).contains("2 hours");
+            assertThat(content).isEqualTo("""
+                    **1** new Thread Feedback Score event happened
+
+                    **Thread Feedback Score Alert Triggered:**
+                    - **Current Thread Feedback Score:** 0.7
+                      **Threshold:** 0.8
+                      **Time Window:** 2 hours
+                      **Feedback Score:** `relevance`
+                      **Scope:** **Workspace-wide**""");
         }
 
         @Test
@@ -233,9 +260,14 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Cost Alert Triggered:**");
-            assertThat(content).contains("$150.50");
-            assertThat(content).contains("$100.00");
+            assertThat(content).isEqualTo("""
+                    **1** new Cost Alert event happened
+
+                    **Cost Alert Triggered:**
+                    - **Current Cost:** $150.50
+                      **Threshold:** $100.00
+                      **Time Window:** 1 hour
+                      **Scope:** **Workspace-wide**""");
         }
 
         @Test
@@ -250,10 +282,14 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Latency Alert Triggered:**");
-            assertThat(content).contains("5.2 s");
-            assertThat(content).contains("3.0 s");
-            assertThat(content).contains("30 minutes");
+            assertThat(content).isEqualTo("""
+                    **1** new Latency Alert event happened
+
+                    **Latency Alert Triggered:**
+                    - **Current Latency:** 5.2 s
+                      **Threshold:** 3.0 s
+                      **Time Window:** 30 minutes
+                      **Scope:** **Workspace-wide**""");
         }
 
         @Test
@@ -270,9 +306,12 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Traces with Guardrails Triggered:**");
-            assertThat(content).contains(traceId.toString());
-            assertThat(content).contains("[View]");
+            assertThat(content).isEqualTo("""
+                    **1** new Guardrail Triggered event happened
+
+                    **Traces with Guardrails Triggered:**
+                    - Trace `%s` | [View](%s/%s/projects/%s/traces?trace=%s)"""
+                    .formatted(traceId, BASE_URL, WORKSPACE_NAME, projectId, traceId));
         }
 
         @Test
@@ -288,9 +327,33 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("**Experiments Finished:**");
-            assertThat(content).contains(experimentId.toString());
-            assertThat(content).contains("[View]");
+            assertThat(content).isEqualTo("""
+                    **1** new Experiment Finished event happened
+
+                    **Experiments Finished:**
+                    - Experiment `%s` | [View](%s/%s/experiments/%s/compare?experiments=%%5B%%22%s%%22%%5D)"""
+                    .formatted(experimentId, BASE_URL, WORKSPACE_NAME, datasetId, experimentId));
+        }
+
+        @Test
+        void rendersMultipleEventsAndPluralizesSummary() {
+            UUID firstPromptId = UUID.randomUUID();
+            UUID secondPromptId = UUID.randomUUID();
+            var event = buildEvent(AlertEventType.PROMPT_CREATED, List.of(
+                    Prompt.builder().id(firstPromptId).name("first").build(),
+                    Prompt.builder().id(secondPromptId).name("second").build()));
+
+            FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
+
+            assertThat(payload.card().elements().get(0).text().content()).isEqualTo("""
+                    **2** new Prompt Created events happened
+
+                    **Prompts Created:**
+                    - Prompt `%s` | [View](%s/%s/prompts/%s)
+                    - Prompt `%s` | [View](%s/%s/prompts/%s)"""
+                    .formatted(
+                            firstPromptId, BASE_URL, WORKSPACE_NAME, firstPromptId,
+                            secondPromptId, BASE_URL, WORKSPACE_NAME, secondPromptId));
         }
     }
 
@@ -299,28 +362,21 @@ class FeishuWebhookPayloadMapperTest {
 
         @Test
         void shouldUseDefaultBaseUrlWhenMetadataEmpty() {
-            var event = WebhookEvent.<Map<String, Object>>builder()
-                    .id("event-1")
-                    .eventType(AlertEventType.PROMPT_CREATED)
-                    .alertType(AlertType.FEISHU)
-                    .alertId(UUID.randomUUID())
-                    .alertName(ALERT_NAME)
-                    .alertMetadata(Map.of())
-                    .workspaceId("workspace-1")
-                    .workspaceName(WORKSPACE_NAME)
-                    .userName("test-user")
-                    .payload(Map.of("metadata",
-                            List.of(Prompt.builder().id(UUID.randomUUID()).name("p1").build())))
-                    .createdAt(Instant.now())
-                    .url("https://open.feishu.cn/open-apis/bot/v2/hook/test")
-                    .headers(Map.of())
-                    .build();
+            UUID promptId = UUID.randomUUID();
+            var event = buildEvent(
+                    AlertEventType.PROMPT_CREATED,
+                    List.of(Prompt.builder().id(promptId).name("p1").build()),
+                    Map.of());
 
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
-            // Should not throw and should contain default URL
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains("http://localhost:5173");
+            assertThat(content).isEqualTo("""
+                    **1** new Prompt Created event happened
+
+                    **Prompts Created:**
+                    - Prompt `%s` | [View](http://localhost:5173/%s/prompts/%s)"""
+                    .formatted(promptId, WORKSPACE_NAME, promptId));
         }
     }
 
@@ -343,7 +399,8 @@ class FeishuWebhookPayloadMapperTest {
 
             var actionElement = payload.card().elements().get(payload.card().elements().size() - 1);
             assertThat(actionElement.tag()).isEqualTo("action");
-            assertThat(actionElement.actions().get(0).url()).contains("/projects/" + projectId);
+            assertThat(actionElement.actions().get(0).url())
+                    .isEqualTo(BASE_URL + "/" + WORKSPACE_NAME + "/projects/" + projectId + "/traces?type=traces");
         }
 
         @Test
@@ -360,7 +417,8 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             var actionElement = payload.card().elements().get(payload.card().elements().size() - 1);
-            assertThat(actionElement.actions().get(0).url()).endsWith("/projects");
+            assertThat(actionElement.actions().get(0).url())
+                    .isEqualTo(BASE_URL + "/" + WORKSPACE_NAME + "/projects");
         }
 
         @Test
@@ -378,7 +436,42 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             var actionElement = payload.card().elements().get(payload.card().elements().size() - 1);
-            assertThat(actionElement.actions().get(0).url()).contains("type=threads");
+            assertThat(actionElement.actions().get(0).url())
+                    .isEqualTo(BASE_URL + "/" + WORKSPACE_NAME + "/projects/" + projectId + "/traces?type=threads");
+        }
+    }
+
+    @Nested
+    class DefensiveFormatting {
+
+        @Test
+        void fallsBackWhenMetricsPayloadIsMalformed() {
+            MetricsAlertPayload malformedPayload = mock(MetricsAlertPayload.class);
+            when(malformedPayload.windowSeconds()).thenThrow(new IllegalStateException("malformed"));
+            var event = buildEvent(AlertEventType.TRACE_ERRORS, List.of(malformedPayload));
+
+            FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
+
+            assertThat(payload.card().elements().get(0).text().content()).isEqualTo("""
+                    **1** new Trace Error Alert event happened
+
+                    **Trace Errors Alert Triggered:**
+                    - Trace Errors alert (unable to parse details)""");
+        }
+
+        @Test
+        void truncatesLargeContentWithinFeishuCardLimit() {
+            var event = buildEvent(AlertEventType.TRACE_ERRORS, List.of(MetricsAlertPayload.builder()
+                    .metricValue("飞".repeat(10_000))
+                    .threshold("10")
+                    .windowSeconds(3_600)
+                    .build()));
+
+            FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
+            String content = payload.card().elements().get(0).text().content();
+
+            assertThat(content.getBytes(StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(25_000);
+            assertThat(content).endsWith("\n\n_Content truncated. Use \"View in Opik\" to see all events._");
         }
     }
 
@@ -408,7 +501,8 @@ class FeishuWebhookPayloadMapperTest {
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
             String content = payload.card().elements().get(0).text().content();
-            assertThat(content).contains(expectedMessage);
+            assertThat(content).isEqualTo("**0** new " + AlertWebhookUtils.formatEventType(eventType)
+                    + " events happened\n\n" + expectedMessage);
         }
     }
 

@@ -88,7 +88,7 @@ Opik provides four destination types for alerts:
 
 Opik supports three main approaches for integrating alerts with external systems:
 
-1. **Native integrations** (Slack, PagerDuty): Use built-in formatting for popular services - no middleware required
+1. **Native integrations** (Slack, PagerDuty, Feishu): Use built-in formatting for popular services - no middleware required
 2. **General webhooks**: Send alerts to custom endpoints, no-code platforms, or middleware services
 3. **Middleware services** (Optional): Add custom logic, routing, or transformations before forwarding to destinations
 
@@ -158,9 +158,39 @@ Opik will automatically format all alert payloads into PagerDuty-compatible even
 - Custom fields for filtering and routing
 - Deduplication keys to prevent duplicate incidents
 
+### Feishu integration (Native)
+
+Opik provides native Feishu (Lark) integration that automatically formats alert events as [interactive cards](https://open.feishu.cn/document/common-capabilities/message-card/message-cards-content) delivered to a group chat via a custom bot webhook.
+
+#### Prerequisites
+- A Feishu (Lark) group chat where you can add a custom bot
+- Permission to create custom bots in the group
+
+#### Setup steps
+
+1. **In Feishu (Lark)**:
+   - Open the target group chat → Settings → Bots
+   - Click "Add Bot" and choose "Custom Bot"
+   - Give the bot a name (e.g., "Opik Alerts") and copy the generated Webhook URL
+
+2. **In Opik**:
+   - Go to Configuration → Alerts tab
+   - Click "Create new alert"
+   - Give your alert a descriptive name
+   - Select **Feishu** as the destination type
+   - Enter the Feishu bot webhook URL: `https://open.feishu.cn/open-apis/bot/v2/hook/...`
+   - Add triggers for the events you want to monitor
+   - Click "Test connection" to verify
+   - Click "Create alert"
+
+Opik will automatically format all alert payloads into Feishu interactive cards with:
+- Color-coded headers by severity (red for errors, orange for metric-threshold and guardrail events, blue for informational events)
+- Human-readable event summaries and details
+- "View in Opik" action buttons linking back to the relevant page
+
 ### Custom integration with middleware service (Optional)
 
-For more complex integrations or custom formatting requirements, you can use a middleware service to transform Opik's payload before sending it to your destination. This approach works with any destination type (General, Slack, or PagerDuty).
+For more complex integrations or custom formatting requirements, you can use a middleware service to transform Opik's payload before sending it to your destination. This approach works with any destination type (General, Slack, PagerDuty, or Feishu).
 
 #### When to use middleware
 
@@ -238,7 +268,7 @@ def opik_to_slack():
 1. Deploy your middleware service to a publicly accessible endpoint
 2. In Opik, create an alert with destination type **General**
 3. Use your middleware service URL as the Endpoint URL
-4. Configure your middleware to forward to the final destination (Slack, PagerDuty, etc.)
+4. Configure your middleware to forward to the final destination (Slack, PagerDuty, Feishu, etc.)
 
 ### Using no-code automation platforms
 

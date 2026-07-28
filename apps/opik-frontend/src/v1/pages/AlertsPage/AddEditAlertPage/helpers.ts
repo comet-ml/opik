@@ -337,6 +337,7 @@ export interface FieldMapping {
   sourceField: string; // Path to field in alert object (e.g., 'name' or 'metadata.routing_key')
   targetPath: string; // Path to replace in webhook example (e.g., 'alert_name' or 'payload.routing_key')
   fallbackValue?: string; // Optional fallback if field is empty
+  transformValue?: (value: unknown) => unknown; // Optional preview-only value transformation
 }
 
 type AlertTypeMappings = {
@@ -373,6 +374,7 @@ export const ALERT_FIELD_MAPPINGS: AlertTypeMappings = {
     {
       sourceField: "name",
       targetPath: "card.header.title.content",
+      transformValue: (value) => `Opik Alert: ${String(value)}`,
     },
   ],
 };
@@ -423,7 +425,10 @@ export function applyFieldReplacements(
 
         if (isValidFieldValue(sourceValue)) {
           // Use lodash set to safely set nested values (supports dot and bracket notation)
-          set(payload, mapping.targetPath, sourceValue);
+          const targetValue = mapping.transformValue
+            ? mapping.transformValue(sourceValue)
+            : sourceValue;
+          set(payload, mapping.targetPath, targetValue);
         } else if (!isNil(mapping.fallbackValue)) {
           set(payload, mapping.targetPath, mapping.fallbackValue);
         }

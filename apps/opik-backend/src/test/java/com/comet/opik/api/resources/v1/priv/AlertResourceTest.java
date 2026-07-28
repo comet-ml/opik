@@ -43,6 +43,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.v1.events.webhooks.feishu.FeishuWebhookPayload;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayload;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackBlock;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayload;
@@ -1243,6 +1244,10 @@ class AlertResourceTest {
                     // For PAGERDUTY just verify it's valid JSON
                     var pagerDutyPayload = JsonUtils.readValue(requestBodyJson, PagerDutyWebhookPayload.class);
                     assertThat(pagerDutyPayload).isNotNull();
+                } else if (alert.alertType() == AlertType.FEISHU) {
+                    // For FEISHU just verify it's valid JSON
+                    var feishuPayload = JsonUtils.readValue(requestBodyJson, FeishuWebhookPayload.class);
+                    assertThat(feishuPayload).isNotNull();
                 }
 
             } catch (Exception e) {
@@ -2308,7 +2313,8 @@ class AlertResourceTest {
         private Stream<Arguments> alertTypeProvider() {
             return Stream.of(
                     Arguments.of(AlertType.SLACK),
-                    Arguments.of(AlertType.PAGERDUTY));
+                    Arguments.of(AlertType.PAGERDUTY),
+                    Arguments.of(AlertType.FEISHU));
         }
 
         private Alert createAlertForEvent(AlertTrigger alertTrigger, AlertType alertType) {
@@ -3040,7 +3046,8 @@ class AlertResourceTest {
                     Arguments.of("alertType is null (defaults to GENERAL)", null),
                     Arguments.of("alertType is GENERAL", AlertType.GENERAL),
                     Arguments.of("alertType is SLACK", AlertType.SLACK),
-                    Arguments.of("alertType is PAGERDUTY", AlertType.PAGERDUTY));
+                    Arguments.of("alertType is PAGERDUTY", AlertType.PAGERDUTY),
+                    Arguments.of("alertType is FEISHU", AlertType.FEISHU));
         }
     }
 

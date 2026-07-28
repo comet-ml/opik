@@ -27,8 +27,7 @@ public class AlertWebhookUtils {
         String metadataUrl = Optional.ofNullable(alertMetadata.get(BASE_URL_METADATA_KEY))
                 .filter(StringUtils::isNotBlank)
                 .orElse(DEFAULT_BASE_URL);
-        metadataUrl = metadataUrl.endsWith("/") ? metadataUrl : metadataUrl + "/";
-        return metadataUrl + workspaceName;
+        return StringUtils.stripEnd(metadataUrl, "/") + "/" + workspaceName;
     }
 
     /**
