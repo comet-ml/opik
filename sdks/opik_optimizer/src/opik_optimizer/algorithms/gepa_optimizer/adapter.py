@@ -21,6 +21,7 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.candidate_selection import select_candidate
+from .ops import candidate_ops
 from .types import OpikDataInst
 
 if TYPE_CHECKING:
@@ -61,6 +62,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         # accepted candidates on). Used to classify each evaluate() call as a
         # full evaluation ("trial") vs. a mini-batch screening eval ("mini-batch").
         self._gepa_val_item_ids = gepa_val_item_ids or set()
+        # Component keys whose candidate edit the placeholder guard rejected on
+        # the most recent rebuild; surfaced in each evaluation's metadata.
+        self._last_placeholder_reverts: list[str] = []
         self._metric_name = metric.__name__
         self._allowed_roles = (
             context.extra_params.get("optimizable_roles")
@@ -215,6 +219,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         """Rebuild prompts with optimized messages, preserving tools/function_map/model."""
         rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
         dropped_components = 0
+        placeholder_reverts: list[str] = []
         for prompt_name, prompt_obj in self._base_prompts.items():
             original_messages = prompt_obj.get_messages()
             new_messages = []
@@ -231,6 +236,16 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 else:
                     optimized_content = candidate.get(component_key, original_content)
                 new_messages.append({"role": msg["role"], "content": optimized_content})
+
+            # Never evaluate a candidate that dropped one of the seed prompt's
+            # template variables — substitution is a silent str.replace, so the
+            # corrupted prompt would otherwise be scored as-is and could win.
+            new_messages, reverted = candidate_ops.enforce_placeholder_preservation(
+                original_messages=original_messages,
+                new_messages=new_messages,
+                prompt_name=prompt_name,
+            )
+            placeholder_reverts.extend(reverted)
 
             # prompt.copy() preserves tools, function_map, model, model_kwargs
             new_prompt = prompt_obj.copy()
@@ -250,6 +265,19 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             logger.warning(
                 "GEPA adapter dropped %s component(s) due to optimize_prompt constraints.",
                 dropped_components,
+            )
+        # Read back by evaluate() straight after this call so the rejection lands
+        # in the trial's experiment metadata instead of only the logs. Safe as a
+        # plain attribute: gepa's engine and reflective-mutation proposer both
+        # call adapter.evaluate() sequentially (their only threading lives in the
+        # unrelated optimize_anything adapter).
+        self._last_placeholder_reverts = placeholder_reverts
+        if placeholder_reverts:
+            logger.warning(
+                "Rejected GEPA candidate edit(s) %s: the rewrite dropped template "
+                "variable(s) present in the seed prompt. Reverted to seed content so "
+                "the candidate is never evaluated with the user's input missing.",
+                placeholder_reverts,
             )
         return rebuilt
 
@@ -294,6 +322,11 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                         ),
                         "source": candidate.get("source"),
                         "candidate_id": candidate.get("id"),
+                        # Present only when the guard rejected an edit, so a
+                        # corrupted-candidate run is auditable after the fact.
+                        "rejected_components_missing_variables": (
+                            self._last_placeholder_reverts or None
+                        ),
                     }
                 )
             }

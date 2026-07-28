@@ -4,6 +4,7 @@ import {
   CodeMetricParamsSchema,
   OptimizationConfigSchema,
   OptimizationConfigFormType,
+  convertOptimizationStudioToFormData,
 } from "./schema";
 import { METRIC_TYPE, OPTIMIZER_TYPE } from "@/types/optimizations";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
@@ -138,5 +139,45 @@ describe("OptimizationConfigSchema — code metric syntax-error submission block
       metricParams: { code: SYNTAX_ERROR_CODE_METRIC },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("convertOptimizationStudioToFormData — seeded prompt shape", () => {
+  // A new run must start as system + user: the system message holds the
+  // instructions (the only role a Studio run optimizes) and the user message
+  // holds the template variables, so the optimizer cannot rewrite the message
+  // carrying them (OPIK-7510). Seeding a lone user message did the opposite.
+  it("seeds a system and a user message for a new run", () => {
+    const { messages } = convertOptimizationStudioToFormData(undefined, [
+      "gpt-4o-mini",
+    ]);
+
+    expect(messages.map((m) => m.role)).toEqual([
+      LLM_MESSAGE_ROLE.system,
+      LLM_MESSAGE_ROLE.user,
+    ]);
+    expect(messages.every((m) => m.content === "")).toBe(true);
+    expect(new Set(messages.map((m) => m.id)).size).toBe(2);
+  });
+
+  it("keeps an existing run's messages untouched", () => {
+    const { messages } = convertOptimizationStudioToFormData(
+      {
+        studio_config: {
+          prompt: {
+            messages: [{ role: "user", content: "Answer {question}" }],
+          },
+          // optimizer/evaluation are read unconditionally by the converter, so
+          // a rerun payload always carries them.
+          optimizer: { type: OPTIMIZER_TYPE.GEPA },
+          evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+        },
+      } as never,
+      ["gpt-4o-mini"],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe(LLM_MESSAGE_ROLE.user);
+    expect(messages[0].content).toBe("Answer {question}");
   });
 });

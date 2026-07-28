@@ -233,7 +233,15 @@ export const convertOptimizationStudioToFormData = (
       id: crypto.randomUUID(),
       role: m.role as LLM_MESSAGE_ROLE,
       content: m.content,
-    })) || [generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user })];
+    })) || [
+      // A new run starts from the shape the optimizers are stable on:
+      // instructions in the system message — the only role a Studio run makes
+      // optimizable — and template variables in the user message, so the
+      // optimizer never rewrites the message holding the user's variables
+      // (OPIK-7510). Seeding a lone user message did the opposite.
+      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.system }),
+      generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
+    ];
 
   const optimizerType =
     (optimization?.studio_config?.optimizer.type as OPTIMIZER_TYPE) ||

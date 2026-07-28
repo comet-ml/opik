@@ -114,11 +114,6 @@ def run_optimization(
     Returns:
         Optimization result object
     """
-    # Optimizers default to optimizing only `system` messages. When the user's
-    # prompt has no system message (e.g. a single user message), that leaves the
-    # optimizer with zero editable components — GEPA then divides by zero while
-    # round-robin selecting one. Optimize whichever roles the prompt actually
-    # contains so a run succeeds for any prompt shape.
     present_roles = sorted(
         {
             message.get("role")
@@ -126,7 +121,21 @@ def run_optimization(
             if message.get("role") in {"system", "user", "assistant"}
         }
     )
-    optimize_prompts = present_roles or "system"
+    if "system" in present_roles:
+        # The shape the algorithms are stable on: instructions in the system
+        # message, template variables in the user message. Restricting the
+        # optimizable set to `system` keeps the variables out of the reflection
+        # LM's reach entirely instead of relying on it to preserve them
+        # (OPIK-7510). Studio seeds this shape by default.
+        optimize_prompts = ["system"]
+    else:
+        # No system message (e.g. a lone user message) — optimizing only
+        # `system` would leave the optimizer zero editable components, and GEPA
+        # then divides by zero while round-robin selecting one. Widen to
+        # whichever roles the prompt actually contains so a run still succeeds
+        # for any prompt shape; the OPIK-7510 candidate guard is what protects
+        # the variables on this path.
+        optimize_prompts = present_roles or "system"
 
     result = optimizer.optimize_prompt(
         optimization_id=optimization_id,

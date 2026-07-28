@@ -185,7 +185,10 @@ class GepaOptimizer(BaseOptimizer):
         n_threads: Number of parallel threads for evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
-        prompt_overrides: Accepted for API parity, but ignored (GEPA does not expose prompt hooks).
+        prompt_overrides: Optional dict or callable overriding the optimizer's own
+            prompts. The one supported key is "reflection_prompt_template", passed
+            through to gepa.optimize() as the instruction-proposal prompt; it must
+            contain the <curr_param> and <side_info> markers.
     """
 
     DEFAULT_PROMPTS = gepa_prompts.DEFAULT_PROMPTS
@@ -229,7 +232,7 @@ class GepaOptimizer(BaseOptimizer):
             name=name,
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
-            prompt_overrides=None,
+            prompt_overrides=prompt_overrides,
         )
         self.n_threads = n_threads
         self._adapter_metric_calls = 0
@@ -245,10 +248,26 @@ class GepaOptimizer(BaseOptimizer):
                 "(e.g., output style inference, prompt generation). "
                 "Provide overrides on the prompt itself if you need precise control."
             )
-        if prompt_overrides is not None:
-            logger.warning(
-                "GEPA prompt overrides are not supported yet and will be ignored."
-            )
+    def _resolve_reflection_prompt_template(self) -> str:
+        """Return the reflection template to hand gepa.optimize(), validated.
+
+        Validated here rather than deep inside gepa so a bad override fails at
+        the start of the run with a clear message instead of mid-search. GEPA
+        would also silently ignore the template if the adapter defined
+        propose_new_texts — OpikGEPAAdapter deliberately does not.
+        """
+        from gepa.strategies.instruction_proposal import InstructionProposalSignature
+
+        template = self.prompts.get("reflection_prompt_template")
+        try:
+            InstructionProposalSignature.validate_prompt_template(template)
+        except ValueError as exc:
+            raise ValueError(
+                "Invalid reflection_prompt_template override: "
+                f"{exc}. The template must contain both the <curr_param> and "
+                "<side_info> markers."
+            ) from exc
+        return template
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
@@ -463,6 +482,10 @@ class GepaOptimizer(BaseOptimizer):
                 "task_lm": None,
                 "reflection_lm": self.model,
                 "candidate_selection_strategy": candidate_selection_strategy,
+                # Replaces GEPA's default instruction-proposal prompt, which
+                # instructs the reflection LM to inline example content and so
+                # invites it to overwrite the user's template variables.
+                "reflection_prompt_template": self._resolve_reflection_prompt_template(),
                 "skip_perfect_score": self.skip_perfect_score,
                 "reflection_minibatch_size": reflection_minibatch_size,
                 "perfect_score": self.perfect_score,
