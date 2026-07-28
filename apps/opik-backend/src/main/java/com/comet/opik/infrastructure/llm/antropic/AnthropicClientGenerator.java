@@ -109,7 +109,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             budgetTokens = budgetNode.asInt();
         }
 
-        return new ThinkingParams(type != null && !"disabled".equals(type), type, budgetTokens);
+        return new ThinkingParams(type != null && !"disabled".equalsIgnoreCase(type), type, budgetTokens);
     }
 
     /**
