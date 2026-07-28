@@ -126,7 +126,7 @@ def _prefetch_opik_mcp() -> None:
     # straight to the terminal rather than capturing it — the install can take a
     # while, and hiding its logs leaves the user staring at a frozen prompt.
     try:
-        result = subprocess.run([uv_executable, "tool", "install", "opik-mcp"])
+        result = subprocess.run([uv_executable, "tool", "install", "opik-mcp"], timeout=120)
     except OSError as error:
         LOGGER.warning(
             "Could not pre-fetch opik-mcp: %s. Your AI host will download it on "

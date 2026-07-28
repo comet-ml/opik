@@ -42,19 +42,19 @@ _BLOCKLIST = [
     re.compile(r"(?:^|[;&|]\s*)nohup\b"),
     re.compile(r"(?:^|[;&|]\s*)disown\b"),
     re.compile(
-        r"\brm\b[^|;]*-[a-zA-Z]*r[a-zA-Z]*[^|;]*-[a-zA-Z]*f[a-zA-Z]*[^|;]*\s+[/~*]"
+        r"\brm\b[^|;]*-[a-zA-Z]*r[a-zA-Z]*[^|;]*-[a-zA-Z]*f[a-zA-Z]*[^|;]*\s+\S"
     ),
     re.compile(
-        r"\brm\b[^|;]*-[a-zA-Z]*f[a-zA-Z]*[^|;]*-[a-zA-Z]*r[a-zA-Z]*[^|;]*\s+[/~*]"
+        r"\brm\b[^|;]*-[a-zA-Z]*f[a-zA-Z]*[^|;]*-[a-zA-Z]*r[a-zA-Z]*[^|;]*\s+\S"
     ),
-    re.compile(r"\brm\s+-[a-zA-Z]*rf[a-zA-Z]*\s+[/~*]"),
+    re.compile(r"\brm\s+-[a-zA-Z]*rf[a-zA-Z]*\s+\S"),
     re.compile(r":\(\)\s*\{.*:\|:.*\}"),
     re.compile(r"\bdd\s+if="),
     re.compile(r"\bmkfs\b"),
     re.compile(r"\bshred\b"),
     re.compile(r"\bcurl\b.*\|\s*\b(bash|sh|zsh|fish|python[23]?)\b"),
     re.compile(r"\bwget\b.*\|\s*\b(bash|sh|zsh|fish|python[23]?)\b"),
-    re.compile(r"\bchmod\s+777\s+/"),
+    re.compile(r"\bchmod\s+777\s+\S"),
     re.compile(r">\s*/dev/(sd[a-z]|nvme\d|vd[a-z]|xvd[a-z]|hd[a-z])"),
 ]
 
