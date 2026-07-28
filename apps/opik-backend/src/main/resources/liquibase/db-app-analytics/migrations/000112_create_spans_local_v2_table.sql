@@ -134,8 +134,9 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ON CLUST
         if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6),
             toFloat64('nan'),
             dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
-    -- Partition input, see header. DateTime64(3) is what UUIDv7ToDateTime returns, so the millisecond the id encodes is
-    -- kept as-is rather than cast down to whole seconds; 8 bytes instead of 4, but Delta leaves little of that on disk.
+    -- Partition input, see header. Whole seconds: UUIDv7ToDateTime returns DateTime64(3) and the millisecond is dropped,
+    -- which is all a weekly partition and the id-range filters need. DateTime64 rather than DateTime is for range, not
+    -- precision — DateTime wraps past 2106-02-07, and prod holds ids dated 2199.
     id_at                        DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1)),
     -- id-only lookups (project and trace unknown) can't use the primary key, where id is the last key column. Two
     -- complementary indexes, as traces_local_v2 has: minmax for the id-range predicates the retention/read paths use
