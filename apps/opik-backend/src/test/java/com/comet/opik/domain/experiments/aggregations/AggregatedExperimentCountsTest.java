@@ -11,7 +11,10 @@ class AggregatedExperimentCountsTest {
     @Test
     @DisplayName("a zero non-aggregated count drops the raw branch while keeping the aggregated one")
     void zeroNonAggregatedDropsRawBranch() {
-        var counts = new AggregatedExperimentCounts(7546, 0);
+        var counts = AggregatedExperimentCounts.builder()
+                .aggregated(7546)
+                .notAggregated(0)
+                .build();
 
         assertThat(counts.hasRaw())
                 .as("no experiment needs the raw fallback, so its branch must not be rendered")
@@ -22,7 +25,10 @@ class AggregatedExperimentCountsTest {
     @Test
     @DisplayName("a single non-aggregated experiment keeps the raw branch")
     void anyNonAggregatedKeepsRawBranch() {
-        var counts = new AggregatedExperimentCounts(56, 3);
+        var counts = AggregatedExperimentCounts.builder()
+                .aggregated(56)
+                .notAggregated(3)
+                .build();
 
         assertThat(counts.hasRaw())
                 .as("dropping the branch here would omit the three non-aggregated experiments")
@@ -33,7 +39,10 @@ class AggregatedExperimentCountsTest {
     @Test
     @DisplayName("a zero aggregated count drops the aggregated branch while keeping the raw one")
     void zeroAggregatedDropsAggregatedBranch() {
-        var counts = new AggregatedExperimentCounts(0, 12);
+        var counts = AggregatedExperimentCounts.builder()
+                .aggregated(0)
+                .notAggregated(12)
+                .build();
 
         assertThat(counts.hasAggregated()).isFalse();
         assertThat(counts.hasRaw()).isTrue();
@@ -42,7 +51,10 @@ class AggregatedExperimentCountsTest {
     @Test
     @DisplayName("both counts zero keeps both branches rather than rendering an empty query")
     void bothCountsZeroKeepsBothBranches() {
-        var counts = new AggregatedExperimentCounts(0, 0);
+        var counts = AggregatedExperimentCounts.builder()
+                .aggregated(0)
+                .notAggregated(0)
+                .build();
 
         assertThat(counts.hasAggregated()).isTrue();
         assertThat(counts.hasRaw()).isTrue();

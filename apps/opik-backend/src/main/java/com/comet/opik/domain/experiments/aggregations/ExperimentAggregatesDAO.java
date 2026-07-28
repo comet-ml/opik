@@ -2874,9 +2874,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result
-                            .map((row, metadata) -> new AggregatedExperimentCounts(
-                                    row.get("aggregated", Long.class),
-                                    row.get("not_aggregated", Long.class))))
+                            .map((row, metadata) -> AggregatedExperimentCounts.builder()
+                                    .aggregated(row.get("aggregated", Long.class))
+                                    .notAggregated(row.get("not_aggregated", Long.class))
+                                    .build()))
                     .next()
                     .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
         }));
