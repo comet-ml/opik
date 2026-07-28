@@ -694,9 +694,11 @@ class ExperimentAggregatesIntegrationTest {
     }
 
     /**
-     * Compares two result lists field for field, in the order the API returned them. Both finds render the same
-     * {@code ORDER BY id DESC}, so the order is deterministic and identical - do not sort the lists before
-     * comparing, or a change in result ordering stops being caught.
+     * Compares two result lists field for field, in the order the API returned them.
+     * {@link #findByProject(UUID, String)} and {@link #findByIds(Set, String)} both render the same
+     * {@code ORDER BY id DESC}, so their ordering is deterministic and identical. Do not sort the lists before
+     * comparing: the recursive comparison is order-sensitive at the top level, which is what makes a change in
+     * result ordering fail the test.
      */
     private void assertSameExperiments(List<Experiment> actual, List<Experiment> expected, String description) {
         assertThat(expected)
