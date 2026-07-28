@@ -273,9 +273,7 @@ class TestGepaFinishReason:
             while not stopper(state):
                 pass
 
-        gepa_result = _make_mock_gepa_result(
-            candidates=[], val_aggregate_scores=[0.5]
-        )
+        gepa_result = _make_mock_gepa_result(candidates=[], val_aggregate_scores=[0.5])
         result, _ = _run_optimize(
             monkeypatch,
             mock_optimization_context,
