@@ -4,6 +4,7 @@ import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
@@ -40,10 +41,11 @@ public class SentinelTranslation {
 
     /**
      * @return {@code null} when the value is absent — {@code null} or the epoch sentinel — otherwise the value itself.
-     * The constant leads the equality check so a {@code null} value can never throw.
      */
     public static Instant epochToNull(Instant value) {
-        return EPOCH_SENTINEL.equals(value) ? null : value;
+        return Optional.ofNullable(value)
+                .filter(present -> !EPOCH_SENTINEL.equals(present))
+                .orElse(null);
     }
 
     /**
@@ -51,7 +53,9 @@ public class SentinelTranslation {
      * Infinities are passed through unchanged: they signal a data defect, not the absent-value sentinel.
      */
     public static Double nanToNull(Double value) {
-        return value != null && value.isNaN() ? null : value;
+        return Optional.ofNullable(value)
+                .filter(present -> !present.isNaN())
+                .orElse(null);
     }
 
     /**
@@ -59,9 +63,10 @@ public class SentinelTranslation {
      * {@code FixedString(36)} form — otherwise the value itself.
      */
     public static String emptyUuidToNull(String value) {
-        return StringUtils.isBlank(value) || CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(value)
-                ? null
-                : value;
+        return Optional.ofNullable(value)
+                .filter(StringUtils::isNotBlank)
+                .filter(present -> !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(present))
+                .orElse(null);
     }
 
     /**
@@ -74,18 +79,19 @@ public class SentinelTranslation {
      * @throws IllegalArgumentException when the value is present but not a UUID.
      */
     public static UUID emptyUuidToNullableUuid(String value) {
-        var present = emptyUuidToNull(value);
-        return present == null ? null : UUID.fromString(present);
+        return Optional.ofNullable(emptyUuidToNull(value))
+                .map(UUID::fromString)
+                .orElse(null);
     }
 
     // Inbound: API null → ClickHouse sentinel.
 
     public static Instant nullToEpoch(Instant value) {
-        return value == null ? EPOCH_SENTINEL : value;
+        return Optional.ofNullable(value).orElse(EPOCH_SENTINEL);
     }
 
     public static double nullToNaN(Double value) {
-        return value == null ? Double.NaN : value;
+        return Optional.ofNullable(value).orElse(Double.NaN);
     }
 
     /**
@@ -94,7 +100,9 @@ public class SentinelTranslation {
      * from being stored as a partial-NUL {@code FixedString(36)} that reads back as neither the sentinel nor a UUID.
      */
     public static String nullToEmptyUuid(String value) {
-        return StringUtils.isBlank(value) ? EMPTY_UUID_SENTINEL : value;
+        return Optional.ofNullable(value)
+                .filter(StringUtils::isNotBlank)
+                .orElse(EMPTY_UUID_SENTINEL);
     }
 
     /**
@@ -102,6 +110,8 @@ public class SentinelTranslation {
      * does not have to spell out the null check around {@link UUID#toString()}.
      */
     public static String nullToEmptyUuid(UUID value) {
-        return value == null ? EMPTY_UUID_SENTINEL : value.toString();
+        return Optional.ofNullable(value)
+                .map(UUID::toString)
+                .orElse(EMPTY_UUID_SENTINEL);
     }
 }
