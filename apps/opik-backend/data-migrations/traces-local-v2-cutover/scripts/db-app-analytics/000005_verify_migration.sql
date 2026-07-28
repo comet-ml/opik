@@ -188,12 +188,14 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- >>> END drill-down
 
 -- >>> BEGIN version-check
--- ns->us version-selection guard. The successor's last_updated_at is DateTime64(6) but the source is DateTime64(9), and
--- last_updated_at is the ReplacingMergeTree version. Two source part-versions of the same key that differ ONLY in
--- sub-microsecond digits collapse to one version on the successor, which may then keep different column values than
--- source FINAL (which keeps the ns-max) — a divergence the microsecond-normalized fingerprint above cannot detect. This
--- surfaces the PRECONDITION: old-schema keys in the window with more distinct ns last_updated_at values than us ones.
--- 0 => the truncation cannot change version selection (safe). > 0 => investigate those keys before trusting the compare.
+-- Legacy sub-microsecond version-selection backstop. last_updated_at (the ReplacingMergeTree version) is DateTime64(6)
+-- on BOTH tables since migration 000019 reduced the source column to micros — but on-disk parts written BEFORE 000019
+-- can still carry sub-microsecond precision until they are merged/rewritten. Two such source part-versions of the same
+-- key that differ ONLY in sub-microsecond digits would collapse to one version on the successor (stored at us), which
+-- may then keep different column values than source FINAL — a divergence the microsecond-normalized fingerprint above
+-- cannot detect. This surfaces the PRECONDITION: old-schema keys in the window with more distinct raw last_updated_at
+-- values than us-truncated ones. 0 => truncation cannot change version selection (safe). > 0 => investigate those keys
+-- before trusting the compare.
 SELECT count() AS collapse_keys
 FROM (
     SELECT workspace_id, project_id, id

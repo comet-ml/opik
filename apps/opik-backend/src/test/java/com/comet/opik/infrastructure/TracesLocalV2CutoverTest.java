@@ -229,7 +229,8 @@ class TracesLocalV2CutoverTest {
      * ends canonical, but a test that fails mid-cutover can leak any intermediate topology, so rather than assume a clean
      * hand-off this normalizes whatever is present back to canonical. The cutover only ever produces these shapes: the
      * completed EXCHANGE (traces = successor, original parked as traces_pre_cutover_backup) and wrap (traces =
-     * Distributed over traces_local), plus the partial states where only the first of a two-statement swap/wrap ran.
+     * Distributed over traces_local), a completed rollback (traces = original, successor parked as
+     * traces_post_rollback_backup), plus the partial states where only the first of a two-statement swap/wrap ran.
      * Every DDL below is guarded on the tables it touches, so no leaked state can make the reset itself throw and
      * cascade into later tests. {@code end_time} being Nullable is the original schema, non-Nullable the successor.
      */
@@ -245,6 +246,12 @@ class TracesLocalV2CutoverTest {
         //    `traces` absent. Restore both names.
         if (!tableExists("traces_local_v2") && tableExists("traces_local")) {
             execute("RENAME TABLE traces_local TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
+            });
+        }
+        // 2b. Rollback (completed): the successor is parked as traces_post_rollback_backup. Recover it into the successor's
+        //     baseline name so step 4 truncates it back to empty.
+        if (!tableExists("traces_local_v2") && tableExists("traces_post_rollback_backup")) {
+            execute("RENAME TABLE traces_post_rollback_backup TO traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
             });
         }
         if (!tableExists("traces") && tableExists("traces_pre_cutover_backup")) {
@@ -276,6 +283,8 @@ class TracesLocalV2CutoverTest {
         execute("DROP TABLE IF EXISTS traces_local ON CLUSTER '{cluster}' SYNC", _ -> {
         });
         execute("DROP TABLE IF EXISTS traces_pre_cutover_backup ON CLUSTER '{cluster}' SYNC", _ -> {
+        });
+        execute("DROP TABLE IF EXISTS traces_post_rollback_backup ON CLUSTER '{cluster}' SYNC", _ -> {
         });
         execute("TRUNCATE TABLE IF EXISTS traces", _ -> {
         });
@@ -484,9 +493,12 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(survivors.subList(1, survivors.size())), workspaceId))
                 .as("all other survivors are intact after rollback")
                 .isEqualTo(survivors.size() - 1);
-        assertThat(tableExists("traces_local_v2"))
-                .as("rollback ends in the canonical state: successor data parked as traces_local_v2")
+        assertThat(tableExists("traces_post_rollback_backup"))
+                .as("rollback ends in the canonical state: successor data parked as traces_post_rollback_backup")
                 .isTrue();
+        assertThat(tableExists("traces_local_v2"))
+                .as("the disposable shadow name is free after rollback (so stage A cannot truncate the backup)")
+                .isFalse();
         assertThat(tableExists("traces_local"))
                 .as("no leftover sharding table after rollback")
                 .isFalse();
@@ -525,7 +537,8 @@ class TracesLocalV2CutoverTest {
      * Rollback stage B (000004_rollback_stage_b + reverse_replay): aborting after the EXCHANGE but before the wrap swaps
      * the tables back and reverse-replays, so a delete that landed on the successor after cutover_start does not
      * resurrect on the restored original. Exercises the reverse-replay's FULL-KEY branch (the comprehensive test covers
-     * the empty-project branch in stage C).
+     * the empty-project branch in stage C), and pins reverse-replay idempotence — the contract {@code --reverse-replay-only}
+     * relies on for re-applying an interrupted rollback replay.
      */
     @Test
     void rollbackAfterExchangeSwapsBackWithoutResurrectingDeletes() {
@@ -575,12 +588,26 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(survivors.subList(1, survivors.size())), workspaceId))
                 .as("all other survivors are intact after the swap-back")
                 .isEqualTo(survivors.size() - 1);
-        assertThat(tableExists("traces_local_v2"))
-                .as("canonical state: successor parked as traces_local_v2")
+        assertThat(tableExists("traces_post_rollback_backup"))
+                .as("canonical state: successor parked as traces_post_rollback_backup")
                 .isTrue();
+        assertThat(tableExists("traces_local_v2"))
+                .as("the disposable shadow name is free after rollback (so stage A cannot truncate the backup)")
+                .isFalse();
         assertThat(tableExists("traces_local"))
                 .as("no leftover sharding table after stage B")
                 .isFalse();
+
+        // Reverse-replay idempotence — the safety property --reverse-replay-only relies on when a stage B/C run's replay
+        // is interrupted and re-applied. Re-running it against the restored original is a no-op: the post-cutover delete
+        // stays masked and no live survivor is dropped.
+        reverseReplay(cutoverStart);
+        assertThat(liveCount("traces", postCutoverDeleted, workspaceId))
+                .as("reverse-replay is idempotent: a repeat run keeps the post-cutover delete masked")
+                .isZero();
+        assertThat(liveCount("traces", idStrings(survivors.subList(1, survivors.size())), workspaceId))
+                .as("reverse-replay is idempotent: a repeat run drops no live survivor")
+                .isEqualTo(survivors.size() - 1);
     }
 
     /**
@@ -627,9 +654,9 @@ class TracesLocalV2CutoverTest {
                 .as("post-wrap traces is a Distributed wrapper")
                 .isEqualTo("Distributed");
 
-        // Restore the canonical baseline (traces = original, traces_local_v2 = successor) so @BeforeEach's reset — which
-        // assumes a regular `traces` — works for the next test. The stage-C reverse-replay still runs here; this test
-        // bridged no deletes in the (cutoverStart, ∞) window, so it matches zero ids and deletes nothing.
+        // Roll back to the canonical baseline (traces = original; successor parked as traces_post_rollback_backup, which
+        // @BeforeEach's reset recovers) so the next test starts clean. The stage-C reverse-replay still runs here; this
+        // test bridged no deletes in the (cutoverStart, ∞) window, so it matches zero ids and deletes nothing.
         rollbackAfterWrap(cutoverStart);
     }
 
@@ -1010,15 +1037,16 @@ class TracesLocalV2CutoverTest {
 
     /**
      * Rollback stage B (000004_rollback_stage_b + reverse_replay): a single atomic multi-target RENAME rotates both
-     * names back — the successor ({@code traces}) returns to {@code traces_local_v2} and the original
-     * ({@code traces_pre_cutover_backup}) returns to {@code traces} (the name freed by the first clause) — so there is no
-     * window where a partial failure strands the successor under the backup name. Then reverse-replay so a delete on the
-     * successor since {@code cutoverStart} does not resurrect on the restored original.
+     * names back — the successor ({@code traces}) is parked as {@code traces_post_rollback_backup} (a retained backup,
+     * distinct from the disposable {@code traces_local_v2} shadow) and the original ({@code traces_pre_cutover_backup})
+     * returns to {@code traces} (the name freed by the first clause) — so there is no window where a partial failure
+     * strands the successor under a wrong name. Then reverse-replay so a delete on the successor since
+     * {@code cutoverStart} does not resurrect on the restored original.
      */
     private void rollbackExchangeBack(String cutoverStart) {
         execute("""
                 RENAME TABLE
-                    traces TO traces_local_v2,
+                    traces TO traces_post_rollback_backup,
                     traces_pre_cutover_backup TO traces
                     ON CLUSTER '{cluster}'
                 """, _ -> {
@@ -1030,16 +1058,17 @@ class TracesLocalV2CutoverTest {
      * Rollback stage C (000004_rollback_stage_c + reverse_replay): promote the parked original back to {@code traces}
      * GAPLESSLY with a single atomic multi-target RENAME that rotates all three names — the data-less wrapper
      * ({@code traces}) to an explicit temp name, the original ({@code traces_pre_cutover_backup}) to live {@code traces}
-     * (the name freed by the first clause), and the successor shard to {@code traces_local_v2}. Then the ex-wrapper is
-     * dropped under its temp name {@code traces_dist_old} — a name only the data-less wrapper ever held, so the DROP
-     * cannot hit the original data regardless of replica timing. Then reverse-replay.
+     * (the name freed by the first clause), and the successor shard to {@code traces_post_rollback_backup} (a retained
+     * backup, distinct from the disposable {@code traces_local_v2} shadow). Then the ex-wrapper is dropped under its temp
+     * name {@code traces_dist_old} — a name only the data-less wrapper ever held, so the DROP cannot hit the original
+     * data regardless of replica timing. Then reverse-replay.
      */
     private void rollbackAfterWrap(String cutoverStart) {
         execute("""
                 RENAME TABLE
                     traces TO traces_dist_old,
                     traces_pre_cutover_backup TO traces,
-                    traces_local TO traces_local_v2
+                    traces_local TO traces_post_rollback_backup
                     ON CLUSTER '{cluster}'
                 """, _ -> {
         });

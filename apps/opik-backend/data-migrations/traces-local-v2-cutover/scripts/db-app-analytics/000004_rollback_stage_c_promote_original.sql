@@ -5,8 +5,9 @@
 -- `traces_pre_cutover_backup` parks the original. Promote the original back to `traces` GAPLESSLY with a single atomic
 -- multi-target RENAME that rotates all three names at once: the data-less Distributed wrapper (`traces`) moves to an
 -- explicit temp name, the original (`traces_pre_cutover_backup`) becomes live `traces` (the name freed by the first
--- clause), and the successor shard (`traces_local`) parks back under `traces_local_v2` — ending in the canonical state
--- (traces = original live, traces_local_v2 = successor parked). `traces` is never absent on a node.
+-- clause), and the successor shard (`traces_local`) parks as `traces_post_rollback_backup` (a retained backup, dropped
+-- only by finalize.sh — NOT the disposable `traces_local_v2` shadow) — ending in the canonical state (traces = original
+-- live, traces_post_rollback_backup = successor parked). `traces` is never absent on a node.
 --
 -- Then drop the ex-wrapper. It is dropped under `traces_dist_old` — a fresh name that ONLY the data-less wrapper ever
 -- occupied — so the DROP cannot hit the original data regardless of per-replica DDL timing (the concern with dropping a
@@ -20,7 +21,7 @@ SET log_comment = 'traces_local_v2_rollback:stage_c';
 RENAME TABLE
     ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces_dist_old,
     ${ANALYTICS_DB_DATABASE_NAME}.traces_pre_cutover_backup TO ${ANALYTICS_DB_DATABASE_NAME}.traces,
-    ${ANALYTICS_DB_DATABASE_NAME}.traces_local TO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2
+    ${ANALYTICS_DB_DATABASE_NAME}.traces_local TO ${ANALYTICS_DB_DATABASE_NAME}.traces_post_rollback_backup
     ON CLUSTER '{cluster}';
 
 -- 2. Drop the ex-wrapper by its unambiguous temp name (data-less Distributed routing definition — no size guard needed).
