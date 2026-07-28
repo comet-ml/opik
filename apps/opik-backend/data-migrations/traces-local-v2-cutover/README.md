@@ -481,6 +481,14 @@ Pick the stage by how far the cutover got (`cutover_start` is the value `exchang
   `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces` and parks the successor as
   `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts unless `traces` is `Distributed`.)
 
+> **Multi-replica note (production is multi-replica).** Stages B and C promote via a single `ON CLUSTER` RENAME of the
+> **live** `traces`. It runs synchronously across the shard's replicas — the client blocks until each applies it, or fails
+> loudly naming a laggard, which then converges via the DDL queue — so there is no durable mixed topology, only a brief
+> sub-second cross-replica skew as it propagates, during which a read on a not-yet-renamed replica sees the pre-rollback
+> `traces`. This is the same accepted `ON CLUSTER` skew as the wrap; on a multi-replica cluster run the rollback in a
+> maintenance moment / with reads quiesced. `finalize.sh` is **exempt** — it renames only the parked backup / disposable
+> shadow, never the live `traces`, so it has no live-read skew and needs no maintenance window.
+
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
 statements, so a failure *between* them needs a restart path:
 

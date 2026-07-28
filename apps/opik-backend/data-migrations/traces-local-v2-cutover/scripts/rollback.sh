@@ -203,6 +203,9 @@ assert_topology
 if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "NOTE: promoting the frozen backup now. Traces the successor accepted after cutover_start ($CUTOVER_START) will" >&2
     echo "      stop being live; recover them from the parked traces_post_rollback_backup (kept until finalize.sh) if needed." >&2
+    echo "NOTE: the promote is a single ON CLUSTER RENAME of the live 'traces' — synchronous across the shard's replicas, but" >&2
+    echo "      with a brief sub-second cross-replica read skew as it propagates (a read on a lagging replica sees the" >&2
+    echo "      pre-rollback 'traces'). On a multi-replica cluster run this in a maintenance moment / with reads quiesced, as for the wrap." >&2
 fi
 
 case "$STAGE" in

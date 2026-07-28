@@ -8,9 +8,11 @@
 -- `traces` (the name freed by the first clause), and the successor shard (`traces_local`) parks as
 -- `traces_post_rollback_backup` (a retained backup, dropped only by finalize.sh — NOT the disposable `traces_local_v2`
 -- shadow) — ending in the canonical state (traces = original live, traces_post_rollback_backup = successor parked). So
--- `traces` is never absent on a node. ACROSS hosts, as for any ON CLUSTER DDL, the rename is eventually-consistent (a
--- lagging host converges on its own, or the call fails loudly naming it), NOT globally atomic — a non-issue in the
--- default single-node deployment (one host).
+-- `traces` is never absent on a node. ACROSS the shard's replicas (production is multi-replica) ON CLUSTER runs
+-- synchronously — the client blocks until every reachable replica applies it, or throws naming a laggard that then
+-- converges via the DDL queue — NOT globally atomic, so the only exposure is a sub-second cross-replica skew as it
+-- propagates, during which a read on a not-yet-renamed replica sees the pre-rollback `traces` (the same accepted
+-- ON CLUSTER skew as the wrap; nil on a single replica). Run this in the rollback maintenance moment (see the runbook).
 --
 -- Then drop the ex-wrapper. It is dropped under `traces_dist_old` — a fresh name that ONLY the data-less wrapper ever
 -- occupied — so the DROP cannot hit the original data regardless of per-replica DDL timing (the concern with dropping a

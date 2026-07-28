@@ -89,10 +89,11 @@ if [[ "$BACKUP" == "traces_post_rollback_backup" ]]; then
     # is fixed at CREATE and unchanged by the rename) — back into an empty `traces_local_v2`. ClickHouse has no single
     # truncate-and-rename, so this is two statements, each atomic PER HOST and ON CLUSTER; ordered TRUNCATE-then-RENAME so
     # the only state a crash between them can leave is an empty `traces_post_rollback_backup`, which re-running finalize
-    # recovers (RENAME-first could strand a populated `traces_local_v2` that a retry backfill would mis-skip). ACROSS hosts,
-    # ON CLUSTER is eventually-consistent, NOT globally atomic — the same accepted skew as any ON CLUSTER DDL and a
-    # non-issue in the default single-node deployment (one host): a lagging host converges on its own via the DDL queue,
-    # or the ON CLUSTER call fails loudly naming it.
+    # recovers (RENAME-first could strand a populated `traces_local_v2` that a retry backfill would mis-skip). ACROSS the
+    # shard's replicas ON CLUSTER runs synchronously (the client blocks until every reachable replica applies it, or throws
+    # naming a laggard that then converges via the DDL queue), NOT globally atomic. Both statements touch only the parked
+    # backup / disposable shadow — never the live `traces` — so unlike the rollback promote and the wrap (which rename live
+    # `traces`) the brief cross-replica skew is invisible to readers, and finalize needs no maintenance window.
     if [[ "$CONFIRM" != "1" ]]; then
         echo "DRY RUN: would recycle $DATABASE.$BACKUP into an empty $DATABASE.traces_local_v2 (TRUNCATE + RENAME)."
         echo "         Re-run with --confirm."
