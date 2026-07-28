@@ -24,7 +24,6 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import MobileOnboarding from "./MobileOnboarding/MobileOnboarding";
-import Loader from "@/shared/Loader/Loader";
 
 const AgentOnboardingQuickstart: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
@@ -72,14 +71,12 @@ const NewQuickstart: React.FC = () => {
   // Guided mobile onboarding A/B test (OPIK-7476). On phones only, split between
   // the guided MobileOnboarding flow ("test" / Group B, no Run button) and the
   // legacy onboarding flow with the Run button ("control" / Group A, which falls
-  // through to the standard desktop logic below). `undefined` means the flag has
-  // not resolved yet — we hold rendering until it does so users are not flashed
-  // one flow then re-bucketed into the other.
-  const mobileOnboardingVariant = useFeatureFlagVariantKey(
-    GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY,
-  );
-  const isMobileOnboardingFlagResolving =
-    isPhone && mobileOnboardingVariant === undefined;
+  // through to the standard desktop logic below). `undefined` falls back to
+  // "control": PostHog is never initialized on self-hosted/OSS and can be
+  // blocked on cloud, where the flag would otherwise stay unresolved forever.
+  const mobileOnboardingVariant =
+    useFeatureFlagVariantKey(GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY) ??
+    GUIDED_MOBILE_ONBOARDING_VARIANTS.CONTROL;
   const showGuidedMobileOnboarding =
     isPhone &&
     mobileOnboardingVariant === GUIDED_MOBILE_ONBOARDING_VARIANTS.TEST;
@@ -118,22 +115,15 @@ const NewQuickstart: React.FC = () => {
   useEffect(() => {
     // Set the #manual step hash for the standard (legacy) manual flow. This
     // covers desktop as well as the guided-mobile "control" arm (which renders
-    // the same flow on phones); it is skipped for the guided mobile flow and
-    // while the experiment bucket is still resolving.
+    // the same flow on phones); it is skipped for the guided mobile flow.
     if (
       !showGuidedMobileOnboarding &&
-      !isMobileOnboardingFlagResolving &&
       variant === "manual" &&
       !manualOnboardingDone
     ) {
       window.history.replaceState(null, "", "#manual");
     }
-  }, [
-    showGuidedMobileOnboarding,
-    isMobileOnboardingFlagResolving,
-    variant,
-    manualOnboardingDone,
-  ]);
+  }, [showGuidedMobileOnboarding, variant, manualOnboardingDone]);
 
   const handleExplore = useCallback(() => {
     if (!firstTraceProjectId) return;
@@ -155,12 +145,6 @@ const NewQuickstart: React.FC = () => {
       params: { workspaceName },
     });
   }, [demoDataEnabled, navigate, workspaceName, setManualOnboardingDone]);
-
-  // Hold rendering on phones until the guided-mobile experiment bucket resolves,
-  // so users are not flashed one onboarding flow and then re-bucketed.
-  if (isMobileOnboardingFlagResolving) {
-    return <Loader />;
-  }
 
   // Group B: guided mobile onboarding flow (no Run button).
   if (showGuidedMobileOnboarding) {

@@ -49,9 +49,9 @@ const IntegrationDetailsDialog: React.FunctionComponent<
   // code executor on for those phone users regardless of the separate
   // run-button-activation-test rollout.
   const { isPhone } = useIsPhone();
-  const guidedMobileOnboardingVariant = useFeatureFlagVariantKey(
-    GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY,
-  );
+  const guidedMobileOnboardingVariant =
+    useFeatureFlagVariantKey(GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY) ??
+    GUIDED_MOBILE_ONBOARDING_VARIANTS.CONTROL;
   const isGuidedMobileOnboardingControl =
     isPhone &&
     guidedMobileOnboardingVariant === GUIDED_MOBILE_ONBOARDING_VARIANTS.CONTROL;

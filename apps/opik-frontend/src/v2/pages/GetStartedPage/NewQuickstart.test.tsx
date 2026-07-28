@@ -441,15 +441,17 @@ describe("NewQuickstart — guided mobile onboarding A/B test (OPIK-7476)", () =
     expect(screen.queryByTestId("mobile-onboarding")).not.toBeInTheDocument();
   });
 
-  it("holds rendering behind a loader while the experiment bucket is unresolved", () => {
+  it("falls back to the control flow when the flag never resolves", () => {
+    // PostHog is never initialized on self-hosted/OSS and can be blocked on
+    // cloud, so an unresolved flag must still reach a usable onboarding flow.
     mockMobileVariant = undefined;
     render(<NewQuickstart />);
 
-    expect(screen.getByTestId("loader")).toBeInTheDocument();
-    expect(screen.queryByTestId("mobile-onboarding")).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("onboarding-integrations-page"),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("onboarding-integrations-page"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("loader")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-onboarding")).not.toBeInTheDocument();
   });
 
   it("does not gate desktop users on the mobile experiment flag", () => {

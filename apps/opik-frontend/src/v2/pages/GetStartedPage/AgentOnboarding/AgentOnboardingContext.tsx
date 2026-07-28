@@ -21,8 +21,8 @@ export const DEFAULT_ONBOARDING_FLOW = "manual";
 // Guided mobile onboarding A/B test (OPIK-7476 / PostHog experiment 387337).
 // On phones, "test" (Group B) gets the guided MobileOnboarding flow that steers
 // users to activate on desktop (no Run button); "control" (Group A) keeps the
-// legacy onboarding flow with the Run button. Undefined = PostHog unavailable /
-// flag not yet resolved (see NewQuickstart for how that is handled).
+// legacy onboarding flow with the Run button. Undefined (PostHog unavailable or
+// flag not yet resolved) falls back to "control" at every call site.
 export const GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY =
   "guided-mobile-onboarding-flow";
 
