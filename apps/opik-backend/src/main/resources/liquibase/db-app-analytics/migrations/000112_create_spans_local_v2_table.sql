@@ -9,9 +9,11 @@
 --   * PARTITION BY toMonday(id_at) (weekly). id_at is derived from the row's UUIDv7 id at insert time, so it
 --     is a deterministic function of the immutable id: a row always lands in the same weekly partition across
 --     ReplacingMergeTree upserts.
---   * Timestamps stored at microsecond precision (DateTime64(6)); nothing ingested needs finer resolution. This
+--   * Event timestamps stored at microsecond precision (DateTime64(6)); nothing ingested needs finer resolution. This
 --     narrows start_time/end_time/created_at from the DateTime64(9) the live table uses (last_updated_at is already
 --     microseconds); sub-microsecond digits are truncated, never rounded, so a row cannot shift a microsecond.
+--     id_at is the exception, at DateTime64(3): that is what UUIDv7ToDateTime returns, so the id's millisecond is
+--     stored as-is instead of being cast down (the live spans column is DateTime, whole seconds).
 --   * end_time, ttft and duration are non-Nullable, using epoch / NaN sentinels, dropping the per-column
 --     null-mask overhead on hot reads. Same three columns as traces_local_v2, and the same sentinels, so
 --     SentinelTranslation covers both tables.
