@@ -11,7 +11,10 @@ on:
 
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # TEMPORARY: include github.event_name so the temporary pull_request (v7) run
+  # doesn't share a group with pull_request_target and get cancelled. Revert with
+  # the rest of the scratch changes.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
