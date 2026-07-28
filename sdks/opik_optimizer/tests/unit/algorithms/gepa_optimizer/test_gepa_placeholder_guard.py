@@ -7,11 +7,14 @@ no error at all. These tests pin the reject-and-revert behaviour that keeps such
 a candidate from ever being evaluated as-is.
 """
 
+from typing import Any
 from unittest.mock import MagicMock
 
 from opik_optimizer.api_objects import chat_prompt
+from opik_optimizer.algorithms.gepa_optimizer import adapter as adapter_module
 from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
 from opik_optimizer.algorithms.gepa_optimizer.ops import candidate_ops
+from opik_optimizer.algorithms.gepa_optimizer.types import OpikDataInst
 from tests.unit.fixtures.builders import make_mock_dataset, make_simple_metric
 
 
@@ -173,6 +176,72 @@ class TestRebuildAppliesGuard:
             rebuilt["p"].get_messages()[0]["content"] == "Answer concisely: {question}"
         )
         assert adapter._last_placeholder_reverts == []
+
+    def test_metadata_records_the_rejection_through_evaluate(
+        self, monkeypatch: Any
+    ) -> None:
+        """The rejection must reach the trial's experiment config, not just logs.
+
+        Logs alone are not "recorded" for a user looking at a finished run, so
+        this walks the real evaluate() path and inspects what is handed to
+        prepare_experiment_config.
+        """
+        captured = self._run_evaluate(
+            monkeypatch, candidate={"p_user_0": "What is the capital of France?"}
+        )
+        gepa_meta = captured["configuration_updates"]["gepa"]
+        assert gepa_meta["rejected_components_missing_variables"] == ["p_user_0"]
+
+    def test_metadata_omits_the_key_when_nothing_was_rejected(
+        self, monkeypatch: Any
+    ) -> None:
+        """drop_none must keep clean runs free of a noisy always-null field."""
+        captured = self._run_evaluate(
+            monkeypatch, candidate={"p_user_0": "Answer briefly: {question}"}
+        )
+        gepa_meta = captured["configuration_updates"]["gepa"]
+        assert "rejected_components_missing_variables" not in gepa_meta
+
+    @staticmethod
+    def _run_evaluate(monkeypatch: Any, candidate: dict[str, str]) -> dict[str, Any]:
+        """Drive adapter.evaluate() with scoring stubbed, returning config kwargs.
+
+        The rebuild itself is deliberately NOT stubbed — it is the code under
+        test here.
+        """
+        prompt = _prompt([{"role": "user", "content": "Answer {question}"}])
+        adapter = _make_adapter({"p": prompt})
+
+        def fake_evaluate_with_result(**kwargs: Any) -> tuple[float, Any]:
+            eval_result = MagicMock()
+            eval_result.test_results = []
+            return 1.0, eval_result
+
+        captured: dict[str, Any] = {}
+
+        def fake_prepare_experiment_config(**kwargs: Any) -> dict[str, Any]:
+            captured.update(kwargs)
+            return {"project_name": "test"}
+
+        monkeypatch.setattr(
+            adapter_module.task_evaluator,
+            "evaluate_with_result",
+            fake_evaluate_with_result,
+        )
+        monkeypatch.setattr(
+            adapter_module, "prepare_experiment_config", fake_prepare_experiment_config
+        )
+
+        batch = [
+            OpikDataInst(
+                input_text="q",
+                answer="a",
+                additional_context={},
+                opik_item={"id": "t1", "question": "q", "answer": "a"},
+            )
+        ]
+        adapter.evaluate(batch, candidate=candidate, capture_traces=False)
+        return captured
 
     def test_guarded_prompt_still_substitutes_the_dataset_value(self) -> None:
         """End-to-end point of the guard: the user's input reaches the model."""

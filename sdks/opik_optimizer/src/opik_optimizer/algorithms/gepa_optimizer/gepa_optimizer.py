@@ -132,6 +132,25 @@ def _build_gepa_stop_callbacks(
     return stop_callbacks, no_improvement_stopper
 
 
+def _validate_reflection_prompt_template(template: str) -> None:
+    """Raise if the reflection template is missing a marker gepa requires.
+
+    Checked with gepa's own validator so the rule cannot drift from upstream.
+    Called from __init__ so a bad override fails when the optimizer is
+    constructed — before the baseline evaluation spends real LLM calls — rather
+    than at gepa.optimize() hand-off, which happens after it.
+    """
+    from gepa.strategies.instruction_proposal import InstructionProposalSignature
+
+    try:
+        InstructionProposalSignature.validate_prompt_template(template)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid reflection_prompt_template override: {exc}. The template "
+            "must contain both the <curr_param> and <side_info> markers."
+        ) from exc
+
+
 def _resolve_gepa_finish_reason(
     *,
     val_scores: list[float],
@@ -249,25 +268,23 @@ class GepaOptimizer(BaseOptimizer):
                 "Provide overrides on the prompt itself if you need precise control."
             )
 
+        # Fail here, not at the gepa.optimize() hand-off: that happens after the
+        # baseline evaluation, so a malformed override would otherwise cost a
+        # full dataset scoring pass before raising.
+        _validate_reflection_prompt_template(
+            self.prompts.get("reflection_prompt_template")
+        )
+
     def _resolve_reflection_prompt_template(self) -> str:
         """Return the reflection template to hand gepa.optimize(), validated.
 
-        Validated here rather than deep inside gepa so a bad override fails at
-        the start of the run with a clear message instead of mid-search. GEPA
-        would also silently ignore the template if the adapter defined
+        __init__ already validated the configured template, so this re-check only
+        catches a template swapped in afterwards via ``optimizer.prompts.set()``.
+        GEPA would also silently ignore the template if the adapter defined
         propose_new_texts — OpikGEPAAdapter deliberately does not.
         """
-        from gepa.strategies.instruction_proposal import InstructionProposalSignature
-
         template = self.prompts.get("reflection_prompt_template")
-        try:
-            InstructionProposalSignature.validate_prompt_template(template)
-        except ValueError as exc:
-            raise ValueError(
-                "Invalid reflection_prompt_template override: "
-                f"{exc}. The template must contain both the <curr_param> and "
-                "<side_info> markers."
-            ) from exc
+        _validate_reflection_prompt_template(template)
         return template
 
     def get_optimizer_metadata(self) -> dict[str, Any]:

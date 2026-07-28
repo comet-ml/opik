@@ -94,11 +94,22 @@ class TestOptimizerWiring:
         )
         assert optimizer._resolve_reflection_prompt_template() == override
 
-    def test_override_missing_markers_fails_fast(self) -> None:
-        """Better a clear error at setup than a crash deep inside the search."""
-        optimizer = GepaOptimizer(
-            model="openai/gpt-4o-mini",
-            prompt_overrides={"reflection_prompt_template": "no markers here"},
-        )
+    def test_override_missing_markers_fails_at_construction(self) -> None:
+        """Must raise in __init__, not at the gepa hand-off.
+
+        The hand-off happens after the baseline evaluation, so validating there
+        would bill the user a full dataset scoring pass before rejecting an
+        obviously malformed template.
+        """
         with pytest.raises(ValueError, match="<curr_param>"):
+            GepaOptimizer(
+                model="openai/gpt-4o-mini",
+                prompt_overrides={"reflection_prompt_template": "no markers here"},
+            )
+
+    def test_template_swapped_in_after_construction_is_still_caught(self) -> None:
+        """__init__ cannot see a later prompts.set(), so resolve re-checks."""
+        optimizer = GepaOptimizer(model="openai/gpt-4o-mini")
+        optimizer.prompts.set("reflection_prompt_template", "no markers here")
+        with pytest.raises(ValueError, match="<side_info>"):
             optimizer._resolve_reflection_prompt_template()
