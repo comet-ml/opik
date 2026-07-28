@@ -13,6 +13,7 @@ import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import usePluginsStore from "@/store/PluginsStore";
 import useAppStore from "@/store/AppStore";
 import { calculateWorkspaceName } from "@/lib/utils";
+import ProjectBreadcrumbSelector from "@/v2/layout/Breadcrumbs/ProjectBreadcrumbSelector";
 
 type CustomRouteStaticData = {
   title?: string;
@@ -56,6 +57,8 @@ const Breadcrumbs = () => {
           return {
             title: title || paramTitle,
             path: match.pathname,
+            param,
+            paramValue,
           };
         })
 
@@ -68,10 +71,17 @@ const Breadcrumbs = () => {
 
     breadcrumbs.forEach((breadcrumb, index, all) => {
       const isLast = all.length - 1 === index;
+      const isProject =
+        breadcrumb.param === "projectId" && Boolean(breadcrumb.paramValue);
 
       items.push(
         <BreadcrumbItem key={breadcrumb.path}>
-          {isLast ? (
+          {isProject ? (
+            <ProjectBreadcrumbSelector
+              projectId={breadcrumb.paramValue as string}
+              title={breadcrumb.title}
+            />
+          ) : isLast ? (
             <span className="cursor-default truncate">{breadcrumb.title}</span>
           ) : (
             <BreadcrumbLink asChild>

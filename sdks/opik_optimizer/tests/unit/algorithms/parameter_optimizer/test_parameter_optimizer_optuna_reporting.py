@@ -131,7 +131,7 @@ class TestReporterLifecycle:
             ]
         )
 
-        optimizer.optimize_parameter(
+        result = optimizer.optimize_parameter(
             prompt=prompt,
             dataset=dataset,
             metric=lambda item, output: 0.5,
@@ -141,6 +141,9 @@ class TestReporterLifecycle:
 
         assert events == ["set", "clear"]
         assert optimizer._reporter is None
+        # The full (non-early) result path also bypasses runtime.build_final_result, so it
+        # must carry scoring_health in details for worker/UI consumers (review: baz-reviewer).
+        assert result.details["scoring_health"] == {"failed_count": 0, "total_count": 0}
 
 
 class TestOptunaHistoryRedaction:

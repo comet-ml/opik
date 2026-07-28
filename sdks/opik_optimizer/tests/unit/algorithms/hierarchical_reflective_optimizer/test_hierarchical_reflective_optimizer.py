@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from opik.evaluation.evaluation_result import EvaluationResult
 
 from opik_optimizer import (
     ChatPrompt,
@@ -20,9 +21,14 @@ from tests.unit.fixtures import make_baseline_prompt, make_two_prompt_bundle
 
 
 def _mock_experiment_result(score: float) -> MagicMock:
+    # spec=EvaluationResult so isinstance(..., EvaluationResult) holds — the
+    # baseline/candidate code paths gate on that type, and a bare MagicMock would
+    # otherwise fall through to float() coercion (== 1.0) and trip perfect-score
+    # early-stop. The score itself is supplied directly by the callers that need
+    # it, so the objective name is left unmatched (baseline reads back 0.0 here).
     score_result = MagicMock(value=score)
     test_result = MagicMock(score_results=[score_result])
-    return MagicMock(test_results=[test_result])
+    return MagicMock(spec=EvaluationResult, test_results=[test_result])
 
 
 class TestHierarchicalReflectiveOptimizerInit:

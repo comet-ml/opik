@@ -205,6 +205,18 @@ jobs:
           grep -E "^version:|^appVersion:" Chart.yaml
           cd -
 
+      # The chart README badges are derived from Chart.yaml by helm-docs, so
+      # regenerate here (git-push: false) to fold the update into the version
+      # commit below. Without this the README lags one release and the next
+      # chart-touching PR trips the helm-docs / update_helm_readme.yaml gate.
+      # Same action + inputs as update_helm_readme.yaml, keeping CI and the
+      # local pre-commit hook in agreement.
+      - name: Regenerate Helm chart README
+        uses: losisin/helm-docs-github-action@v1
+        with:
+          chart-search-root: deployment/helm_chart/opik
+          git-push: false
+
       - name: Bump version.txt for next release
         id: update_version
         shell: bash
@@ -233,6 +245,7 @@ jobs:
           git add sdks/typescript/package.json sdks/typescript/package-lock.json
           git add sdks/typescript/src/opik/integrations/*/package.json sdks/typescript/src/opik/integrations/*/package-lock.json
           git add deployment/helm_chart/opik/Chart.yaml
+          git add deployment/helm_chart/opik/README.md
           git add version.txt
           
           # Check if there are any changes to commit

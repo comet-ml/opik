@@ -3,10 +3,13 @@ package com.comet.opik.domain.filter;
 import com.comet.opik.api.filter.DatasetItemField;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +60,27 @@ class FilterQueryBuilderV2ClientTest {
         void v2EntryPoint__emptyFilters__returnsEmpty() {
             assertThat(FilterQueryBuilder.toAnalyticsDbFiltersV2Client(List.of(), FilterStrategy.DATASET_ITEM))
                     .isEmpty();
+        }
+
+        @Test
+        @DisplayName("Threads traceColumnsNonNullable: trace end_time uses the sentinel-aware column under the flag")
+        void v2EntryPoint__threadsTraceColumnsNonNullableFlag() {
+            var filter = TraceFilter.builder()
+                    .field(TraceField.END_TIME)
+                    .operator(Operator.LESS_THAN)
+                    .value(Instant.now().toString())
+                    .build();
+            var withFlag = FilterQueryBuilder
+                    .toAnalyticsDbFiltersV2Client(List.of(filter), FilterStrategy.TRACE, true)
+                    .orElseThrow();
+            var withoutFlag = FilterQueryBuilder
+                    .toAnalyticsDbFiltersV2Client(List.of(filter), FilterStrategy.TRACE, false)
+                    .orElseThrow();
+
+            // Flag on -> sentinel-aware end_time; flag off -> raw column. Both emit v2 {name:Type} placeholders.
+            assertThat(withFlag).contains("nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9))");
+            assertThat(withoutFlag).doesNotContain("nullIf(end_time");
+            assertThat(withFlag).doesNotContain(":filter0");
         }
     }
 

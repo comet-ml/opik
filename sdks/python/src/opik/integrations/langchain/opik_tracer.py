@@ -5,10 +5,10 @@ from typing import (
     Dict,
     List,
     Optional,
-    Set,
     TYPE_CHECKING,
     Callable,
     NamedTuple,
+    Union,
 )
 import contextvars
 from uuid import UUID
@@ -21,13 +21,15 @@ import opik
 from opik import context_storage, dict_utils, llm_usage, tracing_runtime_config
 from opik.api_objects import span, trace
 from opik.decorator import arguments_helpers, span_creation_handler
-from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
+from opik.types import DistributedTraceHeadersDict, ErrorInfoDict, LLMProvider
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
     run_parse_helpers,
     opik_encoder_extension,
     provider_usage_extractors,
+    response_cost_extractors,
+    run_state,
 )
 
 from ...api_objects import helpers
@@ -45,6 +47,28 @@ language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 # A callable that receives an error string and returns True if the error should be skipped,
 # or False otherwise.
 SkipErrorCallback = Callable[[str], bool]
+
+# A fixed provider to record on an LLM span: a plain string or an LLMProvider.
+ProviderOverride = Union[str, LLMProvider]
+
+
+class ProviderResolverContext(NamedTuple):
+    """What a provider-resolver callback receives for a single LLM run.
+
+    ``model`` is the model name parsed from the run and is the usual routing key
+    (e.g. return "bedrock" when it contains "anthropic"). ``run`` is the raw
+    LangChain run dict, an escape hatch for routing on anything ``model`` alone
+    can't express.
+    """
+
+    model: Optional[str]
+    run: Dict[str, Any]
+
+
+# A callable that receives a ProviderResolverContext and returns the provider to
+# record for that specific run. Returning None falls back to the provider
+# auto-detected from the run.
+ProviderResolver = Callable[[ProviderResolverContext], Optional[ProviderOverride]]
 
 # Placeholder output dictionary used when errors are intentionally skipped
 # via the skip_error_callback. This signals that the output was not produced
@@ -78,6 +102,7 @@ class OpikTracer(BaseTracer):
         thread_id: Optional[str] = None,
         skip_error_callback: Optional[SkipErrorCallback] = None,
         opik_context_read_only_mode: bool = False,
+        provider: Optional[Union[ProviderOverride, ProviderResolver]] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -103,6 +128,18 @@ class OpikTracer(BaseTracer):
                 * If True, OpikTracer will not modify the context storage and only create spans/traces from LangChain's Run objects.
                   This might be useful when the environment doesn't support proper context isolation for concurrent operations and you
                   want to avoid modifying the Opik context stack due to unsafety.
+            provider: The provider to record on LLM spans, used by the backend for
+                cost calculation. Useful when calls are routed through an
+                OpenAI-compatible proxy (e.g. a LiteLLM gateway), where the provider
+                would otherwise be auto-detected as the proxy's hostname and no cost
+                could be computed. Accepts:
+                * a string or ``opik.LLMProvider`` to apply to every LLM span (the
+                  common single-provider case), or
+                * a callable receiving a ``ProviderResolverContext`` (``.model`` is
+                  the parsed model name, ``.run`` the raw run dict) and returning
+                  the provider for that specific run (for chains/graphs that mix
+                  providers). Returning None from the callable falls back to the
+                  auto-detected provider for that run.
             **kwargs: Additional arguments passed to the parent class constructor.
         """
         validator = parameters_validator.create_validator(
@@ -124,21 +161,9 @@ class OpikTracer(BaseTracer):
 
         self._trace_default_tags = tags
 
-        self._span_data_map: Dict[UUID, span.SpanData] = {}
-        """Map from run id to span data."""
-
-        self._created_traces_data_map: Dict[UUID, trace.TraceData] = {}
-        """Map from run id to trace data."""
+        self._run_state = run_state.RunStateStore()
 
         self._created_traces: List[trace.Trace] = []
-
-        self._externally_created_traces_ids: Set[str] = set()
-
-        self._skipped_langgraph_root_run_ids: Set[UUID] = set()
-        """Set of run IDs for LangGraph root runs where we skip creating the span."""
-
-        self._langgraph_parent_span_ids: Dict[UUID, Optional[str]] = {}
-        """Map from LangGraph root run ID to parent span ID (None if attached to trace)."""
 
         self._project_name = project_name
 
@@ -155,6 +180,8 @@ class OpikTracer(BaseTracer):
         self._skip_error_callback = skip_error_callback
 
         self._opik_context_read_only_mode = opik_context_read_only_mode
+
+        self._provider = provider
 
     @property
     def _opik_client(self) -> opik.Opik:
@@ -174,14 +201,6 @@ class OpikTracer(BaseTracer):
             "format": "mermaid",
             "data": graph.draw_mermaid(),
         }
-
-    def _is_opik_span_created_by_this_tracer(self, span_id: str) -> bool:
-        return any(span_.id == span_id for span_ in self._span_data_map.values())
-
-    def _is_opik_trace_created_by_this_tracer(self, trace_id: str) -> bool:
-        return any(
-            trace_.id == trace_id for trace_ in self._created_traces_data_map.values()
-        )
 
     def _persist_run(self, run: Run) -> None:
         run_dict: Dict[str, Any] = run.dict()
@@ -219,11 +238,14 @@ class OpikTracer(BaseTracer):
         if not self._opik_context_read_only_mode:
             self._ensure_no_hanging_opik_tracer_spans()
 
-        span_data = self._span_data_map.get(run.id)
-        if (
-            span_data is None
-            or span_data.trace_id not in self._externally_created_traces_ids
-        ):
+        # LangChain calls _persist_run once per tree, only for the root run, so
+        # this finalizes each trace exactly once. We finalize only traces we own:
+        # `span_data is None` is a trace-only root (a skipped LangGraph root, no
+        # span), and owns_trace() covers the normal case. A root run running under
+        # an external trace (an @track function or distributed headers) is left for
+        # its real owner to finalize - we only contributed spans to it.
+        span_data = self._run_state.get_span_data(run.id)
+        if span_data is None or self._run_state.owns_trace(span_data.trace_id):
             self._finalize_trace(
                 run_id=run.id,
                 run_dict=run_dict,
@@ -240,7 +262,7 @@ class OpikTracer(BaseTracer):
         outputs: Optional[Dict[str, Any]],
         error_info: Optional[ErrorInfoDict],
     ) -> None:
-        trace_data = self._created_traces_data_map.get(run_id)
+        trace_data = self._run_state.get_trace_data(run_id)
         if trace_data is None:
             LOGGER.warning(
                 f"Trace data for run '{run_id}' not found in the traces data map. Skipping processing of _finalize_trace."
@@ -258,10 +280,9 @@ class OpikTracer(BaseTracer):
                 trace_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
         # Check if any child span has a GraphInterrupt output and use it for trace output
-        for _, span_data in self._span_data_map.items():
+        for span_data in self._run_state.spans_for_trace(trace_data.id):
             if (
-                span_data.trace_id == trace_data.id
-                and span_data.metadata is not None
+                span_data.metadata is not None
                 and span_data.metadata.get(LANGGRAPH_INTERRUPT_METADATA_KEY) is True
             ):
                 # Use the interrupt output from the child span
@@ -332,17 +353,6 @@ class OpikTracer(BaseTracer):
             opik_context_storage=self._opik_context_storage,
         )
 
-        trace_created_externally = (
-            span_creation_result.trace_data is None
-            and not self._is_opik_trace_created_by_this_tracer(
-                span_creation_result.span_data.trace_id
-            )
-        )
-        if trace_created_externally:
-            self._externally_created_traces_ids.add(
-                span_creation_result.span_data.trace_id
-            )
-
         should_skip_root_span_creation = (
             span_creation_result.trace_data is not None
             and run_parse_helpers.is_root_run(run_dict)
@@ -381,7 +391,7 @@ class OpikTracer(BaseTracer):
         # Check if the parent is a skipped LangGraph/LangChain root run.
         # If so, attach children directly to trace.
         # Otherwise, attach to the parent span.
-        if run.parent_run_id in self._skipped_langgraph_root_run_ids:
+        if self._run_state.is_skipped_langgraph_root(run.parent_run_id):
             self._attach_span_to_local_or_distributed_trace(
                 run_id=run.id,
                 parent_run_id=run.parent_run_id,
@@ -396,12 +406,12 @@ class OpikTracer(BaseTracer):
         self, run_id: UUID, run_dict: Dict[str, Any], allow_duplicating_root_span: bool
     ) -> None:
         """
-        Creates a root trace and span for a given run and stores the relevant trace and span
-        data in local storage for future reference.
+        Creates a root trace and span for a given run and records the trace and
+        span data in the tracer's run state for later lookup.
 
         The new span is only created if no new trace is created, i.e., when attached to an existing span
         or distributed headers. If a new trace is created, the span is skipped and only the
-        trace data is stored in local storage for future reference.
+        trace data is recorded for future reference.
         """
         # This is the first run for the chain.
         root_run_result = self._track_root_run(run_dict, allow_duplicating_root_span)
@@ -410,49 +420,39 @@ class OpikTracer(BaseTracer):
                 self._opik_context_storage.set_trace_data(
                     root_run_result.new_trace_data
                 )
-
-            if (
-                self._opik_client.config.log_start_trace_span
-                and tracing_runtime_config.is_tracing_active()
-            ):
-                self._opik_client.__internal_api__trace__(
-                    **root_run_result.new_trace_data.as_start_parameters
-                )
+            self._emit_start_trace(root_run_result.new_trace_data)
 
         # If this is a LangGraph/LangChain root run under fresh trace, skip creating the span
         if root_run_result.new_span_data is None:
-            # Mark this run as skipped and store trace data for child runs
-            self._skipped_langgraph_root_run_ids.add(run_id)
+            # Mark this run as skipped and record its trace data for child runs
+            self._run_state.mark_skipped_langgraph_root(run_id)
 
-            # Store parent span ID if LangGraph was attached to the existing span
-            parent_span_id = self._root_run_external_parent_span_id.get()
-            self._langgraph_parent_span_ids[run_id] = parent_span_id
-
-            # Store trace data if we created a new trace but skip span data
             if root_run_result.new_trace_data is not None:
-                self._save_span_trace_data_to_local_maps(
-                    run_id=run_id,
-                    span_data=None,
-                    trace_data=root_run_result.new_trace_data,
-                )
+                self._run_state.save_trace_data(run_id, root_run_result.new_trace_data)
         else:
-            # save new span and trace data to local maps to be able to retrieve them later
-            self._save_span_trace_data_to_local_maps(
-                run_id=run_id,
-                span_data=root_run_result.new_span_data,
-                trace_data=root_run_result.new_trace_data,
-            )
+            # Record the new span (and trace, if any) so children can look them up
+            self._run_state.save_span_data(run_id, root_run_result.new_span_data)
+            if root_run_result.new_trace_data is not None:
+                self._run_state.save_trace_data(run_id, root_run_result.new_trace_data)
 
             if not self._opik_context_read_only_mode:
                 self._opik_context_storage.add_span_data(root_run_result.new_span_data)
 
-            if (
-                self._opik_client.config.log_start_trace_span
-                and tracing_runtime_config.is_tracing_active()
-            ):
-                self._opik_client.__internal_api__span__(
-                    **root_run_result.new_span_data.as_start_parameters
-                )
+            self._emit_start_span(root_run_result.new_span_data)
+
+    def _should_log_start_events(self) -> bool:
+        return (
+            self._opik_client.config.log_start_trace_span
+            and tracing_runtime_config.is_tracing_active()
+        )
+
+    def _emit_start_trace(self, trace_data: trace.TraceData) -> None:
+        if self._should_log_start_events():
+            self._opik_client.__internal_api__trace__(**trace_data.as_start_parameters)
+
+    def _emit_start_span(self, span_data: span.SpanData) -> None:
+        if self._should_log_start_events():
+            self._opik_client.__internal_api__span__(**span_data.as_start_parameters)
 
     def _attach_span_to_parent_span(
         self, run_id: UUID, parent_run_id: UUID, run_dict: Dict[str, Any]
@@ -461,10 +461,11 @@ class OpikTracer(BaseTracer):
         Attaches child span to a parent span and updates relevant context storage.
 
         This method is responsible for creating a new span data object associated with a
-        run, linking it to the parent span data, and saving it to local and external maps.
+        run, linking it to the parent span data, and recording it in the tracer's run state.
         Additionally, it updates the context storage and logs the span if tracing is active.
         """
-        parent_span_data = self._span_data_map[parent_run_id]
+        parent_span_data = self._run_state.get_span_data(parent_run_id)
+        assert parent_span_data is not None
 
         project_name = helpers.resolve_child_span_project_name(
             parent_span_data.project_name,
@@ -482,35 +483,22 @@ class OpikTracer(BaseTracer):
         )
         new_span_data.update(metadata={"created_from": "langchain"})
 
-        self._save_span_trace_data_to_local_maps(
-            run_id=run_id,
-            span_data=new_span_data,
-            trace_data=None,
-        )
+        self._run_state.save_span_data(run_id, new_span_data)
 
-        if new_span_data.trace_id not in self._externally_created_traces_ids:
-            if parent_run_id in self._created_traces_data_map:
-                self._created_traces_data_map[run_id] = self._created_traces_data_map[
-                    parent_run_id
-                ]
-            else:
-                # Parent may be a stream-restart root run that was created as a regular
-                # span (not a skipped LangGraph root). Find the trace data by trace_id.
-                for td in self._created_traces_data_map.values():
-                    if td.id == new_span_data.trace_id:
-                        self._created_traces_data_map[run_id] = td
-                        break
+        if self._run_state.owns_trace(new_span_data.trace_id):
+            # Parent may be a stream-restart root run that exists only as a span
+            # (not a skipped LangGraph root); the store falls back to a trace_id
+            # lookup so the child still inherits the trace data.
+            self._run_state.link_child_run_to_parent_trace(
+                child_run_id=run_id,
+                parent_run_id=parent_run_id,
+                trace_id=new_span_data.trace_id,
+            )
 
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
 
-        if (
-            self._opik_client.config.log_start_trace_span
-            and tracing_runtime_config.is_tracing_active()
-        ):
-            self._opik_client.__internal_api__span__(
-                **new_span_data.as_start_parameters
-            )
+        self._emit_start_span(new_span_data)
 
     def _attach_span_to_local_or_distributed_trace(
         self, run_id: UUID, parent_run_id: UUID, run_dict: Dict[str, Any]
@@ -520,9 +508,10 @@ class OpikTracer(BaseTracer):
         headers and creates new span data based on the provided run information.
         """
         # Check if we have trace data (new trace) or distributed headers
-        if parent_run_id in self._created_traces_data_map:
+        parent_trace_data = self._run_state.get_trace_data(parent_run_id)
+        if parent_trace_data is not None:
             # LangGraph created a new trace - attach children directly to trace
-            trace_data = self._created_traces_data_map[parent_run_id]
+            trace_data = parent_trace_data
             project_name = helpers.resolve_child_span_project_name(
                 trace_data.project_name,
                 context_storage.resolve_project_name(self._project_name, "OpikTracer"),
@@ -537,8 +526,8 @@ class OpikTracer(BaseTracer):
                 type=run_parse_helpers.get_span_type(run_dict),
                 project_name=project_name,
             )
-            if new_span_data.trace_id not in self._externally_created_traces_ids:
-                self._created_traces_data_map[run_id] = trace_data
+            if self._run_state.owns_trace(new_span_data.trace_id):
+                self._run_state.save_trace_data(run_id, trace_data)
 
         elif self._distributed_headers:
             # LangGraph with distributed headers - attach to distributed trace
@@ -554,7 +543,6 @@ class OpikTracer(BaseTracer):
                 ),
                 type=run_parse_helpers.get_span_type(run_dict),
             )
-            self._externally_created_traces_ids.add(new_span_data.trace_id)
 
         elif (
             current_trace_data := self._opik_context_storage.get_trace_data()
@@ -575,9 +563,6 @@ class OpikTracer(BaseTracer):
                 project_name=project_name,
                 type=run_parse_helpers.get_span_type(run_dict),
             )
-
-            if not self._is_opik_trace_created_by_this_tracer(current_trace_data.id):
-                self._externally_created_traces_ids.add(current_trace_data.id)
         else:
             LOGGER.warning(
                 f"Cannot find trace data or distributed headers for LangGraph child run '{run_id}'"
@@ -585,36 +570,26 @@ class OpikTracer(BaseTracer):
             return
 
         new_span_data.update(metadata={"created_from": "langchain"})
-        self._save_span_trace_data_to_local_maps(
-            run_id=run_id,
-            span_data=new_span_data,
-            trace_data=None,
-        )
+        self._run_state.save_span_data(run_id, new_span_data)
 
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
 
-        if (
-            self._opik_client.config.log_start_trace_span
-            and tracing_runtime_config.is_tracing_active()
-        ):
-            self._opik_client.__internal_api__span__(
-                **new_span_data.as_start_parameters
-            )
+        self._emit_start_span(new_span_data)
 
     def _process_end_span(self, run: Run) -> None:
         span_data = None
         try:
             # Skip processing if this is a skipped LangGraph root run
-            if run.id in self._skipped_langgraph_root_run_ids:
+            if self._run_state.is_skipped_langgraph_root(run.id):
                 return
 
-            if run.id not in self._span_data_map:
+            span_data = self._run_state.get_span_data(run.id)
+            if span_data is None:
                 LOGGER.warning(
                     f"Span data for run '{run.id}' not found in the span data map. Skipping processing of end span."
                 )
                 return
-            span_data = self._span_data_map[run.id]
             run_dict: Dict[str, Any] = run.dict()
 
             usage_info = provider_usage_extractors.try_extract_provider_usage_data(
@@ -622,6 +597,12 @@ class OpikTracer(BaseTracer):
             )
             if usage_info is None:
                 usage_info = llm_usage.LLMUsageInfo()
+
+            provider_override = self._resolve_provider(run_dict, usage_info.model)
+            if provider_override is not None:
+                usage_info.provider = provider_override
+
+            total_cost = response_cost_extractors.try_extract_response_cost(run_dict)
 
             # workaround for `.astream()` method usage
             if span_data.input == {"input": ""} or span_data.input == {"input": {}}:
@@ -649,6 +630,7 @@ class OpikTracer(BaseTracer):
                 ),
                 provider=usage_info.provider,
                 model=usage_info.model,
+                total_cost=total_cost,
             )
 
             if tracing_runtime_config.is_tracing_active():
@@ -656,11 +638,55 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.error(f"Failed during _process_end_span: {e}", exc_info=True)
         finally:
-            if span_data is not None and not self._opik_context_read_only_mode:
-                self._opik_context_storage.trim_span_data_stack_to_certain_span(
-                    span_id=span_data.id
+            self._release_ended_span_state(run, span_data)
+
+    def _release_ended_span_state(
+        self, run: Run, span_data: Optional[span.SpanData]
+    ) -> None:
+        """Clean up after a run's span has ended.
+
+        Pops the ended span off the context stack and, when the run is the root
+        of its tree, releases the whole subtree's bookkeeping. A root run's end
+        handler is the last callback LangChain fires for its subtree (after
+        ``_persist_run``), so this is the point at which the state is safe to drop.
+        """
+        if span_data is not None and not self._opik_context_read_only_mode:
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                span_id=span_data.id
+            )
+            self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+
+        if run.parent_run_id is None:
+            self._run_state.release_run_tree(run)
+
+    def _resolve_provider(
+        self, run_dict: Dict[str, Any], model: Optional[str]
+    ) -> Optional[str]:
+        if self._provider is None:
+            return None
+
+        if callable(self._provider):
+            context = ProviderResolverContext(model=model, run=run_dict)
+            try:
+                resolved: Optional[ProviderOverride] = self._provider(context)
+            except Exception:
+                # A user callback must never break trace logging: warn and fall
+                # back to the auto-detected provider for this run.
+                LOGGER.warning(
+                    "The provider resolver callback raised an exception; falling "
+                    "back to the auto-detected provider.",
+                    exc_info=True,
                 )
-                self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+                return None
+        else:
+            resolved = self._provider
+
+        if isinstance(resolved, LLMProvider):
+            # Normalize to the plain string value so a bare enum member never
+            # leaks into logs/spans as "LLMProvider.OPENAI".
+            return resolved.value
+
+        return resolved
 
     def _should_skip_error(self, error_str: str) -> bool:
         if self._skip_error_callback is None:
@@ -669,20 +695,20 @@ class OpikTracer(BaseTracer):
         return self._skip_error_callback(error_str)
 
     def _process_end_span_with_error(self, run: Run) -> None:
-        # Skip processing if this is a skipped LangGraph root run
-        if run.id in self._skipped_langgraph_root_run_ids:
-            return
-
-        if run.id not in self._span_data_map:
-            LOGGER.warning(
-                f"Span data for run '{run.id}' not found in the span data map. Skipping processing of _process_end_span_with_error."
-            )
-            return
-
         span_data = None
         try:
+            # Skip processing if this is a skipped LangGraph root run
+            if self._run_state.is_skipped_langgraph_root(run.id):
+                return
+
+            span_data = self._run_state.get_span_data(run.id)
+            if span_data is None:
+                LOGGER.warning(
+                    f"Span data for run '{run.id}' not found in the span data map. Skipping processing of _process_end_span_with_error."
+                )
+                return
+
             run_dict: Dict[str, Any] = run.dict()
-            span_data = self._span_data_map[run.id]
             error_str = run_dict["error"]
 
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
@@ -715,23 +741,7 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
-            if span_data is not None and not self._opik_context_read_only_mode:
-                self._opik_context_storage.trim_span_data_stack_to_certain_span(
-                    span_id=span_data.id
-                )
-                self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
-
-    def _save_span_trace_data_to_local_maps(
-        self,
-        run_id: UUID,
-        span_data: Optional[span.SpanData],
-        trace_data: Optional[trace.TraceData],
-    ) -> None:
-        if span_data is not None:
-            self._span_data_map[run_id] = span_data
-
-        if trace_data is not None:
-            self._created_traces_data_map[run_id] = trace_data
+            self._release_ended_span_state(run, span_data)
 
     def flush(self) -> None:
         """
@@ -749,13 +759,10 @@ class OpikTracer(BaseTracer):
         return self._created_traces
 
     def get_current_span_data_for_run(self, run_id: UUID) -> Optional[span.SpanData]:
-        return self._span_data_map.get(run_id)
+        return self._run_state.get_span_data(run_id)
 
     def _skip_tracking(self) -> bool:
-        if not tracing_runtime_config.is_tracing_active():
-            return True
-
-        return False
+        return not tracing_runtime_config.is_tracing_active()
 
     def _on_llm_start(self, run: Run) -> None:
         """Process the LLM Run upon start."""

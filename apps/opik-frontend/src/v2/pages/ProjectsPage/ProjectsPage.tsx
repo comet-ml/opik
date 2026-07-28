@@ -22,7 +22,7 @@ import CostCell from "@/shared/DataTableCells/CostCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
-import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
+import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
 import ProjectsActionsPanel from "@/v2/pages/ProjectsPage/ProjectsActionsPanel";
 import { ProjectRowActionsCell } from "@/v2/pages/ProjectsPage/ProjectRowActionsCell";
 import { Button } from "@/ui/button";

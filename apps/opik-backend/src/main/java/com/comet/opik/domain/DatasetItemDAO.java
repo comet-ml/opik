@@ -343,11 +343,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             INNER JOIN (
                 SELECT
                     id
-                FROM traces
+                FROM traces FINAL
                 <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id AND experiment_id IN :experimentIds)
+                AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id AND experiment_id IN :experimentIds))
                 <if(experiment_item_filters)>
                 AND <experiment_item_filters>
                 <endif>
@@ -368,8 +370,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 <if(feedback_scores_empty_filters)>
                 AND fsc.feedback_scores_count = 0
                 <endif>
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ) AS tfs ON ei.trace_id = tfs.id
             <endif>
             <if(dataset_item_filters || search_filter)>
@@ -658,7 +658,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM (
                     SELECT
                         id,
-                       if(end_time IS NOT NULL AND start_time IS NOT NULL
+                       if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
@@ -849,7 +849,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 <endif>
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
-                    SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
+                    SELECT id FROM traces FINAL WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>)
+                    AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>))
+                    AND <experiment_item_filters>
                 )
                 <endif>
             ), feedback_scores_combined AS (
@@ -938,7 +941,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 LEFT JOIN (
                     SELECT
                         id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) as duration

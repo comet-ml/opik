@@ -193,6 +193,102 @@ class SpanCostCalculatorTest {
                         "11.00"));
     }
 
+    /**
+     * Covers the audio-token branches added to
+     * {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI}. OpenAI realtime models
+     * (e.g. {@code gpt-4o-realtime-preview}, {@code gpt-realtime}) publish both
+     * {@code cache_read_input_token_cost} and {@code input_cost_per_audio_token}/
+     * {@code output_cost_per_audio_token}; without this split the cache calculator billed all
+     * audio tokens at the standard text rate.
+     * <ul>
+     *   <li>When the model has non-zero audio input/output rates, the audio portions are
+     *       subtracted from the cache-adjusted input and from the completion buckets and billed
+     *       at the audio rates.</li>
+     *   <li>When the model has no audio rates configured, any audio-token usage keys are
+     *       ignored — every prompt token (minus cached) bills at the standard input rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideOpenAICacheAudioCases")
+    void textGenerationWithCacheCostOpenAI_splitsAudioTokens(String description, ModelPrice modelPrice,
+            Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostOpenAI(modelPrice, usage);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideOpenAICacheAudioCases() {
+        ModelPrice withAudioRates = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .cacheReadInputTokenPrice(new BigDecimal("0.005"))
+                .inputAudioTokenPrice(new BigDecimal("0.05"))
+                .outputAudioTokenPrice(new BigDecimal("0.08"))
+                .build();
+        ModelPrice noAudioRates = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .cacheReadInputTokenPrice(new BigDecimal("0.005"))
+                .build();
+        return Stream.of(
+                // audio rates configured: subtract cached then audio from input,
+                // subtract audio from completion, bill each bucket at its own rate.
+                // input bucket = 1000 - 200 cached - 300 audio = 500 -> 500 * 0.01 = 5.00
+                // audio_in = 300 * 0.05 = 15.00
+                // completion bucket = 500 - 100 audio = 400 -> 400 * 0.02 = 8.00
+                // audio_out = 100 * 0.08 = 8.00
+                // cache_read = 200 * 0.005 = 1.00
+                // total = 5 + 15 + 8 + 8 + 1 = 37.00
+                Arguments.of("audio rates set: realtime-style usage splits all four buckets",
+                        withAudioRates,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                "cache_read_input_tokens", 200,
+                                "prompt_tokens_details.audio_tokens", 300,
+                                "completion_tokens_details.audio_tokens", 100),
+                        "37.00"),
+                // audio rates not configured: audio-token keys in usage are ignored
+                // input = 1000 - 200 cached = 800 -> 800 * 0.01 = 8.00
+                // completion = 100 -> 100 * 0.02 = 2.00
+                // cache_read = 200 * 0.005 = 1.00
+                // total = 8 + 2 + 1 = 11.00
+                Arguments.of("audio rates unset: audio_tokens keys are ignored",
+                        noAudioRates,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "cache_read_input_tokens", 200,
+                                "prompt_tokens_details.audio_tokens", 300,
+                                "completion_tokens_details.audio_tokens", 50),
+                        "11.00"),
+                // original_usage.* key path (SDK 1.6.0+): same expected math as the bare-key
+                // case above; guarantees the prefixed-key branch is exercised in regressions.
+                // 1000 - 200 cached - 300 audio = 500 input; 500 - 100 audio = 400 output
+                // 500*0.01 + 300*0.05 + 400*0.02 + 100*0.08 + 200*0.005 = 37.00
+                Arguments.of("audio rates set: original_usage.* prefixed keys",
+                        withAudioRates,
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 500,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.prompt_tokens_details.audio_tokens", 300,
+                                "original_usage.completion_tokens_details.audio_tokens", 100),
+                        "37.00"),
+                // OpenAI Realtime payloads report prompt_tokens_details.text_tokens explicitly.
+                // When present, use it directly instead of substracting cached + audio from the
+                // total — this avoids over-substraction when the API reports cached-audio
+                // overlap (see baz-reviewer note on cached-audio double-charging).
+                // text_tokens = 480 (API-reported: 20 cached-audio overlap tokens are NOT text)
+                // 480*0.01 + 300*0.05 + 400*0.02 + 100*0.08 + 200*0.005 = 4.80 + 15 + 8 + 8 + 1
+                // = 36.80  (vs 37.00 in the subtraction path — 20-token overlap reflected)
+                Arguments.of("text_tokens present: preferred over subtraction",
+                        withAudioRates,
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 500,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.prompt_tokens_details.audio_tokens", 300,
+                                "original_usage.prompt_tokens_details.text_tokens", 480,
+                                "original_usage.completion_tokens_details.audio_tokens", 100,
+                                "original_usage.completion_tokens_details.text_tokens", 400),
+                        "36.80"));
+    }
+
     @ParameterizedTest(name = "{1}")
     @MethodSource("provideAnthropicBedrockCacheCostCases")
     void textGenerationWithCacheCostUsesOtelCacheKeyFallback(

@@ -22,10 +22,12 @@ type FiltersButtonProps<TColumnData> = {
   onChange: (filters: Filters) => void;
   layout?: "standard" | "icon";
   variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
   align?: "start" | "end";
   disabled?: boolean;
   deferOnChange?: boolean;
   tooltip?: string;
+  className?: string;
 };
 
 const FiltersButton = <TColumnData,>({
@@ -35,14 +37,17 @@ const FiltersButton = <TColumnData,>({
   onChange,
   layout = "standard",
   variant = "outline",
+  size,
   align = "start",
   disabled,
   deferOnChange = false,
   tooltip,
+  className,
 }: FiltersButtonProps<TColumnData>) => {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [open, setOpen] = useState(false);
   const isIconLayout = layout === "icon";
+  const buttonSize = size ?? (isIconLayout ? "icon-sm" : "sm");
 
   const validFilters = useDeepMemo(() => {
     return filters.filter(isFilterValid);
@@ -88,14 +93,16 @@ const FiltersButton = <TColumnData,>({
         <PopoverTrigger asChild>
           <Button
             variant={variant}
-            size="sm"
+            size={buttonSize}
             className={cn(
-              isIconLayout && !validFilters.length && "size-8 px-0",
-              isIconLayout && validFilters.length && "px-3",
+              isIconLayout && validFilters.length && "w-auto px-3",
+              className,
             )}
             disabled={disabled}
           >
-            <FilterIcon className="size-3.5 shrink-0" />
+            <FilterIcon
+              className={cn("shrink-0", !isIconLayout && "size-3.5")}
+            />
             {isIconLayout ? (
               validFilters.length ? (
                 <span className="ml-1.5">{validFilters.length}</span>

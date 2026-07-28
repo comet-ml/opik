@@ -33,6 +33,7 @@ def track_openai(
     executes normally but no span/trace is sent.
 
     Tracks calls to:
+
     * `openai_client.chat.completions.create()`, including support for stream=True mode.
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`

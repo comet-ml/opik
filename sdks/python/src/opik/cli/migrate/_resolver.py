@@ -237,6 +237,30 @@ def name_taken_in_workspace(
     return None
 
 
+def find_row_in_workspace(
+    *,
+    list_fn: Callable[[int, int], Any],
+    name: str,
+    ignore_id: Optional[str] = None,
+) -> Optional[Any]:
+    """Return the first workspace row matching ``name``, or ``None``.
+
+    Sibling to ``name_taken_in_workspace``: that helper answers "is the
+    name taken and by which project" (a label); this one hands back the
+    row itself so the caller can act on it (e.g. delete a stale temp
+    destination by id). ``ignore_id`` excludes a specific row (e.g. the
+    source about to be renamed). Workspace name uniqueness means at most
+    one row matches.
+    """
+    for row in iter_pages(list_fn):
+        if not _name_matches(row.name, name):
+            continue
+        if ignore_id is not None and row.id == ignore_id:
+            continue
+        return row
+    return None
+
+
 def resolve_unique_source_by_name(
     client: opik.Opik,
     *,

@@ -18,12 +18,8 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.anthropic.AnthropicTokenUsage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.googleai.GoogleAiGeminiTokenUsage;
-import dev.langchain4j.model.openai.OpenAiTokenUsage;
-import dev.langchain4j.model.output.TokenUsage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -34,10 +30,10 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -55,6 +51,7 @@ class EvaluationEntityFactory {
     private static final String PREPARE_SPAN_NAME = "prepare_evaluation";
     private static final String MODE_INLINE = "inline";
     private static final String MODE_AGENTIC_TOOLS = "agentic_tools";
+    private static final String BUDGET_EXCEEDED_TAG = "budget_exceeded";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull @Config("responseFormatting") ResponseFormattingConfig responseFormattingConfig;
@@ -76,7 +73,7 @@ class EvaluationEntityFactory {
 
         if (response != null) {
             spanBuilder.output(buildResponseOutput(response))
-                    .usage(extractUsage(response));
+                    .usage(LlmUsageExtractor.toUsageMap(response));
         }
         if (error != null) {
             spanBuilder.errorInfo(toErrorInfo(error));
@@ -155,16 +152,16 @@ class EvaluationEntityFactory {
     }
 
     /** Finalizes the parent trace on success, recording the produced scores as its output. */
-    Trace completedTrace(EvaluationContext eval, List<? extends FeedbackScoreItem> scores) {
-        return trace(eval, buildScoresOutput(scores), null);
+    Trace completedTrace(EvaluationContext eval, List<? extends FeedbackScoreItem> scores, boolean budgetExceeded) {
+        return trace(eval, buildScoresOutput(scores), null, budgetExceeded);
     }
 
     /** Finalizes the parent trace on failure, recording the error. */
-    Trace failedTrace(EvaluationContext eval, Throwable error) {
-        return trace(eval, null, toErrorInfo(error));
+    Trace failedTrace(EvaluationContext eval, Throwable error, boolean budgetExceeded) {
+        return trace(eval, null, toErrorInfo(error), budgetExceeded);
     }
 
-    private Trace trace(EvaluationContext eval, JsonNode output, ErrorInfo errorInfo) {
+    private Trace trace(EvaluationContext eval, JsonNode output, ErrorInfo errorInfo, boolean budgetExceeded) {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put(eval.evaluatedIdKey(), eval.evaluatedId());
         if (eval.evaluatedProjectId() != null) {
@@ -192,6 +189,9 @@ class EvaluationEntityFactory {
                 .source(Source.EVALUATOR)
                 .visibilityMode(VisibilityMode.HIDDEN);
 
+        if (budgetExceeded) {
+            traceBuilder.tags(Set.of(BUDGET_EXCEEDED_TAG));
+        }
         if (output != null) {
             traceBuilder.output(output);
         }
@@ -200,58 +200,6 @@ class EvaluationEntityFactory {
         }
 
         return traceBuilder.build();
-    }
-
-    private static Map<String, Integer> extractUsage(ChatResponse response) {
-        var tokenUsage = response.tokenUsage();
-        if (tokenUsage == null) {
-            return null;
-        }
-        var usage = new HashMap<String, Integer>();
-        if (tokenUsage.inputTokenCount() != null) {
-            usage.put("prompt_tokens", tokenUsage.inputTokenCount());
-        }
-        if (tokenUsage.outputTokenCount() != null) {
-            usage.put("completion_tokens", tokenUsage.outputTokenCount());
-        }
-        if (tokenUsage.totalTokenCount() != null) {
-            usage.put("total_tokens", tokenUsage.totalTokenCount());
-        }
-        addCacheTokens(tokenUsage, usage);
-        return usage.isEmpty() ? null : usage;
-    }
-
-    /**
-     * Records provider-reported prompt-cache token counts under the keys
-     * {@link com.comet.opik.domain.cost.SpanCostCalculator} prices: cache-read tokens are billed at a
-     * reduced rate and cache-creation tokens at a surcharge. No-op for providers/responses without
-     * cache usage, so the span's cost is unchanged when caching is off (the current default).
-     */
-    private static void addCacheTokens(TokenUsage tokenUsage, Map<String, Integer> usage) {
-        switch (tokenUsage) {
-            case AnthropicTokenUsage anthropic -> {
-                putPositive(usage, "cache_creation_input_tokens", anthropic.cacheCreationInputTokens());
-                putPositive(usage, "cache_read_input_tokens", anthropic.cacheReadInputTokens());
-            }
-            // OpenAI-family providers (OpenAI, OpenRouter, custom-llm, Ollama, free) all return this type.
-            case OpenAiTokenUsage openai -> {
-                if (openai.inputTokensDetails() != null) {
-                    putPositive(usage, "cache_read_input_tokens", openai.inputTokensDetails().cachedTokens());
-                }
-            }
-            // Gemini reports the context-cache hit as cachedContentTokenCount, which the Google cost
-            // path subtracts from prompt_tokens and prices at the cache-read rate.
-            case GoogleAiGeminiTokenUsage gemini ->
-                putPositive(usage, "cache_read_input_tokens", gemini.cachedContentTokenCount());
-            default -> {
-            }
-        }
-    }
-
-    private static void putPositive(Map<String, Integer> usage, String key, Integer value) {
-        if (value != null && value > 0) {
-            usage.put(key, value);
-        }
     }
 
     private static JsonNode buildMessagesInput(ChatRequest request) {

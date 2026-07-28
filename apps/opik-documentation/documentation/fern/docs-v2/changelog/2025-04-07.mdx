@@ -1,0 +1,25 @@
+**Opik Dashboard:**
+
+- Added search to codeblocks in the input and output fields.
+- Added sorting on feedback scores in the traces and spans tables:
+  <Frame>
+    <img src="/img/changelog/2025-04-07/sort_feedback.gif" />
+  </Frame>
+- Added sorting on feedback scores in the experiments table.
+
+**Python and JS / TS SDK**:
+
+- Released a new integration with [Google ADK framework](https://google.github.io/adk-docs/).
+- Cleanup up usage information by removing it from metadata field if it's already
+  part of the `Usage` field.
+- Added support for `Rouge` metric - Thanks @rohithmsr !
+- Updated the LangChain callback `OpikTracer()` to log the data in a structured
+  way rather than as raw text. This is expecially useful when using LangGraph.
+- Updated the LangChainJS integration with additional examples and small fixes.
+- Updated the OpenAI integration to support the Responses API.
+- Introduced a new AggregatedMetric metric that can be used to compute aggregations
+  of metrics in experiments.
+- Added logging for LLamaIndex streaming methods.
+- Added a new `text` property on the Opik.Prompt object.
+
+_Releases_: `1.6.14`, `1.7.0`, `1.7.1`, `1.7.2`

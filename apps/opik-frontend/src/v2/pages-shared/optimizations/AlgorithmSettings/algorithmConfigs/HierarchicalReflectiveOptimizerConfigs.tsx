@@ -1,6 +1,6 @@
 import React from "react";
 import { Label } from "@/ui/label";
-import { Checkbox } from "@/ui/checkbox";
+import { Switch } from "@/ui/switch";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { HierarchicalReflectiveOptimizerParameters } from "@/types/optimizations";
 import { DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS } from "@/constants/optimizations";
@@ -18,8 +18,10 @@ const HierarchicalReflectiveOptimizerConfigs = ({
   configs,
   onChange,
 }: HierarchicalReflectiveOptimizerConfigsProps) => {
+  // Fragment (no wrapper): fields render as direct siblings of the popover's
+  // column so every field shares one consistent gap.
   return (
-    <div className="flex w-72 flex-col gap-6">
+    <>
       <SliderInputControl
         value={
           configs.convergence_threshold ??
@@ -37,23 +39,24 @@ const HierarchicalReflectiveOptimizerConfigs = ({
         tooltip="Threshold for determining when optimization has converged. Lower values require more precision (0-1)"
       />
 
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="verbose"
-            checked={
-              configs.verbose ??
-              DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS.VERBOSE
-            }
-            onCheckedChange={(checked) =>
-              onChange({ ...configs, verbose: checked === true })
-            }
-          />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
           <Label htmlFor="verbose" className="cursor-pointer text-sm">
             Verbose
           </Label>
           <ExplainerIcon {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_verbose]} />
         </div>
+        <Switch
+          id="verbose"
+          size="sm"
+          checked={
+            configs.verbose ??
+            DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS.VERBOSE
+          }
+          onCheckedChange={(checked) =>
+            onChange({ ...configs, verbose: checked })
+          }
+        />
       </div>
 
       <SliderInputControl
@@ -69,7 +72,7 @@ const HierarchicalReflectiveOptimizerConfigs = ({
         label="Seed"
         tooltip="Random seed for reproducibility. Use the same seed to get consistent results across runs."
       />
-    </div>
+    </>
   );
 };
 

@@ -93,7 +93,8 @@ public class AgentInsightsJobService {
                                 "Agent insights job not found for project: " + projectId)));
 
         Instant periodEnd = Instant.now();
-        reportPublisher.enqueue(job.projectId(), workspaceId, periodEnd.minus(TRIGGER_WINDOW), periodEnd)
+        reportPublisher.enqueue(job.projectId(), workspaceId, periodEnd.minus(TRIGGER_WINDOW), periodEnd,
+                AgentInsightsMetrics.MANUAL)
                 .subscribe(
                         reportId -> {
                             AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.ENQUEUE_MANUAL_SUCCESS);

@@ -58,6 +58,35 @@ jobs:
               helm lint --values values.yaml .
               cd -
 
+  # Assert the rendered content of specific resources (e.g. the `opik.probe`
+  # helper) via helm-unittest. Tests live in deployment/helm_chart/opik/tests/.
+  unittest-helm-chart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+        - name: Checkout
+          uses: actions/checkout@v6
+
+        - name: Install Helm
+          uses: azure/setup-helm@v4.3.1
+          with:
+            version: v3.21.0
+
+        - name: Install helm-unittest plugin
+          run: helm plugin install https://github.com/helm-unittest/helm-unittest
+
+        - name: Run helm unittest
+          run: |
+              set -e
+              cd deployment/helm_chart/opik
+              helm repo add mysql https://comet-ml.github.io/comet-mysql-helm/
+              helm repo add bitnami https://charts.bitnami.com/bitnami
+              helm repo add clickhouse-operator https://docs.altinity.com/clickhouse-operator
+              helm dependency build
+              helm unittest .
+              cd -
+
   # Prove the chart renders equivalently under Helm 3.x and Helm 4.x so we can ship
   # Helm 4 support without changing behavior for Helm 3 users (DND-537). Each version
   # resolves its own dependencies (`helm dependency build`) and renders from scratch.

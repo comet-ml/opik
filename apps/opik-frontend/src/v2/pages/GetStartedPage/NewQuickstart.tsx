@@ -20,6 +20,8 @@ import LoggedDataStatus from "@/v2/pages-shared/onboarding/IntegrationExplorer/c
 import useFirstTraceReceived from "@/api/projects/useFirstTraceReceived";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsPhone } from "@/hooks/useIsPhone";
+import MobileOnboarding from "./MobileOnboarding/MobileOnboarding";
 
 const AgentOnboardingQuickstart: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
@@ -62,6 +64,8 @@ const AgentOnboardingQuickstart: React.FC = () => {
 };
 
 const NewQuickstart: React.FC = () => {
+  const { isPhone } = useIsPhone();
+
   // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = skip the modal and render the full integrations page. Undefined (PostHog unavailable) falls back to "control".
   const variant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
@@ -94,10 +98,10 @@ const NewQuickstart: React.FC = () => {
   );
 
   useEffect(() => {
-    if (variant === "manual" && !manualOnboardingDone) {
+    if (!isPhone && variant === "manual" && !manualOnboardingDone) {
       window.history.replaceState(null, "", "#manual");
     }
-  }, [variant, manualOnboardingDone]);
+  }, [isPhone, variant, manualOnboardingDone]);
 
   const handleExplore = useCallback(() => {
     if (!firstTraceProjectId) return;
@@ -119,6 +123,10 @@ const NewQuickstart: React.FC = () => {
       params: { workspaceName },
     });
   }, [demoDataEnabled, navigate, workspaceName, setManualOnboardingDone]);
+
+  if (isPhone) {
+    return <MobileOnboarding />;
+  }
 
   if (variant === "manual") {
     if (wasDoneOnMount.current) {

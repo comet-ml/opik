@@ -2,3 +2,6 @@
 
 # isort: skip_file
 
+from .types import WorkspaceSpanMetricRequestInterval, WorkspaceSpanMetricRequestMetricType
+
+__all__ = ["WorkspaceSpanMetricRequestInterval", "WorkspaceSpanMetricRequestMetricType"]

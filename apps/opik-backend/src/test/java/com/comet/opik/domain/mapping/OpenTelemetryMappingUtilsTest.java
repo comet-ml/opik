@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.storageKey;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -379,4 +380,43 @@ public class OpenTelemetryMappingUtilsTest {
 
         assertThat(result).isEmpty();
     }
+
+    private static Stream<Arguments> storageKeyCases() {
+        var prefixOutput = OpenTelemetryMappingRule.builder()
+                .rule("output").isPrefix(true).source("General")
+                .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build();
+        var prefixGenAiInput = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.input.").isPrefix(true).source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.INPUT).build();
+        var prefixOpikMetadata = OpenTelemetryMappingRule.builder()
+                .rule("opik.metadata").isPrefix(true).source("General")
+                .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build();
+        var exactPrompt = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.prompt").source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.INPUT).build();
+
+        return Stream.of(
+                Arguments.of("output prefix, key==prefix", prefixOutput, "output", ""),
+                Arguments.of("output prefix, dotted suffix", prefixOutput, "output.choices", "choices"),
+                Arguments.of("output prefix, bare overlap kept", prefixOutput, "output_tokens", "output_tokens"),
+                Arguments.of("gen_ai.input. prefix, suffix", prefixGenAiInput,
+                        "gen_ai.input.messages", "messages"),
+                Arguments.of("opik.metadata prefix, dotted suffix", prefixOpikMetadata,
+                        "opik.metadata.finish_reason", "finish_reason"),
+                Arguments.of("opik.metadata prefix, deep suffix", prefixOpikMetadata,
+                        "opik.metadata.a.b.c", "a.b.c"),
+                Arguments.of("opik.metadata prefix, bare overlap kept", prefixOpikMetadata,
+                        "opik.metadata.integration", "integration"),
+                Arguments.of("opik.metadata prefix, key shorter than prefix kept", prefixOpikMetadata,
+                        "opik.meta", "opik.meta"),
+                Arguments.of("exact rule, full key kept", exactPrompt, "gen_ai.prompt", "gen_ai.prompt"));
+    }
+
+    @ParameterizedTest(name = "{0}: storageKey({2}) -> {3}")
+    @MethodSource("storageKeyCases")
+    void storageKeyStripsPrefixOrKeepsFullKey(
+            String description, OpenTelemetryMappingRule rule, String key, String expected) {
+        assertThat(storageKey(rule, key)).isEqualTo(expected);
+    }
+
 }

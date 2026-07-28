@@ -153,7 +153,7 @@ public class RetentionEstimationService {
                 catchUpConfig.getServiceStartDate().atStartOfDay(ZoneOffset.UTC).toInstant());
 
         try {
-            var estimate = spanDAO.estimateVelocityForRetention(workspaceId, cutoffId).block();
+            var estimate = spanDAO.estimateVelocityForRetention(workspaceId, fallbackCursor, cutoffId).block();
             if (estimate == null || estimate.spansPerWeek() == 0) {
                 log.info("Retention velocity estimated for workspace '{}': no data found", workspaceId);
                 return new VelocityEstimation(0L, null);

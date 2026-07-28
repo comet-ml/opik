@@ -19,6 +19,7 @@ from ..errors.unauthorized_error import UnauthorizedError
 from ..types.comment import Comment
 from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
+from ..types.existence_response import ExistenceResponse
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
 from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
@@ -1976,6 +1977,62 @@ class RawTracesClient:
                 raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
             yield stream()
+
+    def exist(
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
+        source: typing.Optional[str] = None,
+        thread_only: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ExistenceResponse]:
+        """
+        Returns whether the project has at least one trace matching the given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions without scanning or aggregating the whole project.
+
+        Parameters
+        ----------
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        source : typing.Optional[str]
+
+        thread_only : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ExistenceResponse]
+            Trace existence
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/traces/exists",
+            method="GET",
+            params={
+                "project_id": project_id,
+                "project_name": project_name,
+                "source": source,
+                "thread_only": thread_only,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExistenceResponse,
+                    parse_obj_as(
+                        type_=ExistenceResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def update_thread(
         self,
@@ -4130,6 +4187,62 @@ class AsyncRawTracesClient:
                 raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
             yield await stream()
+
+    async def exist(
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
+        source: typing.Optional[str] = None,
+        thread_only: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ExistenceResponse]:
+        """
+        Returns whether the project has at least one trace matching the given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions without scanning or aggregating the whole project.
+
+        Parameters
+        ----------
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        source : typing.Optional[str]
+
+        thread_only : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ExistenceResponse]
+            Trace existence
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/traces/exists",
+            method="GET",
+            params={
+                "project_id": project_id,
+                "project_name": project_name,
+                "source": source,
+                "thread_only": thread_only,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ExistenceResponse,
+                    parse_obj_as(
+                        type_=ExistenceResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def update_thread(
         self,

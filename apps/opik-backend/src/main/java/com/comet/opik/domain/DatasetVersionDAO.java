@@ -151,8 +151,10 @@ public interface DatasetVersionDAO {
             WHERE dv.batch_group_id = :batch_group_id
                 AND dv.dataset_id = :dataset_id
                 AND dv.workspace_id = :workspace_id
+            ORDER BY dv.id DESC
+            LIMIT 1
             """)
-    Optional<DatasetVersion> findByBatchGroupId(@Bind("batch_group_id") UUID batchGroupId,
+    Optional<DatasetVersion> findLatestByBatchGroupId(@Bind("batch_group_id") UUID batchGroupId,
             @Bind("dataset_id") UUID datasetId,
             @Bind("workspace_id") String workspaceId);
 
@@ -274,19 +276,28 @@ public interface DatasetVersionDAO {
     int deleteTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
             @Bind("workspace_id") String workspaceId);
 
+    @SqlUpdate("""
+            DELETE FROM dataset_version_tags
+            WHERE dataset_id = :dataset_id
+                AND tag = :tag
+                AND version_id = :version_id
+                AND workspace_id = :workspace_id
+            """)
+    int deleteTagIfVersion(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
+            @Bind("version_id") UUID versionId, @Bind("workspace_id") String workspaceId);
+
     @SqlQuery("""
-            WITH version_sequences AS (
-                SELECT
-                    id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
-                FROM dataset_versions
-                WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
-            )
             SELECT
                 dv.id,
                 dv.dataset_id,
                 dv.version_hash,
-                CONCAT('v', vs.seq_num) AS version_name,
+                CONCAT('v', (
+                    SELECT COUNT(*)
+                    FROM dataset_versions s
+                    WHERE s.workspace_id = :workspace_id
+                        AND s.dataset_id = :dataset_id
+                        AND s.id <= dv.id
+                )) AS version_name,
                 dv.items_total,
                 dv.items_added,
                 dv.items_modified,
@@ -299,17 +310,18 @@ public interface DatasetVersionDAO {
                 dv.created_by,
                 dv.last_updated_at,
                 dv.last_updated_by,
-                COALESCE(t.tags, JSON_ARRAY()) AS tags,
-                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
+                COALESCE((
+                    SELECT JSON_ARRAYAGG(t.tag)
+                    FROM dataset_version_tags t
+                    WHERE t.version_id = dv.id
+                ), JSON_ARRAY()) AS tags,
+                EXISTS(
+                    SELECT 1
+                    FROM dataset_version_tags t2
+                    WHERE t2.version_id = dv.id AND t2.tag = 'latest'
+                ) AS is_latest
             FROM dataset_versions AS dv
-            INNER JOIN version_sequences vs ON dv.id = vs.id
             INNER JOIN dataset_version_tags dvt ON dv.id = dvt.version_id
-            LEFT JOIN (
-                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
-                FROM dataset_version_tags
-                WHERE version_id in (select id from version_sequences)
-                GROUP BY version_id
-            ) AS t ON t.version_id = dv.id
             WHERE dvt.dataset_id = :dataset_id
                 AND dvt.tag = :tag
                 AND dv.workspace_id = :workspace_id

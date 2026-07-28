@@ -133,7 +133,7 @@ This workflow will:
   (cd apps/opik-frontend && npm run lint && npm run typecheck)
 
   # For SDK changes
-  (cd "$(git rev-parse --show-toplevel)" && make precommit-sdks)
+  (cd "$(git rev-parse --show-toplevel)" && make precommit)
   ```
 - **If all pass**: Continue to next step
 - **If errors found**: Run auto-fix commands, then re-verify:
@@ -145,7 +145,7 @@ This workflow will:
   (cd apps/opik-frontend && npm run lint:fix && npm run lint && npm run typecheck)
 
   # For SDK changes
-  (cd "$(git rev-parse --show-toplevel)" && make precommit-sdks)
+  (cd "$(git rev-parse --show-toplevel)" && make precommit)
   ```
 - **If quality checks still fail**: Show errors and ask if user wants to continue
 - **If user chooses to continue**: Proceed with warnings

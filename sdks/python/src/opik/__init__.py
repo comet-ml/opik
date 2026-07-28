@@ -24,6 +24,12 @@ from .api_objects.span import Span
 from .api_objects.trace import Trace
 from .configurator.configure import configure
 from .decorator.tracker import flush_tracker, track
+from .message_processing.data_loss import (
+    ErrorsReport,
+    FailedMessageInfo,
+    FailureReason,
+    FlushResult,
+)
 from .evaluation import (
     evaluate,
     evaluate_experiment,
@@ -68,6 +74,10 @@ __all__ = [
     "ExperimentItemReferences",
     "track",
     "flush_tracker",
+    "FlushResult",
+    "FailedMessageInfo",
+    "FailureReason",
+    "ErrorsReport",
     "Opik",
     "get_global_client",
     "set_global_client",

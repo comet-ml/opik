@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import orderBy from "lodash/orderBy";
 import sortBy from "lodash/sortBy";
 import toLower from "lodash/toLower";
 
@@ -9,6 +10,7 @@ import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import useUser from "@/plugins/comet/useUser";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useRecentWorkspaces from "@/plugins/comet/useRecentWorkspaces";
 import useAppStore from "@/store/AppStore";
 import {
   Workspace,
@@ -36,6 +38,14 @@ const useWorkspaceSelectorData = () => {
   const currentOrganization = useCurrentOrganization();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
+  const { getVisitedAt, recordVisit } = useRecentWorkspaces();
+
+  // Mark the active workspace as recently visited so recency ordering reflects
+  // arrivals via direct URL, not only in-menu switches.
+  useEffect(() => {
+    if (workspaceName) recordVisit(workspaceName);
+  }, [workspaceName, recordVisit]);
+
   const handleOpenChange = useCallback(
     (open: boolean) => {
       if (!open && isOrgSubmenuOpen) {
@@ -53,12 +63,13 @@ const useWorkspaceSelectorData = () => {
 
   const handleChangeWorkspace = useCallback(
     (newWorkspace: Workspace) => {
+      recordVisit(newWorkspace.workspaceName);
       navigate({
         to: "/$workspaceName",
         params: { workspaceName: newWorkspace.workspaceName },
       });
     },
-    [navigate],
+    [navigate, recordVisit],
   );
 
   const handleChangeOrganization = useCallback(
@@ -84,13 +95,14 @@ const useWorkspaceSelectorData = () => {
         newOrganizationWorkspaces[0];
 
       if (newWorkspace) {
+        recordVisit(newWorkspace.workspaceName);
         navigate({
           to: "/$workspaceName",
           params: { workspaceName: newWorkspace.workspaceName },
         });
       }
     },
-    [navigate, allWorkspaces, toast],
+    [navigate, allWorkspaces, toast, recordVisit],
   );
 
   const handleOrgSettingsClick = useCallback(() => {
@@ -113,18 +125,30 @@ const useWorkspaceSelectorData = () => {
   }, [allWorkspaces, currentOrganization]);
 
   const filteredWorkspaces = useMemo(() => {
-    if (!search) return memberWorkspaces;
+    const trimmed = search.trim();
+    if (!trimmed) return memberWorkspaces;
 
-    const searchLower = toLower(search);
+    const searchLower = toLower(trimmed);
     return memberWorkspaces.filter((workspace) => {
       const displayName = calculateWorkspaceName(workspace.workspaceName);
       return toLower(displayName).includes(searchLower);
     });
   }, [memberWorkspaces, search]);
 
+  // Recently visited first (mirrors the projects menu's last-updated ordering),
+  // falling back to alphabetical for workspaces that have never been visited.
   const sortedWorkspaces = useMemo(
-    () => sortBy(filteredWorkspaces, "workspaceName"),
-    [filteredWorkspaces],
+    () =>
+      orderBy(
+        filteredWorkspaces,
+        [
+          (workspace) => getVisitedAt(workspace.workspaceName),
+          (workspace) =>
+            toLower(calculateWorkspaceName(workspace.workspaceName)),
+        ],
+        ["desc", "asc"],
+      ),
+    [filteredWorkspaces, getVisitedAt],
   );
 
   const sortedOrganizations = useMemo(() => {

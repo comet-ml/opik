@@ -7,4 +7,5 @@ export interface LlmAsJudgeCodePublic {
     messages: OpikApi.LlmAsJudgeMessagePublic[];
     variables: Record<string, string>;
     schema: OpikApi.LlmAsJudgeOutputSchemaPublic[];
+    maxCostUsd?: number;
 }

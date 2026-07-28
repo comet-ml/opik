@@ -9,12 +9,14 @@ import { AutomationRuleEvaluatorUpdateSpanLlmAsJudge } from "./AutomationRuleEva
 import { AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython } from "./AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython.js";
 import { AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge } from "./AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.js";
 import { AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython } from "./AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.js";
+import { AutomationRuleEvaluatorUpdateTriggerScope } from "./AutomationRuleEvaluatorUpdateTriggerScope.js";
 import { AutomationRuleEvaluatorUpdateUserDefinedMetricPython } from "./AutomationRuleEvaluatorUpdateUserDefinedMetricPython.js";
 
 const _Base = core.serialization.object({
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
     enabled: core.serialization.boolean().optional(),
+    triggerScope: core.serialization.property("trigger_scope", AutomationRuleEvaluatorUpdateTriggerScope.optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     projectIds: core.serialization.property(
         "project_ids",
@@ -81,6 +83,7 @@ export declare namespace AutomationRuleEvaluatorUpdate {
         name: string;
         sampling_rate?: number | null;
         enabled?: boolean | null;
+        trigger_scope?: AutomationRuleEvaluatorUpdateTriggerScope.Raw | null;
         project_id?: string | null;
         project_ids?: string[] | null;
         action: AutomationRuleEvaluatorUpdateAction.Raw;

@@ -4,13 +4,13 @@
  * Optimization prompts are OpenAI-style message arrays. For the diff view we
  * group message content by role (system / user / assistant / …) and pair the
  * comparison target's content against the current prompt's, role by role —
- * matching the Figma trial-details diff (one card per role, content diffed
- * line by line).
+ * one card per role, content diffed line by line.
  */
 
 import isArray from "lodash/isArray";
 import isObject from "lodash/isObject";
 
+import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import {
   OpenAIMessage,
   extractMessageContent,
@@ -19,6 +19,21 @@ import {
 
 /** Roles render in this order; anything else falls after, sorted alphabetically. */
 export const ROLE_DISPLAY_ORDER = ["system", "user", "assistant"];
+
+/**
+ * Fallback text rendering for a prompt that isn't a plain message array:
+ * strings pass through, anything else is pretty-printed as JSON.
+ */
+export const promptToText = (prompt: unknown): string => {
+  if (prompt === null || prompt === undefined) return "";
+  if (typeof prompt === "string") return prompt;
+  return JSON.stringify(prompt, null, 2);
+};
+
+/** Display name for a message role, falling back to the raw role key. */
+export const getRoleLabel = (role: string): string =>
+  LLM_MESSAGE_ROLE_NAME_MAP[role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP] ??
+  role;
 
 export type RoleContent = {
   role: string;
@@ -123,4 +138,37 @@ export const buildRoleDiffRows = (
     baseContent: baseByRole.get(role) ?? "",
     currentContent: currentByRole.get(role) ?? "",
   }));
+};
+
+/** Role used for the single whole-prompt card when a prompt isn't a message array. */
+export const FALLBACK_ROLE = "prompt";
+
+/**
+ * Render-ready diff rows for `current` against a comparison `target`, always
+ * non-empty: when either side isn't a plain message array, collapses to a
+ * single whole-text row so the caller can render exactly one diff card.
+ */
+export const buildDiffRows = (
+  target: unknown,
+  current: unknown,
+): RoleDiffRow[] =>
+  buildRoleDiffRows(target, current) ?? [
+    {
+      role: FALLBACK_ROLE,
+      baseContent: promptToText(target),
+      currentContent: promptToText(current),
+    },
+  ];
+
+/**
+ * Render-ready role rows for a single prompt (no diff): the per-role grouping
+ * when it's a message array, otherwise a single whole-text row. Empty prompts
+ * yield an empty array so the caller can render nothing.
+ */
+export const buildPromptRows = (prompt: unknown): RoleContent[] => {
+  const rows = groupMessageContentByRole(prompt);
+  if (rows) return rows;
+
+  const text = promptToText(prompt);
+  return text ? [{ role: FALLBACK_ROLE, content: text }] : [];
 };

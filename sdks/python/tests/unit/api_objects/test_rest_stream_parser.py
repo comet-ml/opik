@@ -1,5 +1,6 @@
 import json
 
+import httpx
 import pytest
 
 from opik.rest_api.types import span_public as rest_api_types
@@ -83,3 +84,80 @@ def test_read_and_parse_full_stream__happy_flow(spans_stream_source):
     for i, span in enumerate(spans):
         expected = rest_api_types.SpanPublic.model_validate(SPANS_STREAM_JSON[i])
         assert span == expected
+
+
+def test_read_and_parse_full_stream__no_error__requested_batch_sizes_not_halved(
+    spans_stream_source,
+):
+    requested_batch_sizes = []
+
+    def read_source(current_batch_size, last_retrieved_id):
+        requested_batch_sizes.append(current_batch_size)
+        return spans_stream_source
+
+    rest_stream_parser.read_and_parse_full_stream(
+        read_source=read_source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=400,
+    )
+
+    # Two spans returned (< page size) ends the loop after one request; the
+    # requested page size is the configured one, never shrunk.
+    assert requested_batch_sizes == [400]
+
+
+def test_read_and_parse_full_stream__size_correlated_error__halves_page_and_retries_same_cursor(
+    spans_stream_source,
+):
+    requested = []
+    calls = {"n": 0}
+
+    def read_source(current_batch_size, last_retrieved_id):
+        requested.append((current_batch_size, last_retrieved_id))
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.RemoteProtocolError("incomplete chunked read")
+        return spans_stream_source
+
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=read_source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=400,
+    )
+
+    # First request at 400 fails; retried at 200 from the SAME (None) cursor.
+    assert requested == [(400, None), (200, None)]
+    assert len(spans) == 2
+
+
+def test_read_and_parse_full_stream__shrink_floor_reached__reraises(
+    spans_stream_source,
+):
+    def read_source(current_batch_size, last_retrieved_id):
+        raise httpx.ReadTimeout("timed out")
+
+    # Start at the floor so the first failure can't shrink further.
+    with pytest.raises(httpx.ReadTimeout):
+        rest_stream_parser.read_and_parse_full_stream(
+            read_source=read_source,
+            parsed_item_class=rest_api_types.SpanPublic,
+            max_results=None,
+            max_endpoint_batch_size=rest_stream_parser.MIN_ENDPOINT_BATCH_SIZE,
+        )
+
+
+def test_read_and_parse_full_stream__non_size_correlated_error__propagates(
+    spans_stream_source,
+):
+    def read_source(current_batch_size, last_retrieved_id):
+        raise ValueError("not a connection error")
+
+    with pytest.raises(ValueError):
+        rest_stream_parser.read_and_parse_full_stream(
+            read_source=read_source,
+            parsed_item_class=rest_api_types.SpanPublic,
+            max_results=None,
+            max_endpoint_batch_size=400,
+        )

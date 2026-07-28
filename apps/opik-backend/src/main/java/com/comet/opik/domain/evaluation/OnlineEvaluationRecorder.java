@@ -51,6 +51,9 @@ public class OnlineEvaluationRecorder {
     @RequiredArgsConstructor
     private final class RealRecorder implements EvaluationRecorder {
         private final EvaluationContext eval;
+        // Set once from the scorer's reactive chain (before monitor's finalize runs on the same
+        // sequence), read once at finalize — sequential access, no synchronization needed.
+        private boolean budgetExceeded;
 
         @Override
         public Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call) {
@@ -79,12 +82,17 @@ public class OnlineEvaluationRecorder {
         }
 
         @Override
+        public void flagBudgetExceeded() {
+            this.budgetExceeded = true;
+        }
+
+        @Override
         public <T extends FeedbackScoreItem> Mono<List<T>> monitor(Mono<List<T>> scoring) {
             return scoring
                     .doOnNext(scores -> observabilityRecorder.recordTrace(eval.observabilityContext(),
-                            () -> entityFactory.completedTrace(eval, scores)))
+                            () -> entityFactory.completedTrace(eval, scores, budgetExceeded)))
                     .doOnError(error -> observabilityRecorder.recordTrace(eval.observabilityContext(),
-                            () -> entityFactory.failedTrace(eval, error)));
+                            () -> entityFactory.failedTrace(eval, error, budgetExceeded)));
         }
     }
 

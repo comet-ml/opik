@@ -1,0 +1,10 @@
+**Opik Dashboard**:
+
+- Added option to delete experiments from the UI
+- Updated empty state for projects with no traces
+- Removed tooltip delay for the reason icon in the feedback score components
+
+**SDK:**
+
+- Introduced new `get_or_create_dataset` method to the `opik.Opik` client. This method will create a new dataset if it does not exist.
+- When inserting items into a dataset, duplicate items are now silently ignored instead of being ingested.

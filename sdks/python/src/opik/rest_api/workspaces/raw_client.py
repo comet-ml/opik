@@ -9,14 +9,19 @@ from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
+from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
+from ..types.breakdown_config import BreakdownConfig
 from ..types.result import Result
+from ..types.span_filter import SpanFilter
 from ..types.workspace_configuration import WorkspaceConfiguration
 from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from ..types.workspace_version import WorkspaceVersion
+from .types.workspace_span_metric_request_interval import WorkspaceSpanMetricRequestInterval
+from .types.workspace_span_metric_request_metric_type import WorkspaceSpanMetricRequestMetricType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -370,6 +375,97 @@ class RawWorkspacesClient:
             method="POST",
             json={
                 "project_ids": project_ids,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+                "start_before_end": start_before_end,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WorkspaceMetricResponse,
+                    parse_obj_as(
+                        type_=WorkspaceMetricResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_workspace_span_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        metric_type: typing.Optional[WorkspaceSpanMetricRequestMetricType] = OMIT,
+        interval: typing.Optional[WorkspaceSpanMetricRequestInterval] = OMIT,
+        breakdown: typing.Optional[BreakdownConfig] = OMIT,
+        filters: typing.Optional[typing.Sequence[SpanFilter]] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[WorkspaceMetricResponse]:
+        """
+        Gets a span metric time series aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        metric_type : typing.Optional[WorkspaceSpanMetricRequestMetricType]
+
+        interval : typing.Optional[WorkspaceSpanMetricRequestInterval]
+
+        breakdown : typing.Optional[BreakdownConfig]
+
+        filters : typing.Optional[typing.Sequence[SpanFilter]]
+
+        interval_end : typing.Optional[dt.datetime]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[WorkspaceMetricResponse]
+            Workspace span metric
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/workspaces/metrics/spans",
+            method="POST",
+            json={
+                "project_ids": project_ids,
+                "metric_type": metric_type,
+                "interval": interval,
+                "breakdown": convert_and_respect_annotation_metadata(
+                    object_=breakdown, annotation=BreakdownConfig, direction="write"
+                ),
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters, annotation=typing.Sequence[SpanFilter], direction="write"
+                ),
                 "interval_start": interval_start,
                 "interval_end": interval_end,
                 "start_before_end": start_before_end,
@@ -874,6 +970,97 @@ class AsyncRawWorkspacesClient:
             method="POST",
             json={
                 "project_ids": project_ids,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+                "start_before_end": start_before_end,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WorkspaceMetricResponse,
+                    parse_obj_as(
+                        type_=WorkspaceMetricResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_workspace_span_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        metric_type: typing.Optional[WorkspaceSpanMetricRequestMetricType] = OMIT,
+        interval: typing.Optional[WorkspaceSpanMetricRequestInterval] = OMIT,
+        breakdown: typing.Optional[BreakdownConfig] = OMIT,
+        filters: typing.Optional[typing.Sequence[SpanFilter]] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[WorkspaceMetricResponse]:
+        """
+        Gets a span metric time series aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        metric_type : typing.Optional[WorkspaceSpanMetricRequestMetricType]
+
+        interval : typing.Optional[WorkspaceSpanMetricRequestInterval]
+
+        breakdown : typing.Optional[BreakdownConfig]
+
+        filters : typing.Optional[typing.Sequence[SpanFilter]]
+
+        interval_end : typing.Optional[dt.datetime]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[WorkspaceMetricResponse]
+            Workspace span metric
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/workspaces/metrics/spans",
+            method="POST",
+            json={
+                "project_ids": project_ids,
+                "metric_type": metric_type,
+                "interval": interval,
+                "breakdown": convert_and_respect_annotation_metadata(
+                    object_=breakdown, annotation=BreakdownConfig, direction="write"
+                ),
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters, annotation=typing.Sequence[SpanFilter], direction="write"
+                ),
                 "interval_start": interval_start,
                 "interval_end": interval_end,
                 "start_before_end": start_before_end,

@@ -392,6 +392,7 @@ def recreate_experiment(
     target_project_name: Optional[str] = None,
     target_dataset_name: Optional[str] = None,
     target_dataset_version_id: Optional[str] = None,
+    experiment_id: Optional[str] = None,
 ) -> bool:
     """Recreate a single experiment from exported data.
 
@@ -416,6 +417,10 @@ def recreate_experiment(
             this dataset version. Migrate passes the remapped version id from Slice 2's
             ``version_remap``. When ``None``, the experiment is unpinned (server picks
             the current dataset version).
+        experiment_id: When set, the destination experiment is created with this explicit
+            id instead of a server-minted one. Migrate mints and checkpoints the id before
+            creating the row so an interrupted run can delete that exact experiment on
+            resume. When ``None`` (the import-from-disk path), a fresh id is generated.
 
     Note: This function expects that traces and datasets have already been imported into the target workspace.
     When traces are imported, they receive new IDs. The trace_id_map maps original trace IDs
@@ -508,11 +513,19 @@ def recreate_experiment(
             "type": experiment_info.get("type", "regular"),
             "project_name": project_name,
         }
+        # Tags round-trip on both paths: the exporter now serializes them and
+        # create_experiment accepts them directly. Check for None (no tags
+        # field) rather than truthiness so an explicit empty list ([]) is
+        # preserved instead of collapsing to tags=None.
+        experiment_tags = experiment_info.get("tags")
+        if experiment_tags is not None:
+            create_kwargs["tags"] = experiment_tags
+        if experiment_id is not None:
+            create_kwargs["experiment_id"] = experiment_id
         if is_migrate_path:
             create_kwargs["evaluation_method"] = experiment_info.get(
                 "evaluation_method", "dataset"
             )
-            create_kwargs["tags"] = experiment_info.get("tags")
             create_kwargs["dataset_version_id"] = target_dataset_version_id
             optimization_id = experiment_info.get("optimization_id")
             if optimization_id:

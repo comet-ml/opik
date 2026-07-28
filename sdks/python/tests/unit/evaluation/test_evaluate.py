@@ -2961,6 +2961,38 @@ def test_evaluate_on_dict_items__with_scoring_functions(fake_backend):
     }
 
 
+def test_evaluate_on_dict_items__scoring_metrics_list_is_not_mutated(fake_backend):
+    """Reusing a scoring_metrics list across calls must not accumulate wrapped scorers."""
+    items = [{"input": "What is 2+2?", "expected_output": "4"}]
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {"output": "4"}
+
+    def custom_scorer(
+        dataset_item: Dict[str, Any],
+        task_outputs: Dict[str, Any],
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(name="custom_scorer", value=1.0)
+
+    scoring_metrics = [metrics.Equals()]
+
+    for _ in range(2):
+        result = evaluation.evaluate_on_dict_items(
+            items=items,
+            task=task,
+            scoring_metrics=scoring_metrics,
+            scoring_functions=[custom_scorer],
+            scoring_key_mapping={"reference": "expected_output"},
+            scoring_threads=1,
+        )
+
+    assert [metric.name for metric in scoring_metrics] == ["equals_metric"]
+    assert [score.name for score in result.test_results[0].score_results] == [
+        "equals_metric",
+        "custom_scorer",
+    ]
+
+
 def test_evaluate__uses_streaming_by_default(fake_backend):
     """Test that evaluate uses streaming mode by default when no dataset_item_ids or dataset_sampler is provided."""
     mock_dataset = mock.MagicMock(
@@ -3597,6 +3629,58 @@ def test_evaluate_optimization_trial__with_filter_string__passes_to_streaming(
         batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
+
+
+@pytest.mark.parametrize(
+    "experiment_type,expected_type",
+    [
+        (None, "trial"),  # default keeps today's behavior
+        ("trial", "trial"),
+        ("mini-batch", "mini-batch"),
+    ],
+)
+def test_evaluate_optimization_trial__experiment_type__passed_to_create_experiment(
+    fake_backend, experiment_type, expected_type
+):
+    """Optimizers tag mini-batch screening evals with their real experiment type;
+    the value must reach create_experiment so best-score aggregations exclude them."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+        ]
+    )
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    kwargs: Dict[str, Any] = {}
+    if experiment_type is not None:
+        kwargs["experiment_type"] = experiment_type
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-123",
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="the-experiment-name",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+            **kwargs,
+        )
+
+    assert mock_create_experiment.call_args.kwargs["type"] == expected_type
 
 
 def test_evaluate_optimization_trial__traces_and_spans__have_source_optimization(

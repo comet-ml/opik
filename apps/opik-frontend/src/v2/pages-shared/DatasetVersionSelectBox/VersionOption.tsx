@@ -1,8 +1,8 @@
 import React from "react";
-import { Check, GitCommitVertical } from "lucide-react";
 import { SelectItem } from "@/ui/select";
 import { DatasetVersion } from "@/types/datasets";
 import ColoredTag from "@/shared/ColoredTag/ColoredTag";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
@@ -20,31 +20,34 @@ const VersionOption: React.FC<VersionOptionProps> = ({
   return (
     <SelectItem
       key={version.id}
+      wrapperAsChild
       value={formatDatasetVersionKey(datasetId, version.id)}
       className={cn(
-        "flex h-auto min-h-10 flex-col cursor-pointer justify-center py-2 pl-12 min-w-40 focus:bg-primary-foreground focus:text-foreground",
+        "min-h-8 cursor-pointer px-3 py-1 focus:bg-primary-foreground focus:text-foreground",
         {
           "bg-primary-foreground": isSelected,
         },
       )}
     >
-      {isSelected && (
-        <Check className="absolute left-5 top-3 size-4 text-muted-slate" />
-      )}
-      <div className="comet-body-s max-w-[220px] text-light-slate">
-        <GitCommitVertical className="inline-block size-4 text-muted-slate" />
-        <span className="comet-body-s pr-2 text-foreground">
-          {version.version_name}
-        </span>
-        {version.change_description}
-      </div>
-      {version.tags && version.tags.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {version.tags.map((tag) => (
-            <ColoredTag key={tag} label={tag} />
-          ))}
+      <div className="flex w-full min-w-0 flex-col">
+        <div className="comet-body-s flex items-start gap-2 text-foreground">
+          <span className="shrink-0">{version.version_name}</span>
+          {version.tags && version.tags.length > 0 && (
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+              {version.tags.map((tag) => (
+                <ColoredTag key={tag} label={tag} />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+        {version.change_description && (
+          <TooltipWrapper content={version.change_description}>
+            <span className="comet-body-s w-0 min-w-full truncate text-light-slate">
+              {version.change_description}
+            </span>
+          </TooltipWrapper>
+        )}
+      </div>
     </SelectItem>
   );
 };

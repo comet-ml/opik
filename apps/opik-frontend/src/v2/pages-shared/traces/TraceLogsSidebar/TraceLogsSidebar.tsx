@@ -244,9 +244,11 @@ const DEFAULT_TRACES_COLUMNS: string[] = [
   COLUMN_COMMENTS_ID,
 ];
 
-// Per-view behavior of the sidebar. Defaults reproduce the standard logs view used by experiments,
-// playground, trials and annotation queues; callers that need a variant (e.g. the evaluation-traces
-// view) pass an override so this shared component stays free of scenario-specific branching.
+// Per-view behavior of the sidebar. Defaults serve the entity-scoped logs views (experiments,
+// playground, trials, annotation queues): these are already narrowed to one entity, so they show
+// traces of every visibility (experiment runs auto-create hidden traces; scoping, not visibility,
+// is what isolates them). Callers that need a variant (e.g. the evaluation-traces view, which pins
+// hidden) pass an override so this shared component stays free of scenario-specific branching.
 export type TraceLogsViewConfig = {
   // Suffix appended to the localStorage key prefix to isolate this view's column state.
   storageNamespace: string;
@@ -261,7 +263,7 @@ export const DEFAULT_TRACE_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
   defaultColumns: DEFAULT_TRACES_COLUMNS,
   autoSelectScoreColumns: true,
   showMetricsSummary: false,
-  visibilityMode: TRACE_VISIBILITY_MODE.default,
+  visibilityMode: TRACE_VISIBILITY_MODE.all,
 };
 
 // Stable empty reference for the "don't auto-select score columns" case (keeps hook deps steady).

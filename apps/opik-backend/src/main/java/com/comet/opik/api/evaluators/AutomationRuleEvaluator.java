@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -82,12 +83,20 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     @Builder.Default
     private final boolean enabled = true;
 
+    @JsonView({View.Public.class, View.Write.class})
+    @Schema(description = "Controls whether the rule fires on production traces, experiment traces, or both. Defaults to 'production' if omitted.")
+    @Builder.Default
+    private final EvalTriggerScope triggerScope = EvalTriggerScope.PRODUCTION;
+
     @JsonIgnore
     @Builder.Default
     private final List<E> filters = List.of();
 
     @JsonIgnore
-    @NotNull private final T code;
+    // @Valid cascades bean-validation into the polymorphic code record, so nested constraints
+    // (e.g. @Positive on maxCostUsd, @NotNull on model/messages/schema) are enforced at the API
+    // boundary instead of being silently accepted.
+    @NotNull @Valid private final T code;
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)

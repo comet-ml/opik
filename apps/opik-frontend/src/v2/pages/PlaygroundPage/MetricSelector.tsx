@@ -1,15 +1,9 @@
-import React, {
-  useMemo,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
-import { ChevronDown, ExternalLink, Plus } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import React, { useMemo, useState, useCallback } from "react";
+import { ChevronDown, Pencil, Plus } from "lucide-react";
+import toLower from "lodash/toLower";
 
 import { Button } from "@/ui/button";
-import RemovableTag from "@/shared/RemovableTag/RemovableTag";
+import { Tag } from "@/ui/tag";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { ListAction } from "@/ui/list-action";
 import { Separator } from "@/ui/separator";
@@ -18,38 +12,49 @@ import { cn, getSelectAllCheckedState } from "@/lib/utils";
 import { EvaluatorsRule } from "@/types/automations";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import toLower from "lodash/toLower";
+import DropdownEmptyState from "@/v2/pages-shared/DropdownEmptyState/DropdownEmptyState";
+import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import {
+  toggleAllMetrics,
+  toggleMetricSelection,
+} from "@/v2/pages/PlaygroundPage/metricSelection";
 import { usePermissions } from "@/contexts/PermissionsContext";
-
-const MAX_VISIBLE_TAGS = 3;
+import emptyMetricsLightUrl from "/images/empty-metrics-light.svg";
+import emptyMetricsDarkUrl from "/images/empty-metrics-dark.svg";
 
 interface MetricSelectorProps {
   rules: EvaluatorsRule[];
   selectedRuleIds: string[] | null;
   onSelectionChange: (ruleIds: string[] | null) => void;
-  onCreateRuleClick: () => void;
-  workspaceName: string;
   projectId?: string;
   canUsePlayground: boolean;
+  datasetColumnNames?: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRuleCreated?: (rule: EvaluatorsRule) => void;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
   rules,
   selectedRuleIds,
   onSelectionChange,
-  onCreateRuleClick,
-  workspaceName,
   projectId,
   canUsePlayground,
+  datasetColumnNames,
+  open,
+  onOpenChange,
+  onRuleCreated,
 }) => {
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const tagsRef = useRef<HTMLDivElement>(null);
-  const deletingRef = useRef(false);
+  const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
+  const [ruleToEdit, setRuleToEdit] = useState<EvaluatorsRule | null>(null);
 
   const {
     permissions: { canUpdateOnlineEvaluationRules },
   } = usePermissions();
+
+  const canCreateRule =
+    canUsePlayground && canUpdateOnlineEvaluationRules && Boolean(projectId);
 
   const selectedRuleIdsSet = useMemo(
     () => new Set(selectedRuleIds ?? []),
@@ -76,42 +81,28 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const handleSelect = useCallback(
     (ruleId: string) => {
-      if (selectedRuleIds === null || selectedRuleIds.length === rules.length) {
-        // If all selected (null) or all specific items selected, deselect this one
-        const allRuleIds = rules.map((r) => r.id);
-        const newSelection = allRuleIds.filter((id) => id !== ruleId);
-        onSelectionChange(newSelection.length > 0 ? newSelection : []);
-      } else {
-        // Some items selected or none selected
-        const isSelected = selectedRuleIdsSet.has(ruleId);
-        if (isSelected) {
-          const newSelection = selectedRuleIds.filter((id) => id !== ruleId);
-          // If deselecting the last one, set to empty array (none selected)
-          onSelectionChange(newSelection.length > 0 ? newSelection : []);
-        } else {
-          const newSelection = [...selectedRuleIds, ruleId];
-          // If all are now selected, set to null (all selected)
-          onSelectionChange(
-            newSelection.length === rules.length ? null : newSelection,
-          );
-        }
-      }
+      onSelectionChange(
+        toggleMetricSelection(
+          selectedRuleIds,
+          ruleId,
+          rules.map((r) => r.id),
+        ),
+      );
     },
-    [selectedRuleIds, selectedRuleIdsSet, rules, onSelectionChange],
+    [selectedRuleIds, rules, onSelectionChange],
   );
 
   const handleSelectAll = useCallback(() => {
-    onSelectionChange(isAllSelected ? [] : null);
+    onSelectionChange(toggleAllMetrics(isAllSelected));
   }, [onSelectionChange, isAllSelected]);
 
-  const openChangeHandler = useCallback((newOpen: boolean) => {
-    if (deletingRef.current) {
-      deletingRef.current = false;
-      return;
-    }
-    setOpen(newOpen);
-    if (!newOpen) setSearch("");
-  }, []);
+  const openChangeHandler = useCallback(
+    (newOpen: boolean) => {
+      onOpenChange(newOpen);
+      if (!newOpen) setSearch("");
+    },
+    [onOpenChange],
+  );
 
   const isSelected = useCallback(
     (ruleId: string) => {
@@ -121,111 +112,104 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [isAllSelected, selectedRuleIdsSet],
   );
 
+  const openCreateDialog = useCallback(() => {
+    setRuleToEdit(null);
+    openChangeHandler(false);
+    setIsRuleDialogOpen(true);
+  }, [openChangeHandler]);
+
+  const openEditDialog = useCallback(
+    (rule: EvaluatorsRule) => {
+      setRuleToEdit(rule);
+      openChangeHandler(false);
+      setIsRuleDialogOpen(true);
+    },
+    [openChangeHandler],
+  );
+
+  const handleDialogOpenChange = useCallback((newOpen: boolean) => {
+    setIsRuleDialogOpen(newOpen);
+    if (!newOpen) setRuleToEdit(null);
+  }, []);
+
   const hasNoRules = rules.length === 0;
 
-  useEffect(() => {
-    if (open && tagsRef.current) {
-      tagsRef.current.scrollTo({
-        left: tagsRef.current.scrollWidth,
-        behavior: "smooth",
-      });
-    }
-  }, [open, selectedRules.length]);
-
-  const visibleTags = selectedRules.slice(
-    0,
-    open ? undefined : MAX_VISIBLE_TAGS,
-  );
-  const overflowCount = open
-    ? 0
-    : Math.max(0, selectedRules.length - MAX_VISIBLE_TAGS);
-
-  const renderTriggerContent = () => {
-    if (rules.length === 0 || selectedRules.length === 0) {
-      return <span className="truncate text-muted-slate">Select metrics</span>;
-    }
-
-    return (
-      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-        <div
-          ref={tagsRef}
-          className={cn(
-            "comet-no-scrollbar flex min-w-0 shrink items-center gap-2",
-            open ? "overflow-x-auto" : "overflow-hidden",
-          )}
+  const triggerContent =
+    selectedCount === 0 ? (
+      <span className="min-w-0 truncate">Select metrics</span>
+    ) : (
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate">Metrics</span>
+        <Tag
+          variant="green"
+          size="sm"
+          className="group-hover:bg-primary-100 group-hover:text-primary-hover"
         >
-          {visibleTags.map((rule) => (
-            <RemovableTag
-              key={rule.id}
-              label={rule.name}
-              variant="purple"
-              size="default"
-              onDelete={() => {
-                deletingRef.current = true;
-                handleSelect(rule.id);
-              }}
-            />
-          ))}
-        </div>
-        {overflowCount > 0 && (
-          <span className="ml-1 shrink-0 text-xs text-muted-slate">
-            +{overflowCount}
-          </span>
-        )}
-      </div>
+          {selectedCount}
+        </Tag>
+      </span>
     );
-  };
-
-  const triggerElement = (
-    <div
-      tabIndex={0}
-      className={cn(
-        "flex h-8 w-full cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-2 text-sm hover:shadow-sm focus:border-primary focus:outline-none",
-        open && "border-primary",
-      )}
-    >
-      {renderTriggerContent()}
-      <ChevronDown className="ml-auto size-4 shrink-0 text-light-slate" />
-    </div>
-  );
 
   return (
-    <Popover onOpenChange={openChangeHandler} open={open} modal>
-      <PopoverTrigger asChild>{triggerElement}</PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="relative w-[--radix-popover-trigger-width] p-1 pt-12"
-        hideWhenDetached
-        onCloseAutoFocus={(e) => e.preventDefault()}
-      >
-        <div className="absolute inset-x-1 top-0 h-12">
-          <SearchInput
-            searchText={search}
-            setSearchText={setSearch}
-            placeholder="Search"
-            variant="ghost"
-          />
-          <Separator className="mt-1" />
-        </div>
-        <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden">
-          {hasNoRules ? (
-            <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
-              <div className="comet-body-s-accented pb-1 text-foreground">
-                No metrics available
-              </div>
-              {canUsePlayground && canUpdateOnlineEvaluationRules && (
-                <div className="comet-body-s text-muted-slate">
-                  Create an online evaluation rule for the Playground project to
-                  generate metrics for your outputs.
-                </div>
-              )}
+    <>
+      <Popover onOpenChange={openChangeHandler} open={open}>
+        <PopoverTrigger asChild>
+          <div
+            tabIndex={0}
+            className={cn(
+              "flex h-full w-[120px] cursor-pointer items-center gap-1 px-2 text-xs focus:outline-none",
+              open
+                ? "text-foreground"
+                : selectedCount > 0
+                  ? "group text-foreground hover:text-primary"
+                  : "text-light-slate hover:text-foreground",
+            )}
+          >
+            <div className="flex min-w-0 flex-1 items-center overflow-hidden">
+              {triggerContent}
             </div>
-          ) : filteredRules.length > 0 ? (
+            <ChevronDown
+              className={cn(
+                "size-3.5 shrink-0 text-light-slate transition-transform group-hover:text-primary",
+                open && "rotate-180",
+              )}
+            />
+          </div>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="flex max-h-[260px] w-[210px] flex-col p-1"
+          hideWhenDetached
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          {!hasNoRules && (
             <>
-              {filteredRules.map((rule) => (
+              <SearchInput
+                searchText={search}
+                setSearchText={setSearch}
+                variant="ghost"
+                dimension="sm"
+                disableDebounce
+                className="shrink-0"
+              />
+              <Separator className="my-1 shrink-0" />
+            </>
+          )}
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+            {hasNoRules ? (
+              <DropdownEmptyState
+                lightImageUrl={emptyMetricsLightUrl}
+                darkImageUrl={emptyMetricsDarkUrl}
+                title="No metrics yet"
+                ctaLabel={canCreateRule ? "Create metric" : undefined}
+                onCreate={canCreateRule ? openCreateDialog : undefined}
+              />
+            ) : filteredRules.length > 0 ? (
+              filteredRules.map((rule) => (
                 <div
                   key={rule.id}
-                  className="group flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                  className="group flex h-8 cursor-pointer items-center gap-2 rounded-md px-3 hover:bg-primary-foreground"
                   onClick={() => handleSelect(rule.id)}
                 >
                   <Checkbox
@@ -237,78 +221,83 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                       <div className="comet-body-s truncate">{rule.name}</div>
                     </div>
                   </TooltipWrapper>
-                  <div className="flex shrink-0 items-center justify-center rounded">
-                    <TooltipWrapper content="Open in a new tab">
+                  {canUpdateOnlineEvaluationRules && (
+                    <TooltipWrapper content="Edit metric">
                       <Button
                         type="button"
                         variant="minimal"
                         size="icon-xs"
-                        asChild
+                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditDialog(rule);
+                        }}
                       >
-                        <Link
-                          to={`/${workspaceName}/projects/${projectId}/online-evaluation?${
-                            canUpdateOnlineEvaluationRules
-                              ? `editRule=${rule.id}&`
-                              : ""
-                          }search=${rule.id}&filters=[]`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <ExternalLink className="size-3.5 shrink-0" />
-                        </Link>
+                        <Pencil className="size-3.5 shrink-0" />
                       </Button>
                     </TooltipWrapper>
-                  </div>
+                  )}
                 </div>
-              ))}
-            </>
-          ) : (
-            <div className="flex h-20 items-center justify-center text-muted-foreground">
-              No metrics found
+              ))
+            ) : (
+              <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
+                No metrics found
+              </div>
+            )}
+          </div>
+
+          {!hasNoRules && (
+            <div className="shrink-0">
+              {filteredRules.length > 0 && (
+                <>
+                  <Separator className="my-1" />
+                  <div
+                    className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-3 hover:bg-primary-foreground"
+                    onClick={handleSelectAll}
+                  >
+                    <Checkbox
+                      checked={selectAllCheckedState}
+                      className="shrink-0"
+                      tabIndex={-1}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="comet-body-s truncate tabular-nums">
+                        {selectedCount} of {rules.length} selected
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              {canCreateRule && (
+                <>
+                  <Separator className="my-1" />
+                  <ListAction
+                    variant="default"
+                    size="sm"
+                    onClick={openCreateDialog}
+                  >
+                    <Plus className="size-3.5 shrink-0" />
+                    New metric
+                  </ListAction>
+                </>
+              )}
             </div>
           )}
-        </div>
+        </PopoverContent>
+      </Popover>
 
-        <div className="sticky inset-x-0 bottom-0">
-          {!hasNoRules && filteredRules.length > 0 && (
-            <>
-              <Separator className="my-1" />
-              <div
-                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
-                onClick={handleSelectAll}
-              >
-                <Checkbox
-                  checked={selectAllCheckedState}
-                  className="shrink-0"
-                  tabIndex={-1}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="comet-body-s truncate">
-                    {selectedCount} of {rules.length} selected
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-          {canUsePlayground && canUpdateOnlineEvaluationRules && (
-            <>
-              <Separator className="my-1" />
-              <ListAction
-                onClick={() => {
-                  setOpen(false);
-                  onCreateRuleClick();
-                }}
-              >
-                <Plus className="size-3.5 shrink-0" />
-                Add new
-              </ListAction>
-            </>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+      <AddEditRuleDialog
+        key={ruleToEdit ? `edit-${ruleToEdit.id}` : "create"}
+        open={isRuleDialogOpen}
+        setOpen={handleDialogOpenChange}
+        projectId={projectId || ""}
+        rule={ruleToEdit ?? undefined}
+        mode={ruleToEdit ? "edit" : "create"}
+        datasetColumnNames={datasetColumnNames}
+        hideScopeSelector
+        onRuleCreated={onRuleCreated}
+      />
+    </>
   );
 };
 

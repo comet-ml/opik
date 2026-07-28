@@ -27,6 +27,20 @@ OPTIMIZATION_RESULT_SCHEMA_VERSION = "v1"
 MIN_EVAL_THREADS = 1
 MAX_EVAL_THREADS = 32
 
+# Scoring-failure guard (OPIK-7029).
+# Fraction of objective-metric scores that must have failed before we treat the
+# run as unscoreable and raise ``ScoringFailedError`` (which propagates to ERROR)
+# instead of silently COMPLETING with a misleading 0.0 score.
+#
+# We start conservatively at 1.0 = "every single item failed". This is the safest
+# choice: a value < 1.0 (a majority threshold, e.g. 0.5) would let a run that scored
+# some items still fail hard, which risks discarding a partially-successful run and
+# regressing genuine low-score results into false ERRORs. Total failure, by contrast,
+# is unambiguously broken (the metric/judge could not score anything) and is exactly
+# the OPIK-7029 "silent COMPLETED" case. Revisit toward a majority threshold only if
+# real-world data shows partial-failure runs are also useless to users.
+DEFAULT_SCORING_FAILURE_THRESHOLD = 1.0
+
 # Generic defaults.
 DEFAULT_NUM_THREADS = 12
 DEFAULT_SEED = 42
@@ -38,6 +52,16 @@ DEFAULT_TOOL_CALL_MAX_ITERATIONS = 5
 DEFAULT_TOOL_CALL_MAX_TOOLS_TO_OPTIMIZE = 3
 DEFAULT_N_SAMPLES_STRATEGY = "random_sorted"
 DEFAULT_N_SAMPLES_MINIBATCH = None
+
+# GEPA delegates its whole search loop to gepa.optimize(), so Opik's
+# runtime.should_stop never runs during the search. These stop conditions are
+# wired into gepa.optimize() as stop_callbacks instead. The stall stopper ends
+# a run after this many consecutive engine iterations without a full-eval
+# improvement (the strict-acceptance gate can otherwise spin on mini-batches,
+# burning metric calls until the budget is exhausted). Set the
+# `no_improvement_iterations` extra_param to 0 to disable the stall stopper; an
+# absent/None value uses this default.
+DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS = 10
 
 # Benchmarks defaults.
 DEFAULT_BENCHMARK_MAX_CONCURRENT = 5

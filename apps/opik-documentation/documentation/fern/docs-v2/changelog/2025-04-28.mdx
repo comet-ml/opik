@@ -1,0 +1,22 @@
+**Opik Dashboard**:
+
+- Updated the experiment page charts to better handle nulls, all metric values
+  are now displayed.
+- Added lazy loading for traces and span sidebar to better handle very large
+  traces.
+- Added support for trace and span attachments, you can now log pdf, video and
+  audio files to your traces.
+
+<Frame>
+  <img src="/img/changelog/2025-04-28/trace_attachment.gif" />
+</Frame>
+
+- Improved performance of some Experiment endpoints
+
+**Python and JS / TS SDK**:
+
+- Updated DSPy integration following latest DSPy release
+- New Autogen integration based on Opik's OpenTelemetry endpoints
+- Added compression to request payload
+
+_Release_: `1.7.12`, `1.7.13`, `1.7.14`

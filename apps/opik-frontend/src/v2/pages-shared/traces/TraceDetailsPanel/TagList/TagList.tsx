@@ -85,7 +85,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       onDeleteTag={handleDeleteTag}
       size="md"
       className={className}
-      canAdd={canLogTraceSpanThread}
+      readOnly={!canLogTraceSpanThread}
       tagVariant={tagVariant}
     />
   );

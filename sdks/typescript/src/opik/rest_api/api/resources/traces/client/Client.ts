@@ -2399,6 +2399,81 @@ export class TracesClient {
     }
 
     /**
+     * Returns whether the project has at least one trace matching the given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions without scanning or aggregating the whole project.
+     *
+     * @param {OpikApi.TracesExistRequest} request
+     * @param {TracesClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.exist()
+     */
+    public exist(
+        request: OpikApi.TracesExistRequest = {},
+        requestOptions?: TracesClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ExistenceResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__exist(request, requestOptions));
+    }
+
+    private async __exist(
+        request: OpikApi.TracesExistRequest = {},
+        requestOptions?: TracesClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ExistenceResponse>> {
+        const { projectId, projectName, source, threadOnly } = request;
+        const _queryParams: Record<string, unknown> = {
+            project_id: projectId,
+            project_name: projectName,
+            source,
+            thread_only: threadOnly,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/exists",
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.ExistenceResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "GET", "/v1/private/traces/exists");
+    }
+
+    /**
      * Update thread
      *
      * @param {string} threadModelId

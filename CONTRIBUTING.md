@@ -48,9 +48,10 @@ Please review the CLA before contributing:
 6. Fill `.github/pull_request_template.md` completely.
 
 ## GitHub Actions workflows
-Workflow files in `.github/workflows/` are validated with [actionlint](https://github.com/rhysd/actionlint).
-- CI: `.github/workflows/actionlint.yml` runs on PRs that touch workflow files and lints only the changed ones.
-- Local: `.hooks/pre-commit` runs actionlint against staged workflow files when the binary is available; install with `brew install actionlint` (macOS) or via the [official install guide](https://github.com/rhysd/actionlint#installation). Without it the hook prints a hint and skips.
+Workflow files in `.github/workflows/` are validated with [actionlint](https://github.com/rhysd/actionlint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed workflow files. The pre-commit framework builds the pinned actionlint from source automatically — no manual install needed. Run `make hooks` once per clone to enable it locally.
+
+## Dockerfiles
+Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
 
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`
@@ -87,8 +88,20 @@ Rules:
 - Never disclose vulnerabilities, exploit steps, or incident details in public issues/PRs (use private maintainer/security channels).
 - Include the PR template AI watermark/disclosure block when AI is used.
 
+## Code quality (pre-commit)
+Linters and formatters are orchestrated by the [pre-commit](https://pre-commit.com/) framework
+from the single root `.pre-commit-config.yaml` (the source of truth for which checks run on which paths).
+
+- Install once per clone: `pip install pre-commit` (or `brew install pre-commit`), then `make hooks`.
+  Use pre-commit 3.0+ (developed on 4.x); the hook is shared across all worktrees, so install it once.
+- On commit, only the hooks matching your changed files run. If a formatter fixes a file, the commit
+  is aborted and the fixes are left **unstaged** — review them, `git add`, and commit again.
+- Run the same checks over your whole branch diff: `make precommit`. Full-repo audit: `make precommit-all`.
+- Java (Spotless), frontend/TS (ESLint + typecheck) hooks use the repo's own Maven/Node toolchains,
+  so they only run for contributors already set up for those areas.
+
 ## Agent/editor setup
 - Cursor compatibility: `make cursor` (`.cursor -> .agents`)
 - Codex compatibility: `make codex` (`.codex -> .agents`, generates `AGENTS.override.md` from `.agents/rules/*.mdc`)
 - Claude sync: `make claude` (syncs `.agents` to `.claude`)
-- Git hooks: `make hooks`
+- Git hooks: `make hooks` (installs the pre-commit framework hook; see Code quality above)

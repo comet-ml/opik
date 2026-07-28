@@ -30,11 +30,13 @@ import java.util.UUID;
  * Loads a trace/span media attachment (image, audio, video) so the judge can
  * reason over its actual content while scoring (OPIK-6555).
  *
- * <p>Args: {@code {type, id, file_name}} (all required).
+ * <p>Args: {@code {type, id, file_name}} (all required) — copied verbatim from a single
+ * {@code attachments} entry, which is self-describing ({@code type}, {@code id}, {@code file_name}
+ * together identify the owner). Do not infer the owner from ids elsewhere in the structure.
  * <ul>
- *   <li>{@code type} ∈ {@code trace, span} — the entity that owns the attachment.</li>
- *   <li>{@code id} entity id (UUID).</li>
- *   <li>{@code file_name} the exact file name as shown in the entity's {@code attachments} list.</li>
+ *   <li>{@code type} ∈ {@code trace, span} — the {@code type} shown in that {@code attachments} entry.</li>
+ *   <li>{@code id} the {@code id} shown in that same entry (the entity that owns the file).</li>
+ *   <li>{@code file_name} the {@code file_name} shown in that same entry.</li>
  * </ul>
  *
  * <p>Fetch does not return the media inline as text — that is impossible in a tool result.
@@ -55,20 +57,25 @@ public class GetAttachmentTool implements ToolExecutor {
 
     private static final ToolSpecification SPEC = ToolSpecification.builder()
             .name(NAME)
-            .description("Load a media attachment (image, audio, or video) belonging to a trace or span"
-                    + " so you can inspect its actual content while scoring. Reading a trace lists its"
-                    + " attachments in an `attachments` field (file names + media types); pass one of those"
-                    + " file names here to load it into the conversation as viewable media. Only image,"
-                    + " audio, and video files can be loaded."
-                    + " Loaded media links are time-limited; if a link has expired, call this tool again"
-                    + " with the same arguments to obtain a fresh one.")
+            .description("""
+                    Load a media attachment (image, audio, or video) belonging to a trace or span \
+                    so you can inspect its actual content while scoring. The trace/span structure and \
+                    the read tool list attachments in an `attachments` field where each entry is \
+                    self-describing: it carries `type`, `id` and `file_name`. Copy those three values \
+                    verbatim from one entry into this tool's arguments — do not infer the owner from \
+                    other ids in the structure (e.g. a span's nested trace_id). Only image, audio, and \
+                    video files can be loaded. Loaded media links are time-limited; if a link has \
+                    expired, call this tool again with the same arguments to obtain a fresh one.""")
             .parameters(JsonObjectSchema.builder()
-                    .addStringProperty("type", "Entity type that owns the attachment: trace or span.")
-                    .addStringProperty("id",
-                            "Entity id (UUID) — a trace id from the thread skeleton, or a span id.")
-                    .addStringProperty("file_name",
-                            "The attachment file name to load, as shown in the entity's `attachments` list"
-                                    + " (e.g. input-attachment-1-1700000000000.png).")
+                    .addStringProperty("type", """
+                            The `type` shown in the chosen `attachments` entry (trace or span) — the entity \
+                            that owns the file. Copy it verbatim; do not infer it.""")
+                    .addStringProperty("id", """
+                            The `id` shown in that same `attachments` entry (the owning entity's UUID). \
+                            Copy it verbatim.""")
+                    .addStringProperty("file_name", """
+                            The `file_name` shown in that same `attachments` entry \
+                            (e.g. input-attachment-1-1700000000000.png).""")
                     .required("type", "id", "file_name")
                     .build())
             .build();

@@ -82,9 +82,15 @@ class OptimizerFactory:
         )
 
         optimizer_class = cls._OPTIMIZERS[optimizer_type]
-        optimizer = optimizer_class(
-            model=model, model_parameters=model_params, **optimizer_params
-        )
+        try:
+            optimizer = optimizer_class(
+                model=model, model_parameters=model_params, **optimizer_params
+            )
+        except (TypeError, ValueError) as exc:
+            raise InvalidOptimizerError(
+                optimizer_type,
+                f"Constructor rejected the provided parameters: {exc}",
+            ) from exc
 
         logger.debug(f"Created {optimizer_type} optimizer instance")
         return optimizer

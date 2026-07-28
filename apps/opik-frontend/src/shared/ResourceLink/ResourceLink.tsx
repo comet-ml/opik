@@ -1,12 +1,12 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, type LucideIcon } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
-import { Tag } from "@/ui/tag";
+import { Tag, type TagTextSize } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import { Filter } from "@/types/filters";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
@@ -139,9 +139,12 @@ export type ResourceLinkProps = {
   tooltipContent?: string | false;
   asTag?: boolean;
   isSmall?: boolean;
+  textSize?: TagTextSize;
   isDeleted?: boolean;
   prefix?: string;
   suffix?: React.ReactNode;
+  /** Optional leading icon rendered inside the tag (asTag, non-small only). */
+  icon?: LucideIcon;
   className?: string;
 };
 
@@ -154,11 +157,16 @@ function ResourceLink({
   tooltipContent = "",
   asTag = false,
   isSmall = false,
+  textSize = "s",
   isDeleted = false,
   prefix,
   suffix,
+  icon: Icon,
   className,
 }: ResourceLinkProps): React.ReactElement {
+  const bodyClass = textSize === "xs" ? "comet-body-xs" : "comet-body-s";
+  const bodyAccentedClass =
+    textSize === "xs" ? "comet-body-xs-accented" : "comet-body-s-accented";
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const props = RESOURCE_MAP[resource];
@@ -212,15 +220,20 @@ function ResourceLink({
               className,
             )}
           >
+            {!isSmall && Icon && (
+              <Icon className="size-3 shrink-0 text-muted-slate" />
+            )}
             {!isSmall &&
               (deleted ? (
-                <div className="comet-body-s-accented truncate text-foreground">
+                <div
+                  className={cn(bodyAccentedClass, "truncate text-foreground")}
+                >
                   {text}
                 </div>
               ) : (
-                <div className="comet-body-s truncate text-foreground">
+                <div className={cn(bodyClass, "truncate text-foreground")}>
                   {prefix ? `${prefix}: ` : ""}
-                  <span className="comet-body-s-accented">{text}</span>
+                  <span className={bodyAccentedClass}>{text}</span>
                 </div>
               ))}
             {!isSmall && !deleted && suffix}

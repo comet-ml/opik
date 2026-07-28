@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from opik.evaluation.evaluation_result import EvaluationResult
 
 
 @pytest.fixture
@@ -97,8 +98,14 @@ def mock_task_evaluator(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Any]:
             call_count["n"] += 1
 
             if return_evaluation_result:
-                mock_result = MagicMock()
+                # spec=EvaluationResult so isinstance(..., EvaluationResult) holds —
+                # real evaluate() returns a real EvaluationResult, and the optimizer
+                # code paths gate on that type. Name the objective score with the
+                # metric's own __name__ so _extract_objective_scores matches it and
+                # the configured score (not a coerced MagicMock) is what's read back.
+                mock_result = MagicMock(spec=EvaluationResult)
                 mock_result.test_results = []
+                metric_name = getattr(metric, "__name__", "test_metric")
                 items = dataset.get_items() if hasattr(dataset, "get_items") else []
                 for i, item in enumerate(items[:5]):
                     test_result = MagicMock()
@@ -107,7 +114,7 @@ def mock_task_evaluator(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Any]:
                     test_result.test_case = test_case
 
                     score_result = MagicMock()
-                    score_result.name = "test_metric"
+                    score_result.name = metric_name
                     score_result.value = current_score
                     score_result.reason = None
                     score_result.scoring_failed = False

@@ -6,3 +6,23 @@ To learn more about the release, try:
 
   $ helm status -n {{ .Release.Namespace }} {{ .Release.Name }}
   $ helm -n {{ .Release.Namespace }}  get all {{ .Release.Name }}
+{{- if and .Values.clickhouse.enabled (gt (int (.Values.clickhouse.replicasCount | default 1)) 1) }}
+
+────────────────────────────────────────────────────────────────────────────
+[!] ClickHouse is configured with {{ .Values.clickhouse.replicasCount }} replicas.
+
+    For a FRESH install, Opik's analytics migrations must run against a SINGLE
+    ClickHouse replica first. Installing directly on a multi-replica cluster
+    prevents the migrations from completing (the earliest migrations are not
+    cluster-aware and only reach one replica), so opik-backend never becomes Ready.
+
+    Recommended two-phase install for High Availability:
+      1. Install with clickhouse.replicasCount: 1
+      2. Wait until opik-backend is Ready (all migrations applied)
+      3. Set clickhouse.replicasCount: {{ .Values.clickhouse.replicasCount }} and upgrade — the ClickHouse
+         operator copies the schema to the new replicas.
+
+    Already-migrated multi-replica clusters are unaffected; ignore this on upgrades.
+    Docs: https://www.comet.com/docs/opik/self-host/scaling#replication-strategy
+────────────────────────────────────────────────────────────────────────────
+{{- end }}

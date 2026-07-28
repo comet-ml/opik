@@ -4539,7 +4539,8 @@ OptimizationContext(
     finish_reason: Optional = None,
     current_best_score: float | None = None,
     current_best_prompt: dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt] | None = None,
-    dataset_split: str | None = None
+    dataset_split: str | None = None,
+    scoring_health: dict[str, int] | None = None
 )
 ```
 
@@ -4571,6 +4572,7 @@ OptimizationContext(
 <ParamField path="current_best_score" type="float | None" optional={true} />
 <ParamField path="current_best_prompt" type="dict[str, opik_optimizer.api_objects.chat_prompt.ChatPrompt] | None" optional={true} />
 <ParamField path="dataset_split" type="str | None" optional={true} />
+<ParamField path="scoring_health" type="dict[str, int] | None" optional={true} />
 
 ## OptimizationHistoryState
 
@@ -4992,6 +4994,25 @@ MultiMetricObjective(
 <ParamField path="name" type="str" optional={true} default="multi_metric_objective" />
 <ParamField path="reason" type="str | None" optional={true} />
 <ParamField path="reason_builder" type="collections.abc.Callable[[list[_opik._score_result.ScoreResult], list[float], float], str | None] | None" optional={true} />
+
+## ScoringFailedError
+
+```python
+ScoringFailedError(
+    failed: int,
+    total: int,
+    objective_metric_name: str | None = None,
+    message: str | None = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="failed" type="int" />
+<ParamField path="total" type="int" />
+<ParamField path="objective_metric_name" type="str | None" optional={true} />
+<ParamField path="message" type="str | None" optional={true} />
 
 ## PromptLibrary
 

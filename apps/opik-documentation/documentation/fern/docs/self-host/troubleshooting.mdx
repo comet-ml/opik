@@ -80,6 +80,53 @@ You should see a row with the macro name and value.
 
 After restarting ClickHouse, retry the backend deployment or migration. The backend should automatically retry after ClickHouse is ready.
 
+### Fresh Multi-Replica Install Migration Failures
+
+#### Problem Description
+
+A brand-new Opik install on a ClickHouse cluster with **2 or more replicas** cannot complete its analytics migrations. The backend never starts (CrashLoopBackOff), and the migration step fails with errors such as:
+
+```
+Code: 60. DB::Exception: Could not find table: <table_name>. (UNKNOWN_TABLE)
+Code: 81. DB::Exception: Database opik does not exist. (UNKNOWN_DATABASE)
+```
+
+_`opik` is the default analytics database name (`ANALYTICS_DB_DATABASE_NAME`); substitute your own if you overrode it._
+
+**Symptoms:**
+
+- Fresh install only (no existing data); backend in CrashLoopBackOff
+- Migration errors reference a table or the `opik` database that is missing on one replica
+- One replica holds the `opik` database and tables while another has few or none
+
+#### Cause
+
+Opik's earliest analytics migrations predate cluster-aware DDL — they do not use `ON CLUSTER '{cluster}'` — so they create the `opik` database and base tables on a single replica only. Later, cluster-aware migrations fan out to every replica and fail on the one that never received that base schema. The ClickHouse operator only copies schema to a replica when it **joins** the cluster (a scale-up), not during a migration.
+
+#### Resolution
+
+Install High-Availability deployments in two phases so the schema exists before the extra replicas join:
+
+<Steps>
+  <Step>
+    Install (or reset to) `clickhouse.replicasCount: 1`.
+  </Step>
+  <Step>
+    Wait until `opik-backend` is `Ready` — all migrations are applied on the single replica.
+  </Step>
+  <Step>
+    Raise `clickhouse.replicasCount` (e.g. to `2`) and upgrade. The operator provisions the new replica and copies the fully-migrated schema to it.
+  </Step>
+</Steps>
+
+<Callout intent="info">
+Single-replica installs and upgrades of already-migrated multi-replica clusters are unaffected. Cluster-aware migrations use `ON CLUSTER '{cluster}'`, so once the base schema is present on all replicas, later migrations stay consistent automatically.
+</Callout>
+
+<Callout intent="warning">
+If a fresh multi-replica attempt was torn down, the dropped tables can leave orphaned `/clickhouse/tables/...` ZooKeeper paths that cause `REPLICA_ALREADY_EXISTS` on a retry. Since a fresh install has no data to preserve, recovery only needs those orphaned paths cleared before re-running — the full replica-restore rebuild in [ClickHouse Zookeeper Metadata Loss](#clickhouse-zookeeper-metadata-loss) is for recovering existing data and isn't needed here.
+</Callout>
+
 ### ClickHouse Zookeeper Metadata Loss
 
 #### Problem Description

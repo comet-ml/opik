@@ -15,6 +15,7 @@ class TraceThreadLlmAsJudgeCode(UniversalBaseModel):
     model: LlmAsJudgeModelParameters
     messages: typing.List[LlmAsJudgeMessage]
     schema_: typing_extensions.Annotated[typing.List[LlmAsJudgeOutputSchema], FieldMetadata(alias="schema")]
+    max_cost_usd: typing.Optional[float] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -18,7 +18,11 @@
 
     <zookeeper_path>/clickhouse</zookeeper_path>
     <zookeeper_session_timeout_ms>30000</zookeeper_session_timeout_ms>
-    
+
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+    </distributed_ddl>
+
     <remote_servers>
         <cluster>
         <shard>

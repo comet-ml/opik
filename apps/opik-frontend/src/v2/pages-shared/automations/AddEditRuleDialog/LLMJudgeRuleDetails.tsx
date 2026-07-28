@@ -1,11 +1,19 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
 import get from "lodash/get";
 
 import { Label } from "@/ui/label";
-import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
+import { Input } from "@/ui/input";
+import {
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/ui/form";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import SelectBox from "@/shared/SelectBox/SelectBox";
@@ -30,7 +38,11 @@ import {
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
-import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
+import { cn } from "@/lib/utils";
+import {
+  RESERVED_SPAN_LLM_JUDGE_VARIABLES,
+  RESERVED_TRACE_LLM_JUDGE_VARIABLES,
+} from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -64,6 +76,58 @@ type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
   form: UseFormReturn<EvaluationRuleFormType>;
   datasetColumnNames?: string[];
+};
+
+// Positive decimal only (also rejects the sign/exponent/comma that type=number would accept).
+const POSITIVE_DECIMAL_REGEX = /^\d*\.?\d*$/;
+
+type MaxCostInputProps = {
+  value: number | null | undefined;
+  hasError: boolean;
+  onChange: (value: number | null) => void;
+};
+
+// Decimal budget field. The committed form value is a number, but a controlled type=number bound to
+// that number erases an in-progress trailing decimal point ("1." commits as 1 and re-renders "1"),
+// making fractional entry impossible. So keep the raw text as the source of truth for what's displayed
+// and commit the parsed number separately, re-syncing only when the value changes from outside typing.
+const MaxCostInput: React.FC<MaxCostInputProps> = ({
+  value,
+  hasError,
+  onChange,
+}) => {
+  const [text, setText] = useState(value == null ? "" : String(value));
+
+  useEffect(() => {
+    const parsed = text === "" ? null : Number(text);
+    const reflectsCurrentText =
+      value === parsed || (value == null && parsed == null);
+    if (!reflectsCurrentText) {
+      setText(value == null ? "" : String(value));
+    }
+    // Re-sync display only on external value changes (form reset / editing an existing rule), not on
+    // the value we just committed from our own typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      placeholder="No limit"
+      value={text}
+      className={cn("max-w-40", { "border-destructive": hasError })}
+      onChange={(event) => {
+        const raw = event.target.value;
+        if (raw !== "" && !POSITIVE_DECIMAL_REGEX.test(raw)) {
+          return;
+        }
+        setText(raw);
+        const parsed = raw === "" ? null : Number(raw);
+        onChange(parsed === null || Number.isNaN(parsed) ? null : parsed);
+      }}
+    />
+  );
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
@@ -128,6 +192,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       // recalculate variables
       const variables = formInstance.getValues("llmJudgeDetails.variables");
       const currentScope = formInstance.getValues("scope");
+      // {{span}} is reserved on span scope; {{trace}} / {{spans}} on trace scope.
+      const reservedVariables =
+        currentScope === EVALUATORS_RULE_SCOPE.span
+          ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
+          : RESERVED_TRACE_LLM_JUDGE_VARIABLES;
       const localVariables: Record<string, string> = {};
       let parsingVariablesError: boolean = false;
       messages
@@ -152,6 +221,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             variables[v],
             currentScope,
             agenticToolsEnabled,
+            reservedVariables,
           );
         });
 
@@ -235,6 +305,39 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           );
         }}
       />
+      {/* Budget applies only to agentic (multi-turn) evaluations — trace and thread. Span scoring is
+          a single LLM call with no loop to wrap up, so the field is hidden there. */}
+      {!isSpanScope && (
+        <FormField
+          control={form.control}
+          name="llmJudgeDetails.maxCostUsd"
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "llmJudgeDetails",
+              "maxCostUsd",
+            ]);
+
+            return (
+              <FormItem>
+                <FormLabel>Max cost per evaluation (USD)</FormLabel>
+                <FormControl>
+                  <MaxCostInput
+                    value={field.value}
+                    hasError={Boolean(validationErrors?.message)}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
+                <FormDescription className="comet-body-xs text-muted-slate">
+                  Once an evaluation&apos;s spend reaches this amount the judge
+                  wraps up and returns its scores so far. Leave empty for no
+                  limit.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      )}
       <FormField
         control={form.control}
         name="llmJudgeDetails.template"
@@ -351,7 +454,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     includeIntermediateNodes
                     reservedSentinels={
                       agenticToolsEnabled
-                        ? RESERVED_TRACE_EVALUATOR_VARIABLES
+                        ? isSpanScope
+                          ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
+                          : RESERVED_TRACE_LLM_JUDGE_VARIABLES
                         : undefined
                     }
                   />

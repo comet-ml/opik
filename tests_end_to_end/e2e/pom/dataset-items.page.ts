@@ -61,6 +61,67 @@ export class DatasetItemsPage {
     });
   }
 
+  /** Clicking a row opens the editor side-panel (URL gains ?row=<id>). */
+  async openItemEditor(index: number): Promise<void> {
+    return test.step(`Open editor for item at index ${index}`, async () => {
+      const row = this.itemRow(index);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('cell').nth(1).click();
+      await this.editItemPanel.waitFor({ state: 'visible' });
+      await this.editItemPanel.getByRole('region').first().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Edits a single field in the open editor. The editor autosaves: changing a
+   * field stages an "edited" draft (Draft badge appears), it does not persist
+   * on its own — commitDraft() turns the draft into a new version.
+   */
+  async editItemField(field: string, value: string): Promise<void> {
+    return test.step(`Edit field "${field}"`, async () => {
+      await this.editItemPanel
+        .getByRole('region', { name: field })
+        .getByPlaceholder('Enter text for this field…')
+        .fill(value);
+      await this.draftBadge().waitFor({ state: 'visible' });
+    });
+  }
+
+  async closeItemEditor(): Promise<void> {
+    return test.step('Close editor side-panel', async () => {
+      await this.editItemPanel.getByRole('button', { name: 'Close' }).click();
+    });
+  }
+
+  async selectRow(index: number): Promise<void> {
+    return test.step(`Select row at index ${index}`, async () => {
+      await this.itemRow(index).getByRole('checkbox', { name: 'Select row' }).click();
+    });
+  }
+
+  /**
+   * Bulk-deletes the currently selected rows. For an explicit selection this
+   * stages a draft (no confirmation dialog) — commitDraft() persists it.
+   */
+  async bulkDeleteSelected(): Promise<void> {
+    return test.step('Bulk-delete selected rows', async () => {
+      await this.page.getByTestId('dataset-items-bulk-delete-button').click();
+      await this.draftBadge().waitFor({ state: 'visible' });
+    });
+  }
+
+  async search(term: string): Promise<void> {
+    return test.step(`Search items for "${term}"`, async () => {
+      await this.page.getByTestId('search-input').fill(term);
+    });
+  }
+
+  async clearSearch(): Promise<void> {
+    return test.step('Clear item search', async () => {
+      await this.page.getByTestId('search-input').fill('');
+    });
+  }
+
   async fillAddItemPanel(fields: Record<string, string>): Promise<void> {
     return test.step('Fill add-item panel', async () => {
       for (const [column, value] of Object.entries(fields)) {
@@ -143,6 +204,10 @@ export class DatasetItemsPage {
 
   get addItemPanel(): Locator {
     return this.page.getByTestId('dataset-item-panel');
+  }
+
+  get editItemPanel(): Locator {
+    return this.page.getByTestId('dataset-item-editor');
   }
 
   private get itemsTableBody(): Locator {

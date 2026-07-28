@@ -27,6 +27,10 @@ type OptimizationProgressChartContainerProps = {
   isTestSuite?: boolean;
   inProgressInfo?: InProgressInfo;
   isRunningMiniBatches?: boolean;
+  /** Skip the always-open best-trial card while the trial sidebar is open: it
+   *  and the sidebar share one portal root, and no z-index sits both above the
+   *  overview and below the panel, so it would otherwise float over the panel. */
+  suppressBestTrialCard?: boolean;
 };
 
 const OptimizationProgressChartContainer: React.FC<
@@ -42,6 +46,7 @@ const OptimizationProgressChartContainer: React.FC<
   isTestSuite,
   inProgressInfo,
   isRunningMiniBatches,
+  suppressBestTrialCard,
 }) => {
   const isInProgress =
     !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
@@ -82,7 +87,11 @@ const OptimizationProgressChartContainer: React.FC<
       return (
         <NoData
           className="min-h-32 text-light-slate"
-          message="No data to show"
+          message={
+            status === OPTIMIZATION_STATUS.CANCELLED
+              ? "This run was cancelled"
+              : "No data to show"
+          }
         />
       );
     }
@@ -99,13 +108,16 @@ const OptimizationProgressChartContainer: React.FC<
         isTestSuite={isTestSuite}
         isInProgress={isInProgress}
         inProgressInfo={inProgressInfo}
+        suppressBestTrialCard={suppressBestTrialCard}
       />
     );
   };
 
+  // data-chart-panel: the pinned best-trial card clamps itself to this panel's
+  // borders (it may overhang the chart's inner padding).
   return (
-    <Card className="h-[280px] min-w-[400px] flex-auto">
-      <CardHeader className="space-y-0.5 px-4 pt-3">
+    <Card data-chart-panel className="h-auto min-w-[400px] flex-auto">
+      <CardHeader className="space-y-0.5 px-4 pb-0 pt-3">
         <CardTitle className="comet-body-s-accented flex items-center gap-2">
           Optimization progress
           {isInProgress && !noData && (

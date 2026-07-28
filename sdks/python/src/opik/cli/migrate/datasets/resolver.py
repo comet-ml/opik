@@ -33,6 +33,7 @@ from opik.api_objects import rest_helpers
 from .._resolver import (
     DEFAULT_PAGE_SIZE,
     ensure_destination_project_exists as _ensure_destination_project_exists,
+    find_row_in_workspace as _find_row_in_workspace,
     make_list_fn,
     name_taken_in_workspace as _name_taken_in_workspace,
     project_name_for_row,
@@ -148,12 +149,34 @@ def name_taken_in_workspace(
     )
 
 
+def find_dataset_in_workspace(
+    client: opik.Opik,
+    name: str,
+    *,
+    ignore_dataset_id: Optional[str] = None,
+) -> Optional[Any]:
+    """Return the workspace dataset row named ``name``, or ``None``.
+
+    Used by the planner to detect a stale temp destination
+    (``<source>__migrating``) left by a prior failed run so it can be
+    discarded before the re-run recreates it. Returns the raw Fern row
+    (``.id`` / ``.name``); workspace name uniqueness means at most one row
+    matches. Always scopes workspace-wide (``project_id=None``).
+    """
+    return _find_row_in_workspace(
+        list_fn=_datasets_list_fn(client, name=name, project_id=None),
+        name=name,
+        ignore_id=ignore_dataset_id,
+    )
+
+
 # Re-exported so existing imports keep working (callers may have
 # imported these symbols directly from this module historically).
 __all__ = [
     "DEFAULT_PAGE_SIZE",
     "ResolvedDataset",
     "ensure_destination_project_exists",
+    "find_dataset_in_workspace",
     "name_taken_in_workspace",
     "resolve_source",
 ]

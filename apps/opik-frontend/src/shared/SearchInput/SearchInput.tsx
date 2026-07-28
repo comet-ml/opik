@@ -1,4 +1,4 @@
-import React from "react";
+import { forwardRef } from "react";
 import { Search, X } from "lucide-react";
 
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
@@ -43,50 +43,61 @@ export type SearchInputProps = {
   className?: string;
   dimension?: InputProps["dimension"];
   variant?: "default" | "ghost";
+  disableDebounce?: boolean;
 };
 
-export const SearchInput = ({
-  searchText = "",
-  setSearchText,
-  placeholder = "Search",
-  disabled = false,
-  className,
-  dimension,
-  variant = "default",
-}: SearchInputProps) => {
-  const style =
-    (dimension && SEARCH_STYLE_BY_DIMENSION[dimension]) ?? DEFAULT_SEARCH_STYLE;
-  return (
-    <div className={cn("relative w-full", className)}>
-      <div
-        className={cn("absolute top-1/2 -translate-y-1/2", style.iconWrapper)}
-      >
-        <Search className={cn("text-light-slate", style.icon)} />
-      </div>
-      <DebounceInput
-        className={style.input}
-        delay={SEARCH_TEXT_DELAY}
-        onValueChange={setSearchText as (value: unknown) => void}
-        placeholder={placeholder}
-        disabled={disabled}
-        value={searchText}
-        variant={variant}
-        dimension={dimension}
-        data-testid="search-input"
-      />
-      {searchText !== "" && (
-        <div className="absolute right-1 top-1/2 -translate-y-1/2">
-          <Button
-            variant="minimal"
-            size={style.clearButton}
-            onClick={() => setSearchText("")}
-          >
-            <X />
-          </Button>
+export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
+  (
+    {
+      searchText = "",
+      setSearchText,
+      placeholder = "Search",
+      disabled = false,
+      className,
+      dimension,
+      variant = "default",
+      disableDebounce = false,
+    },
+    ref,
+  ) => {
+    const style =
+      (dimension && SEARCH_STYLE_BY_DIMENSION[dimension]) ??
+      DEFAULT_SEARCH_STYLE;
+    return (
+      <div className={cn("relative w-full", className)}>
+        <div
+          className={cn("absolute top-1/2 -translate-y-1/2", style.iconWrapper)}
+        >
+          <Search className={cn("text-light-slate", style.icon)} />
         </div>
-      )}
-    </div>
-  );
-};
+        <DebounceInput
+          ref={ref}
+          className={style.input}
+          delay={disableDebounce ? 0 : SEARCH_TEXT_DELAY}
+          onValueChange={setSearchText as (value: unknown) => void}
+          placeholder={placeholder}
+          disabled={disabled}
+          value={searchText}
+          variant={variant}
+          dimension={dimension}
+          data-testid="search-input"
+        />
+        {searchText !== "" && (
+          <div className="absolute right-1 top-1/2 -translate-y-1/2">
+            <Button
+              variant="minimal"
+              size={style.clearButton}
+              onClick={() => setSearchText("")}
+            >
+              <X />
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+
+SearchInput.displayName = "SearchInput";
 
 export default SearchInput;

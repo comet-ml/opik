@@ -6,6 +6,13 @@ import useExplainStore, {
   handleConsoleEvent,
 } from "./explainStore";
 import { ExplainKind, ExplainTarget } from "@/types/assistant-sidebar";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+
+vi.mock("@/lib/analytics/tracking", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/analytics/tracking")>();
+  return { ...actual, trackEvent: vi.fn() };
+});
 
 const target = (
   entityId: string,
@@ -414,6 +421,11 @@ describe("explainStore", () => {
     const entry = useExplainStore.getState().entries[key("e1")];
     expect(entry.phase).toBe("error");
     expect(entry.code).toBe("timeout");
+    expect(trackEvent).toHaveBeenCalledWith(OpikEvent.EXPLAIN_ERRORED, {
+      kind: "trace.error",
+      code: "timeout",
+      message: expect.stringMatching(/too long/i),
+    });
     expect(emit).toHaveBeenCalledWith("explain:cancel", { explainId });
     // Route retired, so a late chunk that finally arrives is ignored.
     expect(useExplainStore.getState().routes[explainId]).toBeUndefined();
@@ -471,6 +483,11 @@ describe("explainStore", () => {
     const entry = useExplainStore.getState().entries[key("e1")];
     expect(entry.phase).toBe("error");
     expect(entry.code).toBe("unavailable");
+    expect(trackEvent).toHaveBeenCalledWith(OpikEvent.EXPLAIN_ERRORED, {
+      kind: "trace.error",
+      code: "unavailable",
+      message: expect.stringMatching(/unavailable/i),
+    });
     expect(entry.error).not.toBe("raw upstream text"); // friendly copy wins
     expect(entry.error).toMatch(/unavailable/i);
   });
@@ -569,5 +586,12 @@ describe("explainStore", () => {
     expect(entry.phase).toBe("error");
     expect(typeof entry.error).toBe("string");
     expect(entry.error).toBe("boom"); // falls through to the raw message
+    // The raw upstream text also reaches telemetry — the diagnostic detail
+    // for codes with no friendly copy.
+    expect(trackEvent).toHaveBeenCalledWith(OpikEvent.EXPLAIN_ERRORED, {
+      kind: "trace.error",
+      code: "constructor",
+      message: "boom",
+    });
   });
 });

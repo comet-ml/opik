@@ -76,8 +76,12 @@ const ExperimentsPage: React.FC = () => {
             description={
               "Get started by creating your first experiment.\nCompare prompts and models, evaluate results, and track performance over time."
             }
-            primaryActionLabel="Create your first experiment"
-            onPrimaryAction={handleNewExperimentClick}
+            primaryActionLabel={
+              canCreateExperiments ? "Create your first experiment" : undefined
+            }
+            onPrimaryAction={
+              canCreateExperiments ? handleNewExperimentClick : undefined
+            }
             docsUrl={buildDocsUrl("/evaluation/overview")}
           />
         ) : (

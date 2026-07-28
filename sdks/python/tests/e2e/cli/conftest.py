@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import os
 import sys
 from typing import Any, Dict, Iterator, List, Optional, Set
 
@@ -79,7 +80,9 @@ def _best_effort_delete_project(rest_client: OpikApi, name: str) -> None:
 
 
 def run_migrate_cli(
-    args: List[str], audit_log_path: Optional[str] = None
+    args: List[str],
+    audit_log_path: Optional[str] = None,
+    extra_env: Optional[Dict[str, str]] = None,
 ) -> subprocess.CompletedProcess:
     """Invoke ``opik migrate`` via the installed CLI entrypoint.
 
@@ -91,11 +94,20 @@ def run_migrate_cli(
 
     ``--audit-log`` is appended when provided. Tests typically write to a
     tmp_path so the JSON can be re-read and asserted on.
+
+    ``extra_env`` is merged into the child process environment — the resume
+    E2E test uses it to put a test-only ``sitecustomize.py`` seam on
+    ``PYTHONPATH`` that injects a deterministic mid-cascade crash (the child
+    ``os._exit``s, so ``returncode`` is the hard-exit code, not a clean CLI
+    exit) and redirects the checkpoint dir into a tmp path.
     """
     cmd = [sys.executable, "-m", "opik.cli", "migrate"] + args
     if audit_log_path is not None:
         cmd.extend(["--audit-log", audit_log_path])
-    return subprocess.run(cmd, capture_output=True, text=True)
+    env = None
+    if extra_env is not None:
+        env = {**os.environ, **extra_env}
+    return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
 
 # ---------------------------------------------------------------------------

@@ -1,10 +1,18 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
+import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
+import com.comet.opik.utils.JsonUtils;
+import dev.langchain4j.data.message.ChatMessageType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -12,6 +20,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -77,6 +88,46 @@ class TestSuiteEvaluatorMapperTest {
             var result = SupportedJudgeProvider.resolveModel(
                     Set.of(LlmProvider.OLLAMA, LlmProvider.BEDROCK, LlmProvider.GEMINI));
             assertThat(result).hasValue(GeminiModelName.GEMINI_2_0_FLASH.toString());
+        }
+    }
+
+    @Nested
+    @DisplayName("toScoringCode")
+    class ToScoringCode {
+
+        private LlmAsJudgeCode judgeCode(BigDecimal maxCostUsd) {
+            return LlmAsJudgeCode.builder()
+                    .model(LlmAsJudgeModelParameters.builder().name("placeholder").build())
+                    .messages(List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER).content("Evaluate {input}").build()))
+                    .variables(Map.of("input", "input"))
+                    .schema(List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("is correct").type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("Is it correct?").build()))
+                    .maxCostUsd(maxCostUsd)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("preserves maxCostUsd through the prompt + schema-rename transforms")
+        void preservesMaxCostUsd() {
+            var mapper = new TestSuiteEvaluatorMapper(new TestSuiteConfig());
+            var config = JsonUtils.valueToTree(judgeCode(new BigDecimal("0.25")));
+
+            var result = mapper.toScoringCode(config, "gpt-4o-mini", false);
+
+            assertThat(result.maxCostUsd()).isEqualByComparingTo("0.25");
+        }
+
+        @Test
+        @DisplayName("leaves maxCostUsd null when the evaluator sets no budget")
+        void keepsNullWhenNoBudget() {
+            var mapper = new TestSuiteEvaluatorMapper(new TestSuiteConfig());
+            var config = JsonUtils.valueToTree(judgeCode(null));
+
+            var result = mapper.toScoringCode(config, "gpt-4o-mini", false);
+
+            assertThat(result.maxCostUsd()).isNull();
         }
     }
 }

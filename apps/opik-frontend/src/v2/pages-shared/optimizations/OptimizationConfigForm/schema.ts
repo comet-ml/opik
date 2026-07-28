@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pythonLanguage } from "@codemirror/lang-python";
 import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
@@ -22,33 +23,6 @@ export const GepaOptimizerParamsSchema = z.object({
   verbose: z.boolean().optional(),
   seed: z.number().optional(),
 });
-
-// export const EvolutionaryOptimizerParamsSchema = z.object({
-//   model: z.string().optional(),
-//   model_parameters: z.record(z.unknown()).optional(),
-//   population_size: z.number().min(1, "Must be at least 1").optional(),
-//   num_generations: z.number().min(1, "Must be at least 1").optional(),
-//   mutation_rate: z
-//     .number()
-//     .min(0, "Must be between 0 and 1")
-//     .max(1, "Must be between 0 and 1")
-//     .optional(),
-//   crossover_rate: z
-//     .number()
-//     .min(0, "Must be between 0 and 1")
-//     .max(1, "Must be between 0 and 1")
-//     .optional(),
-//   tournament_size: z.number().min(1, "Must be at least 1").optional(),
-//   elitism_size: z.number().min(0, "Must be at least 0").optional(),
-//   adaptive_mutation: z.boolean().optional(),
-//   enable_moo: z.boolean().optional(),
-//   enable_llm_crossover: z.boolean().optional(),
-//   output_style_guidance: z.string().optional(),
-//   infer_output_style: z.boolean().optional(),
-//   n_threads: z.number().min(1, "Must be at least 1").optional(),
-//   verbose: z.boolean().optional(),
-//   seed: z.number().optional(),
-// });
 
 export const HierarchicalReflectiveOptimizerParamsSchema = z.object({
   model: z.string().optional(),
@@ -77,9 +51,51 @@ export const GEvalMetricParamsSchema = z.object({
   evaluation_criteria: z.string().min(1, "Evaluation criteria is required"),
 });
 
-export const CodeMetricParamsSchema = z.object({
-  code: z.string().min(1, "Python code is required"),
-});
+// Client-side Python syntax check using the error-tolerant Lezer grammar that
+// @codemirror/lang-python already ships (no extra dependency). We reuse the
+// language's parser directly instead of building an EditorState, then walk the
+// resulting tree for error nodes. Lezer recovers from syntax errors by
+// inserting nodes whose type reports `isError`, so a valid program yields none.
+// This only catches *syntax* problems (unclosed brackets, bad indentation,
+// stray tokens) — it never inspects semantics, so it can't false-positive on
+// otherwise-valid Python (e.g. metrics that read `kwargs["x"]`).
+export const hasPythonSyntaxError = (code: string): boolean => {
+  const tree = pythonLanguage.parser.parse(code);
+  let hasError = false;
+  tree.iterate({
+    enter: (node) => {
+      if (node.type.isError) {
+        hasError = true;
+        return false;
+      }
+      return undefined;
+    },
+  });
+  return hasError;
+};
+
+export const CodeMetricParamsSchema = z
+  .object({
+    code: z.string().min(1, "Python code is required"),
+    // Rename-capable `score()` param → dataset column map. Shape matches the
+    // backend `_build_code_metric` arguments contract (plain column names, not
+    // trace paths). Optional/partial: unmapped params fall back to same-named
+    // columns backend-side, so only explicit renames need entries here.
+    arguments: z.record(z.string()).optional(),
+  })
+  .superRefine((params, ctx) => {
+    // `.min(1)` above already reports empty code; only run the syntax check when
+    // there is something to parse so we don't double-report on an empty editor.
+    if (params.code && hasPythonSyntaxError(params.code)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        // Anchor to the `code` field so the message flows through
+        // `errors?.code?.message` into CodeMetricConfigs' FormErrorSkeleton.
+        path: ["code"],
+        message: "Python code has a syntax error",
+      });
+    }
+  });
 
 export const LevenshteinMetricParamsSchema = z.object({
   normalize: z.boolean().optional(),
@@ -108,7 +124,7 @@ const isMessageEmpty = (message: LLMMessage): boolean => {
 
 const BaseOptimizationConfigSchema = z.object({
   name: z.string().optional(),
-  datasetId: z.string().min(1, "Test suite is required"),
+  datasetId: z.string().min(1, "Item source is required"),
   optimizerType: z.nativeEnum(OPTIMIZER_TYPE),
   optimizerParams: z.union([
     GepaOptimizerParamsSchema,
@@ -118,8 +134,23 @@ const BaseOptimizationConfigSchema = z.object({
   messages: z
     .array(z.custom<LLMMessage>())
     .min(1, "At least one message is required")
-    .refine((messages) => !messages.some(isMessageEmpty), {
-      message: "All messages must have content",
+    // Emit a per-message issue (path [index, "content"]) instead of one
+    // array-level error, so each empty message card renders its own red border
+    // + inline text rather than a single banner. An array-root error would
+    // shadow these per-index ones (react-hook-form #7742), but `.min(1)` above
+    // is the only root error and it fires solely on an empty list — unreachable
+    // in the UI (the remove button is hidden at one message) — so they never
+    // collide.
+    .superRefine((messages, ctx) => {
+      messages.forEach((message, index) => {
+        if (isMessageEmpty(message)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index, "content"],
+            message: "Message is required",
+          });
+        }
+      });
     }),
   // Accept any string, not just the static PROVIDER_MODEL_TYPE enum: models
   // now come from the backend registry and can include ids that weren't in
@@ -213,36 +244,56 @@ export const convertOptimizationStudioToFormData = (
     METRIC_TYPE.EQUALS;
 
   // Resolve a model the workspace can run: prefer the configured one (rerun /
-  // template) when available, otherwise the first available model, otherwise
-  // "" so the "Model is required" validation blocks submission instead of
-  // seeding a model the gateway can't resolve.
+  // template) when available, otherwise default to the first available model,
+  // otherwise "" (no provider configured) so the "Model is required" validation
+  // blocks submission instead of seeding a model the gateway can't resolve.
   const configuredModel = optimization?.studio_config?.llm_model?.model;
   const modelName =
     configuredModel && availableModels.includes(configuredModel)
       ? configuredModel
       : availableModels[0] ?? "";
 
-  const keptConfiguredModel =
-    Boolean(modelName) && modelName === configuredModel;
   const defaultConfig = modelName
     ? getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE)
     : ({} as LLMPromptConfigsType);
-  const modelConfig =
-    hasExistingConfig && keptConfiguredModel
-      ? { ...defaultConfig, ...existingConfig }
-      : defaultConfig;
+  // Keep the run's saved params (temperature/top_p/...) even when its model is
+  // gone and we fall back to another — submit sanitizes what the resolved model
+  // can't accept. They used to be silently dropped on any model change.
+  const modelConfig = hasExistingConfig
+    ? { ...defaultConfig, ...existingConfig }
+    : defaultConfig;
+
+  // Leave the algorithm model unset unless the saved run explicitly used a model
+  // the workspace can still run. An unset model inherits the prompt model at
+  // runtime (surfaced in the picker as "Same as prompt"). We must not
+  // force-seed it to the prompt model: that overrode intentional inheritance and
+  // could submit a stale/unavailable model behind an "inherited" label.
+  const baseOptimizerParams =
+    optimization?.studio_config?.optimizer.parameters ||
+    getDefaultOptimizerConfig(optimizerType);
+  const savedOptimizerModel = (baseOptimizerParams as { model?: string }).model;
+  const optimizerParams = {
+    ...baseOptimizerParams,
+    model:
+      savedOptimizerModel && availableModels.includes(savedOptimizerModel)
+        ? savedOptimizerModel
+        : undefined,
+  };
 
   return {
     name: optimization?.name || "Optimization run",
     datasetId: optimization?.dataset_id || "",
     optimizerType,
-    optimizerParams:
-      optimization?.studio_config?.optimizer.parameters ||
-      getDefaultOptimizerConfig(optimizerType),
+    optimizerParams,
     metricType,
-    metricParams:
-      optimization?.studio_config?.evaluation?.metrics?.[0]?.parameters ||
-      getDefaultMetricConfig(metricType),
+    // Merge saved params over the metric defaults so required fields the saved
+    // config omitted (e.g. EQUALS `case_sensitive`) are still present. Otherwise
+    // Zod rejects the missing field, no inline error renders for it, and Create
+    // silently no-ops. Mirrors the modelConfig merge above.
+    metricParams: {
+      ...getDefaultMetricConfig(metricType),
+      ...optimization?.studio_config?.evaluation?.metrics?.[0]?.parameters,
+    },
     messages,
     modelName,
     modelConfig,
@@ -265,13 +316,10 @@ export const convertFormDataToStudioConfig = (
       messages,
     },
     llm_model: {
-      // Registry can return ids that aren't members of PROVIDER_MODEL_TYPE.
-      // Cast intentionally — StudioLlmModel.model is typed against the
-      // deprecated enum (OPIK-5022 removes it).
-      model: formData.modelName as PROVIDER_MODEL_TYPE,
-      // Drop params the model doesn't accept (e.g. temperature on models that
-      // deprecate it) before the gateway rejects the request — same last-mile
-      // hardening the playground applies.
+      model: formData.modelName,
+      // Drop params the resolved model doesn't accept (e.g. temperature) before
+      // the gateway rejects them — same hardening the playground applies. The
+      // cast is only because sanitizeConfigForRequest types its arg as the legacy enum.
       parameters: sanitizeConfigForRequest(
         formData.modelName as PROVIDER_MODEL_TYPE,
         formData.modelConfig,

@@ -12,8 +12,8 @@ import ExplainPopover from "./ExplainPopover";
 // Stop pointer/click from reaching the table row (opening the trace panel).
 const stop = (e: SyntheticEvent) => e.stopPropagation();
 
-// The expanded-pill gradient (Figma 351:31659): the resting -45deg gradient
-// rotates to -18deg on hover/open. Colors are theme tokens from main.scss.
+// The expanded-pill gradient: the resting -45deg gradient rotates to -18deg on
+// hover/open. Colors are theme tokens from main.scss.
 const PILL_GRADIENT =
   "bg-[linear-gradient(-18deg,var(--color-ollie-amber)_0%,var(--color-ollie)_100%)]";
 
@@ -28,7 +28,7 @@ const PILL_GRADIENT =
 const owlTriggerClass = (open: boolean, growsLeft: boolean) =>
   cn(
     "group/explain absolute top-1/2 z-10 flex -translate-y-1/2 items-center rounded-full border border-[var(--color-ollie)] p-1 text-white opacity-0 shadow-[var(--shadow-ollie)] transition-all",
-    // Resting circular icon button (Figma 351:31623): -45deg gradient, symmetric p-1.
+    // Resting circular icon button: -45deg gradient, symmetric p-1.
     "bg-[linear-gradient(-45deg,var(--color-ollie-amber)_0%,var(--color-ollie)_100%)]",
     // Anchor + growth direction. flex-row-reverse keeps the icon on the anchored
     // (right) edge so the label slides out to the left.

@@ -18,6 +18,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlm
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
@@ -117,6 +118,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         UUID id = idGenerator.generateId();
         IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
+        // projectIds are persisted without an existence check, so enforce v7 to avoid storing orphan v4 ids.
+        projectIds.forEach(projectId -> idGenerator.validateIdNotInFutureIfPresent(projectId, "project"));
 
         // Dual-field sync: First projectId becomes the legacy project_id field
         UUID primaryProjectId = projectIds.isEmpty() ? null : projectIds.iterator().next();
@@ -197,6 +200,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 }
             };
 
+            if (evaluator.triggerScope() == null) {
+                evaluator = evaluator.withTriggerScope(EvalTriggerScope.PRODUCTION);
+            }
+
             try {
                 log.debug("Creating {} AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'",
                         evaluator.type(), id, evaluator.projectIds(), workspaceId);
@@ -227,6 +234,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     public void update(@NonNull UUID id, @NonNull Set<UUID> projectIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate<?, ?> evaluatorUpdate) {
 
+        projectIds.forEach(projectId -> idGenerator.validateIdNotInFutureIfPresent(projectId, "project"));
+
         log.debug("Updating AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'", id,
                 projectIds,
                 workspaceId);
@@ -238,8 +247,12 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
 
                 // Update base rule (project associations handled separately in junction table)
+                var triggerScope = evaluatorUpdate.getTriggerScope() != null
+                        ? evaluatorUpdate.getTriggerScope()
+                        : EvalTriggerScope.PRODUCTION;
                 int resultBase = dao.updateBaseRule(id, workspaceId, evaluatorUpdate.getName(),
-                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
+                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(),
+                        triggerScope, filtersJson);
 
                 // Update project associations in junction table
                 projectsDAO.deleteByRuleIds(Set.of(id), workspaceId);

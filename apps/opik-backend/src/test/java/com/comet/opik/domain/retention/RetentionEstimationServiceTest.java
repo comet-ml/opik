@@ -89,7 +89,7 @@ class RetentionEstimationServiceTest {
         @Test
         @DisplayName("Falls back to default velocity when estimation hits TOO_MANY_ROWS")
         void fallsBackToDefaultVelocity() {
-            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class)))
+            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class), any(UUID.class)))
                     .thenReturn(Mono.error(tooManyRowsException()));
 
             // Scouting: first month empty, second month has data
@@ -114,7 +114,7 @@ class RetentionEstimationServiceTest {
         @Test
         @DisplayName("Marks catch-up done when scouting finds no data at all")
         void marksDoneWhenScoutingFindsNothing() {
-            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class)))
+            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class), any(UUID.class)))
                     .thenReturn(Mono.error(tooManyRowsException()));
 
             // All months empty
@@ -131,7 +131,7 @@ class RetentionEstimationServiceTest {
         @Test
         @DisplayName("Scouting stops at month that also hits TOO_MANY_ROWS")
         void scoutingStopsAtDenseMonth() {
-            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class)))
+            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class), any(UUID.class)))
                     .thenReturn(Mono.error(tooManyRowsException()));
 
             Instant serviceStart = LocalDate.of(2024, 9, 1)
@@ -154,7 +154,7 @@ class RetentionEstimationServiceTest {
         @DisplayName("Non-TOO_MANY_ROWS exceptions are rethrown")
         void nonTooManyRowsExceptionRethrown() {
             var otherError = new RuntimeException("Connection refused");
-            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class)))
+            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class), any(UUID.class)))
                     .thenReturn(Mono.error(otherError));
 
             org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
@@ -173,7 +173,7 @@ class RetentionEstimationServiceTest {
         @DisplayName("Returns velocity and oldest span time from successful estimation")
         void returnsEstimationResult() {
             Instant oldestSpan = NOW.minus(90, ChronoUnit.DAYS);
-            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class)))
+            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class), any(UUID.class)))
                     .thenReturn(Mono.just(new VelocityEstimate(5000L, oldestSpan)));
 
             var result = service.estimateVelocity(WORKSPACE_ID, PERIOD, NOW);
@@ -189,7 +189,7 @@ class RetentionEstimationServiceTest {
         @Test
         @DisplayName("Empty workspace returns velocity 0 and null cursor (catch-up marked done)")
         void emptyWorkspaceReturnsZeroAndNullCursor() {
-            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class)))
+            when(spanDAO.estimateVelocityForRetention(eq(WORKSPACE_ID), any(UUID.class), any(UUID.class)))
                     .thenReturn(Mono.just(new VelocityEstimate(0L, null)));
 
             var result = service.estimateVelocity(WORKSPACE_ID, PERIOD, NOW);

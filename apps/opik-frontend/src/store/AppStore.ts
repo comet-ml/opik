@@ -7,6 +7,7 @@ export type WorkspaceVersion = "v1" | "v2";
 type AppUser = {
   apiKey: string;
   userName: string;
+  email: string;
 };
 type AppStore = {
   user: AppUser;
@@ -31,6 +32,7 @@ const useAppStore = create<AppStore>((set) => ({
   user: {
     apiKey: "",
     userName: DEFAULT_USERNAME,
+    email: "",
   },
   setUser: (user: AppUser) => set((state) => ({ ...state, user })),
   activeWorkspaceName: "",
@@ -114,6 +116,8 @@ export const useLoggedInUserNameOrOpenSourceDefaultUser = () =>
   );
 
 export const useUserApiKey = () => useAppStore((state) => state.user.apiKey);
+
+export const useUserEmail = () => useAppStore((state) => state.user.email);
 
 export const useSetAppUser = () => useAppStore((state) => state.setUser);
 

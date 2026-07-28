@@ -1,0 +1,105 @@
+---
+description: Track MiniMax model calls with Opik through the OpenAI-compatible
+  or Anthropic-compatible API.
+headline: MiniMax
+og:description: Configure Opik tracing for MiniMax across global and China API
+  endpoints.
+og:site_name: Opik Documentation
+og:title: Integrate MiniMax with Opik
+title: Observability for MiniMax with Opik
+---
+
+MiniMax provides OpenAI-compatible and Anthropic-compatible APIs for its language models. Opik can trace either protocol by wrapping the corresponding Python SDK client.
+
+## Install the dependencies
+
+Install Opik and the SDK for the protocol you plan to use:
+
+```bash
+pip install opik openai anthropic
+```
+
+Configure Opik for your deployment:
+
+```bash
+opik configure
+```
+
+Set your MiniMax API key:
+
+```bash
+export MINIMAX_API_KEY="<MINIMAX_API_KEY>"
+```
+
+## Choose an endpoint
+
+Use the endpoint for your account region and SDK protocol:
+
+| Region | OpenAI-compatible base URL | Anthropic-compatible base URL |
+| --- | --- | --- |
+| Global | `https://api.minimax.io/v1` | `https://api.minimax.io/anthropic` |
+| China | `https://api.minimaxi.com/v1` | `https://api.minimaxi.com/anthropic` |
+
+You can find additional API details in the [global MiniMax documentation](https://platform.minimax.io/docs) or the [China MiniMax documentation](https://platform.minimaxi.com/docs).
+
+## Track OpenAI-compatible calls
+
+Wrap the OpenAI client with `track_openai` and pass the MiniMax base URL:
+
+```python
+import os
+
+from openai import OpenAI
+from opik.integrations.openai import track_openai
+
+client = OpenAI(
+    api_key=os.environ["MINIMAX_API_KEY"],
+    base_url="https://api.minimax.io/v1",
+)
+client = track_openai(client, project_name="minimax-demo")
+
+response = client.chat.completions.create(
+    model="MiniMax-M3",
+    messages=[{"role": "user", "content": "Explain observability in one sentence."}],
+)
+
+print(response.choices[0].message.content)
+```
+
+For a China account, change `base_url` to `https://api.minimaxi.com/v1`.
+
+## Track Anthropic-compatible calls
+
+Wrap the Anthropic client with `track_anthropic` and pass the MiniMax base URL:
+
+```python
+import os
+
+import anthropic
+from opik.integrations.anthropic import track_anthropic
+
+client = anthropic.Anthropic(
+    api_key=os.environ["MINIMAX_API_KEY"],
+    base_url="https://api.minimax.io/anthropic",
+)
+client = track_anthropic(client, project_name="minimax-demo")
+
+response = client.messages.create(
+    model="MiniMax-M3",
+    max_tokens=512,
+    messages=[{"role": "user", "content": "Explain observability in one sentence."}],
+)
+
+print(response.content[0].text)
+```
+
+For a China account, change `base_url` to `https://api.minimaxi.com/anthropic`.
+
+## Model identifiers
+
+Use the model identifier exposed by your MiniMax account. Current text model identifiers include:
+
+- `MiniMax-M3`
+- `MiniMax-M2.7`
+
+The wrapped clients preserve the normal SDK response objects while Opik records the request, response, token usage, and model metadata.

@@ -42,6 +42,13 @@ public interface EvaluationRecorder {
     void recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic);
 
     /**
+     * Marks that the per-evaluation spend budget was reached and the agentic loop wrapped up early.
+     * The finalized parent trace is tagged so users can filter for evaluations that hit their budget.
+     * Fire-and-forget; no-op when monitoring is disabled.
+     */
+    void flagBudgetExceeded();
+
+    /**
      * Taps the scoring computation to finalize the parent trace: on success with the produced scores,
      * on error with the error. Returns the scoring result unchanged (same value, same error), so the
      * scorer composes it transparently and the trace write stays fire-and-forget.

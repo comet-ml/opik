@@ -39,13 +39,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
       
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r tests/test_requirements.txt
-          pip install .
+          uv pip install --system -r requirements.txt -r tests/test_requirements.txt
+          uv pip install --system .
       
       - name: Run unit tests
         env:

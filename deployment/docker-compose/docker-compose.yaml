@@ -43,7 +43,7 @@ services:
         chown -R 1000:1000 /config
       "
   clickhouse:
-    image: clickhouse/clickhouse-server:25.8.16.34-alpine
+    image: clickhouse/clickhouse-server:26.3.16.16-alpine
     pull_policy: always
     hostname: clickhouse
     environment:
@@ -168,11 +168,20 @@ services:
       ANALYTICS_DB_DATABASE_NAME: opik
       ANALYTICS_DB_USERNAME: opik
       ANALYTICS_DB_PASS: opik
-      # Agent Insights read-only freeform SQL (default off). When true, the backend provisions the restricted
+      # Ollie / Agent Insights read-only freeform SQL (default off). When true, the backend provisions the restricted
       # read-only user (provision_agent_insights_readonly_user.sh, after migrations) and connects as it.
-      TOGGLE_AGENT_INSIGHTS_ENABLED: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"false"}
+      TOGGLE_OLLIE_ENABLED: ${TOGGLE_OLLIE_ENABLED:-"false"}
       ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}
       ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
+      # Traces cutover knobs (data-migrations/traces-local-v2-cutover). Default off / unset; the operator sets these
+      # for the backfill-to-cutover window.
+      ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED: ${ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+      ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+      ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS: ${ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS:-}
+      # Flip TRACE_COLUMNS_NON_NULLABLE to true in lockstep with the EXCHANGE (the successor's end_time/ttft are
+      # non-nullable sentinel columns; a null bind would be rejected). The SPAN sibling is for the later spans cutover.
+      ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
+      ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
       OPIK_OTEL_SDK_ENABLED: ${OPIK_OTEL_SDK_ENABLED:-false}
@@ -274,6 +283,10 @@ services:
     tmpfs:
       - /var/lib/docker
 
+  # Default variant: the published GPU-capable image, which runs on CPU when no
+  # GPU is present (torch falls back). For GPU acceleration run it standalone with
+  # `docker run --gpus all`. Use the guardrails-backend-cpu service for a slim,
+  # multi-arch CPU-only image built from source.
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
     pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-always}
@@ -285,6 +298,38 @@ services:
     hostname: guardrails
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
+      HF_TOKEN: ${HF_TOKEN:-}
+      OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL: ${OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL:-}
+      OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL: ${OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL:-}
+      OPIK_GUARDRAILS_ADAPTERS_DIR: /adapters
+    volumes:
+      # Directory of trained custom guardrail models, shared with wherever you run
+      # training. Point OPIK_GUARDRAILS_ADAPTERS_HOST_DIR at your trained models.
+      - ${OPIK_GUARDRAILS_ADAPTERS_HOST_DIR:-./guardrails-adapters}:/adapters
+    healthcheck:
+      test: [ "CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck" ]
+      interval: 2s
+      timeout: 60s
+      retries: 30
+      start_period: 10s
+
+  # CPU-only variant (slim multi-arch image, no GPU or NVIDIA toolkit required).
+  # There is no published CPU image, so it is always built from source. Shares the
+  # `guardrails` hostname with the GPU service; only one of the two runs at a time
+  # (mutually exclusive profiles).
+  guardrails-backend-cpu:
+    pull_policy: build
+    profiles:
+      - guardrails-cpu
+    build:
+      context: ../../apps/opik-guardrails-backend
+      dockerfile: Dockerfile.cpu
+    hostname: guardrails
+    environment:
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
+      HF_TOKEN: ${HF_TOKEN:-}
+      OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL: ${OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL:-}
+      OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL: ${OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL:-}
     healthcheck:
       test: [ "CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck" ]
       interval: 2s

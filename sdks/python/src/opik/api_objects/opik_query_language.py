@@ -487,8 +487,9 @@ class OpikQueryLanguage:
 
     def _is_valid_escaped_key_char(self, quote_type: str, start: int) -> bool:
         if self.query_string[self._cursor] != quote_type:
-            # Check this isn't the end of the string (means we missed the closing quote)
-            if self._cursor + 2 >= len(self.query_string):
+            # Need at least the closing quote still ahead; otherwise unclosed.
+            # Use +1 (not +2) so quoted values at end-of-string work too.
+            if self._cursor + 1 >= len(self.query_string):
                 raise ValueError(
                     "Missing closing quote for: " + self.query_string[start - 1 :]
                 )
@@ -505,6 +506,35 @@ class OpikQueryLanguage:
             return True
 
         return False
+
+    def _parse_quoted_string(self, *, kind: str = "value") -> str:
+        """Parse a double-quoted string at the current cursor (opening quote consumed).
+
+        Reuses ``_is_valid_escaped_key_char`` so value and key quote handling stay
+        in sync (doubled-quote escapes, missing-close errors). Advances past the
+        closing quote.
+        """
+        quote_type = '"'
+        start = self._cursor
+        while self._cursor < len(self.query_string):
+            # False when current char is the closing quote (not an escaped pair).
+            if not self._is_valid_escaped_key_char(quote_type, start):
+                break
+            self._cursor += 1
+
+        if (
+            self._cursor >= len(self.query_string)
+            or self.query_string[self._cursor] != quote_type
+        ):
+            label = "value" if kind == "value" else "key"
+            raise ValueError(
+                f'Missing closing quote for {label}: "{self.query_string[start:]}"'
+            )
+
+        value = self.query_string[start : self._cursor]
+        value = value.replace(quote_type * 2, quote_type)
+        self._cursor += 1  # skip closing quote
+        return value
 
     def _parse_connector(self) -> str:
         start = self._cursor
@@ -554,6 +584,16 @@ class OpikQueryLanguage:
 
             # If escaped key, skip the closing quote
             if is_quoted_key:
+                # An alnum char at the very end of the string can satisfy the
+                # loop's field-char branch without ever reaching the closing
+                # quote check, so verify it explicitly here.
+                if (
+                    self._cursor >= len(self.query_string)
+                    or self.query_string[self._cursor] != quote_type
+                ):
+                    raise ValueError(
+                        "Missing closing quote for: " + self.query_string[start - 1 :]
+                    )
                 key = key.replace(
                     quote_type * 2, quote_type
                 )  # Replace doubled quotes with single quotes
@@ -600,6 +640,9 @@ class OpikQueryLanguage:
         if parsed_field not in supported_operators:
             parsed_field = "default"
 
+        if self._cursor >= len(self.query_string):
+            raise ValueError("Incomplete filter string: unexpected end of input")
+
         # Parse the operator
         if self.query_string[self._cursor] == "=":
             operator = "="
@@ -611,7 +654,10 @@ class OpikQueryLanguage:
             return {"operator": operator}
 
         elif self.query_string[self._cursor] in ["<", ">"]:
-            if self.query_string[self._cursor + 1] == "=":
+            if (
+                self._cursor + 1 < len(self.query_string)
+                and self.query_string[self._cursor + 1] == "="
+            ):
                 operator = f"{self.query_string[self._cursor]}="
                 self._cursor += 2
             else:
@@ -650,34 +696,40 @@ class OpikQueryLanguage:
     def _parse_value(self) -> Dict[str, Any]:
         self._skip_whitespace()
 
+        if self._cursor >= len(self.query_string):
+            raise ValueError("Incomplete filter string: unexpected end of input")
+
         start = self._cursor
         if self.query_string[self._cursor] == '"':
-            self._cursor += 1
-            start = self._cursor
-
-            # TODO: replace with new quote parser used in field parser
-            while (
-                self._cursor < len(self.query_string)
-                and self.query_string[self._cursor] != '"'
-            ):
-                self._cursor += 1
-
-            value = self.query_string[start : self._cursor]
-
-            # Add 1 to skip the closing quote and return the value
-            self._cursor += 1
+            self._cursor += 1  # skip opening quote
+            value = self._parse_quoted_string(kind="value")
             return {"value": value}
         elif (
             self.query_string[self._cursor].isdigit()
             or self.query_string[self._cursor] == "-"
         ):
-            value = self._get_number()
+            sign = ""
+            if self.query_string[self._cursor] == "-":
+                sign = "-"
+                self._cursor += 1
+            value = sign + self._get_number()
+            if value in ("", "-"):
+                raise ValueError(
+                    "Expected a number after '-' in filter value"
+                    if sign
+                    else "Expected a number in filter value"
+                )
             if (
                 self._cursor < len(self.query_string)
                 and self.query_string[self._cursor] == "."
             ):
                 self._cursor += 1
-                value += "." + self._get_number()
+                frac = self._get_number()
+                if not frac:
+                    raise ValueError(
+                        "Expected digits after decimal point in filter value"
+                    )
+                value += "." + frac
 
             return {"value": value}
         else:

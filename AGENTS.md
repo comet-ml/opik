@@ -28,7 +28,7 @@ This repository is a multi-module Opik codebase. Main areas:
 - `cd apps/opik-backend && mvn test` — backend unit/integration tests.
 - `cd apps/opik-backend && mvn spotless:apply` — apply Java formatting.
 - `cd sdks/python && pip install -r tests/test_requirements.txt && pip install -r tests/unit/test_requirements.txt && pytest tests/unit tests/e2e` — Python SDK test suites.
-- `make precommit-sdks` — run module-specific pre-commit checks across all SDKs from their local docs (do not duplicate SDK-specific command lines in multiple places).
+- `make precommit` — run pre-commit hooks on changed files (vs origin/main) from the root `.pre-commit-config.yaml` across all modules (do not duplicate per-module command lines in multiple places).
 - `cd sdks/typescript && npm run lint && npm run test && npm run build` — TS SDK checks.
 - `cd tests_end_to_end/e2e && npx playwright test` — cross-stack Playwright E2E suite.
 

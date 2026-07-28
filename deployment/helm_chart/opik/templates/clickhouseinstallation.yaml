@@ -75,6 +75,10 @@ spec:
       {{- toYaml . | nindent 6 }}
       {{- end }}
       {{- end }}
+      {{- if .Values.clickhouse.tieredStorage.enabled }}
+      conf.d/storage.xml: |
+{{ include "opik.clickhouse.storageXml" . | indent 8 }}
+      {{- end }}
     
     {{- if .Values.zookeeper.enabled }}
     zookeeper:
@@ -128,9 +132,15 @@ spec:
             readinessProbe:
               {{- toYaml .Values.clickhouse.readinessProbe | nindent 14 }}
             {{- end }}
-            {{- with .Values.clickhouse.extraVolumeMounts }}
+            {{- if or .Values.clickhouse.extraVolumeMounts .Values.clickhouse.tieredStorage.enabled }}
             volumeMounts:
+              {{- with .Values.clickhouse.extraVolumeMounts }}
               {{- toYaml . | nindent 14 }}
+              {{- end }}
+              {{- if .Values.clickhouse.tieredStorage.enabled }}
+              - name: {{ .Values.clickhouse.tieredStorage.cold.cache.volumeName }}
+                mountPath: {{ .Values.clickhouse.tieredStorage.cold.cache.path }}
+              {{- end }}
             {{- end }}
           {{- if .Values.clickhouse.backupServer.enabled }}
           - name: clickhouse-backup
@@ -264,6 +274,19 @@ spec:
           resources:
             requests:
               storage: {{ .Values.clickhouse.storage }}
+      {{- if .Values.clickhouse.tieredStorage.enabled }}
+      {{- $cache := .Values.clickhouse.tieredStorage.cold.cache }}
+      - name: {{ $cache.volumeName }}
+        spec:
+          {{- with ($cache.storageClassName | default .Values.clickhouse.storageClassName) }}
+          storageClassName: {{ . }}
+          {{- end }}
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: {{ $cache.storage }}
+      {{- end }}
       {{- with .Values.clickhouse.extraVolumeClaimTemplates }}
       {{- . | toYaml | nindent 6 }}
       {{- end }}

@@ -1,0 +1,38 @@
+## PydanticAI and Logfire Trace Fidelity Improvements
+
+Traces from PydanticAI agents ingested over OpenTelemetry (via Logfire) now show complete, correctly-typed data and accurate cost. Several gaps in the OTel → Opik span mapping were fixed:
+
+- **Tool call I/O is now captured** — tool span inputs and outputs now appear in the correct Input/Output fields. Previously, logfire's `tool_response` attribute fell into the Input bucket and the Output field was empty.
+- **Errors surface at the trace level** — when a span carries an OTel `exception` event or `STATUS_CODE_ERROR` status, the error is translated into `error_info` and propagated up to the parent trace so failed agent runs are flagged at the top level.
+- **Gemini/Google cost now calculated** — PydanticAI reports the generic `google` provider name, which previously matched no pricing row and showed $0 cost. The backend now resolves it to `google_vertexai` or `google_ai` based on the server hostname.
+- **Agent-run spans correctly typed** — spans from `invoke_agent` operations are now typed `general` instead of `llm`, so the trace tree accurately reflects the agent structure.
+
+The error-surfacing fix is generic and benefits all OTel integrations; the tool I/O and cost improvements are specific to PydanticAI and Logfire.
+
+## Quick MCP Server Setup via `opik configure`
+
+Setting up Claude Desktop (or any MCP client) to connect to Opik no longer requires manually editing JSON config files. Running `opik configure` now offers an opt-in MCP setup step at the end of the flow. The standalone `opik mcp configure` command runs the same wizard on its own. Both automatically write the Opik MCP server block to your Claude Desktop configuration.
+
+👉 [MCP server documentation](https://www.comet.com/docs/opik/mcp-server)
+
+## Bug Fixes & Improvements
+
+- **OpenClaw added to onboarding integrations** — The Get Started page now includes OpenClaw with its four-step CLI setup guide (install plugin → configure → status → run), rendered with bash syntax highlighting. The integration details dialog also supports multi-step and non-pip integrations going forward.
+
+- **Logs view: search bar repositioned inline with filters** — The search bar now sits alongside active filter chips in a single wrapping row. Toolbar controls (Columns, Row height, Refresh) moved to the tab row, reducing visual clutter in the main search area. Chart bars changed to violet and table tags to green.
+
+- **Annotation queue: scores scoped per queue** — Feedback scores and comments now carry a `source_queue_id` so each queue's metrics (average scores, reviewer counts) are computed independently. A score submitted through one queue no longer counts toward another queue's statistics when the same trace appears in both.
+
+- **Annotation queue: false "another annotator is reviewing" message resolved** — After submitting a feedback score, the lock heartbeat now correctly recognizes existing lock holders, so annotators no longer see a false "another annotator is reviewing this item" message immediately after scoring.
+
+- **Thread-scoped annotation queues no longer crash** — Opening a thread annotation queue without additional queue filters no longer throws an `Unknown expression or function identifier` error and crashes the queue view.
+
+- **Experiments page: charts stay fixed during horizontal table scroll** — The feedback-score charts now remain pinned to the top while the experiments table scrolls horizontally underneath.
+
+- **Playground: immediate failure on exhausted OpenAI quota** — When an OpenAI API key has insufficient quota (HTTP 429 `insufficient_quota`), the Playground now returns an error immediately instead of retrying the request multiple times and delaying the response.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.66...2.0.73)
+
+_Releases_: `2.0.67`, `2.0.68`, `2.0.69`, `2.0.70`, `2.0.71`, `2.0.72`, `2.0.73`

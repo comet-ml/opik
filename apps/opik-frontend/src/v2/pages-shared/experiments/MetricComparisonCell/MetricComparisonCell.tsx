@@ -5,6 +5,7 @@ import { calcFormatterAwarePercentage } from "@/lib/percentage";
 import PercentageTrend, {
   PercentageTrendType,
 } from "@/shared/PercentageTrend/PercentageTrend";
+import MetricTrendPill from "@/shared/PercentageTrend/MetricTrendPill";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 type MetricComparisonCellProps = {
@@ -27,17 +28,12 @@ const MetricComparisonCell: React.FunctionComponent<
   if (compact) {
     return (
       <div className="flex items-center gap-1.5">
-        {!isUndefined(baseline) && (
-          <TooltipWrapper content={String(baseline)}>
-            <span className="comet-body-s text-muted-slate">
-              {formatter(baseline)}
-            </span>
-          </TooltipWrapper>
-        )}
-        <PercentageTrend percentage={percentage} trend={trend} iconOnly />
+        <MetricTrendPill percentage={percentage} trend={trend} />
         {!isUndefined(current) ? (
           <TooltipWrapper content={String(current)}>
-            <span className="comet-body-s-accented">{formatter(current)}</span>
+            <span className="comet-body-xs text-foreground">
+              {formatter(current)}
+            </span>
           </TooltipWrapper>
         ) : (
           <span className="text-muted-slate">-</span>

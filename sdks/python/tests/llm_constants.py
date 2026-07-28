@@ -80,3 +80,9 @@ BEDROCK_MISTRAL_PIXTRAL = "us.mistral.pixtral-large-2502-v1:0"
 BEDROCK_MISTRAL_PIXTRAL_REGION = "us-east-2"
 
 LITELLM_BEDROCK_CLAUDE_SONNET = f"bedrock/{BEDROCK_CLAUDE_SONNET}"
+
+# ---------------------------------------------------------------------------
+# Mistral AI
+# ---------------------------------------------------------------------------
+# Default chat model: mistral-small-latest — the cheap+fast tier.
+MISTRAL_SMALL = "mistral-small-latest"

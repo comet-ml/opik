@@ -143,6 +143,11 @@ def run_studio_optimization(
     the job handler the RQ worker calls, which sets up the gateway env and runs
     ``optimizer_runner.py`` as an isolated subprocess. Returns the subprocess
     result dict. Optimization records created here are deleted on teardown.
+
+    ``last_optimization_id`` is stamped on the returned callable (set right
+    after the record is created, before the subprocess runs) so a caller can
+    still fetch the persisted optimization — e.g. its ``status``/``error_info``
+    — even when ``process_optimizer_job`` raises on a failed run.
     """
     created_optimization_ids: list[str] = []
     workspace = os.getenv("OPIK_WORKSPACE", "default")
@@ -156,6 +161,7 @@ def run_studio_optimization(
             project_name=project_name,
         )
         created_optimization_ids.append(optimization.id)
+        _run.last_optimization_id = optimization.id
         job_message = {
             "optimization_id": optimization.id,
             "workspace_id": workspace,
@@ -165,6 +171,7 @@ def run_studio_optimization(
         }
         return process_optimizer_job(job_message)
 
+    _run.last_optimization_id = None
     yield _run
     if created_optimization_ids:
         try:

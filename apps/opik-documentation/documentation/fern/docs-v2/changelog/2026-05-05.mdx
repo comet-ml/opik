@@ -1,0 +1,75 @@
+This is our biggest release yet! A fundamental rethink of how you build, debug, and improve AI agents with Opik. Three major new feature groups (Ollie, Test Suites, and the Agent Playground) work together to close the loop from observing a problem to shipping a fix, all without leaving the platform. Alongside them, we've reorganized everything around projects, redesigned the core trace experience, and rebuilt the navigation to match. Here's what's new:
+
+## 🤖 Ollie & Opik Connect
+
+Ollie is a powerful coding agent built into the Opik UI. It has full access to your project's traces and logs, and can analyze patterns across hundreds of interactions, diagnose issues, and take action to fix them, all without leaving the platform.
+
+<Frame>
+  <img src="/img/v2/ollie/hero.png" alt="Ollie agent interface inside Opik" />
+</Frame>
+
+**Highlights:**
+
+- **Trace Analysis** - Analyze traces, spot patterns across interactions, and diagnose issues with full project context
+- **Code Fixes via Opik Connect** - Link Ollie to your local codebase so it can implement fixes directly in your development code
+- **Test Case Generation** - When Ollie fixes an issue, it automatically creates a new test case in your test suite to prevent regressions
+- **UI Navigation** - Ollie can navigate the Opik UI, create filtered views, and take actions on your behalf
+- **Opik Connect CLI** - Connect your codebase with `opik connect`, with support for `--workspace` and `--api-key` flags
+- **Always Available** - Access Ollie from the project home page or as a persistent sidebar from any page in the product
+
+👉 [Ollie Agent Documentation](https://www.comet.com/docs/opik/ollie)
+
+## 🧪 Test Suites
+
+Test Suites bring structured regression testing to agent development. Each suite has global rules that every test case must pass, plus item-level assertions for specific scenarios. Define rules in plain English for what your agent should and shouldn't do, and get clear pass/fail results when you run them.
+
+<Frame>
+  <img src="/img/v2/evaluation/test-suite-run-results.png" alt="Test suite experiment results showing pass/fail per item with assertion details" />
+</Frame>
+
+**Highlights:**
+
+- **Pass/Fail Assertions** - Define global rules and item-level assertions in plain English, no complex metric configurations needed
+- **Multi-Provider LLM-as-Judge** - Assertions can use different LLM providers for evaluation, giving you flexibility in how test cases are judged
+- **Assertion Reasons & Breakdown** - See exactly why each assertion passed or failed with detailed run-breakdown popovers
+- **Add Traces as Test Cases** - Add production traces directly to your suite with assertions, so your suite grows naturally as you build and debug
+- **Full SDK Support** - Python and TypeScript SDKs support creating suites, adding items, running experiments, and importing/exporting suites
+
+👉 [Building Test Suites](https://www.comet.com/docs/opik/evaluation/advanced/building-test-suites)
+
+## 🎮 Agent Playground & Agent Configurations
+
+The Agent Playground connects to your agent so you can run it directly from the Opik UI. Experiment with different prompts, models, and parameters to see how your whole agent responds, without touching your code. Agent Configurations track and version the full set of prompts, models, and variables as a single unit, so you always know what combination worked.
+
+<Frame>
+  <img src="/img/v2/development/agent_sandbox.png" alt="Agent Playground running an agent with configuration controls" />
+</Frame>
+
+**Highlights:**
+
+- **Agent Playground** - Run your full agent from the Opik UI and test different configurations without changing your code
+- **Agent Configurations** - Track and version prompts, models, and variables together as a single versioned unit
+- **Blueprint Versioning** - Auto-increment naming, diff view for changes between versions, and auto-generated descriptions from config changes
+- **Full SDK Support** - Python `AgentConfigManager` and TypeScript `AgentConfig` with Zod schema validation and blueprint caching
+
+👉 [Agent Playground](https://www.comet.com/docs/opik/development/agent-playground)
+
+## 🏗️ Project-Scoped Organization & UX Improvements
+
+Projects now map directly to your agents. Test suites, experiments, optimizations, prompts, datasets, alerts, and dashboards are all scoped to the project, giving you a focused view of everything related to a single agent, paired with a redesigned navigation and trace experience.
+
+<Frame>
+  <img src="/img/v2/observability/traces-page.png" alt="Redesigned unified Logs page with threads, traces, and spans in a single view" />
+</Frame>
+
+**What's new:**
+
+- **Redesigned Navigation** - New sidebar with workspace-level project selector and project-scoped routing across all pages
+- **Unified Logs Page** - Threads, traces, and spans are now combined into a single redesigned Logs page with a cleaner layout and faster navigation between them
+- **Redesigned Trace Details** - New tabbed layout with LLM message formatting, feedback scores section, and error callouts for faster issue identification
+- **Project-Scoped APIs** - All endpoints now support `project_name` scoping for datasets, experiments, optimizations, prompts, alerts, and dashboards
+- **KPI Cards** - New project-level metrics summary cards on the project home page
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/1.10.23...2.0.21)
+
+_Releases_: `1.10.24` through `2.0.21`

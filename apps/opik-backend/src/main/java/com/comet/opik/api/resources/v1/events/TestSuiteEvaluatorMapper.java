@@ -121,7 +121,9 @@ public class TestSuiteEvaluatorMapper {
                     .build());
         }
 
-        return new LlmAsJudgeCode(code.model(), code.messages(), code.variables(), renamedSchema);
+        // toBuilder (not a positional ctor) so every other field — including maxCostUsd and anything
+        // added later — is carried through this rebuild instead of silently dropped.
+        return code.toBuilder().schema(renamedSchema).build();
     }
 
     /**
@@ -158,7 +160,8 @@ public class TestSuiteEvaluatorMapper {
         variables.put("output", "output");
         variables.put("assertions", formatAssertions(code.schema()));
 
-        return new LlmAsJudgeCode(code.model(), messages, variables, code.schema());
+        // toBuilder so maxCostUsd (and any future field) survives the prompt/variable rewrite.
+        return code.toBuilder().messages(messages).variables(variables).build();
     }
 
     /**

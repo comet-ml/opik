@@ -18,6 +18,7 @@ const baselineTarget: PromptComparisonTarget = {
 const parentTarget: PromptComparisonTarget = {
   id: "p-1",
   label: "Parent",
+  caption: "Trial #2",
   prompt: [{ role: "system", content: "parent system text" }],
 };
 
@@ -53,9 +54,11 @@ describe("PromptComparison", () => {
       expect(screen.getByText("→ Trial")).toBeInTheDocument();
       expect(screen.getByText("Hide diff")).toBeInTheDocument();
 
-      // Both sides of the diff render (target removed, current added).
-      expect(container.textContent).toContain("baseline system text");
-      expect(container.textContent).toContain("current system text");
+      // Both sides of the diff render at word granularity: the changed words
+      // (baseline -> current) plus the unchanged shared remainder.
+      expect(container.textContent).toContain("baseline");
+      expect(container.textContent).toContain("current");
+      expect(container.textContent).toContain("system text");
     });
 
     it("hides the diff and shows only the current prompt when toggled", () => {
@@ -83,6 +86,20 @@ describe("PromptComparison", () => {
       expect(screen.queryByText("Baseline")).not.toBeInTheDocument();
     });
 
+    it("shows the target's trial caption in the picker trigger", () => {
+      render(
+        <PromptComparison
+          current={current}
+          targets={[baselineTarget, parentTarget]}
+          defaultTargetId="p-1"
+        />,
+      );
+
+      // Parent carries a "Trial #2" caption tag alongside its label.
+      expect(screen.getByText("Parent")).toBeInTheDocument();
+      expect(screen.getByText("Trial #2")).toBeInTheDocument();
+    });
+
     it("uses a custom currentLabel", () => {
       render(
         <PromptComparison
@@ -93,6 +110,44 @@ describe("PromptComparison", () => {
       );
 
       expect(screen.getByText("→ Best trial")).toBeInTheDocument();
+    });
+  });
+
+  describe("with a title", () => {
+    it("shows the title (not the picker) until diffing starts", () => {
+      render(
+        <PromptComparison
+          current={current}
+          targets={[baselineTarget]}
+          title="Trial prompt"
+          defaultDiff={false}
+        />,
+      );
+
+      // at rest: title + "Show diff", no picker/arrow
+      expect(screen.getByText("Trial prompt")).toBeInTheDocument();
+      expect(screen.getByText("Show diff")).toBeInTheDocument();
+      expect(screen.queryByText("→ Trial")).not.toBeInTheDocument();
+
+      // diffing: picker replaces the title
+      fireEvent.click(screen.getByText("Show diff"));
+      expect(screen.getByText("Baseline")).toBeInTheDocument();
+      expect(screen.getByText("→ Trial")).toBeInTheDocument();
+      expect(screen.queryByText("Trial prompt")).not.toBeInTheDocument();
+    });
+
+    it("shows the title with no toggle when there are no targets", () => {
+      render(
+        <PromptComparison
+          current={current}
+          targets={[]}
+          title="Trial prompt"
+        />,
+      );
+
+      expect(screen.getByText("Trial prompt")).toBeInTheDocument();
+      expect(screen.queryByText("Show diff")).not.toBeInTheDocument();
+      expect(screen.queryByText("Hide diff")).not.toBeInTheDocument();
     });
   });
 });

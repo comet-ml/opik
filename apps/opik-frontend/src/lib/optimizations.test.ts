@@ -3,7 +3,11 @@ import {
   convertOptimizationVariableFormat,
   checkIsTestSuite,
   getOptimizationDefaultConfigByProvider,
+  extractKwargsKeysFromPython,
+  extractRequiredScoreParams,
+  extractMetricNameFromCode,
 } from "./optimizations";
+import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
   Experiment,
   EXPERIMENT_TYPE,
@@ -368,6 +372,511 @@ describe("convertOptimizationVariableFormat", () => {
       const expected = "Line 1 {{var1}}\n\tLine 2 {{var2}}\r\nLine 3";
       expect(convertOptimizationVariableFormat(input)).toBe(expected);
     });
+  });
+});
+
+describe("extractKwargsKeysFromPython", () => {
+  it("does NOT treat a default-less kwargs.get(...) as a required column", () => {
+    // `.get()` is missing-safe (returns None) and the editor helper copy
+    // recommends it as the safe accessor, so it must never hard-block submit
+    // (OPIK-7172 self-review fix).
+    const code = `
+def score(self, output, **kwargs):
+    label = kwargs.get("label")
+    return label
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("does NOT treat kwargs.get(x, default) as a required column", () => {
+    // A supplied default means the metric tolerates a missing column, so it
+    // must never hard-block submit (OPIK-7172 review fix).
+    const code = `
+def score(self, output, **kwargs):
+    label = kwargs.get("label", "")
+    other = kwargs.get('category', None)
+    return label, other
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("returns only the required key when default-ful and required mix", () => {
+    const code = `
+def score(self, output, **kwargs):
+    a = kwargs.get("optional_col", "fallback")
+    b = kwargs["required_col"]
+    return a, b
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["required_col"]);
+  });
+
+  it("extracts a kwargs[...] subscript key", () => {
+    const code = `
+def score(self, output, **kwargs):
+    return kwargs["expected_value"]
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["expected_value"]);
+  });
+
+  it("extracts multiple distinct subscript keys, de-duplicated", () => {
+    // Only subscript accesses are required; the default-less `.get()` on
+    // `category` is missing-safe and must not be collected.
+    const code = `
+def score(self, output, **kwargs):
+    a = kwargs.get("category")
+    b = kwargs["reference"]
+    c = kwargs["reference"]
+    d = kwargs['expected']
+    return a, b, c, d
+`;
+    expect(extractKwargsKeysFromPython(code).sort()).toEqual([
+      "expected",
+      "reference",
+    ]);
+  });
+
+  it("never treats 'output' as a required dataset column", () => {
+    // `output` is always injected by the backend, so even a literal
+    // `kwargs.get("output")` access must not be flagged as a missing column.
+    const code = `kwargs.get("output")`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("returns an empty list for code with no kwargs access", () => {
+    const code = `
+def score(self, output):
+    return output
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("returns an empty list for empty code", () => {
+    expect(extractKwargsKeysFromPython("")).toEqual([]);
+  });
+
+  it("does not resolve dynamic (non-literal) kwargs access", () => {
+    // A variable key can't be statically resolved — documented limitation,
+    // not a false positive to guard against.
+    const code = `
+def score(self, output, **kwargs):
+    key = "label"
+    return kwargs.get(key)
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("ignores kwargs access mentioned inside a # comment", () => {
+    const code = `
+def score(self, output, **kwargs):
+    # historically this read kwargs.get("legacy_col")
+    return kwargs["real_col"]
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["real_col"]);
+  });
+
+  it("ignores kwargs access mentioned inside a docstring", () => {
+    const code = `
+def score(self, output, **kwargs):
+    """Example: kwargs.get("doc_col") or kwargs['other_doc'].
+
+    kwargs["also_in_doc"] should not count either.
+    """
+    return kwargs["real_col"]
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["real_col"]);
+  });
+
+  it("ignores a kwargs literal appearing inside a normal string", () => {
+    const code = `
+def score(self, output, **kwargs):
+    msg = "kwargs.get('in_string')"
+    return kwargs["actual"]
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["actual"]);
+  });
+});
+
+describe("extractRequiredScoreParams", () => {
+  it("returns strict score() positional params (excluding self/output)", () => {
+    const code = `
+def score(self, output, reference):
+    return output == reference
+`;
+    expect(extractRequiredScoreParams(code)).toEqual(["reference"]);
+  });
+
+  it("keeps required positional params even with a trailing **kwargs", () => {
+    // **kwargs only absorbs undeclared extras; `reference` is still required.
+    const code = `
+def score(self, output, reference, **kwargs):
+    return output == reference
+`;
+    expect(extractRequiredScoreParams(code)).toEqual(["reference"]);
+  });
+
+  it("returns [] (defers to backend) when multiple score() defs are ambiguous", () => {
+    const code = `
+class ZMetric(BaseMetric):
+    def score(self, output, reference):
+        return output == reference
+
+class AMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractRequiredScoreParams(code)).toEqual([]);
+  });
+
+  it("excludes params that have a default value", () => {
+    const code = `
+def score(self, output, reference, threshold=0.5):
+    return output == reference
+`;
+    expect(extractRequiredScoreParams(code)).toEqual(["reference"]);
+  });
+
+  it("handles type-annotated params", () => {
+    const code = `
+def score(self, output: str, reference: str, category: str) -> ScoreResult:
+    return output == reference
+`;
+    expect(extractRequiredScoreParams(code).sort()).toEqual([
+      "category",
+      "reference",
+    ]);
+  });
+
+  it("returns [] when there is no score() method", () => {
+    expect(extractRequiredScoreParams("def other(self): pass")).toEqual([]);
+  });
+
+  it("returns [] for empty code", () => {
+    expect(extractRequiredScoreParams("")).toEqual([]);
+  });
+});
+
+describe("extractMetricNameFromCode", () => {
+  // Must stay aligned with the backend AST extractor
+  // (process_worker._metric_name_ast) so create-time objective_name matches the
+  // name the metric scores under — otherwise the UI shows "-".
+  it("extracts the name from super().__init__(name=...)", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(name="accuracy")
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("accuracy");
+  });
+
+  it("extracts the name from an __init__ param default", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "levenshtein"):
+        super().__init__(name=name)
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("levenshtein");
+  });
+
+  it("extracts the name from a class-level attribute", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    name = "custom_attr"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("custom_attr");
+  });
+
+  it("prefers the base-constructor name over the param default (backend order)", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "from_default"):
+        super().__init__(name="from_super")
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("from_super");
+  });
+
+  it("does not treat self.name assignment as the metric name", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        self.name = "not_this"
+        super().__init__(name="real")
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("real");
+  });
+
+  it("falls back to 'code' when no name can be resolved", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("code");
+  });
+
+  it("ignores a method-local `name = ...` assignment (not the metric name)", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        name = "tmp"
+        return 1.0
+`;
+    // The method-local assignment is more deeply indented than the class body,
+    // so it is not read as the metric name.
+    expect(extractMetricNameFromCode(code)).toEqual("code");
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+});
+
+describe("extractMetricNameFromPythonCode — comments & docstrings", () => {
+  it("ignores super().__init__(name=...) inside a docstring", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    """Example:
+        super().__init__(name="accuracy")
+    """
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+
+  it("ignores a commented-out name assignment", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    # name = "custom_attr"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+
+  it("still resolves the real name when a docstring holds a decoy", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    """Docstring decoy: super().__init__(name="fake")"""
+    def __init__(self):
+        super().__init__(name="real")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("real");
+  });
+
+  it("returns a safe result for malformed Python (unclosed docstring)", () => {
+    // An unterminated triple-quoted string: the stripper drops everything from
+    // the opening quotes onward, so the decoy name never leaks out.
+    const code = `
+class MyMetric(BaseMetric):
+    """unterminated docstring
+    super().__init__(name="fake")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+
+  it("finds the class-level name when a helper class is declared first", () => {
+    const code = `
+class Helper:
+    def util(self):
+        return 1
+
+class MyMetric(BaseMetric):
+    name = "custom_attr"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("custom_attr");
+  });
+
+  it("ignores a helper class's own class-level name (only the BaseMetric subclass counts)", () => {
+    // A non-metric helper with its own `name = ...` declared first must NOT win —
+    // otherwise objective_name mismatches the scored name and polling stalls.
+    const code = `
+class Helper:
+    name = "helper_name"
+    def util(self):
+        return 1
+
+class RealMetric(BaseMetric):
+    name = "real_metric"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("real_metric");
+  });
+
+  it("picks the alphabetically-first BaseMetric subclass (mirrors backend)", () => {
+    const code = `
+class ZMetric(BaseMetric):
+    name = "z_name"
+    def score(self, output, **kwargs):
+        return 1.0
+
+class AMetric(BaseMetric):
+    name = "a_name"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("a_name");
+  });
+
+  it("resolves an indirect (transitive) BaseMetric subclass", () => {
+    // AMetric subclasses BaseMetric only via ZBase; it is alphabetically first,
+    // so it is the class the backend instantiates. The extractor must follow the
+    // chain and read AMetric's name (not defer / miss it).
+    const code = `
+class ZBase(BaseMetric):
+    def __init__(self, name="zbase"):
+        super().__init__(name=name)
+
+class AMetric(ZBase):
+    def __init__(self):
+        super().__init__(name="ametric")
+    def score(self, output, reference):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("ametric");
+  });
+
+  it("recognizes a BaseMetric import alias as the metric base", () => {
+    const code = `
+from opik.evaluation.metrics import BaseMetric as BM
+
+class MyMetric(BM):
+    def __init__(self):
+        super().__init__(name="aliased")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("aliased");
+  });
+
+  it("recognizes a dotted BaseMetric reference as the metric base", () => {
+    const code = `
+import opik.evaluation.metrics as metrics
+
+class MyMetric(metrics.BaseMetric):
+    def __init__(self):
+        super().__init__(name="dotted")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("dotted");
+  });
+
+  it("extracts the name when a nested call precedes the name kwarg", () => {
+    // The full (balanced) constructor arg list must be scanned — a nested call
+    // like make_cfg() must not truncate extraction at its inner `)`.
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(config=make_cfg(), name="foo")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("foo");
+  });
+
+  it("extracts the name from a base constructor with a nested call and trailing args", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(name="bar", threshold=default_threshold(0.5))
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("bar");
+  });
+
+  it("returns null when no BaseMetric subclass can be identified", () => {
+    // Indirect subclassing isn't statically resolvable; the backend rejects it
+    // too, so we defer rather than guess a wrong name.
+    const code = `
+class MyMetric(SomeUserBase):
+    name = "unresolved"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+
+  it("resolves an alias from a parenthesized multiline import", () => {
+    const code = `
+from opik.evaluation.metrics import (
+    BaseMetric as BM,
+)
+
+class MyMetric(BM):
+    def __init__(self):
+        super().__init__(name="multiline_alias")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("multiline_alias");
+  });
+
+  it("matches a PEP 695 class header with type parameters", () => {
+    const code = `
+class MyMetric[T](BaseMetric):
+    def __init__(self):
+        super().__init__(name="generic_metric")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("generic_metric");
+  });
+
+  it("ignores super().__init__ calls outside the metric's own __init__", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def helper(self):
+        super().__init__(name="from_helper")
+
+    def __init__(self):
+        super().__init__(name="real_metric")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("real_metric");
+  });
+
+  it("reads name from an explicit base-class __init__ call", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        BaseMetric.__init__(self, name="explicit_base")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("explicit_base");
+  });
+
+  it("ignores a non-base helper __init__ call inside __init__", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        Tokenizer.__init__(self, name="helper_name")
+        super().__init__(name="real_metric")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("real_metric");
+  });
+
+  it("handles a multiline __init__ signature", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(
+        self,
+        name: str = "multiline_default",
+    ):
+        super().__init__(name=name)
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("multiline_default");
+  });
+});
+
+// The unknown-column check that gates submission
+// (`useOptimizationsNewFormHandlers.missingDatasetVariables`) is exactly this
+// diff: dataset columns referenced by the code metric (via `extractKwargsKeysFromPython`
+// plus any explicit `arguments` map values) that are absent from the item
+// source's actual columns.
+describe("extractKwargsKeysFromPython — unknown-column detection", () => {
+  it("flags a referenced key that is not among the dataset's columns", () => {
+    const code = `kwargs["nonexistent_column"]`;
+    const datasetVariables = ["text", "label"];
+    const referenced = extractKwargsKeysFromPython(code);
+    const missing = referenced.filter((key) => !datasetVariables.includes(key));
+    expect(missing).toEqual(["nonexistent_column"]);
+  });
+
+  it("does not flag a referenced key that matches a dataset column", () => {
+    const code = `kwargs.get("label")`;
+    const datasetVariables = ["text", "label"];
+    const referenced = extractKwargsKeysFromPython(code);
+    const missing = referenced.filter((key) => !datasetVariables.includes(key));
+    expect(missing).toEqual([]);
   });
 });
 

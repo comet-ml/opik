@@ -11,9 +11,10 @@ import { TooltipProvider } from "@/ui/tooltip";
 import { PostHogProvider } from "posthog-js/react";
 import posthog from "posthog-js";
 import DatasetExportPanel from "@/v2/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel";
-
-const TOOLTIP_DELAY_DURATION = 500;
-const TOOLTIP_SKIP__DELAY_DURATION = 0;
+import {
+  TOOLTIP_DELAY_DURATION,
+  TOOLTIP_SKIP_DELAY_DURATION,
+} from "@/constants/shared";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,7 +35,7 @@ function App() {
             <ThemeProvider>
               <TooltipProvider
                 delayDuration={TOOLTIP_DELAY_DURATION}
-                skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
+                skipDelayDuration={TOOLTIP_SKIP_DELAY_DURATION}
               >
                 <RouterProvider router={router} />
                 <DatasetExportPanel />

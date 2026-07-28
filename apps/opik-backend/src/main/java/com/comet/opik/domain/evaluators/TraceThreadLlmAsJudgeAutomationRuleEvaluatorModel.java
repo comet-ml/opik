@@ -1,10 +1,12 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import lombok.Builder;
 import org.jdbi.v3.json.Json;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -23,6 +25,7 @@ public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
         String name,
         Float samplingRate,
         boolean enabled,
+        EvalTriggerScope triggerScope,
         String filters,
         @Json TraceThreadLlmAsJudgeCode code,
         Instant createdAt,
@@ -43,6 +46,11 @@ public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
     }
 
     @Override
+    public AutomationRuleEvaluatorModel<?> withTriggerScope(EvalTriggerScope triggerScope) {
+        return toBuilder().triggerScope(triggerScope).build();
+    }
+
+    @Override
     public AutomationRuleEvaluatorModel<?> withProjectDetails(
             UUID projectId, String projectName, SortedSet<ProjectReference> projects) {
         return toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
@@ -51,7 +59,8 @@ public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
     public record TraceThreadLlmAsJudgeCode(
             LlmAsJudgeCodeParameters model,
             List<LlmAsJudgeCodeMessage> messages,
-            List<LlmAsJudgeCodeSchema> schema) {
+            List<LlmAsJudgeCodeSchema> schema,
+            BigDecimal maxCostUsd) {
     }
 
 }

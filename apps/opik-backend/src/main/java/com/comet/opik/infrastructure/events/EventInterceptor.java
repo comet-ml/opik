@@ -23,10 +23,21 @@ class EventInterceptor implements MethodInterceptor {
 
     private static final AttributeKey<String> LISTENER_KEY = stringKey("listener");
 
+    private final LongCounter invokedCounter;
     private final LongCounter errorCounter;
 
     EventInterceptor() {
-        this.errorCounter = GlobalOpenTelemetry.get().getMeter(TRACER_NAME)
+        var meter = GlobalOpenTelemetry.get().getMeter(TRACER_NAME);
+        // Some listeners (e.g. TraceThreadListener, TraceDeletedListener, EnvironmentAutoCreateListener) subscribe to
+        // a reactive chain internally and return before it completes, so this only observes dispatch of the
+        // synchronous portion, not end-to-end processing — hence "invoked", not "consumed"/"processed".
+        this.invokedCounter = meter
+                .counterBuilder("opik.event.invoked")
+                .setDescription(
+                        "Listener invocations whose synchronous portion completed without throwing, by listener. "
+                                + "Does not track completion of async work some listeners fire-and-forget internally.")
+                .build();
+        this.errorCounter = meter
                 .counterBuilder("opik.event.error")
                 .setDescription("Event processing errors, by listener and error type")
                 .build();
@@ -56,6 +67,7 @@ class EventInterceptor implements MethodInterceptor {
 
         try (Scope scope = span.makeCurrent()) {
             Object result = methodInvocation.proceed();
+            invokedCounter.add(1, Attributes.of(LISTENER_KEY, listenerName));
             log.info("Event intercepted: {}", event);
             return result;
         } catch (Throwable e) {

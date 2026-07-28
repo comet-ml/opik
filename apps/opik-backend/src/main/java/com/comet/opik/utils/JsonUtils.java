@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.google.common.annotations.VisibleForTesting;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -25,7 +26,9 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Collection;
@@ -44,32 +47,34 @@ public class JsonUtils {
     private static volatile ObjectMapper MAPPER;
 
     static {
-        // Initialize with default (20MB - Jackson default) until OpikApplication configures it
-        MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
-        log.info("JsonUtils initialized with default maxStringLength: '{}'",
+        MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN, -1L);
+        log.info("JsonUtils initialized with default maxStringLength: '{}', maxDocumentLength: unlimited",
                 StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
     }
 
     /**
-     * Configures JsonUtils with the limit from config.yml.
+     * Configures JsonUtils with the limits from config.yml.
      * Called by OpikApplication during startup.
      *
-     * @param maxStringLength Maximum string length in bytes
+     * @param maxStringLength   Maximum single string value length in bytes
+     * @param maxDocumentLength Maximum whole-document length in bytes ({@code <= 0} means unlimited)
      */
-    public static synchronized void configure(int maxStringLength) {
-        MAPPER = createConfiguredMapper(maxStringLength);
-        log.info("JsonUtils configured with maxStringLength: '{}' bytes ('{}'MB)",
-                maxStringLength, maxStringLength / 1024 / 1024);
+    public static synchronized void configure(int maxStringLength, long maxDocumentLength) {
+        MAPPER = createConfiguredMapper(maxStringLength, maxDocumentLength);
+        log.info("JsonUtils configured with maxStringLength: '{}' bytes ('{}'MB), maxDocumentLength: '{}' bytes",
+                maxStringLength, maxStringLength / 1024 / 1024, maxDocumentLength);
     }
 
     /**
      * Creates and configures an ObjectMapper with the specified limits.
      * This configuration matches the Dropwizard ObjectMapper setup in OpikApplication.
      *
-     * @param maxStringLength Maximum string length in bytes
+     * @param maxStringLength   Maximum single string value length in bytes
+     * @param maxDocumentLength Maximum whole-document length in bytes ({@code <= 0} means unlimited)
      * @return Configured ObjectMapper instance
      */
-    private static ObjectMapper createConfiguredMapper(int maxStringLength) {
+    @VisibleForTesting
+    static ObjectMapper createConfiguredMapper(int maxStringLength, long maxDocumentLength) {
         ObjectMapper mapper = new ObjectMapper();
 
         // Basic configuration matching Dropwizard defaults
@@ -87,13 +92,23 @@ public class JsonUtils {
                 .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                 .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
-        // Configure stream read constraints
-        StreamReadConstraints readConstraints = StreamReadConstraints.builder()
-                .maxStringLength(maxStringLength)
-                .build();
-        mapper.getFactory().setStreamReadConstraints(readConstraints);
+        applyStreamReadConstraints(mapper, maxStringLength, maxDocumentLength);
 
         return mapper;
+    }
+
+    /**
+     * Applies the JSON stream-read size limits to {@code mapper}'s factory. NOTE: {@code maxDocumentLength}
+     * is enforced only on parser buffer refills (stream/reader input, e.g. the HTTP request body) - a fully
+     * in-memory {@code String}/{@code byte[]} read bypasses it; {@code maxStringLength} applies to both.
+     */
+    public static void applyStreamReadConstraints(@NonNull ObjectMapper mapper, int maxStringLength,
+            long maxDocumentLength) {
+        StreamReadConstraints readConstraints = StreamReadConstraints.builder()
+                .maxStringLength(maxStringLength)
+                .maxDocumentLength(maxDocumentLength)
+                .build();
+        mapper.getFactory().setStreamReadConstraints(readConstraints);
     }
 
     /**
@@ -112,6 +127,27 @@ public class JsonUtils {
      */
     public static ObjectNode createObjectNode() {
         return MAPPER.createObjectNode();
+    }
+
+    /**
+     * Shallow-merges object {@code overrides} on top of {@code base}, returning a new object node.
+     * Keys present in {@code overrides} are added/replaced; keys only in {@code base} are preserved.
+     * <p>
+     * Only object overrides are mergeable: a {@code null}, scalar, or array {@code overrides} is ignored
+     * and {@code base} is returned unchanged, so a non-object value can never be propagated into storage
+     * (which would violate the object-shaped metadata contract the callers/UI rely on). Likewise a
+     * non-object {@code base} is discarded rather than merged onto.
+     */
+    public static JsonNode merge(JsonNode base, JsonNode overrides) {
+        if (overrides == null || !overrides.isObject()) {
+            return base;
+        }
+        ObjectNode result = MAPPER.createObjectNode();
+        if (base != null && base.isObject()) {
+            result.setAll((ObjectNode) base);
+        }
+        result.setAll((ObjectNode) overrides);
+        return result;
     }
 
     /**
@@ -265,6 +301,53 @@ public class JsonUtils {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    public void writeValue(@NonNull Writer writer, @NonNull Object value) {
+        try {
+            MAPPER.writeValue(writer, value);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public void writeValue(@NonNull OutputStream outputStream, @NonNull Object value) {
+        try {
+            MAPPER.writeValue(outputStream, value);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Serialized character (UTF-16) length of a node without materializing its JSON string — the node is
+     * streamed through a counting writer, so a large field costs O(1) transient heap rather than a full
+     * copy. A {@code null} or JSON-null node counts as 0. Use {@link #getSerializedLengthInBytes} to
+     * enforce byte-denominated limits.
+     */
+    public long getSerializedLength(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return 0L;
+        }
+        var counter = new CountingWriter();
+        writeValue(counter, node);
+        return counter.getCount();
+    }
+
+    /**
+     * Serialized UTF-8 byte length of a node without materializing its JSON — the node is streamed through
+     * a counting output stream, so a large field costs O(1) transient heap rather than a full copy. This
+     * is the byte-accurate variant of {@link #getSerializedLength}, for enforcing byte-denominated caps
+     * (where non-ASCII text makes the byte count exceed the character count). A {@code null} or JSON-null
+     * node counts as 0.
+     */
+    public long getSerializedLengthInBytes(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return 0L;
+        }
+        var counter = new CountingOutputStream();
+        writeValue(counter, node);
+        return counter.getCount();
     }
 
     public <T> T readJsonFile(@NonNull String fileName, @NonNull TypeReference<T> valueTypeRef) throws IOException {

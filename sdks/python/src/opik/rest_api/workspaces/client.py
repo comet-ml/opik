@@ -5,12 +5,16 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.breakdown_config import BreakdownConfig
 from ..types.result import Result
+from ..types.span_filter import SpanFilter
 from ..types.workspace_configuration import WorkspaceConfiguration
 from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from ..types.workspace_version import WorkspaceVersion
 from .raw_client import AsyncRawWorkspacesClient, RawWorkspacesClient
+from .types.workspace_span_metric_request_interval import WorkspaceSpanMetricRequestInterval
+from .types.workspace_span_metric_request_metric_type import WorkspaceSpanMetricRequestMetricType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -255,6 +259,68 @@ class WorkspacesClient:
             interval_start=interval_start,
             interval_end=interval_end,
             project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def get_workspace_span_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        metric_type: typing.Optional[WorkspaceSpanMetricRequestMetricType] = OMIT,
+        interval: typing.Optional[WorkspaceSpanMetricRequestInterval] = OMIT,
+        breakdown: typing.Optional[BreakdownConfig] = OMIT,
+        filters: typing.Optional[typing.Sequence[SpanFilter]] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceMetricResponse:
+        """
+        Gets a span metric time series aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        metric_type : typing.Optional[WorkspaceSpanMetricRequestMetricType]
+
+        interval : typing.Optional[WorkspaceSpanMetricRequestInterval]
+
+        breakdown : typing.Optional[BreakdownConfig]
+
+        filters : typing.Optional[typing.Sequence[SpanFilter]]
+
+        interval_end : typing.Optional[dt.datetime]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceMetricResponse
+            Workspace span metric
+
+        Examples
+        --------
+        from Opik import OpikApi
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.get_workspace_span_metric(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        """
+        _response = self._raw_client.get_workspace_span_metric(
+            interval_start=interval_start,
+            project_ids=project_ids,
+            metric_type=metric_type,
+            interval=interval,
+            breakdown=breakdown,
+            filters=filters,
+            interval_end=interval_end,
             start_before_end=start_before_end,
             request_options=request_options,
         )
@@ -599,6 +665,71 @@ class AsyncWorkspacesClient:
             interval_start=interval_start,
             interval_end=interval_end,
             project_ids=project_ids,
+            start_before_end=start_before_end,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def get_workspace_span_metric(
+        self,
+        *,
+        interval_start: dt.datetime,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        metric_type: typing.Optional[WorkspaceSpanMetricRequestMetricType] = OMIT,
+        interval: typing.Optional[WorkspaceSpanMetricRequestInterval] = OMIT,
+        breakdown: typing.Optional[BreakdownConfig] = OMIT,
+        filters: typing.Optional[typing.Sequence[SpanFilter]] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WorkspaceMetricResponse:
+        """
+        Gets a span metric time series aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        metric_type : typing.Optional[WorkspaceSpanMetricRequestMetricType]
+
+        interval : typing.Optional[WorkspaceSpanMetricRequestInterval]
+
+        breakdown : typing.Optional[BreakdownConfig]
+
+        filters : typing.Optional[typing.Sequence[SpanFilter]]
+
+        interval_end : typing.Optional[dt.datetime]
+
+        start_before_end : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WorkspaceMetricResponse
+            Workspace span metric
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.get_workspace_span_metric(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_workspace_span_metric(
+            interval_start=interval_start,
+            project_ids=project_ids,
+            metric_type=metric_type,
+            interval=interval,
+            breakdown=breakdown,
+            filters=filters,
+            interval_end=interval_end,
             start_before_end=start_before_end,
             request_options=request_options,
         )

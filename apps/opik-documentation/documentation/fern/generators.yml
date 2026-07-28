@@ -2,3 +2,5 @@ api:
   specs:
     - openapi: ./openapi/opik.yaml
       overrides: ./openapi/overrides.yml
+      settings:
+        disambiguate-request-names: false

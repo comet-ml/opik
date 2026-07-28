@@ -20,6 +20,9 @@ MODEL_PARAMS = [
     pytest.param(
         (f"vertex_ai/{llm_constants.GEMINI_FLASH}", ["ensure_vertexai_configured"]),
         id="vertex_ai",
+        marks=pytest.mark.skip(
+            reason="Temporarily disabled: Vertex AI 429 RESOURCE_EXHAUSTED quota failures in CI"
+        ),
     ),
 ]
 

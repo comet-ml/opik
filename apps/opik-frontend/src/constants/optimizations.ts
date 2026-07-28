@@ -1,4 +1,16 @@
 import {
+  Braces,
+  Code,
+  Dna,
+  Equal,
+  GitBranch,
+  Network,
+  Sigma,
+  Sparkles,
+  SpellCheck,
+  type LucideIcon,
+} from "lucide-react";
+import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
   Optimization,
@@ -165,7 +177,44 @@ export const OPTIMIZATION_METRIC_OPTIONS = [
     description:
       "Compares numeric output against a reference value. Closer values score higher.",
   },
+  {
+    value: METRIC_TYPE.CODE,
+    label: "Custom code",
+    description: "Score outputs with a custom Python metric.",
+  },
 ];
+
+export type IconConfig = { icon: LucideIcon; color: string };
+
+export const ALGORITHM_ICON_MAP: Partial<Record<OPTIMIZER_TYPE, IconConfig>> = {
+  [OPTIMIZER_TYPE.GEPA]: { icon: Dna, color: "var(--optimizer-icon-gepa)" },
+  [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: {
+    icon: Network,
+    color: "var(--optimizer-icon-hierarchical)",
+  },
+  [OPTIMIZER_TYPE.EVOLUTIONARY]: {
+    icon: GitBranch,
+    color: "var(--optimizer-icon-evolutionary)",
+  },
+};
+
+export const METRIC_ICON_MAP: Record<METRIC_TYPE, IconConfig> = {
+  [METRIC_TYPE.EQUALS]: { icon: Equal, color: "var(--metric-icon-equals)" },
+  [METRIC_TYPE.JSON_SCHEMA_VALIDATOR]: {
+    icon: Braces,
+    color: "var(--metric-icon-json-schema)",
+  },
+  [METRIC_TYPE.G_EVAL]: { icon: Sparkles, color: "var(--metric-icon-g-eval)" },
+  [METRIC_TYPE.LEVENSHTEIN]: {
+    icon: SpellCheck,
+    color: "var(--metric-icon-levenshtein)",
+  },
+  [METRIC_TYPE.NUMERICAL_SIMILARITY]: {
+    icon: Sigma,
+    color: "var(--metric-icon-numerical)",
+  },
+  [METRIC_TYPE.CODE]: { icon: Code, color: "var(--metric-icon-code)" },
+};
 
 // Type for demo dataset items - keys should match template variables
 export type DemoDatasetItem = Record<string, unknown>;

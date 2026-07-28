@@ -9,6 +9,7 @@ from ... import constants
 from ...api_objects.types import MetricFunction
 from ...utils import throttle as _throttle
 from ...utils.logging import debug_log
+from ...utils.scoring import improves_over
 from collections.abc import Sequence
 from .ops.halloffame_ops import PromptHallOfFame, add_best_candidate_to_hof
 from ...core.results import OptimizationRound
@@ -426,7 +427,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                     improvement=improvement,
                 )
 
-                if best_cand_score_avg > best_score:
+                # Tie policy (OPIK-7038): strict improvement only.
+                if improves_over(best_cand_score_avg, best_score):
                     best_score = best_cand_score_avg
                     best_prompts = best_candidate_this_round
 

@@ -1,2 +1,4 @@
 *~
 *.orig
+# helm-unittest suites (dev/test only; not shipped in the packaged chart)
+tests/

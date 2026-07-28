@@ -19,6 +19,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlm
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -88,6 +89,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -424,7 +426,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @DisplayName("create evaluator definition: when api key is present, then return proper response")
         void createAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(
                 String sessionToken, boolean isAuthorized, String workspaceName) {
-            var projectId = UUID.randomUUID();
+            var projectId = generator.generate();
             var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectIds(Set.of(projectId))
                     .build();
@@ -739,6 +741,25 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
             }
         }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"0", "-0.5"})
+        @DisplayName("create evaluator: when max_cost_usd is not positive, then reject at the API boundary")
+        void createEvaluator__whenMaxCostUsdIsNotPositive__thenReturnUnprocessableEntity(String maxCostUsd) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var invalidCode = evaluator.getCode().toBuilder()
+                    .maxCostUsd(new BigDecimal(maxCostUsd))
+                    .build();
+            var invalidEvaluator = evaluator.toBuilder().code(invalidCode).build();
+
+            try (var actualResponse = evaluatorsResourceClient.createEvaluator(
+                    invalidEvaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                var errorMessage = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+                assertThat(errorMessage.errors())
+                        .anyMatch(error -> error.toLowerCase().contains("cost")
+                                && error.contains("must be greater than 0"));
+            }
+        }
     }
 
     @Nested
@@ -921,6 +942,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .name(updatedEvaluator.getName())
                     .samplingRate(updatedEvaluator.getSamplingRate())
                     .enabled(updatedEvaluator.isEnabled())
+                    .triggerScope(updatedEvaluator.getTriggerScope())
                     .filters((List) updatedEvaluator.getFilters())
                     .code(updatedEvaluator.getCode())
                     .build();
@@ -1492,6 +1514,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(0f) // Low sampling rate to avoid actual processing
                     .enabled(true)
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .filters(List.of())
                     .projectIds(Set.of(projectId))
                     .build();
@@ -1502,6 +1525,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // High sampling rate, but rule is disabled
                     .enabled(false)
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .filters(List.of())
                     .projectIds(Set.of(projectId))
                     .build();
@@ -1538,6 +1562,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // 100% sampling rate
                     .enabled(false) // But disabled
+                    .triggerScope(EvalTriggerScope.PRODUCTION)
                     .projectIds(Set.of(projectId))
                     .build();
             var disabledId = evaluatorsResourceClient.createEvaluator(disabledRule, WORKSPACE_NAME, API_KEY);

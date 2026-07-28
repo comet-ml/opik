@@ -1,6 +1,7 @@
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 import { Prompt } from "@/types/prompts";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type PromptTagsListProps = {
   tags: string[];
@@ -13,6 +14,9 @@ const PromptTagsList: React.FC<PromptTagsListProps> = ({
   prompt,
   promptId,
 }) => {
+  const {
+    permissions: { canEditPrompts },
+  } = usePermissions();
   const { mutate } = usePromptUpdateMutation();
 
   const mutateTags = (newTags: string[]) => {
@@ -41,6 +45,7 @@ const PromptTagsList: React.FC<PromptTagsListProps> = ({
       align="start"
       size="sm"
       tagVariant="lavender"
+      readOnly={!canEditPrompts}
     />
   );
 };

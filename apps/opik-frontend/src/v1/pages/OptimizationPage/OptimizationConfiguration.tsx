@@ -4,8 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card";
 import { OptimizationStudioConfig } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import { MessagesList } from "@/v1/pages-shared/prompts/PromptMessageDisplay";
-import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
-import { getOptimizerLabel } from "@/lib/optimizations";
+import { getMetricLabel, getOptimizerLabel } from "@/lib/optimizations";
 import { extractDisplayMessages } from "@/lib/llm";
 import useAppStore from "@/store/AppStore";
 import ResizableSection from "@/shared/ResizableSection/ResizableSection";
@@ -16,12 +15,6 @@ interface OptimizationConfigurationProps {
   optimizationId: string;
   bestExperiment?: Experiment;
 }
-
-const getMetricLabel = (type: string): string => {
-  return (
-    OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === type)?.label || type
-  );
-};
 
 const formatParamName = (key: string): string => {
   return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());

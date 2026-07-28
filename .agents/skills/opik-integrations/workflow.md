@@ -33,7 +33,7 @@ Understand the target library before touching Opik. Prefer fanning out parallel 
 Answer all of these:
 
 - **Entrypoint shape** — Is it a client object with methods (→ patching/proxy), a callback/tracer interface (→ callback), or already OpenTelemetry-instrumented? If it emits OTel, first decide whether a **docs-only OTLP-to-Opik** setup suffices (backend does the mapping) before committing to a client-side processor/exporter — see the OTel notes in the language reference.
-- **Methods to trace** — the specific calls users invoke (e.g. `chat.complete`, `embed`, `rerank`). List sync *and* async variants.
+- **Methods to trace** — the specific calls users invoke (e.g. `chat.complete`, `embed`, `rerank`). List sync *and* async variants, and **treat structured-output methods (`parse`, `response_format=…`) and their streaming variants as in-scope by default** — don't defer them to "follow-ups" unless the user says so. Enumerate the full cross-product up front (complete/parse × sync/async × stream/non-stream).
 - **Streaming** — does a streamed call return an iterator/async-iterator, a context manager, or emit events? How are chunks shaped, and where does usage land (final chunk? separate event?)?
 - **Input** — the request fields worth logging (messages, prompt, tools/functions, model params).
 - **Output** — where the completion text / choices / tool calls live in the response object.
@@ -47,6 +47,7 @@ Read the closest sibling integration in full — it is the template, and most de
 - The library exposes **multiple incompatible client classes or versions** (e.g. a v1 `Client` and a v2 `ClientV2` with different method signatures and response shapes). Decide which to support, and whether both are in scope.
 - The **usage/token shape differs** from the sibling's (so the sibling's usage parser won't just work and you need custom mapping).
 - The **response/streaming shape** is materially different from the sibling's.
+- **Methods delegate to each other.** Check whether a higher-level method calls a lower-level one you also patch (e.g. Mistral's `chat.parse` calls `chat.complete`; some SDKs' `stream` calls `create`). Patching both naively **double-logs the call and double-counts cost**. Read the delegating method's source to find this. The idiomatic fix is to patch **only the primitive** and name the span after that primitive (see [python.md](python.md)) — verify the span count and cost in Phase 5.
 
 A target that looks like "just another provider" but has any of the above is *not* a clean clone — say so before writing code.
 
@@ -100,6 +101,8 @@ This is the proof that the integration actually logs correctly. Do not rely on r
    - `model` and `provider` set correctly
    - streamed calls produce the same shape as non-streamed (aggregated output + usage)
    - an induced error records `error_info` and still re-raises
+   - **no duplicate spans / double cost** — a call to a delegating method (e.g. `parse`) produces exactly one span, and its `total_estimated_cost` is not doubled
+   - **nesting** — a traced call made inside an `@track` function attaches as a child span of that function's span
 5. **Loop** until the logged data matches. Fix the integration, re-run, re-read.
 
 **SDK read-back fallback (equivalent evidence).** When the MCP can't read the backend you can write to, verify against that backend over REST instead: `client = opik.Opik(); client.search_traces(project_name=...)` then `client.search_spans(trace_id=...)`, and assert the same checklist (type, input/output, usage, model, provider). This is a real backend round-trip — note in the report that read-back was via the SDK, not the MCP tool, and why.
@@ -108,8 +111,14 @@ This is the proof that the integration actually logs correctly. Do not rely on r
 
 Add coverage with the language's harness — see the test section of the language reference, which delegates to the `python-sdk` / `typescript-sdk` testing skills.
 
-- **Python**: `sdks/python/tests/library_integration/<name>/`, using `fake_backend` and `testlib` `TraceModel`/`SpanModel` trees with `ANY_*` matchers. Assert input/output/usage/model/provider. Gate real API calls behind an `ensure_<name>_configured` fixture. Name tests `test_<what>__<case>__<expected>`.
+- **Python**: `sdks/python/tests/library_integration/<name>/`, using `fake_backend` and `testlib` `TraceModel`/`SpanModel` trees with `ANY_*` matchers. Assert input/output/usage/model/provider. Gate real API calls behind an `ensure_<name>_configured` fixture. Name tests `test_<what>__<case>__<expected>`. Cover every enumerated flow — including `parse`/structured-output variants, the delegating-method single-span case, and one **nested-under-`@track`** case (asserts the LLM span attaches as a child).
 - **TypeScript**: `*.test.ts` with vitest, mocking the API layer (or MSW), `await flush()` before asserting, fake timers for batching. Mirror the sibling integration's test file.
+
+**Register the tests in CI (Python) — this is part of "done", not optional.** The `tests/library_integration/<name>/` files run only if wired into GitHub Actions:
+
+1. Create `.github/workflows/lib-<name>-tests.yml` by cloning the closest sibling (e.g. `lib-anthropic-tests.yml`): set the provider's API-key env from `secrets.<PROVIDER>_API_KEY`, install `library_integration/<name>/requirements.txt`, run `pytest -vv .` in the test dir. **Unless asked otherwise, pin a single Python version** (`matrix.python_version: ["3.12"]`) instead of the full `PYTHON_VERSIONS` matrix.
+2. Register it in `.github/workflows/lib-integration-tests-runner.yml`: add `<name>` to the `libs` `workflow_dispatch` choices, add a `<name>_tests` job (`if: contains(fromJSON('["<name>", "all"]'), …)` + `uses:` the new file + `secrets: inherit`), and add it to the `notify-slack` job's `needs` list and `SUITE_RESULTS` payload.
+3. Flag that the run needs a `<PROVIDER>_API_KEY` repository secret to exist, and validate both YAML files parse.
 
 ## Phase 7 — Document
 
@@ -171,4 +180,4 @@ Explicitly flag the gaps: any flow **implemented but not covered by a test**, an
 
 ## Definition of done
 
-Implementation merged-quality, MCP verification passed (Phase 5 checklist) or its absence reported, tests added and passing, docs page authored and routed, and the **Phase 8 report delivered**. Then run `make claude` if you added/edited files under `.agents/`.
+Implementation merged-quality, MCP verification passed (Phase 5 checklist) or its absence reported, tests added and passing **and registered in CI** (Python: `lib-<name>-tests.yml` + runner wiring), docs page authored and routed, and the **Phase 8 report delivered**. Then run `make claude` if you added/edited files under `.agents/`.

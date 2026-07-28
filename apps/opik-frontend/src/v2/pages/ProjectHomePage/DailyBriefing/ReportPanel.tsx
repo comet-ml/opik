@@ -5,21 +5,7 @@ import { Separator } from "@/ui/separator";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import { OllieReport, RecommendedAction } from "@/types/ollie-reports";
 import { formatRelativeDateTime } from "@/lib/date";
-
-const CARD_STYLES = [
-  {
-    card: "border-sky-200/60 bg-sky-200/10 hover:bg-sky-200/20 hover:border-sky-200/80",
-    iconBg: "bg-sky-300",
-  },
-  {
-    card: "border-violet-300/40 bg-violet-300/10 hover:bg-violet-300/20 hover:border-violet-300/60",
-    iconBg: "bg-violet-400",
-  },
-  {
-    card: "border-fuchsia-300/50 bg-fuchsia-300/10 hover:bg-fuchsia-300/20 hover:border-fuchsia-300/70",
-    iconBg: "bg-fuchsia-400",
-  },
-];
+import { ACCENT_CARD_STYLES } from "@/constants/accentCardStyles";
 
 type ReportPanelProps = {
   report: OllieReport | null;
@@ -61,7 +47,7 @@ export default function ReportPanel({
             <h4 className="comet-title-s">Action items</h4>
             <div className="flex gap-3">
               {actions.map((action, i) => {
-                const style = CARD_STYLES[i % CARD_STYLES.length];
+                const style = ACCENT_CARD_STYLES[i % ACCENT_CARD_STYLES.length];
                 return (
                   <button
                     key={action.name}

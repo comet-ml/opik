@@ -1,0 +1,45 @@
+suite: backend configmap env
+
+# Baseline render assertions for the backend env ConfigMap
+# (templates/configmap-backend.yaml). Component `env` maps in values.yaml are
+# rendered as ConfigMap data keys (and consumed by the deployment via envFrom),
+# so the ConfigMap is where env values are asserted.
+templates:
+  - templates/configmap-backend.yaml
+
+tests:
+  - it: backend env values from values.yaml land in the configmap
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: data.STATE_DB_USER
+          value: opik
+      - equal:
+          path: data.ANALYTICS_DB_PORT
+          value: "8123"
+
+  - it: extra env keys set on the component are emitted
+    set:
+      component.backend.env.MY_CUSTOM_FLAG: enabled
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.MY_CUSTOM_FLAG
+          value: enabled
+
+  - it: backend configmap is not rendered when backendConfigMap is disabled
+    set:
+      component.backend.backendConfigMap.enabled: false
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+      skipEmptyTemplates: true
+    asserts:
+      - hasDocuments:
+          count: 0

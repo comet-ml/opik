@@ -15,5 +15,5 @@ import java.util.UUID;
 public interface AgentInsightsReportClient {
 
     void triggerAgentInsights(String reportId, UUID projectId, String workspaceId,
-            Instant periodStart, Instant periodEnd);
+            Instant periodStart, Instant periodEnd, String triggerSource);
 }

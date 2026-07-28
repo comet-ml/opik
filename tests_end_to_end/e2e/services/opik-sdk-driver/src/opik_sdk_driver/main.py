@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from opik.rest_api.core.api_error import ApiError
 
 from .routes import (
+    annotation_queues,
     datasets,
     experiments,
     feedback_definitions,
@@ -31,3 +32,4 @@ app.include_router(datasets.router)
 app.include_router(experiments.router)
 app.include_router(prompts.router)
 app.include_router(test_suites.router)
+app.include_router(annotation_queues.router)

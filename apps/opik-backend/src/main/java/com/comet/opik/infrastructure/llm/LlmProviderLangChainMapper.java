@@ -204,21 +204,16 @@ public interface LlmProviderLangChainMapper {
 
     private <E, T extends LlmProviderError<E>> Optional<ErrorMessage> getErrorMessage(Throwable throwable, Logger log,
             Class<T> errorType) {
-        Optional<Throwable> llmProviderError = Throwables.findThrowableInChain(this::findError, throwable);
+        Optional<String> errorJson = extractErrorJson(throwable);
 
         String failToGetErrorMessage = "failed to parse %s message".formatted(errorType.getSimpleName());
 
-        if (llmProviderError.isEmpty()) {
+        if (errorJson.isEmpty()) {
             log.warn(failToGetErrorMessage, throwable);
             return Optional.empty();
         }
 
-        String message = llmProviderError.get().getMessage();
-        int openBraceIndex = message.indexOf('{');
-        String jsonPart = message.substring(openBraceIndex);
-
-        Optional<T> error = parseError(log, jsonPart, errorType);
-        return error.map(LlmProviderError::toErrorMessage);
+        return parseError(log, errorJson.get(), errorType).map(LlmProviderError::toErrorMessage);
     }
 
     private <E, T extends LlmProviderError<E>> Optional<T> parseError(Logger log, String jsonPart, Class<T> errorType) {
@@ -241,12 +236,42 @@ public interface LlmProviderLangChainMapper {
         return t.getMessage() != null && t.getMessage().contains("{");
     }
 
+    private Optional<String> extractErrorJson(Throwable throwable) {
+        return Throwables.findThrowableInChain(this::findError, throwable)
+                .map(Throwable::getMessage)
+                .map(message -> message.substring(message.indexOf('{')));
+    }
+
+    /**
+     * OpenRouter reports a numeric {@code error.code} (mapped by {@link OpenRouterErrorMessage});
+     * OpenAI-compatible providers report a string {@code error.code} (mapped by
+     * {@link OpenAiErrorMessage}). Returns {@code true} only for a numeric code.
+     */
+    private boolean hasNumericErrorCode(String errorJson) {
+        try {
+            return JsonUtils.getJsonNodeFromString(errorJson).path("error").path("code").isNumber();
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Resolves an upstream LLM error payload to an {@link ErrorMessage}. OpenRouter and OpenAI share
+     * the same error envelope but differ on the {@code code} type — OpenRouter a numeric HTTP status,
+     * OpenAI a string code. The OpenRouter model is attempted only when the payload actually carries
+     * a numeric code, so a string-code payload is never run through OpenRouter's {@code Integer code}
+     * (which would raise, and log, an {@code InvalidFormatException} on every provider error). OpenAI
+     * is the fallback for everything else. The order must not be flipped unconditionally: OpenAI would
+     * silently coerce OpenRouter's numeric code into its String field and degrade the status to 500.
+     */
     default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
 
-        Optional<ErrorMessage> errorMessage = getErrorMessage(throwable, log, OpenRouterErrorMessage.class);
+        if (extractErrorJson(throwable).filter(this::hasNumericErrorCode).isPresent()) {
+            Optional<ErrorMessage> openRouterError = getErrorMessage(throwable, log, OpenRouterErrorMessage.class);
 
-        if (errorMessage.isPresent()) {
-            return errorMessage;
+            if (openRouterError.isPresent()) {
+                return openRouterError;
+            }
         }
 
         return getErrorMessage(throwable, log, OpenAiErrorMessage.class);

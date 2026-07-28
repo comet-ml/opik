@@ -79,6 +79,10 @@ class OptimizationContext:
         None  # Best prompt seen so far
     )
     dataset_split: str | None = None  # train/validation when applicable
+    # Scoring health for the best/final candidate's evaluation (OPIK-7043).
+    # Set whenever a new best score is recorded; populated even when failed_count=0
+    # so downstream layers can rely on the key always being present.
+    scoring_health: dict[str, int] | None = None
 
 
 @dataclass
@@ -152,6 +156,12 @@ def build_optimization_metadata(
     metadata: dict[str, Any] = {"optimizer": optimizer.__class__.__name__}
     if getattr(optimizer, "name", None):
         metadata["name"] = optimizer.name
+
+    # Record the model on the optimization itself so the UI can show it as a
+    # header pill for SDK-launched runs (Studio runs carry it in studio_config).
+    model = getattr(optimizer, "model", None)
+    if model:
+        metadata["model"] = model
 
     agent_class_name: str | None = None
     if agent_class is not None:

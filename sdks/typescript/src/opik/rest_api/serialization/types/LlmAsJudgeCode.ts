@@ -13,6 +13,7 @@ export const LlmAsJudgeCode: core.serialization.ObjectSchema<serializers.LlmAsJu
         messages: core.serialization.list(LlmAsJudgeMessage),
         variables: core.serialization.record(core.serialization.string(), core.serialization.string()),
         schema: core.serialization.list(LlmAsJudgeOutputSchema),
+        maxCostUsd: core.serialization.property("max_cost_usd", core.serialization.number().optional()),
     });
 
 export declare namespace LlmAsJudgeCode {
@@ -21,5 +22,6 @@ export declare namespace LlmAsJudgeCode {
         messages: LlmAsJudgeMessage.Raw[];
         variables: Record<string, string>;
         schema: LlmAsJudgeOutputSchema.Raw[];
+        max_cost_usd?: number | null;
     }
 }

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { UnfoldVertical, FoldVertical } from "lucide-react";
-import { Button } from "@/ui/button";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import CopyButton from "@/shared/CopyButton/CopyButton";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 
@@ -19,34 +19,42 @@ const DatasetSamplePreview: React.FC<DatasetSamplePreviewProps> = ({
   );
 
   return (
-    <div>
-      <Button
-        type="button"
-        variant="link"
-        size="sm"
-        className="h-auto p-0 text-muted-slate"
-        onClick={() => setIsSampleExpanded(!isSampleExpanded)}
-      >
-        {isSampleExpanded ? (
-          <>
-            <FoldVertical className="mr-1 size-4" />
-            Collapse dataset item sample
-          </>
-        ) : (
-          <>
-            <UnfoldVertical className="mr-1 size-4" />
-            View dataset item sample
-          </>
+    // One light box (header + code share the background, no inner divider) to
+    // match Figma. The code renders `transparent` so it doesn't draw its own
+    // box, and both header and code use the same px-3 gutter so the chevron and
+    // the line-number column line up.
+    <div className="overflow-hidden rounded-md border border-border bg-primary-foreground">
+      {/* The whole row toggles (not just the chevron); Copy is a separate
+          control alongside it so it doesn't collapse the panel on click. */}
+      <div className="flex h-8 items-center justify-between gap-2 pr-2">
+        <button
+          type="button"
+          className="comet-body-xs flex h-full flex-1 items-center gap-1 px-3 font-normal text-muted-slate"
+          onClick={() => setIsSampleExpanded(!isSampleExpanded)}
+        >
+          {isSampleExpanded ? (
+            <ChevronDown className="size-3 shrink-0" />
+          ) : (
+            <ChevronRight className="size-3 shrink-0" />
+          )}
+          Sample payload
+        </button>
+        {isSampleExpanded && (
+          <CopyButton
+            text={formattedSample}
+            tooltipText="Copy sample payload"
+            size="icon-2xs"
+            variant="ghost"
+          />
         )}
-      </Button>
+      </div>
       {isSampleExpanded && (
-        <div className="mt-2 rounded-md border border-border">
-          <div className="flex h-10 items-center justify-between border-b border-border px-4">
-            <span className="comet-body-s text-muted-slate">Payload</span>
-          </div>
+        <div className="px-1.5 pb-2">
           <CodeHighlighter
             data={formattedSample}
             language={SUPPORTED_LANGUAGE.json}
+            hideCopy
+            transparent
           />
         </div>
       )}

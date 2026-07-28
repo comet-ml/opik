@@ -10,6 +10,7 @@ import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
 import io.opentelemetry.proto.trace.v1.Status;
@@ -19,6 +20,7 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,6 +37,7 @@ import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractCos
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.storageKey;
 
 @UtilityClass
 @Slf4j
@@ -88,7 +91,12 @@ public class OpenTelemetryMapper {
             }
             effectiveTraceId = opikTraceId;
             var otelParentSpanId = otelSpan.getParentSpanId();
-            opikParentSpanId = otelParentSpanId.isEmpty()
+            // Some instrumentations set parent_span_id to the 16-byte trace id to mean "top-level span".
+            // Converting it yields a dangling UUID that doesn't match the Redis-mapped trace id, so
+            // treat it as a root span.
+            boolean parentIsTraceId = !otelParentSpanId.isEmpty()
+                    && otelParentSpanId.equals(otelSpan.getTraceId());
+            opikParentSpanId = (otelParentSpanId.isEmpty() || parentIsTraceId)
                     ? null
                     : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), traceTimestamp);
         }
@@ -104,7 +112,8 @@ public class OpenTelemetryMapper {
                 .endTime(Instant.ofEpochMilli(endTimeMs));
 
         List<Span.Event> events = otelSpan.getEventsList();
-        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events);
+        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events,
+                otelSpan.getName());
 
         extractErrorInfo(otelSpan).ifPresent(spanBuilder::errorInfo);
 
@@ -121,15 +130,43 @@ public class OpenTelemetryMapper {
      */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName, List<Span.Event> events) {
+        enrichSpanWithAttributes(spanBuilder, attributes, integrationName, events, null);
+    }
+
+    private static final String CLAUDE_CODE_LLM_SPAN = "claude_code.llm_request";
+    private static final String NEW_CONTEXT_ATTR = "new_context";
+
+    // Reserved metadata keys that must not be overwritten by user-supplied JSON merged from opik.metadata.
+    private static final Set<String> RESERVED_METADATA_KEYS = Set.of("thread_id", "integration", "server.address");
+
+    /**
+     * Same as {@link #enrichSpanWithAttributes(SpanBuilder, List, String, List)} but with the OTEL
+     * span name, used for span-name-aware routing (e.g. Claude Code's {@code new_context} maps to
+     * input only on {@code claude_code.llm_request} spans).
+     *
+     * @param spanName the OTEL span name (may be null)
+     */
+    public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
+            String integrationName, List<Span.Event> events, String spanName) {
         Map<String, Integer> usage = new HashMap<>();
         ObjectNode input = JsonUtils.createObjectNode();
         ObjectNode output = JsonUtils.createObjectNode();
         ObjectNode metadata = JsonUtils.createObjectNode();
         Set<String> tags = new HashSet<>();
+        // Claude Code spans carry a lot of session/config attributes that aren't input. For that
+        // integration the default bucket for unmapped attributes is metadata (not input), so only
+        // the explicitly promoted content attributes land in input/output/usage.
+        // Decided per span by name (not from the batch-level integrationName below): a single OTLP
+        // batch can mix scopes from more than one integration, so gating this on the batch-wide
+        // value could misroute a non-Claude span or skip routing for a real Claude Code span.
+        boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCodeSpan(spanName);
+        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
+
         // Hold model and provider until the attribute loop completes so we can apply
         // post-processing (e.g. Elastic Inference Service routing) that needs both values.
+        // Claude Code is Anthropic-only and never sends a provider attribute, so set it directly.
         String model = null;
-        String provider = null;
+        String provider = isClaudeCode ? "anthropic" : null;
 
         if (StringUtils.isNotBlank(integrationName)) {
             metadata.put("integration", integrationName);
@@ -139,12 +176,20 @@ public class OpenTelemetryMapper {
         for (KeyValue attribute : attributes) {
             var key = attribute.getKey();
             var value = attribute.getValue();
-            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key);
+
+            // Claude Code's `new_context` is the latest message fed to the model on llm_request
+            // spans (the real LLM input); on interaction/tool spans it just repeats the prompt /
+            // tool result, so it's kept in metadata there rather than input.
+            if (isClaudeCode && NEW_CONTEXT_ATTR.equals(key)) {
+                extractToJsonColumn(CLAUDE_CODE_LLM_SPAN.equals(spanName) ? input : metadata, key, value);
+                continue;
+            }
+
+            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key, isClaudeCode);
 
             if (ruleOpt.isEmpty()) {
-                // if it's not explicitly request to drop, we keep it in input
-                log.debug("No rule found for kv {} -> {}. Using for Input.", key, attribute.getValue());
-                extractToJsonColumn(input, key, value);
+                log.debug("No rule found for unmapped attribute key '{}'. Using default bucket.", key);
+                extractToJsonColumn(defaultBucket, key, value);
                 continue;
             }
 
@@ -177,7 +222,16 @@ public class OpenTelemetryMapper {
                         default -> metadata;
                     };
 
-                    extractToJsonColumn(node, key, value);
+                    String jsonKey = storageKey(rule, key);
+                    // If the suffix is empty then try merging as a JSON object,
+                    // otherwise nest under the stripped key or the rule key.
+                    if (jsonKey.isEmpty() && value.getValueCase() == AnyValue.ValueCase.STRING_VALUE) {
+                        mergeJsonObjectOrFallback(node, rule.getRule(), key, value);
+                    } else if (jsonKey.isEmpty()) {
+                        extractToJsonColumn(node, rule.getRule(), value);
+                    } else {
+                        extractToJsonColumn(node, jsonKey, value);
+                    }
                     break;
 
                 case TAGS :
@@ -203,6 +257,13 @@ public class OpenTelemetryMapper {
 
         // Process events and add them to metadata
         processEvents(events, metadata);
+
+        // Claude Code emits the tool result as a `tool.output` span event (Bash carries it on
+        // `output`, file tools on `content`). Surface it as the tool span's output instead of
+        // leaving it only in metadata.opentelemetry.events.
+        if (isClaudeCode) {
+            extractToolOutputEvent(events, output);
+        }
 
         // Rewrite Elastic Inference Service model/provider into the underlying provider so
         // that cost lookup and provider-based filtering see the real upstream. Records the
@@ -252,6 +313,69 @@ public class OpenTelemetryMapper {
         }
     }
 
+    /**
+     * When the storage key is empty and the value is a string, try parsing it as a JSON object
+     * and merge its fields into {@code node}, skipping {@link #RESERVED_METADATA_KEYS}. On a
+     * non-object JSON value or a parse failure, fall back to storing the raw value under the
+     * rule's key via {@link #extractToJsonColumn}.
+     */
+    private static void mergeJsonObjectOrFallback(ObjectNode node, String ruleKey, String key, AnyValue value) {
+        String stringValue = value.getStringValue();
+
+        // Only try to parse JSON-looking strings
+        String trimmed = StringUtils.trimToEmpty(stringValue);
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            extractToJsonColumn(node, ruleKey, value);
+            return;
+        }
+        try {
+            var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
+            if (jsonNode.isObject()) {
+                jsonNode.fields()
+                        .forEachRemaining(entry -> {
+                            if (!RESERVED_METADATA_KEYS.contains(entry.getKey())) {
+                                node.set(entry.getKey(), entry.getValue());
+                            }
+                        });
+            } else {
+                extractToJsonColumn(node, ruleKey, value);
+            }
+        } catch (UncheckedIOException e) {
+            log.warn("Failed to parse JSON, falling back to text for key '{}'", key, e);
+            extractToJsonColumn(node, ruleKey, value);
+        }
+    }
+
+    private static final String TOOL_OUTPUT_EVENT_NAME = "tool.output";
+    private static final Set<String> TOOL_OUTPUT_CONTENT_KEYS = Set.of("output", "content");
+
+    /**
+     * Maps a Claude Code {@code tool.output} span event into the tool span's output. The event
+     * carries the tool result on {@code output} (Bash) or {@code content} (file tools). The last
+     * event wins if several are present.
+     *
+     * @param events the list of events extracted from the otel payload
+     * @param output the output node to populate
+     */
+    private static void extractToolOutputEvent(List<Span.Event> events, ObjectNode output) {
+        findLastEvent(events, TOOL_OUTPUT_EVENT_NAME)
+                .ifPresent(event -> event.getAttributesList().stream()
+                        .filter(attribute -> TOOL_OUTPUT_CONTENT_KEYS.contains(attribute.getKey()))
+                        .forEach(attribute -> extractToJsonColumn(output, attribute.getKey(), attribute.getValue())));
+    }
+
+    /**
+     * Finds the last span event with the given name; the last one wins when several exist.
+     */
+    private static Optional<Span.Event> findLastEvent(List<Span.Event> events, String name) {
+        if (CollectionUtils.isEmpty(events)) {
+            return Optional.empty();
+        }
+        return events.stream()
+                .filter(event -> name.equals(event.getName()))
+                .reduce((first, second) -> second);
+    }
+
     private static final String EXCEPTION_EVENT_NAME = "exception";
     private static final String EXCEPTION_TYPE_ATTR = "exception.type";
     private static final String EXCEPTION_MESSAGE_ATTR = "exception.message";
@@ -273,9 +397,7 @@ public class OpenTelemetryMapper {
      * @return the extracted error info, or empty when the span did not fail
      */
     static Optional<ErrorInfo> extractErrorInfo(Span otelSpan) {
-        var exceptionEvent = otelSpan.getEventsList().stream()
-                .filter(event -> EXCEPTION_EVENT_NAME.equals(event.getName()))
-                .reduce((first, second) -> second);
+        var exceptionEvent = findLastEvent(otelSpan.getEventsList(), EXCEPTION_EVENT_NAME);
 
         if (exceptionEvent.isPresent()) {
             var attributes = exceptionEvent.get().getAttributesList();

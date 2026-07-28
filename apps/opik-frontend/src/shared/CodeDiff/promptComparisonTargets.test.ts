@@ -92,7 +92,12 @@ describe("buildPromptComparisonTargets", () => {
 
       expect(targets).toEqual([
         { id: "base", label: "Baseline", prompt: "baseline prompt" },
-        { id: "p-1", label: "Parent", prompt: "parent prompt" },
+        {
+          id: "p-1",
+          label: "Parent",
+          caption: "Trial #4",
+          prompt: "parent prompt",
+        },
       ]);
     });
 
@@ -116,10 +121,9 @@ describe("buildPromptComparisonTargets", () => {
       });
 
       expect(targets.map((t) => t.id)).toEqual(["p-b", "p-a"]);
-      expect(targets.map((t) => t.label)).toEqual([
-        "Parent (Trial #3)",
-        "Parent (Trial #2)",
-      ]);
+      // Both keep the plain "Parent" label; the trial tag distinguishes them.
+      expect(targets.map((t) => t.label)).toEqual(["Parent", "Parent"]);
+      expect(targets.map((t) => t.caption)).toEqual(["Trial #3", "Trial #2"]);
     });
 
     it("skips parent ids that are not present in the candidate list", () => {
@@ -192,7 +196,12 @@ describe("buildPromptComparisonTargets", () => {
       });
 
       expect(targets).toEqual([
-        { id: "p-1", label: "Parent", prompt: "parent prompt" },
+        {
+          id: "p-1",
+          label: "Parent",
+          caption: "Trial #3",
+          prompt: "parent prompt",
+        },
       ]);
     });
   });

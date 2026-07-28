@@ -129,6 +129,26 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       {{- end }}
+      {{- if and (eq $key "python-backend") $.Values.redis.enabled $value.waitForRedis.enabled (ne (dig "env" "RQ_WORKER_ENABLED" "true" $value | toString | lower) "false") }}
+        {{- $redisHost := $value.waitForRedis.redis.host | default ($.Values.redis.fullnameOverride | default "opik-redis-master") }}
+        - name: wait-for-redis-service
+          image: "{{ default $.Values.registry $value.waitForRedis.image.registry }}/{{ $value.waitForRedis.image.repository }}:{{ $value.waitForRedis.image.tag }}"
+          imagePullPolicy: {{ default $value.image.pullPolicy $value.waitForRedis.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $value.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until nc -z -v -w5 {{ $redisHost }} {{ $value.waitForRedis.redis.port }}; do
+                echo "Redis is not available. Waiting for Redis at {{ $redisHost }}:{{ $value.waitForRedis.redis.port }}...";
+                sleep 5;
+              done;
+              echo "Redis is available at {{ $redisHost }}:{{ $value.waitForRedis.redis.port }}";
+          {{- with $value.waitForRedis.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- end }}
       {{- if and (eq $key "backend") $value.run_migration }}
         - name: backend-migrations
           image: "{{ $.Values.registry }}/{{ $value.image.repository }}:{{ default $.Chart.AppVersion $value.image.tag }}"

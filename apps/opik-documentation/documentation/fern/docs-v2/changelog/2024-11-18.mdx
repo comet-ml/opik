@@ -1,0 +1,12 @@
+**Opik Dashboard**:
+
+- Updated the majority of tables to increase the information density, it is now easier to review many traces at once.
+- Images logged to datasets and experiments are now displayed in the UI. Both images urls and base64 encoded images are supported.
+
+**SDK**:
+
+- The `scoring_metrics` argument is now optional in the `evaluate` method. This is useful if you are looking at evaluating your LLM calls manually in the Opik UI.
+- When uploading a dataset, the SDK now prints a link to the dataset in the UI.
+- Usage is now correctly logged when using the LangChain OpenAI integration.
+- Implement a batching mechanism for uploading spans and dataset items to avoid `413 Request Entity Too Large` errors.
+- Removed pandas and numpy as mandatory dependencies.

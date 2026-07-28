@@ -1,29 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { TestSuitesPage } from '@e2e/pom/test-suites.page';
 import { TestSuiteItemsPage } from '@e2e/pom/test-suite-items.page';
-import { ConfigurationPage } from '@e2e/pom/configuration.page';
-
-/**
- * Pick an Anthropic-or-OpenAI model from env; provision the matching provider key
- * via the UI if it isn't already configured. Returns the model display name to use
- * with the playground.
- */
-async function ensureModelAvailable(page: import('@playwright/test').Page): Promise<string> {
-  const anthropic = process.env.ANTHROPIC_API_KEY;
-  const openai = process.env.OPENAI_API_KEY;
-  if (!anthropic && !openai) {
-    test.skip(true, 'Neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set');
-    return '';
-  }
-  const cfg = new ConfigurationPage(page);
-  await cfg.gotoAiProviders();
-  if (anthropic) {
-    await cfg.ensureProviderConfigured('Anthropic', anthropic);
-    return 'Claude Haiku 4.5';
-  }
-  await cfg.ensureProviderConfigured('OpenAI', openai!);
-  return 'GPT 4o Mini';
-}
+import { ensureModelAvailable } from '@e2e/pom/model-availability';
 
 test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, () => {
   /**
@@ -190,7 +168,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
       // "Run experiment" dialog → Test suite tab.
       if ((await playground.loadedSourcePill().count()) === 0) {
         await playground.clickRunExperiment();
-        await playground.submitRunExperimentDialog({ mode: 'test_suite', entityName: name });
+        await playground.selectRunExperimentSource({ mode: 'test_suite', entityName: name });
       }
       await expect(playground.loadedSourcePill()).toBeVisible({ timeout: 20_000 });
 

@@ -40,24 +40,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Get pip cache dir
-        id: pip-cache
-        run: |
-          echo "dir=$(pip cache dir)" >> "$GITHUB_OUTPUT"
-      - name: pip cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pip-cache.outputs.dir }}
-          key: ${{ matrix.os }}-${{ matrix.python-version }}-pip
-          restore-keys: |
-            ${{ matrix.os }}-${{ matrix.python-version }}-pip
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -U ipython nbconvert
+          uv pip install --system -U ipython nbconvert
       - name: Install opik from source files (optional)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.install_opik == 'true' }}
-        run: pip install sdks/python
+        run: uv pip install --system sdks/python
       - name: Prepare env variables
         run: |
           directory=$(dirname -- "${NOTEBOOK_TO_TEST}")

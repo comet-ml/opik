@@ -374,6 +374,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           onBlur={onReasonBlur}
           disabled={value === ""}
           className="min-h-6 resize-none overflow-hidden py-1 pt-[4px]"
+          data-testid={`annotate-score-reason-${name}`}
           ref={(e) => {
             textAreaRef.current = e;
             updateTextAreaHeight(e, 32);

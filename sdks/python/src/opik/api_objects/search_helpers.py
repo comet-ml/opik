@@ -15,6 +15,7 @@ def search_spans_with_filters(
     max_results: int,
     truncate: bool,
     exclude: Optional[List[str]] = None,
+    max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
 ) -> List[span_public.SpanPublic]:
     def fetch_page(
         current_batch_size: int, last_retrieved_id: Optional[str]
@@ -41,6 +42,7 @@ def search_spans_with_filters(
         read_source=fetch_page,
         max_results=max_results,
         parsed_item_class=span_public.SpanPublic,
+        max_endpoint_batch_size=max_batch_size,
     )
 
     return spans
@@ -54,6 +56,7 @@ def search_traces_with_filters(
     max_results: Optional[int] = None,
     truncate: bool = True,
     exclude: Optional[List[str]] = None,
+    max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
 ) -> List[trace_public.TracePublic]:
     def fetch_page(
         current_batch_size: int, last_retrieved_id: Optional[str]
@@ -77,6 +80,7 @@ def search_traces_with_filters(
         read_source=fetch_page,
         max_results=max_results,
         parsed_item_class=trace_public.TracePublic,
+        max_endpoint_batch_size=max_batch_size,
     )
     return traces
 

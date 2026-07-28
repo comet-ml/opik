@@ -3,13 +3,19 @@ import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import HeaderStatistic from "@/shared/DataTableHeaders/HeaderStatistic";
 import { cn } from "@/lib/utils";
 import {
-  CELL_HORIZONTAL_ALIGNMENT_MAP,
+  CELL_HORIZONTAL_ALIGNMENT_CLASS_MAP,
   HEADER_TEXT_CLASS_MAP,
+  resolveHorizontalAlignment,
 } from "@/constants/shared";
-import { COLUMN_TYPE, ROW_HEIGHT } from "@/types/shared";
+import {
+  CELL_HORIZONTAL_ALIGNMENT,
+  COLUMN_TYPE,
+  ROW_HEIGHT,
+} from "@/types/shared";
 
 type CustomColumnMeta = {
   type?: COLUMN_TYPE;
+  horizontalAlignment?: CELL_HORIZONTAL_ALIGNMENT;
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
   statisticTooltipFormater?: (value: number) => string;
@@ -34,15 +40,18 @@ const HeaderWrapper = <TData,>({
   supportStatistic = true,
 }: HeaderWrapperProps<TData>) => {
   const metaData = metadata as CustomColumnMeta | undefined;
-  const type = metaData?.type;
   const statisticKey = metaData?.statisticKey;
   const statisticDataFormater = metaData?.statisticDataFormater;
   const statisticTooltipFormater = metaData?.statisticTooltipFormater;
   const supportsPercentiles = metaData?.supportsPercentiles;
   const { columnsStatistic, rowHeight } = tableMetadata || {};
 
+  // Resolve alignment the same way the cell does (explicit `horizontalAlignment`
+  // override wins over the per-type default), so a header always sits under its
+  // own column's content — e.g. a right-aligned metric column keeps header and
+  // values on the same edge.
   const horizontalAlignClass =
-    CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
+    CELL_HORIZONTAL_ALIGNMENT_CLASS_MAP[resolveHorizontalAlignment(metaData)];
 
   const isSmall = rowHeight === ROW_HEIGHT.small;
   const hasStats = supportStatistic && columnsStatistic;

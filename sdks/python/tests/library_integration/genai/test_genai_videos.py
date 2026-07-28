@@ -27,7 +27,6 @@ from ...testlib import (
     assert_equal,
     patch_environ,
 )
-import tenacity
 
 pytestmark = [
     pytest.mark.usefixtures("ensure_vertexai_configured"),
@@ -57,24 +56,10 @@ def use_us_central1_for_veo():
         yield
 
 
-def _is_rate_limit_error(exception: Exception) -> bool:
-    if isinstance(exception, genai_errors.ClientError):
-        return exception.response.status_code == 429
-    return False
-
-
-retry_on_rate_limit = tenacity.retry(
-    stop=tenacity.stop_after_attempt(3),
-    wait=tenacity.wait_incrementing(start=5, increment=5),
-    retry=tenacity.retry_if_exception(_is_rate_limit_error),
-)
-
-
 @pytest.mark.skipif(
     SKIP_EXPENSIVE_TESTS,
     reason="Expensive tests disabled. Set OPIK_TEST_EXPENSIVE=1 to enable.",
 )
-@retry_on_rate_limit
 def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
     """
     Test sync video generation workflow: create -> wait -> save.
@@ -283,7 +268,6 @@ def test_genai_client__generate_videos_and_save__sync__happyflow(fake_backend):
     reason="Expensive tests disabled. Set OPIK_TEST_EXPENSIVE=1 to enable.",
 )
 @pytest.mark.asyncio
-@retry_on_rate_limit
 async def test_genai_client__generate_videos_and_save__async__happyflow(fake_backend):
     """
     Test async video generation workflow: create -> wait -> save.
@@ -571,7 +555,6 @@ def test_genai_client__generate_videos__error_handling(fake_backend):
     SKIP_EXPENSIVE_TESTS,
     reason="Expensive tests disabled. Set OPIK_TEST_EXPENSIVE=1 to enable.",
 )
-@retry_on_rate_limit
 def test_genai_client__generate_videos_with_upload_videos_disabled__no_attachment(
     fake_backend,
 ):

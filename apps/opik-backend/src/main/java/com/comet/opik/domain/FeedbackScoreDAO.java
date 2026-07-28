@@ -131,22 +131,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
-    private static final String DELETE_SPANS_CASCADE_FEEDBACK_SCORE = """
-            DELETE FROM <table_name>
-            WHERE entity_type = 'span'
-            AND entity_id IN (
-                SELECT id
-                FROM spans
-                WHERE trace_id IN :trace_ids
-                AND workspace_id = :workspace_id
-                <if(project_id)>AND project_id = :project_id<endif>
-            )
-            AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
-            SETTINGS allow_nondeterministic_mutations = 1, log_comment = '<log_comment>'
-            ;
-            """;
-
     private static final String DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS = """
             DELETE FROM <table_name>
             WHERE entity_id IN :entity_ids
@@ -653,45 +637,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         if (CollectionUtils.isNotEmpty(experimentIds)) {
             template.add("experiment_ids", experimentIds);
         }
-    }
-
-    private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, UUID projectId, Connection connection) {
-        log.info("Deleting feedback scores by span entityId, traceIds count '{}'", traceIds.size());
-
-        return makeMonoContextAware((userName, workspaceId) -> {
-            // Delete from feedback_scores table
-            var template1 = getSTWithLogComment(DELETE_SPANS_CASCADE_FEEDBACK_SCORE, "cascade_span_delete", workspaceId,
-                    userName, traceIds.size());
-            Optional.ofNullable(projectId)
-                    .ifPresent(id -> template1.add("project_id", id));
-            template1.add("table_name", "feedback_scores");
-
-            var statement1 = connection.createStatement(template1.render())
-                    .bind("trace_ids", traceIds.toArray(UUID[]::new))
-                    .bind("workspace_id", workspaceId);
-
-            if (projectId != null) {
-                statement1.bind("project_id", projectId);
-            }
-
-            // Delete from authored_feedback_scores table
-            var template2 = getSTWithLogComment(DELETE_SPANS_CASCADE_FEEDBACK_SCORE, "cascade_span_delete_authored",
-                    workspaceId, userName, traceIds.size());
-            Optional.ofNullable(projectId)
-                    .ifPresent(id -> template2.add("project_id", id));
-            template2.add("table_name", "authored_feedback_scores");
-
-            var statement2 = connection.createStatement(template2.render())
-                    .bind("trace_ids", traceIds.toArray(UUID[]::new))
-                    .bind("workspace_id", workspaceId);
-
-            if (projectId != null) {
-                statement2.bind("project_id", projectId);
-            }
-
-            return Mono.from(statement1.execute())
-                    .then(Mono.from(statement2.execute()));
-        });
     }
 
     private Mono<Long> deleteScoresByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId,

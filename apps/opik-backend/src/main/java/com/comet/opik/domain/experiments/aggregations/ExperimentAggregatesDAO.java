@@ -42,6 +42,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -66,6 +67,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -711,7 +713,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             SELECT
                 id as trace_id,
                 project_id,
-                duration,
+                if(isNaN(duration), NULL, duration) AS duration,
                 metadata,
                 input,
                 output,
@@ -1271,18 +1273,25 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                            di.description,
                            eia.execution_policy
                 )) AS experiment_items_array
-            FROM experiment_item_aggregates eia FINAL
-            LEFT JOIN dataset_item_versions AS lookup_div FINAL
-                ON lookup_div.workspace_id = eia.workspace_id
-                AND lookup_div.id = eia.dataset_item_id
+            FROM (
+                SELECT eia.*,
+                       if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) AS stable_dataset_item_id
+                FROM experiment_item_aggregates eia FINAL
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = eia.workspace_id
+                    AND lookup_div.id = eia.dataset_item_id
+                WHERE eia.workspace_id = :workspace_id
+                <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
+                <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
+                <if(experiment_item_filters)>AND <experiment_item_filters><endif>
+                <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
+                <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
+                -- all duplicated rows share the same stable_dataset_item_id, so arbitrary pick is safe
+                LIMIT 1 BY eia.id
+            ) eia
             LEFT JOIN dataset_item_versions_resolved AS di
-                ON di.id = if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)
-            WHERE eia.workspace_id = :workspace_id
-            <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
-            <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
-            <if(experiment_item_filters)>AND <experiment_item_filters><endif>
-            <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
-            <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
+                ON di.id = eia.stable_dataset_item_id
+            WHERE 1 = 1
             <if(dataset_item_filters)>
             AND <dataset_item_filters>
             <endif>
@@ -1594,12 +1603,13 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     /**
      * Distinct project_ids this experiment's items reference; always emits exactly one Set
-     * (possibly empty when no traces with project_id are found). See
-     * {@link #GET_PROJECT_IDS}.
+     * (possibly empty when no traces with project_id are found). See {@link #GET_PROJECT_IDS} and
+     * {@link #unionProjectIdChunks(Flux)}.
      */
     @Override
     public Mono<Set<UUID>> getProjectIds(UUID experimentId) {
-        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
+        return asyncTemplate.nonTransaction(connection -> unionProjectIdChunks(makeFluxContextAware((userName,
+                workspaceId) -> {
             var template = getSTWithLogComment(GET_PROJECT_IDS,
                     "getProjectIds", workspaceId, userName, experimentId.toString());
 
@@ -1612,7 +1622,22 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                             .stream(row.get("project_ids", String[].class))
                             .map(UUID::fromString)
                             .collect(Collectors.toUnmodifiableSet())));
-        }).single());
+        })));
+    }
+
+    /**
+     * Folds the project_id chunks emitted by the result stream into a single immutable Set. Using
+     * {@code reduceWith} (rather than {@code single()}/{@code singleOrEmpty()}) is deliberate: the
+     * R2DBC result publisher can emit more than one element, which would make {@code single()}
+     * throw {@code IndexOutOfBoundsException}. Unioning always yields exactly one Set (empty when
+     * the stream is empty) and is idempotent for the normal single-row result.
+     */
+    @VisibleForTesting
+    static Mono<Set<UUID>> unionProjectIdChunks(Flux<Set<UUID>> projectIdChunks) {
+        return projectIdChunks.reduceWith(() -> new HashSet<UUID>(), (allProjectIds, projectIds) -> {
+            allProjectIds.addAll(projectIds);
+            return allProjectIds;
+        }).map(Set::copyOf);
     }
 
     private Mono<TraceAggregations> getTraceAggregations(UUID experimentId, Set<UUID> projectIds, UUID labelProjectId) {

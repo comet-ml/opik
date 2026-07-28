@@ -41,6 +41,12 @@ export interface TagProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof tagVariants> {}
 
+/**
+ * Tag label typography scale (distinct from the layout `size` variant):
+ * "s" → comet-body-s (14px), "xs" → comet-body-xs (12px, for compact headers).
+ */
+export type TagTextSize = "s" | "xs";
+
 const Tag = React.forwardRef<HTMLDivElement, TagProps>(
   ({ className, variant, size, ...props }, ref) => {
     return (

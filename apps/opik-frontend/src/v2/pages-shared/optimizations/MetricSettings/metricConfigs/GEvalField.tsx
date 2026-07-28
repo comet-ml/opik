@@ -2,17 +2,24 @@ import React from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 
+import { cn } from "@/lib/utils";
 import { Label } from "@/ui/label";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
+import { FormErrorSkeleton } from "@/ui/form";
 
 import {
   mustachePlugin,
   codeMirrorPromptTheme,
 } from "@/constants/codeMirrorPlugins";
 
-import { Explainer } from "@/types/shared";
-
-const CODEMIRROR_EXTENSIONS = [EditorView.lineWrapping, mustachePlugin];
+// Match the Figma card text leading (20px for 14px text).
+const roomyLineHeight = EditorView.theme({
+  ".cm-content": { lineHeight: "20px" },
+});
+const CODEMIRROR_EXTENSIONS = [
+  EditorView.lineWrapping,
+  mustachePlugin,
+  roomyLineHeight,
+];
 const CODEMIRROR_BASIC_SETUP = {
   foldGutter: false,
   allowMultipleSelections: false,
@@ -23,32 +30,34 @@ const CODEMIRROR_BASIC_SETUP = {
 interface GEvalFieldProps {
   id: string;
   label: string;
-  explainer: Explainer;
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   editorRef: React.MutableRefObject<EditorView | null>;
   onFocus: () => void;
+  error?: string;
 }
 
 const GEvalField: React.FC<GEvalFieldProps> = ({
   id,
   label,
-  explainer,
   value,
   onChange,
   placeholder,
   editorRef,
   onFocus,
+  error,
 }) => (
-  <div className="space-y-2">
-    <div className="flex items-center">
-      <Label htmlFor={id} className="mr-1.5 text-sm">
-        {label}
-      </Label>
-      <ExplainerIcon {...explainer} />
-    </div>
-    <div className="min-h-16 rounded-md border border-input bg-background px-3 py-2 focus-within:border-primary">
+  <div className="space-y-1">
+    <Label htmlFor={id} className="text-sm">
+      {label}
+    </Label>
+    <div
+      className={cn(
+        "min-h-16 rounded-md border bg-background px-3 py-2 focus-within:border-primary",
+        error ? "border-destructive" : "border-input",
+      )}
+    >
       <CodeMirror
         onCreateEditor={(view) => {
           editorRef.current = view;
@@ -62,6 +71,7 @@ const GEvalField: React.FC<GEvalFieldProps> = ({
         extensions={CODEMIRROR_EXTENSIONS}
       />
     </div>
+    {error && <FormErrorSkeleton>{error}</FormErrorSkeleton>}
   </div>
 );
 

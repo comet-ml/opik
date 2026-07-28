@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import isNumber from "lodash/isNumber";
 
@@ -10,25 +10,28 @@ import {
   formatAsPercentage,
 } from "@/lib/optimization-formatters";
 import { calcFormatterAwarePercentage } from "@/lib/percentage";
-import PercentageTrend, {
-  PercentageTrendType,
-} from "@/shared/PercentageTrend/PercentageTrend";
+import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
+import MetricTrendPill from "@/shared/PercentageTrend/MetricTrendPill";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-const useBaselinePercentage = (
+
+type TrialCellContext = CellContext<AggregatedCandidate, unknown>;
+
+// Plain helper (not memoized): call sites pass fresh inline accessors each
+// render, so a useMemo here would never hit its cache — and the calc is a
+// single arithmetic op, so caching buys nothing.
+const getBaselinePercentage = (
   baseline: AggregatedCandidate | undefined,
   candidateId: string,
   value: number | undefined,
   baselineAccessor: (c: AggregatedCandidate) => number | undefined,
   formatter?: (v: number) => string,
 ): number | undefined => {
-  return useMemo(() => {
-    if (candidateId === baseline?.candidateId) return undefined;
-    return calcFormatterAwarePercentage(
-      value,
-      baseline ? baselineAccessor(baseline) : undefined,
-      formatter,
-    );
-  }, [baseline, candidateId, value, baselineAccessor, formatter]);
+  if (candidateId === baseline?.candidateId) return undefined;
+  return calcFormatterAwarePercentage(
+    value,
+    baseline ? baselineAccessor(baseline) : undefined,
+    formatter,
+  );
 };
 
 type TrialMetricCellProps = {
@@ -39,6 +42,9 @@ type TrialMetricCellProps = {
   suffix?: string;
 };
 
+// The trend pill sits before the value, and the pair is flush right (the
+// column types right-align via CellWrapper). Uses the shared MetricTrendPill
+// so trials render deltas identically to the optimization table.
 const TrialMetricCellContent: React.FunctionComponent<TrialMetricCellProps> = ({
   value,
   formatter,
@@ -47,6 +53,7 @@ const TrialMetricCellContent: React.FunctionComponent<TrialMetricCellProps> = ({
   suffix,
 }) => (
   <>
+    <MetricTrendPill percentage={percentage} trend={trend} />
     {isNumber(value) ? (
       <TooltipWrapper content={String(value)}>
         <span>
@@ -57,43 +64,42 @@ const TrialMetricCellContent: React.FunctionComponent<TrialMetricCellProps> = ({
     ) : (
       "-"
     )}
-    <PercentageTrend percentage={percentage} trend={trend} />
   </>
 );
 
-export const TrialNumberCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialNumberCell = (context: TrialCellContext) => {
+  const row = context.row.original;
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="comet-body-s">#{row.trialNumber}</span>
+      <span className="min-w-0 truncate">Trial #{row.trialNumber}</span>
     </CellWrapper>
   );
 };
 
-export const TrialStepCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialStepCell = (context: TrialCellContext) => {
+  const row = context.row.original;
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="comet-body-s">Step {row.stepIndex}</span>
+      <span className="min-w-0 truncate">Step {row.stepIndex}</span>
     </CellWrapper>
   );
 };
 
-export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialAccuracyCell = (context: TrialCellContext) => {
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { baselineCandidate, isTestSuite } = (custom ?? {}) as {
     baselineCandidate?: AggregatedCandidate;
     isTestSuite?: boolean;
   };
 
-  const percentage = useBaselinePercentage(
+  const percentage = getBaselinePercentage(
     baselineCandidate,
     row.candidateId,
     row.score,
@@ -110,7 +116,7 @@ export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-2"
+      className="gap-1.5"
     >
       <TrialMetricCellContent
         value={row.score}
@@ -122,16 +128,14 @@ export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
   );
 };
 
-export const TrialCandidateCostCell = (
-  context: CellContext<unknown, unknown>,
-) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialCandidateCostCell = (context: TrialCellContext) => {
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { baselineCandidate } = (custom ?? {}) as {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = useBaselinePercentage(
+  const percentage = getBaselinePercentage(
     baselineCandidate,
     row.candidateId,
     row.runtimeCost,
@@ -143,7 +147,7 @@ export const TrialCandidateCostCell = (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-2"
+      className="gap-1.5"
     >
       <TrialMetricCellContent
         value={row.runtimeCost}
@@ -155,16 +159,14 @@ export const TrialCandidateCostCell = (
   );
 };
 
-export const TrialCandidateLatencyCell = (
-  context: CellContext<unknown, unknown>,
-) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialCandidateLatencyCell = (context: TrialCellContext) => {
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { baselineCandidate } = (custom ?? {}) as {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = useBaselinePercentage(
+  const percentage = getBaselinePercentage(
     baselineCandidate,
     row.candidateId,
     row.latencyP50,
@@ -176,7 +178,7 @@ export const TrialCandidateLatencyCell = (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-2"
+      className="gap-1.5"
     >
       <TrialMetricCellContent
         value={row.latencyP50}

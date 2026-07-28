@@ -56,7 +56,6 @@
 
     --warning: 348 86% 61%;
     --success: 142 64% 32%;
-    --library-loaded: 78 75% 59%;
 
     /* Gray scale for utility classes */
     --gray-100: #f3f4f6;
@@ -100,6 +99,17 @@
     --chart-gray-light: #ebf2f5;
     --chart-gray-dark: #45575f;
 
+    /* Optimization Studio icon accents (per-algorithm / per-metric) */
+    --optimizer-icon-gepa: #12a594;
+    --optimizer-icon-hierarchical: #6e56cf;
+    --optimizer-icon-evolutionary: #30a46c;
+    --metric-icon-equals: #30a46c;
+    --metric-icon-json-schema: #0b7cff;
+    --metric-icon-g-eval: #8e4ec6;
+    --metric-icon-levenshtein: #f76808;
+    --metric-icon-numerical: #e5484d;
+    --metric-icon-code: #d6409f;
+
     /* Template icon colors */
     --template-icon-metrics: #5899da;
     --template-icon-performance: #ef6868;
@@ -138,6 +148,11 @@
 
     /* Config link icon color */
     --color-fuchsia: #db46ef;
+
+    /* Optimization trial colors (progress chart + best-trial markers) */
+    --trial-pruned: #f0abfc; /* fuchsia-300 */
+    --trial-best: #701a75; /* fuchsia-900 */
+    --trial-best-ring: #f0abfc; /* fuchsia-300 */
 
     /* Error indicator colors */
     --error-indicator-background: #ffd2d2;
@@ -186,6 +201,7 @@
     --color-orange: #f97316;
     --color-yellow: #eab308;
     --color-green: #10b981;
+    --color-green-bright: #00d14c;
     --color-lime: #a3e635;
     --color-turquoise: #06b6d4;
     --color-blue: #3b82f6;
@@ -195,6 +211,18 @@
     --color-emerald: #10b981;
     --color-cyan: #06b6d4;
     --color-rose: #f43f5e;
+
+    /* 2.0 accent colors (playground prompts, onboarding, etc.) */
+    --accent-green: #6bdf93;
+    --accent-blue: #a6ddfe;
+    --accent-purple: #6e3de8;
+    --accent-magenta: #be48ea;
+    --accent-red: #df5a40;
+    --accent-indigo: #5356f1;
+
+    /* Neutral pill surface (status tag + metric-change pill) */
+    --pill-neutral-bg: #f8fafc;
+    --pill-neutral-border: #f1f5f9;
 
     /* Tag variant background and text colors */
     --tag-gray-bg: #f3f4f6;
@@ -266,6 +294,11 @@
     --warning-box-icon-bg: 45 93% 58%;
     --warning-box-icon-text: 32 85% 32%;
 
+    /* Recoverable-waste callout (AI Spend) */
+    --waste-bg: #fee8d7;
+    --waste-border: #fb9341;
+    --waste-text: #000000;
+
     --selection-bar: 237 68% 29%;
     --row-selected: 235 85% 97%;
 
@@ -325,7 +358,6 @@
 
     --warning: 348 86% 61%;
     --success: 142 64% 40%;
-    --library-loaded: 78 75% 65%;
 
     /* Gray scale for utility classes - Dark Mode */
     --gray-100: 217.2 32.6% 15%;
@@ -358,6 +390,13 @@
 
     /* Config link icon color - Dark Mode */
     --color-fuchsia: #c850c0;
+
+    /* Optimization trial colors - Dark Mode. The best marker's two-tone
+       inverts: a bright center with a dim ring so it pops on dark
+       backgrounds, and pruned dots dim to fuchsia-800 to read as faded. */
+    --trial-pruned: #86198f; /* fuchsia-800 */
+    --trial-best: #f0abfc; /* fuchsia-300 */
+    --trial-best-ring: #86198f; /* fuchsia-800 */
 
     /* Edit badge colors - Dark Mode */
     --edit-badge-bg: #cc4730;
@@ -413,6 +452,14 @@
     --chart-gray-light: #2e2e2e;
     --chart-gray-dark: #e2e8f0;
 
+    /* 2.0 accent colors - Dark Mode */
+    --accent-green: #6bdf93;
+    --accent-blue: #a6ddfe;
+    --accent-purple: #6e3de8;
+    --accent-magenta: #be48ea;
+    --accent-red: #df5a40;
+    --accent-indigo: #5356f1;
+
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;
     --template-icon-performance: #ef6868;
@@ -441,6 +488,10 @@
     --scrollbar-thumb: #242424;
     --scrollbar-thumb-hover: #2e2e2e;
     --scrollbar-background: #121212;
+    /* Neutral pill surface (status tag + metric-change pill) - Dark Mode */
+    --pill-neutral-bg: #1c1c1c;
+    --pill-neutral-border: #2a2a2a;
+
     /* Tag variant background and text colors - Dark Mode */
     --tag-gray-bg: #242424;
     --tag-purple-bg: #2e2932;
@@ -508,6 +559,11 @@
     --warning-box-text: 48 96% 64%;
     --warning-box-icon-bg: 32 95% 44%;
     --warning-box-icon-text: 45 93% 58%;
+
+    /* Recoverable-waste callout (AI Spend) - Dark Mode */
+    --waste-bg: #fb934126;
+    --waste-border: #fb9341;
+    --waste-text: #fee8d7;
 
     --selection-bar: 237 58% 39%;
     --row-selected: 0 0% 15%;

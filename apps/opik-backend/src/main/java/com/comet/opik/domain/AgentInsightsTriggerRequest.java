@@ -20,5 +20,7 @@ record AgentInsightsTriggerRequest(
         @NonNull UUID projectId,
         @NonNull String workspaceId,
         @NonNull Instant periodStart,
-        @NonNull Instant periodEnd) {
+        @NonNull Instant periodEnd,
+        // "manual" (Run diagnostics) or "scheduled" (daily sweep) — forwarded so Ollie can tag its BI events.
+        @NonNull String triggerSource) {
 }

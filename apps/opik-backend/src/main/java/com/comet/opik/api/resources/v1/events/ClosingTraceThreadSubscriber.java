@@ -46,7 +46,7 @@ public class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWit
 
         return traceThreadService
                 .processProjectWithTraceThreadsPendingClosure(message.projectId(), now,
-                        defaultTimeoutToMarkThreadAsInactive)
+                        defaultTimeoutToMarkThreadAsInactive, config.getColdStartLookback().toJavaDuration())
                 .contextWrite(context -> context.put(USER_NAME, DEFAULT_USER)
                         .put(WORKSPACE_ID, message.workspaceId()));
     }

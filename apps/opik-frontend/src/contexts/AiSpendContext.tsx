@@ -3,6 +3,7 @@ import React, { createContext, useContext, ReactNode } from "react";
 export type AiSpendContextValue = {
   isPending: boolean;
   hasAccess: boolean;
+  isOrganizationAdmin?: boolean;
   spendWorkspaceName?: string;
   isSpendWorkspaceActive?: boolean;
   organizationName?: string;
@@ -12,6 +13,7 @@ export type AiSpendContextValue = {
 const DEFAULT_VALUE: AiSpendContextValue = {
   isPending: false,
   hasAccess: false,
+  isOrganizationAdmin: false,
   goToCostIntelligence: () => {},
 };
 

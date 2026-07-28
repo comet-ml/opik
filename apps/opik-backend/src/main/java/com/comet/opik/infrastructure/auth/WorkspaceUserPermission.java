@@ -42,6 +42,9 @@ public enum WorkspaceUserPermission {
     ANNOTATION_QUEUE_DELETE("annotation_queue_delete"),
     ANNOTATION_QUEUE_RESULTS_EXPORT("annotation_queue_results_export"),
 
+    PROMPT_VIEW("prompt_view"),
+    PROMPT_CREATE("prompt_create"),
+    PROMPT_EDIT("prompt_edit"),
     PROMPT_DELETE("prompt_delete"),
 
     OPTIMIZATION_RUN_VIEW("optimization_run_view"),

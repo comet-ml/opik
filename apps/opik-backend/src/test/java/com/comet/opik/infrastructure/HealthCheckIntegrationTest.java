@@ -73,7 +73,7 @@ class HealthCheckIntegrationTest {
     }
 
     /**
-     * Default test-config: {@code serviceToggles.agentInsightsEnabled} off. Covers the standard
+     * Default test-config: {@code serviceToggles.ollieEnabled} off. Covers the standard
      * health check HTTP surface (per-check + aggregate {@code all}). Opik-owned checks
      * (clickhouse, mysql, redis, clickhouse-readonly-freeform-sql) are asserted individually;
      * Dropwizard-provided checks (db, deadlocks) only appear in the aggregate row.
@@ -103,6 +103,12 @@ class HealthCheckIntegrationTest {
             // freeform-SQL issue never gates overall readiness.
             var clickhouseFreeformSqlResponse = HealthCheckResponse.builder()
                     .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
+            // Toggle off in config-test (databaseAnalytics.clusterHealthCheckEnabled / coldStorageDiskHealthCheckEnabled)
+            // → healthy without touching ClickHouse. Critical when enabled, so listed critical here.
+            var clickhouseClusterResponse = HealthCheckResponse.builder()
+                    .name("clickhouse-cluster").healthy(true).critical(true).type(READY).build();
+            var clickhouseColdStorageDiskResponse = HealthCheckResponse.builder()
+                    .name("clickhouse-cold-storage-disk").healthy(true).critical(true).type(READY).build();
             var mysqlResponse = HealthCheckResponse.builder()
                     .name("mysql").healthy(true).critical(true).type(READY).build();
             var redisResponse = HealthCheckResponse.builder()
@@ -118,6 +124,8 @@ class HealthCheckIntegrationTest {
             var all = List.of(
                     clickHouseResponse,
                     clickhouseFreeformSqlResponse,
+                    clickhouseClusterResponse,
+                    clickhouseColdStorageDiskResponse,
                     mysqlResponse,
                     redisResponse,
                     dbResponse,
@@ -128,6 +136,8 @@ class HealthCheckIntegrationTest {
                     arguments("mysql", List.of(mysqlResponse)),
                     arguments("redis", List.of(redisResponse)),
                     arguments("clickhouse-readonly-freeform-sql", List.of(clickhouseFreeformSqlResponse)),
+                    arguments("clickhouse-cluster", List.of(clickhouseClusterResponse)),
+                    arguments("clickhouse-cold-storage-disk", List.of(clickhouseColdStorageDiskResponse)),
                     arguments("shared_http_client", List.of(sharedHttpClientResponse)),
                     arguments("all", all));
         }
@@ -140,7 +150,7 @@ class HealthCheckIntegrationTest {
     }
 
     /**
-     * {@code serviceToggles.agentInsightsEnabled} on. The production-shape Agent Insights
+     * {@code serviceToggles.ollieEnabled} on. The production-shape Agent Insights
      * read-only user is provisioned globally on the test ClickHouse container (see
      * {@code src/test/resources/users.xml}, mirroring
      * {@code apps/opik-backend/provision_agent_insights_readonly_user.sh}), so the {@code
@@ -157,7 +167,7 @@ class HealthCheckIntegrationTest {
 
         @RegisterApp
         private final TestDropwizardAppExtension app = newApp(List.of(
-                new CustomConfig("serviceToggles.agentInsightsEnabled", "true")));
+                new CustomConfig("serviceToggles.ollieEnabled", "true")));
 
         private ClientSupport client;
         private String baseURI;
@@ -176,6 +186,54 @@ class HealthCheckIntegrationTest {
 
             callHealthCheckAndAwaitAssertResponse(
                     client, baseURI, "clickhouse-readonly-freeform-sql", List.of(expected));
+        }
+    }
+
+    /**
+     * Both existence toggles on, so each probe runs its real {@code count()} query against the test
+     * ClickHouse — exercising the end-to-end SQL path the unit tests mock out. The container's {@code
+     * clickhouse.xml} defines a {@code cluster} remote_server (mirroring the deploy macros), so the
+     * cluster probe finds it and reports healthy; there is no {@code cold_s3} disk, so that probe
+     * reports unhealthy. Both are {@code critical: true}, so the per-check endpoint may return a
+     * non-OK status while still carrying the JSON body.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class ExistenceChecksEnabled {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(List.of(
+                new CustomConfig("databaseAnalytics.clusterHealthCheckEnabled", "true"),
+                new CustomConfig("databaseAnalytics.coldStorageDiskHealthCheckEnabled", "true")));
+
+        private ClientSupport client;
+        private String baseURI;
+
+        @BeforeAll
+        void setUpAll(ClientSupport client) {
+            this.client = client;
+            this.baseURI = TestUtils.getBaseUrl(client);
+            ClientSupportUtils.config(client);
+        }
+
+        private Stream<Arguments> healthCheckRunsAgainstClickHouse() {
+            // Cluster 'cluster' is defined in the test container's clickhouse.xml → present → healthy.
+            // Disk 'cold_s3' is not configured on the test container → absent → unhealthy.
+            return Stream.of(
+                    arguments("clickhouse-cluster", true),
+                    arguments("clickhouse-cold-storage-disk", false));
+        }
+
+        @ParameterizedTest(name = "healthCheckRunsAgainstClickHouse - {0} -> healthy={1}")
+        @MethodSource
+        void healthCheckRunsAgainstClickHouse(String name, boolean healthy) {
+            var expected = HealthCheckResponse.builder()
+                    .name(name).healthy(healthy).critical(true).type(READY).build();
+
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertResponse(readHealthCheck(client, baseURI, name), List.of(expected)));
         }
     }
 
@@ -206,6 +264,18 @@ class HealthCheckIntegrationTest {
                 .request()
                 .get()) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(HEALTH_CHECK_LIST_GENERIC_TYPE);
+        }
+    }
+
+    /**
+     * Reads the health check body without asserting the HTTP status: an unhealthy {@code critical}
+     * check makes the endpoint return a non-OK status while still carrying the JSON results.
+     */
+    private List<HealthCheckResponse> readHealthCheck(ClientSupport client, String baseURI, String name) {
+        try (var response = client.target("%s/health-check?name=%s".formatted(baseURI, name))
+                .request()
+                .get()) {
             return response.readEntity(HEALTH_CHECK_LIST_GENERIC_TYPE);
         }
     }

@@ -9,6 +9,7 @@ import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -25,6 +26,7 @@ import jakarta.ws.rs.core.UriBuilder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.tika.Tika;
 import reactor.core.publisher.Mono;
@@ -79,6 +81,12 @@ public interface AttachmentService {
     Mono<Boolean> hasAnyAttachmentByEntityIds(EntityType entityType, Set<UUID> entityIds);
 
     /**
+     * Lists attachments for a set of entity IDs in a single batch DB call. Each returned
+     * {@link AttachmentInfo} carries its owning {@code entityId} so callers can group by entity.
+     */
+    Mono<List<AttachmentInfo>> getAttachmentInfoByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    /**
      * Presigned (S3) download URL for a single attachment, reachable by an external
      * caller (e.g. an LLM provider fetching media during online evaluation). Uses the
      * same object-key layout as upload/download so it resolves the stored object.
@@ -112,12 +120,14 @@ class AttachmentServiceImpl implements AttachmentService {
     private final @NonNull ProjectService projectService;
     private final @NonNull OpikConfiguration config;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull IdGenerator idGenerator;
     private static final Tika tika = new Tika();
     private static final int MAX_ATTACHMENTS_PER_ENTITY = 1_000;
 
     @Override
     public StartMultipartUploadResponse startMultiPartUpload(@NonNull StartMultipartUploadRequest startUploadRequest,
             @NonNull String workspaceId, @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(startUploadRequest.entityId(), startUploadRequest.entityType().getValue());
         if (config.getS3Config().isMinIO()) {
             return prepareMinIOUploadResponse(startUploadRequest);
         }
@@ -142,6 +152,8 @@ class AttachmentServiceImpl implements AttachmentService {
     public void completeMultiPartUpload(@NonNull CompleteMultipartUploadRequest completeUploadRequest,
             @NonNull String workspaceId,
             @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(completeUploadRequest.entityId(),
+                completeUploadRequest.entityType().getValue());
         // In case of MinIO complete is not needed, file is uploaded directly via BE
         if (config.getS3Config().isMinIO()) {
             log.info("Skipping completeMultiPartUpload for MinIO");
@@ -183,6 +195,7 @@ class AttachmentServiceImpl implements AttachmentService {
     @Override
     public void uploadAttachmentInternal(@NonNull AttachmentInfo attachmentInfo, byte[] data,
             @NonNull String workspaceId, @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(attachmentInfo.entityId(), attachmentInfo.entityType().getValue());
 
         attachmentInfo = attachmentInfo.toBuilder()
                 .containerId(getProjectIdByName(attachmentInfo.projectName(), workspaceId, userName))
@@ -436,6 +449,16 @@ class AttachmentServiceImpl implements AttachmentService {
         }
         return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
                 .map(list -> !list.isEmpty());
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<AttachmentInfo>> getAttachmentInfoByEntityIds(@NonNull EntityType entityType,
+            Set<UUID> entityIds) {
+        if (CollectionUtils.isEmpty(entityIds)) {
+            return Mono.just(List.of());
+        }
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds);
     }
 
     @Override

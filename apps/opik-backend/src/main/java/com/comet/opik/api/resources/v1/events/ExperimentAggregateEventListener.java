@@ -28,10 +28,12 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPubli
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
@@ -123,45 +125,89 @@ public class ExperimentAggregateEventListener {
 
     @Subscribe
     public void onTracesCreated(TracesCreated event) {
-        var traceIds = event.traces().stream().map(Trace::id).collect(Collectors.toSet());
-        triggerByTraceIds(traceIds, event.workspaceId(), event.userName())
-                .subscribe(null, e -> log.error("Error triggering aggregation for traces created", e));
+        // Split by project so each aggregation trigger targets a single project (enables project_id pruning).
+        Map<UUID, Set<UUID>> traceIdsByProject = event.traces().stream()
+                .collect(Collectors.groupingBy(Trace::projectId, Collectors.mapping(Trace::id, Collectors.toSet())));
+        triggerByTraceIdsPerProject(traceIdsByProject, event.workspaceId(), event.userName(),
+                "Error triggering aggregation for traces created");
     }
 
     @Subscribe
     public void onTracesUpdated(TracesUpdated event) {
-        triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName())
-                .subscribe(null, e -> log.error("Error triggering aggregation for traces updated", e));
+        var errorMessage = "Error triggering aggregation for traces updated";
+        var traceIdToProjectId = event.traceIdToProjectId();
+
+        if (MapUtils.isEmpty(traceIdToProjectId)) {
+            // No per-trace -> project mapping available: fall back to a single workspace-scoped trigger that
+            // relies on the trace_id skip index, instead of re-scanning the full id set once per project.
+            triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName(), null)
+                    .subscribe(null, e -> log.error(errorMessage, e));
+            return;
+        }
+
+        // Split the mapped trace ids by project so each aggregation trigger targets a single project.
+        Map<UUID, Set<UUID>> traceIdsByProject = traceIdToProjectId.entrySet().stream()
+                .collect(Collectors.groupingBy(Map.Entry::getValue,
+                        Collectors.mapping(Map.Entry::getKey, Collectors.toSet())));
+        triggerByTraceIdsPerProject(traceIdsByProject, event.workspaceId(), event.userName(), errorMessage);
+
+        // The mapping may not cover every trace id in the event (e.g. getProjectIdsByTraceIds omitted some);
+        // route the uncovered ones through the workspace-scoped fallback so their aggregation isn't skipped.
+        Set<UUID> uncoveredTraceIds = event.traceIds().stream()
+                .filter(traceId -> !traceIdToProjectId.containsKey(traceId))
+                .collect(Collectors.toSet());
+        if (!uncoveredTraceIds.isEmpty()) {
+            triggerByTraceIds(uncoveredTraceIds, event.workspaceId(), event.userName(), null)
+                    .subscribe(null, e -> log.error(errorMessage, e));
+        }
     }
 
     @Subscribe
     public void onTracesDeleted(TracesDeleted event) {
-        triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName())
+        triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName(), event.projectId())
                 .subscribe(null, e -> log.error("Error triggering aggregation for traces deleted", e));
     }
 
     @Subscribe
     public void onSpansCreated(SpansCreated event) {
-        var traceIds = event.spans().stream().map(Span::traceId).collect(Collectors.toSet());
-        triggerByTraceIds(traceIds, event.workspaceId(), event.userName())
-                .subscribe(null, e -> log.error("Error triggering aggregation for spans created", e));
+        Map<UUID, Set<UUID>> traceIdsByProject = event.spans().stream()
+                .collect(Collectors.groupingBy(Span::projectId, Collectors.mapping(Span::traceId, Collectors.toSet())));
+        triggerByTraceIdsPerProject(traceIdsByProject, event.workspaceId(), event.userName(),
+                "Error triggering aggregation for spans created");
     }
 
     @Subscribe
     public void onSpansUpdated(SpansUpdated event) {
-        triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName())
+        triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName(), null)
                 .subscribe(null, e -> log.error("Error triggering aggregation for spans updated", e));
     }
 
     @Subscribe
     public void onSpansDeleted(SpansDeleted event) {
-        triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName())
+        triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName(), event.projectId())
                 .subscribe(null, e -> log.error("Error triggering aggregation for spans deleted", e));
+    }
+
+    private void triggerByTraceIdsPerProject(Map<UUID, Set<UUID>> traceIdsByProject, String workspaceId,
+            String userName, String errorMessage) {
+        // Each per-project trigger logs and recovers via onErrorResume, so one project's failure doesn't
+        // abort the rest and no error reaches the terminal subscriber.
+        Flux.fromIterable(traceIdsByProject.entrySet())
+                .concatMap(entry -> triggerByTraceIds(entry.getValue(), workspaceId, userName, entry.getKey())
+                        .onErrorResume(e -> logAndContinue(errorMessage, e)))
+                .subscribe();
+    }
+
+    // Keeps the per-project fan-out going when one project's aggregation fails.
+    private Mono<Void> logAndContinue(String errorMessage, Throwable e) {
+        log.error(errorMessage, e);
+        return Mono.empty();
     }
 
     @Subscribe
     public void onFeedbackScoresCreated(FeedbackScoresCreated event) {
-        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
+        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName(),
+                event.projectId())
                 .subscribe(null, e -> log.error("Error triggering aggregation for feedback scores created", e));
     }
 
@@ -169,7 +215,8 @@ public class ExperimentAggregateEventListener {
     public void onAssertionResultsCreated(AssertionResultsCreated event) {
         log.info("Received assertion results created event on workspaceId '{}', entityType '{}', entityIds size '{}'",
                 event.workspaceId(), event.entityType(), event.entityIds().size());
-        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
+        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName(),
+                event.projectId())
                 .subscribe(null,
                         e -> log.error(
                                 "Error triggering aggregation for assertion results created on workspaceId '{}', entityType '{}', entityIds size '{}'",
@@ -178,30 +225,34 @@ public class ExperimentAggregateEventListener {
 
     @Subscribe
     public void onFeedbackScoresDeleted(FeedbackScoresDeleted event) {
-        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
+        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName(),
+                event.projectId())
                 .subscribe(null, e -> log.error("Error triggering aggregation for feedback scores deleted", e));
     }
 
     @Subscribe
     public void onCommentsCreated(CommentsCreated event) {
-        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
+        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName(),
+                event.projectId())
                 .subscribe(null, e -> log.error("Error triggering aggregation for comments created", e));
     }
 
     @Subscribe
     public void onCommentsUpdated(CommentsUpdated event) {
-        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
+        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName(),
+                event.projectId())
                 .subscribe(null, e -> log.error("Error triggering aggregation for comments updated", e));
     }
 
     @Subscribe
     public void onCommentsDeleted(CommentsDeleted event) {
-        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
+        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName(),
+                event.projectId())
                 .subscribe(null, e -> log.error("Error triggering aggregation for comments deleted", e));
     }
 
     private Mono<Void> triggerByEntityIds(Set<UUID> entityIds, EntityType entityType, String workspaceId,
-            String userName) {
+            String userName, @Nullable UUID projectId) {
         if (!config.isEnabled()) {
             log.debug(
                     "Ignoring entity aggregation trigger for entity type '{}': experiment denormalization config is disabled",
@@ -212,8 +263,8 @@ public class ExperimentAggregateEventListener {
             return Mono.empty();
         }
         return switch (entityType) {
-            case TRACE -> triggerByTraceIds(entityIds, workspaceId, userName);
-            case SPAN -> triggerBySpanIds(entityIds, workspaceId, userName);
+            case TRACE -> triggerByTraceIds(entityIds, workspaceId, userName, projectId);
+            case SPAN -> triggerBySpanIds(entityIds, workspaceId, userName, projectId);
             default -> {
                 log.debug("Skipping aggregation trigger for entity type '{}'", entityType);
                 yield Mono.empty();
@@ -228,18 +279,20 @@ public class ExperimentAggregateEventListener {
                         .collect(Collectors.toSet()));
     }
 
-    private Mono<Void> triggerByTraceIds(Set<UUID> traceIds, String workspaceId, String userName) {
+    private Mono<Void> triggerByTraceIds(Set<UUID> traceIds, String workspaceId, String userName,
+            @Nullable UUID projectId) {
         return triggerAggregation(traceIds, workspaceId, userName,
                 ids -> experimentItemService
-                        .getExperimentRefsByTraceIds(ids, FINISHED_STATUSES)
+                        .getExperimentRefsByTraceIds(ids, FINISHED_STATUSES, projectId)
                         .map(ExperimentTraceRef::experimentId)
                         .collect(Collectors.toSet()));
     }
 
-    private Mono<Void> triggerBySpanIds(Set<UUID> spanIds, String workspaceId, String userName) {
+    private Mono<Void> triggerBySpanIds(Set<UUID> spanIds, String workspaceId, String userName,
+            @Nullable UUID projectId) {
         return triggerAggregation(spanIds, workspaceId, userName,
                 ids -> experimentItemService
-                        .getExperimentRefsBySpanIds(ids, FINISHED_STATUSES)
+                        .getExperimentRefsBySpanIds(ids, FINISHED_STATUSES, projectId)
                         .map(ExperimentTraceRef::experimentId)
                         .collect(Collectors.toSet()));
     }

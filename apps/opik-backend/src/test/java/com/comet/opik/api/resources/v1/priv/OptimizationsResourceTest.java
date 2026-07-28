@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentScore;
@@ -443,38 +444,6 @@ class OptimizationsResourceTest {
         }
 
         @Test
-        @DisplayName("Cancel studio optimization passes required permissions to auth endpoint")
-        void cancelStudioOptimizationPassesRequiredPermissionsToAuthEndpoint() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            wireMock.server().resetRequests();
-            optimizationResourceClient.callCancelStudio(UUID.randomUUID(), apiKey, workspaceName).close();
-
-            wireMock.server().verify(
-                    postRequestedFor(urlPathEqualTo("/opik/auth"))
-                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
-                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
-        }
-
-        @Test
-        @DisplayName("Cancel studio optimization returns 403 when permission is denied")
-        void cancelStudioOptimizationReturnsForbiddenWhenPermissionDenied() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-
-            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
-                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
-
-            try (var response = optimizationResourceClient.callCancelStudio(UUID.randomUUID(), apiKey,
-                    workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
-            }
-        }
-
-        @Test
         @DisplayName("Get studio optimization logs passes required permissions to auth endpoint")
         void getStudioOptimizationLogsPassesRequiredPermissionsToAuthEndpoint() {
             String apiKey = UUID.randomUUID().toString();
@@ -872,9 +841,17 @@ class OptimizationsResourceTest {
         // Update optimization
         optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, 204);
 
+        // Incoming metadata is merged onto the existing metadata (provided keys overwrite, existing keys
+        // preserved); when absent the existing metadata is carried forward untouched.
+        var expectedMetadata = update.metadata() != null
+                ? JsonUtils.merge(optimization.metadata(), update.metadata())
+                : optimization.metadata();
+
         optimization = optimization.toBuilder().id(id)
                 .name(update.name() != null ? update.name() : optimization.name())
                 .status(update.status() != null ? update.status() : optimization.status())
+                .errorInfo(update.errorInfo() != null ? update.errorInfo() : optimization.errorInfo())
+                .metadata(expectedMetadata)
                 .build();
 
         var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
@@ -886,7 +863,55 @@ class OptimizationsResourceTest {
         return Stream.of(
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class)),
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().name(null).build()),
-                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()));
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()),
+                // errorInfo-only update: exercises the branch that persists a failure reason without
+                // name/status/metadata (previously short-circuited to Mono.empty() before this behavior was added)
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder()
+                        .name(null).status(null).metadata(null).build()),
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().metadata(null).build()));
+    }
+
+    @Test
+    @DisplayName("Update optimization metadata: merges into existing metadata, preserving other keys")
+    void updateMetadataMergesAndPreservesExistingKeys() {
+        // Create optimization with a pre-existing metadata key (e.g. optimizer) that Wave-0 code relies on
+        var initialMetadata = JsonUtils.getJsonNodeFromString(
+                JsonUtils.writeValueAsString(Map.of("optimizer", "MetaPromptOptimizer", "model", "gpt-4o")));
+        var optimization = optimizationResourceClient.createPartialOptimization()
+                .metadata(initialMetadata)
+                .build();
+        var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+        // Update with a scoring_health metadata payload (the feature contract with PY-4)
+        var scoringHealth = JsonUtils.getJsonNodeFromString(
+                JsonUtils.writeValueAsString(
+                        Map.of("scoring_health", Map.of("failed_count", 2, "total_count", 5))));
+        var update = OptimizationUpdate.builder()
+                .status(OptimizationStatus.COMPLETED)
+                .metadata(scoringHealth)
+                .build();
+        optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        var afterMerge = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+        // scoring_health added
+        assertThat(afterMerge.metadata().get("scoring_health").get("failed_count").asInt()).isEqualTo(2);
+        assertThat(afterMerge.metadata().get("scoring_health").get("total_count").asInt()).isEqualTo(5);
+        // pre-existing keys preserved (not clobbered)
+        assertThat(afterMerge.metadata().get("optimizer").asText()).isEqualTo("MetaPromptOptimizer");
+        assertThat(afterMerge.metadata().get("model").asText()).isEqualTo("gpt-4o");
+        assertThat(afterMerge.status()).isEqualTo(OptimizationStatus.COMPLETED);
+
+        // A subsequent status-only update (no metadata) must leave the merged metadata untouched
+        var statusOnly = OptimizationUpdate.builder()
+                .status(OptimizationStatus.COMPLETED)
+                .build();
+        optimizationResourceClient.update(id, statusOnly, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        var afterStatusOnly = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        assertThat(afterStatusOnly.metadata()).isEqualTo(afterMerge.metadata());
+        assertThat(afterStatusOnly.metadata().get("optimizer").asText()).isEqualTo("MetaPromptOptimizer");
+        assertThat(afterStatusOnly.metadata().get("scoring_health").get("failed_count").asInt()).isEqualTo(2);
     }
 
     @Nested
@@ -1467,17 +1492,37 @@ class OptimizationsResourceTest {
         }
 
         @Test
-        @DisplayName("Cancel Studio optimization returns NOT_IMPLEMENTED")
-        void cancelStudioOptimization__returnsNotImplemented() {
+        @DisplayName("error_info is preserved when SDK re-upserts with a null errorInfo")
+        void errorInfoPreservedOnReUpsertWithNullErrorInfo() {
+            // Create a Studio optimization (upsert full-row replace path)
             var studioConfig = createStudioConfig();
             var optimization = optimizationResourceClient.createPartialOptimization()
                     .studioConfig(studioConfig)
+                    .errorInfo(null)
                     .build();
-
             var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
-            // Cancel should return 501 NOT_IMPLEMENTED
-            optimizationResourceClient.cancelStudio(id, API_KEY, TEST_WORKSPACE_NAME, 501);
+            // Record a failure reason through the PATCH/update path (as the worker does)
+            var errorInfo = podamFactory.manufacturePojo(ErrorInfo.class);
+            optimizationResourceClient.update(id,
+                    OptimizationUpdate.builder().status(OptimizationStatus.CANCELLED).errorInfo(errorInfo).build(),
+                    API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            var afterFailure = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(afterFailure.errorInfo()).isEqualTo(errorInfo);
+
+            // Re-upsert the same optimization with a null errorInfo (SDK behavior): the persisted
+            // failure reason must survive the full-row replace instead of being clobbered to blank.
+            optimizationResourceClient.upsert(optimization.toBuilder().id(id).errorInfo(null).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+
+            var afterReUpsert = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            // The re-upsert with a null errorInfo must not drop the persisted failure reason
+            // nor the sibling studioConfig (both preserved through the upsert path). Status
+            // ordering across the update/upsert rows is governed by last_updated_at, so it is
+            // not asserted here.
+            assertThat(afterReUpsert.errorInfo()).isEqualTo(errorInfo);
+            assertThat(afterReUpsert.studioConfig()).isEqualTo(studioConfig);
         }
 
         @Test
@@ -2017,6 +2062,28 @@ class OptimizationsResourceTest {
                     null, null, null, List.of(filter), 200);
 
             assertThat(page.content()).containsExactly(actualOpt1);
+        }
+
+        @Test
+        @DisplayName("Create with a non-existent project_id returns 400 (OPIK-7029, C5)")
+        void createWithNonExistentProjectId__returnsBadRequest() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // A random project_id that was never created: resolveProjectId's shared
+            // ProjectService.validateProjectIdExists throws NotFoundException (404); the upsert-scoped
+            // onErrorMap converts that to a 400 BadRequest so a bad project on create is a client error,
+            // not a missing-resource 404.
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .projectId(UUID.randomUUID())
+                    .projectName(null)
+                    .build();
+
+            try (var response = optimizationResourceClient.callCreate(optimization, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
         }
     }
 

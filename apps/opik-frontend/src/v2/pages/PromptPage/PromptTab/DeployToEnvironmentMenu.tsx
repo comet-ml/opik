@@ -45,10 +45,10 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const {
-    permissions: { canConfigureWorkspaceSettings },
+    permissions: { canEditPrompts },
   } = usePermissions();
   const { data: environmentsData } = useEnvironmentsList({
-    enabled: canConfigureWorkspaceSettings,
+    enabled: canEditPrompts,
   });
   const { mutate: setVersionEnvironment, isPending: isDeploying } =
     useSetPromptVersionEnvironmentMutation();
@@ -88,7 +88,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
 
   const handleToggle = useCallback(
     (envName: string) => {
-      if (!canConfigureWorkspaceSettings) return;
+      if (!canEditPrompts) return;
       if (activeEnvSet.has(envName)) {
         const next = activeEnvironments.filter((e) => e !== envName);
         applyEnvironments(next, `Removed ${versionLabel} from ${envName}`);
@@ -98,7 +98,7 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
       }
     },
     [
-      canConfigureWorkspaceSettings,
+      canEditPrompts,
       activeEnvSet,
       activeEnvironments,
       versionLabel,
@@ -107,17 +107,17 @@ const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
   );
 
   const handleClearAll = useCallback(() => {
-    if (!canConfigureWorkspaceSettings) return;
+    if (!canEditPrompts) return;
     if (activeEnvironments.length === 0) return;
     applyEnvironments([], `Removed ${versionLabel} from all environments`);
   }, [
-    canConfigureWorkspaceSettings,
+    canEditPrompts,
     activeEnvironments.length,
     versionLabel,
     applyEnvironments,
   ]);
 
-  if (!canConfigureWorkspaceSettings) return null;
+  if (!canEditPrompts) return null;
 
   return (
     <DropdownMenu>

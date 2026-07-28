@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/ui/select";
 import {
+  EVAL_TRIGGER_SCOPE,
   EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
   EvaluatorsRule,
@@ -99,6 +100,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     messages: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.messages,
     variables: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.variables,
     schema: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.schema,
+    maxCostUsd: null,
   },
   [EVALUATORS_RULE_SCOPE.thread]: {
     model: "",
@@ -111,6 +113,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     messages: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.messages,
     variables: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.variables,
     schema: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.schema,
+    maxCostUsd: null,
   },
   [EVALUATORS_RULE_SCOPE.span]: {
     model: "",
@@ -144,6 +147,7 @@ type AddEditRuleDialogProps = {
   hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
   defaultScope?: EVALUATORS_RULE_SCOPE; // Optional: default scope for new rules
   mode?: "create" | "edit" | "clone"; // Optional: dialog mode
+  onRuleCreated?: (rule: EvaluatorsRule) => void; // Optional: fired with the created rule
 };
 
 const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
@@ -155,6 +159,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   hideScopeSelector = false,
   defaultScope,
   mode,
+  onRuleCreated,
 }) => {
   const {
     permissions: { canUpdateOnlineEvaluationRules },
@@ -205,6 +210,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
       enabled: defaultRule?.enabled ?? true,
+      triggerScope: defaultRule?.trigger_scope ?? EVAL_TRIGGER_SCOPE.production,
       filters: normalizeFilters(
         defaultRule?.filters ?? [],
         (formScope === EVALUATORS_RULE_SCOPE.thread
@@ -255,6 +261,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         scope: initialScope,
         type: defaultType,
         enabled: true,
+        triggerScope: EVAL_TRIGGER_SCOPE.production,
         filters: [],
         llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[initialScope]),
       });
@@ -268,6 +275,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         scope: formScope,
         type: getBackendRuleType(formScope, formUIRuleType),
         enabled: defaultRule.enabled ?? true,
+        triggerScope:
+          defaultRule.trigger_scope ?? EVAL_TRIGGER_SCOPE.production,
         filters: normalizeFilters(
           defaultRule.filters ?? [],
           (formScope === EVALUATORS_RULE_SCOPE.thread
@@ -423,6 +432,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       project_ids: formData.projectIds,
       sampling_rate: formData.samplingRate,
       enabled: formData.enabled,
+      trigger_scope: formData.triggerScope,
       filters: validFilters,
       type: ruleType,
     };
@@ -462,10 +472,15 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       {
         rule: getRule(),
       },
-      { onSuccess: onRuleCreatedEdited },
+      {
+        onSuccess: (rule: EvaluatorsRule) => {
+          onRuleCreatedEdited();
+          onRuleCreated?.(rule);
+        },
+      },
     );
     setOpen(false);
-  }, [createMutate, getRule, onRuleCreatedEdited, setOpen]);
+  }, [createMutate, getRule, onRuleCreatedEdited, onRuleCreated, setOpen]);
 
   const editPrompt = useCallback(() => {
     updateMutate(
@@ -611,6 +626,55 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     </FormItem>
                   )}
                 />
+
+                {!isThreadScope && !isSpanScope && (
+                  <FormField
+                    control={form.control}
+                    name="triggerScope"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label className="flex items-center">
+                          Trigger scope{" "}
+                          <TooltipWrapper content="Choose whether this rule fires on production traces, experiment traces, or both.">
+                            <Info className="ml-1 size-4 text-light-slate" />
+                          </TooltipWrapper>
+                        </Label>
+                        <FormControl>
+                          <div className="flex">
+                            <ToggleGroup
+                              type="single"
+                              data-testid="add-edit-rule-dialog-trigger-scope"
+                              value={field.value}
+                              onValueChange={(value: EVAL_TRIGGER_SCOPE) => {
+                                if (!value) return;
+                                field.onChange(value);
+                              }}
+                            >
+                              <ToggleGroupItem
+                                value={EVAL_TRIGGER_SCOPE.production}
+                                aria-label="Production traces"
+                              >
+                                Production traces
+                              </ToggleGroupItem>
+                              <ToggleGroupItem
+                                value={EVAL_TRIGGER_SCOPE.experiment}
+                                aria-label="Experiment traces"
+                              >
+                                Experiment traces
+                              </ToggleGroupItem>
+                              <ToggleGroupItem
+                                value={EVAL_TRIGGER_SCOPE.both}
+                                aria-label="Both"
+                              >
+                                Both
+                              </ToggleGroupItem>
+                            </ToggleGroup>
+                          </div>
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {!isEdit && (
                   <FormField

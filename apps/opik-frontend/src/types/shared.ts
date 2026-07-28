@@ -1,4 +1,8 @@
-import { Cell, Header } from "@tanstack/react-table";
+import {
+  CellContext,
+  ColumnDefTemplate,
+  HeaderContext,
+} from "@tanstack/react-table";
 
 export type Updater<T> = T | ((old: T) => T);
 export type OnChangeFn<T> = (updaterOrValue: Updater<T>) => void;
@@ -98,11 +102,11 @@ export type ColumnData<T> = {
   scoreType?: ScoreType;
   customMeta?: object;
   iconType?: HeaderIconType;
-  header?: Header<T, unknown>;
+  header?: ColumnDefTemplate<HeaderContext<T, unknown>>;
   headerCheckbox?: boolean;
   explainer?: Explainer;
-  cell?: Cell<T, unknown>;
-  aggregatedCell?: Cell<T, unknown>;
+  cell?: ColumnDefTemplate<CellContext<T, unknown>>;
+  aggregatedCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   horizontalAlignment?: CELL_HORIZONTAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;

@@ -69,7 +69,9 @@ logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 # Configure opik_optimizer log level separately (default: DEBUG to show optimizer output)
 # This can be set via OPIK_OPTIMIZER_LOG_LEVEL env var (automatically inherited by subprocess)
 OPTIMIZER_LOG_LEVEL = os.environ.get("OPIK_OPTIMIZER_LOG_LEVEL", "DEBUG").upper()
-logging.getLogger("opik_optimizer").setLevel(getattr(logging, OPTIMIZER_LOG_LEVEL, logging.DEBUG))
+logging.getLogger("opik_optimizer").setLevel(
+    getattr(logging, OPTIMIZER_LOG_LEVEL, logging.DEBUG)
+)
 
 # Suppress Pydantic serialization warnings from LiteLLM
 # These occur due to LiteLLM's varying response structures across providers
@@ -185,9 +187,7 @@ def route_litellm_calls_through_gateway(workspace_name):
 
     litellm.completion = completion_with_workspace
     litellm.acompletion = acompletion_with_workspace
-    logger.debug(
-        "Routing LiteLLM calls through gateway with Comet-Workspace header"
-    )
+    logger.debug("Routing LiteLLM calls through gateway with Comet-Workspace header")
 
 
 def _gateway_model(model: str) -> str:
@@ -282,6 +282,7 @@ def main():
         from opik_backend.studio.types import (
             OptimizationConfig,
             OptimizationRunResult,
+            extract_scoring_health,
         )
         from opik_backend.studio.helpers import (
             initialize_opik_client,
@@ -361,6 +362,22 @@ def main():
                 else:
                     output["optimized_prompt"] = str(result.prompt)
 
+            # Extract scoring_health from the SDK result and forward it to the
+            # backend as metadata.scoring_health so the UI can show an exact
+            # failed/total count. The helper returns None for older SDKs or
+            # malformed data and never raises.
+            scoring_health = extract_scoring_health(result)
+            if scoring_health is not None:
+                output["scoring_health"] = scoring_health
+                status_manager.set_completion_metadata(
+                    {"scoring_health": scoring_health}
+                )
+                logger.debug(
+                    "Queued scoring_health metadata for completion: failed=%d total=%d",
+                    scoring_health["failed_count"],
+                    scoring_health["total_count"],
+                )
+
         # Output result as JSON on last line of stdout
         print(json.dumps(output))
 
@@ -372,9 +389,24 @@ def main():
         # Local import: an exception can fire before the deferred import above.
         from opik_backend.studio.types import OptimizationErrorResult
 
+        # Classify HERE, where the real exception object (typed Studio errors and
+        # provider SDK exceptions) is available, into a high-level user-facing
+        # message. Fall back to a generic message if even the classifier import
+        # fails (e.g. a very early environment failure).
+        try:
+            from opik_backend.studio.errors import to_user_facing_message
+
+            user_message = to_user_facing_message(e)
+        except Exception:
+            user_message = (
+                "The optimization run ran into an unexpected error and stopped. "
+                "Open the logs for the full details."
+            )
+
         error_output: OptimizationErrorResult = {
             "success": False,
             "error": str(e),
+            "user_message": user_message,
             "traceback": traceback.format_exc(),
         }
         print(json.dumps(error_output))

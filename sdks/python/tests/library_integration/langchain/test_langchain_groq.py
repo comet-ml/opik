@@ -15,7 +15,6 @@ from ...testlib import (
 )
 
 
-@pytest.mark.skip(reason="Until resolve groq credentials issue in CI")
 @pytest.mark.parametrize(
     "streaming",
     [False, True],

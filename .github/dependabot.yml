@@ -11,5 +11,37 @@ updates:
      interval: "weekly"      # How often to check for updates
    ignore:
      - dependency-name: "*"
-       update-types: ["version-update:semver-patch"] 
+       update-types: ["version-update:semver-patch"]
    open-pull-requests-limit: 5
+
+ # CI / test-tooling only, and scoped to manifests a pull_request workflow
+ # actually installs and runs — so a bad bump surfaces as a red check pre-merge,
+ # never in a shipped image. Production-image manifests (apps/**) and SDK release
+ # manifests (sdks/**) are deliberately NOT watched. Other test dirs (tests_load,
+ # visual-tests, test-helper-service) are omitted because no pull_request workflow
+ # exercises them today — watching them would produce unverified bumps. See OPIK-7494.
+
+ - package-ecosystem: "github-actions"
+   directory: "/"
+   schedule:
+     interval: "weekly"
+   open-pull-requests-limit: 10
+   # Batch minor/patch into one tidy PR; let each major bump come as its own
+   # PR so a breaking bump is attributable and revertable on its own CI.
+   groups:
+     github-actions-minor:
+       update-types: ["minor", "patch"]
+
+ # end2end_suites_v2.yml runs on pull_request for tests_end_to_end/e2e/** and
+ # does `npm ci` + Playwright there, so these bumps are exercised pre-merge.
+ - package-ecosystem: "npm"
+   directory: "/tests_end_to_end/e2e"
+   schedule:
+     interval: "weekly"
+   ignore:
+     - dependency-name: "*"
+       update-types: ["version-update:semver-patch"]
+   open-pull-requests-limit: 5
+   groups:
+     e2e:
+       patterns: ["*"]

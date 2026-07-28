@@ -1,0 +1,63 @@
+suite: opik.cspHeaderValue helper (Content-Security-Policy)
+
+# Exercises the `opik.cspHeaderValue` helper (templates/_helpers.tpl) through the
+# frontend nginx ConfigMap (templates/configmap-frontend-nginx.yaml). The helper
+# builds the Content-Security-Policy header value from the contentSecurityPolicy
+# map, sorting directives alphabetically and space-joining each directive's
+# sources. The header is also gated behind the legacy csp.enabled flag
+# (csp = Content-Security-Policy).
+#
+# NB: helm-unittest `set` deep-merges into the default contentSecurityPolicy in
+# values.yaml rather than replacing it, so these tests assert against the default
+# Content-Security-Policy (sort order + joined sources) rather than a hand-built
+# full string.
+templates:
+  - templates/configmap-frontend-nginx.yaml
+
+documentSelector: &nginx
+  path: metadata.name
+  value: opik-frontend-nginx
+
+tests:
+  - it: emits the default Content-Security-Policy with directives sorted alphabetically
+    documentSelector: *nginx
+    asserts:
+      # base-uri (default's first directive) precedes default-src, which
+      # precedes worker-src (its last) — proving alphabetical ordering.
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'Content-Security-Policy "base-uri .*; default-src .*; worker-src .* always;'
+
+  - it: space-joins multiple sources within a directive
+    documentSelector: *nginx
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+
+  - it: omits the Content-Security-Policy header when csp.enabled is false (legacy flag)
+    set:
+      component.frontend.csp.enabled: false
+    documentSelector: *nginx
+    asserts:
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: "add_header Content-Security-Policy"
+
+  - it: renders the Content-Security-Policy header when csp.enabled is true
+    set:
+      component.frontend.csp.enabled: true
+    documentSelector: *nginx
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: "add_header Content-Security-Policy"
+
+  - it: omits the Content-Security-Policy header when contentSecurityPolicy is empty
+    set:
+      component.frontend.contentSecurityPolicy: null
+    documentSelector: *nginx
+    asserts:
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: "add_header Content-Security-Policy"
