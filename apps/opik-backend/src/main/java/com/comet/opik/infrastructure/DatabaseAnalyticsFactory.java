@@ -11,7 +11,6 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -139,13 +138,12 @@ public class DatabaseAnalyticsFactory {
     }
 
     /**
-     * Returns {@code queryParameters} with each {@link #configurableQueryParameters() configurable server setting}
-     * present in {@code custom_http_params} replaced by its config-field value; unchanged when none are present.
+     * Returns {@code queryParameters} with the configured overrides applied: present-only
+     * {@link #configurableQueryParameters() settings} replace an existing value in {@code custom_http_params}, while
+     * {@link #injectedQueryParameters() inject-when-set settings} are added even when absent (including when
+     * {@code queryParameters} is blank). Returned unchanged when no override field is set.
      */
     private String getQueryParametersOverrides(String queryParameters) {
-        if (StringUtils.isBlank(queryParameters)) {
-            return queryParameters;
-        }
         var parsed = parseQueryParameters(queryParameters);
         var overrides = configurableQueryParameters().entrySet().stream()
                 .filter(override -> parsed.serverSettings().containsKey(override.getKey()))

@@ -126,6 +126,11 @@ class DatabaseAnalyticsFactoryIntegrationTest {
                         "custom_http_params=max_query_size=123456789",
                         null, null, null,
                         Map.of("async_insert_max_data_size", "10485760", "max_query_size", "123456789")),
+                // blank queryParameters + field set: inject-when-set still applies (async_insert may be enabled server-side)
+                Arguments.of("max data size injected when query parameters blank",
+                        null,
+                        null, null, 52428800L,
+                        Map.of("async_insert_max_data_size", "52428800")),
                 // all overrides together: max/min override values present in the chain, max_data_size injected though absent
                 Arguments.of("all overrides applied",
                         "custom_http_params=async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100",
