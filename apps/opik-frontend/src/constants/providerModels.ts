@@ -2061,6 +2061,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.6-plus:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_FLASH,
+      label: "qwen/qwen3.7-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_MAX,
       label: "qwen/qwen3.7-max",
     },

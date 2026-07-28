@@ -1,0 +1,182 @@
+---
+headline: Install the macOS app with MDM
+og:description: Deploy Cost Intelligence as a macOS menu-bar app and network
+  extension for transparent capture, when no client configuration can be
+  delivered to the coding agent.
+og:site_name: Opik Documentation
+og:title: Install the macOS app with MDM - Opik
+title: macOS app with MDM
+---
+
+The macOS app captures coding-agent traffic **transparently**, using a system extension that the OS hands the relevant network flows. Nothing configures the agent: no base-URL change, no environment variables.
+
+<Warning>
+  This path terminates TLS locally in order to see traffic, which makes it a
+  materially larger security review than the plugin paths. Prefer
+  [managed settings](/cost-intelligence/install/managed-settings) or
+  [MDM](/cost-intelligence/install/mdm) if either can deliver configuration to
+  your fleet, since they need no system extension, no certificate, and no TLS
+  interception. Use this path when neither can.
+</Warning>
+
+## How it differs from the plugin
+
+| | Plugin (proxy) | macOS app (extension) |
+| --- | --- | --- |
+| How traffic arrives | Agent is pointed at a local port | The OS diverts the flows |
+| Client configuration | Required (delivered by MDM) | None |
+| TLS | Not intercepted | Terminated locally |
+| Platforms | macOS, Linux, Windows | macOS only |
+
+## What you deploy
+
+Four deliverables. Only two can ride in the configuration profile, which is the main thing to plan around:
+
+| Deliverable | Delivery |
+| --- | --- |
+| `Opik CIPX.app` in `/Applications` | Package payload |
+| Configuration profile | MDM configuration profile |
+| `~/.opik-cipx/config.toml` (workspace credentials) | Per-user file drop, **not** profile-deliverable |
+| Per-device certificate trust | Established on-device; cannot be centrally authored |
+
+The app bundle embeds both the system extension and the capture engine, so there is no separate engine install.
+
+## The configuration profile
+
+The profile carries two payloads that do different jobs.
+
+### Pre-approving the system extension
+
+A `com.apple.system-extension-policy` payload allow-lists the capture extension so it activates **silently**: the developer never sees the *System Settings → General → Login Items & Extensions → Network Extensions* approval gate.
+
+<Note>
+  This is honored **only when the profile is pushed by an MDM the device is
+  enrolled in.** A locally installed profile is ignored for this payload type, so
+  a test machine with a hand-installed profile will still show the manual
+  approval prompt. That's expected, and it isn't a broken profile.
+</Note>
+
+### Forcing the app's settings
+
+A managed-preferences payload writes into the app's preference domain `com.comet.opik-cipx-app`. Forced values take precedence over anything the user sets, and the corresponding controls are disabled in the app's Settings window with a "Managed by your organization" note.
+
+| Key | Type | Recommended | Why |
+| --- | --- | --- | --- |
+| `Cipx.isEnabled` | Boolean | `true` | Master capture switch; also drives automatic activation |
+| `Settings.enableViewer` | Boolean | `false` | Local debug dashboard; no place in a fleet |
+| `Settings.enableAdmin` | Boolean | `false` | Local control endpoint |
+| `Settings.startAtLogin` | Boolean | `true` | Capture survives logout and reboot |
+| `Settings.allowExtensionUninstall` | Boolean | `false` | Hides the uninstall action from users |
+| `Settings.enabledHarnesses` | Array | `["com.anthropic.claude-code"]` | Which clients to capture, by code-signing ID |
+
+Validate the profile before pushing, because a malformed payload is silently ignored by some MDMs:
+
+```bash
+plutil -lint opik-cipx-app.mobileconfig    # must print "OK"
+```
+
+### Pushing it
+
+| MDM | Path |
+| --- | --- |
+| **Jamf Pro** | Configuration Profile → Application & Custom Settings → External Applications; domain `com.comet.opik-cipx-app`. The system-extension allow-list is a separate *System Extensions* payload. |
+| **Kandji** | Library → Custom Profile → upload the `.mobileconfig` |
+| **Intune** | Devices → macOS → Configuration profile → Preference file; domain `com.comet.opik-cipx-app` |
+| **JumpCloud** | Custom macOS MDM Profile (Policy) → paste the `.mobileconfig` |
+
+## Delivering workspace credentials
+
+The Opik destination is **not** a preference key, so no configuration profile can carry it. The capture engine is launched by a login-item app, and GUI apps don't inherit shell environment, so nothing you export in a shell profile or push as an MDM environment variable reaches it.
+
+Ship a file instead, per user, at `~/.opik-cipx/config.toml`:
+
+```toml
+[opik]
+base_url  = "https://www.comet.com/opik/api"
+api_key   = "<workspace-scoped service-account key>"
+workspace = "your-org-cc-workspace"
+project   = "claude-code"
+
+[capture]
+capture_content = false
+```
+
+Delivery notes:
+
+- It lands in a **user home**, so an MDM script running as root must resolve the console user and `chown` the file to them. A root-owned file won't be writable by the daemon.
+- Mode the file `0600` and the directory `0700`.
+- It contains the ingest API key, so use a service-account key and rotate by re-deploying.
+
+<Warning>
+  A device missing this file will look completely healthy and capture nothing.
+  The extension is deliberately fail-open, and a missing or crashed engine can never
+  break a developer's session, so the only reliable verification is confirming
+  traces arrive in Opik.
+</Warning>
+
+## Activation
+
+Once the app has launched once, everything else is automatic. On launch it activates the system extension, starts the capture engine, enables the proxy configuration, and registers a login item so capture returns after every reboot. With the profile pre-approving the extension, none of this prompts the user.
+
+Activation is fail-safe: any error in the chain turns capture back off rather than leaving a half-configured proxy.
+
+To trigger that first launch, in order of preference:
+
+1. A package postinstall script that opens the app in the console user's context.
+2. A LaunchAgent shipped alongside the app. This also covers users who weren't logged in at install time.
+3. An MDM "run as current user" script.
+
+## Certificate trust
+
+To categorize traffic rather than just count bytes, the extension terminates TLS locally, which means the client must trust the interception certificate.
+
+The certificate authority is minted **per device**, with a private key that is hardware-backed and non-extractable. This is deliberate: there is no shared fleet-wide interception key, so compromising one device does not compromise the fleet. The consequence is that **there is no single certificate to embed in a centrally authored MDM certificate payload**; trust is established on the device that generated it.
+
+For Claude Code this is handled for you: the app points Claude Code at the device's own certificate. The certificate authority also carries constraints limiting it to the specific model-provider hostnames, so even a fully trusted authority cannot vouch for any other domain. That is worth raising early in a security review, because it's the property that makes local termination defensible.
+
+## Verify
+
+On a target device, as the logged-in user:
+
+```bash
+systemextensionsctl list | grep opik-cipx        # extension activated
+defaults read com.comet.opik-cipx-app Cipx.isEnabled
+ls -l ~/.opik-cipx/config.toml                   # the step that silently fails
+```
+
+Then confirm traces are arriving in the target Opik workspace.
+
+## Uninstall
+
+```bash
+# Remove the profile via your MDM, or:
+sudo profiles remove -identifier com.comet.opik-cipx-app.managed
+
+# Tear down cleanly, then remove the app
+open -a "/Applications/Opik CIPX.app" --args disable
+sudo rm -rf "/Applications/Opik CIPX.app"
+
+# Local state, including the per-device certificate
+rm -rf ~/.opik-cipx "~/Library/Application Support/opik-cipx"
+```
+
+Removing the app without disabling first leaves an orphaned system-extension registration, so prefer the `disable` step.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Reduce coding agent spend"
+    icon="fa-regular fa-arrow-trend-down"
+    href="/cost-intelligence/reduce-agent-spend"
+  >
+    Turn the data into a lower bill.
+  </Card>
+  <Card
+    title="Installation overview"
+    icon="fa-regular fa-download"
+    href="/cost-intelligence/install/overview"
+  >
+    Compare rollout paths and review the data inventory.
+  </Card>
+</CardGroup>
