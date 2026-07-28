@@ -420,6 +420,8 @@ class RemoteAuthServiceTest {
                 arguments(HttpStatus.SC_UNAUTHORIZED, "text/plain", DROPWIZARD_UNAUTHORIZED_BODY, NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_UNAUTHORIZED, "text/html", "<html><body>401</body></html>", NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_UNAUTHORIZED, "text/plain", "", NOT_LOGGED_USER),
+                // a proxy error page far larger than the logged-body cap must still resolve to a client error
+                arguments(HttpStatus.SC_UNAUTHORIZED, "text/html", "x".repeat(5_000), NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_BAD_REQUEST, "text/plain", "Bad Request", MISSING_WORKSPACE));
     }
 

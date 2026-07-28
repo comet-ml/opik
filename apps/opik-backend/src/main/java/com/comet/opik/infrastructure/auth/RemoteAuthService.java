@@ -45,6 +45,9 @@ class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
     private static final String NOT_LOGGED_USER = "Please login first";
 
+    // Remote error bodies are arbitrary upstream content, so cap what reaches the logs.
+    private static final int MAX_LOGGED_BODY_LENGTH = 512;
+
     // GenericType instances are thread-safe and expensive to build, so reuse a single instance.
     private static final GenericType<List<WorkspaceIdNameResponse>> WORKSPACE_LIST_TYPE = new GenericType<>() {
     };
@@ -284,13 +287,19 @@ class RemoteAuthService implements AuthService {
         return new InternalServerErrorException("Unexpected error while " + operation);
     }
 
+    /**
+     * Reads the response body for diagnostics only, never to be surfaced to the caller. The result is capped at
+     * {@link #MAX_LOGGED_BODY_LENGTH} characters: a remote error body is arbitrary upstream content (a proxy error page
+     * or a stack trace, not necessarily our own JSON), so it must not be able to flood the logs or carry an unbounded
+     * amount of upstream detail into them.
+     */
     private static String readBodySafely(Response response) {
         try {
             if (!response.hasEntity()) {
                 return "";
             }
             bufferEntitySafely(response);
-            return response.readEntity(String.class);
+            return StringUtils.abbreviate(response.readEntity(String.class), MAX_LOGGED_BODY_LENGTH);
         } catch (RuntimeException e) {
             log.warn("Failed to read remote response body for debugging", e);
             return "";
@@ -499,7 +508,8 @@ class RemoteAuthService implements AuthService {
             return response.readEntity(String.class);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
             var message = readErrorMessage(response, MISSING_WORKSPACE);
-            log.error("Workspace not found by name: '{}'", message);
+            // An unknown workspace name is a caller mistake on the public-endpoint fallback path, not a server fault.
+            log.warn("Workspace not found by name: '{}'", message);
             throw new ClientErrorException(message, Response.Status.BAD_REQUEST);
         }
 
