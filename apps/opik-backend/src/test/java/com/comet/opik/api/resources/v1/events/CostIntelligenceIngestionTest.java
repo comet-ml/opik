@@ -187,8 +187,10 @@ class CostIntelligenceIngestionTest {
                 assertThat(memory.isDefinition()).isEqualTo(1);
                 assertThat(memory.alloc()).isCloseTo(5.0, within(1e-9)); // 120 * 20 / 480
                 assertThat(memory.contentSha256()).isEqualTo("a1b2c3"); // block sha256 persisted verbatim
-                // origin distinguishes the auto-memory slice from the CLAUDE.md / rules files
-                // sharing the lane, so a lever can price autoMemoryEnabled off the real bytes.
+                // Claude Code's `autoMemoryEnabled: false` removes only the auto-memory slice,
+                // not the CLAUDE.md / rules files sharing this lane. Neither that setting nor
+                // the savings lever pricing it lives here — see ai-cost-backend's auto_memory
+                // policy; this repo's job is just to persist the distinction.
                 assertThat(memory.origin()).isEqualTo("auto_memory");
 
                 var skills = rows.get(1);
