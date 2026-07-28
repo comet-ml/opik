@@ -3,6 +3,11 @@ name: 🗂️ Auto Label PR
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
+  # TEMPORARY (danield/NA-test-labeler-v7): runs the workflow from the PR HEAD so the
+  # @v7 bump actually executes pre-merge. pull_request_target can't self-test action
+  # bumps because it always runs the base-branch workflow. REVERT before any merge.
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
 
 
 concurrency:
@@ -24,7 +29,7 @@ jobs:
 
     steps:
       - name: Apply and Sync Labels
-        uses: actions/labeler@v6
+        uses: actions/labeler@v7
         with:
           sync-labels: true # Remove labels if the file paths no longer match
           configuration-path: .github/labeler.yml
