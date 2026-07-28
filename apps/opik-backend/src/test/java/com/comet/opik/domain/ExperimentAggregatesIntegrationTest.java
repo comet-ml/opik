@@ -82,7 +82,6 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -691,11 +690,14 @@ class ExperimentAggregatesIntegrationTest {
 
         assertThat(page).isNotNull();
 
-        return page.content().stream()
-                .sorted(Comparator.comparing(Experiment::id))
-                .toList();
+        return page.content();
     }
 
+    /**
+     * Compares two result lists field for field, in the order the API returned them. Both finds render the same
+     * {@code ORDER BY id DESC}, so the order is deterministic and identical - do not sort the lists before
+     * comparing, or a change in result ordering stops being caught.
+     */
     private void assertSameExperiments(List<Experiment> actual, List<Experiment> expected, String description) {
         assertThat(expected)
                 .as("the reference find must return experiments, otherwise the comparison is vacuous")
