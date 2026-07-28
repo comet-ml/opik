@@ -17,9 +17,14 @@
 --     SentinelTranslation covers both tables.
 --   * parent_span_id is FixedString(36) instead of String: it holds a UUID or nothing, so the fixed width removes the
 --     per-value offset and compresses like the other id columns. Absent is the empty sentinel, which ClickHouse stores
---     (and reads back) as 36 NUL bytes — SentinelTranslation.emptyUuidToNull/nullToEmptyUuid already handle both forms.
---     Note for the cutover: the live DAO tests presence with LENGTH(parent_span_id) > 0, which is always 36 here; those
---     predicates have to move to the sentinel helpers when the DAO switches tables.
+--     as 36 NUL bytes. Two consequences for the cutover, both verified against this table on 26.3:
+--       - SQL is unaffected. ClickHouse trims the padding when casting FixedString to String, so the DAO's presence
+--         checks — LENGTH(CAST(parent_span_id AS Nullable(String))) > 0 — still read 0 for the sentinel and keep
+--         behaving exactly as they do on the String column. A bare LENGTH(parent_span_id) would instead always be 36,
+--         so the cast must stay.
+--       - The read path is not. The driver surfaces the padded form to Java as 36 NUL characters, which is not blank
+--         (NUL is not whitespace), so a !isBlank() guard lets it through and UUID.fromString then throws. Reads must go
+--         through SentinelTranslation.emptyUuidToNull, which recognises both the empty and the all-NUL form.
 --   * usage is Map(String, Int64) instead of Map(String, Int32): a lossless widening that matches what the DAO already
 --     binds (SpanDAO casts to Map(String, Int64) on update, and the API model carries the counts as boxed integers),
 --     removing the narrowing the live column forces on every write.

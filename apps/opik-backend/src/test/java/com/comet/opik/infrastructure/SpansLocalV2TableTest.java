@@ -47,6 +47,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.utils.TruncationUtils.createSlimJsonString;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
@@ -160,6 +161,30 @@ class SpansLocalV2TableTest {
         assertThat(SentinelTranslation.nanToNull(getColumn(storedSpan, "duration", Double.class))).isNull();
         assertThat(getColumn(storedSpan, "truncation_threshold", Long.class))
                 .isEqualTo(DEFAULT_TRUNCATION_THRESHOLD);
+    }
+
+    /**
+     * The two halves of the root-span sentinel contract, which differ and are easy to conflate. ClickHouse stores the
+     * empty {@code FixedString(36)} NUL-padded, but trims the padding when casting to String — so the DAO's
+     * {@code LENGTH(CAST(parent_span_id AS Nullable(String))) > 0} presence checks behave on this column exactly as they
+     * do on the live String one, while a bare {@code LENGTH} would always be 36. The driver, by contrast, hands Java the
+     * padded form, and NUL is not whitespace, so a {@code !isBlank()} guard does not catch it and {@code UUID.fromString}
+     * throws: reads must go through {@link SentinelTranslation#emptyUuidToNull(String)}.
+     */
+    @Test
+    void rootSpanSentinelCastsToEmptyInSqlButReachesJavaNulPadded() {
+        var storedSpan = newStoredSpan(Instant.now().truncatedTo(ChronoUnit.MICROS), null,
+                DEFAULT_TRUNCATION_THRESHOLD).toBuilder()
+                .parentSpanId(null)
+                .build();
+        insert(storedSpan);
+
+        assertThat(getColumn(storedSpan, "LENGTH(CAST(parent_span_id AS Nullable(String)))", Long.class)).isZero();
+        assertThat(getColumn(storedSpan, "LENGTH(parent_span_id)", Long.class)).isEqualTo(36);
+
+        var raw = getColumn(storedSpan, "parent_span_id", String.class);
+        assertThat(raw).isEqualTo(CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE).isNotBlank();
+        assertThat(SentinelTranslation.emptyUuidToNull(raw)).isNull();
     }
 
     @Test
