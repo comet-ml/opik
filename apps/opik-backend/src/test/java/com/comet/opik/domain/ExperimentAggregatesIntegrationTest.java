@@ -82,6 +82,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -132,6 +133,14 @@ class ExperimentAggregatesIntegrationTest {
 
     public static final String[] IGNORED_FIELDS_EXPERIMENT_ITEM = {"createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments", "projectName", "executionPolicy"};
+
+    public static final String[] UNORDERED_FIELDS_SCORES = {"experimentScores", "feedbackScores"};
+
+    public static final String[] UNORDERED_FIELDS_SCORES_IN_CONTENT = Arrays.stream(UNORDERED_FIELDS_SCORES)
+            .map("content."::concat)
+            .toArray(String[]::new);
+
+    public static final String[] UNORDERED_FIELDS_ASSERTIONS = {"feedbackScores", "assertionResults"};
 
     @RegisterApp
     private final TestDropwizardAppExtension app;
@@ -607,12 +616,12 @@ class ExperimentAggregatesIntegrationTest {
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
 
-        var page = findByProject(project.id(), workspaceId);
+        var scoped = findByProject(project.id(), workspaceId);
+        var reference = findByIds(Set.of(aggregatedExperiment.id(), nonAggregatedExperiment.id()), workspaceId);
 
-        assertThat(page).isNotNull();
-        assertThat(page.content().stream().map(Experiment::id).toList())
-                .as("both the aggregated and the non-aggregated experiment of the requested project must be returned")
-                .contains(aggregatedExperiment.id(), nonAggregatedExperiment.id());
+        assertSameExperiments(scoped, reference,
+                "a project-scoped find must return the same experiments, field for field, as a find that cannot "
+                        + "drop the raw branch - including the non-aggregated experiment of that project");
     }
 
     /**
@@ -649,29 +658,56 @@ class ExperimentAggregatesIntegrationTest {
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
 
-        var page = findByProject(requestedProject.id(), workspaceId);
+        var scoped = findByProject(requestedProject.id(), workspaceId);
+        var reference = findByIds(Set.of(aggregatedExperiment.id()), workspaceId);
 
-        assertThat(page).isNotNull();
-        assertThat(page.content().stream().map(Experiment::id).toList())
-                .as("the experiment of the requested project must be returned")
-                .contains(aggregatedExperiment.id());
-        assertThat(page.content().stream().map(Experiment::id).toList())
-                .as("an experiment reachable only from another project must not leak into this listing")
-                .doesNotContain(unrelatedNonAggregated.id());
+        assertSameExperiments(scoped, reference,
+                "dropping the raw branch must not change the returned experiments, and an experiment reachable "
+                        + "only from another project must not appear at all");
     }
 
-    private Experiment.ExperimentPage findByProject(UUID projectId, String workspaceId) {
-        var searchCriteria = ExperimentSearchCriteria.builder()
+    private List<Experiment> findByProject(UUID projectId, String workspaceId) {
+        return findExperiments(ExperimentSearchCriteria.builder()
                 .projectId(projectId)
                 .entityType(EntityType.TRACE)
                 .sortingFields(List.of())
-                .build();
+                .build(), workspaceId);
+    }
 
-        return experimentService.find(1, 100, searchCriteria)
+    private List<Experiment> findByIds(Set<UUID> experimentIds, String workspaceId) {
+        return findExperiments(ExperimentSearchCriteria.builder()
+                .experimentIds(experimentIds)
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build(), workspaceId);
+    }
+
+    private List<Experiment> findExperiments(ExperimentSearchCriteria searchCriteria, String workspaceId) {
+        var page = experimentService.find(1, 100, searchCriteria)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, USER)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
+
+        assertThat(page).isNotNull();
+
+        return page.content().stream()
+                .sorted(Comparator.comparing(Experiment::id))
+                .toList();
+    }
+
+    private void assertSameExperiments(List<Experiment> actual, List<Experiment> expected, String description) {
+        assertThat(expected)
+                .as("the reference find must return experiments, otherwise the comparison is vacuous")
+                .isNotEmpty();
+
+        assertThat(actual)
+                .as(description)
+                .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                        .build())
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
+                .isEqualTo(expected);
     }
 
     @ParameterizedTest(name = "Group by {0}")
@@ -821,7 +857,7 @@ class ExperimentAggregatesIntegrationTest {
                         RecursiveComparisonConfiguration.builder()
                                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                 .build())
-                .ignoringCollectionOrderInFields("feedbackScores", "experimentScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
                 .isEqualTo(aggregationsFromRaw);
     }
 
@@ -1050,7 +1086,7 @@ class ExperimentAggregatesIntegrationTest {
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .build())
-                .ignoringCollectionOrderInFields("feedbackScores", "experimentScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
                 .isEqualTo(fromRaw);
     }
 
@@ -1479,7 +1515,7 @@ class ExperimentAggregatesIntegrationTest {
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                    .ignoringCollectionOrderInFields("feedbackScores", "assertionResults")
+                    .ignoringCollectionOrderInFields(UNORDERED_FIELDS_ASSERTIONS)
                     .ignoringFields(IGNORED_FIELDS_EXPERIMENT_ITEM)
                     .isEqualTo(expectedExperiments);
         }
@@ -1515,7 +1551,7 @@ class ExperimentAggregatesIntegrationTest {
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .build())
-                .ignoringCollectionOrderInFields("content.feedbackScores", "content.experimentScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES_IN_CONTENT)
                 .isEqualTo(expected);
     }
 
@@ -1536,7 +1572,7 @@ class ExperimentAggregatesIntegrationTest {
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .build())
-                .ignoringCollectionOrderInFields("feedbackScores", "experimentScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
                 .isEqualTo(expected);
     }
 
@@ -2440,7 +2476,7 @@ class ExperimentAggregatesIntegrationTest {
                 .as("experiment item must be identical before and after aggregation")
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS_EXPERIMENT_ITEM)
-                .ignoringCollectionOrderInFields("feedbackScores", "assertionResults")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_ASSERTIONS)
                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .isEqualTo(beforeItem);
     }
@@ -3200,7 +3236,7 @@ class ExperimentAggregatesIntegrationTest {
                                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                 .build())
                 .ignoringFields(EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE)
-                .ignoringCollectionOrderInFields("experimentScores", "feedbackScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
                 .isEqualTo(rawExperiment);
 
         assertThat(aggregatedExperiment.id())
