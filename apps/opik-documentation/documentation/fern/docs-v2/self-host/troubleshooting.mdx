@@ -359,14 +359,14 @@ Widening the flush window trades a little ingestion latency and buffer memory �
 
 #### Cause B resolution — unblock the stuck merge
 
-Work from least to most invasive: the threshold bump (step 1) and diagnosis (steps 2–3) are non-destructive; `DETACH` (step 4) is recoverable but data-affecting; the ZooKeeper edit (step 6) is the last resort.
+Work from least to most invasive: the threshold bump (step 1) and diagnosis (steps 2–3) are non-destructive; `DETACH` (step 4) is recoverable but data-affecting; the ZooKeeper edit (step 6) is the last resort. Run the commands against the table your diagnosis flagged — replace `<table>` with `spans` or `traces`.
 
 <Steps>
   <Step>
     **Restore ingestion immediately (reversible, no data loss).** Temporarily raise the throw threshold so inserts succeed while you fix the root cause:
 
     ```sql
-    ALTER TABLE <database_name>.spans ON CLUSTER '{cluster}' MODIFY SETTING parts_to_throw_insert = 20000, parts_to_delay_insert = 20000;
+    ALTER TABLE <database_name>.<table> ON CLUSTER '{cluster}' MODIFY SETTING parts_to_throw_insert = 20000, parts_to_delay_insert = 20000;
     ```
 
     On a Distributed deployment, target the underlying per-shard ReplacingMergeTree table, not the Distributed proxy. This is a safe, reversible stopgap — no data is deleted — so revert to the defaults once the backlog has drained.
@@ -381,7 +381,7 @@ Work from least to most invasive: the threshold bump (step 1) and diagnosis (ste
     **Try to recover the corrupt source parts.** If a part is still intact on another replica, `DETACH` the corrupt local copy (never `DROP`) — ClickHouse then re-fetches the good copy from a healthy replica, which lets the blocked merge complete. Detached parts are preserved under the table's `detached/` directory.
 
     ```sql
-    ALTER TABLE <database_name>.spans DETACH PART 'all_1_100_5';
+    ALTER TABLE <database_name>.<table> DETACH PART 'all_1_100_5';
     -- repeat for each corrupt part named in the exception
     ```
 
@@ -390,13 +390,13 @@ Work from least to most invasive: the threshold bump (step 1) and diagnosis (ste
     </Callout>
   </Step>
   <Step>
-    **Re-check the queue.** If the stuck entry is gone and merges resume, the backlog will drain on its own. A `SYSTEM RESTART REPLICA <database_name>.spans` can help a node re-read its queue.
+    **Re-check the queue.** If the stuck entry is gone and merges resume, the backlog will drain on its own. A `SYSTEM RESTART REPLICA <database_name>.<table>` can help a node re-read its queue.
   </Step>
   <Step>
     **Last resort — remove the stuck queue entry from ZooKeeper.** When re-fetch/`DETACH` can't clear it (steps 4–5), removing the poison entry directly is the reliable fix — but it is dangerous, so do it only after 4–5 and ideally with ClickHouse expertise on hand. Delete the specific stuck `queue-XXXXXXXXXX` node under **every** replica path, then restart the replicas:
 
     ```
-    /clickhouse/tables/<shard>/<database_name>/spans/replicas/<replica>/queue/queue-XXXXXXXXXX
+    /clickhouse/tables/<shard>/<database_name>/<table>/replicas/<replica>/queue/queue-XXXXXXXXXX
     ```
 
     <Callout intent="warning">
