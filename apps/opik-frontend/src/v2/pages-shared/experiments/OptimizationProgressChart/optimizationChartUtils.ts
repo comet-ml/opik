@@ -226,7 +226,57 @@ type CandidateLookups = {
   parentSiblings: Map<string, string[]>;
   bestScore: number | undefined;
   bestCandidate: AggregatedCandidate | undefined;
+  expectedItemCount: number;
 };
+
+/**
+ * Number of evaluated items a *finished* full evaluation has in this run, used
+ * as the denominator for "has this trial finished evaluating?".
+ *
+ * There is no planned/expected item count anywhere in the API: every count on
+ * AggregatedCandidate is derived from rows that already exist in
+ * `experiment_items`, so they report items **completed so far**, never items
+ * planned (backend: `trace_count = count(DISTINCT ei.trace_id)`, and
+ * `total_count` / `passed_count` come from the `pass_rate_agg` CTE over the same
+ * table). `Experiment.status` is no help either — the SDK never sets it, so
+ * trial experiments are created already marked "completed".
+ *
+ * What the run does give us is its own denominator. Every full evaluation in one
+ * optimization scores the same item set: the baseline evaluates
+ * `validation_dataset or dataset` capped at `n_samples`
+ * (base_optimizer._select_evaluation_dataset) and GEPA builds its valset from
+ * that same source and cap (gepa_optimizer's `val_source` / `val_plan`). So the
+ * step-0 baseline's completed count is the count every other trial must reach.
+ *
+ * Deliberately baseline-derived rather than a `max()` over all candidates: a
+ * candidate groups *all* its experiments and `aggregateExperimentMetrics` sums
+ * their counts, so one double-counted candidate would inflate the denominator
+ * and freeze every finished trial on "Evaluating". Under-estimating (the
+ * baseline itself still running) only delays the gate, which is the safe
+ * direction — step 0 is always labelled "baseline" and never pruned anyway.
+ */
+const getExpectedItemCount = (candidates: AggregatedCandidate[]): number => {
+  let baseline: AggregatedCandidate | undefined;
+  for (const c of candidates) {
+    if (c.stepIndex !== 0) continue;
+    if (!baseline || c.created_at < baseline.created_at) baseline = c;
+  }
+  return baseline?.totalDatasetItemCount ?? 0;
+};
+
+/**
+ * True while a candidate's evaluation is still in flight — it has scored fewer
+ * items than a full evaluation in this run covers. Its score is therefore a
+ * partial average and must not be read as a final result.
+ *
+ * `0` denominators mean "unknown" (no baseline yet, or counts not reported) and
+ * fail open, leaving the pre-existing behaviour untouched.
+ */
+const isStillEvaluating = (
+  c: AggregatedCandidate,
+  expectedItemCount: number,
+): boolean =>
+  expectedItemCount > 0 && c.totalDatasetItemCount < expectedItemCount;
 
 const buildCandidateLookups = (
   candidates: AggregatedCandidate[],
@@ -268,18 +318,42 @@ const buildCandidateLookups = (
     undefined,
   );
 
-  return { hasChildren, parentSiblings, bestScore, bestCandidate };
+  return {
+    hasChildren,
+    parentSiblings,
+    bestScore,
+    bestCandidate,
+    expectedItemCount: getExpectedItemCount(candidates),
+  };
 };
 
 const computeInProgressStatus = (
   c: AggregatedCandidate,
   lookups: CandidateLookups,
 ): TrialStatus => {
-  const { hasChildren, parentSiblings, bestScore, bestCandidate } = lookups;
+  const {
+    hasChildren,
+    parentSiblings,
+    bestScore,
+    bestCandidate,
+    expectedItemCount,
+  } = lookups;
   if (c.score == null) return "running";
   const isBest = bestCandidate?.candidateId === c.candidateId;
 
   if (isBest || hasChildren.has(c.candidateId)) return "passed";
+
+  // A trial that has not finished its items is ineligible for "pruned"
+  // (user-facing "Discarded") no matter how low its score looks: mid-evaluation
+  // the score is a partial average over the items done so far, so a value below
+  // the running best is not evidence the trial lost. Sits ahead of BOTH pruned
+  // branches below — the score comparison and the sibling-progress one — because
+  // an unfinished trial has no final result for either to judge (OPIK-7460).
+  //
+  // Trials with children or the current best are exempt above: children only
+  // spawn from an accepted candidate, so those evaluations are already done.
+  if (isStillEvaluating(c, expectedItemCount)) return "evaluating";
+
   if (bestScore != null && c.score < bestScore) return "pruned";
 
   const parentKey = [...c.parentCandidateIds].sort().join(",");
