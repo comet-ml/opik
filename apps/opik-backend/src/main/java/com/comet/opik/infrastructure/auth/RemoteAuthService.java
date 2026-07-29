@@ -295,10 +295,9 @@ class RemoteAuthService implements AuthService {
      */
     private static String readBodySafely(Response response) {
         try {
-            if (!response.hasEntity()) {
+            if (!isEntityReadable(response)) {
                 return "";
             }
-            bufferEntitySafely(response);
             return StringUtils.abbreviate(response.readEntity(String.class), MAX_LOGGED_BODY_LENGTH);
         } catch (RuntimeException e) {
             log.warn("Failed to read remote response body for debugging", e);
@@ -307,15 +306,22 @@ class RemoteAuthService implements AuthService {
     }
 
     /**
-     * Buffers the response entity so it can be read more than once. A client response entity is backed by a single-shot
-     * input stream, so without buffering the first reader consumes it and every later read fails. Buffering is
-     * idempotent, so callers do not need to track whether it already happened.
+     * Guards a {@code readEntity} call: reports whether the response carries an entity and that entity was buffered, so
+     * that it can be read, and read again. A client response entity is backed by a single-shot input stream, so without
+     * buffering the first reader consumes it and every later read fails. Buffering is idempotent — an already buffered
+     * entity reports success — so callers do not need to track whether it already happened.
+     *
+     * @return {@code false} when there is no entity, or when it could not be buffered and is therefore unsafe to read
      */
-    private static void bufferEntitySafely(Response response) {
+    private static boolean isEntityReadable(Response response) {
+        if (!response.hasEntity()) {
+            return false;
+        }
         try {
-            response.bufferEntity();
+            return response.bufferEntity();
         } catch (RuntimeException e) {
             log.warn("Failed to buffer remote response entity, status: '{}'", response.getStatus(), e);
+            return false;
         }
     }
 
@@ -332,17 +338,16 @@ class RemoteAuthService implements AuthService {
      * <p>
      * Only a JSON body is treated as a message intended for the caller. Any other content type is a framework-level
      * response rather than an application error, so it is logged and the caller-facing {@code fallback} is used instead
-     * of leaking the remote framework's wording. The entity is buffered up front so that both the diagnostic logging
-     * here and any later reader of the same response can read it, rather than relying on being the first to consume the
-     * single-shot entity stream.
+     * of leaking the remote framework's wording. Every read is guarded by {@link #isEntityReadable(Response)}, which
+     * also buffers, so that both the diagnostic logging here and any later reader of the same response can read it
+     * rather than relying on being the first to consume the single-shot entity stream.
      *
      * @param fallback message used when the body is absent, not JSON, unreadable or empty
      */
     private static String readErrorMessage(Response response, String fallback) {
-        if (!response.hasEntity()) {
+        if (!isEntityReadable(response)) {
             return fallback;
         }
-        bufferEntitySafely(response);
         var mediaType = response.getMediaType();
         if (mediaType == null || !MediaType.APPLICATION_JSON_TYPE.isCompatible(mediaType)) {
             log.warn("React service replied with a non-JSON error body, status: '{}', contentType: '{}', body: '{}'",
