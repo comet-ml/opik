@@ -322,9 +322,10 @@ class OptimizationStalledReaperServiceTest {
         var id = seedBackdatedRunningStudioRun(Duration.ofHours(1));
         var experimentId = createTrialExperiment(id);
         // An item referencing a still-unfinished trace is exactly what a worker killed mid-trial leaves
-        // behind — and it makes the full GET/FIND query drop the run (pre-existing mapping bug). The
-        // reaper's re-read must not go through that query, or this run is skipped on every cycle and the
-        // eternal spinner is back.
+        // behind — it used to make the full GET/FIND query drop the run (fixed by FIND's NaN guards; see
+        // OptimizationsResourceTest). The reaper's re-read must stay off that query regardless, so a
+        // future FIND regression can never make it skip such a run on every cycle and resurrect the
+        // eternal spinner.
         createExperimentItem(experimentId, false);
 
         reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
@@ -438,9 +439,8 @@ class OptimizationStalledReaperServiceTest {
 
     /**
      * Appends one experiment item to a trial — the per-dataset-item progress signal within a trial. The
-     * item's trace is created for real first: the worker always logs the trace before the item, and an
-     * orphan trace_id makes the optimization GET query drop the run entirely (pre-existing FIND bug,
-     * unrelated to the reaper), which would fail this suite's statusOf() assertions with a 404.
+     * item's trace is created for real first, matching the worker, which always logs the trace before
+     * the item.
      */
     private void createExperimentItem(UUID experimentId) {
         createExperimentItem(experimentId, true);
@@ -463,8 +463,8 @@ class OptimizationStalledReaperServiceTest {
     }
 
     /**
-     * The bare status re-read the reaper itself uses. Assertions go through it when the run's related
-     * data breaks the heavyweight GET/FIND mapping (see reapsStaleRunDespiteUnmappableGetById).
+     * The bare status re-read the reaper itself uses. reapsStaleRunDespiteUnmappableGetById asserts
+     * through it to prove the reaper path works independently of the heavyweight GET/FIND mapping.
      */
     private OptimizationStatus statusSnapshotOf(UUID id) {
         var snapshot = injector.getInstance(OptimizationDAO.class)

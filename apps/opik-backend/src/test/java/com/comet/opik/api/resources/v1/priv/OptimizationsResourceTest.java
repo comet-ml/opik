@@ -528,6 +528,24 @@ class OptimizationsResourceTest {
                     .isEqualTo(optimization);
         }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("Get optimizer by id when a trial item references an unfinished or missing trace")
+        void getByIdWhenTrialItemReferencesUnfinishedTrace(boolean traceExists) {
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            createTrialWithUnfinishedTraceItem(id, traceExists, API_KEY, TEST_WORKSPACE_NAME);
+
+            // The run must not vanish (OPIK-7459): duration aggregates are simply absent.
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization.id()).isEqualTo(id);
+            assertThat(actualOptimization.numTrials()).isEqualTo(1L);
+            assertThat(actualOptimization.bestDuration()).isNull();
+            assertThat(actualOptimization.baselineDuration()).isNull();
+        }
+
         @Test
         @DisplayName("Get optimizer by id with feedback scores")
         void getByIdWithFeedbackScores() {
@@ -809,6 +827,39 @@ class OptimizationsResourceTest {
         return DatasetResourceClient.buildDataset(podamFactory);
     }
 
+    /**
+     * Links a trial with one experiment item to the run, the item's trace either still unfinished (no
+     * end time, so no duration) or missing entirely — the state a worker killed mid-trial leaves
+     * behind. Regression state for OPIK-7459: FIND's duration quantile over zero finished traces
+     * produced NaN, the row mapper cannot read NaN as BigDecimal, and the r2dbc driver swallows mapper
+     * exceptions — so the whole run silently vanished from both getById and find.
+     */
+    private void createTrialWithUnfinishedTraceItem(UUID optimizationId, boolean traceExists, String apiKey,
+            String workspaceName) {
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .optimizationId(optimizationId)
+                .type(ExperimentType.TRIAL)
+                .build();
+        var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+        var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .endTime(null)
+                .duration(null)
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        if (traceExists) {
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+        }
+
+        var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .traceId(trace.id())
+                .feedbackScores(null)
+                .build();
+        experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+    }
+
     @Test
     @DisplayName("Delete optimizers by ids")
     void deleteByIds() {
@@ -967,6 +1018,31 @@ class OptimizationsResourceTest {
             // Verify results
             assertOptimizationPage(optimizationPage, 1, 2,
                     optimizationPage.content().size(), expectedOptimizations.reversed());
+        }
+
+        @Test
+        @DisplayName("Find optimizations includes a run whose trial item references an unfinished trace")
+        void findIncludesRunWhoseTrialItemReferencesUnfinishedTrace() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            createTrialWithUnfinishedTraceItem(id, true, apiKey, workspaceName);
+
+            // The run must stay on the list (OPIK-7459): duration aggregates are simply absent.
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, null, null, null, 200);
+
+            assertThat(optimizationPage.content())
+                    .extracting(Optimization::id)
+                    .containsExactly(id);
+            assertThat(optimizationPage.content().getFirst().numTrials()).isEqualTo(1L);
         }
 
         @Test

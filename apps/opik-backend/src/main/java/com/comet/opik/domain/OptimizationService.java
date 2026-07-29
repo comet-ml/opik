@@ -359,11 +359,12 @@ class OptimizationServiceImpl implements OptimizationService {
 
     private Mono<Long> applyUpdate(@NonNull UUID id, @NonNull OptimizationUpdate update) {
         return optimizationDAO.getById(id)
-                // getById's FIND drops runs whose related data it cannot map (e.g. a trial item pointing
-                // at a still-unfinished trace — exactly what a worker killed mid-trial leaves behind). A
-                // status write must still land on such a run, or neither the worker's terminal report nor
-                // the stalled-run reaper can ever move it off RUNNING (OPIK-7459). The raw-row fallback
-                // carries null aggregates, which only degrades the completion analytics event.
+                // Defense in depth: getById's FIND used to drop runs whose related data it could not map
+                // (a trial item pointing at a still-unfinished trace — what a worker killed mid-trial
+                // leaves behind; fixed by FIND's NaN guards, OPIK-7459). A status write must still land
+                // even if FIND ever regresses, or neither the worker's terminal report nor the
+                // stalled-run reaper could move such a run off RUNNING. The raw-row fallback carries
+                // null aggregates, which only degrades the completion analytics event.
                 .switchIfEmpty(Mono.defer(() -> optimizationDAO.getRowById(id)))
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {

@@ -104,10 +104,13 @@ public interface OptimizationDAO {
     /**
      * Latest status + row timestamp of a run, straight off the {@code optimizations} table. The reaper's
      * pre-update re-read MUST use this instead of {@link #getById} (the full {@code FIND} with its
-     * experiment/trace/score joins): {@code FIND} drops rows whose related data it fails to map — e.g. a
-     * trial item referencing a still-unfinished trace, which is exactly the state a worker killed
-     * mid-trial leaves behind — and an empty re-read makes the reaper skip that run on every cycle,
-     * resurrecting the eternal spinner this job exists to prevent (found by OPIK-7459 e2e).
+     * experiment/trace/score joins): the reaper only needs these two fields, and its liveness decision
+     * must stay decoupled from {@code FIND}'s mapping of related data — {@code FIND} used to silently
+     * drop a run whose trial item referenced a still-unfinished trace (exactly the state a worker killed
+     * mid-trial leaves behind; found by OPIK-7459 e2e, fixed in {@code FIND}'s NaN guards), and an empty
+     * re-read made the reaper skip that run on every cycle, resurrecting the eternal spinner this job
+     * exists to prevent. The bare read keeps any future {@code FIND} regression from ever re-breaking
+     * the reaper.
      */
     record OptimizationStatusSnapshot(@NonNull OptimizationStatus status, @NonNull Instant lastUpdatedAt) {
     }
@@ -116,9 +119,9 @@ public interface OptimizationDAO {
 
     /**
      * The optimization row alone — no experiment/trace/score joins, so the aggregate fields
-     * ({@code numTrials}, scores, durations, costs) are left null. Fallback for write paths when
-     * {@link #getById}'s full {@code FIND} cannot map the run (see {@link #getStatusSnapshotById}):
-     * a status update must never be blocked by unmappable related data.
+     * ({@code numTrials}, scores, durations, costs) are left null. Fallback for write paths in case
+     * {@link #getById}'s full {@code FIND} ever fails to map the run again (see
+     * {@link #getStatusSnapshotById}): a status update must never be blocked by related data.
      */
     Mono<Optimization> getRowById(UUID id);
 }
@@ -430,6 +433,15 @@ class OptimizationDAOImpl implements OptimizationDAO {
             ;
             """;
 
+    /**
+     * No numeric column this query returns may ever be NaN/Inf: the row mapper reads them as
+     * {@code BigDecimal}, {@code BigDecimal.valueOf(NaN)} throws, and the clickhouse-r2dbc driver
+     * swallows mapper exceptions and silently drops the row — the run then 404s in getById and
+     * vanishes from find. The two float sources are guarded where non-finite values can enter:
+     * {@code duration_p50} (quantiles over zero finished traces yields NaN — the state a worker
+     * killed mid-trial leaves behind, OPIK-7459) and {@code experiment_scores_parsed.value}
+     * (JSON-parsed, so unbounded input). Costs are Decimal and cannot be non-finite.
+     */
     private static final String FIND = """
             WITH optimization_final AS (
                 SELECT
@@ -552,6 +564,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
                 WHERE e.experiment_scores != '' AND e.experiment_scores != '[]'
                   AND length(JSON_VALUE(score, '$.name')) > 0
+                  AND isFinite(CAST(JSON_VALUE(score, '$.value') AS Float64))
             ), experiment_scores_agg AS (
                 SELECT
                     experiment_id,
@@ -565,8 +578,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 SELECT
                     ei.experiment_id,
                     count(DISTINCT ei.trace_id) AS trace_count,
-                    arrayElement(
-                        quantiles(0.5)(t.duration), 1
+                    if(
+                        isFinite(arrayElement(quantiles(0.5)(t.duration), 1)),
+                        arrayElement(quantiles(0.5)(t.duration), 1),
+                        NULL
                     ) AS duration_p50,
                     sum(s.total_estimated_cost) AS total_estimated_cost
                 FROM experiment_items_final ei
