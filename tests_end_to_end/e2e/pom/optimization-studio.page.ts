@@ -36,12 +36,15 @@ export class OptimizationStudioPage {
   ) {}
 
   async gotoNew(): Promise<void> {
-    return test.step('Open the Optimization Studio new-run page', async () => {
+    return test.step('Open the Optimization Studio new-run panel', async () => {
       const env = loadEnvConfig();
+      // The new-run flow is a side panel over the runs list
+      // (`/optimizations?new=true`). `/optimizations/new` is kept as a redirect
+      // to it, so navigating the legacy path also covers that back-compat route.
       await this.page.goto(
         `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations/new`,
       );
-      await this.page.getByRole('heading', { name: 'Optimize a prompt' }).waitFor();
+      await this.newRunPanel().waitFor();
     });
   }
 
@@ -64,8 +67,11 @@ export class OptimizationStudioPage {
   async selectDataset(name: string): Promise<void> {
     return test.step(`Select dataset "${name}"`, async () => {
       await this.datasetPickerButton().click();
-      await this.page.getByTestId('search-input').fill(name);
-      await this.page.getByRole('dialog').getByText(name, { exact: true }).click();
+      const dialog = this.page.getByRole('dialog');
+      // Scope to the dialog: the run panel behind it also renders a
+      // `search-input`, so an unscoped testid matches two elements.
+      await dialog.getByTestId('search-input').fill(name);
+      await dialog.getByText(name, { exact: true }).click();
       await expect(this.page.getByRole('button', { name })).toBeVisible();
     });
   }
@@ -193,6 +199,15 @@ export class OptimizationStudioPage {
     });
   }
 
+  /**
+   * The new-run side panel. `ResizableSidePanel` renders its `panelId` as a
+   * data-testid, so this is the one purpose-built hook on the panel — the
+   * header is a plain span ("New optimization run"), not a heading.
+   */
+  private newRunPanel(): Locator {
+    return this.page.locator('[data-testid="new-optimization-run-sidebar"]');
+  }
+
   private promptEditor(): Locator {
     return this.page.locator('[data-testid="playground-message-editor"] .cm-content');
   }
@@ -212,10 +227,15 @@ export class OptimizationStudioPage {
 
   private modelCombobox(): Locator {
     // The model picker is the only combobox on the form that renders a provider
-    // name; the others show "GEPA optimizer" / "Equals".
+    // name; the others show "GEPA optimizer" / "Equals". With no provider key
+    // configured it renders its "Select an LLM model" placeholder instead, so
+    // match that too — the form must still be assertable in that state.
     return this.page
       .locator('[role="combobox"]')
-      .filter({ hasText: /Anthropic|OpenAI|Gemini|openrouter|free|gpt-|claude|GPT|Claude/i });
+      .filter({
+        hasText:
+          /Anthropic|OpenAI|Gemini|openrouter|free|gpt-|claude|GPT|Claude|Select an LLM model/i,
+      });
   }
 
   private trialsTable(): Locator {
