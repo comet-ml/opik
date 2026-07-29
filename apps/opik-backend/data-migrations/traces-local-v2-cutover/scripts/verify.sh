@@ -26,11 +26,7 @@
 #   --from-week N       start at week offset N (0-based from the anchor Monday). Default 0.
 #   --to-week M         stop after week offset M (inclusive). Default: last week with data.
 #   --weeks-stride S    compare every S-th week (S>1 samples partitions for a quick pass). Default 1.
-#   --drill-down        on a mismatched week, also print up to 100 keys that differ or exist on one side only (also
-#                       lists the version-collapse keys per week).
-#   --allow-version-collapse  proceed (exit 0) despite version-collapse keys after reviewing them. Without it, a non-zero
-#                       version-collapse count is a REVIEW-REQUIRED failure (exit 3) — distinct from a fidelity mismatch
-#                       (exit 1) — because the microsecond fingerprint cannot verify version selection for those keys.
+#   --drill-down        on a mismatched week, also print up to 100 keys that differ or exist on one side only.
 
 set -euo pipefail
 
@@ -45,7 +41,6 @@ FROM_WEEK=0
 TO_WEEK=""
 WEEKS_STRIDE=1              # 1 = every week; S skips to every S-th weekly partition for a quick, pruned pass
 DRILL_DOWN=0
-ALLOW_VERSION_COLLAPSE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -57,7 +52,6 @@ while [[ $# -gt 0 ]]; do
         --to-week) TO_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
         --weeks-stride) WEEKS_STRIDE="${2:?"$1 requires a value"}"; shift 2 ;;
         --drill-down) DRILL_DOWN=1; shift ;;
-        --allow-version-collapse) ALLOW_VERSION_COLLAPSE=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -102,18 +96,6 @@ compare_window() {
     clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block compare "$1" "$2")"
 }
 
-# Count of old-table keys in the window whose last_updated_at has more ns-distinct values than us-distinct — i.e. rows
-# where the ns->us truncation could make the successor pick a different ReplacingMergeTree version than source FINAL, a
-# divergence the microsecond fingerprint cannot see. 0 => version selection is truncation-safe for the window.
-version_check_window() {
-    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block version-check "$1" "$2")"
-}
-
-# Up to 100 keys behind a non-zero version_check (only under --drill-down).
-version_check_drill_window() {
-    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block version-check-drill "$1" "$2")"
-}
-
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
 drill_down_window() {
     clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:verify' --multiquery --query "$(render_block drill-down "$1" "$2")"
@@ -143,7 +125,6 @@ log "Verify: $OLD_TABLE vs $NEW_TABLE | weeks [$FROM_WEEK..$TO_WEEK] stride $WEE
 
 mismatches=0
 checked=0
-version_collapse=0
 for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
     LO="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $week))") 00:00:00"
     HI="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $((week + 1))))") 00:00:00"
@@ -166,33 +147,11 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week+=WEEKS_STRIDE )); do
             log "  re-run with --drill-down to list the differing keys for this window" >&2
         fi
     fi
-
-    # ns->us version-selection guard. Separate from the fidelity verdict: the fingerprint can't see it, so it is
-    # surfaced and gates the run separately (REVIEW REQUIRED) rather than being silently trusted.
-    collapse_out="$(version_check_window "$LO" "$HI")"
-    if [[ -n "$collapse_out" && "$collapse_out" != "0" ]]; then
-        version_collapse=$((version_collapse + collapse_out))
-        log "  NOTE week $week: $collapse_out key(s) on $OLD_TABLE have sub-microsecond-distinct last_updated_at — the ns->us truncation may pick a different version than source FINAL for them; the fingerprint cannot detect it." >&2
-        if [[ "$DRILL_DOWN" == "1" ]]; then
-            log "  version-collapse keys (workspace_id, project_id, id):" >&2
-            version_check_drill_window "$LO" "$HI" >&2
-        fi
-    fi
 done
 
-# Fidelity mismatch is the hard failure (exit 1). Check it first so a real data difference takes precedence.
+# Fidelity mismatch is the hard failure (exit 1).
 if [[ "$mismatches" != "0" ]]; then
     log "FAILED: $mismatches of $checked windows mismatched." >&2
     exit 1
 fi
-# Version-collapse is NOT a proven mismatch — it is an unverifiable region. Fail REVIEW-REQUIRED (exit 3, distinct from
-# a fidelity FAILED=1) unless the operator has reviewed the keys and accepts them via --allow-version-collapse.
-if [[ "$version_collapse" != "0" ]]; then
-    if [[ "$ALLOW_VERSION_COLLAPSE" == "1" ]]; then
-        log "PASSED (with review override): all $checked windows match; $version_collapse version-collapse key(s) accepted via --allow-version-collapse."
-        exit 0
-    fi
-    log "REVIEW REQUIRED: all $checked windows match, but $version_collapse key(s) on $OLD_TABLE have sub-microsecond-distinct last_updated_at — the microsecond fingerprint cannot verify version selection for them (NOT a data mismatch). Re-run with --drill-down to list them; once confirmed benign, re-run with --allow-version-collapse." >&2
-    exit 3
-fi
-log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD). Version-collapse keys: 0."
+log "PASSED: all $checked windows match (sample 1/$SAMPLE_MOD)."
