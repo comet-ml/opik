@@ -1,11 +1,13 @@
 import logging
 import math
+from collections.abc import Callable
 from typing import Any, cast
 
 from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStopper
 
 from ...base_optimizer import BaseOptimizer
 from ... import constants
+from ...core import llm_calls as _llm_calls
 from ...core.state import (
     AlgorithmResult,
     FinishReason,
@@ -97,6 +99,39 @@ def _coerce_positive_int(
         )
         return fallback
     return coerced
+
+
+def _coerce_max_reflection_calls(value: Any, *, max_trials: int) -> int:
+    """Validate the max_reflection_calls override to a non-negative int.
+
+    Defaults to ``max_trials``: with GEPA's default round-robin component
+    selector each proposal iteration makes at most one reflection-LM call, and
+    the metric budget admits exactly ``max_trials`` candidates — so a healthy
+    run never needs more reflections than trials. ``0`` disables the cap.
+    """
+    return _coerce_positive_int(
+        value,
+        default=max_trials,
+        allow_zero=True,
+        name="max_reflection_calls",
+    )
+
+
+class _ReflectionBudgetStopper:
+    """Stop callback that halts GEPA once the reflection-LM call budget is spent.
+
+    Reflection calls are made by the proposer *inside* an iteration, while stop
+    callbacks run at the top of the engine loop — so the cap is enforced with at
+    most one iteration of overshoot (one reflection call per component under the
+    default round-robin selector).
+    """
+
+    def __init__(self, optimizer: "GepaOptimizer", max_reflection_calls: int) -> None:
+        self._optimizer = optimizer
+        self.max_reflection_calls = max_reflection_calls
+
+    def __call__(self, gepa_state: Any) -> bool:
+        return self._optimizer._reflection_call_count >= self.max_reflection_calls
 
 
 def _coerce_no_improvement_iterations(value: Any) -> int:
@@ -275,13 +310,19 @@ def _resolve_gepa_finish_reason(
     total_metric_calls: Any,
     max_metric_calls: int,
     stop_file_watched: bool,
+    reflection_calls: int = 0,
+    max_reflection_calls: int = 0,
 ) -> FinishReason | None:
     """Return why GEPA's search ended, or None to leave the label to the caller.
 
     Our own stops ("perfect_score"/"no_improvement") are decided from candidate
     full-eval (valset) scores, exactly like the stop conditions — same seed
     exclusion and same non-finite filtering, so the label can never claim a stop
-    the stopper did not make.
+    the stopper did not make. "reflection_budget" is decided from the
+    reflection-LM call counter behind _ReflectionBudgetStopper, and is checked
+    before the stop-file branch below: exhausting the reflection budget also
+    ends the run with metric-call budget still on the clock, so the unspent
+    budget alone cannot tell the two apart.
 
     One other exit is distinguishable, and only when gepa can actually produce
     it: with ``run_dir`` set, gepa wires a FileStopper on ``<run_dir>/gepa.stop``
@@ -316,6 +357,13 @@ def _resolve_gepa_finish_reason(
             no_improvement_iterations,
         )
         return "no_improvement"
+    if max_reflection_calls > 0 and reflection_calls >= max_reflection_calls:
+        logger.info(
+            "GEPA stopped early: reflection-LM call budget exhausted (%s/%s).",
+            reflection_calls,
+            max_reflection_calls,
+        )
+        return "reflection_budget"
     if (
         stop_file_watched
         and isinstance(total_metric_calls, int)
@@ -405,6 +453,8 @@ class GepaOptimizer(BaseOptimizer):
         )
         self.n_threads = n_threads
         self._adapter_metric_calls = 0
+        self._reflection_call_count = 0
+        self._max_reflection_calls = 0
         self._adapter = None  # Will be set during optimization
         self._validation_dataset = None
         self._gepa_rescored_scores: list[float] = []
@@ -442,6 +492,42 @@ class GepaOptimizer(BaseOptimizer):
             "model": self.model,
             "n_threads": self.n_threads,
         }
+
+    def _make_reflection_lm(
+        self, context: OptimizationContext
+    ) -> Callable[[str | list[dict[str, str]]], str]:
+        """Build the reflection-LM callable handed to gepa.optimize().
+
+        Passing a callable (instead of the bare model name) routes GEPA's
+        reflection calls through core.llm_calls.call_model, so they are traced
+        as Opik spans (opik_call_type="reflection", cost visible per call),
+        honor the optimizer's model_parameters, and are counted — both into the
+        run-wide llm_call_counter and into _reflection_call_count, which
+        _ReflectionBudgetStopper reads to enforce max_reflection_calls.
+        """
+        metadata = _llm_calls.build_llm_call_metadata(self, "reflection")
+
+        def _reflection_lm(prompt: str | list[dict[str, str]]) -> str:
+            messages = (
+                [{"role": "user", "content": prompt}]
+                if isinstance(prompt, str)
+                else list(prompt)
+            )
+            # Count before calling: a failed attempt still spent tokens.
+            self._reflection_call_count += 1
+            return cast(
+                str,
+                _llm_calls.call_model(
+                    messages=messages,
+                    model=self.model,
+                    model_parameters=self.model_parameters,
+                    metadata=metadata,
+                    optimization_id=context.optimization_id,
+                    project_name=context.project_name,
+                ),
+            )
+
+        return _reflection_lm
 
     def pre_optimize(self, context: OptimizationContext) -> None:
         """Set up GEPA-specific state before optimization."""
@@ -609,10 +695,19 @@ class GepaOptimizer(BaseOptimizer):
             max_metric_calls=max_metric_calls,
         )
 
+        # Reflection-LM calls are not metric calls, so max_metric_calls does not
+        # bound them — they get their own ceiling (OPIK-7521). 0 disables the cap.
+        max_reflection_calls = _coerce_max_reflection_calls(
+            context.extra_params.get("max_reflection_calls"),
+            max_trials=max_trials,
+        )
+        self._max_reflection_calls = max_reflection_calls
+
         train_insts = helpers.build_data_insts(train_items, input_key, output_key)
         val_insts = helpers.build_data_insts(val_items, input_key, output_key)
 
         self._adapter_metric_calls = 0
+        self._reflection_call_count = 0
 
         if self.agent is None:
             raise ValueError("GepaOptimizer requires an agent to run evaluations.")
@@ -642,6 +737,8 @@ class GepaOptimizer(BaseOptimizer):
         stop_callbacks, no_improvement_stopper = _build_gepa_stop_callbacks(
             self.perfect_score, no_improvement_iterations
         )
+        if max_reflection_calls > 0:
+            stop_callbacks.append(_ReflectionBudgetStopper(self, max_reflection_calls))
 
         use_adapter_progress_bar = display_progress_bar if self.verbose == 0 else False
 
@@ -661,7 +758,7 @@ class GepaOptimizer(BaseOptimizer):
                 "valset": val_insts,
                 "adapter": adapter,
                 "task_lm": None,
-                "reflection_lm": self.model,
+                "reflection_lm": self._make_reflection_lm(context),
                 "candidate_selection_strategy": candidate_selection_strategy,
                 # Replaces GEPA's default instruction-proposal prompt, which
                 # instructs the reflection LM to inline example content and so
@@ -705,9 +802,16 @@ class GepaOptimizer(BaseOptimizer):
             total_metric_calls=getattr(gepa_result, "total_metric_calls", None),
             max_metric_calls=max_metric_calls,
             stop_file_watched=run_dir is not None,
+            reflection_calls=self._reflection_call_count,
+            max_reflection_calls=max_reflection_calls,
         )
         context.finish_reason = (
             context.finish_reason or gepa_finish_reason or "max_trials"
+        )
+        logger.info(
+            "GEPA made %s reflection-LM call(s) (budget: %s).",
+            self._reflection_call_count,
+            max_reflection_calls or "unlimited",
         )
 
         # Filter duplicate candidates based on content

@@ -11,6 +11,7 @@ from opik_optimizer import GepaOptimizer, constants
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
     MIN_EXPECTED_REFLECTION_ITERATIONS,
     CandidateScoreThresholdStopper,
+    _ReflectionBudgetStopper,
     _build_gepa_stop_callbacks,
     _coerce_no_improvement_iterations,
     _coerce_positive_int,
@@ -96,11 +97,15 @@ class TestGepaStopCallbackWiring:
         )
 
         stoppers = captured["stop_callbacks"]
-        assert len(stoppers) == 2
+        assert len(stoppers) == 3
         assert isinstance(stoppers[0], ScoreThresholdStopper)
         assert stoppers[0].threshold == GepaOptimizer(model="gpt-4o-mini").perfect_score
         assert isinstance(stoppers[1], NoImprovementStopper)
         assert stoppers[1].max_iterations_without_improvement == 10
+        # Reflection-LM calls are outside max_metric_calls, so they get their
+        # own budget stopper (OPIK-7521); default cap = max_trials.
+        assert isinstance(stoppers[2], _ReflectionBudgetStopper)
+        assert stoppers[2].max_reflection_calls == 2
 
     def test_no_improvement_stopper_disabled_with_zero(
         self,
@@ -122,8 +127,9 @@ class TestGepaStopCallbackWiring:
         )
 
         stoppers = captured["stop_callbacks"]
-        assert len(stoppers) == 1
+        assert len(stoppers) == 2
         assert isinstance(stoppers[0], ScoreThresholdStopper)
+        assert isinstance(stoppers[1], _ReflectionBudgetStopper)
 
     def test_no_improvement_iterations_override(
         self,
