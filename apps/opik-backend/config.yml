@@ -1074,12 +1074,21 @@ optimizationStalledReaper:
   # Description: A run stuck in INITIALIZED longer than this is marked ERROR (the worker should call
   #   mark_running within seconds; kept above normal queue latency to tolerate a backlog)
   initializedTimeout: ${OPTIMIZATION_STALLED_REAPER_INITIALIZED_TIMEOUT:-5m}
-  # Default: 8h
-  # Description: A run stuck in RUNNING longer than this is marked ERROR. MUST exceed the worker's max
-  #   execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, default 6h = 21600s) plus a buffer, since the row
-  #   has no per-progress heartbeat and last_updated_at only advances on a status change. If you raise
-  #   the worker timeout, raise this too or healthy long runs will be reaped.
-  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-8h}
+  # Default: 30m
+  # Description: A RUNNING run showing no activity for longer than this is marked ERROR. Activity is
+  #   liveness derived from run progress — the newest of last_updated_at, the latest trial experiment's
+  #   created_at, and the latest experiment item's created_at — so a healthy multi-hour run is never
+  #   reaped while it keeps evaluating items, and this does NOT need to exceed the worker's execution
+  #   timeout (OPTSTUDIO_EXECUTION_TIMEOUT, 6h). It MUST stay above the longest legitimate gap between
+  #   progress signals (one dataset-item evaluation plus the worker's between-trial thinking time), or a
+  #   slow-but-alive run gets reaped mid-flight.
+  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-30m}
+  # Default: 24h
+  # Description: Absolute ceiling for a RUNNING run measured from its last status change, reaped even if
+  #   trial/item writes are still arriving (zombie-worker backstop; preserves the "a run can never stay
+  #   stuck indefinitely" guarantee). MUST exceed the worker's execution timeout
+  #   (OPTSTUDIO_EXECUTION_TIMEOUT, 6h) plus a buffer, and must not be below runningTimeout.
+  runningHardTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_HARD_TIMEOUT:-24h}
   # Default: 7d
   # Description: Added to max(initializedTimeout, runningTimeout) to size the last_updated_at floor of the
   #   reaper's scan. Pure reaper-downtime insurance (a run that stalled just before the reaper went down is

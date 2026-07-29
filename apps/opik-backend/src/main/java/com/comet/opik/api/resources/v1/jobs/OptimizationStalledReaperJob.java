@@ -29,10 +29,11 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * If the worker never runs (worker down, Redis/queue unreachable, job lost) or crashes before it can
  * report, the run is frozen on {@code INITIALIZED} (or {@code RUNNING}) forever with no error surfaced.
  * This reaper is the environment-independent safety net that guarantees a run can never stay stuck
- * indefinitely: it finds runs whose latest status is non-terminal and older than the configured
- * threshold and asks {@link OptimizationService#reconcileStalledStudioOptimizations} to mark them
- * failed with a clear reason. A distributed lock with hold-until-expiry keeps only one instance
- * reconciling per cycle.
+ * indefinitely: it finds runs whose latest status is non-terminal and whose liveness — the row's
+ * {@code last_updated_at} or, for {@code RUNNING} runs, the latest trial experiment's {@code created_at}
+ * (OPIK-7459) — is older than the configured threshold, and asks
+ * {@link OptimizationService#reconcileStalledStudioOptimizations} to mark them failed with a clear
+ * reason. A distributed lock with hold-until-expiry keeps only one instance reconciling per cycle.
  */
 @Slf4j
 @Singleton
@@ -80,6 +81,7 @@ public class OptimizationStalledReaperJob extends Job implements InterruptableJo
                     return optimizationService.reconcileStalledStudioOptimizations(
                             config.initializedTimeout().toJavaDuration(),
                             config.runningTimeout().toJavaDuration(),
+                            config.runningHardTimeout().toJavaDuration(),
                             config.lookbackMargin().toJavaDuration(),
                             config.batchSize())
                             .doOnSuccess(count -> {

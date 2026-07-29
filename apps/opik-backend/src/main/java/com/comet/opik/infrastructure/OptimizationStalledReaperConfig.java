@@ -32,13 +32,24 @@ import java.util.concurrent.TimeUnit;
  *        {@code ERROR}. The worker is expected to call mark_running within seconds of picking the job
  *        up, so this can be short — but it is kept comfortably above normal queue latency to avoid
  *        killing a run that is merely waiting behind a backlog.
- * @param runningTimeout a run stuck in {@code RUNNING} longer than this is transitioned to {@code ERROR}.
- *        There is no per-progress heartbeat on the optimization row (last_updated_at only advances on a
- *        status change), so this MUST be set above the worker's maximum execution timeout
- *        ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) plus a buffer, otherwise a legitimately long
- *        run would be reaped mid-flight. The {@code @MinDuration} floor is pinned to that 6h worker
- *        default so a below-worker-timeout override fails fast at boot instead of silently reaping
- *        in-flight runs (same fail-fast intent as {@link #isLockDurationBelowJobInterval()}).
+ * @param runningTimeout a {@code RUNNING} run showing no <em>activity</em> for longer than this is
+ *        transitioned to {@code ERROR}. Activity is liveness derived from run progress (OPIK-7459): the
+ *        newest of the row's {@code last_updated_at}, the latest trial experiment's {@code created_at},
+ *        and the latest experiment item's {@code created_at} — a healthy run keeps creating trial
+ *        experiments and, within a trial, one experiment item per evaluated dataset item, so this no
+ *        longer needs to exceed the worker's maximum execution timeout
+ *        ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) and can be minutes. What it MUST stay above is
+ *        the longest legitimate gap between progress signals — roughly one dataset-item evaluation plus
+ *        the worker's between-trial thinking time — or a slow-but-alive run gets reaped mid-flight; the
+ *        {@code @MinDuration} floor guards the pathological end of that (same fail-fast intent as
+ *        {@link #isLockDurationBelowJobInterval()}).
+ * @param runningHardTimeout absolute ceiling for a {@code RUNNING} run measured from its last status
+ *        change, reaped even when trial/item writes are still arriving. This preserves the pre-OPIK-7459
+ *        "a run can never stay stuck indefinitely" guarantee against a zombie worker that keeps producing
+ *        rows without ever reporting a terminal status. MUST exceed the worker's maximum execution
+ *        timeout ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) plus a buffer — the {@code @MinDuration}
+ *        floor is pinned to that 6h default — and MUST NOT be below {@link #runningTimeout()}
+ *        (enforced by {@link #isRunningHardTimeoutAtLeastRunningTimeout()}).
  * @param lookbackMargin added to {@code max(initializedTimeout, runningTimeout)} to size the
  *        {@code last_updated_at >= now - window} floor of the reaper's scan. It is pure reaper-downtime
  *        insurance: a run that stalled just before the reaper became unavailable is still caught once the
@@ -59,7 +70,8 @@ public record OptimizationStalledReaperConfig(
         @NotNull @MinDuration(value = 0, unit = TimeUnit.SECONDS) @MaxDuration(value = 30, unit = TimeUnit.MINUTES) Duration startupDelay,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 6, unit = TimeUnit.HOURS) Duration jobInterval,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 24, unit = TimeUnit.HOURS) Duration initializedTimeout,
-        @NotNull @MinDuration(value = 6, unit = TimeUnit.HOURS) @MaxDuration(value = 7, unit = TimeUnit.DAYS) Duration runningTimeout,
+        @NotNull @MinDuration(value = 5, unit = TimeUnit.MINUTES) @MaxDuration(value = 7, unit = TimeUnit.DAYS) Duration runningTimeout,
+        @NotNull @MinDuration(value = 6, unit = TimeUnit.HOURS) @MaxDuration(value = 30, unit = TimeUnit.DAYS) Duration runningHardTimeout,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS) @MaxDuration(value = 30, unit = TimeUnit.DAYS) Duration lookbackMargin,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration lockDuration,
         @Min(1) @Max(10_000) int batchSize) {
@@ -73,5 +85,15 @@ public record OptimizationStalledReaperConfig(
     @AssertTrue(message = "optimizationStalledReaper.lockDuration must be less than jobInterval") public boolean isLockDurationBelowJobInterval() {
         return lockDuration == null || jobInterval == null
                 || lockDuration.toMilliseconds() < jobInterval.toMilliseconds();
+    }
+
+    /**
+     * The hard ceiling must not undercut the progress timeout — otherwise the ceiling, which ignores the
+     * progress signal, would reap healthy runs before the progress-based check even gets a say.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "optimizationStalledReaper.runningHardTimeout must not be less than runningTimeout") public boolean isRunningHardTimeoutAtLeastRunningTimeout() {
+        return runningHardTimeout == null || runningTimeout == null
+                || runningHardTimeout.toMilliseconds() >= runningTimeout.toMilliseconds();
     }
 }

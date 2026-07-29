@@ -33,6 +33,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -81,7 +82,7 @@ public interface OptimizationService {
      * @return the number of runs transitioned to ERROR in this pass.
      */
     Mono<Long> reconcileStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
-            Duration lookbackMargin, int batchSize);
+            Duration runningHardTimeout, Duration lookbackMargin, int batchSize);
 }
 
 @Singleton
@@ -358,6 +359,12 @@ class OptimizationServiceImpl implements OptimizationService {
 
     private Mono<Long> applyUpdate(@NonNull UUID id, @NonNull OptimizationUpdate update) {
         return optimizationDAO.getById(id)
+                // getById's FIND drops runs whose related data it cannot map (e.g. a trial item pointing
+                // at a still-unfinished trace — exactly what a worker killed mid-trial leaves behind). A
+                // status write must still land on such a run, or neither the worker's terminal report nor
+                // the stalled-run reaper can ever move it off RUNNING (OPIK-7459). The raw-row fallback
+                // carries null aggregates, which only degrades the completion analytics event.
+                .switchIfEmpty(Mono.defer(() -> optimizationDAO.getRowById(id)))
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -661,11 +668,13 @@ class OptimizationServiceImpl implements OptimizationService {
     @Override
     @WithSpan
     public Mono<Long> reconcileStalledStudioOptimizations(@NonNull Duration initializedTimeout,
-            @NonNull Duration runningTimeout, @NonNull Duration lookbackMargin, int batchSize) {
-        return optimizationDAO.findStalledStudioOptimizations(initializedTimeout, runningTimeout, lookbackMargin,
-                batchSize)
+            @NonNull Duration runningTimeout, @NonNull Duration runningHardTimeout, @NonNull Duration lookbackMargin,
+            int batchSize) {
+        return optimizationDAO.findStalledStudioOptimizations(initializedTimeout, runningTimeout, runningHardTimeout,
+                lookbackMargin, batchSize)
                 // Sequential: stalled runs are rare and this keeps the reaper's DB/Redis footprint small.
-                .concatMap(stalled -> markStalledOptimizationAsError(stalled, initializedTimeout, runningTimeout))
+                .concatMap(stalled -> markStalledOptimizationAsError(stalled, initializedTimeout, runningTimeout,
+                        runningHardTimeout))
                 .reduce(0L, Long::sum);
     }
 
@@ -676,20 +685,26 @@ class OptimizationServiceImpl implements OptimizationService {
      * the overall pass: a single row's failure is logged and counted as 0.
      */
     private Mono<Long> markStalledOptimizationAsError(OptimizationDAO.StalledOptimization stalled,
-            Duration initializedTimeout, Duration runningTimeout) {
+            Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout) {
         UUID id = stalled.id();
         String workspaceId = stalled.workspaceId();
 
-        // Re-read under the workspace context and only flip if the run is still non-terminal: this
-        // closes the (tiny) race where the worker reports a terminal status between the reaper's query
-        // and this update, which would otherwise overwrite a genuine completion/cancellation with ERROR.
-        return optimizationDAO.getById(id)
+        // Re-read under the workspace context and only flip if the run is still non-terminal AND still
+        // dead by the same liveness the reaper query used: the fleet-wide query and this update are not
+        // atomic, so a terminal status reported in between (status filter) or a trial/item written in
+        // between (activity re-check, OPIK-7459) must veto the transition — otherwise a genuine
+        // completion or a slow-but-alive trial straddling the window boundary gets overwritten with ERROR.
+        // The re-read is a bare status snapshot, NOT getById: see OptimizationDAO#getStatusSnapshotById
+        // for why the full FIND must not gate reaping.
+        return optimizationDAO.getStatusSnapshotById(id)
                 .filter(current -> CANCELLABLE_STATUSES.contains(current.status()))
+                .filterWhen(current -> isStillDead(current, id, runningTimeout, runningHardTimeout))
                 .flatMap(current -> {
                     // Build the reason from the RE-READ current status, not the reaper's stale query
                     // status: a run that moved INITIALIZED -> RUNNING between the query and here must get
                     // the "no activity" message, not the "failed to start" one (review: thiagohora).
-                    String reason = buildStalledReason(current.status(), initializedTimeout, runningTimeout);
+                    String reason = buildStalledReason(current, initializedTimeout, runningTimeout,
+                            runningHardTimeout);
                     log.warn(
                             "Reconciling stalled studio optimization '{}' in workspace '{}' (status '{}') to ERROR: {}",
                             id, workspaceId, current.status(), reason);
@@ -716,12 +731,38 @@ class OptimizationServiceImpl implements OptimizationService {
                 });
     }
 
-    private String buildStalledReason(OptimizationStatus status, Duration initializedTimeout,
-            Duration runningTimeout) {
-        if (status == OptimizationStatus.RUNNING) {
-            return ("[System] Optimization failed: the run showed no activity for over %d hours without "
-                    + "completing and was marked as failed. The optimizer worker may have crashed or been terminated.")
-                    .formatted(runningTimeout.toHours());
+    /**
+     * Re-check that a RUNNING candidate is still dead by the reaper's own liveness definition. Runs past
+     * the hard ceiling are reaped regardless of recent trial/item writes (that ceiling exists precisely
+     * for zombies that keep producing rows), so the activity probe only runs — and only costs a query —
+     * for the rare non-hard-capped candidate. Non-RUNNING candidates (INITIALIZED) have no progress
+     * signal to re-check.
+     */
+    private Mono<Boolean> isStillDead(OptimizationDAO.OptimizationStatusSnapshot current, UUID id,
+            Duration runningTimeout, Duration runningHardTimeout) {
+        if (current.status() != OptimizationStatus.RUNNING || isPastHardCap(current, runningHardTimeout)) {
+            return Mono.just(true);
+        }
+        return optimizationDAO.hasRecentStudioActivity(id, runningTimeout).map(active -> !active);
+    }
+
+    private static boolean isPastHardCap(OptimizationDAO.OptimizationStatusSnapshot current,
+            Duration runningHardTimeout) {
+        return current.lastUpdatedAt().isBefore(Instant.now().minus(runningHardTimeout));
+    }
+
+    private String buildStalledReason(OptimizationDAO.OptimizationStatusSnapshot current,
+            Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout) {
+        if (current.status() == OptimizationStatus.RUNNING) {
+            if (isPastHardCap(current, runningHardTimeout)) {
+                return ("[System] Optimization failed: the run exceeded the maximum running time of %s without "
+                        + "completing and was marked as failed. The optimizer worker may be stuck.")
+                        .formatted(DurationFormatUtils.formatDurationWords(runningHardTimeout.toMillis(), true, true));
+            }
+            return ("[System] Optimization failed: the run made no progress (no status change, new trial, or "
+                    + "evaluated item) for over %s and was marked as failed. The optimizer worker may have crashed "
+                    + "or been terminated.")
+                    .formatted(DurationFormatUtils.formatDurationWords(runningTimeout.toMillis(), true, true));
         }
         return ("[System] Optimization failed to start: the optimizer worker did not begin processing within %d "
                 + "minutes and may be unavailable. The run was marked as failed.")

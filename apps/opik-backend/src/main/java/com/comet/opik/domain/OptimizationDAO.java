@@ -97,7 +97,30 @@ public interface OptimizationDAO {
     Mono<Long> batchSetProjectId(Set<UUID> optimizationIds, UUID projectId);
 
     Flux<StalledOptimization> findStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
-            Duration lookbackMargin, int limit);
+            Duration runningHardTimeout, Duration lookbackMargin, int limit);
+
+    Mono<Boolean> hasRecentStudioActivity(UUID optimizationId, Duration window);
+
+    /**
+     * Latest status + row timestamp of a run, straight off the {@code optimizations} table. The reaper's
+     * pre-update re-read MUST use this instead of {@link #getById} (the full {@code FIND} with its
+     * experiment/trace/score joins): {@code FIND} drops rows whose related data it fails to map — e.g. a
+     * trial item referencing a still-unfinished trace, which is exactly the state a worker killed
+     * mid-trial leaves behind — and an empty re-read makes the reaper skip that run on every cycle,
+     * resurrecting the eternal spinner this job exists to prevent (found by OPIK-7459 e2e).
+     */
+    record OptimizationStatusSnapshot(@NonNull OptimizationStatus status, @NonNull Instant lastUpdatedAt) {
+    }
+
+    Mono<OptimizationStatusSnapshot> getStatusSnapshotById(UUID id);
+
+    /**
+     * The optimization row alone — no experiment/trace/score joins, so the aggregate fields
+     * ({@code numTrials}, scores, durations, costs) are left null. Fallback for write paths when
+     * {@link #getById}'s full {@code FIND} cannot map the run (see {@link #getStatusSnapshotById}):
+     * a status update must never be blocked by unmappable related data.
+     */
+    Mono<Optimization> getRowById(UUID id);
 }
 
 @Singleton
@@ -257,8 +280,30 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * a {@code >=} lower bound can never drop it — it just bounds the scan to recent data instead of the
      * whole (unbounded-growth) table, which the old query re-read + re-sorted every cycle. {@code
      * INITIALIZED} (worker never started) and {@code RUNNING} (worker died mid-run) use separate
-     * upper-bound thresholds because there is no per-progress heartbeat on the row. The caller-supplied
-     * {@code lookbackMargin} sets the floor width and its reaper-downtime tradeoff.
+     * upper-bound thresholds. The caller-supplied {@code lookbackMargin} sets the floor width and its
+     * reaper-downtime tradeoff.
+     *
+     * <p>The {@code RUNNING} branch measures liveness against run <em>progress</em>, not only the row
+     * timestamp (OPIK-7459): {@code last_updated_at} advances only on a status change, but a healthy run
+     * keeps writing trial experiments ({@code experiments.optimization_id}) and, within a trial, one
+     * experiment item per evaluated dataset item. Liveness is the newest of the row timestamp, the latest
+     * trial experiment's {@code created_at}, and the latest experiment item's {@code created_at}; since
+     * the branch already requires {@code latest_updated_at} to be past the threshold, that reduces to the
+     * {@code NOT IN} anti-join below — "and no trial experiment or experiment item was created within the
+     * running timeout either". The item-level signal matters: a single trial evaluates up to
+     * {@code OPTSTUDIO_DATASET_SAMPLES} (1000) items and can legitimately run for a large fraction of the
+     * worker's whole execution timeout ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, 6h), so trial-creation alone
+     * would false-positive mid-trial; items narrow the legitimate silent gap to ~one dataset-item
+     * evaluation, which is what lets the running timeout be minutes. The probe is uncorrelated (evaluated
+     * once per pass); the {@code experiments} scan is floored by {@code :lookback_seconds} (safe: a
+     * candidate run's row timestamp is within the lookback window and its trial experiments are created
+     * after the run starts) and the {@code experiment_items} scan by the running timeout — both floors
+     * prune via the {@code minmax} skip indexes of migration 000112.
+     *
+     * <p>{@code :running_hard_timeout_seconds} is the absolute ceiling that survives the progress signal:
+     * a RUNNING row older than it is reaped even with recent trial/item writes, so a zombie worker that
+     * keeps producing rows without ever reporting a terminal status cannot keep the spinner alive forever
+     * (this preserves the pre-OPIK-7459 "can never stay stuck indefinitely" guarantee).
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
             SELECT
@@ -278,10 +323,76 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 HAVING (latest_status = 'initialized'
                         AND less(latest_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
                     OR (latest_status = 'running'
-                        AND less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds)))
+                        AND (less(latest_updated_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
+                            OR (less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds))
+                                AND toString(id) NOT IN (
+                                    SELECT optimization_id
+                                    FROM experiments
+                                    WHERE optimization_id != ''
+                                      AND greaterOrEquals(created_at, subtractSeconds(now64(6), :lookback_seconds))
+                                      AND (greaterOrEquals(created_at, subtractSeconds(now64(6), :running_timeout_seconds))
+                                          OR id IN (
+                                              SELECT experiment_id
+                                              FROM experiment_items
+                                              WHERE greaterOrEquals(created_at, subtractSeconds(now64(6), :running_timeout_seconds))
+                                          ))
+                                ))))
                 ORDER BY latest_updated_at ASC
                 LIMIT :limit
             )
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Single-run, workspace-scoped mirror of the reaper query's liveness probe: did this optimization
+     * write a trial experiment or an experiment item within the window? Used as the pre-update re-read
+     * guard (OPIK-7459) — the fleet-wide reaper query and the ERROR update are not atomic, so a trial or
+     * item landing in between must veto the transition, exactly like the status re-read vetoes a
+     * terminal-status race. Both scans sit behind the workspace prefix of the primary key plus the
+     * {@code minmax} indexes on {@code optimization_id} (000069) and {@code created_at} (000112).
+     */
+    /** Latest row version by id, no joins — see {@link #getRowById}. */
+    private static final String GET_RAW_BY_ID = """
+            SELECT *
+            FROM optimizations
+            WHERE workspace_id = :workspace_id
+              AND id = :id
+            ORDER BY last_updated_at DESC
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Bare status/timestamp re-read for the reaper — see {@link #getStatusSnapshotById}. The aliases
+     * deliberately differ from the source column names: {@code max(last_updated_at) AS last_updated_at}
+     * would make the CH 26.3 analyzer resolve the {@code argMax} ordering argument to the alias (an
+     * aggregate inside an aggregate, ILLEGAL_AGGREGATION) — same analyzer quirk as
+     * {@link #BATCH_SET_PROJECT_ID}'s subquery guard.
+     */
+    private static final String GET_STATUS_SNAPSHOT = """
+            SELECT
+                argMax(status, last_updated_at) AS latest_status,
+                max(last_updated_at) AS latest_updated_at
+            FROM optimizations
+            WHERE workspace_id = :workspace_id
+              AND id = :id
+            GROUP BY id
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    private static final String HAS_RECENT_STUDIO_ACTIVITY = """
+            SELECT 1
+            FROM experiments
+            WHERE workspace_id = :workspace_id
+              AND optimization_id = :optimization_id
+              AND (greaterOrEquals(created_at, subtractSeconds(now64(6), :window_seconds))
+                  OR id IN (
+                      SELECT experiment_id
+                      FROM experiment_items
+                      WHERE workspace_id = :workspace_id
+                        AND greaterOrEquals(created_at, subtractSeconds(now64(6), :window_seconds))
+                  ))
+            LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -988,58 +1099,62 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Publisher<Optimization> mapToDto(Result result) {
-        return result.map((row, rowMetadata) -> {
-            OptimizationStudioConfig studioConfig = null;
-            String studioConfigJson = row.get("studio_config", String.class);
-            if (StringUtils.isNotEmpty(studioConfigJson)) {
-                try {
-                    studioConfig = JsonUtils.readValue(studioConfigJson, OptimizationStudioConfig.class);
-                } catch (UncheckedIOException e) {
-                    log.error("Failed to deserialize studio_config for optimization: '{}'",
-                            row.get("id", UUID.class), e);
-                }
+        return result.map((row, rowMetadata) -> mapRowColumns(row).toBuilder()
+                .feedbackScores(getFeedbackScores(row, "feedback_scores"))
+                .experimentScores(getFeedbackScores(row, "experiment_scores"))
+                .numTrials(row.get("num_trials", Long.class))
+                .baselineObjectiveScore(row.get("baseline_objective_score", BigDecimal.class))
+                .bestObjectiveScore(row.get("best_objective_score", BigDecimal.class))
+                .baselineDuration(row.get("baseline_duration", BigDecimal.class))
+                .bestDuration(row.get("best_duration", BigDecimal.class))
+                .baselineCost(row.get("baseline_cost", BigDecimal.class))
+                .bestCost(row.get("best_cost", BigDecimal.class))
+                .totalOptimizationCost(row.get("total_optimization_cost", BigDecimal.class))
+                .build());
+    }
+
+    /** Maps the plain {@code optimizations} table columns — everything except FIND's computed aggregates. */
+    private Optimization mapRowColumns(io.r2dbc.spi.Row row) {
+        OptimizationStudioConfig studioConfig = null;
+        String studioConfigJson = row.get("studio_config", String.class);
+        if (StringUtils.isNotEmpty(studioConfigJson)) {
+            try {
+                studioConfig = JsonUtils.readValue(studioConfigJson, OptimizationStudioConfig.class);
+            } catch (UncheckedIOException e) {
+                log.error("Failed to deserialize studio_config for optimization: '{}'",
+                        row.get("id", UUID.class), e);
             }
+        }
 
-            ErrorInfo errorInfo = null;
-            String errorInfoJson = row.get("error_info", String.class);
-            if (StringUtils.isNotBlank(errorInfoJson)) {
-                try {
-                    errorInfo = JsonUtils.readValue(errorInfoJson, ERROR_INFO_TYPE);
-                } catch (UncheckedIOException e) {
-                    log.error("Failed to deserialize error_info for optimization: '{}'",
-                            row.get("id", UUID.class), e);
-                }
+        ErrorInfo errorInfo = null;
+        String errorInfoJson = row.get("error_info", String.class);
+        if (StringUtils.isNotBlank(errorInfoJson)) {
+            try {
+                errorInfo = JsonUtils.readValue(errorInfoJson, ERROR_INFO_TYPE);
+            } catch (UncheckedIOException e) {
+                log.error("Failed to deserialize error_info for optimization: '{}'",
+                        row.get("id", UUID.class), e);
             }
+        }
 
-            String projectIdStr = row.get("project_id", String.class);
-            UUID projectId = StringUtils.isNotBlank(projectIdStr) ? UUID.fromString(projectIdStr) : null;
+        String projectIdStr = row.get("project_id", String.class);
+        UUID projectId = StringUtils.isNotBlank(projectIdStr) ? UUID.fromString(projectIdStr) : null;
 
-            return Optimization.builder()
-                    .id(row.get("id", UUID.class))
-                    .name(row.get("name", String.class))
-                    .datasetId(row.get("dataset_id", UUID.class))
-                    .projectId(projectId)
-                    .objectiveName(row.get("objective_name", String.class))
-                    .status(OptimizationStatus.fromString(row.get("status", String.class)))
-                    .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
-                    .studioConfig(studioConfig)
-                    .errorInfo(errorInfo)
-                    .createdAt(row.get("created_at", Instant.class))
-                    .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                    .createdBy(row.get("created_by", String.class))
-                    .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
-                    .experimentScores(getFeedbackScores(row, "experiment_scores"))
-                    .numTrials(row.get("num_trials", Long.class))
-                    .baselineObjectiveScore(row.get("baseline_objective_score", BigDecimal.class))
-                    .bestObjectiveScore(row.get("best_objective_score", BigDecimal.class))
-                    .baselineDuration(row.get("baseline_duration", BigDecimal.class))
-                    .bestDuration(row.get("best_duration", BigDecimal.class))
-                    .baselineCost(row.get("baseline_cost", BigDecimal.class))
-                    .bestCost(row.get("best_cost", BigDecimal.class))
-                    .totalOptimizationCost(row.get("total_optimization_cost", BigDecimal.class))
-                    .build();
-        });
+        return Optimization.builder()
+                .id(row.get("id", UUID.class))
+                .name(row.get("name", String.class))
+                .datasetId(row.get("dataset_id", UUID.class))
+                .projectId(projectId)
+                .objectiveName(row.get("objective_name", String.class))
+                .status(OptimizationStatus.fromString(row.get("status", String.class)))
+                .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
+                .studioConfig(studioConfig)
+                .errorInfo(errorInfo)
+                .createdAt(row.get("created_at", Instant.class))
+                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .createdBy(row.get("created_by", String.class))
+                .lastUpdatedBy(row.get("last_updated_by", String.class))
+                .build();
     }
 
     private Publisher<DatasetEventInfoHolder> mapDatasetId(Result result) {
@@ -1231,16 +1346,18 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     @Override
     public Flux<StalledOptimization> findStalledStudioOptimizations(@NonNull Duration initializedTimeout,
-            @NonNull Duration runningTimeout, @NonNull Duration lookbackMargin, int limit) {
+            @NonNull Duration runningTimeout, @NonNull Duration runningHardTimeout, @NonNull Duration lookbackMargin,
+            int limit) {
         // How far back the query scans (the last_updated_at FLOOR that lets the minmax skip index prune
         // granules): the largest timeout plus the configured reaper-downtime margin, so in normal operation
         // the floor is purely a scan bound and never a coverage gap — a run's last status change is only
         // older than this if the reaper was down longer than the margin, in which case that run is not
         // reaped (documented tradeoff, review: thiagohora).
-        long lookbackSeconds = Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds())
-                + lookbackMargin.toSeconds();
-        var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d"
-                .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(), lookbackSeconds, limit);
+        long lookbackSeconds = Math.max(Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds()),
+                runningHardTimeout.toSeconds()) + lookbackMargin.toSeconds();
+        var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, runningHardTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d"
+                .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(),
+                        runningHardTimeout.toSeconds(), lookbackSeconds, limit);
         var template = FilterUtils.getSTWithLogComment(FIND_STALLED_STUDIO_OPTIMIZATIONS,
                 "find_stalled_studio_optimizations", "", "", details);
         return Mono.from(connectionFactory.create())
@@ -1248,6 +1365,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     var statement = connection.createStatement(template.render())
                             .bind("initialized_timeout_seconds", initializedTimeout.toSeconds())
                             .bind("running_timeout_seconds", runningTimeout.toSeconds())
+                            .bind("running_hard_timeout_seconds", runningHardTimeout.toSeconds())
                             .bind("lookback_seconds", lookbackSeconds)
                             .bind("limit", limit);
                     return Flux.from(statement.execute());
@@ -1257,5 +1375,51 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         .workspaceId(row.get("workspace_id", String.class))
                         .status(OptimizationStatus.fromString(row.get("status", String.class)))
                         .build()));
+    }
+
+    @Override
+    public Mono<OptimizationStatusSnapshot> getStatusSnapshotById(@NonNull UUID id) {
+        var template = FilterUtils.getSTWithLogComment(GET_STATUS_SNAPSHOT,
+                "get_optimization_status_snapshot", "", "", "id=%s".formatted(id));
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("id", id);
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, metadata) -> new OptimizationStatusSnapshot(
+                        OptimizationStatus.fromString(row.get("latest_status", String.class)),
+                        row.get("latest_updated_at", Instant.class))))
+                .singleOrEmpty();
+    }
+
+    @Override
+    public Mono<Optimization> getRowById(@NonNull UUID id) {
+        var template = FilterUtils.getSTWithLogComment(GET_RAW_BY_ID,
+                "get_optimization_row_by_id", "", "", "id=%s".formatted(id));
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("id", id);
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, metadata) -> mapRowColumns(row)))
+                .singleOrEmpty();
+    }
+
+    @Override
+    public Mono<Boolean> hasRecentStudioActivity(@NonNull UUID optimizationId, @NonNull Duration window) {
+        var details = "optimizationId=%s, windowSeconds=%d".formatted(optimizationId, window.toSeconds());
+        var template = FilterUtils.getSTWithLogComment(HAS_RECENT_STUDIO_ACTIVITY,
+                "has_recent_studio_activity", "", "", details);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("optimization_id", optimizationId)
+                            .bind("window_seconds", window.toSeconds());
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> Flux.from(result.map((row, metadata) -> true)))
+                .hasElements();
     }
 }

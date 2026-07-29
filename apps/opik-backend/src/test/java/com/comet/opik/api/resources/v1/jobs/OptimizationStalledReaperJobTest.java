@@ -26,7 +26,8 @@ import static org.mockito.Mockito.when;
 class OptimizationStalledReaperJobTest {
 
     private static final Duration INITIALIZED_TIMEOUT = Duration.minutes(5);
-    private static final Duration RUNNING_TIMEOUT = Duration.hours(8);
+    private static final Duration RUNNING_TIMEOUT = Duration.minutes(30);
+    private static final Duration RUNNING_HARD_TIMEOUT = Duration.hours(24);
     private static final Duration LOOKBACK_MARGIN = Duration.days(7);
     private static final int BATCH_SIZE = 42;
 
@@ -46,6 +47,7 @@ class OptimizationStalledReaperJobTest {
                 .jobInterval(Duration.minutes(5))
                 .initializedTimeout(INITIALIZED_TIMEOUT)
                 .runningTimeout(RUNNING_TIMEOUT)
+                .runningHardTimeout(RUNNING_HARD_TIMEOUT)
                 .lookbackMargin(LOOKBACK_MARGIN)
                 .lockDuration(Duration.minutes(4))
                 .batchSize(BATCH_SIZE)
@@ -61,7 +63,7 @@ class OptimizationStalledReaperJobTest {
                 .thenAnswer(invocation -> invocation.<Mono<Long>>getArgument(1));
         when(optimizationService.reconcileStalledStudioOptimizations(
                 INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(),
-                LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE))
+                RUNNING_HARD_TIMEOUT.toJavaDuration(), LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE))
                 .thenReturn(Mono.just(3L));
 
         job.doJob(mock(JobExecutionContext.class));
@@ -70,7 +72,7 @@ class OptimizationStalledReaperJobTest {
         Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
                 .untilAsserted(() -> verify(optimizationService).reconcileStalledStudioOptimizations(
                         INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(),
-                        LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE));
+                        RUNNING_HARD_TIMEOUT.toJavaDuration(), LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE));
     }
 
     @Test
