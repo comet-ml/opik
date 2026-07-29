@@ -756,6 +756,107 @@ class OptimizationsResourceTest {
                     });
         }
 
+        /**
+         * When two candidates tie on the objective score, the best duration and cost are taken from the
+         * earliest-created candidate - the same candidate the baseline resolves to. So under a tie the best and
+         * baseline values must coincide, and because the two candidates are given clearly different costs and
+         * durations, picking the later candidate instead would break that equality. Without a defined tie-break
+         * these two fields are arbitrary: the previous implementation returned different values for the same data
+         * depending only on the query plan.
+         */
+        @Test
+        @DisplayName("Get optimizer by id when candidates tie on score, then best matches the earliest candidate")
+        void getById__whenCandidatesTieOnScore__bestComesFromEarliestCandidate() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "tie-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            var objectiveName = "accuracy";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .build(),
+                    apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Both candidates score identically, so only the tie-break decides which one best_* comes from.
+            var tiedScore = BigDecimal.valueOf(0.75);
+
+            var earliest = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(tiedScore).build()))
+                    .build();
+            experimentResourceClient.create(earliest, apiKey, workspaceName);
+
+            var later = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(tiedScore).build()))
+                    .build();
+            experimentResourceClient.create(later, apiKey, workspaceName);
+
+            // Deliberately divergent cost and trace duration, so choosing the later candidate is observable.
+            createTracesSpansAndItems(earliest, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(3), Instant.now().minusSeconds(2), BigDecimal.valueOf(0.01));
+            createTracesSpansAndItems(later, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(30), Instant.now().minusSeconds(1), BigDecimal.valueOf(0.99));
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual).isNotNull();
+                        assertThat(actual.numTrials()).isEqualTo(2L);
+
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestObjectiveScore(), tiedScore))
+                                .as("both candidates score the same, so the tie-break is what is under test")
+                                .isZero();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineObjectiveScore(), tiedScore))
+                                .isZero();
+
+                        assertThat(actual.bestCost()).isNotNull();
+                        assertThat(actual.baselineCost()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestCost(), actual.baselineCost()))
+                                .as("under a tie the best candidate is the earliest one, which the baseline also "
+                                        + "resolves to, so the two costs must agree")
+                                .isZero();
+
+                        assertThat(actual.bestDuration()).isNotNull();
+                        assertThat(actual.baselineDuration()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestDuration(), actual.baselineDuration()))
+                                .as("likewise for duration, which differs sharply between the two candidates")
+                                .isZero();
+                    });
+        }
+
         private void createTracesSpansAndItems(Experiment experiment, List<DatasetItem> datasetItems,
                 Project project, String apiKey, String workspaceName,
                 Instant traceStart, Instant traceEnd, BigDecimal costPerSpan) {

@@ -636,6 +636,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM optimization_final AS o
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -944,18 +945,22 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private Mono<Optimization.OptimizationPage> find(int page, int size, long total,
             OptimizationSearchCriteria searchCriteria, boolean hasExperiments) {
-        var template = TemplateUtils.newST(hasExperiments ? FIND : FIND_WITHOUT_EXPERIMENTS);
-
-        bindTemplateParams(template, searchCriteria);
-
         var offset = (page - 1) * size;
 
-        template.add("limit", size);
-        template.add("offset", offset);
-
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = hasExperiments
+                            ? TemplateUtils.newST(FIND)
+                            : FilterUtils.getSTWithLogComment(FIND_WITHOUT_EXPERIMENTS,
+                                    "find_optimizations_without_experiments", workspaceId, userName, "");
+
+                    bindTemplateParams(template, searchCriteria);
+
+                    template.add("limit", size);
+                    template.add("offset", offset);
+
                     Statement statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
                             .bind("limit", size)
                             .bind("offset", offset);
 
@@ -963,8 +968,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     // and binding a parameter the rendered query does not contain fails the statement.
                     bindQueryParams(searchCriteria, statement, hasExperiments);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(this::mapToDto)
                 .collectList()
                 .map(optimizations -> new Optimization.OptimizationPage(page, optimizations.size(), total,
