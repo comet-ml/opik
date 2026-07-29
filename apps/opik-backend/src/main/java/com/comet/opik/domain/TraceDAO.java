@@ -132,7 +132,9 @@ public interface TraceDAO {
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
 
-    Mono<Map<UUID, UUID>> getProjectIdsByTraceIdsBounded(Set<UUID> traceIds);
+    Mono<Map<UUID, Set<UUID>>> getAllProjectIdsByTraceIds(Set<UUID> traceIds);
+
+    Mono<Map<UUID, Set<UUID>>> getAllProjectIdsByTraceIdsBounded(Set<UUID> traceIds);
 
     Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
@@ -1878,11 +1880,19 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * Always filters by the full {@code (workspace_id, project_id, id)} sort key. {@code project_id} is mandatory:
+     * the delete path resolves each id's owning project(s) up front and issues one delete per project group, so a
+     * delete never ignores part of the dedup key and over-deletes a reused id across projects (OPIK-7483). A
+     * project-less delete is also unsupported once {@code traces} is a Distributed table (OPIK-7455). It carries no
+     * {@code id_at}/time predicate on purpose, so it still deletes rows whose {@code id_at} is untrustworthy (e.g. a
+     * wrapped timestamp) - unlike the partition-pruned resolver, correctness here does not depend on {@code id_at}.
+     */
     private static final String DELETE_BY_ID = """
             DELETE FROM traces
             WHERE id IN :ids
             AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
+            AND project_id = :project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2146,21 +2156,37 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /**
-     * Partition-bounded variant used on the delete path. id_at is MATERIALIZED as
-     * UUIDv7ToDateTime(toUUID(id)) (migration 000091), so bounding toMonday(id_at) by the id set's own
-     * min/max (mirrors SELECT_PROJECT_ID_FROM_TRACE) is exact - it never drops a valid id - while keeping
-     * the lookup on the ids' own weekly partitions instead of scanning all cold history once traces tier.
+     * Resolves every distinct {@code (id, project_id)} pair for a set of trace ids. A reused id maps to <b>all</b> its
+     * owning projects - unlike {@code SELECT_PROJECT_IDS_BY_TRACE_IDS}'s {@code any(project_id)} - so the delete path
+     * removes it from each under the full sort key (OPIK-7483). {@code DISTINCT} (not FINAL) suffices: lightweight-delete
+     * masks are honored at read time, so a deleted pair never surfaces and a live pair always does, regardless of
+     * version. Has no time predicate, so it reads every partition; the delete path uses it only as the fallback for the
+     * ids the bounded pass could not resolve, keeping that scan minimal.
      */
-    private static final String SELECT_PROJECT_IDS_BY_TRACE_IDS_BOUNDED = """
-            SELECT
-                id,
-                any(project_id) AS project_id
+    private static final String SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS = """
+            SELECT DISTINCT id, project_id
+            FROM traces
+            WHERE id IN :trace_ids
+            AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /**
+     * Partition-pruned fast pass of {@code SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS}. Bounds {@code toMonday(id_at)} (the
+     * future weekly partition key; {@code id_at} is MATERIALIZED from the UUIDv7 id, migration 000091) to the id set's
+     * own min/max, so it reads only the ids' own weekly partitions instead of every partition. For well-formed UUIDv7
+     * ids {@code id_at} is monotonic in id, so the window resolves them all; malformed ids whose {@code id_at} is not
+     * monotonic (e.g. a wrapped timestamp, OPIK-7456) can fall outside it, so the delete path re-resolves whatever this
+     * pass leaves unresolved via the unbounded query - the bounded query is never the sole resolver for a delete.
+     */
+    private static final String SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS_BOUNDED = """
+            SELECT DISTINCT id, project_id
             FROM traces
             WHERE id IN :trace_ids
             AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:min_id), 'UTC'))
             AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:max_id), 'UTC'))
             AND workspace_id = :workspace_id
-            GROUP BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -3407,24 +3433,18 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull Connection connection) {
+    public Mono<Void> delete(Set<UUID> ids, UUID projectId, @NonNull Connection connection) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
-        log.info("Deleting traces, count '{}'{}", ids.size(),
-                projectId != null ? " for project id '" + projectId + "'" : "");
+        log.info("Deleting traces, count '{}', project id '{}'", ids.size(), projectId);
 
         return makeMonoContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(DELETE_BY_ID, "delete_traces", workspaceId, userName, ids.size());
-            Optional.ofNullable(projectId)
-                    .ifPresent(id -> template.add("project_id", id));
+            var template = getSTWithLogComment(DELETE_BY_ID, "delete_traces", workspaceId, userName,
+                    "trace_ids_size=%s, project_id=%s".formatted(ids.size(), projectId));
 
             var statement = connection.createStatement(template.render())
-                    .bind("ids", ids.toArray(UUID[]::new));
-
-            if (projectId != null) {
-                statement.bind("project_id", projectId);
-            }
-
-            statement.bind("workspace_id", workspaceId);
+                    .bind("ids", ids.toArray(UUID[]::new))
+                    .bind("project_id", projectId)
+                    .bind("workspace_id", workspaceId);
 
             var segment = startSegment("traces", "Clickhouse", "delete");
             return Mono.from(statement.execute())
@@ -4557,29 +4577,54 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Mono<Map<UUID, UUID>> collectTraceIdToProjectId(Statement statement) {
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
-                        row.get("project_id", UUID.class))))
+        return traceIdProjectIdPairs(statement)
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
+    private Mono<Map<UUID, Set<UUID>>> collectTraceIdToProjectIds(Statement statement) {
+        return traceIdProjectIdPairs(statement)
+                .collect(Collectors.groupingBy(Map.Entry::getKey,
+                        Collectors.mapping(Map.Entry::getValue, toSet())));
+    }
+
+    private Flux<Map.Entry<UUID, UUID>> traceIdProjectIdPairs(Statement statement) {
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .flatMapMany(result -> result.map((row, _) -> Map.entry(row.get("id", UUID.class),
+                        row.get("project_id", UUID.class))));
+    }
+
     @Override
-    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIdsBounded(Set<UUID> traceIds) {
+    @WithSpan
+    public Mono<Map<UUID, Set<UUID>>> getAllProjectIdsByTraceIds(Set<UUID> traceIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS, "get_all_project_ids_by_trace_ids",
+                    workspaceId, userName, "trace_ids_size=%s".formatted(traceIds.size()));
+            var statement = connection.createStatement(template.render())
+                    .bind("trace_ids", traceIds.toArray(UUID[]::new));
+            return collectTraceIdToProjectIds(statement);
+        }));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, Set<UUID>>> getAllProjectIdsByTraceIdsBounded(Set<UUID> traceIds) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
 
         var minId = Collections.min(traceIds);
         var maxId = Collections.max(traceIds);
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS_BOUNDED,
-                    "get_project_ids_by_trace_ids_bounded", workspaceId, userName, traceIds.size());
+            var template = getSTWithLogComment(SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS_BOUNDED,
+                    "get_all_project_ids_by_trace_ids_bounded", workspaceId, userName,
+                    "trace_ids_size=%s".formatted(traceIds.size()));
 
             var statement = connection.createStatement(template.render())
                     .bind("trace_ids", traceIds.toArray(UUID[]::new))
                     .bind("min_id", minId)
                     .bind("max_id", maxId);
 
-            return collectTraceIdToProjectId(statement);
+            return collectTraceIdToProjectIds(statement);
         }));
     }
 

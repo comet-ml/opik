@@ -31,6 +31,7 @@ import uk.co.jemos.podam.api.PodamFactoryImpl;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -44,6 +45,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -289,6 +291,85 @@ class TraceServiceImplTest {
                     .hasMessageContaining("Error deleting traces");
 
             verify(traceDao).delete(ids, projectId, connection);
+            verifyNoInteractions(deletionEventDAO, eventBus);
+        }
+
+        @Test
+        void deleteWithoutProjectIdRemovesReusedIdFromEveryOwningProject() {
+            var reusedId = idGenerator.generateId();
+            var soloId = idGenerator.generateId();
+            var projectA = idGenerator.generateId();
+            var projectB = idGenerator.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var ids = Set.of(reusedId, soloId);
+            var connection = mockDeleteFlow();
+
+            // Bounded fast pass resolves everything: reusedId lives in A and B, soloId only in A.
+            when(traceDao.getAllProjectIdsByTraceIdsBounded(ids))
+                    .thenReturn(Mono.just(Map.of(reusedId, Set.of(projectA, projectB), soloId, Set.of(projectA))));
+            when(traceDao.delete(Set.of(reusedId, soloId), projectA, connection)).thenReturn(Mono.empty());
+            when(traceDao.delete(Set.of(reusedId), projectB, connection)).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .delete(ids, null)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            // Each delete carries the resolved project (full key): A gets both ids, B gets only the reused id.
+            verify(traceDao).delete(Set.of(reusedId, soloId), projectA, connection);
+            verify(traceDao).delete(Set.of(reusedId), projectB, connection);
+            // Bounded resolved all, so the unbounded fallback is not queried.
+            verify(traceDao, never()).getAllProjectIdsByTraceIds(any());
+            verifyNoInteractions(deletionEventDAO);
+        }
+
+        @Test
+        void deleteWithoutProjectIdFallsBackToUnboundedForBoundedMisses() {
+            var resolvedId = idGenerator.generateId();
+            var missedId = idGenerator.generateId();
+            var projectA = idGenerator.generateId();
+            var projectB = idGenerator.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var ids = Set.of(resolvedId, missedId);
+            var connection = mockDeleteFlow();
+
+            // Bounded window resolves only resolvedId; missedId (e.g. a wrapped id_at) is re-resolved unbounded.
+            when(traceDao.getAllProjectIdsByTraceIdsBounded(ids))
+                    .thenReturn(Mono.just(Map.of(resolvedId, Set.of(projectA))));
+            when(traceDao.getAllProjectIdsByTraceIds(Set.of(missedId)))
+                    .thenReturn(Mono.just(Map.of(missedId, Set.of(projectB))));
+            when(traceDao.delete(Set.of(resolvedId), projectA, connection)).thenReturn(Mono.empty());
+            when(traceDao.delete(Set.of(missedId), projectB, connection)).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .delete(ids, null)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).getAllProjectIdsByTraceIds(Set.of(missedId));
+            verify(traceDao).delete(Set.of(resolvedId), projectA, connection);
+            verify(traceDao).delete(Set.of(missedId), projectB, connection);
+        }
+
+        @Test
+        void deleteWithoutProjectIdSkipsIdsThatResolveToNoProject() {
+            var ids = Set.of(idGenerator.generateId(), idGenerator.generateId());
+            var workspaceId = UUID.randomUUID().toString();
+            mockDeleteFlow();
+
+            // Both passes come back empty: the ids have no live row, so the delete is a no-op.
+            when(traceDao.getAllProjectIdsByTraceIdsBounded(ids)).thenReturn(Mono.just(Map.of()));
+            when(traceDao.getAllProjectIdsByTraceIds(ids)).thenReturn(Mono.just(Map.of()));
+
+            assertDoesNotThrow(() -> traceService
+                    .delete(ids, null)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao, never()).delete(any(), any(), any());
             verifyNoInteractions(deletionEventDAO, eventBus);
         }
 

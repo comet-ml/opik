@@ -56,6 +56,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -484,6 +485,13 @@ class TraceServiceImpl implements TraceService {
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id.toString()))));
     }
 
+    /**
+     * Deletes the given trace ids. With an explicit {@code projectId}, deletes only within that project. Without one
+     * (delete-by-id, or a batch spanning projects), resolves every owning project for each id and deletes it under the
+     * full {@code (workspace_id, project_id, id)} key, once per project group - so an id reused across projects is
+     * removed from all of them and no delete is ever project-less (OPIK-7483). Ids with no live row are already gone,
+     * so they are skipped.
+     */
     @Override
     @WithSpan
     public Mono<Void> delete(@NonNull Set<UUID> ids, UUID projectId) {
@@ -494,27 +502,54 @@ class TraceServiceImpl implements TraceService {
             return template.nonTransaction(connection -> delete(ids, projectId, connection));
         }
 
-        // No project provided (e.g. delete-by-id, or a batch spanning projects): resolve each trace's owning
-        // project and delete per project group, so every delete - and its async span/feedback cascade carried
-        // by the TracesDeleted event - filters by project_id and prunes on the (workspace_id, project_id)
-        // sorting-key prefix instead of scanning the whole workspace. Trace ids with no resolvable project
-        // (the trace row is already gone) fall back to a workspace-scoped delete to still clean up orphan rows.
-        log.info("Resolving owning projects for trace ids to delete per project group (count={})", ids.size());
-        return dao.getProjectIdsByTraceIdsBounded(ids)
-                .flatMap(traceToProject -> {
-                    var idsByProject = ids.stream()
-                            .filter(traceToProject::containsKey)
-                            .collect(Collectors.groupingBy(traceToProject::get, Collectors.toSet()));
-                    var unresolvedIds = ids.stream()
-                            .filter(id -> !traceToProject.containsKey(id))
-                            .collect(Collectors.toSet());
+        log.info("Resolving owning projects to delete traces per project group, count '{}'", ids.size());
+        return resolveOwningProjects(ids)
+                .flatMap(projectsByTrace -> {
+                    var idsByProject = projectsByTrace.entrySet().stream()
+                            .flatMap(entry -> entry.getValue().stream()
+                                    .map(project -> Map.entry(project, entry.getKey())))
+                            .collect(Collectors.groupingBy(Map.Entry::getKey,
+                                    Collectors.mapping(Map.Entry::getValue, Collectors.toSet())));
+
+                    // Resolution only returns queried ids, so its key set is a subset of ids.
+                    int unresolvedCount = ids.size() - projectsByTrace.size();
+                    if (unresolvedCount > 0) {
+                        log.info("Skipping trace ids with no owning project, already absent, skipped '{}', total '{}'",
+                                unresolvedCount, ids.size());
+                    }
 
                     return template.nonTransaction(connection -> Flux.fromIterable(idsByProject.entrySet())
                             .concatMap(group -> delete(group.getValue(), group.getKey(), connection))
-                            .then(Mono.defer(() -> unresolvedIds.isEmpty()
-                                    ? Mono.empty()
-                                    : delete(unresolvedIds, null, connection)))
                             .then());
+                });
+    }
+
+    /**
+     * Resolves every owning project for each id via a bounded (partition-pruned) fast pass, then re-resolves only the
+     * ids the bounded pass left unresolved via an unbounded pass, so rows the bounded window skips - malformed ids
+     * whose id_at is not monotonic in id (e.g. a wrapped timestamp, OPIK-7456) - are still found with their project.
+     * The bounded query is never the sole resolver for a delete. Returns id -> set of owning projects; ids absent
+     * from the result have no live row.
+     */
+    private Mono<Map<UUID, Set<UUID>>> resolveOwningProjects(Set<UUID> ids) {
+        return dao.getAllProjectIdsByTraceIdsBounded(ids)
+                .flatMap(bounded -> {
+                    var missSet = ids.stream()
+                            .filter(id -> !bounded.containsKey(id))
+                            .collect(Collectors.toSet());
+                    if (missSet.isEmpty()) {
+                        return Mono.just(bounded);
+                    }
+                    log.info(
+                            "Bounded project resolution incomplete, re-resolving miss set unbounded, missed '{}', total '{}'",
+                            missSet.size(), ids.size());
+                    return dao.getAllProjectIdsByTraceIds(missSet)
+                            .map(unbounded -> {
+                                // Keys are disjoint: unbounded only carries the miss set, none of which is in bounded.
+                                var merged = new HashMap<>(bounded);
+                                merged.putAll(unbounded);
+                                return merged;
+                            });
                 });
     }
 
