@@ -575,7 +575,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * so the optimization set considered here is a superset of {@code optimization_final}. That makes a negative
      * answer conservative: if this finds nothing, the narrowed set has nothing either.
      */
-    private static final String HAS_EXPERIMENTS_IN_SCOPE = """
+    private static final String HAS_EXPERIMENTS_FOR_DIRECT_FILTERS = """
             SELECT 1 AS has_experiments
             FROM experiments
             WHERE workspace_id = :workspace_id
@@ -585,10 +585,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                 <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
-                <if(id)>AND id = :id <endif>
                 <if(project_id)>AND project_id = :project_id <endif>
             )
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -879,24 +879,28 @@ class OptimizationDAOImpl implements OptimizationDAO {
     @Override
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
-        return Mono.zip(getCount(searchCriteria), hasExperimentsInScope(searchCriteria))
-                .flatMap(results -> find(page, size, results.getT1(), searchCriteria, results.getT2()))
+        return getCount(searchCriteria)
+                .filter(totalCount -> totalCount > 0)
+                .flatMap(totalCount -> hasExperimentsForDirectFilters(searchCriteria)
+                        .flatMap(hasExperiments -> find(page, size, totalCount, searchCriteria, hasExperiments)))
                 .defaultIfEmpty(Optimization.OptimizationPage.empty(page, List.of()));
     }
 
-    private Mono<Boolean> hasExperimentsInScope(OptimizationSearchCriteria searchCriteria) {
-        var template = TemplateUtils.newST(HAS_EXPERIMENTS_IN_SCOPE);
-
-        bindTemplateParams(template, searchCriteria);
-
+    private Mono<Boolean> hasExperimentsForDirectFilters(OptimizationSearchCriteria searchCriteria) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    Statement statement = connection.createStatement(template.render());
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = FilterUtils.getSTWithLogComment(HAS_EXPERIMENTS_FOR_DIRECT_FILTERS,
+                            "has_optimization_experiments", workspaceId, userName, "");
 
-                    bindQueryParams(searchCriteria, statement, false);
+                    bindScopeTemplateParams(template, searchCriteria);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    Statement statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId);
+
+                    bindScopeQueryParams(searchCriteria, statement);
+
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(result -> result.map(row -> row.get("has_experiments", Integer.class)))
                 .hasElements();
     }
@@ -965,10 +969,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         optimizations, List.of()));
     }
 
-    private void bindTemplateParams(ST template, OptimizationSearchCriteria searchCriteria) {
-
-        Optional.ofNullable(searchCriteria.datasetDeleted())
-                .ifPresent(datasetDeleted -> template.add("dataset_deleted", datasetDeleted.toString()));
+    /**
+     * The subset of criteria that select which optimizations are in scope by identity rather than by attribute.
+     * Shared with {@link #HAS_EXPERIMENTS_FOR_DIRECT_FILTERS}, which declares only these placeholders - binding a
+     * parameter the rendered query does not contain fails the statement, so the two must stay in step.
+     */
+    private void bindScopeTemplateParams(ST template, OptimizationSearchCriteria searchCriteria) {
 
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
@@ -977,15 +983,23 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .filter(ids -> !ids.isEmpty())
                 .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
 
+        Optional.ofNullable(searchCriteria.projectId())
+                .ifPresent(projectId -> template.add("project_id", projectId));
+    }
+
+    private void bindTemplateParams(ST template, OptimizationSearchCriteria searchCriteria) {
+
+        bindScopeTemplateParams(template, searchCriteria);
+
+        Optional.ofNullable(searchCriteria.datasetDeleted())
+                .ifPresent(datasetDeleted -> template.add("dataset_deleted", datasetDeleted.toString()));
+
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
 
         Optional.ofNullable(searchCriteria.studioOnly())
                 .filter(Boolean.TRUE::equals)
                 .ifPresent(studioOnly -> template.add("studio_only", "true"));
-
-        Optional.ofNullable(searchCriteria.projectId())
-                .ifPresent(projectId -> template.add("project_id", projectId));
 
         Optional.ofNullable(searchCriteria.filters())
                 .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.OPTIMIZATION))
@@ -995,10 +1009,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .ifPresent(entityType -> template.add("entity_type", EntityType.TRACE.getType()));
     }
 
-    private void bindQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement, boolean isFindQuery) {
-
-        Optional.ofNullable(searchCriteria.datasetDeleted())
-                .ifPresent(datasetDeleted -> statement.bind("dataset_deleted", datasetDeleted));
+    private void bindScopeQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement) {
 
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
@@ -1007,11 +1018,19 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .filter(ids -> !ids.isEmpty())
                 .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds));
 
-        Optional.ofNullable(searchCriteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-
         Optional.ofNullable(searchCriteria.projectId())
                 .ifPresent(projectId -> statement.bind("project_id", projectId.toString()));
+    }
+
+    private void bindQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement, boolean isFindQuery) {
+
+        bindScopeQueryParams(searchCriteria, statement);
+
+        Optional.ofNullable(searchCriteria.datasetDeleted())
+                .ifPresent(datasetDeleted -> statement.bind("dataset_deleted", datasetDeleted));
+
+        Optional.ofNullable(searchCriteria.name())
+                .ifPresent(name -> statement.bind("name", name));
 
         Optional.ofNullable(searchCriteria.filters())
                 .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.OPTIMIZATION));
