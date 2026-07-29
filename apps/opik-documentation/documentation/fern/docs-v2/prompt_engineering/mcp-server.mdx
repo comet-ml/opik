@@ -348,29 +348,34 @@ coding agent _how_ to use Opik for real tasks: tracing, evaluation, the SDK, and
 an end-to-end `instrument` routine. Unlike ubiquitous CLIs, a model doesn't know
 Opik from training, so the skills are what let it use Opik without fumbling.
 
-The skills live in
-[`opik-mcp/skills`](https://github.com/comet-ml/opik-mcp/tree/main/src/opik_mcp/skills)
-and reach your agent two ways:
+The skills are authored once in
+[`opik-mcp`](https://github.com/comet-ml/opik-mcp/tree/main/src/opik_mcp/skills)
+and reach your agent a few ways:
 
-- **With the MCP** — the agent pulls a skill on demand with `read_skill`; nothing
-  to install:
+- **Standard install (any agent)** — the ecosystem-standard skills installer,
+  which works across Claude Code, Cursor, Codex, VS Code, Gemini CLI, and more:
+
+  ```bash
+  npx skills add comet-ml/opik-skills          # add the Opik skills
+  npx skills add comet-ml/opik-skills --all    # or all of them
+  ```
+
+- **Claude Code plugin** — get the skills **and** the MCP in one install:
+
+  ```text
+  /plugin install opik
+  ```
+
+- **With the MCP** — if you're already connected, the agent pulls a skill on
+  demand with `read_skill`; nothing to install:
 
   ```text
   read_skill("opik")                 # overview + reference list
   read_skill("opik/tracing-python")  # one reference file
   ```
 
-- **Without the MCP** — install them onto disk from the
-  [opik-skills front door](https://github.com/comet-ml/opik-skills):
-
-  ```bash
-  # shallow clone + copy (works with any agent that reads skills from disk)
-  git clone --depth 1 https://github.com/comet-ml/opik-mcp.git
-  cp -r opik-mcp/src/opik_mcp/skills/* ~/.claude/skills/
-
-  # or, if you already have the package:
-  uvx opik-mcp skills install --dir ~/.claude/skills
-  ```
+Already have the Opik Python package? `uvx opik-mcp skills install` exports the
+same skills to disk as a convenience.
 
 ## Using the MCP server
 
