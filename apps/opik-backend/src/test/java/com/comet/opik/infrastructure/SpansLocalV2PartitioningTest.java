@@ -25,7 +25,6 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -344,14 +343,10 @@ class SpansLocalV2PartitioningTest {
         }).collectList().block();
 
         var explain = String.join("\n", explainRows);
-        var minMaxIndexes = new ArrayList<JsonNode>();
-        for (JsonNode indexes : JsonUtils.getJsonNodeFromString(explain).findValues("Indexes")) {
-            for (JsonNode index : indexes) {
-                if ("MinMax".equals(index.path("Type").asText())) {
-                    minMaxIndexes.add(index);
-                }
-            }
-        }
+        var minMaxIndexes = JsonUtils.getJsonNodeFromString(explain).findValues("Indexes").stream()
+                .flatMap(JsonNode::valueStream)
+                .filter(index -> "MinMax".equals(index.path("Type").asText()))
+                .toList();
         assertThat(minMaxIndexes).as("MinMax index entries in EXPLAIN output:%n%s", explain).hasSize(1);
         return JsonUtils.treeToValue(minMaxIndexes.getFirst(), MinMaxParts.class);
     }
