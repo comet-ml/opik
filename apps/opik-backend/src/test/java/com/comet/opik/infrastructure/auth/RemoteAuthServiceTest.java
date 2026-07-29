@@ -75,6 +75,7 @@ class RemoteAuthServiceTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String NOT_LOGGED_USER = "Please login first";
     private static final String DROPWIZARD_UNAUTHORIZED_BODY = "Credentials are required to access this resource.";
+    private static final String REMOTE_ERROR_MESSAGE = "remote error message";
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -510,6 +511,68 @@ class RemoteAuthServiceTest {
                 arguments(HttpStatus.SC_UNAUTHORIZED, "{\"msg\":\"   \"}", NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_UNAUTHORIZED, "{}", NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_BAD_REQUEST, "not json at all", MISSING_WORKSPACE));
+    }
+
+    static Stream<Arguments> errorBodyContentTypeArgs() {
+        return Stream.of(
+                arguments("application/json", REMOTE_ERROR_MESSAGE),
+                arguments("application/json;charset=utf-8", REMOTE_ERROR_MESSAGE),
+                // Jackson parses a structured +json suffix and a non-application type just as happily, so gating on
+                // APPLICATION_JSON_TYPE.isCompatible would discard a remote message these used to surface
+                arguments("application/problem+json", REMOTE_ERROR_MESSAGE),
+                arguments("text/json", REMOTE_ERROR_MESSAGE),
+                // these say nothing about the body, so the caller-facing fallback is used instead
+                arguments("application/octet-stream", NOT_LOGGED_USER),
+                arguments("text/plain", NOT_LOGGED_USER),
+                arguments("*/*", NOT_LOGGED_USER));
+    }
+
+    /**
+     * Pins which content types are still read as JSON. Anything the Jackson provider can deserialize must keep
+     * surfacing the remote {@code msg()}, exactly as it did before this class started gating on the content type;
+     * everything else resolves to the caller-facing fallback instead of a server error.
+     */
+    @ParameterizedTest
+    @MethodSource("errorBodyContentTypeArgs")
+    void testSessionAuth__whenRemoteRepliesUnauthorized__thenOnlyJsonContentTypesSurfaceRemoteMessage(
+            String contentType, String expectedMessage) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .willReturn(aResponse().withStatus(HttpStatus.SC_UNAUTHORIZED)
+                        .withHeader("Content-Type", contentType)
+                        .withBody("{\"msg\":\"%s\",\"code\":401}".formatted(REMOTE_ERROR_MESSAGE))));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""),
+                sessionCookie(sessionTokenValue),
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(expectedMessage)
+                .satisfies(throwable -> assertThat(((ClientErrorException) throwable).getResponse().getStatus())
+                        .isEqualTo(HttpStatus.SC_UNAUTHORIZED));
+    }
+
+    @Test
+    void testSessionAuth__whenRemoteRepliesUnauthorizedWithoutContentType__thenFallbackMessage() {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .willReturn(aResponse().withStatus(HttpStatus.SC_UNAUTHORIZED)
+                        .withBody("{\"msg\":\"%s\",\"code\":401}".formatted(REMOTE_ERROR_MESSAGE))));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""),
+                sessionCookie(sessionTokenValue),
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(NOT_LOGGED_USER);
     }
 
     @Test

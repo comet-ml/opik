@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -326,6 +327,21 @@ class RemoteAuthService implements AuthService {
     }
 
     /**
+     * Reports whether the body should be read as JSON, matching what the registered Jackson provider actually parses
+     * rather than only the exact {@code application/json} type. A structured suffix ({@code application/problem+json})
+     * and a non-{@code application} type ({@code text/json}) both deserialize fine, so gating on
+     * {@code APPLICATION_JSON_TYPE.isCompatible} would discard a perfectly good remote message. A wildcard or absent
+     * type tells us nothing about the body and is not treated as JSON.
+     */
+    private static boolean isJson(MediaType mediaType) {
+        if (mediaType == null || MediaType.MEDIA_TYPE_WILDCARD.equals(mediaType.getSubtype())) {
+            return false;
+        }
+        var subtype = mediaType.getSubtype().toLowerCase(Locale.ROOT);
+        return "json".equals(subtype) || subtype.endsWith("+json");
+    }
+
+    /**
      * Extracts the error message from a non-successful react-service response without assuming the body is JSON.
      * <p>
      * The react service does not always answer with a {@link ReactServiceErrorResponse}: endpoints guarded by
@@ -349,7 +365,7 @@ class RemoteAuthService implements AuthService {
             return fallback;
         }
         var mediaType = response.getMediaType();
-        if (mediaType == null || !MediaType.APPLICATION_JSON_TYPE.isCompatible(mediaType)) {
+        if (!isJson(mediaType)) {
             log.warn("React service replied with a non-JSON error body, status: '{}', contentType: '{}', body: '{}'",
                     response.getStatus(), mediaType, readBodySafely(response));
             return fallback;
