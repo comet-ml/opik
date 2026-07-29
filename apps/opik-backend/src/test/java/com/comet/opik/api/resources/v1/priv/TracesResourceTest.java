@@ -3980,6 +3980,25 @@ class TracesResourceTest {
             var request = factory.manufacturePojo(BatchDeleteByProject.class);
             traceResourceClient.deleteTraces(request, workspaceName, apiKey);
         }
+
+        @Test
+        void deleteTracesWithNullIdInBatchIsRejected() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // A null element must be rejected at the API boundary rather than reaching resolution and blowing up.
+            var ids = new HashSet<UUID>();
+            ids.add(generator.generate());
+            ids.add(null);
+            var request = BatchDeleteByProject.builder().ids(ids).build();
+
+            try (var response = traceResourceClient.deleteTraces(request, workspaceName, apiKey,
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                assertThat(response.hasEntity()).isTrue();
+            }
+        }
     }
 
     @Nested
