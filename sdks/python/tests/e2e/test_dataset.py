@@ -1,3 +1,6 @@
+import logging
+import time
+
 import opik
 import opik.exceptions
 from opik import synchronization
@@ -7,6 +10,8 @@ from opik.api_objects import helpers
 from . import verifiers
 from ..testlib import generate_project_name
 import pytest
+
+LOGGER = logging.getLogger(__name__)
 
 PROJECT_NAME = generate_project_name("e2e", __name__)
 
@@ -130,6 +135,71 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
         ],
         project_name=PROJECT_NAME,
     )
+
+
+@pytest.mark.parametrize("num_threads", [1, 2, 4, 8, 16])
+def test_insert_parallel__same_data_regardless_of_thread_count(
+    opik_client: opik.Opik, dataset_name: str, num_threads: int
+):
+    """Parallel insert must produce the same dataset content, item count and
+    a single version whatever the thread count.
+
+    Item count (16k) yields 16 batches at the 1000-rows/batch cap, so even the
+    16-thread run has a batch per worker; payload is kept tiny so total bytes
+    stay small for CI. Timing is logged (not asserted): whether more threads
+    are actually faster depends on the target backend (e.g. rate limits), so
+    the speedup is measured ad-hoc against a real test environment rather than
+    gated in CI. Correctness, however, must hold identically across thread
+    counts.
+    """
+    DESCRIPTION = "E2E parallel insert dataset"
+    N_ITEMS = 16_000  # 16 batches at the 1000-rows/batch cap -> feeds 16 workers
+
+    name = f"{dataset_name}-t{num_threads}"
+    items = [
+        {
+            "input": {"question": f"question {i}"},
+            "expected_output": {"output": f"answer {i}"},
+        }
+        for i in range(N_ITEMS)
+    ]
+    expected_items = [dataset_item.DatasetItem(**item) for item in items]
+
+    dataset = opik_client.create_dataset(
+        name, description=DESCRIPTION, project_name=PROJECT_NAME
+    )
+
+    start = time.perf_counter()
+    dataset.insert(items, num_threads=num_threads)
+    elapsed = time.perf_counter() - start
+    LOGGER.info(
+        "Parallel insert of %d items with num_threads=%d took %.2fs (%.0f rows/s)",
+        N_ITEMS,
+        num_threads,
+        elapsed,
+        N_ITEMS / elapsed if elapsed else 0,
+    )
+
+    # All items persisted server-side, exactly once, with identical content.
+    verifiers.verify_dataset(
+        opik_client=opik_client,
+        name=name,
+        description=DESCRIPTION,
+        dataset_items=expected_items,
+        project_name=PROJECT_NAME,
+    )
+
+    # Shared batch_group_id => a single version, no matter the thread count.
+    # (Unique-per-chunk grouping would create one version per batch.)
+    # Skipped when versioning is disabled on the backend (get_version_info
+    # returns None); the count + content checks above already prove correctness.
+    stored_dataset = opik_client.get_dataset(name=name, project_name=PROJECT_NAME)
+    version_info = stored_dataset.get_version_info()
+    if version_info is not None:
+        assert version_info.version_name == "v1", (
+            "Parallel insert must fold all batches into one version regardless of thread count"
+        )
+        assert version_info.items_total == N_ITEMS
 
 
 def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
