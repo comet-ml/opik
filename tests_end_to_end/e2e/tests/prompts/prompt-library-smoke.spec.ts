@@ -29,10 +29,10 @@ async function runVersioningSteps(detail: PromptDetailPage, opts: VersioningOpts
   });
 }
 
-test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@prompts'] }, () => {
+test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@area:prompts'] }, () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
-  test('SDK-seeded text prompt appears in library, edit creates new version, old version is preserved', async ({
+  test('SDK-seeded text prompt appears in library, edit creates new version, old version is preserved', { tag: ['@cap:prompts.list-prompts', '@cap:prompts.sdk-seeded-visible', '@cap:prompts.edit-creates-version', '@cap:prompts.old-version-preserved'] }, async ({
     project,
     textPrompt,
     page,
@@ -64,7 +64,7 @@ test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@prompts'] }, ()
     });
   });
 
-  test('SDK-seeded chat prompt appears in library, edit creates new version, old version is preserved', async ({
+  test('SDK-seeded chat prompt appears in library, edit creates new version, old version is preserved', { tag: ['@cap:prompts.sdk-seeded-visible', '@cap:prompts.edit-creates-version', '@cap:prompts.version-history'] }, async ({
     project,
     chatPrompt,
     page,
@@ -136,7 +136,7 @@ test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@prompts'] }, ()
   ];
 
   for (const variant of UI_VARIANTS) {
-    test(`UI-created ${variant.label} prompt shows content, edit creates new version, old version is preserved`, async ({
+    test(`UI-created ${variant.label} prompt shows content, edit creates new version, old version is preserved`, { tag: ['@cap:prompts.create-text-prompt-ui', '@cap:prompts.create-chat-prompt-ui', '@cap:prompts.edit-creates-version'] }, async ({
       project,
       page,
       registerPromptCleanup,

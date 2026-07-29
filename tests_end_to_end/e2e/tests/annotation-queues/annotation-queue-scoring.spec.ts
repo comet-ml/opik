@@ -1,7 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { AnnotationQueuePage } from '@e2e/pom/annotation-queue.page';
 
-test.describe('Annotation queue — UI scoring, SDK verify', { tag: ['@t2-cuj', '@annotation-queues'] }, () => {
+test.describe('Annotation queue — UI scoring, SDK verify', { tag: ['@t2-cuj', '@area:annotation-queues', '@cap:annotation-queues.score-queue-item', '@cap:annotation-queues.score-with-reason', '@cap:annotation-queues.skip-item', '@cap:annotation-queues.scores-reach-traces'] }, () => {
   test('Scoring two items and skipping a third reflects on the source traces', async ({
     annotationQueue,
     backendClient,

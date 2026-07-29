@@ -32,7 +32,7 @@ test.describe('Visual Comparison - Trace Sidebar', () => {
     await page.close();
   });
 
-  test('S01: Trace sidebar - Messages tab', async ({ page }) => {
+  test('S01: Trace sidebar - Messages tab', { tag: ['@vcap:traces.trace-sidebar-messages'] }, async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.waitForTracesReady(TRACE_INPUT_TEXT);
@@ -45,7 +45,7 @@ test.describe('Visual Comparison - Trace Sidebar', () => {
     await screenshot(page, 'S01-trace-sidebar-messages', [panel.statsRowMask]);
   });
 
-  test('S02: Trace sidebar - Details tab', async ({ page }) => {
+  test('S02: Trace sidebar - Details tab', { tag: ['@vcap:traces.trace-sidebar-details'] }, async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.waitForTracesReady(TRACE_INPUT_TEXT);
@@ -59,7 +59,7 @@ test.describe('Visual Comparison - Trace Sidebar', () => {
     await screenshot(page, 'S02-trace-sidebar-details', [panel.statsRowMask]);
   });
 
-  test('S03: Trace sidebar - Feedback scores tab', async ({ page }) => {
+  test('S03: Trace sidebar - Feedback scores tab', { tag: ['@vcap:traces.trace-sidebar-feedback'] }, async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.waitForTracesReady(TRACE_INPUT_TEXT);
@@ -72,7 +72,7 @@ test.describe('Visual Comparison - Trace Sidebar', () => {
     await screenshot(page, 'S03-trace-sidebar-feedback-scores', [panel.statsRowMask]);
   });
 
-  test('S04: Trace sidebar - Prompts tab', async ({ page }) => {
+  test('S04: Trace sidebar - Prompts tab', { tag: ['@vcap:traces.trace-sidebar-prompts'] }, async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.waitForTracesReady(TRACE_INPUT_TEXT);

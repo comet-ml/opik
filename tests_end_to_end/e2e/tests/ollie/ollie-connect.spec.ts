@@ -35,7 +35,7 @@ function skipIfOllieDisabled(envConfig: { features: { ollie: boolean }; apiKey: 
 
 const AGENTS_DIR = path.resolve(__dirname, '../../agents');
 
-test.describe('Ollie — Local Runner', { tag: ['@t3-nightly', '@ollie'] }, () => {
+test.describe('Ollie — Local Runner', { tag: ['@t3-nightly', '@area:ollie', '@cap:ollie.instrument-command', '@cap:ollie.improve-command', '@cap:ollie.pairing-approve'] }, () => {
   test.beforeEach(({ envConfig }) => skipIfOllieDisabled(envConfig));
 
   test('/instrument adds Opik tracing to a connected uninstrumented agent', async ({

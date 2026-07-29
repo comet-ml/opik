@@ -29,8 +29,8 @@ function seedSentimentDataset(sdkClient: SdkClient, projectName: string, name: s
   });
 }
 
-test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '@optimization-studio'] }, () => {
-  test('the new-run form renders its sections and enables Optimize only once valid', async ({
+test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '@area:optimization-studio'] }, () => {
+  test('the new-run form renders its sections and enables Optimize only once valid', { tag: ['@cap:optimization-studio.new-run-form-validation'] }, async ({
     project,
     sdkClient,
     backendClient,
@@ -70,7 +70,7 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
     });
   });
 
-  test('launches a GEPA + Equals run from the studio UI and it completes end-to-end', async ({
+  test('launches a GEPA + Equals run from the studio UI and it completes end-to-end', { tag: ['@cap:optimization-studio.launch-gepa-run', '@cap:optimization-studio.run-completes-healthy', '@cap:optimization-studio.studio-logs-download'] }, async ({
     project,
     sdkClient,
     backendClient,
@@ -174,8 +174,8 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
   });
 });
 
-test.describe('Optimization Studio — variant', { tag: ['@t2-cuj', '@t1-stsaas', '@optimization-studio'] }, () => {
-  test('launches a Hierarchical Reflective + Equals run and it completes end-to-end', async ({
+test.describe('Optimization Studio — variant', { tag: ['@t2-cuj', '@t1-stsaas', '@area:optimization-studio'] }, () => {
+  test('launches a Hierarchical Reflective + Equals run and it completes end-to-end', { tag: ['@cap:optimization-studio.launch-hier-reflective', '@cap:optimization-studio.run-completes-healthy'] }, async ({
     project,
     sdkClient,
     backendClient,
