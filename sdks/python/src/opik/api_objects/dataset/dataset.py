@@ -647,7 +647,7 @@ class Dataset(DatasetExportOperations):
     def __internal_api__insert_items_as_dataclasses__(
         self,
         items: List[dataset_item.DatasetItem],
-        num_threads: int,
+        num_threads: int = 1,
     ) -> None:
         # Lazy-sync against the backend the first time we insert into a
         # dataset that was fetched from the backend (list or get-by-name
