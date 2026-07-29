@@ -131,7 +131,7 @@ Always scale vertically before adding more replicas for efficiency.
 
 #### Fresh multi-replica installs: migrate first, then scale
 
-A brand-new install running directly on **2 or more ClickHouse replicas** cannot complete its analytics migrations. Opik's earliest migrations aren't cluster-aware, so on a fresh multi-replica cluster they only reach one replica; later migrations then fail with errors such as `UNKNOWN_TABLE` or `UNKNOWN_DATABASE` (a table or the `opik` database missing on one replica), and `opik-backend` never becomes ready. The chart ships `clickhouse.replicasCount: 2`, so a fresh install takes this path unless you override it — install High-Availability deployments in two phases:
+A brand-new install running directly on **2 or more ClickHouse replicas** cannot complete its analytics migrations. Opik's earliest migrations aren't cluster-aware, so on a fresh multi-replica cluster they only reach one replica; later migrations then fail with errors such as `UNKNOWN_TABLE` or `UNKNOWN_DATABASE` (a table or the `opik` database missing on one replica), and `opik-backend` never becomes ready. Install High-Availability deployments in two phases:
 
 <Steps>
   <Step>

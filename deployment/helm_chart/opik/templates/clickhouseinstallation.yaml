@@ -93,13 +93,14 @@ spec:
           replicasCount: {{ .Values.clickhouse.replicasCount }}
           # internal_replication pins Distributed-engine inserts to one live replica per shard and
           # lets ReplicatedMergeTree replication fan the parts out, instead of the Distributed table
-          # writing every replica itself. The operator would default it to true only once
-          # replicasCount > 1; setting it here makes it explicit and stable across replica counts
-          # (a no-op on a single replica, where there is nothing to fan out to). Shard names are
-          # left unset so the operator keeps generating them by index — host identity is unchanged.
-          {{- if ge (int .Values.clickhouse.shardsCount) 1 }}
+          # writing every replica itself. Only meaningful with more than one replica, so the shards
+          # list is rendered only then — a single-replica deployment keeps the plain shardsCount /
+          # replicasCount layout it has today. This states explicitly what the operator would
+          # otherwise infer from replicasCount > 1. Shard names are left unset so the operator keeps
+          # generating them by index — host identity is unchanged.
+          {{- if gt (int .Values.clickhouse.replicasCount) 1 }}
           shards:
-            {{- range $i := until (int .Values.clickhouse.shardsCount) }}
+            {{- range $i := until (int (max 1 (int .Values.clickhouse.shardsCount))) }}
             - internalReplication: "true"
             {{- end }}
           {{- end }}

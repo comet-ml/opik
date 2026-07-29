@@ -29,13 +29,33 @@ data:
   {{- end }}
   {{- end }}
   {{- if eq $key "backend" }}
-  {{- /* Derived from the clickhouse / databaseAnalytics values above. An explicit key under
-         component.backend.env wins, so operators can still pin either env var directly. */}}
-  {{- if not (hasKey $value.env "ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED") }}
-  ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED: {{ $.Values.clickhouse.sharding.enabled | quote }}
+  {{- /* Hyperscale / analytics data-model flags, derived from the clickhouse, databaseAnalytics,
+         databaseAnalyticsDataModel and partitionMetrics values. They mirror the defaults in
+         apps/opik-backend/config.yml so the chart states them explicitly instead of relying on the
+         image's built-in default, and every downstream slice has a flag to flip without a chart
+         change. An explicit key under component.backend.env wins over anything derived here. */}}
+  {{- $env := $value.env | default dict }}
+  {{- $da := $.Values.databaseAnalytics }}
+  {{- $dm := $.Values.databaseAnalyticsDataModel }}
+  {{- $pm := $.Values.partitionMetrics }}
+  {{- range $k, $v := dict
+        "ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED" $.Values.clickhouse.sharding.enabled
+        "ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED" $da.coldStorageDiskHealthCheckEnabled
+        "UUID_VALIDATION_ENABLED" $da.uuidV7ValidationEnabled
+        "UUID_VALIDATION_AUDIT_ONLY" $da.uuidV7ValidationAuditOnly
+        "UUID_VALIDATION_WINDOW" $da.uuidV7ValidationWindow
+        "ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE" $dm.traceColumnsNonNullable
+        "ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE" $dm.spanColumnsNonNullable
+        "ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED" $dm.traceDeletionEventsCaptureEnabled
+        "ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED" $dm.spanDeletionEventsCaptureEnabled
+        "ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE" $dm.deletionEventsInsertBatchSize
+        "PARTITION_METRICS_ENABLED" $pm.enabled
+        "PARTITION_METRICS_INTERVAL" $pm.interval
+        "PARTITION_METRICS_LWD_TABLES" $pm.lwdTables
+      }}
+  {{- if not (hasKey $env $k) }}
+  {{ $k }}: {{ $v | quote }}
   {{- end }}
-  {{- if not (hasKey $value.env "UUID_VALIDATION_WINDOW") }}
-  UUID_VALIDATION_WINDOW: {{ printf "%dms" (int $.Values.databaseAnalytics.uuidV7ValidationWindowMs) | quote }}
   {{- end }}
   {{- end }}
 {{- end }}
