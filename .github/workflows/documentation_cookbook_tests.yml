@@ -37,7 +37,7 @@ jobs:
       OPIK_SENTRY_ENABLE: False
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Set up uv

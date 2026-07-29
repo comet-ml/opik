@@ -133,6 +133,14 @@ class ExperimentAggregatesIntegrationTest {
     public static final String[] IGNORED_FIELDS_EXPERIMENT_ITEM = {"createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments", "projectName", "executionPolicy"};
 
+    public static final String[] UNORDERED_FIELDS_SCORES = {"experimentScores", "feedbackScores"};
+
+    public static final String[] UNORDERED_FIELDS_SCORES_IN_CONTENT = Arrays.stream(UNORDERED_FIELDS_SCORES)
+            .map("content."::concat)
+            .toArray(String[]::new);
+
+    public static final String[] UNORDERED_FIELDS_ASSERTIONS = {"feedbackScores", "assertionResults"};
+
     @RegisterApp
     private final TestDropwizardAppExtension app;
 
@@ -574,6 +582,138 @@ class ExperimentAggregatesIntegrationTest {
         assertExperimentMatches(rawExperiment, experimentFromAggregates, projectA.id(), projectB.id());
     }
 
+    /**
+     * The aggregated/non-aggregated counts decide which branches of FIND are rendered, and they are narrowed by
+     * the requested project. A non-aggregated experiment reachable from that project must keep the raw branch
+     * alive, otherwise it disappears from the response. This is the data-loss case, and it exercises the
+     * trace-derived binding: the experiment reaches the project through the traces its items point at, which is
+     * how most experiments are bound to a project.
+     */
+    @Test
+    @DisplayName("A project-scoped find returns non-aggregated experiments belonging to that project")
+    void projectScopedFindReturnsNonAggregatedExperimentsOfThatProject() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+        var aggregatedExperiment = createExperiment(dataset, apiKey, workspaceName);
+        createExperimentItemWithData(
+                aggregatedExperiment.id(), dataset.id(), project.name(), feedbackScores, apiKey, workspaceName);
+
+        var nonAggregatedExperiment = createExperiment(dataset, apiKey, workspaceName);
+        createExperimentItemWithData(
+                nonAggregatedExperiment.id(), dataset.id(), project.name(), feedbackScores, apiKey, workspaceName);
+
+        experimentAggregatesService.populateAggregations(aggregatedExperiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var scoped = findByProject(project.id(), workspaceId);
+        var reference = findByIds(Set.of(aggregatedExperiment.id(), nonAggregatedExperiment.id()), workspaceId);
+
+        assertSameExperiments(scoped, reference,
+                "a project-scoped find must return the same experiments, field for field, as a find that cannot "
+                        + "drop the raw branch - including the non-aggregated experiment of that project");
+    }
+
+    /**
+     * The mirror case: an experiment reachable only from another project must not appear in this project's
+     * listing. Before the counts were narrowed by project such an experiment also forced the raw branch to be
+     * rendered for every request in the workspace, which is the cost this narrowing removes.
+     */
+    @Test
+    @DisplayName("A project-scoped find excludes non-aggregated experiments of other projects")
+    void projectScopedFindExcludesNonAggregatedExperimentsOfOtherProjects() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var requestedProject = createProject(apiKey, workspaceName);
+        var otherProject = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+        var aggregatedExperiment = createExperiment(dataset, apiKey, workspaceName);
+        createExperimentItemWithData(
+                aggregatedExperiment.id(), dataset.id(), requestedProject.name(), feedbackScores, apiKey,
+                workspaceName);
+
+        var unrelatedNonAggregated = createExperiment(dataset, apiKey, workspaceName);
+        createExperimentItemWithData(
+                unrelatedNonAggregated.id(), dataset.id(), otherProject.name(), feedbackScores, apiKey,
+                workspaceName);
+
+        experimentAggregatesService.populateAggregations(aggregatedExperiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var scoped = findByProject(requestedProject.id(), workspaceId);
+        var reference = findByIds(Set.of(aggregatedExperiment.id()), workspaceId);
+
+        assertSameExperiments(scoped, reference,
+                "dropping the raw branch must not change the returned experiments, and an experiment reachable "
+                        + "only from another project must not appear at all");
+    }
+
+    private List<Experiment> findByProject(UUID projectId, String workspaceId) {
+        return findExperiments(ExperimentSearchCriteria.builder()
+                .projectId(projectId)
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build(), workspaceId);
+    }
+
+    private List<Experiment> findByIds(Set<UUID> experimentIds, String workspaceId) {
+        return findExperiments(ExperimentSearchCriteria.builder()
+                .experimentIds(experimentIds)
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build(), workspaceId);
+    }
+
+    private List<Experiment> findExperiments(ExperimentSearchCriteria searchCriteria, String workspaceId) {
+        var page = experimentService.find(1, 100, searchCriteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(page).isNotNull();
+
+        return page.content();
+    }
+
+    /**
+     * Compares two result lists field for field, in the order the API returned them.
+     * {@link #findByProject(UUID, String)} and {@link #findByIds(Set, String)} both render the same
+     * {@code ORDER BY id DESC}, so their ordering is deterministic and identical. Do not sort the lists before
+     * comparing: the recursive comparison is order-sensitive at the top level, which is what makes a change in
+     * result ordering fail the test.
+     */
+    private void assertSameExperiments(List<Experiment> actual, List<Experiment> expected, String description) {
+        assertThat(expected)
+                .as("the reference find must return experiments, otherwise the comparison is vacuous")
+                .isNotEmpty();
+
+        assertThat(actual)
+                .as(description)
+                .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                        .build())
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
+                .isEqualTo(expected);
+    }
+
     @ParameterizedTest(name = "Group by {0}")
     @MethodSource("groupingTestCases")
     @DisplayName("ExperimentAggregatesService.findGroups matches ExperimentService.findGroups (raw)")
@@ -721,7 +861,7 @@ class ExperimentAggregatesIntegrationTest {
                         RecursiveComparisonConfiguration.builder()
                                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                 .build())
-                .ignoringCollectionOrderInFields("feedbackScores", "experimentScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
                 .isEqualTo(aggregationsFromRaw);
     }
 
@@ -950,7 +1090,7 @@ class ExperimentAggregatesIntegrationTest {
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .build())
-                .ignoringCollectionOrderInFields("feedbackScores", "experimentScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
                 .isEqualTo(fromRaw);
     }
 
@@ -1379,7 +1519,7 @@ class ExperimentAggregatesIntegrationTest {
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                    .ignoringCollectionOrderInFields("feedbackScores", "assertionResults")
+                    .ignoringCollectionOrderInFields(UNORDERED_FIELDS_ASSERTIONS)
                     .ignoringFields(IGNORED_FIELDS_EXPERIMENT_ITEM)
                     .isEqualTo(expectedExperiments);
         }
@@ -1415,7 +1555,7 @@ class ExperimentAggregatesIntegrationTest {
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .build())
-                .ignoringCollectionOrderInFields("content.feedbackScores", "content.experimentScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES_IN_CONTENT)
                 .isEqualTo(expected);
     }
 
@@ -1436,7 +1576,7 @@ class ExperimentAggregatesIntegrationTest {
                 .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .build())
-                .ignoringCollectionOrderInFields("feedbackScores", "experimentScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
                 .isEqualTo(expected);
     }
 
@@ -2340,7 +2480,7 @@ class ExperimentAggregatesIntegrationTest {
                 .as("experiment item must be identical before and after aggregation")
                 .usingRecursiveComparison()
                 .ignoringFields(IGNORED_FIELDS_EXPERIMENT_ITEM)
-                .ignoringCollectionOrderInFields("feedbackScores", "assertionResults")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_ASSERTIONS)
                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                 .isEqualTo(beforeItem);
     }
@@ -3100,7 +3240,7 @@ class ExperimentAggregatesIntegrationTest {
                                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                 .build())
                 .ignoringFields(EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE)
-                .ignoringCollectionOrderInFields("experimentScores", "feedbackScores")
+                .ignoringCollectionOrderInFields(UNORDERED_FIELDS_SCORES)
                 .isEqualTo(rawExperiment);
 
         assertThat(aggregatedExperiment.id())

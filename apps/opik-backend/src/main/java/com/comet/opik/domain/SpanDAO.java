@@ -21,6 +21,7 @@ import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
+import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
@@ -2533,7 +2534,9 @@ public class SpanDAO {
     @WithSpan
     public Mono<SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
         log.info("Finding span by '{}'", spanSearchCriteria);
-        return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
+        return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total))
+                .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e,
+                        SpanPage.empty(page, sortingFactory.getSortableFields())));
     }
 
     @WithSpan
@@ -2588,7 +2591,8 @@ public class SpanDAO {
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
                 .filter(CollectionUtils::isNotEmpty)
-                .flatMap(Flux::fromIterable);
+                .flatMap(Flux::fromIterable)
+                .onErrorResume(ErrorUtils::isMalformedJsonPath, e -> Flux.empty());
     }
 
     private BigDecimal calculateCost(Span span) {
@@ -2969,7 +2973,8 @@ public class SpanDAO {
                             .singleOrEmpty();
 
                     return StatsMerger.zipAndMerge(spansMono, feedbackMono);
-                }));
+                }))
+                .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, ProjectStats.empty()));
     }
 
     @SuppressWarnings("unchecked")
