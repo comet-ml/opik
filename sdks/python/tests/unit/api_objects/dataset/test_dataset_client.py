@@ -242,12 +242,10 @@ def test_insert__parallel__batch_failure_raises(monkeypatch):
     _small_batches(monkeypatch, size=2)
     mock_rest_client = Mock()
 
-    calls = {"n": 0}
-
+    # Any batch failing must surface to the caller. Fail unconditionally so the
+    # assertion is deterministic regardless of worker scheduling.
     def failing_create_or_update(*args, **kwargs):
-        calls["n"] += 1
-        if calls["n"] == 2:
-            raise ValueError("backend rejected batch")
+        raise ValueError("backend rejected batch")
 
     mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
         failing_create_or_update
@@ -262,3 +260,19 @@ def test_insert__parallel__batch_failure_raises(monkeypatch):
 
     with pytest.raises(ValueError, match="backend rejected batch"):
         dataset.insert(_make_items(10), num_threads=4)
+
+
+@pytest.mark.parametrize("bad_value", [0, -1, 1.5, "2", True])
+def test_insert__invalid_num_threads__raises_before_upload(bad_value):
+    mock_rest_client = Mock()
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    with pytest.raises(ValueError, match="num_threads must be a positive integer"):
+        dataset.insert(_make_items(3), num_threads=bad_value)
+
+    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()

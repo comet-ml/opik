@@ -623,8 +623,9 @@ class Dataset(DatasetExportOperations):
         dataset version regardless of how many workers send them. With
         ``num_threads <= 1`` batches are sent sequentially in the caller
         thread. With ``num_threads > 1`` they are fanned out across a thread
-        pool; the first batch that fails raises to the caller, so a partial
-        upload never returns successfully.
+        pool; the first batch that fails re-raises to the caller. There is no
+        rollback, so batches that already succeeded before the failure remain
+        persisted.
         """
         if num_threads <= 1:
             for batch in batches:
@@ -646,7 +647,7 @@ class Dataset(DatasetExportOperations):
     def __internal_api__insert_items_as_dataclasses__(
         self,
         items: List[dataset_item.DatasetItem],
-        num_threads: int = 1,
+        num_threads: int,
     ) -> None:
         # Lazy-sync against the backend the first time we insert into a
         # dataset that was fetched from the backend (list or get-by-name
@@ -694,15 +695,21 @@ class Dataset(DatasetExportOperations):
             items: List of dicts (which will be converted to dataset items)
                 to add to the dataset.
             num_threads: Number of worker threads used to upload the item
-                batches. With ``1`` (the default) batches are uploaded
-                sequentially. With more than ``1`` the batches of this single
-                ``insert`` are uploaded in parallel; they all land in one
-                dataset version, and if any batch fails the call raises rather
-                than persisting a partial dataset. Items are keyed by their
-                ``id``, so parallel and sequential inserts of the same items
-                produce identical dataset content; the input order is not a
-                read-back guarantee.
+                batches. Must be a positive integer. With ``1`` (the default)
+                batches are uploaded sequentially. With more than ``1`` the
+                batches of this single ``insert`` are uploaded in parallel;
+                they all land in one dataset version. If any batch fails the
+                call re-raises; there is no rollback, so batches that already
+                succeeded remain persisted. Items are keyed by their ``id``, so
+                parallel and sequential inserts of the same items produce
+                identical dataset content; the input order is not a read-back
+                guarantee.
         """
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
