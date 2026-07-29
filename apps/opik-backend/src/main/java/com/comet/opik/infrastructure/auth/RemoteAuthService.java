@@ -331,13 +331,17 @@ class RemoteAuthService implements AuthService {
      * rather than only the exact {@code application/json} type. A structured suffix ({@code application/problem+json})
      * and a non-{@code application} type ({@code text/json}) both deserialize fine, so gating on
      * {@code APPLICATION_JSON_TYPE.isCompatible} would discard a perfectly good remote message. A wildcard or absent
-     * type tells us nothing about the body and is not treated as JSON.
+     * type tells us nothing about the body and is not treated as JSON — including a wildcard carrying the suffix
+     * ({@code application/*+json}), which is not a legal response content type in the first place.
      */
     private static boolean isJson(MediaType mediaType) {
-        if (mediaType == null || MediaType.MEDIA_TYPE_WILDCARD.equals(mediaType.getSubtype())) {
+        if (mediaType == null) {
             return false;
         }
         var subtype = mediaType.getSubtype().toLowerCase(Locale.ROOT);
+        if (subtype.contains(MediaType.MEDIA_TYPE_WILDCARD)) {
+            return false;
+        }
         return "json".equals(subtype) || subtype.endsWith("+json");
     }
 

@@ -524,17 +524,21 @@ class RemoteAuthServiceTest {
                 // these say nothing about the body, so the caller-facing fallback is used instead
                 arguments("application/octet-stream", NOT_LOGGED_USER),
                 arguments("text/plain", NOT_LOGGED_USER),
-                arguments("*/*", NOT_LOGGED_USER));
+                arguments("*/*", NOT_LOGGED_USER),
+                // a wildcard is not a legal response content type, so it is not trusted even with the +json suffix
+                arguments("application/*", NOT_LOGGED_USER),
+                arguments("application/*+json", NOT_LOGGED_USER));
     }
 
     /**
-     * Pins which content types are still read as JSON. Anything the Jackson provider can deserialize must keep
-     * surfacing the remote {@code msg()}, exactly as it did before this class started gating on the content type;
-     * everything else resolves to the caller-facing fallback instead of a server error.
+     * Pins which content types are read as JSON: subtype {@code json} or a {@code +json} structured suffix. Anything
+     * the Jackson provider can deserialize must keep surfacing the remote {@code msg()}, exactly as it did before this
+     * class started gating on the content type; everything else resolves to the caller-facing fallback instead of a
+     * server error.
      */
     @ParameterizedTest
     @MethodSource("errorBodyContentTypeArgs")
-    void testSessionAuth__whenRemoteRepliesUnauthorized__thenOnlyJsonContentTypesSurfaceRemoteMessage(
+    void testSessionAuth__whenRemoteRepliesUnauthorized__thenJsonSubtypesSurfaceRemoteMessage(
             String contentType, String expectedMessage) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var sessionTokenValue = "session-" + UUID.randomUUID();
