@@ -1,5 +1,9 @@
 export { detectLLMMessages } from "./detectLLMMessages";
 export { mapAndCombineMessages } from "./mapAndCombineMessages";
+export {
+  canShowLLMMessages,
+  resolveLLMMessageFormatHint,
+} from "./messageRendering";
 
 export type {
   LLMMessageFormat,
