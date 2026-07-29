@@ -428,7 +428,7 @@ class RemoteAuthServiceTest {
 
     @ParameterizedTest
     @MethodSource("nonJsonErrorBodyArgs")
-    void testSessionAuth__whenRemoteErrorBodyIsNotJson__thenClientErrorInsteadOfServerError(
+    void sessionAuth__whenRemoteErrorBodyIsNotJson__thenClientErrorInsteadOfServerError(
             int remoteAuthStatusCode, String contentType, String body, String expectedMessage) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var sessionTokenValue = "session-" + UUID.randomUUID();
@@ -452,7 +452,7 @@ class RemoteAuthServiceTest {
 
     @ParameterizedTest
     @MethodSource("nonJsonErrorBodyArgs")
-    void testAuth__whenRemoteErrorBodyIsNotJson__thenClientErrorInsteadOfServerError(
+    void auth__whenRemoteErrorBodyIsNotJson__thenClientErrorInsteadOfServerError(
             int remoteAuthStatusCode, String contentType, String body, String expectedMessage) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var apiKey = "apiKey-" + UUID.randomUUID();
@@ -481,7 +481,7 @@ class RemoteAuthServiceTest {
      */
     @ParameterizedTest
     @MethodSource("malformedJsonErrorBodyArgs")
-    void testSessionAuth__whenRemoteErrorBodyIsMalformedJson__thenClientErrorAndBodyReReadForDiagnostics(
+    void sessionAuth__whenRemoteErrorBodyIsMalformedJson__thenClientErrorAndBodyReReadForDiagnostics(
             int remoteAuthStatusCode, String body, String expectedMessage) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var sessionTokenValue = "session-" + UUID.randomUUID();
@@ -538,7 +538,7 @@ class RemoteAuthServiceTest {
      */
     @ParameterizedTest
     @MethodSource("errorBodyContentTypeArgs")
-    void testSessionAuth__whenRemoteRepliesUnauthorized__thenJsonSubtypesSurfaceRemoteMessage(
+    void sessionAuth__whenRemoteRepliesUnauthorized__thenJsonSubtypesSurfaceRemoteMessage(
             String contentType, String expectedMessage) {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var sessionTokenValue = "session-" + UUID.randomUUID();
@@ -561,7 +561,7 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testSessionAuth__whenRemoteRepliesUnauthorizedWithoutContentType__thenFallbackMessage() {
+    void sessionAuth__whenRemoteRepliesUnauthorizedWithoutContentType__thenFallbackMessage() {
         var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var sessionTokenValue = "session-" + UUID.randomUUID();
         WIRE_MOCK.server().stubFor(post("/opik/auth-session")
