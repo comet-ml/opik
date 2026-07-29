@@ -1,7 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { AnnotationQueuePage } from '@e2e/pom/annotation-queue.page';
 
-test.describe('Annotation queue — UI scoring, SDK verify', { tag: ['@t2-cuj', '@annotation-queue'] }, () => {
+test.describe('Annotation queue — UI scoring, SDK verify', { tag: ['@t2-cuj', '@annotation-queues'] }, () => {
   test('Scoring two items and skipping a third reflects on the source traces', async ({
     annotationQueue,
     backendClient,
