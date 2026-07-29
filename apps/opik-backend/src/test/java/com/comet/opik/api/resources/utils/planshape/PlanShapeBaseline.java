@@ -3,8 +3,9 @@ package com.comet.opik.api.resources.utils.planshape;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.Builder;
-import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.List;
@@ -17,38 +18,37 @@ import java.util.stream.Collectors;
  * offenders are fixed. Each entry is a {@link PlanShapeViolation#fingerprint()} plus a human note explaining why it is
  * tolerated / which ticket tracks its removal.
  */
+@RequiredArgsConstructor
 public class PlanShapeBaseline {
 
+    private static final TypeReference<List<Entry>> ENTRIES_TYPE = new TypeReference<>() {
+    };
+
     @Builder(toBuilder = true)
-    public record Entry(@NonNull String fingerprint, String note) {
+    public record Entry(String fingerprint, String note) {
     }
 
     private final Set<String> allowedFingerprints;
 
-    private PlanShapeBaseline(Set<String> allowedFingerprints) {
-        this.allowedFingerprints = allowedFingerprints;
-    }
-
-    public static PlanShapeBaseline loadFromClasspath(@NonNull String resourcePath) {
+    public static PlanShapeBaseline loadFromClasspath(String resourcePath) {
         try (InputStream is = PlanShapeBaseline.class.getClassLoader().getResourceAsStream(resourcePath)) {
             if (is == null) {
-                throw new IllegalStateException("Plan-shape baseline resource not found: " + resourcePath);
+                throw new IllegalStateException("Plan-shape baseline resource not found: '%s'".formatted(resourcePath));
             }
-            List<Entry> entries = JsonUtils.getMapper().readValue(is, new TypeReference<>() {
-            });
+            List<Entry> entries = JsonUtils.getMapper().readValue(is, ENTRIES_TYPE);
             return new PlanShapeBaseline(entries.stream().map(Entry::fingerprint).collect(Collectors.toSet()));
         } catch (UncheckedIOException e) {
             throw e;
         } catch (Exception e) {
-            throw new UncheckedIOException("Failed to load plan-shape baseline: " + resourcePath,
-                    new java.io.IOException(e));
+            throw new UncheckedIOException(new IOException(
+                    "Failed to load plan-shape baseline: '%s'".formatted(resourcePath), e));
         }
     }
 
     /**
-     * @return the violations that are not present in the baseline — i.e. the ones that must fail the build.
+     * Returns the violations that are not present in the baseline — i.e. the ones that must fail the build.
      */
-    public List<PlanShapeViolation> netNew(@NonNull List<PlanShapeViolation> violations) {
+    public List<PlanShapeViolation> netNew(List<PlanShapeViolation> violations) {
         return violations.stream()
                 .filter(violation -> !allowedFingerprints.contains(violation.fingerprint()))
                 .toList();

@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.planshape;
 
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.argument.Argument;
 import org.jdbi.v3.core.statement.SqlLogger;
@@ -14,10 +15,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * JDBI {@link SqlLogger} that captures the {@code EXPLAIN FORMAT=JSON} plan of every {@code SELECT} rendered while it is
+ * JDBI {@link SqlLogger} that captures the {@code EXPLAIN FORMAT=JSON} plan of every read query rendered while it is
  * installed, keyed by the rendered SQL. It reuses JDBI's own {@link Argument} binding machinery to re-apply the exact
  * parameters onto the EXPLAIN prepared statement on the same live connection, so no value extraction or re-binding
- * guesswork is needed. Non-SELECT statements are ignored.
+ * guesswork is needed. Non-read statements are ignored.
  *
  * <p>EXPLAIN is requested in JSON <b>format version 2</b> ({@code explain_json_format_version = 2}): version 1 puts the
  * table <i>alias</i> in {@code table_name} (so a base-table match like {@code prompts} silently misses {@code FROM
@@ -25,8 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * vocabulary for both materialization and full scans. {@link MySqlPlanShapeAsserter} depends on the v2 shape.</p>
  *
  * <p>This is the shared MySQL capture foundation for the query plan-shape gate (OPIK-7448). Deduplicating by rendered
- * SQL keeps the captured set bounded even when a query runs many times. A SELECT whose EXPLAIN throws is recorded in
- * {@link CapturedQueries#failedSql()} rather than silently dropped, so the gate can surface queries it could not vet
+ * SQL keeps the captured set bounded even when a query runs many times. A read query whose EXPLAIN throws is recorded
+ * in {@link CapturedQueries#failedSql()} rather than silently dropped, so the gate can surface queries it could not vet
  * instead of treating them as clean.</p>
  */
 @Slf4j
@@ -36,17 +37,24 @@ public class CapturingSqlLogger implements SqlLogger {
     private final Set<String> failedSql = ConcurrentHashMap.newKeySet();
 
     /**
+     * Result of a capture session.
+     *
      * @param plansByRenderedSql successfully-captured {@code EXPLAIN FORMAT=JSON} plans, keyed by rendered SQL.
-     * @param failedSql          rendered SELECTs whose EXPLAIN threw — captured but un-vetted, surfaced so they can't
-     *                           pass the gate by omission.
+     * @param failedSql          rendered read queries whose EXPLAIN threw — captured but un-vetted, surfaced so they
+     *                           can't pass the gate by omission.
      */
+    @Builder(toBuilder = true)
     public record CapturedQueries(Map<String, String> plansByRenderedSql, Set<String> failedSql) {
     }
 
     @Override
     public void logAfterExecution(StatementContext context) {
+        if (context == null) {
+            return;
+        }
+
         var renderedSql = context.getRenderedSql();
-        if (renderedSql == null || !isReadQuery(renderedSql)) {
+        if (!isReadQuery(renderedSql)) {
             return;
         }
         if (plansByRenderedSql.containsKey(renderedSql) || failedSql.contains(renderedSql)) {
@@ -69,7 +77,7 @@ public class CapturingSqlLogger implements SqlLogger {
             forceV2ExplainFormat(context);
 
             try (PreparedStatement explainStatement = context.getConnection()
-                    .prepareStatement("EXPLAIN FORMAT=JSON " + jdbcSql)) {
+                    .prepareStatement("EXPLAIN FORMAT=JSON %s".formatted(jdbcSql))) {
 
                 for (int i = 0; i < parameterNames.size(); i++) {
                     int position = i;
@@ -77,7 +85,7 @@ public class CapturingSqlLogger implements SqlLogger {
                     Argument argument = binding.findForName(parameterName, context)
                             .or(() -> binding.findForPosition(position))
                             .orElseThrow(() -> new IllegalStateException(
-                                    "No bound argument for parameter '%s' in: %s".formatted(parameterName, jdbcSql)));
+                                    "No bound argument for parameter '%s' in: '%s'".formatted(parameterName, jdbcSql)));
                     // JDBC positions are 1-based; JDBI Arguments apply themselves onto the target statement.
                     argument.apply(position + 1, explainStatement, context);
                 }
@@ -90,27 +98,36 @@ public class CapturingSqlLogger implements SqlLogger {
                     return null;
                 }
             }
-        } catch (Exception e) {
+        } catch (Exception exception) {
             // A query the gate cannot EXPLAIN (e.g. one referencing a session TEMPORARY TABLE that only exists
-            // mid-flight) is recorded as failed rather than dropped, so the gate can report it instead of passing it
-            // by omission.
-            log.debug("EXPLAIN failed for query [{}]: {}", jdbcSql, e.getMessage());
+            // mid-flight) is recorded as failed rather than dropped, so the gate can report it instead of passing it by
+            // omission. Warn because an un-vetted query is a gap in coverage, not routine noise.
+            log.warn("EXPLAIN failed for query '{}'", jdbcSql, exception);
             failedSql.add(renderedSql);
             return null;
         }
     }
 
-    // v2 puts the base table name in table_name (v1 uses the alias) — required for the full-scan check to match.
+    /**
+     * Pins the connection to EXPLAIN JSON format version 2, whose {@code table_name} is the base table name; version 1
+     * reports the alias, which would make the full-scan check silently miss aliased tables.
+     */
     private void forceV2ExplainFormat(StatementContext context) throws Exception {
         try (Statement statement = context.getConnection().createStatement()) {
             statement.execute("SET explain_json_format_version = 2");
         }
     }
 
-    // Read paths the gate vets: plain SELECTs and CTE reads (WITH ... SELECT). Matching only "select" would skip the
-    // CTE class entirely — exactly the multi-reference-CTE shape (OPIK-7198) the gate exists to catch. No WITH-prefixed
-    // @SqlUpdate writes exist in the backend, and MySQL EXPLAIN handles WITH ... SELECT the same as a plain SELECT.
+    /**
+     * Read paths the gate vets: plain {@code SELECT}s and CTE reads ({@code WITH ... SELECT}). Matching only
+     * {@code select} would skip the CTE class entirely — exactly the multi-reference-CTE shape (OPIK-7198) the gate
+     * exists to catch. No {@code WITH}-prefixed {@code @SqlUpdate} writes exist in the backend, and MySQL EXPLAIN
+     * handles {@code WITH ... SELECT} the same as a plain {@code SELECT}.
+     */
     private static boolean isReadQuery(String sql) {
+        if (sql == null) {
+            return false;
+        }
         var normalized = sql.stripLeading().toLowerCase(Locale.ROOT);
         return normalized.startsWith("select") || normalized.startsWith("with");
     }

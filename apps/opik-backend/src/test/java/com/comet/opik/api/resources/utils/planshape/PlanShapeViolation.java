@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.utils.planshape;
 
 import lombok.Builder;
-import lombok.NonNull;
 
 import java.util.Locale;
 
@@ -12,7 +11,7 @@ import java.util.Locale;
  * structurally-changed query does.
  */
 @Builder(toBuilder = true)
-public record PlanShapeViolation(@NonNull String renderedSql, @NonNull Type type, @NonNull String detail) {
+public record PlanShapeViolation(String renderedSql, Type type, String detail) {
 
     public enum Type {
         MATERIALIZED_SUBQUERY,
@@ -20,7 +19,7 @@ public record PlanShapeViolation(@NonNull String renderedSql, @NonNull Type type
     }
 
     public String fingerprint() {
-        return type.name() + " :: " + normalize(renderedSql);
+        return "%s :: %s".formatted(type.name(), normalize(renderedSql));
     }
 
     private static String normalize(String sql) {

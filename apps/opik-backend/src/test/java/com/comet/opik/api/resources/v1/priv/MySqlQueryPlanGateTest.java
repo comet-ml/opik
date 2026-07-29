@@ -52,10 +52,11 @@ class MySqlQueryPlanGateTest {
 
     private static final String BASELINE_RESOURCE = "planshape/mysql-baseline.json";
 
-    // MySQL tables that grow with tenant data — a full scan here is a latency cliff at scale. The high-volume analytics
-    // tables (traces, spans, dataset_items) live in ClickHouse and are out of scope for the MySQL gate.
+    // MySQL tables that grow with tenant data — a full scan here is a latency cliff at scale. All entries must be MySQL
+    // tables: the analytics tables (traces, spans, dataset_items, experiments) live in ClickHouse and are out of scope
+    // for the MySQL gate.
     private static final Set<String> FULL_SCAN_SENSITIVE_TABLES = Set.of(
-            "datasets", "experiments", "prompts", "prompt_versions", "feedback_definitions", "projects");
+            "datasets", "prompts", "prompt_versions", "feedback_definitions", "projects");
 
     // MySQL-backed list endpoints. Each renders the SELECT of a DAO the gate must vet.
     private static final List<String> READ_PATHS = List.of(
@@ -142,8 +143,8 @@ class MySqlQueryPlanGateTest {
 
     private static String renderFailure(List<PlanShapeViolation> netNew) {
         return netNew.stream()
-                .map(v -> "%n  [%s] %s%n    fingerprint: %s%n    sql: %s".formatted(
-                        v.type(), v.detail(), v.fingerprint(), v.renderedSql()))
+                .map(violation -> "%n  [%s] %s%n    fingerprint: %s%n    sql: %s".formatted(
+                        violation.type(), violation.detail(), violation.fingerprint(), violation.renderedSql()))
                 .collect(Collectors.joining("",
                         "🐬 Net-new MySQL plan-shape violations (add to planshape/mysql-baseline.json only with a "
                                 + "tracking ticket, or fix the query):",

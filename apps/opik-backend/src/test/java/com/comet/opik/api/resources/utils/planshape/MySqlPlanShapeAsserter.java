@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.utils.planshape;
 
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,8 +21,10 @@ import java.util.Set;
  *       table name (v1 reported the alias here, which is why the gate pins v2).</li>
  * </ul>
  *
- * The walk is recursive because the v2 plan nests {@code inputs} / nested operations arbitrarily deep.
+ * The walk is recursive because the v2 plan nests {@code inputs} / nested operations arbitrarily deep. EXPLAIN
+ * documents are shallow (a handful of levels), so stack depth is not a concern here.
  */
+@RequiredArgsConstructor
 public class MySqlPlanShapeAsserter {
 
     private static final String OPERATION = "operation";
@@ -33,11 +35,7 @@ public class MySqlPlanShapeAsserter {
 
     private final Set<String> fullScanSensitiveTables;
 
-    public MySqlPlanShapeAsserter(@NonNull Set<String> fullScanSensitiveTables) {
-        this.fullScanSensitiveTables = fullScanSensitiveTables;
-    }
-
-    public List<PlanShapeViolation> findViolations(@NonNull String renderedSql, @NonNull String explainJson) {
+    public List<PlanShapeViolation> findViolations(String renderedSql, String explainJson) {
         var violations = new ArrayList<PlanShapeViolation>();
         walk(JsonUtils.getJsonNodeFromString(explainJson), renderedSql, violations);
         return violations;
@@ -55,8 +53,8 @@ public class MySqlPlanShapeAsserter {
                 violations.add(PlanShapeViolation.builder()
                         .renderedSql(renderedSql)
                         .type(PlanShapeViolation.Type.MATERIALIZED_SUBQUERY)
-                        .detail("Plan materializes a subquery into an internal temporary table (OPIK-7198 class): "
-                                + node.path(OPERATION).asText("materialize"))
+                        .detail("Plan materializes a subquery into an internal temporary table (OPIK-7198 class): '%s'"
+                                .formatted(node.path(OPERATION).asText("materialize")))
                         .build());
             } else if (ACCESS_TABLE_SCAN.equals(accessType)) {
                 var tableName = node.path(TABLE_NAME).asText(null);
