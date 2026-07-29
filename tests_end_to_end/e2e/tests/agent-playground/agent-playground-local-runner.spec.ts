@@ -33,6 +33,7 @@ test.describe('Agent Playground — Local Runner', { tag: ['@t3-nightly', '@agen
           apiKey,
           cwd: scratchDir.path,
           command: ['python', path.join(scratchDir.path, 'agent.py')],
+          apiUrl: envConfig.apiBaseUrl,
           apiBaseUrl: envConfig.apiBaseUrl,
         }));
 
