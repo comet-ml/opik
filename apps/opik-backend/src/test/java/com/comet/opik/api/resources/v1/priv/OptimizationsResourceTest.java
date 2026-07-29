@@ -820,10 +820,11 @@ class OptimizationsResourceTest {
                     .build();
             experimentResourceClient.create(later, apiKey, workspaceName);
 
-            // The fixture creates one trace and one span per dataset item, so per-trace cost reduces to exactly
-            // the span cost. Giving the two candidates far-apart costs makes the chosen candidate observable.
-            var earliestCost = BigDecimal.valueOf(0.01);
-            var laterCost = BigDecimal.valueOf(0.99);
+            // The fixture creates one trace and one span per dataset item, so per-trace cost reduces to the span
+            // cost. The two costs must differ in their integer parts: bigDecimalComparator falls back to comparing
+            // only toBigInteger(), so 0.01 and 0.99 would compare equal and could not tell the candidates apart.
+            var earliestCost = BigDecimal.valueOf(1);
+            var laterCost = BigDecimal.valueOf(9);
 
             createTracesSpansAndItems(earliest, items, project, apiKey, workspaceName,
                     Instant.now().minusSeconds(3), Instant.now().minusSeconds(2), earliestCost);
