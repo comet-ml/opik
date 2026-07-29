@@ -13,6 +13,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
+import lombok.NonNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -24,6 +25,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -135,13 +137,47 @@ class SpansLocalV2PartitioningTest {
         assertThat(actualParts.selected()).isEqualTo(actualParts.total());
     }
 
+    /**
+     * The predicate the SpanDAO read path emits: each id-range bound carries a parallel {@code toMonday(id_at)} bound
+     * derived from the same UUIDv7, expressed on the partition expression itself. ClickHouse folds it back onto the
+     * {@code id_at} MinMax via {@code toMonday}'s monotonicity, so the pruning shows on the MinMax entry (the Partition
+     * entry then reports the already-pruned set).
+     * <p>
+     * Both bounds are pinned independently rather than through a single {@code selected < total}, which one bound
+     * working alone would already satisfy. ids 1..2 are the inner two of the four seeded weeks, so week 0 sits below
+     * the range and week 3 above: dropping either bound must give back the parts on that side. The comparison is
+     * between the three runs, never against an absolute part count — {@code Initial Parts} counts every active part in
+     * the container-wide table, which the other tests in this class also write to.
+     */
     @Test
     void idRangeWithToMondayBoundPrunesPartitions() {
         var seed = seedConsecutiveWeeklyPartitions();
+        Consumer<Statement> binder = statement -> statement
+                .bind("workspace_id", seed.workspaceId())
+                .bind("id_lo", seed.ids().get(1))
+                .bind("id_hi", seed.ids().get(2));
 
-        // The exact predicate the SpanDAO read path emits: each id-range bound carries a parallel toMonday(id_at)
-        // bound derived from the same UUIDv7, expressed on the partition expression itself.
-        var actualParts = minMaxParts("""
+        var lowerBoundOnly = minMaxParts("""
+                SELECT
+                    id
+                FROM spans_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id >= :id_lo
+                    AND id <= :id_hi
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'))
+                """, binder);
+        var upperBoundOnly = minMaxParts("""
+                SELECT
+                    id
+                FROM spans_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id >= :id_lo
+                    AND id <= :id_hi
+                    AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC'))
+                """, binder);
+        // Run last on purpose: a background merge can only ever collapse parts, so measuring the two-bound query
+        // against the most-merged state keeps the inequalities below one-directional.
+        var bothBounds = minMaxParts("""
                 SELECT
                     id
                 FROM spans_local_v2
@@ -150,16 +186,14 @@ class SpansLocalV2PartitioningTest {
                     AND id <= :id_hi
                     AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_lo), 'UTC'))
                     AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_hi), 'UTC'))
-                """, statement -> statement
-                .bind("workspace_id", seed.workspaceId())
-                .bind("id_lo", seed.ids().get(1))
-                .bind("id_hi", seed.ids().get(2)));
+                """, binder);
 
-        // ids 1..2 are the inner two of the four seeded weeks, so week 0 sits below the range and week 3 above; both
-        // prune away, demonstrating pruning on each bound. ClickHouse folds the toMonday(id_at) bound back onto the
-        // id_at MinMax via toMonday's monotonicity, so the pruning shows on the MinMax entry (the Partition entry then
-        // reports the already-pruned set).
-        assertThat(actualParts.selected()).isLessThan(actualParts.total());
+        // Each bound prunes what the other cannot: the week-3 parts only the upper bound excludes, and the week-0
+        // parts only the lower one does. Together they also imply pruning happens at all, since a planner that ignored
+        // the id_at predicate would select every part in all three runs and fail both comparisons.
+        assertThat(bothBounds.selected())
+                .isLessThan(lowerBoundOnly.selected())
+                .isLessThan(upperBoundOnly.selected());
     }
 
     /**
@@ -294,6 +328,12 @@ class SpansLocalV2PartitioningTest {
      * Runs {@code EXPLAIN indexes = 1, json = 1} for the query and returns its {@code MinMax} index entry. That entry
      * reflects part-level pruning on the partition-expression column ({@code id_at}): {@code Initial Parts} is every
      * active part in the (reused) table, {@code Selected Parts} is what survives partition pruning.
+     * <p>
+     * The table also carries four minmax skip indexes (on {@code id}, {@code id_at}, {@code created_at} and
+     * {@code last_updated_at}), but EXPLAIN reports those under type {@code Skip}; {@code MinMax} is the partition-level
+     * entry, and these queries read one table through one scan, so exactly one must appear. Asserting that — rather than
+     * taking the first match — keeps the guards from silently reading some other entry's part counts if a future
+     * ClickHouse version changes how the block is reported.
      */
     private MinMaxParts minMaxParts(String selectSql, Consumer<Statement> binder) {
         var explainRows = transactionTemplateAsync.stream(connection -> {
@@ -304,15 +344,16 @@ class SpansLocalV2PartitioningTest {
         }).collectList().block();
 
         var explain = String.join("\n", explainRows);
-        var indexes = JsonUtils.getJsonNodeFromString(explain).findValue("Indexes");
-        if (indexes != null) {
+        var minMaxIndexes = new ArrayList<JsonNode>();
+        for (JsonNode indexes : JsonUtils.getJsonNodeFromString(explain).findValues("Indexes")) {
             for (JsonNode index : indexes) {
                 if ("MinMax".equals(index.path("Type").asText())) {
-                    return JsonUtils.treeToValue(index, MinMaxParts.class);
+                    minMaxIndexes.add(index);
                 }
             }
         }
-        throw new AssertionError("No MinMax index in EXPLAIN output:\n" + explain);
+        assertThat(minMaxIndexes).as("MinMax index entries in EXPLAIN output:%n%s", explain).hasSize(1);
+        return JsonUtils.treeToValue(minMaxIndexes.getFirst(), MinMaxParts.class);
     }
 
     private Instant weekInstant(int weekOffset) {
@@ -320,7 +361,8 @@ class SpansLocalV2PartitioningTest {
     }
 
     @Builder(toBuilder = true)
-    private record Seed(String workspaceId, UUID projectId, UUID traceId, List<UUID> ids) {
+    private record Seed(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID traceId,
+            @NonNull List<UUID> ids) {
     }
 
     @Builder(toBuilder = true)
