@@ -190,12 +190,16 @@ export class OptimizationStudioPage {
     });
   }
 
-  /** Assert the Best-trial-configuration panel shows the given algorithm + metric. */
+  /**
+   * Assert the run's configuration shows the given algorithm + metric. These
+   * render as pills in the detail page's header, which sits outside the tab
+   * structure — so scope to `main`, not to the Overview tabpanel.
+   */
   async expectBestTrialConfig(opts: { algorithm: string; metric: string }): Promise<void> {
-    return test.step('Assert Best-trial configuration panel', async () => {
-      const overview = this.page.getByRole('tabpanel');
-      await expect(overview).toContainText(opts.algorithm);
-      await expect(overview).toContainText(opts.metric);
+    return test.step('Assert the run configuration pills', async () => {
+      const header = this.page.locator('main');
+      await expect(header).toContainText(opts.algorithm);
+      await expect(header).toContainText(opts.metric);
     });
   }
 
