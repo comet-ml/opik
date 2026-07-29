@@ -74,6 +74,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const rootScrollRef = useRef<HTMLDivElement>(null);
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
+  const provider = get(data, "provider", undefined);
 
   const agentGraphData = get(
     data,
@@ -91,10 +92,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   // Show Messages tab when at least one field is supported and neither is invalid
   const canShowMessagesTab = useMemo(() => {
-    const input = detectLLMMessages(transformedInput, { fieldType: "input" });
-    const output = detectLLMMessages(transformedOutput, {
-      fieldType: "output",
-    });
+    const input = detectLLMMessages(
+      transformedInput,
+      { fieldType: "input" },
+      provider,
+    );
+    const output = detectLLMMessages(
+      transformedOutput,
+      { fieldType: "output" },
+      provider,
+    );
 
     const hasValid = input.supported || output.supported;
     const hasInvalid =
@@ -102,7 +109,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
       (!output.supported && !output.empty);
 
     return hasValid && !hasInvalid;
-  }, [transformedInput, transformedOutput]);
+  }, [provider, transformedInput, transformedOutput]);
 
   const defaultTab = canShowMessagesTab ? "messages" : "details";
 
@@ -166,7 +173,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const created_at = data.created_at ? formatDate(data.created_at) : "";
   const estimatedCost = data.total_estimated_cost;
   const model = get(data, "model", null);
-  const provider = get(data, "provider", null);
 
   const durationTooltip = (
     <div>
@@ -357,6 +363,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 media={media}
                 isLoading={isSpanInputOutputLoading}
                 scrollContainerRef={rootScrollRef}
+                formatHint={provider}
               />
             </TabsContent>
           )}

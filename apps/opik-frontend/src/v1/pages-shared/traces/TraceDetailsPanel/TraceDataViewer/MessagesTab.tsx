@@ -33,6 +33,7 @@ type MessagesTabProps = {
   media: UnifiedMediaItem[];
   isLoading: boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement>;
+  formatHint?: string;
 };
 
 function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
@@ -54,10 +55,12 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   media,
   isLoading,
   scrollContainerRef,
+  formatHint,
 }) => {
   const { messages: combinedMessages, usage } = useMemo(
-    () => mapAndCombineMessages(transformedInput, transformedOutput),
-    [transformedInput, transformedOutput],
+    () =>
+      mapAndCombineMessages(transformedInput, transformedOutput, formatHint),
+    [formatHint, transformedInput, transformedOutput],
   );
 
   const allMessageIds = useMemo(
