@@ -43,6 +43,7 @@ import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class StatsUtils {
 
@@ -407,6 +408,16 @@ public class StatsUtils {
         if (d1 == null) return -1;
         if (d2 == null) return 1;
         return Math.abs(d1 - d2) < 1e-6 ? 0 : Double.compare(d1, d2);
+    }
+
+    /**
+     * Asserts two BigDecimals are equal, tolerating the scale differences that come back from ClickHouse.
+     * Both values must be present - a null on either side is a failure rather than a match.
+     */
+    public static void assertBigDecimalEquals(BigDecimal actual, BigDecimal expected) {
+        assertThat(actual).isNotNull();
+        assertThat(expected).isNotNull();
+        assertThat(bigDecimalComparator(actual, expected)).isZero();
     }
 
     public static int bigDecimalComparator(BigDecimal v1, BigDecimal v2) {

@@ -177,9 +177,7 @@ class OptimizationsResourceFindProjectOptimizationsTest {
         assertThat(optimization.bestCost()).isNull();
         assertThat(optimization.baselineCost()).isNull();
         // sum() over an empty group is 0, not null
-        assertThat(optimization.totalOptimizationCost()).isNotNull();
-        assertThat(StatsUtils.bigDecimalComparator(
-                optimization.totalOptimizationCost(), BigDecimal.ZERO)).isZero();
+        StatsUtils.assertBigDecimalEquals(optimization.totalOptimizationCost(), BigDecimal.ZERO);
     }
 
     @Test

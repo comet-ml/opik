@@ -726,14 +726,12 @@ class OptimizationsResourceTest {
                         assertThat(actualOptimization.numTrials()).isEqualTo(2L);
 
                         // Baseline = earliest candidate's objective score
-                        assertThat(actualOptimization.baselineObjectiveScore()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.baselineObjectiveScore(), baselineScore)).isZero();
+                        StatsUtils.assertBigDecimalEquals(
+                                actualOptimization.baselineObjectiveScore(), baselineScore);
 
                         // Best = highest objective score across candidates
-                        assertThat(actualOptimization.bestObjectiveScore()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.bestObjectiveScore(), bestScore)).isZero();
+                        StatsUtils.assertBigDecimalEquals(
+                                actualOptimization.bestObjectiveScore(), bestScore);
 
                         // Duration fields are populated (traces have start/end times)
                         assertThat(actualOptimization.baselineDuration()).isNotNull();
@@ -822,11 +820,15 @@ class OptimizationsResourceTest {
                     .build();
             experimentResourceClient.create(later, apiKey, workspaceName);
 
-            // Deliberately divergent cost and trace duration, so choosing the later candidate is observable.
+            // The fixture creates one trace and one span per dataset item, so per-trace cost reduces to exactly
+            // the span cost. Giving the two candidates far-apart costs makes the chosen candidate observable.
+            var earliestCost = BigDecimal.valueOf(0.01);
+            var laterCost = BigDecimal.valueOf(0.99);
+
             createTracesSpansAndItems(earliest, items, project, apiKey, workspaceName,
-                    Instant.now().minusSeconds(3), Instant.now().minusSeconds(2), BigDecimal.valueOf(0.01));
+                    Instant.now().minusSeconds(3), Instant.now().minusSeconds(2), earliestCost);
             createTracesSpansAndItems(later, items, project, apiKey, workspaceName,
-                    Instant.now().minusSeconds(30), Instant.now().minusSeconds(1), BigDecimal.valueOf(0.99));
+                    Instant.now().minusSeconds(30), Instant.now().minusSeconds(1), laterCost);
 
             await().atMost(10, TimeUnit.SECONDS)
                     .pollInterval(1, TimeUnit.SECONDS)
@@ -837,24 +839,19 @@ class OptimizationsResourceTest {
                         assertThat(actual.numTrials()).isEqualTo(2L);
 
                         // Both candidates score the same, so only the tie-break decides best_*
-                        assertThat(actual.bestObjectiveScore()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actual.bestObjectiveScore(), tiedScore)).isZero();
+                        StatsUtils.assertBigDecimalEquals(actual.bestObjectiveScore(), tiedScore);
 
-                        assertThat(actual.baselineObjectiveScore()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actual.baselineObjectiveScore(), tiedScore)).isZero();
+                        StatsUtils.assertBigDecimalEquals(actual.baselineObjectiveScore(), tiedScore);
 
-                        // Under a tie the best candidate is the earliest one, which the baseline also resolves to
-                        assertThat(actual.bestCost()).isNotNull();
-                        assertThat(actual.baselineCost()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actual.bestCost(), actual.baselineCost())).isZero();
+                        // Under a tie the earliest candidate wins, so both rollups must report its concrete
+                        // cost. Comparing best against baseline alone would still pass if both picked the later
+                        // candidate, which is the regression this guards.
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), earliestCost);
+                        StatsUtils.assertBigDecimalEquals(actual.baselineCost(), earliestCost);
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestCost(), laterCost))
+                                .isNotZero();
 
-                        assertThat(actual.bestDuration()).isNotNull();
-                        assertThat(actual.baselineDuration()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actual.bestDuration(), actual.baselineDuration())).isZero();
+                        StatsUtils.assertBigDecimalEquals(actual.bestDuration(), actual.baselineDuration());
                     });
         }
 
