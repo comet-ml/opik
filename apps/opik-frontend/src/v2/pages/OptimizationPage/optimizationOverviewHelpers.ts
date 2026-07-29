@@ -144,15 +144,56 @@ const NO_CANDIDATES_MESSAGE =
   "This is common when the original prompt already scores well.";
 
 /**
- * Body copy for the empty-run panel and the KPI score-card caption.
+ * The scoring-failure lead sentence, single-sourced so the panel body and the
+ * KPI caption cannot drift apart (they only differ in the tail they append).
+ *
+ * - `suppressed`: backend health data says nothing failed — say nothing.
+ * - `all-failed` / `partial`: exact-count copy (OPIK-7159 Wave 2). `lead` has
+ *   no trailing punctuation; callers append their own tail.
+ * - `unknown`: no usable health data — callers fall back to static Wave-1 copy.
+ */
+type ScoringFailureSummary =
+  | { kind: "suppressed" | "unknown"; lead?: never }
+  | { kind: "all-failed" | "partial"; lead: string };
+
+const summarizeScoringFailure = (
+  scoringHealth?: OptimizationScoringHealth,
+): ScoringFailureSummary => {
+  if (!scoringHealth || scoringHealth.total_count <= 0)
+    return { kind: "unknown" };
+
+  const { failed_count, total_count } = scoringHealth;
+
+  if (failed_count === 0) return { kind: "suppressed" };
+
+  if (failed_count >= total_count) {
+    // Every item failed — stronger framing. The noun agrees with total_count,
+    // so a one-item dataset reads "The item …" not "All 1 item …".
+    return {
+      kind: "all-failed",
+      lead:
+        total_count === 1
+          ? "The item failed to score"
+          : `All ${total_count} items failed to score`,
+    };
+  }
+
+  // Partial failure. It always has total_count >= 2 (failed_count is >= 1 and
+  // strictly less than total), so the noun is always plural ("1 of 5 items").
+  return {
+    kind: "partial",
+    lead: `${failed_count} of ${total_count} items failed to score`,
+  };
+};
+
+/**
+ * Body copy for the empty-run panel.
  *
  * NO_CANDIDATES has its own copy and ignores `scoring_health`: the baseline
  * scored, so per-item failure counts cannot explain it.
  *
- * SCORING_FAILED has two paths. When `scoring_health` is present with
- * `total_count > 0`, use the backend's exact counts (OPIK-7159 Wave 2),
- * distinguishing all-failed from partial and keeping the noun in agreement with
- * total_count. Otherwise return the static Wave-1 message unchanged.
+ * SCORING_FAILED copy comes from {@link summarizeScoringFailure}: exact-count
+ * framing when backend health data exists, static Wave-1 message otherwise.
  *
  * Returns null when there is nothing to say: cause NONE, or health data
  * reporting no failures.
@@ -165,41 +206,27 @@ export const getEmptyRunMessage = (
 
   if (cause === EMPTY_RUN_CAUSE.NO_CANDIDATES) return NO_CANDIDATES_MESSAGE;
 
-  // --- Exact-count path (backend-provided, OPIK-7159 Wave 2) ---
-  if (scoringHealth && scoringHealth.total_count > 0) {
-    const { failed_count, total_count } = scoringHealth;
+  const failure = summarizeScoringFailure(scoringHealth);
 
-    if (failed_count === 0) {
-      // Backend says nothing failed — suppress the warning.
+  switch (failure.kind) {
+    case "suppressed":
       return null;
-    }
-
-    if (failed_count >= total_count) {
-      // Every item failed — use the stronger framing. The noun agrees with
-      // total_count, so a one-item dataset reads "The item …" not "All 1 item …".
-      const lead =
-        total_count === 1
-          ? "The item failed to score."
-          : `All ${total_count} items failed to score.`;
+    case "all-failed":
       return (
-        `${lead} ` +
+        `${failure.lead}. ` +
         "The metric may have errored on every evaluation. " +
         "Open the logs, check the metric and model, then run it again."
       );
-    }
-
-    // Partial failure — softer framing. A partial failure always has
-    // total_count >= 2 (failed_count is >= 1 and strictly less than total),
-    // so the noun is always plural ("1 of 5 items", never "1 of 5 item").
-    return (
-      `${failed_count} of ${total_count} items failed to score. ` +
-      "Some evaluations did not produce a usable result. " +
-      "Open the logs to see which items failed, then run it again."
-    );
+    case "partial":
+      return (
+        `${failure.lead}. ` +
+        "Some evaluations did not produce a usable result. " +
+        "Open the logs to see which items failed, then run it again."
+      );
+    case "unknown":
+      // Heuristic fallback (Wave 1, no backend data).
+      return "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.";
   }
-
-  // --- Heuristic fallback (Wave 1, no backend data) ---
-  return "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.";
 };
 
 /**
@@ -220,20 +247,18 @@ export const getEmptyRunKPICaption = (
     return "No candidates generated. Baseline prompt kept.";
   }
 
-  if (scoringHealth && scoringHealth.total_count > 0) {
-    const { failed_count, total_count } = scoringHealth;
-    if (failed_count === 0) return null;
+  const failure = summarizeScoringFailure(scoringHealth);
 
-    if (failed_count >= total_count) {
-      return total_count === 1
-        ? "The item failed to score — check the logs."
-        : `All ${total_count} items failed to score — check the logs.`;
-    }
-    return `${failed_count} of ${total_count} items failed to score — check the logs.`;
+  switch (failure.kind) {
+    case "suppressed":
+      return null;
+    case "all-failed":
+    case "partial":
+      return `${failure.lead} — check the logs.`;
+    case "unknown":
+      // Heuristic fallback (Wave 1).
+      return "No usable scores — check the logs.";
   }
-
-  // Heuristic fallback (Wave 1).
-  return "No usable scores — check the logs.";
 };
 
 /**
