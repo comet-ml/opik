@@ -523,18 +523,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     AND ec.optimization_id = ospe.optimization_id
                 LEFT JOIN experiment_durations ed ON ec.experiment_id = ed.experiment_id
                 GROUP BY ec.optimization_id, ec.candidate_id
-            ), best_candidate AS (
+            ), candidate_rollup AS (
                 SELECT
                     optim_id AS optimization_id,
-                    max(weighted_score) AS best_score,
-                    argMax(weighted_duration, weighted_score) AS best_duration,
-                    argMax(per_trace_cost, weighted_score) AS best_cost
-                FROM candidate_metrics
-                WHERE isNotNull(weighted_score)
-                GROUP BY optim_id
-            ), baseline_candidate AS (
-                SELECT
-                    optim_id AS optimization_id,
+                    maxIf(weighted_score, isNotNull(weighted_score)) AS best_score,
+                    argMinIf(weighted_duration, tuple(-weighted_score, earliest_created_at),
+                        isNotNull(weighted_score)) AS best_duration,
+                    argMinIf(per_trace_cost, tuple(-weighted_score, earliest_created_at),
+                        isNotNull(weighted_score)) AS best_cost,
                     argMin(weighted_score, earliest_created_at) AS baseline_score,
                     argMin(weighted_duration, earliest_created_at) AS baseline_duration,
                     argMin(per_trace_cost, earliest_created_at) AS baseline_cost
@@ -555,20 +551,89 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 maxMap(fs.feedback_scores) AS feedback_scores,
                 maxMap(es.experiment_scores) AS experiment_scores,
                 any(bc.best_score) AS best_objective_score,
-                any(blc.baseline_score) AS baseline_objective_score,
+                any(bc.baseline_score) AS baseline_objective_score,
                 any(bc.best_duration) AS best_duration,
                 any(bc.best_cost) AS best_cost,
-                any(blc.baseline_duration) AS baseline_duration,
-                any(blc.baseline_cost) AS baseline_cost,
+                any(bc.baseline_duration) AS baseline_duration,
+                any(bc.baseline_cost) AS baseline_cost,
                 any(oc.total_optimization_cost) AS total_optimization_cost
             FROM optimization_final AS o
             LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
-            LEFT JOIN best_candidate AS bc ON o.id = bc.optimization_id
-            LEFT JOIN baseline_candidate AS blc ON o.id = blc.optimization_id
+            LEFT JOIN candidate_rollup AS bc ON o.id = bc.optimization_id
             LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             GROUP BY o.*
+            ORDER BY o.id DESC
+            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            ;
+            """;
+
+    /**
+     * Does any optimization in scope have an experiment? Deliberately applies only the direct column filters
+     * and omits the narrowing ones ({@code name}, {@code dataset_deleted}, {@code studio_only}, {@code filters}),
+     * so the optimization set considered here is a superset of {@code optimization_final}. That makes a negative
+     * answer conservative: if this finds nothing, the narrowed set has nothing either.
+     */
+    private static final String HAS_EXPERIMENTS_IN_SCOPE = """
+            SELECT 1 AS has_experiments
+            FROM experiments
+            WHERE workspace_id = :workspace_id
+            AND optimization_id IN (
+                SELECT id
+                FROM optimizations
+                WHERE workspace_id = :workspace_id
+                <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
+                <if(id)>AND id = :id <endif>
+                <if(project_id)>AND project_id = :project_id <endif>
+            )
+            LIMIT 1
+            ;
+            """;
+
+    /**
+     * The {@link #FIND} projection for the case where no optimization in scope has an experiment. Every
+     * aggregate in {@link #FIND} is derived from {@code experiments_final}, so with no experiments they all
+     * collapse to their empty-input values and the fifteen-CTE pipeline reads nothing useful. The literals below
+     * reproduce those values and their exact declared types - note {@code total_optimization_cost} is a
+     * non-nullable zero, because {@code sum()} over an empty group returns 0 rather than NULL.
+     */
+    private static final String FIND_WITHOUT_EXPERIMENTS = """
+            WITH optimization_final AS (
+                SELECT
+                    *
+                FROM (
+                    SELECT *
+                    FROM optimizations
+                    WHERE workspace_id = :workspace_id
+                    <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                    <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
+                    <if(id)>AND id = :id <endif>
+                    <if(project_id)>AND project_id = :project_id <endif>
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, dataset_id, id
+                )
+                WHERE 1=1
+                <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
+                <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
+                <if(studio_only)>AND studio_config != ''<endif>
+                <if(filters)>AND <filters><endif>
+            )
+            SELECT
+                o.*,
+                o.id as id,
+                toUInt64(0) AS num_trials,
+                CAST(map(), 'Map(String, Float64)') AS feedback_scores,
+                CAST(map(), 'Map(String, Float64)') AS experiment_scores,
+                CAST(NULL, 'Nullable(Float64)') AS best_objective_score,
+                CAST(NULL, 'Nullable(Float64)') AS baseline_objective_score,
+                CAST(NULL, 'Nullable(Float64)') AS best_duration,
+                CAST(NULL, 'Nullable(Decimal(38, 12))') AS best_cost,
+                CAST(NULL, 'Nullable(Float64)') AS baseline_duration,
+                CAST(NULL, 'Nullable(Decimal(38, 12))') AS baseline_cost,
+                CAST(0, 'Decimal(38, 12)') AS total_optimization_cost
+            FROM optimization_final AS o
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             ;
@@ -814,9 +879,26 @@ class OptimizationDAOImpl implements OptimizationDAO {
     @Override
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
-        return getCount(searchCriteria)
-                .flatMap(totalCount -> find(page, size, totalCount, searchCriteria))
+        return Mono.zip(getCount(searchCriteria), hasExperimentsInScope(searchCriteria))
+                .flatMap(results -> find(page, size, results.getT1(), searchCriteria, results.getT2()))
                 .defaultIfEmpty(Optimization.OptimizationPage.empty(page, List.of()));
+    }
+
+    private Mono<Boolean> hasExperimentsInScope(OptimizationSearchCriteria searchCriteria) {
+        var template = TemplateUtils.newST(HAS_EXPERIMENTS_IN_SCOPE);
+
+        bindTemplateParams(template, searchCriteria);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(template.render());
+
+                    bindQueryParams(searchCriteria, statement, false);
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map(row -> row.get("has_experiments", Integer.class)))
+                .hasElements();
     }
 
     @Override
@@ -857,8 +939,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Mono<Optimization.OptimizationPage> find(int page, int size, long total,
-            OptimizationSearchCriteria searchCriteria) {
-        var template = TemplateUtils.newST(FIND);
+            OptimizationSearchCriteria searchCriteria, boolean hasExperiments) {
+        var template = TemplateUtils.newST(hasExperiments ? FIND : FIND_WITHOUT_EXPERIMENTS);
 
         bindTemplateParams(template, searchCriteria);
 
