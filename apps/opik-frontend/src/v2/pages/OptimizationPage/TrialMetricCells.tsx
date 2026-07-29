@@ -99,7 +99,10 @@ export const TrialNumberCell = (context: TrialCellContext) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="min-w-0 truncate">Trial #{row.trialNumber}</span>
+      <span className="min-w-0 truncate">
+        {/* The baseline is not a trial and carries no number (OPIK-7589). */}
+        {row.trialNumber == null ? "Baseline" : `Trial #${row.trialNumber}`}
+      </span>
     </CellWrapper>
   );
 };

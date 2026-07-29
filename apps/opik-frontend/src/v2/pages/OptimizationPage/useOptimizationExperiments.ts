@@ -131,7 +131,12 @@ export const useOptimizationExperiments = () => {
   }, [data?.content, isTestSuite, optimization?.objective_name]);
 
   const candidates = useMemo(
-    () => aggregateCandidates(experiments, optimization?.objective_name),
+    () =>
+      // v2 numbers only real candidate trials (1..N, matching max_trials); the
+      // baseline is not a trial and carries no number (OPIK-7589).
+      aggregateCandidates(experiments, optimization?.objective_name, {
+        unnumberedBaseline: true,
+      }),
     [experiments, optimization?.objective_name],
   );
 

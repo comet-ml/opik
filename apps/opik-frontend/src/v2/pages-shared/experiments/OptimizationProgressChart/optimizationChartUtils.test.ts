@@ -727,49 +727,88 @@ describe("buildCandidateChartData", () => {
 
 // OPIK-7589: the axis is positioned by step but labelled by trial number, the
 // identity the trials table / sidebar / cards use. A "Step 3" tick under a
-// "Trial #4" card read as an off-by-one bug.
+// "Trial #4" card read as an off-by-one bug. The baseline is not a trial —
+// it carries no number (null), so candidates count 1..N and the last trial
+// number matches the configured max_trials.
 describe("buildStepTickLabels", () => {
   it("labels step 0 Baseline and single-trial steps by their trial number", () => {
     const labels = buildStepTickLabels([
-      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: 1 }),
-      makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
-      makePoint({ candidateId: "t3", stepIndex: 2, trialNumber: 3 }),
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+      makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+      makePoint({ candidateId: "t2", stepIndex: 2, trialNumber: 2 }),
     ]);
     expect(labels.get(0)).toBe("Baseline");
-    expect(labels.get(1)).toBe("Trial 2");
-    expect(labels.get(2)).toBe("Trial 3");
+    expect(labels.get(1)).toBe("Trial 1");
+    expect(labels.get(2)).toBe("Trial 2");
+  });
+
+  it("labels the unnumbered baseline's step even when it is the only dot", () => {
+    const labels = buildStepTickLabels([
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+    ]);
+    expect(labels.get(0)).toBe("Baseline");
+  });
+
+  it("labels the third candidate Trial 3, agreeing with its card", () => {
+    // Rodrigo's OPIK-7589 screenshot: with the baseline counted as Trial #1
+    // the dot on the third candidate step said "Step 3" on the axis and
+    // "Trial #4" in the card. Axis and card must both say 3 now.
+    const third = makeCandidate({
+      candidateId: "t3",
+      stepIndex: 3,
+      score: 0.5,
+      trialNumber: 3,
+    });
+    const labels = buildStepTickLabels([
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+      makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+      makePoint({ candidateId: "t2", stepIndex: 2, trialNumber: 2 }),
+      makePoint({ candidateId: "t3", stepIndex: 3, trialNumber: 3 }),
+    ]);
+    expect(labels.get(3)).toBe("Trial 3");
+    expect(
+      buildTrialCardModel({ candidate: third, status: "passed" }).title,
+    ).toBe("Trial #3");
   });
 
   it("labels a fan-out step with the range of its trials", () => {
     const labels = buildStepTickLabels([
-      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: 1 }),
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+      makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
       makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
       makePoint({ candidateId: "t3", stepIndex: 1, trialNumber: 3 }),
-      makePoint({ candidateId: "t4", stepIndex: 1, trialNumber: 4 }),
     ]);
-    expect(labels.get(1)).toBe("Trials 2–4");
+    expect(labels.get(1)).toBe("Trials 1–3");
   });
 
   it("numbers the ghost after every plotted trial on a new step", () => {
     const labels = buildStepTickLabels(
       [
-        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: 1 }),
-        makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+        makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
       ],
       2,
     );
-    expect(labels.get(2)).toBe("Trial 3");
+    expect(labels.get(2)).toBe("Trial 2");
   });
 
   it("extends the range of the step the ghost joins", () => {
     const labels = buildStepTickLabels(
       [
-        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: 1 }),
-        makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+        makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
       ],
       1,
     );
-    expect(labels.get(1)).toBe("Trials 2–3");
+    expect(labels.get(1)).toBe("Trials 1–2");
+  });
+
+  it("numbers a ghost evaluating right after the baseline Trial 1", () => {
+    const labels = buildStepTickLabels(
+      [makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null })],
+      1,
+    );
+    expect(labels.get(1)).toBe("Trial 1");
   });
 
   it("labels a ghost-only chart Trial 1", () => {
@@ -987,6 +1026,23 @@ describe("buildTrialCardModel", () => {
       "Latency",
       "Runtime cost",
     ]);
+  });
+
+  it("titles the unnumbered baseline card Baseline, not Trial #N", () => {
+    const candidate = makeCandidate({
+      candidateId: "base",
+      stepIndex: 0,
+      trialNumber: null,
+      score: 0.4,
+    });
+
+    const model = buildTrialCardModel({
+      candidate,
+      status: "baseline",
+    });
+
+    expect(model.title).toBe("Baseline");
+    expect(model.statusLabel).toBe("Baseline");
   });
 
   it("labels and colours the best trial, with a ring around the dot", () => {

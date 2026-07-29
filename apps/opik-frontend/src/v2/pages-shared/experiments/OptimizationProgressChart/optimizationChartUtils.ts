@@ -189,7 +189,11 @@ export const buildTrialCardModel = ({
   }
 
   return {
-    title: `Trial #${candidate.trialNumber}`,
+    // The baseline carries no trial number — it is not a trial (OPIK-7589).
+    title:
+      candidate.trialNumber == null
+        ? "Baseline"
+        : `Trial #${candidate.trialNumber}`,
     statusLabel: isBest ? "Best trial" : TRIAL_STATUS_LABELS[status],
     dotColor: isBest ? TRIAL_BEST_COLOR : TRIAL_STATUS_COLORS[status],
     dotRingColor: isBest ? TRIAL_BEST_RING_COLOR : undefined,
@@ -210,8 +214,9 @@ export type CandidateDataPoint = {
   candidateId: string;
   stepIndex: number;
   /** 1-based creation-order number — the "Trial #N" identity used across the
-   *  run view (table, sidebar, deep links). The baseline is Trial #1. */
-  trialNumber: number;
+   *  run view (table, sidebar, deep links). The baseline is not a trial and
+   *  carries `null`; candidates count 1..N, matching max_trials (OPIK-7589). */
+  trialNumber: number | null;
   parentCandidateIds: string[];
   value: number | null;
   status: TrialStatus;
@@ -626,12 +631,13 @@ export const getUniqueSteps = (items: { stepIndex: number }[]): number[] => {
  * sibling trials on one step, and they must stack on a single x — but steps
  * are an internal grouping the rest of the run view never leads with: the
  * trials table, the sidebar, deep links and the trial cards all identify a dot
- * as "Trial #N" (1-based, baseline = #1). Labelling the same dot "Step 3" on
- * the axis and "Trial #4" in its card read as an off-by-one bug (OPIK-7589),
- * so the ticks speak trial numbers too: a single-trial step is "Trial N", a
- * fan-out step is the range "Trials N–M" (trial numbers follow creation order,
- * so one step's trials are contiguous), and step 0 is "Baseline" — matching
- * the baseline card's own status label.
+ * as "Trial #N". Labelling the same dot "Step 3" on the axis and "Trial #4"
+ * in its card read as an off-by-one bug (OPIK-7589), so the ticks speak trial
+ * numbers too: a single-trial step is "Trial N", a fan-out step is the range
+ * "Trials N–M" (trial numbers follow creation order, so one step's trials are
+ * contiguous). The baseline is not a trial: it carries no number (candidates
+ * count 1..N, so the last number matches max_trials) and its step 0 is
+ * labelled "Baseline" — matching the baseline card's own status label.
  *
  * `ghostStep` is the step of the candidate currently being evaluated (the
  * dashed ghost dot). It has no aggregated candidate yet, so it is numbered
@@ -642,9 +648,13 @@ export const buildStepTickLabels = (
   chartData: CandidateDataPoint[],
   ghostStep?: number | null,
 ): Map<number, string> => {
+  const steps = new Set<number>();
   const rangeByStep = new Map<number, { min: number; max: number }>();
   let maxTrialNumber = 0;
   for (const d of chartData) {
+    steps.add(d.stepIndex);
+    // The baseline is unnumbered; its step is labelled "Baseline" below.
+    if (d.trialNumber == null) continue;
     maxTrialNumber = Math.max(maxTrialNumber, d.trialNumber);
     const range = rangeByStep.get(d.stepIndex);
     if (range) {
@@ -656,6 +666,7 @@ export const buildStepTickLabels = (
   }
 
   if (ghostStep != null) {
+    steps.add(ghostStep);
     const ghostTrialNumber = maxTrialNumber + 1;
     const range = rangeByStep.get(ghostStep);
     if (range) {
@@ -669,14 +680,18 @@ export const buildStepTickLabels = (
   }
 
   const labels = new Map<number, string>();
-  for (const [stepIndex, { min, max }] of rangeByStep) {
+  for (const stepIndex of steps) {
+    if (stepIndex === 0) {
+      labels.set(stepIndex, "Baseline");
+      continue;
+    }
+    const range = rangeByStep.get(stepIndex);
+    if (!range) continue;
     labels.set(
       stepIndex,
-      stepIndex === 0
-        ? "Baseline"
-        : min === max
-          ? `Trial ${min}`
-          : `Trials ${min}–${max}`,
+      range.min === range.max
+        ? `Trial ${range.min}`
+        : `Trials ${range.min}–${range.max}`,
     );
   }
   return labels;

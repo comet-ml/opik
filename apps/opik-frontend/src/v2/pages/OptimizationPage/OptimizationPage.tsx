@@ -154,10 +154,13 @@ const OptimizationPage: React.FC = () => {
   );
 
   // The candidate behind the open sidebar; matched by trial number with an
-  // experiment-ids fallback for deep links minted before numbering.
+  // experiment-ids fallback for deep links minted before numbering — and for
+  // the baseline, which has no trial number and therefore no URL param.
   const activeTrialCandidate = useMemo(
     () =>
-      candidates.find((c) => c.trialNumber === trialSidebar.trialNumber) ??
+      (trialSidebar.trialNumber != null
+        ? candidates.find((c) => c.trialNumber === trialSidebar.trialNumber)
+        : undefined) ??
       candidates.find((c) =>
         c.experimentIds.some((id) => trialSidebar.experimentIds.includes(id)),
       ),
@@ -361,6 +364,7 @@ const OptimizationPage: React.FC = () => {
         open={trialSidebar.open}
         onClose={trialSidebar.close}
         trialNumber={trialSidebar.trialNumber}
+        isBaseline={activeTrialCandidate?.trialNumber === null}
         trialExperiments={trialExperiments}
       >
         <TrialSidebarContent
