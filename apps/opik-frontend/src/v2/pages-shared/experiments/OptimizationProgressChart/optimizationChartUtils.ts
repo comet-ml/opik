@@ -120,39 +120,12 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   failed: "Failed",
 };
 
-/**
- * Full status label for the trial tooltip header, including the step it
- * happened at (e.g. "Passed step 1", "Discarded in step 2"). The baseline has
- * no step suffix, and the best trial is labelled separately by the caller.
- */
-export const getTrialStatusLabel = (
-  status: TrialStatus,
-  stepIndex: number,
-): string => {
-  switch (status) {
-    case "baseline":
-      return "Baseline";
-    case "passed":
-      return `Passed step ${stepIndex}`;
-    case "pruned":
-      return `Discarded in step ${stepIndex}`;
-    case "evaluating":
-      return `Evaluating step ${stepIndex}`;
-    case "running":
-      return `Running step ${stepIndex}`;
-    case "failed":
-      return `Failed step ${stepIndex}`;
-    default:
-      return TRIAL_STATUS_LABELS[status];
-  }
-};
-
 export type TrialCardRow = { label: string; value: string };
 
 export type TrialCardModel = {
   /** Header title, e.g. "Trial #20". */
   title: string;
-  /** Header status label, e.g. "Passed step 1" or "Best trial". */
+  /** Header status label, e.g. "Passed" or "Best trial". */
   statusLabel: string;
   /** Fill colour of the header status dot. */
   dotColor: string;
@@ -171,17 +144,20 @@ export type TrialCardModel = {
  * The score row shows a percentage; test-suite runs relabel it "Pass rate" and
  * append the passed/total fraction. Latency and cost rows are omitted when the
  * candidate has no value for them.
+ *
+ * The status label deliberately carries no step reference ("Passed", not
+ * "Passed step 3"): trial numbers are the chart's one user-facing numbering
+ * (see {@link buildStepTickLabels}), and quoting a second, zero-based sequence
+ * next to "Trial #4" read as an off-by-one bug (OPIK-7589).
  */
 export const buildTrialCardModel = ({
   candidate,
   status,
-  stepIndex,
   isTestSuite,
   isBest,
 }: {
   candidate: AggregatedCandidate;
   status: TrialStatus;
-  stepIndex: number;
   isTestSuite?: boolean;
   isBest?: boolean;
 }): TrialCardModel => {
@@ -214,7 +190,7 @@ export const buildTrialCardModel = ({
 
   return {
     title: `Trial #${candidate.trialNumber}`,
-    statusLabel: isBest ? "Best trial" : getTrialStatusLabel(status, stepIndex),
+    statusLabel: isBest ? "Best trial" : TRIAL_STATUS_LABELS[status],
     dotColor: isBest ? TRIAL_BEST_COLOR : TRIAL_STATUS_COLORS[status],
     dotRingColor: isBest ? TRIAL_BEST_RING_COLOR : undefined,
     rows,
@@ -233,6 +209,9 @@ export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
 export type CandidateDataPoint = {
   candidateId: string;
   stepIndex: number;
+  /** 1-based creation-order number — the "Trial #N" identity used across the
+   *  run view (table, sidebar, deep links). The baseline is Trial #1. */
+  trialNumber: number;
   parentCandidateIds: string[];
   value: number | null;
   status: TrialStatus;
@@ -585,6 +564,7 @@ export const buildCandidateChartData = (
     .map((c) => ({
       candidateId: c.candidateId,
       stepIndex: c.stepIndex,
+      trialNumber: c.trialNumber,
       parentCandidateIds: c.parentCandidateIds,
       value: c.score ?? null,
       status: statusMap.get(c.candidateId) ?? "pruned",
@@ -637,6 +617,69 @@ export const buildTrendLineEdges = (
 export const getUniqueSteps = (items: { stepIndex: number }[]): number[] => {
   const steps = new Set(items.map((item) => item.stepIndex));
   return Array.from(steps).sort((a, b) => a - b);
+};
+
+/**
+ * X-axis tick labels for the progress chart, keyed by step index.
+ *
+ * The axis stays *positioned* by optimizer step — branching runs put several
+ * sibling trials on one step, and they must stack on a single x — but steps
+ * are an internal grouping the rest of the run view never leads with: the
+ * trials table, the sidebar, deep links and the trial cards all identify a dot
+ * as "Trial #N" (1-based, baseline = #1). Labelling the same dot "Step 3" on
+ * the axis and "Trial #4" in its card read as an off-by-one bug (OPIK-7589),
+ * so the ticks speak trial numbers too: a single-trial step is "Trial N", a
+ * fan-out step is the range "Trials N–M" (trial numbers follow creation order,
+ * so one step's trials are contiguous), and step 0 is "Baseline" — matching
+ * the baseline card's own status label.
+ *
+ * `ghostStep` is the step of the candidate currently being evaluated (the
+ * dashed ghost dot). It has no aggregated candidate yet, so it is numbered
+ * after every plotted trial — as its own tick, or extending the range of the
+ * step it joins.
+ */
+export const buildStepTickLabels = (
+  chartData: CandidateDataPoint[],
+  ghostStep?: number | null,
+): Map<number, string> => {
+  const rangeByStep = new Map<number, { min: number; max: number }>();
+  let maxTrialNumber = 0;
+  for (const d of chartData) {
+    maxTrialNumber = Math.max(maxTrialNumber, d.trialNumber);
+    const range = rangeByStep.get(d.stepIndex);
+    if (range) {
+      range.min = Math.min(range.min, d.trialNumber);
+      range.max = Math.max(range.max, d.trialNumber);
+    } else {
+      rangeByStep.set(d.stepIndex, { min: d.trialNumber, max: d.trialNumber });
+    }
+  }
+
+  if (ghostStep != null) {
+    const ghostTrialNumber = maxTrialNumber + 1;
+    const range = rangeByStep.get(ghostStep);
+    if (range) {
+      range.max = Math.max(range.max, ghostTrialNumber);
+    } else {
+      rangeByStep.set(ghostStep, {
+        min: ghostTrialNumber,
+        max: ghostTrialNumber,
+      });
+    }
+  }
+
+  const labels = new Map<number, string>();
+  for (const [stepIndex, { min, max }] of rangeByStep) {
+    labels.set(
+      stepIndex,
+      stepIndex === 0
+        ? "Baseline"
+        : min === max
+          ? `Trial ${min}`
+          : `Trials ${min}–${max}`,
+    );
+  }
+  return labels;
 };
 
 export type DotHit = { candidateId: string; cx: number; cy: number };

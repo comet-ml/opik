@@ -21,6 +21,7 @@ import {
   TrialLegendItem,
   buildTrialLegendItems,
   buildTrendLineEdges,
+  buildStepTickLabels,
   getUniqueSteps,
   findNearestDot,
 } from "./optimizationChartUtils";
@@ -104,6 +105,14 @@ const OptimizationProgressChartContent: React.FC<
     if (!isInProgress || steps.length === 0 || !inProgressInfo) return null;
     return inProgressInfo.stepIndex;
   }, [isInProgress, steps, inProgressInfo]);
+
+  // Ticks are positioned by step but labelled by trial number — the one
+  // numbering the whole run view identifies dots by (OPIK-7589). See
+  // buildStepTickLabels for the full rationale.
+  const tickLabels = useMemo(
+    () => buildStepTickLabels(chartData, ghostStep),
+    [chartData, ghostStep],
+  );
 
   const { overlapOffsets, ghostXOffset } = useMemo(() => {
     const groups = new Map<string, string[]>();
@@ -318,9 +327,7 @@ const OptimizationProgressChartContent: React.FC<
                 ? [...steps, ghostStep]
                 : steps
             }
-            tickFormatter={(value) =>
-              value === 0 ? "Baseline" : `Step ${value}`
-            }
+            tickFormatter={(value) => tickLabels.get(value) ?? ""}
             domain={xDomain}
             padding={X_AXIS_PADDING}
           />

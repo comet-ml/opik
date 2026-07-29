@@ -7,9 +7,9 @@ import {
   buildTrendLineEdges,
   buildTrialCardModel,
   buildEdgePath,
+  buildStepTickLabels,
   getUniqueSteps,
   findNearestDot,
-  getTrialStatusLabel,
   getTrialDotColor,
   STATUS_VARIANT_MAP,
   TRIAL_STATUS_COLORS,
@@ -28,6 +28,7 @@ const makePoint = (
   },
 ): CandidateDataPoint => ({
   parentCandidateIds: [],
+  trialNumber: 1,
   value: null,
   status: "passed",
   name: "test",
@@ -710,16 +711,69 @@ describe("buildCandidateChartData", () => {
     const data = buildCandidateChartData(candidates);
     expect(data[0].status).toBe("baseline");
   });
+
+  it("should carry the trial number through to the data point", () => {
+    const candidates = [
+      makeCandidate({
+        candidateId: "a",
+        stepIndex: 0,
+        score: 0.5,
+        trialNumber: 7,
+      }),
+    ];
+    expect(buildCandidateChartData(candidates)[0].trialNumber).toBe(7);
+  });
 });
 
-describe("getTrialStatusLabel", () => {
-  it("labels baseline without a step suffix", () => {
-    expect(getTrialStatusLabel("baseline", 0)).toBe("Baseline");
+// OPIK-7589: the axis is positioned by step but labelled by trial number, the
+// identity the trials table / sidebar / cards use. A "Step 3" tick under a
+// "Trial #4" card read as an off-by-one bug.
+describe("buildStepTickLabels", () => {
+  it("labels step 0 Baseline and single-trial steps by their trial number", () => {
+    const labels = buildStepTickLabels([
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: 1 }),
+      makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+      makePoint({ candidateId: "t3", stepIndex: 2, trialNumber: 3 }),
+    ]);
+    expect(labels.get(0)).toBe("Baseline");
+    expect(labels.get(1)).toBe("Trial 2");
+    expect(labels.get(2)).toBe("Trial 3");
   });
 
-  it("labels passed and pruned trials with their step", () => {
-    expect(getTrialStatusLabel("passed", 1)).toBe("Passed step 1");
-    expect(getTrialStatusLabel("pruned", 2)).toBe("Discarded in step 2");
+  it("labels a fan-out step with the range of its trials", () => {
+    const labels = buildStepTickLabels([
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: 1 }),
+      makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+      makePoint({ candidateId: "t3", stepIndex: 1, trialNumber: 3 }),
+      makePoint({ candidateId: "t4", stepIndex: 1, trialNumber: 4 }),
+    ]);
+    expect(labels.get(1)).toBe("Trials 2–4");
+  });
+
+  it("numbers the ghost after every plotted trial on a new step", () => {
+    const labels = buildStepTickLabels(
+      [
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: 1 }),
+        makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+      ],
+      2,
+    );
+    expect(labels.get(2)).toBe("Trial 3");
+  });
+
+  it("extends the range of the step the ghost joins", () => {
+    const labels = buildStepTickLabels(
+      [
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: 1 }),
+        makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+      ],
+      1,
+    );
+    expect(labels.get(1)).toBe("Trials 2–3");
+  });
+
+  it("labels a ghost-only chart Trial 1", () => {
+    expect(buildStepTickLabels([], 1).get(1)).toBe("Trial 1");
   });
 });
 
@@ -811,10 +865,6 @@ describe("failed trial-status maps", () => {
     expect(STATUS_VARIANT_MAP.failed).toBe("red");
     expect(TRIAL_STATUS_COLORS.failed).toBe("var(--color-red)");
     expect(TRIAL_STATUS_ORDER).toContain("failed");
-  });
-
-  it("gives the failed trial a stepped tooltip label", () => {
-    expect(getTrialStatusLabel("failed", 2)).toBe("Failed step 2");
   });
 });
 
@@ -924,11 +974,12 @@ describe("buildTrialCardModel", () => {
     const model = buildTrialCardModel({
       candidate,
       status: "passed",
-      stepIndex: 3,
     });
 
     expect(model.title).toBe("Trial #20");
-    expect(model.statusLabel).toBe("Passed step 3");
+    // No step reference — trial numbers are the chart's one user-facing
+    // numbering (OPIK-7589).
+    expect(model.statusLabel).toBe("Passed");
     expect(model.dotColor).toBe(TRIAL_STATUS_COLORS.passed);
     expect(model.dotRingColor).toBeUndefined();
     expect(model.rows.map((r) => r.label)).toEqual([
@@ -948,7 +999,6 @@ describe("buildTrialCardModel", () => {
     const model = buildTrialCardModel({
       candidate,
       status: "passed",
-      stepIndex: 5,
       isBest: true,
     });
 
@@ -969,7 +1019,6 @@ describe("buildTrialCardModel", () => {
     const model = buildTrialCardModel({
       candidate,
       status: "passed",
-      stepIndex: 1,
       isTestSuite: true,
     });
 
@@ -990,12 +1039,11 @@ describe("buildTrialCardModel", () => {
     const model = buildTrialCardModel({
       candidate,
       status: "pruned",
-      stepIndex: 2,
     });
 
     expect(model.rows).toHaveLength(1);
     expect(model.rows[0]).toEqual({ label: "Score", value: "-" });
-    expect(model.statusLabel).toBe("Discarded in step 2");
+    expect(model.statusLabel).toBe("Discarded");
   });
 });
 
