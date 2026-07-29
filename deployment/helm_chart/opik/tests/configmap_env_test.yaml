@@ -33,6 +33,67 @@ tests:
           path: data.MY_CUSTOM_FLAG
           value: enabled
 
+  # Hyperscale flags derived from the clickhouse / databaseAnalytics values (OPIK-6880).
+  - it: derives the cluster readiness probe and UUID validation window from the chart defaults
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED
+          value: "false"
+      - equal:
+          path: data.UUID_VALIDATION_WINDOW
+          value: "86400000ms"
+
+  - it: turns the cluster readiness probe on with the sharding switch
+    set:
+      clickhouse.sharding.enabled: true
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED
+          value: "true"
+
+  - it: renders the UUID validation window in milliseconds
+    set:
+      databaseAnalytics.uuidV7ValidationWindowMs: 43200000
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.UUID_VALIDATION_WINDOW
+          value: "43200000ms"
+
+  - it: an explicit component env key wins over the derived value
+    set:
+      clickhouse.sharding.enabled: true
+      component.backend.env.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED: "false"
+      component.backend.env.UUID_VALIDATION_WINDOW: 36h
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED
+          value: "false"
+      - equal:
+          path: data.UUID_VALIDATION_WINDOW
+          value: "36h"
+
+  - it: the derived keys are backend-only
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - notExists:
+          path: data.ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED
+      - notExists:
+          path: data.UUID_VALIDATION_WINDOW
+
   - it: backend configmap is not rendered when backendConfigMap is disabled
     set:
       component.backend.backendConfigMap.enabled: false

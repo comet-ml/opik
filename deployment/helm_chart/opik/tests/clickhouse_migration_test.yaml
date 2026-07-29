@@ -2,16 +2,20 @@ suite: clickhouse multi-replica migration NOTES reminder
 
 # When ClickHouse runs >= 2 replicas, NOTES.txt reminds operators to use the two-phase
 # HA install flow (migrate at 1 replica, then scale up), since a fresh multi-replica
-# install cannot complete its migrations (OPIK-7332).
+# install cannot complete its migrations (OPIK-7332). replicasCount now defaults to 2,
+# so the reminder is part of the default install output and a fresh install has to
+# override replicasCount to 1 for the first phase.
 
 templates:
   - templates/NOTES.txt
 
 tests:
-  - it: NOTES omits the multi-replica migration banner for the default replica count
+  - it: NOTES shows the multi-replica migration banner at the default replica count
     asserts:
-      - notMatchRegexRaw:
-          pattern: "two-phase install"
+      - matchRegexRaw:
+          pattern: "ClickHouse is configured with 2 replicas"
+      - matchRegexRaw:
+          pattern: "two-phase install for High Availability"
 
   - it: NOTES omits the banner at an explicit single replica
     set:

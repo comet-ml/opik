@@ -28,5 +28,15 @@ data:
   PYTHON_CODE_EXECUTOR_IMAGE_TAG: {{ $.Chart.AppVersion | quote }}
   {{- end }}
   {{- end }}
+  {{- if eq $key "backend" }}
+  {{- /* Derived from the clickhouse / databaseAnalytics values above. An explicit key under
+         component.backend.env wins, so operators can still pin either env var directly. */}}
+  {{- if not (hasKey $value.env "ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED") }}
+  ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED: {{ $.Values.clickhouse.sharding.enabled | quote }}
+  {{- end }}
+  {{- if not (hasKey $value.env "UUID_VALIDATION_WINDOW") }}
+  UUID_VALIDATION_WINDOW: {{ printf "%dms" (int $.Values.databaseAnalytics.uuidV7ValidationWindowMs) | quote }}
+  {{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}

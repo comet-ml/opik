@@ -194,11 +194,12 @@ Call opik api on http://localhost:5173/api
 | clickhouse.readinessProbe.initialDelaySeconds | int | `30` |  |
 | clickhouse.readinessProbe.periodSeconds | int | `10` |  |
 | clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
-| clickhouse.replicasCount | int | `1` |  |
+| clickhouse.replicasCount | int | `2` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.serviceAccount.create | bool | `false` |  |
 | clickhouse.serviceAccount.name | string | `""` |  |
+| clickhouse.sharding.enabled | bool | `false` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
 | clickhouse.templates.podTemplate | string | `"clickhouse-cluster-pod-template"` |  |
@@ -449,6 +450,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.waitForRedis.redis.host | string | `""` |  |
 | component.python-backend.waitForRedis.redis.port | int | `6379` |  |
 | component.python-backend.waitForRedis.resources | object | `{}` |  |
+| databaseAnalytics.uuidV7ValidationWindowMs | int | `86400000` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | global.argocd | bool | `false` |  |

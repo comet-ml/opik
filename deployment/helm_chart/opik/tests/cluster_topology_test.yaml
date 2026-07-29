@@ -1,0 +1,75 @@
+suite: clickhouse cluster topology flags (shards, internal_replication, sharding switch)
+
+# Hyperscale topology flags landed ahead of the slices that flip them (OPIK-6880).
+# The cluster layout carries an explicit shards[] list so internal_replication is
+# pinned to true independently of replicasCount, and clickhouse.sharding.enabled
+# drives the backend's Distributed-cluster readiness probe.
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: pins internal_replication on the single default shard
+    asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.shardsCount
+          value: 1
+      - equal:
+          path: spec.configuration.clusters[0].layout.replicasCount
+          value: 2
+      - lengthEqual:
+          path: spec.configuration.clusters[0].layout.shards
+          count: 1
+      - equal:
+          path: spec.configuration.clusters[0].layout.shards[0].internalReplication
+          value: "true"
+
+  - it: leaves shard names unset so the operator keeps generating them by index
+    asserts:
+      - notExists:
+          path: spec.configuration.clusters[0].layout.shards[0].name
+
+  - it: pins internal_replication on every shard when sharded
+    set:
+      clickhouse.shardsCount: 3
+    asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.shardsCount
+          value: 3
+      - lengthEqual:
+          path: spec.configuration.clusters[0].layout.shards
+          count: 3
+      - equal:
+          path: spec.configuration.clusters[0].layout.shards[2].internalReplication
+          value: "true"
+
+  - it: keeps internal_replication pinned at a single replica
+    set:
+      clickhouse.replicasCount: 1
+    asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.replicasCount
+          value: 1
+      - equal:
+          path: spec.configuration.clusters[0].layout.shards[0].internalReplication
+          value: "true"
+
+  # A zero shard count is already invalid, but the shards[] list must not render as a
+  # null value where the CRD expects an array.
+  - it: omits the shards list entirely rather than emitting a null one
+    set:
+      clickhouse.shardsCount: 0
+    asserts:
+      - notExists:
+          path: spec.configuration.clusters[0].layout.shards
+
+  - it: sharding.enabled does not alter the rendered cluster layout
+    set:
+      clickhouse.sharding.enabled: true
+    asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.shardsCount
+          value: 1
+      - lengthEqual:
+          path: spec.configuration.clusters[0].layout.shards
+          count: 1

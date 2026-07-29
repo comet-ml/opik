@@ -681,14 +681,33 @@ altinity-clickhouse-operator:
     enabled: false
     interval: '' # workaround for https://github.com/Altinity/clickhouse-operator/issues/1759
 
+# Backend-side settings for the analytics (ClickHouse) database. Rendered into the backend env
+# ConfigMap; each key maps to the ANALYTICS_DB_* / UUID_VALIDATION_* env var documented in
+# apps/opik-backend/config.yml.
+databaseAnalytics:
+  # Window, in milliseconds, for UUIDv7 ingestion validation: writes whose `id` embeds a timestamp
+  # further than this into the past or future are rejected. Rendered as UUID_VALIDATION_WINDOW.
+  # Accepted range is 12h .. 45d; the backend rejects anything outside it at startup. Inert while
+  # UUID_VALIDATION_ENABLED is false (the default) — set that key under component.backend.env to
+  # turn validation on, and UUID_VALIDATION_AUDIT_ONLY to count offenders without rejecting them.
+  uuidV7ValidationWindowMs: 86400000 # 24h
+
 clickhouse:
   enabled: true
   shardsCount: 1
   # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
   # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
-  # migrations from completing on a fresh cluster. See the self-host/scaling docs.
-  replicasCount: 1
+  # migrations from completing on a fresh cluster (OPIK-7332), so a fresh install at this default must
+  # override replicasCount to 1 first — NOTES.txt prints the reminder. See the self-host/scaling docs.
+  replicasCount: 2
+  # Switches the deployment to the sharded (Hyperscale) topology. A no-op while shardsCount is 1: it
+  # only drives the backend's `clickhouse-cluster` readiness probe, which verifies the Distributed
+  # cluster definition is visible from the node (ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED — set that
+  # key explicitly under component.backend.env to decouple the two). Turn on together with
+  # shardsCount > 1 once the Distributed tables are in place.
+  sharding:
+    enabled: false
   image: altinity/clickhouse-server:26.3.16.10001.altinitystable
   storage: 50Gi
   logsLevel: information
