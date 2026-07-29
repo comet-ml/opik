@@ -37,6 +37,15 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
     testNamespace,
     page,
   }) => {
+    // Pin the model the same way the run tests do, rather than relying on the
+    // form's default: the default is whatever the deployment offers (the free
+    // gpt-5-nano on Comet), and on a deployment with no provider key it is
+    // empty, which keeps Optimize disabled and fails the assertion below.
+    const modelDisplayName = await test.step(
+      'Ensure an LLM provider is available',
+      async () => ensureModelAvailable(page),
+    );
+
     // A form-only test still needs a project-associated dataset for the picker.
     const dataset = await test.step('Seed a dataset for the picker', async () =>
       seedSentimentDataset(sdkClient, project.name, `${testNamespace}-form-ds`));
@@ -48,7 +57,8 @@ test.describe('Optimization Studio — core', { tag: ['@t2-cuj', '@t1-stsaas', '
       await studio.assertFormRenders();
     });
 
-    await test.step('Optimize enables once dataset + prompt + reference key are set', async () => {
+    await test.step('Optimize enables once model + dataset + prompt + reference key are set', async () => {
+      await studio.selectModel(modelDisplayName);
       await studio.selectDataset(dataset.name);
       await studio.setUserPrompt(PROMPT);
       await studio.setReferenceKey('label');
