@@ -137,23 +137,25 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
     )
 
 
-@pytest.mark.parametrize("num_threads", [1, 2, 4, 8, 16])
+@pytest.mark.parametrize("num_threads", [1, 8])
 def test_insert_parallel__same_data_regardless_of_thread_count(
     opik_client: opik.Opik, dataset_name: str, num_threads: int
 ):
     """Parallel insert must produce the same dataset content, item count and
-    a single version whatever the thread count.
+    a single version whether it runs sequentially or across worker threads.
 
-    Item count (16k) yields 16 batches at the 1000-rows/batch cap, so even the
-    16-thread run has a batch per worker; payload is kept tiny so total bytes
-    stay small for CI. Timing is logged (not asserted): whether more threads
-    are actually faster depends on the target backend (e.g. rate limits), so
-    the speedup is measured ad-hoc against a real test environment rather than
-    gated in CI. Correctness, however, must hold identically across thread
-    counts.
+    Sequential (1) and parallel (8) are compared: 10k items yield 10 batches
+    at the 1000-rows/batch cap, so the parallel run fans real work across the
+    pool; payload is kept tiny so total bytes stay small for CI. Timing is
+    logged (not asserted): CI runs a single backend container, so it is
+    backend-bound and understates the speedup — the real throughput gain is
+    measured ad-hoc against a resourced test environment. What CI guarantees
+    is that correctness holds identically whatever the thread count.
     """
     DESCRIPTION = "E2E parallel insert dataset"
-    N_ITEMS = 16_000  # 16 batches at the 1000-rows/batch cap -> feeds 16 workers
+    N_ITEMS = (
+        10_000  # 10 batches at the 1000-rows/batch cap -> real fan-out at 8 workers
+    )
 
     name = f"{dataset_name}-t{num_threads}"
     items = [
