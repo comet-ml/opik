@@ -959,7 +959,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             .bind("limit", size)
                             .bind("offset", offset);
 
-                    bindQueryParams(searchCriteria, statement, true);
+                    // entity_type is only declared by FIND; the fast path omits the feedback-score CTEs that use it,
+                    // and binding a parameter the rendered query does not contain fails the statement.
+                    bindQueryParams(searchCriteria, statement, hasExperiments);
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
