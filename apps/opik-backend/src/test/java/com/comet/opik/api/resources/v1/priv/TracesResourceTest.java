@@ -3997,6 +3997,8 @@ class TracesResourceTest {
             try (var response = traceResourceClient.deleteTraces(request, workspaceName, apiKey,
                     HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
                 assertThat(response.hasEntity()).isTrue();
+                assertThat(response.readEntity(ErrorMessage.class).errors())
+                        .containsExactly("ids[].<iterable element> must not be null");
             }
         }
     }
