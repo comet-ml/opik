@@ -168,7 +168,7 @@ class TestReflectionLmWiring:
 class TestReflectionBudgetStopper:
     def test_stops_only_once_budget_is_spent(self) -> None:
         optimizer = SimpleNamespace(_reflection_call_count=0)
-        stopper = _ReflectionBudgetStopper(optimizer, 3)
+        stopper = _ReflectionBudgetStopper(optimizer, 3)  # type: ignore[arg-type]
         state = SimpleNamespace()
 
         assert stopper(state) is False

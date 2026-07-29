@@ -130,7 +130,7 @@ class _ReflectionBudgetStopper:
         self._optimizer = optimizer
         self.max_reflection_calls = max_reflection_calls
 
-    def __call__(self, gepa_state: Any) -> bool:
+    def __call__(self, _gepa_state: Any) -> bool:
         return self._optimizer._reflection_call_count >= self.max_reflection_calls
 
 
