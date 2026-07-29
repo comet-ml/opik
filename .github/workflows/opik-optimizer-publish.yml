@@ -33,7 +33,7 @@ jobs:
                 python3 -m build --sdist --wheel --outdir dist/ .
 
         - name: Publish package distributions to PyPI
-          uses: pypa/gh-action-pypi-publish@v1.12.4
+          uses: pypa/gh-action-pypi-publish@v1.14.1
           with:
             packages-dir: sdks/opik_optimizer/dist
             # Symmetric to OPIK-6624's npm publish 403-skip: replays / races where
