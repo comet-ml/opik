@@ -489,8 +489,9 @@ class TraceServiceImpl implements TraceService {
      * Deletes the given trace ids. With an explicit {@code projectId}, deletes only within that project. Without one
      * (delete-by-id, or a batch spanning projects), resolves every owning project for each id and deletes it under the
      * full {@code (workspace_id, project_id, id)} key, once per project group - so an id reused across projects is
-     * removed from all of them and no delete is ever project-less (OPIK-7483). Ids with no live row are already gone,
-     * so they are skipped.
+     * removed from all of them and no delete is ever project-less (OPIK-7483). Ids with no live trace row are skipped
+     * (a no-op); delete-by-id does not clean up orphaned child rows of a trace that never existed - that is the child
+     * entities' own lifecycle concern.
      */
     @Override
     @WithSpan
@@ -525,11 +526,15 @@ class TraceServiceImpl implements TraceService {
     }
 
     /**
-     * Resolves every owning project for each id via a bounded (partition-pruned) fast pass, then re-resolves only the
-     * ids the bounded pass left unresolved via an unbounded pass, so rows the bounded window skips - malformed ids
-     * whose id_at is not monotonic in id (e.g. a wrapped timestamp, OPIK-7456) - are still found with their project.
-     * The bounded query is never the sole resolver for a delete. Returns id -> set of owning projects; ids absent
-     * from the result have no live row.
+     * Resolves every owning project for each id: a bounded (partition-pruned) fast pass, then an unbounded pass over
+     * only the ids the bounded one left unresolved. Returns id -> set of owning projects; ids absent from the result
+     * have no live row.
+     * <p>
+     * The miss set is dominated by ids with no live row (already deleted, client retries), for which the unbounded
+     * pass also finds nothing and the delete is a no-op. Its real job is to still resolve the rare malformed id whose
+     * {@code id_at} is not monotonic in id (e.g. a wrapped timestamp, OPIK-7456) and so falls outside the bounded
+     * window. The bounded query is never the sole resolver for a delete. Once {@code traces} is partitioned, the
+     * bounded predicate prunes as intended and this unbounded fallback can be removed.
      */
     private Mono<Map<UUID, Set<UUID>>> resolveOwningProjects(Set<UUID> ids) {
         return dao.getAllProjectIdsByTraceIdsBounded(ids)
