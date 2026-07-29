@@ -593,6 +593,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     /**
+     * The check that selects this projection runs as its own statement, so an experiment inserted between the
+     * two reads leaves the aggregates at these empty-input values for that one response. Reads in this system are
+     * already eventually consistent through replica lag, so this sits inside existing behaviour and self-corrects
+     * on the next request rather than needing a shared read boundary.
+     * <p>
      * The {@link #FIND} projection for the case where no optimization in scope has an experiment. Every
      * aggregate in {@link #FIND} is derived from {@code experiments_final}, so with no experiments they all
      * collapse to their empty-input values and the fifteen-CTE pipeline reads nothing useful. The literals below

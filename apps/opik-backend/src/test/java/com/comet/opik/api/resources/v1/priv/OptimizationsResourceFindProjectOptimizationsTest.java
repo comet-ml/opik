@@ -169,7 +169,8 @@ class OptimizationsResourceFindProjectOptimizationsTest {
         var optimization = page.content().getFirst();
 
         assertThat(optimization.numTrials()).isZero();
-        assertThat(optimization.feedbackScores()).isEmpty();
+        // getScoresAggregation maps an empty score map to null rather than an empty list
+        assertThat(optimization.feedbackScores()).isNull();
         assertThat(optimization.bestObjectiveScore()).isNull();
         assertThat(optimization.baselineObjectiveScore()).isNull();
         assertThat(optimization.bestDuration()).isNull();

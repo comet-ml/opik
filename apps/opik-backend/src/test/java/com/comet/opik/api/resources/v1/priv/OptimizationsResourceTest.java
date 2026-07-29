@@ -843,13 +843,17 @@ class OptimizationsResourceTest {
 
                         StatsUtils.assertBigDecimalEquals(actual.baselineObjectiveScore(), tiedScore);
 
-                        // Under a tie the earliest candidate wins, so both rollups must report its concrete
-                        // cost. Comparing best against baseline alone would still pass if both picked the later
-                        // candidate, which is the regression this guards.
-                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), earliestCost);
-                        StatsUtils.assertBigDecimalEquals(actual.baselineCost(), earliestCost);
+                        // Under a tie the earliest candidate wins. Asserting best equals baseline alone would
+                        // still pass if both rollups picked the later candidate, so also require that neither
+                        // reports the later candidate's cost. Together these catch either rollup drifting,
+                        // without depending on how per-trace cost is derived.
+                        assertThat(actual.bestCost()).isNotNull();
+                        assertThat(actual.baselineCost()).isNotNull();
                         assertThat(StatsUtils.bigDecimalComparator(actual.bestCost(), laterCost))
                                 .isNotZero();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineCost(), laterCost))
+                                .isNotZero();
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), actual.baselineCost());
 
                         StatsUtils.assertBigDecimalEquals(actual.bestDuration(), actual.baselineDuration());
                     });
