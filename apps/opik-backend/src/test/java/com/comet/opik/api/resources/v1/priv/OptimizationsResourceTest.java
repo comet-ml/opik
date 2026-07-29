@@ -836,24 +836,25 @@ class OptimizationsResourceTest {
                         assertThat(actual).isNotNull();
                         assertThat(actual.numTrials()).isEqualTo(2L);
 
-                        assertThat(StatsUtils.bigDecimalComparator(actual.bestObjectiveScore(), tiedScore))
-                                .as("both candidates score the same, so the tie-break is what is under test")
-                                .isZero();
-                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineObjectiveScore(), tiedScore))
-                                .isZero();
+                        // Both candidates score the same, so only the tie-break decides best_*
+                        assertThat(actual.bestObjectiveScore()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(
+                                actual.bestObjectiveScore(), tiedScore)).isZero();
 
+                        assertThat(actual.baselineObjectiveScore()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(
+                                actual.baselineObjectiveScore(), tiedScore)).isZero();
+
+                        // Under a tie the best candidate is the earliest one, which the baseline also resolves to
                         assertThat(actual.bestCost()).isNotNull();
                         assertThat(actual.baselineCost()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(actual.bestCost(), actual.baselineCost()))
-                                .as("under a tie the best candidate is the earliest one, which the baseline also "
-                                        + "resolves to, so the two costs must agree")
-                                .isZero();
+                        assertThat(StatsUtils.bigDecimalComparator(
+                                actual.bestCost(), actual.baselineCost())).isZero();
 
                         assertThat(actual.bestDuration()).isNotNull();
                         assertThat(actual.baselineDuration()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(actual.bestDuration(), actual.baselineDuration()))
-                                .as("likewise for duration, which differs sharply between the two candidates")
-                                .isZero();
+                        assertThat(StatsUtils.bigDecimalComparator(
+                                actual.bestDuration(), actual.baselineDuration())).isZero();
                     });
         }
 

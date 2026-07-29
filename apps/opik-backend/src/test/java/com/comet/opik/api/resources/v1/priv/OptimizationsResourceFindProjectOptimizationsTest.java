@@ -176,10 +176,10 @@ class OptimizationsResourceFindProjectOptimizationsTest {
         assertThat(optimization.baselineDuration()).isNull();
         assertThat(optimization.bestCost()).isNull();
         assertThat(optimization.baselineCost()).isNull();
-        assertThat(optimization.totalOptimizationCost())
-                .as("sum() over an empty group is 0, not null")
-                .usingComparator(StatsUtils::bigDecimalComparator)
-                .isEqualTo(BigDecimal.ZERO);
+        // sum() over an empty group is 0, not null
+        assertThat(optimization.totalOptimizationCost()).isNotNull();
+        assertThat(StatsUtils.bigDecimalComparator(
+                optimization.totalOptimizationCost(), BigDecimal.ZERO)).isZero();
     }
 
     @Test
