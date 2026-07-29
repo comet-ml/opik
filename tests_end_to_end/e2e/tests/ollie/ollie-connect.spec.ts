@@ -58,6 +58,7 @@ test.describe('Ollie — Local Runner', { tag: ['@t3-nightly', '@ollie'] }, () =
           projectName: project.name,
           workspace: envConfig.workspace,
           apiKey: envConfig.apiKey!,
+          apiUrl: envConfig.apiBaseUrl,
           cwd: scratchDir.path,
         }));
 
@@ -135,6 +136,7 @@ test.describe('Ollie — Local Runner', { tag: ['@t3-nightly', '@ollie'] }, () =
           projectName: project.name,
           workspace: envConfig.workspace,
           apiKey: envConfig.apiKey!,
+          apiUrl: envConfig.apiBaseUrl,
           cwd: scratchDir.path,
         }));
 
