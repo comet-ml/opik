@@ -11468,7 +11468,8 @@ components:
               rules)
             format: uuid
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
@@ -12029,7 +12030,8 @@ components:
               rules)
             format: uuid
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
@@ -12382,7 +12384,8 @@ components:
           items:
             $ref: "#/components/schemas/ProjectReference_Public"
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
@@ -12845,7 +12848,8 @@ components:
           items:
             $ref: "#/components/schemas/ProjectReference_Public"
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
@@ -12948,7 +12952,8 @@ components:
       type: object
       properties:
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
