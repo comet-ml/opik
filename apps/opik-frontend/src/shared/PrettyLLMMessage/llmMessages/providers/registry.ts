@@ -13,9 +13,13 @@ const FORMAT_REGISTRY: Record<
 };
 
 export const getFormat = (
-  format: LLMMessageFormat,
+  format: string,
 ): LLMMessageFormatImplementation | null => {
-  return FORMAT_REGISTRY[format] || null;
+  if (!Object.prototype.hasOwnProperty.call(FORMAT_REGISTRY, format)) {
+    return null;
+  }
+
+  return FORMAT_REGISTRY[format as LLMMessageFormat];
 };
 
 export const getAllFormats = (): LLMMessageFormatImplementation[] => {

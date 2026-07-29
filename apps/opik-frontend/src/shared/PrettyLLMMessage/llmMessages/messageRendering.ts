@@ -1,18 +1,17 @@
 import { detectLLMMessages } from "./detectLLMMessages";
 import { getFormat } from "./providers/registry";
-import { LLMMessageFormat } from "./types";
 
 export const resolveLLMMessageFormatHint = (
   provider?: string,
   traceProviders?: string[],
 ): string | undefined => {
   // Span providers may include integration formats such as "langchain".
-  if (provider) return provider;
+  if (provider) return getFormat(provider)?.name;
 
   if (traceProviders?.length !== 1) return undefined;
 
   const [traceProvider] = traceProviders;
-  return getFormat(traceProvider as LLMMessageFormat)?.name;
+  return getFormat(traceProvider)?.name;
 };
 
 export const canShowLLMMessages = (

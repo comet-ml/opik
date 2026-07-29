@@ -40,4 +40,14 @@ describe("detectLLMMessages", () => {
       confidence: "low",
     });
   });
+
+  it("safely falls back for a prototype property hint", () => {
+    expect(
+      detectLLMMessages(AMBIGUOUS_INPUT, { fieldType: "input" }, "__proto__"),
+    ).toEqual({
+      supported: true,
+      format: "openai",
+      confidence: "low",
+    });
+  });
 });

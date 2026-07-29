@@ -16,6 +16,13 @@ describe("resolveLLMMessageFormatHint", () => {
     );
   });
 
+  it.each(["unsupported", "__proto__", "constructor"])(
+    "falls back for an unregistered span provider: %s",
+    (provider) => {
+      expect(resolveLLMMessageFormatHint(provider, ["openai"])).toBeUndefined();
+    },
+  );
+
   it("uses a single registered trace provider", () => {
     expect(resolveLLMMessageFormatHint(undefined, ["openai"])).toBe("openai");
   });

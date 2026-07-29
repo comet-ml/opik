@@ -88,9 +88,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
-  const canShowMessagesTab = useMemo(
-    () => canShowLLMMessages(transformedInput, transformedOutput, formatHint),
-    [formatHint, transformedInput, transformedOutput],
+  const canShowMessagesTab = canShowLLMMessages(
+    transformedInput,
+    transformedOutput,
+    formatHint,
   );
 
   const defaultTab = canShowMessagesTab ? "messages" : "details";
