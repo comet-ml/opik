@@ -188,14 +188,16 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- >>> END drill-down
 
 -- >>> BEGIN version-check
--- Legacy sub-microsecond version-selection backstop. last_updated_at (the ReplacingMergeTree version) is DateTime64(6)
--- on BOTH tables since migration 000019 reduced the source column to micros — but on-disk parts written BEFORE 000019
--- can still carry sub-microsecond precision until they are merged/rewritten. Two such source part-versions of the same
--- key that differ ONLY in sub-microsecond digits would collapse to one version on the successor (stored at us), which
--- may then keep different column values than source FINAL — a divergence the microsecond-normalized fingerprint above
--- cannot detect. This surfaces the PRECONDITION: old-schema keys in the window with more distinct raw last_updated_at
--- values than us-truncated ones. 0 => truncation cannot change version selection (safe). > 0 => investigate those keys
--- before trusting the compare.
+-- Version-selection backstop — INERT on a fully-000019 schema; kept as defense-in-depth only. last_updated_at (the
+-- ReplacingMergeTree version) is DateTime64(6) on BOTH tables since migration 000019 reduced the source column to micros.
+-- ClickHouse coerces a column to its DECLARED type at READ time, so even an on-disk part physically written BEFORE 000019
+-- at (9) surfaces its value already truncated to us — the raw sub-microsecond digits are unrecoverable through the
+-- column. So uniqExact(last_updated_at) and uniqExact(toDateTime64(last_updated_at, 6)) are ALWAYS equal on a
+-- (6)-declared column and collapse_keys is structurally 0: this can only ever fire if last_updated_at is later re-declared
+-- at higher precision than (6). It would then surface keys whose sub-us-distinct versions collapse to one us version on
+-- the successor (a divergence the us-normalized fingerprint above cannot detect). 0 => truncation cannot change version
+-- selection (safe / expected). Dropping this guard and --allow-version-collapse as dead code is a reasonable follow-up;
+-- left in place here to keep this PR scoped to the cutover rollback tooling.
 SELECT count() AS collapse_keys
 FROM (
     SELECT workspace_id, project_id, id
