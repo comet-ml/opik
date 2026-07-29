@@ -191,7 +191,7 @@ class CostIntelligenceIngestionTest {
                 // not the CLAUDE.md / rules files sharing this lane. Neither that setting nor
                 // the savings lever pricing it lives here — see ai-cost-backend's auto_memory
                 // policy; this repo's job is just to persist the distinction.
-                assertThat(memory.origin()).isEqualTo("auto_memory");
+                assertThat(memory.subcategory()).isEqualTo("auto_memory");
 
                 var skills = rows.get(1);
                 assertThat(skills.blockIdx()).isEqualTo(2);
@@ -271,15 +271,15 @@ class CostIntelligenceIngestionTest {
                             assertThat(row.contentSha256()).isEqualTo("a1b2c3");
                         });
 
-                // origin is persisted per row in order: only the memory block carried one in
+                // subcategory is persisted per row in order: only the memory block carried one in
                 // the fixture, so every other row -- residuals included -- must read "".
-                // Guards against a dropped or misordered origin across the batch, and pins
+                // Guards against a dropped or misordered subcategory across the batch, and pins
                 // that '' stays the "unknown" sentinel rather than leaking a real value.
-                assertThat(rows).filteredOn(row -> !row.origin().isEmpty())
+                assertThat(rows).filteredOn(row -> !row.subcategory().isEmpty())
                         .singleElement()
                         .satisfies(row -> {
                             assertThat(row.category()).isEqualTo("memory");
-                            assertThat(row.origin()).isEqualTo("auto_memory");
+                            assertThat(row.subcategory()).isEqualTo("auto_memory");
                         });
 
                 // model and start_time ride on every block row.
@@ -537,7 +537,7 @@ class CostIntelligenceIngestionTest {
                               }
                             },
                             "blocks": [
-                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","origin":"auto_memory","sha256":"a1b2c3"},
+                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
                               {"category":"identity_context","side":"input","cache_status":"none","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"skills_loaded","side":"input","cache_status":"read","parent_category":"context","chars":360,"tool_name":"","tool_server":"","tool_use_id":"","resource":"dataviz","kind":"text"},
                               {"category":"mcp_tool_calls","side":"output","cache_status":"none","parent_category":"assistant","chars":30,"tool_name":"search","tool_server":"srv","tool_use_id":"tu1","resource":"res","kind":"tool"},
@@ -692,7 +692,7 @@ class CostIntelligenceIngestionTest {
                     alloc,
                     model,
                     side, cache_status, parent_category, chars,
-                    tool_name, tool_server, tool_use_id, resource, kind, origin,
+                    tool_name, tool_server, tool_use_id, resource, kind, subcategory,
                     content_sha256,
                     toUnixTimestamp64Milli(start_time) AS start_ms
                 FROM cipx_spend_blocks FINAL
@@ -724,7 +724,7 @@ class CostIntelligenceIngestionTest {
                             row.get("tool_use_id", String.class),
                             row.get("resource", String.class),
                             row.get("kind", String.class),
-                            row.get("origin", String.class),
+                            row.get("subcategory", String.class),
                             row.get("content_sha256", String.class),
                             row.get("start_ms", Long.class))))
                     .collectList();
@@ -808,7 +808,7 @@ class CostIntelligenceIngestionTest {
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
             String bdLane, String label, Integer isDefinition, Double alloc, String model, String side,
             String cacheStatus, String parentCategory, Long chars, String toolName, String toolServer,
-            String toolUseId, String resource, String kind, String origin, String contentSha256, Long startMs) {
+            String toolUseId, String resource, String kind, String subcategory, String contentSha256, Long startMs) {
     }
 
     @Builder
