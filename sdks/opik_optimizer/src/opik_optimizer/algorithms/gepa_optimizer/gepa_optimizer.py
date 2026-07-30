@@ -333,7 +333,15 @@ class GepaOptimizer(BaseOptimizer):
                 project_name=self.project_name,
                 metadata=_llm_calls.build_llm_call_metadata(self, "gepa_reflection"),
             )
-            return result if isinstance(result, str) else str(result)
+            # A content-filtered or tool-call-only completion has no content.
+            # Stringifying it would hand gepa the literal instruction "None" and
+            # burn a trial on a corrupted prompt, so fail loudly instead.
+            if not isinstance(result, str) or not result.strip():
+                raise ValueError(
+                    "GEPA reflection received an empty response from "
+                    f"{self.model}; cannot propose a new instruction."
+                )
+            return result
 
         return cast(Callable[[str | list[dict[str, Any]]], str], _reflection_lm)
 

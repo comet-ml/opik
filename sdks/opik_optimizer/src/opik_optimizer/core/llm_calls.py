@@ -1,7 +1,9 @@
 import copy
 import json
 import logging
+import math
 import sys
+from decimal import Decimal
 from types import FrameType
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
@@ -9,6 +11,7 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 import litellm
 from litellm.exceptions import BadRequestError
+from opik import opik_context
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
@@ -62,18 +65,35 @@ def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
 
 def _strip_duplicate_opik_logger(params: dict[str, Any]) -> dict[str, Any]:
     """
-    Drop Opik's LiteLLM callback from the params handed to a tracked completion.
+    Drop Opik's LiteLLM callback, but only when it would duplicate our own span.
 
-    `call_model` wraps the call with `track_completion`, which already logs a
-    span. `opik_monitor.try_add_opik_monitoring_to_params` separately injects an
+    `call_model` wraps the call with `track_completion`, which logs a span.
+    `opik_monitor.try_add_opik_monitoring_to_params` separately injects an
     `OpikLogger` into success/failure callbacks — its "already decorated" guard
     inspects the module-level `litellm.completion`, so it cannot see our
-    decorated copy. Leaving both in place logs the same call twice, which
-    double-counts its cost in any span-derived total (OPIK-7521).
+    decorated copy.
+
+    Whether that is a duplicate depends on the surrounding trace context:
+
+    * A tracked span is open (GEPA reflection under ``@opik.track``): the
+      OpikLogger nests a second, identically-priced span into the same trace,
+      double-counting the call in any per-trace cost sum (OPIK-7521).
+    * No span is open (every other ``call_model`` caller): the OpikLogger
+      creates its own trace and is the only thing that stamps
+      ``metadata["opik"]["tags"] = [optimization_id, ...]`` onto it —
+      ``track_completion`` hardcodes ``tags=["litellm"]``. Dropping it here
+      would delete the sole optimization-tagged trace and hide that spend.
     """
     try:
         from litellm.integrations.opik.opik import OpikLogger
     except Exception:  # pragma: no cover - litellm always ships this
+        return params
+
+    try:
+        span_already_tracked = opik_context.get_current_span_data() is not None
+    except Exception:
+        span_already_tracked = False
+    if not span_already_tracked:
         return params
 
     updated: dict[str, Any] | None = None
@@ -235,41 +255,71 @@ def _get_project_name_from_optimizer() -> str | None:
     return None
 
 
+def _coerce_cost(value: Any) -> float | None:
+    """Return value as a float cost, or None when it is not a usable number."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float, Decimal)):
+        numeric = float(value)
+        return numeric if math.isfinite(numeric) else None
+    return None
+
+
 def _extract_response_cost(response: Any) -> float | None:
-    """Best-effort cost from a litellm response (`.cost`, else hidden params)."""
-    cost = getattr(response, "cost", None)
-    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
-        return float(cost)
+    """Best-effort cost from a litellm response (`.cost`, else hidden params).
+
+    LiteLLM's own `ModelResponse` has no `.cost`; the figure lives in
+    `_hidden_params["response_cost"]`, so the fallback is the common path.
+    """
+    cost = _coerce_cost(getattr(response, "cost", None))
+    if cost is not None:
+        return cost
     hidden_params = getattr(response, "_hidden_params", None)
     if isinstance(hidden_params, dict):
-        hidden_cost = hidden_params.get("response_cost")
-        if isinstance(hidden_cost, (int, float)) and not isinstance(hidden_cost, bool):
-            return float(hidden_cost)
+        return _coerce_cost(hidden_params.get("response_cost"))
     return None
 
 
 def _extract_response_usage(response: Any) -> dict[str, int] | None:
-    """Best-effort token usage from a litellm response."""
+    """Best-effort token usage from a litellm response (object or dict form)."""
     usage_obj = getattr(response, "usage", None)
     if usage_obj is None:
         return None
-    try:
-        return {
-            "prompt_tokens": int(getattr(usage_obj, "prompt_tokens", 0) or 0),
-            "completion_tokens": int(getattr(usage_obj, "completion_tokens", 0) or 0),
-            "total_tokens": int(getattr(usage_obj, "total_tokens", 0) or 0),
-        }
-    except (TypeError, ValueError):
-        return None
+
+    def _field(name: str) -> int:
+        raw = (
+            usage_obj.get(name)
+            if isinstance(usage_obj, dict)
+            else getattr(usage_obj, name, 0)
+        )
+        if isinstance(raw, bool) or raw is None:
+            return 0
+        if not isinstance(raw, (int, float, Decimal)):
+            return 0
+        numeric = float(raw)
+        return int(numeric) if math.isfinite(numeric) else 0
+
+    return {
+        "prompt_tokens": _field("prompt_tokens"),
+        "completion_tokens": _field("completion_tokens"),
+        "total_tokens": _field("total_tokens"),
+    }
 
 
 def _record_cost_usage_if_in_optimizer(response: Any) -> None:
-    """Accumulate the response's cost/usage onto the nearest optimizer (OPIK-7521)."""
-    optimizer = _find_optimizer_in_stack()
-    if optimizer is None:
-        return
-    optimizer._add_llm_cost(_extract_response_cost(response))
-    optimizer._add_llm_usage(_extract_response_usage(response))
+    """Accumulate the response's cost/usage onto the nearest optimizer (OPIK-7521).
+
+    Best-effort by design: this is telemetry, so a provider returning something
+    exotic must never abort an otherwise-successful optimization run.
+    """
+    try:
+        optimizer = _find_optimizer_in_stack()
+        if optimizer is None:
+            return
+        optimizer._add_llm_cost(_extract_response_cost(response))
+        optimizer._add_llm_usage(_extract_response_usage(response))
+    except Exception:
+        logger.debug("Failed to record LLM cost/usage", exc_info=True)
 
 
 def _build_call_time_params(

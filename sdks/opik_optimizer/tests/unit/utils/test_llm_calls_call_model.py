@@ -5,6 +5,8 @@ Unit tests for call_model/call_model_async and related utilities in opik_optimiz
 from __future__ import annotations
 
 from collections.abc import Callable
+from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -419,10 +421,54 @@ class TestCostUsageCapture:
 
         assert optimizer.llm_cost_total == pytest.approx(0.5)
 
-    def test_call_model_tolerates_mock_cost_attributes(self) -> None:
-        """MagicMock auto-attrs (non-numeric cost, non-int usage) must not raise."""
+    def test_cost_extraction_is_robust_to_exotic_response_objects(self) -> None:
+        """Robustness guard, not regression coverage: cost/usage extraction is
+        telemetry and must never abort an otherwise-successful run, whatever the
+        provider returns. Passes on unfixed code by construction."""
         optimizer = _make_mock_optimizer()
-        response = make_mock_response("ok")  # .cost/.usage are auto MagicMocks
+
+        class Hostile:
+            """Response whose cost/usage explode in every way we've seen."""
+
+            choices = [
+                SimpleNamespace(message=SimpleNamespace(content="ok", parsed=None))
+            ]
+
+            @property
+            def cost(self) -> Any:
+                raise RuntimeError("provider blew up reading cost")
+
+            @property
+            def usage(self) -> Any:
+                return SimpleNamespace(
+                    prompt_tokens=float("inf"),  # int() raises OverflowError
+                    completion_tokens="many",  # int() raises ValueError
+                    total_tokens=None,
+                )
+
+        def inner_call(self: Any) -> None:
+            _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: lambda **kw: Hostile()
+            inner_call(optimizer)
+
+        # The call still succeeded and recorded nothing rather than raising.
+        assert optimizer.llm_call_counter == 1
+        assert optimizer.llm_cost_total == 0.0
+        assert optimizer.llm_token_usage_total["total_tokens"] == 0
+
+    def test_call_model_records_dict_usage(self) -> None:
+        """Some providers hand back `usage` as a plain dict."""
+        optimizer = _make_mock_optimizer()
+        response = make_mock_response("ok")
+        response.cost = None
+        response._hidden_params = {}
+        response.usage = {
+            "prompt_tokens": 7,
+            "completion_tokens": 3,
+            "total_tokens": 10,
+        }
 
         def inner_call(self: Any) -> None:
             _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
@@ -431,7 +477,27 @@ class TestCostUsageCapture:
             mock_track.return_value = lambda completion_fn: lambda **kw: response
             inner_call(optimizer)
 
-        assert optimizer.llm_cost_total == 0.0
+        assert optimizer.llm_token_usage_total == {
+            "prompt_tokens": 7,
+            "completion_tokens": 3,
+            "total_tokens": 10,
+        }
+
+    def test_call_model_records_decimal_cost(self) -> None:
+        """Decimal cost must not be silently dropped."""
+        optimizer = _make_mock_optimizer()
+        response = make_mock_response("ok")
+        response.cost = Decimal("0.125")
+        response.usage = None
+
+        def inner_call(self: Any) -> None:
+            _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: lambda **kw: response
+            inner_call(optimizer)
+
+        assert optimizer.llm_cost_total == pytest.approx(0.125)
 
     @pytest.mark.asyncio
     async def test_call_model_async_records_cost_and_usage_to_optimizer(self) -> None:
@@ -456,17 +522,28 @@ class TestCostUsageCapture:
 
 
 class TestDuplicateOpikLoggerStripped:
-    """OPIK-7521: track_completion already logs the call; the litellm OpikLogger
-    callback would log a second identical span, doubling the reported cost."""
+    """OPIK-7521: the litellm OpikLogger must be dropped only when it would
+    duplicate a span we already log, i.e. when a tracked span is open.
+
+    With a span open (GEPA reflection under @opik.track), track_completion logs
+    the call and the OpikLogger would nest a second, identically-priced span
+    into the same trace — doubling the cost the backend sums per trace.
+
+    With no span open (every other call_model caller), the OpikLogger creates
+    its OWN trace and is the only thing that stamps
+    metadata["opik"]["tags"] = [optimization_id, ...] onto it — track_completion
+    hardcodes tags=["litellm"]. Stripping it there would delete the sole
+    optimization-tagged trace and hide that spend from the run's cost.
+    """
 
     def _make_logger(self) -> Any:
         from litellm.integrations.opik.opik import OpikLogger
 
         return OpikLogger()
 
-    def test_call_model_strips_opik_logger_callbacks(self) -> None:
-        opik_logger = self._make_logger()
-        other_callback = object()
+    def _call_with_callbacks(
+        self, opik_logger: Any, other_callback: Any, *, span_open: bool
+    ) -> dict[str, Any]:
         captured_kwargs: dict[str, Any] = {}
 
         def fake_monitoring(params: dict[str, Any]) -> dict[str, Any]:
@@ -480,18 +557,52 @@ class TestDuplicateOpikLoggerStripped:
             captured_kwargs.update(kwargs)
             return make_mock_response("ok")
 
+        current_span = object() if span_open else None
+
         with patch(
             "opik_optimizer.core.llm_calls.opik_litellm_monitor."
             "try_add_opik_monitoring_to_params",
             side_effect=fake_monitoring,
         ):
-            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-                mock_track.return_value = lambda completion_fn: capture
-                _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
+            with patch(
+                "opik_optimizer.core.llm_calls.opik_context.get_current_span_data",
+                return_value=current_span,
+            ):
+                with patch(
+                    "opik_optimizer.core.llm_calls.track_completion"
+                ) as mock_track:
+                    mock_track.return_value = lambda completion_fn: capture
+                    _llm_calls.call_model(
+                        messages=[user_message("test")], model="gpt-4o"
+                    )
+
+        return captured_kwargs
+
+    def test_strips_opik_logger_when_a_span_is_already_open(self) -> None:
+        opik_logger = self._make_logger()
+        other_callback = object()
+
+        captured_kwargs = self._call_with_callbacks(
+            opik_logger, other_callback, span_open=True
+        )
 
         assert opik_logger not in captured_kwargs.get("success_callback", [])
-        assert other_callback in captured_kwargs.get("success_callback", [])
         assert opik_logger not in captured_kwargs.get("failure_callback", [])
+        # A caller's own callbacks must survive.
+        assert other_callback in captured_kwargs.get("success_callback", [])
+
+    def test_keeps_opik_logger_when_no_span_is_open(self) -> None:
+        """Without this, non-GEPA optimizers lose optimization-id trace tagging."""
+        opik_logger = self._make_logger()
+        other_callback = object()
+
+        captured_kwargs = self._call_with_callbacks(
+            opik_logger, other_callback, span_open=False
+        )
+
+        assert opik_logger in captured_kwargs.get("success_callback", [])
+        assert opik_logger in captured_kwargs.get("failure_callback", [])
+        assert other_callback in captured_kwargs.get("success_callback", [])
 
 
 class TestCounterIncrement:

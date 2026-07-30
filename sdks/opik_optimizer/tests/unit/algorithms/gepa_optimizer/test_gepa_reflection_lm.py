@@ -88,8 +88,11 @@ def _run_optimize(
         prompt=simple_chat_prompt,
         dataset=dataset,
         metric=sample_metric,
-        max_trials=2,
+        # max_trials must exceed reflection_minibatch_size, or GEPA skips
+        # reflection entirely and the fixture would not represent a real run.
+        max_trials=6,
         n_samples=2,
+        reflection_minibatch_size=1,
     )
     return result, captured, optimizer
 
@@ -156,7 +159,46 @@ class TestGepaReflectionLmInstrumentation:
         ]
         metadata = captured_kwargs.get("metadata") or {}
         assert metadata.get("opik_call_type") == "gepa_reflection"
-        assert "test-opt-123" in metadata.get("opik", {}).get("tags", [])
+
+    def test_reflection_trace_is_tagged_with_the_optimization_id(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """The backend attributes reflection cost by TRACE TAGS, so this is the
+        assertion that keeps the spend visible. track_completion hardcodes
+        tags=["litellm"], so the tags must come from _tag_trace."""
+        _, captured, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+        )
+        reflection_lm = captured["reflection_lm"]
+
+        tag_calls: list[Any] = []
+        monkeypatch.setattr(
+            "opik_optimizer.base_optimizer.opik_context.update_current_trace",
+            lambda **kwargs: tag_calls.append(kwargs),
+        )
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: (
+                lambda **kw: _make_reflection_response("improved")
+            )
+            reflection_lm("improve this prompt")
+
+        assert tag_calls, "reflection must tag its trace for cost attribution"
+        tags = tag_calls[-1]["tags"]
+        assert "test-opt-123" in tags
+        assert "Reflection" in tags
+        assert "GEPA" in tags
 
     def test_reflection_call_accepts_messages_list(
         self,
@@ -194,6 +236,69 @@ class TestGepaReflectionLmInstrumentation:
 
         assert output == "multimodal instruction"
         assert captured_kwargs["messages"] == messages
+
+    def test_empty_completion_raises_instead_of_proposing_none(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """A content-filtered or tool-call-only response yields None content.
+        Stringifying it would hand gepa the literal instruction "None" and burn
+        a trial on a corrupted prompt; fail loudly instead."""
+        _, captured, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+        )
+        reflection_lm = captured["reflection_lm"]
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: (
+                lambda **kw: _make_reflection_response(None)
+            )
+            with pytest.raises(ValueError, match="empty response"):
+                reflection_lm("improve this prompt")
+
+    def test_callable_satisfies_gepas_real_wrapper_contract(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """gepa wraps a non-str reflection_lm in TrackingLM and invokes it with a
+        single positional arg, expecting a str back. Pin that against the real
+        class so a signature drift in gepa breaks here, not in a live run."""
+        from gepa.lm import TrackingLM
+
+        _, captured, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+        )
+
+        tracking_lm = TrackingLM(captured["reflection_lm"])
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: (
+                lambda **kw: _make_reflection_response("instruction via gepa")
+            )
+            out = tracking_lm("improve this prompt")
+
+        assert isinstance(out, str)
+        assert out.strip() == "instruction via gepa"
 
     def test_reflection_cost_lands_in_optimization_result(
         self,
