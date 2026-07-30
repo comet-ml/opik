@@ -22,12 +22,19 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 @RequiredArgsConstructor
 @Slf4j
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
+
+    private static final Map<String, String> MULTI_REGION_API_ENDPOINTS = Map.of(
+            "global", "aiplatform.googleapis.com",
+            "eu", "aiplatform.eu.rep.googleapis.com",
+            "us", "aiplatform.us.rep.googleapis.com");
 
     private final @NonNull LlmProviderClientConfig clientConfig;
 
@@ -98,6 +105,15 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         return generationConfig.build();
     }
 
+    /**
+     * The Vertex AI SDK derives its host from the location as {@code %s-aiplatform.googleapis.com}, which only holds
+     * for single-region locations. The multi-region locations resolve to their own hosts, so they have to be set
+     * explicitly or the client targets a name that does not exist (e.g. {@code global-aiplatform.googleapis.com}).
+     */
+    static Optional<String> apiEndpointFor(String location) {
+        return Optional.ofNullable(MULTI_REGION_API_ENDPOINTS.get(location.trim().toLowerCase(Locale.ROOT)));
+    }
+
     private VertexAI getVertexAI(LlmProviderClientApiConfig config) {
         try {
             var credentials = ServiceAccountCredentials.fromStream(
@@ -106,7 +122,10 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             VertexAI.Builder builder = new VertexAI.Builder();
 
             Optional.ofNullable(config.configuration().get("location"))
-                    .ifPresent(builder::setLocation);
+                    .ifPresent(location -> {
+                        builder.setLocation(location);
+                        apiEndpointFor(location).ifPresent(builder::setApiEndpoint);
+                    });
 
             return builder
                     .setProjectId(credentials.getProjectId())

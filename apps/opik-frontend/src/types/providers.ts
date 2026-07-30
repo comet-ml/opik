@@ -750,8 +750,11 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_05_06 = "vertex_ai/gemini-2.5-pro-preview-05-06",
   VERTEX_AI_GEMINI_3_FLASH_PREVIEW = "vertex_ai/gemini-3-flash-preview",
   VERTEX_AI_GEMINI_3_PRO = "vertex_ai/gemini-3-pro-preview",
+  VERTEX_AI_GEMINI_3_1_FLASH_LITE = "vertex_ai/gemini-3.1-flash-lite",
+  VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW = "vertex_ai/gemini-3.1-flash-lite-preview",
   VERTEX_AI_GEMINI_3_1_PRO = "vertex_ai/gemini-3.1-pro-preview",
   VERTEX_AI_GEMINI_3_5_FLASH = "vertex_ai/gemini-3.5-flash",
+  VERTEX_AI_GEMINI_3_5_FLASH_LITE = "vertex_ai/gemini-3.5-flash-lite",
   VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
 }
 
