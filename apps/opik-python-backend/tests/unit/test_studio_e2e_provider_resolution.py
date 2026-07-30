@@ -17,21 +17,30 @@ _CONFTEST_PATH = (
 )
 
 
-def _load_e2e_conftest():
-    """Import tests/e2e/conftest.py as a module without collecting the e2e suite."""
-    spec = importlib.util.spec_from_file_location(
-        "_studio_e2e_conftest", _CONFTEST_PATH
-    )
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+_MODULE_NAME = "_studio_e2e_conftest"
 
 
 @pytest.fixture(scope="module")
 def e2e_conftest():
-    return _load_e2e_conftest()
+    """Import tests/e2e/conftest.py as a module without collecting the e2e suite.
+
+    Registered in ``sys.modules`` only while the tests run (some import
+    machinery resolves a module by name during execution) and removed afterwards
+    so nothing later in the session can pick up this stale copy.
+    """
+    spec = importlib.util.spec_from_file_location(_MODULE_NAME, _CONFTEST_PATH)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.modules.get(_MODULE_NAME)
+    sys.modules[_MODULE_NAME] = module
+    try:
+        spec.loader.exec_module(module)
+        yield module
+    finally:
+        if previous is None:
+            sys.modules.pop(_MODULE_NAME, None)
+        else:
+            sys.modules[_MODULE_NAME] = previous
 
 
 class TestProviderForModel:

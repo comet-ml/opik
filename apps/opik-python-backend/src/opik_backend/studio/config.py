@@ -102,6 +102,7 @@ OPTIMIZER_PERFECT_SCORE = _read_float_env(
 # ignores the pin (litellm's drop_params keeps the run alive instead of failing
 # it) and stays sampled, which is why the stop conditions must tolerate score
 # noise on their own — see CandidateScoreThresholdStopper in the optimizer SDK.
+# Dimensionless sampling temperature; valid range 0.0-2.0 (0.0 = least random).
 OPTIMIZER_TASK_TEMPERATURE = _read_float_env(
     "OPTIMIZER_TASK_TEMPERATURE", "0.0", minimum=0.0, maximum=2.0
 )
