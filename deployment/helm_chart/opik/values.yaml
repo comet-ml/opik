@@ -931,10 +931,10 @@ clickhouse:
       # IMPORTANT: set this back to false once the restore has completed.
       # Otherwise the next `helm upgrade` re-creates the job and restores again.
       createJob: false
-      # Name of the backup to restore. REQUIRED when createJob is true (Helm
-      # rendering fails otherwise). Must match a backup name from the backup
-      # server's /backup/list, e.g. "backup202401011200" as produced by the
-      # backup CronJob above.
+      # -- Name of the backup to restore, REQUIRED when createJob is true (Helm
+      # rendering fails otherwise). Must be a `name` from the backup server's
+      # `/backup/list`, e.g. "2026-01-16" — a backup the backup server created.
+      # Backups written by the SQL-based CronJob above cannot be restored by it.
       backupName: ""
       # Override with any image that has bash and curl — the job needs nothing else.
       image: "amazon/aws-cli:2.27.49"
@@ -958,8 +958,9 @@ clickhouse:
     port: 7171
     # Service the restore job uses to reach the clickhouse-backup REST API.
     # The backup port is exposed on the operator's per-replica service, so this
-    # defaults (in the restore job template) to chi-<release>-clickhouse-cluster-0-0
-    # on backupServer.port. Override name/port if your shard/replica layout differs.
+    # defaults (in the restore job template) to chi-<opik.name>-clickhouse-cluster-0-0
+    # — opik.name, not the release name — on service.port, falling back to
+    # backupServer.port. Override name/port if your shard/replica layout differs.
     service:
       name: ""
       port: ""

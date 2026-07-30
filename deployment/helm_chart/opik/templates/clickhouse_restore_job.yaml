@@ -1,4 +1,8 @@
 {{ if and .Values.clickhouse.enabled .Values.clickhouse.backupServer.enabled .Values.clickhouse.backup.restore.createJob }}
+{{- $bsPort := .Values.clickhouse.backupServer.service.port | default .Values.clickhouse.backupServer.port -}}
+{{- if not (regexMatch "^[0-9]+$" (printf "%v" $bsPort)) -}}
+{{- fail (printf "clickhouse.backupServer.service.port (or clickhouse.backupServer.port) must be a number, got %q" (printf "%v" $bsPort)) -}}
+{{- end -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -30,7 +34,7 @@ spec:
             exit 1
           }
 
-          # Most recent action for this backup from the backup server's history,
+          # Latest started action for this backup from the backup server's history,
           # optionally restricted to one command. /backup/actions returns NDJSON (one
           # compact object per line) and the quoted command value is matched whole, so
           # "restore backup-1" cannot match "restore backup-10". Empty result means no
@@ -144,7 +148,7 @@ spec:
         - name: BACKUP_NAME
           value: {{ required "clickhouse.backup.restore.backupName must be set when clickhouse.backup.restore.createJob is true" .Values.clickhouse.backup.restore.backupName | quote }}
         - name: RESTORE_SERVICE
-          value: {{ .Values.clickhouse.backupServer.service.name | default (printf "chi-%s-clickhouse-cluster-0-0" (include "opik.name" $)) }}:{{ .Values.clickhouse.backupServer.service.port | default .Values.clickhouse.backupServer.port }}
+          value: {{ .Values.clickhouse.backupServer.service.name | default (printf "chi-%s-clickhouse-cluster-0-0" (include "opik.name" $)) }}:{{ $bsPort }}
         {{- range $key, $value := .Values.clickhouse.backup.restore.extraEnv }}
         - name: {{ $key }}
           value: {{ $value | quote }}

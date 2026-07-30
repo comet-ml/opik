@@ -118,7 +118,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.extraEnv | object | `{}` |  |
 | clickhouse.backup.restore.activeDeadlineSeconds | int | `86400` |  |
 | clickhouse.backup.restore.affinity | object | `{}` |  |
-| clickhouse.backup.restore.backupName | string | `""` |  |
+| clickhouse.backup.restore.backupName | string | `""` | Name of the backup to restore, REQUIRED when createJob is true (Helm rendering fails otherwise). Must be a `name` from the backup server's `/backup/list`, e.g. "2026-01-16" — a backup the backup server created. Backups written by the SQL-based CronJob above cannot be restored by it. |
 | clickhouse.backup.restore.createJob | bool | `false` |  |
 | clickhouse.backup.restore.extraEnv | object | `{}` |  |
 | clickhouse.backup.restore.image | string | `"amazon/aws-cli:2.27.49"` |  |
