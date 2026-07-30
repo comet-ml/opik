@@ -41,6 +41,35 @@ OPTIMIZER_RUNTIME_PARAMS = {
     "max_retries": int(os.getenv("OPTIMIZER_HIERARCHICAL_MAX_RETRIES", "2")),
 }
 
+def _read_float_env(name: str, default: str, *, minimum: float, maximum: float) -> float:
+    """Parse a float env var, failing fast at import on a malformed value.
+
+    ``float()`` alone accepts "nan" and "inf", which silently break the score
+    comparisons these values feed (``baseline >= nan`` is always False, ``>= inf``
+    never true), so the range is enforced here instead of surfacing as a run that
+    mysteriously never stops. Same fail-at-startup contract as
+    _read_reflection_minibatch_override.
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        raw = default
+    stripped = raw.strip()
+    try:
+        value = float(stripped)
+    except ValueError:
+        # Truncate: the value is free text from the environment.
+        raise ValueError(
+            f"{name} must be a number between {minimum} and {maximum}, "
+            f"got {stripped[:32]!r}"
+        ) from None
+    if not math.isfinite(value) or not (minimum <= value <= maximum):
+        raise ValueError(
+            f"{name} must be a finite number between {minimum} and {maximum}, "
+            f"got {value}"
+        )
+    return value
+
+
 # Studio-run perfect_score (OPIK-7511). perfect_score does double duty in the
 # SDK: it is the baseline/iteration skip threshold AND (for GEPA) the run-level
 # stop threshold via ScoreThresholdStopper. The SDK default (0.95) makes a
@@ -50,7 +79,14 @@ OPTIMIZER_RUNTIME_PARAMS = {
 # default) rather than changing the SDK-wide default under every SDK user.
 # Injected as a constructor default by OptimizerFactory.build, so it takes
 # effect on the currently pinned opik_optimizer release — no pin bump needed.
-OPTIMIZER_PERFECT_SCORE = float(os.getenv("OPTIMIZER_PERFECT_SCORE", "1.0"))
+# Range 0.0-1.0: every metric the Studio exposes is normalised to that (equals
+# and json_schema_validator are 0/1, levenshtein_ratio/geval/numerical_similarity
+# are ratios). A custom `code` metric on another scale should set perfect_score
+# per run via optimizer_params rather than moving this deployment-wide default.
+# 0.0 is legal and disables threshold stopping (see _build_gepa_stop_callbacks).
+OPTIMIZER_PERFECT_SCORE = _read_float_env(
+    "OPTIMIZER_PERFECT_SCORE", "1.0", minimum=0.0, maximum=1.0
+)
 
 # Temperature for the *task* model — the one whose completions are scored
 # (OPIK-7511). At the provider default, repeating the SAME evaluation of the SAME
@@ -61,7 +97,9 @@ OPTIMIZER_PERFECT_SCORE = float(os.getenv("OPTIMIZER_PERFECT_SCORE", "1.0"))
 # optimizer/reflection model, which needs sampling diversity to propose varied
 # candidates. Models that fix their temperature (the gpt-5 family accepts only
 # 1) ignore this via litellm's drop_params rather than failing the run.
-OPTIMIZER_TASK_TEMPERATURE = float(os.getenv("OPTIMIZER_TASK_TEMPERATURE", "0.0"))
+OPTIMIZER_TASK_TEMPERATURE = _read_float_env(
+    "OPTIMIZER_TASK_TEMPERATURE", "0.0", minimum=0.0, maximum=2.0
+)
 
 # GEPA reflection mini-batch sizing (OPIK-7511).
 # GEPA only promotes a candidate to a full evaluation on a STRICT win over the

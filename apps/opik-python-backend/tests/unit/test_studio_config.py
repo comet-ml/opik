@@ -12,6 +12,61 @@ from opik_backend.studio.config import (
 )
 
 
+class TestFloatEnvValidation:
+    """float() alone accepts nan/inf, which silently breaks the score comparisons
+    these values feed — a bad deployment value must fail at startup instead."""
+
+    @pytest.mark.parametrize(
+        "env,default,minimum,maximum",
+        [
+            ("OPTIMIZER_PERFECT_SCORE", "1.0", 0.0, 1.0),
+            ("OPTIMIZER_TASK_TEMPERATURE", "0.0", 0.0, 2.0),
+        ],
+    )
+    @pytest.mark.parametrize("bad_value", ["nan", "inf", "-inf", "abc", "-0.5", "9.5"])
+    def test_invalid_value__raises_naming_the_variable(
+        self, env, default, minimum, maximum, bad_value, monkeypatch
+    ):
+        monkeypatch.setenv(env, bad_value)
+        with pytest.raises(ValueError, match=env):
+            config_module._read_float_env(
+                env, default, minimum=minimum, maximum=maximum
+            )
+
+    def test_blank_value__uses_default(self, monkeypatch):
+        monkeypatch.setenv("OPTIMIZER_PERFECT_SCORE", "   ")
+        assert (
+            config_module._read_float_env(
+                "OPTIMIZER_PERFECT_SCORE", "1.0", minimum=0.0, maximum=1.0
+            )
+            == 1.0
+        )
+
+    def test_bounds_are_inclusive(self, monkeypatch):
+        monkeypatch.setenv("OPTIMIZER_PERFECT_SCORE", "0.0")
+        assert (
+            config_module._read_float_env(
+                "OPTIMIZER_PERFECT_SCORE", "1.0", minimum=0.0, maximum=1.0
+            )
+            == 0.0
+        )
+
+    def test_error_message_is_bounded(self, monkeypatch):
+        monkeypatch.setenv("OPTIMIZER_PERFECT_SCORE", "x" * 5000)
+        with pytest.raises(ValueError) as exc_info:
+            config_module._read_float_env(
+                "OPTIMIZER_PERFECT_SCORE", "1.0", minimum=0.0, maximum=1.0
+            )
+        assert len(str(exc_info.value)) < 200
+
+    def test_module_import_fails_fast_on_malformed_env(self, monkeypatch):
+        monkeypatch.setenv("OPTIMIZER_PERFECT_SCORE", "nan")
+        with pytest.raises(ValueError, match="OPTIMIZER_PERFECT_SCORE"):
+            importlib.reload(config_module)
+        monkeypatch.delenv("OPTIMIZER_PERFECT_SCORE")
+        importlib.reload(config_module)
+
+
 class TestResolveReflectionMinibatchSize:
     """OPIK-7511: the reflection mini-batch scales with dataset size so coarse
     0/1 metrics get a usable gradient, capped only by the dataset itself and

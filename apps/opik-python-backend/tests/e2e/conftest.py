@@ -26,11 +26,23 @@ from opik_backend.jobs.optimizer import process_optimizer_job
 _PROVIDER = "anthropic"
 
 
+_PROVIDER_SECRET_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+
+
 def _provider_for_model(model: str | None) -> str:
-    """Provider required by the e2e model (default model is Anthropic)."""
-    if model and model.startswith("gpt"):
-        return "openai"
-    return _PROVIDER
+    """Provider required by the e2e model (default model is Anthropic).
+
+    Handles both bare ids ("gpt-5-nano") and gateway-prefixed ones
+    ("openai/gpt-4o") — the Studio routes everything through the gateway with an
+    ``openai/`` prefix, so a prefix-blind check would ask the backend for an
+    Anthropic key and get a BadRequestException for the missing one.
+    """
+    if not model:
+        return _PROVIDER
+    provider, _, remainder = model.partition("/")
+    if remainder and provider in _PROVIDER_SECRET_ENV:
+        return provider
+    return "openai" if model.startswith("gpt") else _PROVIDER
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -78,10 +90,10 @@ def workspace_provider_key() -> None:
     """Ensure the provider required by the e2e model has a key in the backend
     workspace, so the optimization resolves it server-side via the gateway —
     the key is never handed to the optimizer. For the default Anthropic model
-    the key comes from the ANTHROPIC_API_KEY secret (CI); for a local stack
-    whose workspace already has the required provider configured (e.g.
-    ``OPTSTUDIO_E2E_MODEL=gpt-5-nano`` with an OpenAI workspace key) this is a
-    no-op. Skips when the provider is neither configured nor obtainable."""
+    the key comes from the ANTHROPIC_API_KEY secret (CI); an OpenAI model takes
+    OPENAI_API_KEY. For a local stack whose workspace already has the required
+    provider configured this is a no-op. Skips when the provider is neither
+    configured nor obtainable."""
     base = _backend_base()
     if not base:
         pytest.skip("OPIK_URL_OVERRIDE not set; e2e requires a running Opik backend")
@@ -89,11 +101,12 @@ def workspace_provider_key() -> None:
     headers = _workspace_headers()
     if _provider_configured(base, headers, provider):
         return
-    secret = os.getenv("ANTHROPIC_API_KEY") if provider == _PROVIDER else None
+    secret_env = _PROVIDER_SECRET_ENV[provider]
+    secret = os.getenv(secret_env)
     if not secret:
         pytest.skip(
-            f"no {provider} provider key configured in the workspace "
-            "(and no secret available to store one)"
+            f"no {provider} provider key configured in the workspace and "
+            f"{secret_env} is not set"
         )
     httpx.post(
         f"{base}/v1/private/llm-provider-key",

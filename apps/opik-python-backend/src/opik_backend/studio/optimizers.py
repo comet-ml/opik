@@ -1,6 +1,7 @@
 """Optimizer factory for Optimization Studio."""
 
 import logging
+import math
 from typing import Dict, Type, Any
 
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import GepaOptimizer
@@ -42,6 +43,30 @@ def ensure_default_model_params(
         # Let models that fix their temperature ignore ours instead of erroring.
         params.setdefault("drop_params", True)
     return params
+
+
+def _resolve_perfect_score(value: Any, optimizer_type: str) -> float:
+    """Validate the run's ``perfect_score`` override, falling back to the default.
+
+    The value comes from the studio config, so it can be absent, explicitly
+    ``null``, or junk. It ends up in ``baseline_score >= perfect_score`` deep in a
+    run, where ``None`` or a NaN raises/mis-compares long after the config that
+    caused it — so reject it here, where the error can still name the field.
+    ``0`` is a legal value (it disables threshold stopping), so this must not
+    treat it as falsy.
+    """
+    if value is None:
+        return OPTIMIZER_PERFECT_SCORE
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise InvalidOptimizerError(
+            optimizer_type,
+            f"perfect_score must be a finite number, got {type(value).__name__}",
+        )
+    if not math.isfinite(value):
+        raise InvalidOptimizerError(
+            optimizer_type, f"perfect_score must be a finite number, got {value}"
+        )
+    return float(value)
 
 
 class OptimizerFactory:
@@ -96,7 +121,9 @@ class OptimizerFactory:
         # optimizer accepts perfect_score in its constructor; an explicit value
         # in the run's optimizer_params still wins.
         optimizer_params = dict(optimizer_params)
-        optimizer_params.setdefault("perfect_score", OPTIMIZER_PERFECT_SCORE)
+        optimizer_params["perfect_score"] = _resolve_perfect_score(
+            optimizer_params.get("perfect_score", None), optimizer_type
+        )
 
         logger.debug(
             f"Initializing {optimizer_type} optimizer with params: {optimizer_params}"

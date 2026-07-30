@@ -200,6 +200,48 @@ class TestTaskModelTemperaturePinning:
         assert "temperature" not in recorder.captured_kwargs["model_parameters"]
 
 
+class TestPerfectScoreValidation:
+    """The run's perfect_score comes from the studio config, so it can be absent,
+    explicitly null, or junk — it must be rejected here rather than blowing up
+    inside `baseline_score >= perfect_score` mid-run."""
+
+    def test_explicit_null__falls_back_to_default(self):
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={"perfect_score": None},
+            )
+        assert recorder.captured_kwargs["perfect_score"] == 1.0
+
+    def test_zero__is_kept_not_treated_as_falsy(self):
+        """0 legitimately disables threshold stopping."""
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={"perfect_score": 0},
+            )
+        assert recorder.captured_kwargs["perfect_score"] == 0.0
+
+    @pytest.mark.parametrize(
+        "bad_value", [float("nan"), float("inf"), float("-inf"), "0.9", [], True]
+    )
+    def test_invalid_values__raise_invalid_optimizer_error(self, bad_value):
+        with pytest.raises(InvalidOptimizerError) as exc_info:
+            OptimizerFactory.build(
+                optimizer_type="gepa",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={"perfect_score": bad_value},
+            )
+        assert "perfect_score" in str(exc_info.value)
+
+
 class TestOptimizerFactoryListAvailable:
     def test_list_available_returns_known_types(self):
         available = OptimizerFactory.list_available()
