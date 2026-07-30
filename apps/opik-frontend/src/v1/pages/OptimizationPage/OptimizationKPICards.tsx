@@ -54,12 +54,6 @@ type OptimizationKPICardsProps = {
   objectiveName?: string;
   optimizationCreatedAt?: string;
   isInProgress?: boolean;
-  /**
-   * Backend aggregate for the whole run (Optimization.total_optimization_cost).
-   * Includes optimizer-internal spend (e.g. GEPA reflection calls) that belongs
-   * to no trial (OPIK-7521), so it wins over the client-side trial sum.
-   */
-  totalOptimizationCost?: number;
 };
 
 const OptimizationKPICards: React.FunctionComponent<
@@ -72,12 +66,12 @@ const OptimizationKPICards: React.FunctionComponent<
   objectiveName,
   optimizationCreatedAt,
   isInProgress,
-  totalOptimizationCost,
 }) => {
   const kpiData = useMemo(() => {
-    const totalOptCost =
-      totalOptimizationCost ??
-      experiments.reduce((sum, e) => sum + (e.total_estimated_cost ?? 0), 0);
+    const totalOptCost = experiments.reduce(
+      (sum, e) => sum + (e.total_estimated_cost ?? 0),
+      0,
+    );
 
     let totalDuration: number | undefined;
     if (optimizationCreatedAt && experiments.length > 0 && !isInProgress) {
@@ -92,7 +86,7 @@ const OptimizationKPICards: React.FunctionComponent<
     }
 
     return { totalOptCost, totalDuration };
-  }, [experiments, optimizationCreatedAt, isInProgress, totalOptimizationCost]);
+  }, [experiments, optimizationCreatedAt, isInProgress]);
 
   const startTime = useMemo(() => {
     if (!optimizationCreatedAt) return undefined;
