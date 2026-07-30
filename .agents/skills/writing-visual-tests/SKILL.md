@@ -135,7 +135,7 @@ Restart it (`kill $(lsof -ti:5555)`, relaunch) whenever you change a route file 
 
 ## Cleanup checklist
 
-Everything this suite generates is gitignored (`tests_end_to_end/visual-tests/.gitignore` entries: `test-results/`, `visual-report/`, `.auth/`, `.test-state.json`, `screenshots/`; repo-wide: `allure-results/`) — nothing here risks a bad commit, but it does accumulate on disk across sessions. Work through this list before ending a visual-testing session, not just the config restore.
+Everything this suite generates is gitignored (root `.gitignore` entries: `tests_end_to_end/visual-tests/test-results/`, `visual-report/`, `.auth/`, `.test-state.json`, `screenshots/`; repo-wide: `allure-results/`) — nothing here risks a bad commit, but it does accumulate on disk across sessions. Work through this list before ending a visual-testing session, not just the config restore.
 
 **`~/.opik.config` and the `test-helper-service` process are machine-wide, not scoped to your run.** If another agent, terminal, or teammate could be running visual/E2E tests concurrently on the same machine, check before you touch either — restoring the config or killing the process out from under a run in progress breaks it:
 
@@ -154,10 +154,11 @@ Also note: `playwright.config.ts`'s `webServer` directive auto-spawns `test-help
 | `test-helper-service` process (port 5555) | Flask bridge — may be one you started, or one `webServer` auto-spawned, or someone else's | Confirm it's actually idle/yours (see above) before `kill $(lsof -ti:5555)`. |
 | Docker containers (`opik-opik-*`) | The stack under test | **Leave alone** if they were already running when you started (the common case) — don't `--stop`/`--clean` a stack you didn't start. Only stop containers you personally started for this session. |
 | `test-results/` | Playwright's per-test output (failure screenshots, videos, traces) | Regenerated every run — safe to delete: `rm -rf test-results`. |
-| `screenshots/comparison/` | Side-by-side copy written only when `SKIP_TEARDOWN=1` | Regenerated every run — safe to delete: `rm -rf screenshots/comparison`. |
+| `screenshots/comparison/` | Side-by-side copy written on every comparison run (i.e. whenever `SKIP_TEARDOWN` is not `1`) | Regenerated every run — safe to delete: `rm -rf screenshots/comparison`. |
 | `visual-report/` | The HTML report (`npm run test:report`) | Safe to delete: `rm -rf visual-report`. |
 | `allure-results/` | Allure reporter output | Safe to delete: `rm -rf allure-results`. |
-| `.auth/`, `.test-state.json` | Storage state / experiment-ID bridge for non-`SKIP_TEARDOWN` runs | Removed automatically by `global-teardown.ts` on a normal run; delete by hand only if you aborted mid-run without ever finishing a non-`SKIP_TEARDOWN` pass. |
+| `.test-state.json` | Experiment-ID bridge for non-`SKIP_TEARDOWN` runs | Removed automatically by `global-teardown.ts` on a normal run; delete by hand only if you aborted mid-run without ever finishing a non-`SKIP_TEARDOWN` pass. |
+| `.auth/` | Playwright storage state written by `global-setup.ts` | **Not cleaned up by `global-teardown.ts`** — it only removes `.test-state.json` and server-side data. Delete by hand: `rm -rf .auth`. |
 | `screenshots/baseline/*.png` | Your actual baselines | **Not cruft — don't reflexively delete.** Gitignored and per-machine by design (see "Baselines are local and gitignored"); leave them for the next person/session to reuse, unless you specifically want to force a clean re-baseline. |
 | Seeded project (`visual-project` / `visual-empty-project`) in the running Opik instance | Server-side data, not a local file | Deleted by `global-teardown.ts` on a plain `npx playwright test` run (not `SKIP_TEARDOWN=1`). Do a final run *without* `SKIP_TEARDOWN` before you finish (see step 7) so this actually happens — don't leave it to the next person. |
 
