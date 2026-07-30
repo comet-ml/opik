@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 import litellm
 from litellm.exceptions import BadRequestError
-from opik import context_storage as opik_context_storage
+from opik import opik_context
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
@@ -90,11 +90,18 @@ def _strip_duplicate_opik_logger(params: dict[str, Any]) -> dict[str, Any]:
         return params
 
     try:
-        # Cheap existence check: get_current_span_data() would copy the whole
-        # SpanData just to test for None.
-        span_already_tracked = not opik_context_storage.span_data_stack_empty()
+        # Deliberately the documented public API rather than a cheaper internal
+        # stack probe: neither failure direction here is safe (misreading an open
+        # span double-counts reflection cost, misreading a closed one deletes the
+        # only optimization-tagged trace), so the predicate must not depend on an
+        # internal that can drift. One SpanData copy is nothing next to the HTTP
+        # call that follows.
+        span_already_tracked = opik_context.get_current_span_data() is not None
     except Exception:
-        # Conservative direction: keep the logger, so a tagged trace is never lost.
+        # Can't tell — leave the callbacks alone. Keeps attribution intact for
+        # every caller; the cost of being wrong is a duplicate span for GEPA,
+        # which is visible in the data rather than silently missing from it.
+        logger.debug("Could not determine Opik span context", exc_info=True)
         span_already_tracked = False
     if not span_already_tracked:
         return params

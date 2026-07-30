@@ -563,9 +563,8 @@ class TestDuplicateOpikLoggerStripped:
             side_effect=fake_monitoring,
         ):
             with patch(
-                "opik_optimizer.core.llm_calls.opik_context_storage."
-                "span_data_stack_empty",
-                return_value=not span_open,
+                "opik_optimizer.core.llm_calls.opik_context.get_current_span_data",
+                return_value=(object() if span_open else None),
             ):
                 with patch(
                     "opik_optimizer.core.llm_calls.track_completion"
@@ -588,6 +587,43 @@ class TestDuplicateOpikLoggerStripped:
         assert opik_logger not in captured_kwargs.get("success_callback", [])
         assert opik_logger not in captured_kwargs.get("failure_callback", [])
         # A caller's own callbacks must survive.
+        assert other_callback in captured_kwargs.get("success_callback", [])
+
+    def test_keeps_opik_logger_when_span_context_is_unreadable(self) -> None:
+        """If the span predicate itself fails we cannot tell which case we are in.
+        Leave the callbacks alone: a duplicate span is visible in the data,
+        whereas a deleted optimization tag makes the spend silently vanish."""
+        opik_logger = self._make_logger()
+        other_callback = object()
+        captured_kwargs: dict[str, Any] = {}
+
+        def fake_monitoring(params: dict[str, Any]) -> dict[str, Any]:
+            return {**params, "success_callback": [opik_logger, other_callback]}
+
+        def capture(**kwargs: Any) -> Any:
+            captured_kwargs.update(kwargs)
+            return make_mock_response("ok")
+
+        with patch(
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor."
+            "try_add_opik_monitoring_to_params",
+            side_effect=fake_monitoring,
+        ):
+            with patch(
+                "opik_optimizer.core.llm_calls.opik_context.get_current_span_data",
+                side_effect=RuntimeError("opik context unavailable"),
+            ):
+                with patch(
+                    "opik_optimizer.core.llm_calls.track_completion"
+                ) as mock_track:
+                    mock_track.return_value = lambda completion_fn: capture
+                    result = _llm_calls.call_model(
+                        messages=[user_message("test")], model="gpt-4o"
+                    )
+
+        # The call still succeeds and the callbacks are untouched.
+        assert result == "ok"
+        assert opik_logger in captured_kwargs.get("success_callback", [])
         assert other_callback in captured_kwargs.get("success_callback", [])
 
     def test_keeps_opik_logger_when_no_span_is_open(self) -> None:
