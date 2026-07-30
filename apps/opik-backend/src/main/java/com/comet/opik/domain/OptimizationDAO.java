@@ -112,6 +112,7 @@ public interface OptimizationDAO {
      * exists to prevent. The bare read keeps any future {@code FIND} regression from ever re-breaking
      * the reaper.
      */
+    @Builder(toBuilder = true)
     record OptimizationStatusSnapshot(@NonNull OptimizationStatus status, @NonNull Instant lastUpdatedAt) {
     }
 
@@ -298,10 +299,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * worker's whole execution timeout ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, 6h), so trial-creation alone
      * would false-positive mid-trial; items narrow the legitimate silent gap to ~one dataset-item
      * evaluation, which is what lets the running timeout be minutes. The probe is uncorrelated (evaluated
-     * once per pass); the {@code experiments} scan is floored by {@code :lookback_seconds} (safe: a
-     * candidate run's row timestamp is within the lookback window and its trial experiments are created
-     * after the run starts) and the {@code experiment_items} scan by the running timeout — both floors
-     * prune via the {@code minmax} skip indexes of migration 000112.
+     * once per pass); matching on {@code (id, workspace_id)} tuples keeps it workspace-precise anyway —
+     * an experiment or item written in another workspace can never register as this run's progress, the
+     * same scoping {@link #HAS_RECENT_STUDIO_ACTIVITY} applies via its {@code WHERE}. The
+     * {@code experiments} scan is floored by {@code :lookback_seconds} (safe: a candidate run's row
+     * timestamp is within the lookback window and its trial experiments are created after the run starts)
+     * and the {@code experiment_items} scan by the running timeout — both floors prune via the
+     * {@code minmax} skip indexes of migration 000112.
      *
      * <p>{@code :running_hard_timeout_seconds} is the absolute ceiling that survives the progress signal:
      * a RUNNING row older than it is reaped even with recent trial/item writes, so a zombie worker that
@@ -328,14 +332,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     OR (latest_status = 'running'
                         AND (less(latest_updated_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
                             OR (less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds))
-                                AND toString(id) NOT IN (
-                                    SELECT optimization_id
+                                AND (toString(id), workspace_id) NOT IN (
+                                    SELECT optimization_id, workspace_id
                                     FROM experiments
                                     WHERE optimization_id != ''
                                       AND greaterOrEquals(created_at, subtractSeconds(now64(6), :lookback_seconds))
                                       AND (greaterOrEquals(created_at, subtractSeconds(now64(6), :running_timeout_seconds))
-                                          OR id IN (
-                                              SELECT experiment_id
+                                          OR (id, workspace_id) IN (
+                                              SELECT experiment_id, workspace_id
                                               FROM experiment_items
                                               WHERE greaterOrEquals(created_at, subtractSeconds(now64(6), :running_timeout_seconds))
                                           ))
@@ -347,16 +351,24 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     /**
-     * Single-run, workspace-scoped mirror of the reaper query's liveness probe: did this optimization
-     * write a trial experiment or an experiment item within the window? Used as the pre-update re-read
-     * guard (OPIK-7459) — the fleet-wide reaper query and the ERROR update are not atomic, so a trial or
-     * item landing in between must veto the transition, exactly like the status re-read vetoes a
-     * terminal-status race. Both scans sit behind the workspace prefix of the primary key plus the
-     * {@code minmax} indexes on {@code optimization_id} (000069) and {@code created_at} (000112).
+     * Latest row version by id, no joins — see {@link #getRowById}. Columns are exactly the set
+     * {@link #mapRowColumns} reads, so a future heavyweight column cannot silently widen this read.
      */
-    /** Latest row version by id, no joins — see {@link #getRowById}. */
     private static final String GET_RAW_BY_ID = """
-            SELECT *
+            SELECT
+                id,
+                name,
+                dataset_id,
+                project_id,
+                objective_name,
+                status,
+                metadata,
+                studio_config,
+                error_info,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by
             FROM optimizations
             WHERE workspace_id = :workspace_id
               AND id = :id
@@ -383,6 +395,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * Single-run, workspace-scoped mirror of the reaper query's liveness probe: did this optimization
+     * write a trial experiment or an experiment item within the window? Used as the pre-update re-read
+     * guard (OPIK-7459) — the fleet-wide reaper query and the ERROR update are not atomic, so a trial or
+     * item landing in between must veto the transition, exactly like the status re-read vetoes a
+     * terminal-status race. Both scans sit behind the workspace prefix of the primary key plus the
+     * {@code minmax} indexes on {@code optimization_id} (000069) and {@code created_at} (000112).
+     */
     private static final String HAS_RECENT_STUDIO_ACTIVITY = """
             SELECT 1
             FROM experiments
@@ -1402,9 +1422,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             .bind("id", id);
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(result -> result.map((row, metadata) -> new OptimizationStatusSnapshot(
-                        OptimizationStatus.fromString(row.get("latest_status", String.class)),
-                        row.get("latest_updated_at", Instant.class))))
+                .flatMap(result -> result.map((row, metadata) -> OptimizationStatusSnapshot.builder()
+                        .status(OptimizationStatus.fromString(row.get("latest_status", String.class)))
+                        .lastUpdatedAt(row.get("latest_updated_at", Instant.class))
+                        .build()))
                 .singleOrEmpty();
     }
 

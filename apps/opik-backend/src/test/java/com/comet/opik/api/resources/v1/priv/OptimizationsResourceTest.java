@@ -77,6 +77,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -547,6 +548,34 @@ class OptimizationsResourceTest {
         }
 
         @Test
+        @DisplayName("Get optimizer by id when a trial carries a non-finite experiment score")
+        void getByIdWhenTrialCarriesNonFiniteScore() {
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // A string-typed "NaN" parses as valid JSON, and FIND's CAST turns it into a Float64 nan —
+            // the exact input the isFinite guard in experiment_scores_parsed filters. Without the guard
+            // it propagates into the aggregates, the row mapper cannot read it as BigDecimal, and the
+            // whole run silently vanishes (OPIK-7459 — same driver behavior as the NaN duration case
+            // above). This cannot be seeded through the API (ExperimentScore.value is a BigDecimal, so
+            // "NaN" is rejected at deserialization) — the column stores raw JSON that older/foreign
+            // writers may have shaped differently, hence the raw insert. A non-finite JSON *number*
+            // (e.g. 1e999) is a different failure mode: simdjson rejects the whole document and
+            // JSONExtractArrayRaw returns [], losing every score of the trial but never producing nan.
+            insertTrialWithRawScores(id,
+                    "[{\"name\":\"finite_metric\",\"value\":0.75},{\"name\":\"nan_metric\",\"value\":\"NaN\"}]");
+
+            // The run must not vanish: the non-finite score entry is simply excluded from the aggregates.
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization.id()).isEqualTo(id);
+            assertThat(actualOptimization.numTrials()).isEqualTo(1L);
+            assertThat(actualOptimization.experimentScores())
+                    .extracting(FeedbackScoreAverage::name)
+                    .containsExactly("finite_metric");
+        }
+
+        @Test
         @DisplayName("Get optimizer by id with feedback scores")
         void getByIdWithFeedbackScores() {
             // Create dataset
@@ -858,6 +887,33 @@ class OptimizationsResourceTest {
                 .feedbackScores(null)
                 .build();
         experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+    }
+
+    /**
+     * Inserts a trial experiment row straight into ClickHouse with a raw {@code experiment_scores}
+     * JSON string. The API cannot produce every shape this column can hold ({@code ExperimentScore}
+     * types {@code value} as a {@code BigDecimal}), but FIND must survive whatever raw JSON is already
+     * stored — see getByIdWhenTrialCarriesNonFiniteScore.
+     */
+    private void insertTrialWithRawScores(UUID optimizationId, String experimentScoresJson) {
+        var experiment = experimentResourceClient.createPartialExperiment().build();
+        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("");
+                var statement = connection.prepareStatement(
+                        ("INSERT INTO %s.experiments (workspace_id, dataset_id, id, name, optimization_id, "
+                                + "experiment_scores, created_by, last_updated_by) "
+                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)").formatted(DATABASE_NAME))) {
+            statement.setString(1, WORKSPACE_ID);
+            statement.setString(2, experiment.datasetId().toString());
+            statement.setString(3, experiment.id().toString());
+            statement.setString(4, experiment.name());
+            statement.setString(5, optimizationId.toString());
+            statement.setString(6, experimentScoresJson);
+            statement.setString(7, USER);
+            statement.setString(8, USER);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to seed trial experiment with raw scores", e);
+        }
     }
 
     @Test

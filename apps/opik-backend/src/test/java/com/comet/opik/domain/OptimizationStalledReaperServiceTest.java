@@ -43,8 +43,11 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -87,6 +90,11 @@ class OptimizationStalledReaperServiceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+    // A second, unrelated workspace — cross-workspace isolation coverage for the liveness probe.
+    private static final String OTHER_API_KEY = UUID.randomUUID().toString();
+    private static final String OTHER_WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final String OTHER_WORKSPACE_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -147,6 +155,7 @@ class OptimizationStalledReaperServiceTest {
         this.injector = injector;
 
         mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID, USER);
+        mockTargetWorkspace(wireMock.server(), OTHER_API_KEY, OTHER_WORKSPACE_NAME, OTHER_WORKSPACE_ID, USER);
     }
 
     @Test
@@ -266,17 +275,16 @@ class OptimizationStalledReaperServiceTest {
 
     @Test
     @DisplayName("keeps a running run alive on item-level progress within a long trial")
-    void keepsRunningRunAliveOnItemProgressWithinLongTrial() throws InterruptedException {
+    void keepsRunningRunAliveOnItemProgressWithinLongTrial() {
         var id = seedBackdatedRunningStudioRun(Duration.ofHours(1));
-        var experimentId = createTrialExperiment(id);
 
-        // Age the trial experiment past the 4-second window, then land a fresh item on it — the shape of
-        // a long single trial: the experiment row is old, but items keep arriving as dataset items are
-        // evaluated. Only the item-level branch of the liveness probe can keep this run alive.
-        Thread.sleep(8_000);
+        // The shape of a long single trial: the trial experiment row is old (backdated an hour, far past
+        // the 5-minute window), but items keep arriving as dataset items are evaluated. Only the
+        // item-level branch of the liveness probe can keep this run alive.
+        var experimentId = createBackdatedTrialExperiment(id, Duration.ofHours(1));
         createExperimentItem(experimentId);
 
-        reconcile(NEVER, Duration.ofSeconds(4), BATCH_SIZE);
+        reconcile(NEVER, Duration.ofMinutes(5), BATCH_SIZE);
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.RUNNING);
     }
@@ -296,6 +304,23 @@ class OptimizationStalledReaperServiceTest {
 
         assertThat(statusOf(staleId)).isEqualTo(OptimizationStatus.ERROR);
         assertThat(statusOf(healthyId)).isEqualTo(OptimizationStatus.RUNNING);
+    }
+
+    @Test
+    @DisplayName("reaps a stale run whose id is referenced by another workspace's experiment")
+    void reapsStaleRunDespiteForeignWorkspaceExperiment() {
+        var staleId = seedBackdatedRunningStudioRun(Duration.ofHours(1));
+        // optimization_id is stored without an existence check (see ExperimentService), so a client in
+        // another workspace can write an experiment carrying this run's UUID. The liveness probe matches
+        // (id, workspace_id) tuples, so foreign-workspace activity must never register as this run's
+        // progress and keep a dead run spinning.
+        experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
+                .optimizationId(staleId)
+                .build(), OTHER_API_KEY, OTHER_WORKSPACE_NAME);
+
+        reconcile(NEVER, Duration.ofMinutes(5), BATCH_SIZE);
+
+        assertThat(statusOf(staleId)).isEqualTo(OptimizationStatus.ERROR);
     }
 
     @Test
@@ -435,6 +460,39 @@ class OptimizationStalledReaperServiceTest {
                 .optimizationId(optimizationId)
                 .build();
         return experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE_NAME);
+    }
+
+    /**
+     * Inserts a trial experiment row straight into ClickHouse with a backdated {@code created_at}. The
+     * API always stamps {@code created_at} server-side, and the reaper probe reads {@code experiments}
+     * without FINAL — so a second, backdated version of an API-created row would not hide the fresh
+     * one. A single raw row is the only way to seed an "old trial" deterministically, without
+     * {@code Thread.sleep}-ing the suite past the reaper window.
+     */
+    private UUID createBackdatedTrialExperiment(UUID optimizationId, Duration age) {
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .optimizationId(optimizationId)
+                .build();
+        var createdAt = LocalDateTime.ofInstant(Instant.now().minus(age), ZoneOffset.UTC);
+        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("");
+                var statement = connection.prepareStatement(
+                        ("INSERT INTO %s.experiments (workspace_id, dataset_id, id, name, optimization_id, "
+                                + "created_at, last_updated_at, created_by, last_updated_by) "
+                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").formatted(DATABASE_NAME))) {
+            statement.setString(1, WORKSPACE_ID);
+            statement.setString(2, experiment.datasetId().toString());
+            statement.setString(3, experiment.id().toString());
+            statement.setString(4, experiment.name());
+            statement.setString(5, optimizationId.toString());
+            statement.setObject(6, createdAt);
+            statement.setObject(7, createdAt);
+            statement.setString(8, USER);
+            statement.setString(9, USER);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to seed backdated trial experiment", e);
+        }
+        return experiment.id();
     }
 
     /**
