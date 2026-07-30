@@ -11,7 +11,7 @@ accumulation into the final OptimizationResult).
 """
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,12 +32,13 @@ def _make_mock_gepa_result(**overrides: Any) -> MagicMock:
 
 
 def _make_reflection_response(
-    content: str = "new instruction",
+    # None models a content-filtered / tool-call-only completion.
+    content: str | None = "new instruction",
     *,
     cost: float | None = None,
     usage: dict[str, int] | None = None,
 ) -> MagicMock:
-    response = make_mock_response(content)
+    response = make_mock_response(cast(str, content))
     response.cost = cost
     if usage is None:
         response.usage = None
