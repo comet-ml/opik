@@ -254,7 +254,10 @@ def build_optimizer_and_prompt(config):
     prompt = ChatPrompt(
         messages=config.prompt_messages,
         model=task_model,
-        model_parameters=ensure_default_model_params(task_params),
+        # deterministic: this model's completions are what the metric scores, so
+        # its temperature is pinned — otherwise the same prompt scores differently
+        # on repeat evals and every threshold decision becomes partly luck.
+        model_parameters=ensure_default_model_params(task_params, deterministic=True),
     )
     return optimizer, prompt
 

@@ -52,6 +52,17 @@ OPTIMIZER_RUNTIME_PARAMS = {
 # effect on the currently pinned opik_optimizer release — no pin bump needed.
 OPTIMIZER_PERFECT_SCORE = float(os.getenv("OPTIMIZER_PERFECT_SCORE", "1.0"))
 
+# Temperature for the *task* model — the one whose completions are scored
+# (OPIK-7511). At the provider default, repeating the SAME evaluation of the SAME
+# prompt over the SAME dataset gave 0.90-1.00 (measured: gpt-4o-mini flipped even
+# on unambiguous items; gpt-5-nano flipped 3 of 6 repeats), so a run's score —
+# and every threshold decision taken on it — was partly a coin flip. Pinning it
+# made the same eval reproduce exactly (6/6 identical). Not applied to the
+# optimizer/reflection model, which needs sampling diversity to propose varied
+# candidates. Models that fix their temperature (the gpt-5 family accepts only
+# 1) ignore this via litellm's drop_params rather than failing the run.
+OPTIMIZER_TASK_TEMPERATURE = float(os.getenv("OPTIMIZER_TASK_TEMPERATURE", "0.0"))
+
 # GEPA reflection mini-batch sizing (OPIK-7511).
 # GEPA only promotes a candidate to a full evaluation on a STRICT win over the
 # reflection mini-batch (gepa/core/engine.py "new_sum <= old_sum: skip"). With

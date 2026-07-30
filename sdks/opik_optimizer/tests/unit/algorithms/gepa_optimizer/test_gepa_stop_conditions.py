@@ -10,6 +10,7 @@ from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStoppe
 from opik_optimizer import GepaOptimizer, constants
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
     MIN_EXPECTED_REFLECTION_ITERATIONS,
+    CandidateScoreThresholdStopper,
     _build_gepa_stop_callbacks,
     _coerce_no_improvement_iterations,
     _coerce_positive_int,
@@ -292,6 +293,73 @@ class TestGepaFinishReason:
         )
 
         assert result.details["finish_reason"] == "no_improvement"
+
+
+class TestCandidateScoreThresholdStopper:
+    """OPIK-7511: one lucky eval of the SEED program must not end the run.
+
+    With a coarse 0/1 metric the seed's own full eval is noisy (and unpinnable on
+    the gpt-5 family), so stopping on it produced runs that reported
+    finish_reason="perfect_score" while showing no improvement.
+    """
+
+    def test_stopper__only_seed_at_threshold__does_not_stop(self) -> None:
+        stopper = CandidateScoreThresholdStopper(1.0)
+        state = SimpleNamespace(program_full_scores_val_set=[1.0])
+        assert stopper(state) is False
+
+    def test_stopper__candidate_at_threshold__stops(self) -> None:
+        stopper = CandidateScoreThresholdStopper(1.0)
+        state = SimpleNamespace(program_full_scores_val_set=[0.95, 1.0])
+        assert stopper(state) is True
+
+    def test_stopper__candidates_below_threshold__does_not_stop(self) -> None:
+        stopper = CandidateScoreThresholdStopper(1.0)
+        state = SimpleNamespace(program_full_scores_val_set=[1.0, 0.9, 0.95])
+        assert stopper(state) is False
+
+    def test_stopper__empty_or_missing_history__does_not_stop(self) -> None:
+        stopper = CandidateScoreThresholdStopper(0.95)
+        assert stopper(SimpleNamespace(program_full_scores_val_set=[])) is False
+        assert stopper(SimpleNamespace(program_full_scores_val_set=None)) is False
+        assert stopper(SimpleNamespace()) is False
+
+    def test_stopper__none_scores_are_skipped(self) -> None:
+        stopper = CandidateScoreThresholdStopper(0.95)
+        state = SimpleNamespace(program_full_scores_val_set=[0.5, None, 0.99])
+        assert stopper(state) is True
+
+    def test_stopper__never_raises_on_weird_state(self) -> None:
+        class Boom:
+            @property
+            def program_full_scores_val_set(self) -> Any:
+                raise RuntimeError("boom")
+
+        assert CandidateScoreThresholdStopper(0.95)(Boom()) is False
+
+    def test_finish_reason__only_seed_reached_threshold__is_not_perfect_score(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """The label must agree with the stopper: a seed-only 1.0 is a budget
+        exit, not a perfect score."""
+        gepa_result = _make_mock_gepa_result(candidates=[], val_aggregate_scores=[1.0])
+        result, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            gepa_result=gepa_result,
+        )
+
+        assert result.details["finish_reason"] == "max_trials"
 
 
 class TestStopperSemantics:

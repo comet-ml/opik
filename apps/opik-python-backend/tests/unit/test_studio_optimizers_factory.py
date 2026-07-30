@@ -7,7 +7,10 @@ just unknown-type errors.
 import pytest
 from unittest.mock import MagicMock, patch
 
-from opik_backend.studio.optimizers import OptimizerFactory
+from opik_backend.studio.optimizers import (
+    OptimizerFactory,
+    ensure_default_model_params,
+)
 from opik_backend.studio.exceptions import InvalidOptimizerError
 
 
@@ -152,6 +155,49 @@ class TestOptimizerFactoryPerfectScoreInjection:
             optimizer_params={},
         )
         assert optimizer.perfect_score == 1.0
+
+
+class TestTaskModelTemperaturePinning:
+    """OPIK-7511: the scored (task) model runs at a pinned temperature so the same
+    prompt scores the same twice; the reflection model keeps its sampling
+    diversity."""
+
+    def test_task_params__no_temperature_given__pinned_deterministic(self):
+        params = ensure_default_model_params({}, deterministic=True)
+        assert params["temperature"] == 0.0
+        # Models that fix their temperature (gpt-5 family) must ignore ours
+        # rather than fail the run.
+        assert params["drop_params"] is True
+
+    def test_task_params__explicit_temperature__wins(self):
+        params = ensure_default_model_params({"temperature": 0.7}, deterministic=True)
+        assert params["temperature"] == 0.7
+
+    def test_optimizer_params__not_deterministic__temperature_untouched(self):
+        params = ensure_default_model_params({})
+        assert "temperature" not in params
+        assert "drop_params" not in params
+
+    def test_params__max_tokens_default_still_applied_either_way(self):
+        assert "max_tokens" in ensure_default_model_params({})
+        assert "max_tokens" in ensure_default_model_params({}, deterministic=True)
+
+    def test_params__caller_dict_not_mutated(self):
+        caller = {}
+        ensure_default_model_params(caller, deterministic=True)
+        assert caller == {}
+
+    def test_factory__optimizer_model_keeps_sampling_diversity(self):
+        """The factory builds the reflection model — it must not pin temperature."""
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={},
+            )
+        assert "temperature" not in recorder.captured_kwargs["model_parameters"]
 
 
 class TestOptimizerFactoryListAvailable:
