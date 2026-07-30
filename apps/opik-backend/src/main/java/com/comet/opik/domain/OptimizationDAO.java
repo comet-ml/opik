@@ -540,13 +540,60 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     argMin(per_trace_cost, earliest_created_at) AS baseline_cost
                 FROM candidate_metrics
                 GROUP BY optim_id
+            ), optimization_tagged_traces AS (
+                -- Traces tagged with the optimization id but linked to no experiment item:
+                -- optimizer-internal LLM calls (e.g. GEPA reflection, candidate generation).
+                -- Their spend is part of the run's total cost even though they belong to no
+                -- trial (OPIK-7521).
+                SELECT DISTINCT
+                    tag AS optimization_id_str,
+                    id AS trace_id
+                FROM (
+                    SELECT id, tags
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND hasAny(tags, (SELECT groupArray(toString(id)) FROM optimization_final))
+                    AND id NOT IN (SELECT trace_id FROM experiment_items_final)
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, id
+                )
+                ARRAY JOIN tags AS tag
+                WHERE tag IN (SELECT toString(id) FROM optimization_final)
+            ), optimization_tagged_costs AS (
+                SELECT
+                    ott.optimization_id_str AS optimization_id_str,
+                    sum(s.total_estimated_cost) AS total_estimated_cost
+                FROM optimization_tagged_traces ott
+                INNER JOIN (
+                    SELECT trace_id, sum(total_estimated_cost) AS total_estimated_cost
+                    FROM (
+                        SELECT workspace_id, project_id, trace_id, parent_span_id, id, total_estimated_cost, last_updated_at
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
+                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                    )
+                    GROUP BY trace_id
+                ) AS s ON s.trace_id = ott.trace_id
+                GROUP BY ott.optimization_id_str
             ), optimization_costs AS (
                 SELECT
-                    ef2.optimization_id AS optimization_id,
-                    sum(ed2.total_estimated_cost) AS total_optimization_cost
-                FROM experiments_final ef2
-                LEFT JOIN experiment_durations ed2 ON ef2.id = ed2.experiment_id
-                GROUP BY ef2.optimization_id
+                    optimization_id,
+                    sum(cost) AS total_optimization_cost
+                FROM (
+                    SELECT
+                        ef2.optimization_id AS optimization_id,
+                        ed2.total_estimated_cost AS cost
+                    FROM experiments_final ef2
+                    LEFT JOIN experiment_durations ed2 ON ef2.id = ed2.experiment_id
+                    UNION ALL
+                    SELECT
+                        toFixedString(otc.optimization_id_str, 36) AS optimization_id,
+                        otc.total_estimated_cost AS cost
+                    FROM optimization_tagged_costs otc
+                )
+                GROUP BY optimization_id
             )
             SELECT
                 o.*,

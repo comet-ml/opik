@@ -756,6 +756,115 @@ class OptimizationsResourceTest {
                     });
         }
 
+        @Test
+        @DisplayName("Total optimization cost includes optimization-tagged traces outside experiment items")
+        void getById__whenOptimizationTaggedTracesExistOutsideTrials__totalCostIncludesThem() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "reflection-cost-test-" + UUID.randomUUID();
+            Dataset dataset = Dataset.builder()
+                    .name(datasetName)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
+            datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
+
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName(objectiveName)
+                    .build();
+
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var trialScore = BigDecimal.valueOf(0.7);
+            var trialMetadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", UUID.randomUUID().toString())));
+
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(trialMetadata)
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(trialScore).build()))
+                    .build();
+
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trialCostPerSpan = BigDecimal.valueOf(0.05);
+            createTracesSpansAndItems(
+                    experiment, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    trialCostPerSpan);
+
+            // Reflection-style trace: tagged with the optimization id, but linked to no
+            // experiment item (OPIK-7521). Its span cost must count into the run total.
+            var reflectionCost = BigDecimal.valueOf(0.07);
+            Trace reflectionTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Prompt Optimization"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(reflectionTrace), apiKey, workspaceName);
+
+            Span reflectionSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(reflectionTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(reflectionCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(reflectionSpan), apiKey, workspaceName);
+
+            var expectedTrialCost = trialCostPerSpan.multiply(BigDecimal.valueOf(items.size()));
+            var expectedTotalCost = expectedTrialCost.add(reflectionCost);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization).isNotNull();
+
+                        // The run total includes the tagged non-trial trace's spend
+                        assertThat(actualOptimization.totalOptimizationCost()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(
+                                actualOptimization.totalOptimizationCost(), expectedTotalCost)).isZero();
+
+                        // best/baseline stay trial-scoped per-trace comparison metrics
+                        assertThat(actualOptimization.bestCost()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(
+                                actualOptimization.bestCost(), trialCostPerSpan)).isZero();
+                        assertThat(actualOptimization.baselineCost()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(
+                                actualOptimization.baselineCost(), trialCostPerSpan)).isZero();
+                    });
+        }
+
         private void createTracesSpansAndItems(Experiment experiment, List<DatasetItem> datasetItems,
                 Project project, String apiKey, String workspaceName,
                 Instant traceStart, Instant traceEnd, BigDecimal costPerSpan) {
