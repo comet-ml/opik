@@ -66,6 +66,21 @@ def initialize_opik_client(context: OptimizationJobContext) -> opik.Opik:
     return client
 
 
+def count_optimizable_items(dataset_items: list) -> int:
+    """Count the items the optimizer will actually train on.
+
+    The SDK's sampling builds its plan from dataset item ids and drops rows
+    without one (``opik_optimizer/utils/sampling.py:_extract_ids``), so a plain
+    ``len()`` can exceed the resulting trainset — and a mini-batch sized from
+    that number would exceed it too. Count the same rows the SDK will keep.
+    """
+    return sum(
+        1
+        for item in dataset_items
+        if isinstance(item, dict) and item.get("id") is not None
+    )
+
+
 def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
     """Load dataset and validate it has items.
 
@@ -76,8 +91,9 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
     Returns:
         Tuple of (dataset, item_count). The count is returned so callers can
         size dataset-dependent parameters without re-fetching every item; it is
-        capped at DATASET_SAMPLES — only the effective (sampled) size matters
-        downstream, so we never materialize more items just to count them.
+        capped at DATASET_SAMPLES (only the effective sampled size matters
+        downstream) and counts only items the optimizer can use — see
+        count_optimizable_items.
 
     Raises:
         DatasetNotFoundError: If dataset not found or inaccessible
@@ -86,17 +102,23 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
     try:
         dataset = client.get_dataset(dataset_name)
         logger.debug(f"Loaded dataset: {dataset_name}")
+        # Bounded fetch, inside the same translation: access/transport failures
+        # here are just as much "dataset unusable" as a failed lookup, and the
+        # docstring promises DatasetNotFoundError for them.
+        dataset_items = dataset.get_items(nb_samples=DATASET_SAMPLES)
     except Exception as e:
         logger.error(f"Failed to load dataset '{dataset_name}': {e}")
         raise DatasetNotFoundError(dataset_name, e)
 
-    # Validate dataset has items (bounded fetch — see docstring)
-    dataset_items = dataset.get_items(nb_samples=DATASET_SAMPLES)
     if not dataset_items:
         raise EmptyDatasetError(dataset_name)
 
-    logger.debug(f"Dataset has {len(dataset_items)} items (capped at {DATASET_SAMPLES})")
-    return dataset, len(dataset_items)
+    item_count = count_optimizable_items(dataset_items)
+    logger.debug(
+        f"Dataset has {len(dataset_items)} items (capped at {DATASET_SAMPLES}), "
+        f"{item_count} usable by the optimizer"
+    )
+    return dataset, item_count
 
 
 def run_optimization(
@@ -146,7 +168,9 @@ def run_optimization(
     if dataset_size is None:
         # Bounded fetch: only the effective (sampled) size matters, so never
         # materialize more than DATASET_SAMPLES items just to count them.
-        dataset_size = len(dataset.get_items(nb_samples=DATASET_SAMPLES))
+        dataset_size = count_optimizable_items(
+            dataset.get_items(nb_samples=DATASET_SAMPLES)
+        )
     effective_dataset_size = min(dataset_size, DATASET_SAMPLES)
     reflection_minibatch_size = resolve_reflection_minibatch_size(
         dataset_size=effective_dataset_size,

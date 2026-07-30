@@ -18,6 +18,7 @@ from llm_constants import (
 )
 
 from opik_backend.jobs import optimizer_runner
+from opik_backend.studio.config import OPTIMIZER_TASK_TEMPERATURE
 from opik_backend.studio.types import OptimizationConfig
 
 
@@ -110,6 +111,30 @@ def test_algorithm_defaults_to_prompt_model_when_not_set():
     # and its parameters.
     assert optimizer.model == GATEWAY_CLAUDE_HAIKU
     assert optimizer.model_parameters.get("temperature") == 0.3
+
+
+def test_task_model_temperature_is_pinned_on_the_prompt():
+    """OPIK-7511: the pin must survive all the way onto the object that carries
+    the scored completions — asserting the helper alone would not prove the task
+    model actually runs pinned, and the reflection model must stay sampled."""
+    config = OptimizationConfig.from_dict(_config())
+
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert prompt.model_kwargs.get("temperature") == OPTIMIZER_TASK_TEMPERATURE
+    # Guard for models that fix their own temperature: without this the pin
+    # fails the run instead of being ignored.
+    assert prompt.model_kwargs.get("drop_params") is True
+    # The reflection model needs sampling diversity — it must NOT be pinned.
+    assert "temperature" not in optimizer.model_parameters
+
+
+def test_task_model_explicit_temperature_survives_the_pin():
+    config = OptimizationConfig.from_dict(_config(task_params={"temperature": 0.4}))
+
+    _, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert prompt.model_kwargs.get("temperature") == 0.4
 
 
 def test_optimizer_params_preserved_without_separate_model():

@@ -255,8 +255,9 @@ def build_optimizer_and_prompt(config):
         messages=config.prompt_messages,
         model=task_model,
         # deterministic: this model's completions are what the metric scores, so
-        # its temperature is pinned — otherwise the same prompt scores differently
-        # on repeat evals and every threshold decision becomes partly luck.
+        # pin its temperature where the provider honours it. Best-effort, not a
+        # guarantee — models that fix their own temperature (the gpt-5 family)
+        # stay sampled, so the stop conditions tolerate score noise themselves.
         model_parameters=ensure_default_model_params(task_params, deterministic=True),
     )
     return optimizer, prompt

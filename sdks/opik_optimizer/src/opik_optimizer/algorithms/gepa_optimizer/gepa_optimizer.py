@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Any, cast
 
 from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStopper
@@ -112,33 +113,55 @@ def _coerce_no_improvement_iterations(value: Any) -> int:
     )
 
 
+def _candidate_full_eval_scores(val_scores: Any) -> list[float]:
+    """Comparable full-eval scores of gepa's *candidates*, seed excluded.
+
+    Index 0 of gepa's full-eval list is the seed program's own eval
+    (gepa/core/state.py seeds the list with it); everything after it is a
+    candidate. Non-numeric and non-finite entries are dropped so an inf from a
+    custom metric cannot read as "threshold reached".
+    """
+    return [
+        float(score)
+        for score in list(val_scores or [])[1:]
+        if isinstance(score, (int, float))
+        and not isinstance(score, bool)
+        and math.isfinite(score)
+    ]
+
+
 class CandidateScoreThresholdStopper(ScoreThresholdStopper):
     """Stop when a *candidate* full eval reaches the threshold — never the seed.
 
-    ``program_full_scores_val_set[0]`` is the seed program's own full eval
-    (gepa/core/state.py seeds the list with it), so the vendored stopper can end
-    a run on that single number, before any candidate exists. With the Studio's
-    coarse 0/1 metrics that is a coin flip rather than a fact: repeating the SAME
-    eval of the SAME prompt over the SAME dataset scored 0.95/1.00 on gpt-5-nano
-    and 0.90/0.95 on gpt-4o-mini, and the gpt-5 family refuses any temperature
-    but 1, so the scores cannot be made reproducible. Such a run stopped at
-    iteration zero and reported finish_reason="perfect_score" while the UI showed
-    "no improvement" at the baseline score (OPIK-7511).
+    The vendored stopper reads the whole score list, so it can end a run on the
+    seed program's own eval, before any candidate exists. Scores are not
+    reproducible in general (a model may fix its own temperature and stay
+    sampled), so on a coarse metric that turns "stop because the target was
+    reached" into a coin flip — and the run is then reported as a perfect score
+    while showing no improvement (OPIK-7511).
 
     "The baseline is already good enough" is owned by ``should_skip_optimization``
-    on Opik's own baseline evaluation, which runs before GEPA — so ignoring index
-    0 here loses no stop path, it just stops the two from overlapping.
+    on Opik's own baseline evaluation, which runs before GEPA — so ignoring the
+    seed here loses no stop path, it just stops the two from overlapping.
     """
 
     def __call__(self, gepa_state: Any) -> bool:
         try:
-            scores = list(
-                getattr(gepa_state, "program_full_scores_val_set", None) or []
-            )
+            scores = getattr(gepa_state, "program_full_scores_val_set", None)
             return any(
-                score is not None and score >= self.threshold for score in scores[1:]
+                score >= self.threshold for score in _candidate_full_eval_scores(scores)
             )
         except Exception:
+            # Never take a run down from a stop callback — but do not fail quiet
+            # either: swallowing this silently disables threshold stopping, and a
+            # gepa upgrade that renames the score list would otherwise look like
+            # "the target was simply never reached".
+            logger.warning(
+                "Could not read gepa full-eval scores (%s); threshold stopping is "
+                "inactive for this iteration.",
+                type(gepa_state).__name__,
+                exc_info=True,
+            )
             return False
 
 
@@ -180,16 +203,19 @@ def _resolve_gepa_finish_reason(
 ) -> FinishReason | None:
     """Return why GEPA's search ended ("perfect_score"/"no_improvement"), or None.
 
-    Decided from full-eval (valset) scores only, matching the stop conditions —
-    including their blind spot: index 0 is the seed program's own eval, which
-    CandidateScoreThresholdStopper deliberately ignores, so reading it here would
-    label a run "perfect_score" that the stopper never stopped.
+    Decided from candidate full-eval (valset) scores, exactly like the stop
+    conditions — same seed exclusion and same non-finite filtering, so the label
+    can never claim a stop the stopper did not make.
     """
-    finite = [s for s in val_scores[1:] if s is not None]
-    if perfect_score > 0 and finite and max(finite) >= perfect_score:
+    candidate_scores = _candidate_full_eval_scores(val_scores)
+    if (
+        perfect_score > 0
+        and candidate_scores
+        and max(candidate_scores) >= perfect_score
+    ):
         logger.info(
             "GEPA stopped early: full-eval score %.4f reached perfect_score %.4f.",
-            max(finite),
+            max(candidate_scores),
             perfect_score,
         )
         return "perfect_score"

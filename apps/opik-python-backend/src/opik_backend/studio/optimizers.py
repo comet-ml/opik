@@ -31,17 +31,22 @@ def ensure_default_model_params(
     outputs (and baseline/per-trial task completions) don't truncate.
 
     Pass ``deterministic=True`` for the task model, whose completions are scored:
-    it pins the temperature so the same prompt scores the same twice (see
-    OPTIMIZER_TASK_TEMPERATURE). An explicit value from the run config always
-    wins. Leave it False for the optimizer/reflection model, which needs sampling
-    diversity to propose varied candidates.
+    it pins the temperature so repeated evaluations of one prompt agree (see
+    OPTIMIZER_TASK_TEMPERATURE). An explicit temperature from the run config still
+    wins, but a ``null`` one does not — the studio config can carry explicit nulls,
+    and ``setdefault`` would forward that ``None`` to litellm. ``drop_params`` is
+    forced rather than defaulted: it is our guard so a model that fixes its own
+    temperature ignores the pin instead of failing the run, not a user knob.
+    Leave ``deterministic`` False for the optimizer/reflection model, which needs
+    sampling diversity to propose varied candidates.
     """
     params = dict(model_params or {})
-    params.setdefault("max_tokens", LLM_MAX_TOKENS)
+    if params.get("max_tokens") is None:
+        params["max_tokens"] = LLM_MAX_TOKENS
     if deterministic:
-        params.setdefault("temperature", OPTIMIZER_TASK_TEMPERATURE)
-        # Let models that fix their temperature ignore ours instead of erroring.
-        params.setdefault("drop_params", True)
+        if params.get("temperature") is None:
+            params["temperature"] = OPTIMIZER_TASK_TEMPERATURE
+        params["drop_params"] = True
     return params
 
 

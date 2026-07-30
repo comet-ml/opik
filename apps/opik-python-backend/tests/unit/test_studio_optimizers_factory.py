@@ -7,6 +7,8 @@ just unknown-type errors.
 import pytest
 from unittest.mock import MagicMock, patch
 
+from opik_backend.studio import config as config_module
+from opik_backend.studio import optimizers as optimizers_module
 from opik_backend.studio.optimizers import (
     OptimizerFactory,
     ensure_default_model_params,
@@ -158,20 +160,53 @@ class TestOptimizerFactoryPerfectScoreInjection:
 
 
 class TestTaskModelTemperaturePinning:
-    """OPIK-7511: the scored (task) model runs at a pinned temperature so the same
-    prompt scores the same twice; the reflection model keeps its sampling
+    """OPIK-7511: the scored (task) model runs at a pinned temperature so repeated
+    evaluations of one prompt agree; the reflection model keeps its sampling
     diversity."""
 
-    def test_task_params__no_temperature_given__pinned_deterministic(self):
+    def test_task_params__no_temperature_given__pinned_to_configured_value(self):
+        # Assert against the configured value, not a literal: config reads
+        # OPTIMIZER_TASK_TEMPERATURE at import, so an env override in the test
+        # environment must not turn a correct implementation red.
         params = ensure_default_model_params({}, deterministic=True)
-        assert params["temperature"] == 0.0
+        assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
         # Models that fix their temperature (gpt-5 family) must ignore ours
         # rather than fail the run.
         assert params["drop_params"] is True
 
+    def test_task_params__default_configured_value_is_zero(self, monkeypatch):
+        """The shipped default, independent of the ambient environment."""
+        monkeypatch.delenv("OPTIMIZER_TASK_TEMPERATURE", raising=False)
+        assert (
+            config_module._read_float_env(
+                "OPTIMIZER_TASK_TEMPERATURE", "0.0", minimum=0.0, maximum=2.0
+            )
+            == 0.0
+        )
+
     def test_task_params__explicit_temperature__wins(self):
         params = ensure_default_model_params({"temperature": 0.7}, deterministic=True)
         assert params["temperature"] == 0.7
+
+    def test_task_params__explicit_null_temperature__is_pinned_not_forwarded(self):
+        """The studio config can carry explicit nulls; forwarding None to litellm
+        would either error or silently fall back to the provider default."""
+        params = ensure_default_model_params(
+            {"temperature": None}, deterministic=True
+        )
+        assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
+
+    def test_task_params__explicit_false_drop_params__is_forced(self):
+        """drop_params is our guard for fixed-temperature models, not a user knob:
+        leaving it False would fail the whole run on a gpt-5 model."""
+        params = ensure_default_model_params(
+            {"drop_params": False}, deterministic=True
+        )
+        assert params["drop_params"] is True
+
+    def test_task_params__explicit_null_max_tokens__is_defaulted(self):
+        params = ensure_default_model_params({"max_tokens": None})
+        assert params["max_tokens"] == optimizers_module.LLM_MAX_TOKENS
 
     def test_optimizer_params__not_deterministic__temperature_untouched(self):
         params = ensure_default_model_params({})

@@ -329,13 +329,31 @@ class TestCandidateScoreThresholdStopper:
         state = SimpleNamespace(program_full_scores_val_set=[0.5, None, 0.99])
         assert stopper(state) is True
 
-    def test_stopper__never_raises_on_weird_state(self) -> None:
+    def test_stopper__non_finite_scores_do_not_trip_it(self) -> None:
+        """A custom metric returning inf must not read as "target reached"."""
+        stopper = CandidateScoreThresholdStopper(1.0)
+        state = SimpleNamespace(
+            program_full_scores_val_set=[0.5, float("inf"), float("nan"), 0.9]
+        )
+        assert stopper(state) is False
+
+    def test_stopper__non_numeric_scores_are_skipped(self) -> None:
+        stopper = CandidateScoreThresholdStopper(0.95)
+        state = SimpleNamespace(program_full_scores_val_set=[0.5, "1.0", True, None])
+        assert stopper(state) is False
+
+    def test_stopper__unreadable_state__keeps_run_alive_but_warns(self, caplog) -> None:
+        """A stop callback must never take a run down — but swallowing the failure
+        silently would disable threshold stopping invisibly, so it logs."""
+
         class Boom:
             @property
             def program_full_scores_val_set(self) -> Any:
                 raise RuntimeError("boom")
 
-        assert CandidateScoreThresholdStopper(0.95)(Boom()) is False
+        with caplog.at_level(logging.WARNING, logger=_GEPA_OPTIMIZER_LOGGER):
+            assert CandidateScoreThresholdStopper(0.95)(Boom()) is False
+        assert "threshold stopping is inactive" in caplog.text
 
     def test_finish_reason__only_seed_reached_threshold__is_not_perfect_score(
         self,
@@ -349,6 +367,32 @@ class TestCandidateScoreThresholdStopper:
         """The label must agree with the stopper: a seed-only 1.0 is a budget
         exit, not a perfect score."""
         gepa_result = _make_mock_gepa_result(candidates=[], val_aggregate_scores=[1.0])
+        result, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            gepa_result=gepa_result,
+        )
+
+        assert result.details["finish_reason"] == "max_trials"
+
+    def test_finish_reason__non_finite_candidate_score__is_not_perfect_score(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """The label filters non-finite scores exactly like the stopper, so an inf
+        cannot claim a stop that never happened."""
+        gepa_result = _make_mock_gepa_result(
+            candidates=[], val_aggregate_scores=[0.5, float("inf")]
+        )
         result, _ = _run_optimize(
             monkeypatch,
             mock_optimization_context,

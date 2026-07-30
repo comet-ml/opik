@@ -1,8 +1,11 @@
 """Configuration for Optimization Studio."""
 
+import logging
 import math
 import os
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # Opik Configuration
 OPIK_URL = os.getenv("OPIK_URL_OVERRIDE")
@@ -89,14 +92,16 @@ OPTIMIZER_PERFECT_SCORE = _read_float_env(
 )
 
 # Temperature for the *task* model — the one whose completions are scored
-# (OPIK-7511). At the provider default, repeating the SAME evaluation of the SAME
-# prompt over the SAME dataset gave 0.90-1.00 (measured: gpt-4o-mini flipped even
-# on unambiguous items; gpt-5-nano flipped 3 of 6 repeats), so a run's score —
-# and every threshold decision taken on it — was partly a coin flip. Pinning it
-# made the same eval reproduce exactly (6/6 identical). Not applied to the
-# optimizer/reflection model, which needs sampling diversity to propose varied
-# candidates. Models that fix their temperature (the gpt-5 family accepts only
-# 1) ignore this via litellm's drop_params rather than failing the run.
+# (OPIK-7511). Scoring should be repeatable: at the provider default, repeated
+# evaluations of one prompt over one dataset returned different scores, which
+# makes every threshold decision taken on them partly luck. Deliberately NOT
+# applied to the optimizer/reflection model, which needs sampling diversity to
+# propose varied candidates.
+#
+# This is best-effort, not a guarantee: a model that fixes its own temperature
+# ignores the pin (litellm's drop_params keeps the run alive instead of failing
+# it) and stays sampled, which is why the stop conditions must tolerate score
+# noise on their own — see CandidateScoreThresholdStopper in the optimizer SDK.
 OPTIMIZER_TASK_TEMPERATURE = _read_float_env(
     "OPTIMIZER_TASK_TEMPERATURE", "0.0", minimum=0.0, maximum=2.0
 )
@@ -117,9 +122,12 @@ OPTIMIZER_TASK_TEMPERATURE = _read_float_env(
 # - floor of 5 keeps the previous behaviour for small datasets;
 # - cap at dataset_size: a mini-batch cannot exceed the trainset;
 # - cap by the metric-call budget so the run keeps at least
-#   GEPA_MIN_REFLECTION_ITERATIONS reflection iterations (a large batch never
-#   prevents reflection — the gepa engine does not gate iterations on the
-#   remaining budget — it just burns the budget in fewer iterations).
+#   GEPA_MIN_REFLECTION_ITERATIONS reflection iterations *when the budget allows
+#   it at all* — a batch of 1 cannot be cut further, so a budget below
+#   2 * GEPA_MIN_REFLECTION_ITERATIONS calls fits fewer iterations regardless
+#   (logged when it happens). A large batch never prevents reflection — the gepa
+#   engine does not gate iterations on the remaining budget — it just burns the
+#   budget in fewer iterations.
 # The env var remains an explicit operator override (used verbatim; validated
 # at service startup — integer >= 1).
 GEPA_REFLECTION_MINIBATCH_ENV = "OPTIMIZER_GEPA_REFLECTION_BATCH_SIZE"
@@ -132,6 +140,13 @@ GEPA_REFLECTION_MINIBATCH_FRACTION = 0.2
 # this many iterations: below ~5 the reflective search degenerates into one or
 # two mutation shots and GEPA's Pareto candidate selection has nothing to
 # select over (it also mirrors the mini-batch floor of 5).
+#
+# Deliberately duplicated from MIN_EXPECTED_REFLECTION_ITERATIONS in the SDK
+# (algorithms/gepa_optimizer/gepa_optimizer.py), which warns on the same rule:
+# the constant does not exist in the pinned opik-optimizer release, so importing
+# it would break the backend until the pin moves. Collapse the two — and the
+# ~2*b cost model they share — when the pin is bumped (OPIK-7460); until then
+# keep the values equal.
 GEPA_MIN_REFLECTION_ITERATIONS = 5
 
 
@@ -179,6 +194,18 @@ def resolve_reflection_minibatch_size(dataset_size: int, max_trials: int) -> int
     # max_trials * dataset_size. A reflection iteration costs ~2*b of it; cap b
     # so at least GEPA_MIN_REFLECTION_ITERATIONS iterations fit.
     budget_cap = (max_trials * dataset_size) // (2 * GEPA_MIN_REFLECTION_ITERATIONS)
+    if budget_cap < 1:
+        # A mini-batch cannot go below 1, so this run simply cannot fit the
+        # target iteration count — say so instead of implying the cap held.
+        logger.warning(
+            "Metric-call budget (max_trials=%s * dataset_size=%s) fits fewer than "
+            "%s reflection iterations even at a mini-batch of 1; raise max_trials "
+            "or use a larger dataset.",
+            max_trials,
+            dataset_size,
+            GEPA_MIN_REFLECTION_ITERATIONS,
+        )
+        budget_cap = 1
     return max(1, min(dataset_size, scaled, budget_cap))
 
 
