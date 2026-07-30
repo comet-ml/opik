@@ -351,11 +351,11 @@ installable in one command:
 npx skills add comet-ml/opik-skills
 ```
 
-The workspace-facing skills are **transport-adaptive**: they use your Opik SDK
-config by default, and this MCP server when it's connected — same skill either
-way. See **[Agent Skills](/agent-skills)** for the full list and usage. A
-connected agent can also pull the skills on demand (served as cacheable
-resources) — nothing to install.
+The workspace-facing skills **work best with this server connected** (the
+recommended path); they also run over your Opik SDK config — the fallback for
+OSS / self-hosted / CI. See **[Agent Skills](/agent-skills)** for the full list
+and usage. A connected agent can also pull the skills on demand (served as
+cacheable resources) — nothing to install.
 
 ## What's unique to the MCP
 

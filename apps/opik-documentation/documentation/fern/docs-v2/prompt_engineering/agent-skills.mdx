@@ -2,7 +2,7 @@
 title: Opik Agent Skills
 ---
 
-**Agent Skills** teach your coding agent how to work with Opik — add tracing, find and explain failures, turn them into tests, and compare fixes — right in your editor. They're portable Markdown ([agentskills.io](https://agentskills.io)) picked up by ~40 agents. The workspace-facing skills use your Opik SDK config by default, or the [Opik MCP server](/mcp-server) when it's connected — same skill either way. Because a model doesn't know Opik from training the way it knows `git`, the skills are what let it use Opik without fumbling.
+**Agent Skills** teach your coding agent how to work with Opik — add tracing, find and explain failures, turn them into tests, and compare fixes — right in your editor. They're portable Markdown ([agentskills.io](https://agentskills.io)) picked up by ~40 agents. The workspace-facing skills work best with the hosted [Opik MCP server](/mcp-server) connected (recommended); they also run over your SDK config — the path for OSS / self-hosted. Because a model doesn't know Opik from training the way it knows `git`, the skills are what let it use Opik without fumbling.
 
 ## Install
 
@@ -14,42 +14,30 @@ Skills install into your agent's skills directory and are picked up automaticall
 
 ## Available skills
 
-Opik does two things for your agent — **observe** what your app did, and **evaluate** its quality. The skills group the same way, plus one reference skill. You rarely call them by name — describe the task and your agent picks. Start with `/instrument`.
-
-### Observability — see what happened
+You rarely call these by name — describe the task and your agent picks the right one. Start with `/instrument`.
 
 | Skill | Purpose |
 |---|---|
 | `/instrument` | Add Opik tracing to your app and verify a real trace lands (runs `opik configure` first if the project isn't set up). **Start here.** |
 | `/find` | Surface the traces worth your attention — errors, regressions, outliers, low online-eval scores. |
 | `/explain` | Root-cause a specific trace — what went wrong, and why. |
-
-### Evaluation — measure & verify quality
-
-| Skill | Purpose |
-|---|---|
-| `/evaluate` | Build an LLM evaluation and run it against your app — judges, datasets, RAG — and return an experiment with scores. |
 | `/test` | Turn a failing case into a repeatable check (creates a dataset + test suite). |
-| `/compare` | Run a candidate against the baseline over that suite and show you the numbers. |
-
-### Reference
-
-| Skill | Purpose |
-|---|---|
-| `/opik` | Opik SDK reference — tracing, span types, framework integrations, threads, prompts — plus best practices. Consulted automatically; you rarely invoke it by name. |
+| `/compare` | Run a candidate against the baseline over a test suite and show you the numbers. |
+| `/evaluate` | Build an LLM evaluation and run it against your app — judges, datasets, RAG — and return an experiment with scores. |
+| `/opik` | **Reference** — Opik SDK knowledge (tracing, span types, integrations, threads, prompts) plus best practices. Consulted automatically; you rarely invoke it. |
 
 <Note>
-`/explain` reasons two ways. By default it fetches the trace via the SDK and root-causes it **against your code**. With the [Opik MCP server](/mcp-server) connected on Opik Cloud, it can escalate to **Ollie** for workspace-wide investigation across many traces. Same result shape either way.
+`/explain` reasons two ways. By default it fetches the trace via the SDK and root-causes it **against your code**. With the hosted [Opik MCP server](/mcp-server) connected on Opik Cloud, it can escalate to **Ollie** for workspace-wide investigation across many traces.
 </Note>
 
 ## Using skills
 
-Invoke a skill by name — `/find` — or just describe the task ("why are my `demo` traces failing?") and your agent picks the right one. A typical debugging pass flows `/find` → `/explain` → `/test` → `/compare`, crossing from observability into evaluation. Start with `/instrument`; everything builds on the traces it produces.
+Invoke a skill by name — `/find` — or just describe the task ("why are my `demo` traces failing?") and your agent picks the right one. A typical debugging pass flows `/find` → `/explain` → `/test` → `/compare`. Start with `/instrument`; everything builds on the traces it produces.
 
 ## Learn more
 
-- **Live data and Ollie from chat** — add the [Opik MCP server](/mcp-server).
-- **Self-hosting Opik (OSS)?** Everything except Ollie works over your SDK config — run `opik configure` and choose self-hosted.
+- **Recommended:** connect the hosted [Opik MCP server](/mcp-server) for live data, in-chat tool calls, and Ollie.
+- **Self-hosting Opik (OSS)?** The skills run over your SDK config — run `opik configure` and choose self-hosted.
 - [Opik documentation](https://www.comet.com/docs/opik/)
 
 <Note>
