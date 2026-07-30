@@ -540,19 +540,33 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     argMin(per_trace_cost, earliest_created_at) AS baseline_cost
                 FROM candidate_metrics
                 GROUP BY optim_id
+            ), optimization_tagged_trace_ids AS (
+                -- Candidate traces: anything that has ever carried one of these optimization
+                -- ids as a tag. Deliberately a superset — the authoritative check runs below
+                -- on each trace's LATEST version, so a tag removed by a later update stops
+                -- counting. Narrowing here is what keeps that check off a full workspace scan;
+                -- arrayExists with an IN-subquery probes a set instead of scanning a constant
+                -- array per row, which matters because optimization_final is the whole
+                -- workspace on the list endpoint (pagination applies to the outer projection).
+                SELECT DISTINCT id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
             ), optimization_tagged_traces AS (
                 -- Traces tagged with the optimization id but linked to no experiment item:
                 -- optimizer-internal LLM calls (e.g. GEPA reflection, candidate generation).
                 -- Their spend is part of the run's total cost even though they belong to no
-                -- trial (OPIK-7521).
+                -- trial (OPIK-7521). Not project-scoped on purpose: optimizer-internal traces
+                -- land in the optimizer's project while trials land in the dataset's.
                 SELECT DISTINCT
                     tag AS optimization_id_str,
-                    id AS trace_id
+                    trace_id,
+                    project_id
                 FROM (
-                    SELECT id, tags
+                    SELECT id AS trace_id, project_id, tags
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND hasAny(tags, (SELECT groupArray(toString(id)) FROM optimization_final))
+                    AND id IN (SELECT id FROM optimization_tagged_trace_ids)
                     AND id NOT IN (SELECT trace_id FROM experiment_items_final)
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, id
@@ -570,6 +584,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         SELECT workspace_id, project_id, trace_id, parent_span_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
+                        AND project_id IN (SELECT DISTINCT project_id FROM optimization_tagged_traces)
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
                         ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
