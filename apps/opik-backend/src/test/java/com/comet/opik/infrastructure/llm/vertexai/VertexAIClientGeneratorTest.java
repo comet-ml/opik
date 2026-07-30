@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 class VertexAIClientGeneratorTest {
 
@@ -152,6 +153,27 @@ class VertexAIClientGeneratorTest {
         void generatedClientKeepsTheRegionalHost(String location) {
             assertThat(apiEndpointForConfiguredLocation(Map.of("location", location)))
                     .isEqualTo("%s-aiplatform.googleapis.com".formatted(location));
+        }
+    }
+
+    @Nested
+    @DisplayName("Blank locations fall back to the SDK default")
+    class BlankLocations {
+
+        /**
+         * The location is not validated for blankness at the API boundary, and the SDK rejects an empty one outright, so
+         * a blank value has to be treated the same as an absent one rather than canonicalised into {@code ""}.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {"", "   "})
+        void areTreatedAsAbsent(String location) {
+            assertThat(generatedClientFor(Map.of("location", location)).getLocation())
+                    .isEqualTo(generatedClientFor(Map.of()).getLocation());
+        }
+
+        @Test
+        void doNotFailClientCreation() {
+            assertThatCode(() -> generatedClientFor(Map.of("location", "   "))).doesNotThrowAnyException();
         }
     }
 }

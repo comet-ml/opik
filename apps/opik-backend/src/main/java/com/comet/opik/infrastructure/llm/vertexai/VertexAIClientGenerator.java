@@ -19,6 +19,7 @@ import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -130,6 +131,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             VertexAI.Builder builder = new VertexAI.Builder();
 
             Optional.ofNullable(config.configuration().get("location"))
+                    .filter(StringUtils::isNotBlank)
                     .map(VertexAIClientGenerator::canonicalLocation)
                     .ifPresent(location -> {
                         builder.setLocation(location);
