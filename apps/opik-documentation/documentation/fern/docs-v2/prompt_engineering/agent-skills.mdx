@@ -2,37 +2,56 @@
 title: Opik Agent Skills
 ---
 
-**Agent Skills** teach your coding agent how to use Opik — add tracing, evaluate, and debug LLM apps — right in your editor. They're portable Markdown ([agentskills.io](https://agentskills.io)) picked up by ~40 agents, and they work with or without the [Opik MCP server](/mcp-server). Because a model doesn't know Opik from training the way it knows `git`, the skills are what let it use Opik without fumbling.
+**Agent Skills** teach your coding agent how to work with Opik — add tracing, find and explain failures, turn them into tests, and compare fixes — right in your editor. They're portable Markdown ([agentskills.io](https://agentskills.io)) picked up by ~40 agents. The workspace-facing skills use your Opik SDK config by default, or the [Opik MCP server](/mcp-server) when it's connected — same skill either way. Because a model doesn't know Opik from training the way it knows `git`, the skills are what let it use Opik without fumbling.
 
 ## Install
 
 ```bash
-npx skills add comet-ml/opik-skills          # add the Opik skills
-npx skills add comet-ml/opik-skills --all    # or all of them
+npx skills add comet-ml/opik-skills
 ```
 
 Skills install into your agent's skills directory and are picked up automatically by Claude Code, Cursor, VS Code (Copilot), Codex, Gemini CLI, and more.
 
 ## Available skills
 
+Opik does two things for your agent — **observe** what your app did, and **evaluate** its quality. The skills group the same way, plus one reference skill. You rarely call them by name — describe the task and your agent picks. Start with `/instrument`.
+
+### Observability — see what happened
+
 | Skill | Purpose |
 |---|---|
-| `/opik` | Opik SDK reference — tracing, span types, framework integrations, threads, prompts |
-| `/opik-connect` | Connect your project to Opik (creates a free API key if you don't have one) |
-| `/instrument` | Add tracing to your app and verify a real trace lands |
-| `/agent-ops` | Agent architecture, evaluation, and production-monitoring best practices |
-| `/evaluation` | Build LLM evaluations — judges, RAG, synthetic data, error analysis |
+| `/instrument` | Add Opik tracing to your app and verify a real trace lands (runs `opik configure` first if the project isn't set up). **Start here.** |
+| `/find` | Surface the traces worth your attention — errors, regressions, outliers, low online-eval scores. |
+| `/explain` | Root-cause a specific trace — what went wrong, and why. |
+
+### Evaluation — measure & verify quality
+
+| Skill | Purpose |
+|---|---|
+| `/evaluate` | Build an LLM evaluation and run it against your app — judges, datasets, RAG — and return an experiment with scores. |
+| `/test` | Turn a failing case into a repeatable check (creates a dataset + test suite). |
+| `/compare` | Run a candidate against the baseline over that suite and show you the numbers. |
+
+### Reference
+
+| Skill | Purpose |
+|---|---|
+| `/opik` | Opik SDK reference — tracing, span types, framework integrations, threads, prompts — plus best practices. Consulted automatically; you rarely invoke it by name. |
 
 <Note>
-More skills are on the way — including finding and root-causing failing traces, and a "safe to ship" check for changes.
+`/explain` reasons two ways. By default it fetches the trace via the SDK and root-causes it **against your code**. With the [Opik MCP server](/mcp-server) connected on Opik Cloud, it can escalate to **Ollie** for workspace-wide investigation across many traces. Same result shape either way.
 </Note>
 
 ## Using skills
 
-Invoke a skill by name — `/instrument` — or just describe the task ("add Opik tracing to my app") and your agent picks the right one. The first time, `/instrument` runs `/opik-connect` for you, so there's no separate setup step.
+Invoke a skill by name — `/find` — or just describe the task ("why are my `demo` traces failing?") and your agent picks the right one. A typical debugging pass flows `/find` → `/explain` → `/test` → `/compare`, crossing from observability into evaluation. Start with `/instrument`; everything builds on the traces it produces.
 
 ## Learn more
 
-- **Live data from chat** (read traces, run experiments, ask Ollie) — add the [Opik MCP server](/mcp-server).
-- **Self-hosting Opik (OSS)?** Point `/opik-connect` at your own instance.
+- **Live data and Ollie from chat** — add the [Opik MCP server](/mcp-server).
+- **Self-hosting Opik (OSS)?** Everything except Ollie works over your SDK config — run `opik configure` and choose self-hosted.
 - [Opik documentation](https://www.comet.com/docs/opik/)
+
+<Note>
+Coming next: deciding whether a change is **safe to ship**, and confirming it **held in production**.
+</Note>

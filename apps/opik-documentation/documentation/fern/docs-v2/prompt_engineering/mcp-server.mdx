@@ -344,16 +344,29 @@ use `read` / `list` / `write` directly.
 ## Skills for coding agents
 
 Beyond the tools, Opik ships **agent skills** that teach a coding agent _how_ to
-use Opik — add tracing, evaluate, debug — installable in one command and usable
-with or without this MCP. Install them the standard way:
+use Opik — add tracing, find and explain failures, test and compare fixes —
+installable in one command:
 
 ```bash
 npx skills add comet-ml/opik-skills
 ```
 
-See **[Agent Skills](/agent-skills)** for the full list and usage. If your agent
-is connected to this MCP, it can also pull skills on demand via `read_skill` —
-nothing to install.
+The workspace-facing skills are **transport-adaptive**: they use your Opik SDK
+config by default, and this MCP server when it's connected — same skill either
+way. See **[Agent Skills](/agent-skills)** for the full list and usage. A
+connected agent can also pull the skills on demand (served as cacheable
+resources) — nothing to install.
+
+## What's unique to the MCP
+
+Traces, datasets, test suites, experiments — even Diagnostics — are all
+reachable through the Opik SDK too. Connect the MCP for what only it gives you:
+
+- **In-chat tool calls** — your agent acts directly, instead of writing and
+  running throwaway scripts.
+- **Governance** — per-user OAuth and audit, rather than a shared API key.
+- **Ollie** — `ask_ollie` is the one capability with no SDK path; it's how
+  skills like `/explain` and `/find` escalate to workspace-wide investigation.
 
 ## Using the MCP server
 
