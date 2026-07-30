@@ -118,9 +118,22 @@ def playwright_test_tags(project_root: Path) -> list[set[str]]:
     parseable JSON, 0 tests, 1 error.
     """
     cmd = ["npx", "playwright", "test", "--list", "--reporter=json"]
-    proc = subprocess.run(
-        cmd, cwd=project_root, capture_output=True, text=True, timeout=300,
-    )
+    try:
+        proc = subprocess.run(
+            cmd, cwd=project_root, capture_output=True, text=True, timeout=300,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            f"playwright --list timed out after {e.timeout:.0f}s\n"
+            f"  cmd: {' '.join(cmd)}\n  cwd: {project_root}"
+        ) from None
+    except OSError as e:
+        # npx missing, cwd gone, not executable — never reaches Playwright.
+        raise RuntimeError(
+            f"could not run playwright --list: {e}\n"
+            f"  cmd: {' '.join(cmd)}\n  cwd: {project_root}\n"
+            "  is `npm ci` done in this project?"
+        ) from None
 
     def fail(why: str) -> RuntimeError:
         # Playwright puts collection errors in the report's `errors` array, not on
@@ -252,7 +265,16 @@ class Change:
 
 def reconcile(taxonomy: Path, estate: Path) -> tuple[list[str], list[Change], list[str]]:
     """-> (new lines, changes, warnings). Never writes."""
-    tax = yaml.safe_load(taxonomy.read_text())
+    try:
+        text = taxonomy.read_text()
+    except OSError as e:
+        raise RuntimeError(f"could not read {taxonomy}: {e}") from None
+    try:
+        tax = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise RuntimeError(f"{taxonomy} is not valid YAML: {e}") from None
+    if not isinstance(tax, dict):
+        raise RuntimeError(f"{taxonomy} did not parse to a mapping (got {type(tax).__name__})")
     caps, vcaps = scan_estate(estate)
 
     # The load dimension is `status: planned` and reports to JUnit, not Allure.
@@ -261,7 +283,9 @@ def reconcile(taxonomy: Path, estate: Path) -> tuple[list[str], list[Change], li
     dims = tax.get("dimensions") or {}
     skip_load = (dims.get("load") or {}).get("status") != "active"
 
-    lines = taxonomy.read_text().splitlines()
+    # Same text the parse above used — re-reading could pick up a mid-run edit
+    # and desynchronise the line numbers from the parsed structure.
+    lines = text.splitlines()
     changes: list[Change] = []
     warnings: list[str] = []
 
@@ -349,8 +373,11 @@ def main() -> int:
     ap.add_argument("--summary", action="store_true", help="print the change list")
     args = ap.parse_args()
 
-    # These are operational failures with actionable messages (a broken spec, a
-    # missing project), not bugs — print the reason, not a traceback.
+    # Operational failures — a broken spec, a missing project, an unreadable or
+    # malformed taxonomy, npx absent, --list timing out — are converted to
+    # RuntimeError at their source and reported as a message, not a traceback.
+    # Deliberately not `except Exception`: anything else IS a bug, and a stack
+    # trace is the right output for it.
     try:
         lines, changes, warnings = reconcile(args.taxonomy, args.estate)
     except RuntimeError as e:
@@ -372,7 +399,11 @@ def main() -> int:
         return 1 if (changes or warnings) else 0
 
     if changes:
-        args.taxonomy.write_text("\n".join(lines) + "\n")
+        try:
+            args.taxonomy.write_text("\n".join(lines) + "\n")
+        except OSError as e:
+            print(f"reconcile: could not write {args.taxonomy}: {e}", file=sys.stderr)
+            return 1
         print(f"reconcile: updated {args.taxonomy} ({len(changes)} field(s))")
     else:
         print("reconcile: no changes")
