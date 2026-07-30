@@ -352,6 +352,109 @@ class TestStripProjectName:
         assert "opik" not in result["metadata"]
 
 
+def _make_mock_optimizer() -> BaseOptimizer:
+    class MockOptimizer(BaseOptimizer):
+        DEFAULT_PROMPTS: dict[str, str] = {}
+
+        def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
+            pass
+
+        def run_optimization(self, context: OptimizationContext) -> Any:
+            pass
+
+        def get_config(self, context: OptimizationContext) -> dict[str, Any]:
+            return {"optimizer": "MockOptimizer"}
+
+        def get_optimizer_metadata(self) -> dict[str, Any]:
+            return {}
+
+    return MockOptimizer(model="gpt-4o")
+
+
+class TestCostUsageCapture:
+    """OPIK-7521: call_model must accumulate cost/usage onto the calling optimizer."""
+
+    def _make_costed_response(self) -> Any:
+        from types import SimpleNamespace
+
+        response = make_mock_response("ok")
+        response.cost = 0.25
+        response.usage = SimpleNamespace(
+            prompt_tokens=10, completion_tokens=5, total_tokens=15
+        )
+        return response
+
+    def test_call_model_records_cost_and_usage_to_optimizer(self) -> None:
+        optimizer = _make_mock_optimizer()
+        response = self._make_costed_response()
+
+        def inner_call(self: Any) -> None:
+            _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: (lambda **kw: response)
+            inner_call(optimizer)
+
+        assert optimizer.llm_call_counter == 1
+        assert optimizer.llm_cost_total == pytest.approx(0.25)
+        assert optimizer.llm_token_usage_total == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
+
+    def test_call_model_cost_falls_back_to_hidden_params(self) -> None:
+        optimizer = _make_mock_optimizer()
+        response = make_mock_response("ok")
+        response.cost = None
+        response.usage = None
+        response._hidden_params = {"response_cost": 0.5}
+
+        def inner_call(self: Any) -> None:
+            _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: (lambda **kw: response)
+            inner_call(optimizer)
+
+        assert optimizer.llm_cost_total == pytest.approx(0.5)
+
+    def test_call_model_tolerates_mock_cost_attributes(self) -> None:
+        """MagicMock auto-attrs (non-numeric cost, non-int usage) must not raise."""
+        optimizer = _make_mock_optimizer()
+        response = make_mock_response("ok")  # .cost/.usage are auto MagicMocks
+
+        def inner_call(self: Any) -> None:
+            _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: (lambda **kw: response)
+            inner_call(optimizer)
+
+        assert optimizer.llm_cost_total == 0.0
+
+    @pytest.mark.asyncio
+    async def test_call_model_async_records_cost_and_usage_to_optimizer(self) -> None:
+        optimizer = _make_mock_optimizer()
+        response = self._make_costed_response()
+
+        async def completion(**kw: Any) -> Any:
+            return response
+
+        async def inner_call(self: Any) -> None:
+            await _llm_calls.call_model_async(
+                messages=[user_message("test")], model="gpt-4o"
+            )
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda completion_fn: completion
+            await inner_call(optimizer)
+
+        assert optimizer.llm_call_counter == 1
+        assert optimizer.llm_cost_total == pytest.approx(0.25)
+        assert optimizer.llm_token_usage_total["total_tokens"] == 15
+
+
 class TestCounterIncrement:
     def test_increment_llm_counter_walks_stack(self) -> None:
         class MockOptimizer(BaseOptimizer):

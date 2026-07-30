@@ -160,68 +160,87 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 _T = TypeVar("_T", bound=BaseModel)
 
 
-def _increment_llm_counter_if_in_optimizer() -> None:
-    """
-    Walk up the call stack and increment the first optimizer's counter if found.
-    """
+def _find_optimizer_in_stack() -> Any | None:
+    """Return the nearest BaseOptimizer bound as `self` on the call stack."""
     try:
         from ..base_optimizer import BaseOptimizer
     except Exception:
-        return
+        return None
 
     try:
         frame: FrameType | None = sys._getframe()
     except ValueError:
-        return
+        return None
 
     while frame is not None:
         optimizer_candidate = frame.f_locals.get("self")
         if isinstance(optimizer_candidate, BaseOptimizer):
-            optimizer_candidate._increment_llm_counter()
-            break
+            return optimizer_candidate
         frame = frame.f_back
+    return None
+
+
+def _increment_llm_counter_if_in_optimizer() -> None:
+    """
+    Walk up the call stack and increment the first optimizer's counter if found.
+    """
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        optimizer._increment_llm_counter()
 
 
 def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
     """
     Walk up the call stack and increment the first optimizer's counter if found.
     """
-    try:
-        from ..base_optimizer import BaseOptimizer
-    except Exception:
-        return
-
-    try:
-        frame: FrameType | None = sys._getframe()
-    except ValueError:
-        return
-
-    while frame is not None:
-        optimizer_candidate = frame.f_locals.get("self")
-        if isinstance(optimizer_candidate, BaseOptimizer):
-            optimizer_candidate._increment_llm_call_tools_counter()
-            break
-        frame = frame.f_back
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        optimizer._increment_llm_call_tools_counter()
 
 
 def _get_project_name_from_optimizer() -> str | None:
     """Return project_name from the nearest optimizer on the call stack."""
-    try:
-        from ..base_optimizer import BaseOptimizer
-    except Exception:
-        return None
-
-    try:
-        frame: FrameType | None = sys._getframe()
-    except ValueError:
-        return None
-
-    while frame is not None:
-        optimizer_candidate = frame.f_locals.get("self")
-        if isinstance(optimizer_candidate, BaseOptimizer):
-            return getattr(optimizer_candidate, "project_name", None)
-        frame = frame.f_back
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        return getattr(optimizer, "project_name", None)
     return None
+
+
+def _extract_response_cost(response: Any) -> float | None:
+    """Best-effort cost from a litellm response (`.cost`, else hidden params)."""
+    cost = getattr(response, "cost", None)
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+        return float(cost)
+    hidden_params = getattr(response, "_hidden_params", None)
+    if isinstance(hidden_params, dict):
+        hidden_cost = hidden_params.get("response_cost")
+        if isinstance(hidden_cost, (int, float)) and not isinstance(hidden_cost, bool):
+            return float(hidden_cost)
+    return None
+
+
+def _extract_response_usage(response: Any) -> dict[str, int] | None:
+    """Best-effort token usage from a litellm response."""
+    usage_obj = getattr(response, "usage", None)
+    if usage_obj is None:
+        return None
+    try:
+        return {
+            "prompt_tokens": int(getattr(usage_obj, "prompt_tokens", 0) or 0),
+            "completion_tokens": int(getattr(usage_obj, "completion_tokens", 0) or 0),
+            "total_tokens": int(getattr(usage_obj, "total_tokens", 0) or 0),
+        }
+    except (TypeError, ValueError):
+        return None
+
+
+def _record_cost_usage_if_in_optimizer(response: Any) -> None:
+    """Accumulate the response's cost/usage onto the nearest optimizer (OPIK-7521)."""
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is None:
+        return
+    optimizer._add_llm_cost(_extract_response_cost(response))
+    optimizer._add_llm_usage(_extract_response_usage(response))
 
 
 def _build_call_time_params(
@@ -673,6 +692,7 @@ def call_model(
             num_retries=6,
             **_strip_project_name(attempt_params),
         )
+        _record_cost_usage_if_in_optimizer(response)
 
         choices = getattr(response, "choices", None)
         choices_count = len(choices) if isinstance(choices, list) else "unknown"
@@ -856,6 +876,7 @@ async def call_model_async(
             num_retries=6,
             **_strip_project_name(attempt_params),
         )
+        _record_cost_usage_if_in_optimizer(response)
 
         choices = getattr(response, "choices", None)
         logger.debug(

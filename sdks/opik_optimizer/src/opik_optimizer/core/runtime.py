@@ -250,6 +250,12 @@ def build_final_result(
         history=history_entries,
         llm_calls=optimizer.llm_call_counter,
         llm_calls_tools=optimizer.llm_call_tools_counter,
+        llm_cost_total=optimizer.llm_cost_total or None,
+        llm_token_usage_total=(
+            dict(optimizer.llm_token_usage_total)
+            if optimizer.llm_token_usage_total.get("total_tokens")
+            else None
+        ),
         dataset_id=context.dataset.id,
         optimization_id=context.optimization_id,
     )
@@ -566,6 +572,12 @@ def build_early_stop_result(
         history=optimizer._history_builder.get_entries(),
         llm_calls=optimizer.llm_call_counter,
         llm_calls_tools=optimizer.llm_call_tools_counter,
+        llm_cost_total=optimizer.llm_cost_total or None,
+        llm_token_usage_total=(
+            dict(optimizer.llm_token_usage_total)
+            if optimizer.llm_token_usage_total.get("total_tokens")
+            else None
+        ),
         dataset_id=context.dataset.id,
         optimization_id=context.optimization_id,
     )
