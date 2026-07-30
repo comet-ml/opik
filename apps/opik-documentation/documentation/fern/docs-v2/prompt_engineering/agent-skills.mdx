@@ -1,0 +1,38 @@
+---
+title: Opik Agent Skills
+---
+
+**Agent Skills** teach your coding agent how to use Opik — add tracing, evaluate, and debug LLM apps — right in your editor. They're portable Markdown ([agentskills.io](https://agentskills.io)) picked up by ~40 agents, and they work with or without the [Opik MCP server](/mcp-server). Because a model doesn't know Opik from training the way it knows `git`, the skills are what let it use Opik without fumbling.
+
+## Install
+
+```bash
+npx skills add comet-ml/opik-skills          # add the Opik skills
+npx skills add comet-ml/opik-skills --all    # or all of them
+```
+
+Skills install into your agent's skills directory and are picked up automatically by Claude Code, Cursor, VS Code (Copilot), Codex, Gemini CLI, and more.
+
+## Available skills
+
+| Skill | Purpose |
+|---|---|
+| `/opik` | Opik SDK reference — tracing, span types, framework integrations, threads, prompts |
+| `/opik-connect` | Connect your project to Opik (creates a free API key if you don't have one) |
+| `/instrument` | Add tracing to your app and verify a real trace lands |
+| `/agent-ops` | Agent architecture, evaluation, and production-monitoring best practices |
+| `/evaluation` | Build LLM evaluations — judges, RAG, synthetic data, error analysis |
+
+<Note>
+More skills are on the way — including finding and root-causing failing traces, and a "safe to ship" check for changes.
+</Note>
+
+## Using skills
+
+Invoke a skill by name — `/instrument` — or just describe the task ("add Opik tracing to my app") and your agent picks the right one. The first time, `/instrument` runs `/opik-connect` for you, so there's no separate setup step.
+
+## Learn more
+
+- **Live data from chat** (read traces, run experiments, ask Ollie) — add the [Opik MCP server](/mcp-server).
+- **Self-hosting Opik (OSS)?** Point `/opik-connect` at your own instance.
+- [Opik documentation](https://www.comet.com/docs/opik/)
