@@ -936,6 +936,7 @@ clickhouse:
       # server's /backup/list, e.g. "backup202401011200" as produced by the
       # backup CronJob above.
       backupName: ""
+      # Override with any image that has bash and curl — the job needs nothing else.
       image: "amazon/aws-cli:2.27.49"
       # Hard cap on the job runtime (seconds) so a stuck restore whose status
       # never resolves cannot run forever. Default: 24h.

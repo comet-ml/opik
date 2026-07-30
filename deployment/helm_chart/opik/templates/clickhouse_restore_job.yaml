@@ -25,17 +25,37 @@ spec:
           set -euo pipefail
           CHECK_INTERVAL=900  # 15 minutes in seconds
 
-          # Fetch the most recent restore action for this backup from the backup
-          # server's action history. The /backup/actions endpoint returns NDJSON
-          # (one action object per line), so no --slurp is needed. Matches the
-          # exact command ("restore <name>" or "restore_remote <name>") so a
-          # backup like "backup-1" can't match "backup-10". Tolerates a transient
-          # server error by returning an empty string.
+          command -v curl >/dev/null || {
+            echo "ERROR: curl not found; clickhouse.backup.restore.image needs bash and curl"
+            exit 1
+          }
+
+          # Most recent action for this backup from the backup server's history,
+          # optionally restricted to one command. /backup/actions returns NDJSON (one
+          # compact object per line) and the quoted command value is matched whole, so
+          # "restore backup-1" cannot match "restore backup-10". Empty result means no
+          # action found — including when the server errors.
+          # Fed by process substitution, not a pipe, so $result survives the loop.
           get_restore_action() {
-            curl --silent "http://${RESTORE_SERVICE}/backup/actions" 2>/dev/null \
-              | jq -c --arg name "$BACKUP_NAME" \
-                  'select(.command == "restore " + $name or .command == "restore_remote " + $name)' 2>/dev/null \
-              | tail -1 || true
+            local want="${1:-}" line result=""
+            while IFS= read -r line; do
+              if [ -n "$want" ]; then
+                case "$line" in *"\"${want} ${BACKUP_NAME}\""*) result="$line" ;; esac
+              else
+                case "$line" in
+                  *"\"restore ${BACKUP_NAME}\""*|*"\"restore_remote ${BACKUP_NAME}\""*) result="$line" ;;
+                esac
+              fi
+            done < <(curl --silent "http://${RESTORE_SERVICE}/backup/actions" 2>/dev/null || true)
+            printf '%s' "$result"
+          }
+
+          # First value of a top-level string field on one JSON line. Pure bash, so the
+          # job needs no jq — slim images (incl. amazon/aws-cli) do not ship it.
+          json_field() {
+            local rest="${2#*\"${1}\":\"}"
+            [ "$rest" = "${2}" ] && return 0
+            printf '%s' "${rest%%\"*}"
           }
 
           # Idempotency / reschedule safety: if a restore for this backup already
@@ -45,14 +65,15 @@ spec:
           EXISTING_ACTION=$(get_restore_action)
           SKIP_INITIATE="false"
           if [ -n "$EXISTING_ACTION" ]; then
-            EXISTING_STATUS=$(echo "$EXISTING_ACTION" | jq -r '.status')
+            EXISTING_STATUS=$(json_field status "$EXISTING_ACTION")
             echo "Found existing restore action with status: ${EXISTING_STATUS}"
             if [ "$EXISTING_STATUS" = "success" ]; then
               echo "✓ Backup ${BACKUP_NAME} has already been restored successfully. Nothing to do."
               exit 0
             elif [ "$EXISTING_STATUS" != "error" ]; then
               echo "A restore is already in progress (pod likely rescheduled), attaching to it."
-              RESTORE_COMMAND=$(echo "$EXISTING_ACTION" | jq -r '.command | split(" ")[0]')
+              EXISTING_COMMAND=$(json_field command "$EXISTING_ACTION")
+              RESTORE_COMMAND="${EXISTING_COMMAND%% *}"
               SKIP_INITIATE="true"
             fi
           fi
@@ -60,32 +81,32 @@ spec:
           if [ "$SKIP_INITIATE" = "false" ]; then
             echo ""
             echo "=== Checking if backup ${BACKUP_NAME} is available locally ==="
-            LOCAL_BACKUPS=$(curl --silent --fail "http://${RESTORE_SERVICE}/backup/list/local")
-            echo "$LOCAL_BACKUPS" | jq '.'
+            # On a list failure, fall back to restore_remote — it works either way.
+            LOCAL_BACKUPS=$(curl --silent --fail "http://${RESTORE_SERVICE}/backup/list/local" || true)
+            printf '%s\n' "$LOCAL_BACKUPS"
 
-            # Check if backup exists locally (handle both single object and array responses).
-            # Use jq -r (not -e): with -e jq exits non-zero on a "false" result, which
-            # under `set -euo pipefail` would abort the job and skip the restore_remote fallback.
-            BACKUP_LOCAL=$(echo "$LOCAL_BACKUPS" | jq -r --arg name "$BACKUP_NAME" 'if type == "array" then any(.[]; .name == $name) elif type == "object" then .name == $name else false end')
-
-            if [ "$BACKUP_LOCAL" = "true" ]; then
-              echo "✓ Backup found locally, using local restore"
-              RESTORE_COMMAND="restore"
-            else
-              echo "✗ Backup not found locally, using restore_remote (download + restore)"
-              RESTORE_COMMAND="restore_remote"
-            fi
+            case "$LOCAL_BACKUPS" in
+              *"\"name\":\"${BACKUP_NAME}\""*)
+                echo "✓ Backup found locally, using local restore"
+                RESTORE_COMMAND="restore"
+                ;;
+              *)
+                echo "✗ Backup not found locally, using restore_remote (download + restore)"
+                RESTORE_COMMAND="restore_remote"
+                ;;
+            esac
 
             echo ""
             echo "=== Starting ${RESTORE_COMMAND} of backup ${BACKUP_NAME} at $(date) ==="
             RESTORE_RESPONSE=$(curl --silent --fail -X POST "http://${RESTORE_SERVICE}/backup/${RESTORE_COMMAND}/${BACKUP_NAME}")
-            echo "$RESTORE_RESPONSE" | jq '.'
+            printf '%s\n' "$RESTORE_RESPONSE"
 
-            # Check if restore initiation failed
-            if echo "$RESTORE_RESPONSE" | jq -e '.status == "error"' > /dev/null; then
-              echo "ERROR: Restore failed to start!"
-              exit 1
-            fi
+            case "$RESTORE_RESPONSE" in
+              *'"status":"error"'*)
+                echo "ERROR: Restore failed to start!"
+                exit 1
+                ;;
+            esac
           fi
 
           # Poll for restore completion
@@ -94,20 +115,16 @@ spec:
           while true; do
             echo "$(date): Checking restore status for backup ${BACKUP_NAME}..."
 
-            # Latest restore action for this backup (NDJSON stream, no --slurp).
-            RESTORE_ACTION=$(curl --silent "http://${RESTORE_SERVICE}/backup/actions" 2>/dev/null \
-              | jq -c --arg name "$BACKUP_NAME" --arg command "$RESTORE_COMMAND" \
-                  'select(.command == $command + " " + $name)' 2>/dev/null \
-              | tail -1 || true)
+            RESTORE_ACTION=$(get_restore_action "$RESTORE_COMMAND")
 
             if [ -z "$RESTORE_ACTION" ]; then
               echo "No restore operation found for ${BACKUP_NAME} yet, checking again..."
             else
               echo "$RESTORE_ACTION"
-              STATUS=$(echo "$RESTORE_ACTION" | jq -r '.status')
+              STATUS=$(json_field status "$RESTORE_ACTION")
 
               if [ "$STATUS" = "error" ]; then
-                echo "ERROR: Restore failed!"
+                echo "ERROR: Restore failed! $(json_field error "$RESTORE_ACTION")"
                 exit 1
               elif [ "$STATUS" = "success" ]; then
                 echo "✓ Restore completed successfully at $(date)"
