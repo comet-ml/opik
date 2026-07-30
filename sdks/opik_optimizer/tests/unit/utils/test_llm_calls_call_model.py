@@ -392,7 +392,7 @@ class TestCostUsageCapture:
             _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
 
         with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda completion_fn: (lambda **kw: response)
+            mock_track.return_value = lambda completion_fn: lambda **kw: response
             inner_call(optimizer)
 
         assert optimizer.llm_call_counter == 1
@@ -414,7 +414,7 @@ class TestCostUsageCapture:
             _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
 
         with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda completion_fn: (lambda **kw: response)
+            mock_track.return_value = lambda completion_fn: lambda **kw: response
             inner_call(optimizer)
 
         assert optimizer.llm_cost_total == pytest.approx(0.5)
@@ -428,7 +428,7 @@ class TestCostUsageCapture:
             _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
 
         with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda completion_fn: (lambda **kw: response)
+            mock_track.return_value = lambda completion_fn: lambda **kw: response
             inner_call(optimizer)
 
         assert optimizer.llm_cost_total == 0.0
@@ -487,9 +487,7 @@ class TestDuplicateOpikLoggerStripped:
         ):
             with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
                 mock_track.return_value = lambda completion_fn: capture
-                _llm_calls.call_model(
-                    messages=[user_message("test")], model="gpt-4o"
-                )
+                _llm_calls.call_model(messages=[user_message("test")], model="gpt-4o")
 
         assert opik_logger not in captured_kwargs.get("success_callback", [])
         assert other_callback in captured_kwargs.get("success_callback", [])
