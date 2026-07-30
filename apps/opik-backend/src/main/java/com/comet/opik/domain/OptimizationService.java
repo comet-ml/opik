@@ -232,6 +232,16 @@ class OptimizationServiceImpl implements OptimizationService {
                                         builder.errorInfo(existing.errorInfo());
                                     }
 
+                                    // Preserve the original creation time: the upsert is a full-row
+                                    // replace, so without this the column DEFAULT re-stamps created_at on
+                                    // every re-upsert. Beyond the wrong timestamp on screen, the
+                                    // stalled-run reaper's hard ceiling is measured from created_at, and a
+                                    // drifting value would let non-status writes postpone it forever
+                                    // (OPIK-7459).
+                                    if (existing.createdAt() != null) {
+                                        builder.createdAt(existing.createdAt());
+                                    }
+
                                     // Preserve original name only if incoming name is blank
                                     // (SDK sends blank name, but explicit updates should be honored)
                                     if (StringUtils.isBlank(optimization.name())) {
@@ -764,9 +774,16 @@ class OptimizationServiceImpl implements OptimizationService {
         return optimizationDAO.hasRecentStudioActivity(id, runningTimeout).map(active -> !active);
     }
 
+    /**
+     * The ceiling runs from the run's creation, not from {@code last_updated_at}: any write to the row
+     * refreshes the latter (a metadata PATCH, an SDK re-upsert), which would let a run postpone the
+     * backstop forever — exactly the eternal spinner this job exists to end. {@code created_at} is now
+     * preserved across re-upserts (see the upsert path in this class), so nothing a client writes can move
+     * it (review: baz-reviewer, OPIK-7459).
+     */
     private static boolean isPastHardCap(OptimizationDAO.OptimizationStatusSnapshot current,
             Duration runningHardTimeout) {
-        return current.lastUpdatedAt().isBefore(Instant.now().minus(runningHardTimeout));
+        return current.startedAt().isBefore(Instant.now().minus(runningHardTimeout));
     }
 
     private String buildStalledReason(OptimizationDAO.OptimizationStatusSnapshot current,

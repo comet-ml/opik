@@ -188,6 +188,25 @@ class OptimizationStalledReaperServiceTest {
         assertThat(transitioned).isGreaterThanOrEqualTo(1);
     }
 
+    @Test
+    @DisplayName("records the stall reason as structured error_info, not only in the studio log")
+    void recordsStallReasonAsErrorInfo() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+
+        reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
+
+        var reaped = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        assertThat(reaped.status()).isEqualTo(OptimizationStatus.ERROR);
+        // The UI prefers error_info.message and only falls back to scraping the studio log, so a failed
+        // log fetch must not hide a reason the platform knows exactly.
+        assertThat(reaped.errorInfo()).isNotNull();
+        assertThat(reaped.errorInfo().message())
+                .startsWith("[System] Optimization failed")
+                .contains("no progress");
+        assertThat(reaped.errorInfo().exceptionType()).isNotBlank();
+        assertThat(reaped.errorInfo().traceback()).isNotBlank();
+    }
+
     @ParameterizedTest
     @MethodSource("stalledRuns")
     @DisplayName("leaves a studio run within its timeout untouched")
@@ -361,14 +380,36 @@ class OptimizationStalledReaperServiceTest {
     @Test
     @DisplayName("reaps a running run past the hard ceiling despite fresh trial progress")
     void reapsRunningRunPastHardCapDespiteProgress() {
-        var id = seedBackdatedRunningStudioRun(Duration.ofHours(2));
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
         createTrialExperiment(id);
+        // Started 2h ago, but the row itself was written a moment ago — the state a metadata PATCH or an
+        // SDK re-upsert leaves behind. The ceiling used to be measured from last_updated_at, so such a
+        // write postponed the backstop indefinitely and the spinner never died (review: baz-reviewer).
+        backdateRunStart(id, Duration.ofHours(2));
 
-        // The just-created trial keeps the run alive for the progress check (5m), but the row is 2h past
-        // its last status change and the hard ceiling is 1h — the zombie-worker backstop must win.
+        // Fresh trial progress AND a fresh row timestamp: the progress branch is satisfied and the
+        // no-progress branch cannot fire, so only the 1h ceiling can reap this run.
         reconcile(NEVER, Duration.ofMinutes(5), Duration.ofHours(1), BATCH_SIZE);
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+    }
+
+    @Test
+    @DisplayName("re-upsert preserves the run's creation time")
+    void reUpsertPreservesCreatedAt() {
+        var optimization = optimizationResourceClient.createPartialOptimization()
+                .studioConfig(studioConfig())
+                .build();
+        var id = optimizationResourceClient.upsert(optimization, API_KEY, TEST_WORKSPACE_NAME);
+        var createdAt = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).createdAt();
+
+        optimizationResourceClient.upsert(optimization.toBuilder().id(id).build(), API_KEY, TEST_WORKSPACE_NAME);
+
+        // The upsert is a full-row replace, so without carrying created_at over the column DEFAULT
+        // re-stamps it on every write — which both lies about when the run started and lets the hard
+        // ceiling (measured from it) drift forward forever.
+        assertThat(optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).createdAt())
+                .isEqualTo(createdAt);
     }
 
     @Test
@@ -452,6 +493,36 @@ class OptimizationStalledReaperServiceTest {
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.RUNNING);
         return id;
+    }
+
+    /**
+     * Clones the run's latest row version with a backdated {@code created_at} and a fresh
+     * {@code last_updated_at} — "started long ago, but something wrote the row a moment ago", the only
+     * shape the hard ceiling is supposed to catch. Neither timestamp is settable through the API (create
+     * stamps {@code created_at} server-side, the update endpoint stamps {@code last_updated_at}), and
+     * cloning the row inside ClickHouse keeps the helper from re-plumbing every column. The new version
+     * carries the newest {@code last_updated_at}, so it wins the reaper's {@code argMax} dedup while
+     * {@code min(created_at)} picks up the backdated start.
+     */
+    private void backdateRunStart(UUID id, Duration startedAgo) {
+        var startedAt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSSSSS")
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.now().minus(startedAgo));
+        var sql = ("INSERT INTO %s.optimizations (id, dataset_id, name, workspace_id, project_id, "
+                + "objective_name, status, metadata, studio_config, error_info, created_by, last_updated_by, "
+                + "created_at, last_updated_at) "
+                + "SELECT id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, "
+                + "studio_config, error_info, created_by, last_updated_by, "
+                + "toDateTime64('%s', 9, 'UTC'), now64(6) "
+                + "FROM %s.optimizations WHERE id = '%s' AND workspace_id = '%s' "
+                + "ORDER BY last_updated_at DESC LIMIT 1")
+                .formatted(DATABASE_NAME, startedAt, DATABASE_NAME, id, WORKSPACE_ID);
+        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("");
+                var statement = connection.createStatement()) {
+            statement.executeUpdate(sql);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to backdate run start", e);
+        }
     }
 
     /** Creates a trial experiment linked to the run — the progress signal the reaper's liveness reads. */
@@ -550,24 +621,5 @@ class OptimizationStalledReaperServiceTest {
 
     private OptimizationStatus statusOf(UUID id) {
         return optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).status();
-    }
-
-    @Test
-    @DisplayName("records the stall reason as structured error_info, not only in the studio log")
-    void recordsStallReasonAsErrorInfo() {
-        var id = seedStudioRun(OptimizationStatus.RUNNING);
-
-        reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
-
-        var reaped = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
-        assertThat(reaped.status()).isEqualTo(OptimizationStatus.ERROR);
-        // The UI prefers error_info.message and only falls back to scraping the studio log, so a failed
-        // log fetch must not hide a reason the platform knows exactly.
-        assertThat(reaped.errorInfo()).isNotNull();
-        assertThat(reaped.errorInfo().message())
-                .startsWith("[System] Optimization failed")
-                .contains("no progress");
-        assertThat(reaped.errorInfo().exceptionType()).isNotBlank();
-        assertThat(reaped.errorInfo().traceback()).isNotBlank();
     }
 }

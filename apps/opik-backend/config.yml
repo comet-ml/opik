@@ -1084,15 +1084,13 @@ optimizationStalledReaper:
   #   slow-but-alive run gets reaped mid-flight.
   runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-30m}
   # Default: 24h
-  # Description: Absolute ceiling for a RUNNING run, reaped even if trial/item writes are still arriving
-  #   (zombie-worker backstop; preserves the "a run can never stay stuck indefinitely" guarantee).
-  #   Measured from the newest write to the run's row, which for a studio run is the mark_running
-  #   transition: the worker touches the row only at transitions (mark_running / mark_completed /
-  #   mark_error), never on a heartbeat. An external write to the row (REST metadata PATCH, SDK re-upsert)
-  #   does postpone the ceiling; making it immune would need a dedicated status_changed_at column, because
-  #   last_updated_at is the ReplacingMergeTree version and created_at is re-stamped by re-upserts.
-  #   MUST exceed the worker's execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, 6h) plus a buffer, and must
-  #   not be below runningTimeout.
+  # Description: Absolute ceiling for a RUNNING run measured from when the run was created, reaped even if
+  #   trial/item writes are still arriving (zombie-worker backstop; preserves the "a run can never stay
+  #   stuck indefinitely" guarantee). Deliberately measured from created_at rather than last_updated_at:
+  #   any write to the row refreshes the latter, so a metadata PATCH or an SDK re-upsert would postpone the
+  #   backstop forever. created_at is preserved across re-upserts, so no client write can move it.
+  #   MUST exceed the worker's execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, 6h) plus a buffer — both are
+  #   measured from the same origin — and must not be below runningTimeout.
   runningHardTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_HARD_TIMEOUT:-24h}
   # Default: 7d
   # Description: Added to max(initializedTimeout, runningTimeout) to size the last_updated_at floor of the

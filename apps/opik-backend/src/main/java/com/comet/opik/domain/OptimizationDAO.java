@@ -113,7 +113,8 @@ public interface OptimizationDAO {
      * the reaper.
      */
     @Builder(toBuilder = true)
-    record OptimizationStatusSnapshot(@NonNull OptimizationStatus status, @NonNull Instant lastUpdatedAt) {
+    record OptimizationStatusSnapshot(@NonNull OptimizationStatus status, @NonNull Instant lastUpdatedAt,
+            @NonNull Instant startedAt) {
     }
 
     Mono<OptimizationStatusSnapshot> getStatusSnapshotById(UUID id);
@@ -311,13 +312,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * a RUNNING row older than it is reaped even with recent trial/item writes, so a zombie worker that
      * keeps producing rows without ever reporting a terminal status cannot keep the spinner alive forever
      * (this preserves the pre-OPIK-7459 "can never stay stuck indefinitely" guarantee). The ceiling runs
-     * from {@code last_updated_at}, i.e. the newest write to the row, which for a studio run is the
-     * {@code mark_running} transition — the worker writes the row only at transitions, never on a
-     * heartbeat. A non-status write (REST metadata PATCH, SDK re-upsert) therefore postpones the ceiling;
-     * closing that would need a dedicated {@code status_changed_at} column, since {@code last_updated_at}
-     * is this table's {@code ReplacingMergeTree} version (freezing it on non-status updates would make two
-     * versions collide and lose the update) and {@code created_at} is re-stamped by every re-upsert
-     * (review: baz-reviewer).
+     * from {@code min(created_at)} — the run's start — and deliberately not from {@code last_updated_at}:
+     * every write to the row refreshes that column, so a metadata PATCH or an SDK re-upsert would postpone
+     * the backstop indefinitely (review: baz-reviewer). {@code created_at} is preserved across re-upserts
+     * by the upsert path, and {@code min} ignores any legacy row version left over from when it was not,
+     * so no client write can move the ceiling. This is also the frame the worker's own execution timeout
+     * (OPTSTUDIO_EXECUTION_TIMEOUT) is measured in, which is what makes the "hard cap must exceed it"
+     * invariant meaningful.
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
             SELECT
@@ -329,7 +330,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     id,
                     any(workspace_id) AS workspace_id,
                     argMax(status, last_updated_at) AS latest_status,
-                    max(last_updated_at) AS latest_updated_at
+                    max(last_updated_at) AS latest_updated_at,
+                    min(created_at) AS started_at
                 FROM optimizations
                 WHERE studio_config != ''
                   AND greaterOrEquals(last_updated_at, subtractSeconds(now64(6), :lookback_seconds))
@@ -337,7 +339,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 HAVING (latest_status = 'initialized'
                         AND less(latest_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
                     OR (latest_status = 'running'
-                        AND (less(latest_updated_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
+                        AND (less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
                             OR (less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds))
                                 AND (toString(id), workspace_id) NOT IN (
                                     SELECT optimization_id, workspace_id
@@ -394,7 +396,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String GET_STATUS_SNAPSHOT = """
             SELECT
                 argMax(status, last_updated_at) AS latest_status,
-                max(last_updated_at) AS latest_updated_at
+                max(last_updated_at) AS latest_updated_at,
+                min(created_at) AS started_at
             FROM optimizations
             WHERE workspace_id = :workspace_id
               AND id = :id
@@ -440,7 +443,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 error_info,
                 created_by,
                 last_updated_by,
-                last_updated_at
+                last_updated_at,
+                created_at
             )
             VALUES (
                 :id,
@@ -455,7 +459,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 :error_info,
                 :created_by,
                 :last_updated_by,
-                COALESCE(parseDateTime64BestEffortOrNull(:last_updated_at, 6), now64(6))
+                COALESCE(parseDateTime64BestEffortOrNull(:last_updated_at, 6), now64(6)),
+                COALESCE(parseDateTime64BestEffortOrNull(:created_at, 9), now64(9))
             )
             ;
             """;
@@ -1124,6 +1129,16 @@ class OptimizationDAOImpl implements OptimizationDAO {
             statement.bindNull("last_updated_at", String.class);
         }
 
+        // created_at used to be absent from the INSERT, so the column DEFAULT re-stamped it on every
+        // re-upsert: a run's creation time drifted forward, and the stalled-run reaper's hard ceiling
+        // (which is measured from it) could be postponed indefinitely by writes that are not status
+        // changes. The service carries the existing row's value in on re-upsert (OPIK-7459).
+        if (optimization.createdAt() != null) {
+            statement.bind("created_at", optimization.createdAt().toString());
+        } else {
+            statement.bindNull("created_at", String.class);
+        }
+
         return makeFluxContextAware((userName, workspaceId) -> {
             log.info("Inserting optimization with id '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
                     optimization.id(), optimization.datasetId(), optimization.datasetName(), workspaceId);
@@ -1432,6 +1447,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .flatMap(result -> result.map((row, metadata) -> OptimizationStatusSnapshot.builder()
                         .status(OptimizationStatus.fromString(row.get("latest_status", String.class)))
                         .lastUpdatedAt(row.get("latest_updated_at", Instant.class))
+                        .startedAt(row.get("started_at", Instant.class))
                         .build()))
                 .singleOrEmpty();
     }
