@@ -131,10 +131,10 @@ def lint_spec(path: Path, rel: str, idx, retired: dict, *, visual: bool) -> list
         # Tier cardinality is deliberately NOT enforced. "Exactly one tier"
         # constrains a single test, but tags union from describe to test, so the
         # scope that must hold the invariant is a test *after* inheritance — not
-        # a file and not a `tag: [...]` block. Four specs legitimately carry
-        # several tiers across sibling describes (ollie-agentic has three).
-        # Checking this correctly needs the TS AST to resolve describe nesting;
-        # a file- or block-level count would fail those valid specs, so the hole
+        # a file, and not a `tag: [...]` block either (a describe and its tests
+        # are separate blocks whose tags combine). Specs legitimately carry
+        # several tiers across sibling describes, so any file- or block-level
+        # count would fail valid specs. Enforcing it needs the TS AST; the hole
         # is left open on purpose rather than closed wrongly.
         if not cap_tags:
             f.append(Finding(rel, 1, "no @cap: tag: a spec must declare every capability it asserts"))

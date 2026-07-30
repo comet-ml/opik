@@ -11,14 +11,19 @@ fact, and this job refreshes the cache. Nobody edits those flags by hand.
                      state, axes. Never touched here. Those change via the
                      discovery job (OPIK-7632) or a human PR.
 
-Run nightly after merges land. Exits 0 with no changes when the file already
-agrees, so it is cheap to run on every push.
+Run nightly after merges land.
+
+Exit codes: 0 when the taxonomy already agrees (or, without --check, once it has
+been updated); 1 from --check when derived fields drifted; 1 from either mode
+when a spec tags a capability the taxonomy does not define, since that is drift
+this job cannot repair on its own.
 
 Reads tags via `playwright test --list --reporter=json`, not a regex, so it needs
 `npm ci` in e2e/ and visual-tests/ first. That is deliberate: tags union from
 describe to test, so the tier covering a given `@cap:` is only knowable after
-inheritance is resolved. A regex version of this job was measured "correcting"
-5 accurate `tier:` fields to wrong values.
+inheritance is resolved. A regex version of this job mis-attributed tiers in
+every spec whose sibling describes ran at different tiers, and would have
+rewritten accurate `tier:` values to wrong ones.
 
 Why line surgery instead of yaml.safe_load + dump: the taxonomy carries 175
 comments and 242 column-aligned flow mappings that a load/dump round-trip
@@ -83,8 +88,17 @@ def scan_estate(estate: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]
         ("visual-tests", vcaps, "@vcap:"),
     ):
         root = estate / sub
+        # Both projects are required. Skipping a missing one would leave that
+        # dimension's tag map empty, which reads as "nothing is covered" and
+        # would flip every capability in it to covered: false — the same
+        # corruption as parsing a partial --list. If the estate layout changes,
+        # this job must be updated deliberately, not fail open.
         if not (root / "package.json").is_file():
-            continue
+            raise RuntimeError(
+                f"expected a Playwright project at {root} (no package.json). "
+                "reconcile refuses to run against an incomplete estate — it would "
+                "mark every capability in this dimension as uncovered."
+            )
         for tags in playwright_test_tags(root):
             tiers = {t.lstrip("@") for t in tags if t.lstrip("@") in TIER_ORDER}
             for t in tags:
@@ -94,18 +108,51 @@ def scan_estate(estate: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]
 
 
 def playwright_test_tags(project_root: Path) -> list[set[str]]:
-    """Every test's fully-resolved tag set, via `playwright test --list`."""
+    """Every test's fully-resolved tag set, via `playwright test --list`.
+
+    Raises rather than returning a partial list. This matters more than it looks:
+    a single spec with a syntax error makes `--list` exit 1 while still printing
+    *valid* JSON with `suites: []` and an `errors` array. Parsing that happily
+    would tell the reconciler no capability is tagged, flipping every `covered:`
+    to false and committing the wipe. Verified: one bad spec => exit 1, 3.7 kB of
+    parseable JSON, 0 tests, 1 error.
+    """
+    cmd = ["npx", "playwright", "test", "--list", "--reporter=json"]
     proc = subprocess.run(
-        ["npx", "playwright", "test", "--list", "--reporter=json"],
-        cwd=project_root, capture_output=True, text=True, timeout=300,
+        cmd, cwd=project_root, capture_output=True, text=True, timeout=300,
     )
-    # Playwright writes the JSON report to stdout even when it also warns on
-    # stderr; only a missing/!0-with-empty-stdout run is a real failure.
-    if not proc.stdout.strip():
-        raise RuntimeError(
-            f"playwright --list produced no output in {project_root}\n{proc.stderr[-800:]}"
+
+    def fail(why: str) -> RuntimeError:
+        # Playwright puts collection errors in the report's `errors` array, not on
+        # stderr, so surface those rather than a slice of the JSON header.
+        detail = proc.stderr.strip()[-800:]
+        if not detail:
+            try:
+                errs = (json.loads(proc.stdout) or {}).get("errors") or []
+                detail = "\n".join(
+                    f"    {(e.get('message') or str(e)).strip()[:300]}" for e in errs[:5]
+                )
+            except Exception:
+                detail = proc.stdout.strip()[:300]
+        return RuntimeError(
+            f"{why}\n  cmd: {' '.join(cmd)}\n  cwd: {project_root}\n"
+            f"  exit: {proc.returncode}\n  detail:\n{detail or '    (none)'}"
         )
-    report = json.loads(proc.stdout)
+
+    if proc.returncode != 0:
+        raise fail("playwright --list failed; refusing to reconcile from a partial estate")
+    if not proc.stdout.strip():
+        raise fail("playwright --list produced no output")
+
+    try:
+        report = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise fail(f"playwright --list emitted unparseable JSON: {e}") from None
+
+    # Belt and braces: --list can report collection errors without a non-zero
+    # exit in some Playwright versions.
+    if report.get("errors"):
+        raise fail(f"playwright --list reported {len(report['errors'])} collection error(s)")
 
     out: list[set[str]] = []
 
@@ -302,7 +349,13 @@ def main() -> int:
     ap.add_argument("--summary", action="store_true", help="print the change list")
     args = ap.parse_args()
 
-    lines, changes, warnings = reconcile(args.taxonomy, args.estate)
+    # These are operational failures with actionable messages (a broken spec, a
+    # missing project), not bugs — print the reason, not a traceback.
+    try:
+        lines, changes, warnings = reconcile(args.taxonomy, args.estate)
+    except RuntimeError as e:
+        print(f"reconcile: {e}", file=sys.stderr)
+        return 1
 
     for w in warnings:
         print(f"warning: {w}", file=sys.stderr)

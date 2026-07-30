@@ -72,8 +72,11 @@ jobs:
         working-directory: tests_end_to_end/visual-tests
         run: npm ci --ignore-scripts
 
+      # Deliberately stable, with no timestamp: create-pull-request force-updates
+      # this branch and reuses the open PR. A per-run branch name would open a
+      # fresh reconciliation PR every night and leave the old ones to rot.
       - name: Set branch name
-        run: echo "BRANCH_NAME=github-actions/OPIK-7532-reconcile-qa-taxonomy-$(date +%Y-%m-%d-%H-%M-%S)" >> "$GITHUB_ENV"
+        run: echo "BRANCH_NAME=github-actions/OPIK-7532-reconcile-qa-taxonomy" >> "$GITHUB_ENV"
 
       - name: Reconcile
         id: reconcile
