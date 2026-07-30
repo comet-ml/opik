@@ -19,25 +19,38 @@ from .ops import candidate_ops, result_ops, scoring_ops
 logger = logging.getLogger(__name__)
 
 
-def _warn_if_reflection_minibatch_too_large(
+# Each reflection iteration scores the current and the proposed candidate on
+# the same mini-batch (gepa/proposer/reflective_mutation), so a batch of b
+# costs ~2*b metric calls per iteration. Warn when fewer than this many
+# iterations fit the budget — the run degenerates into a few mutation shots.
+MIN_EXPECTED_REFLECTION_ITERATIONS = 5
+
+
+def _warn_if_reflection_minibatch_exhausts_budget(
     *,
     reflection_minibatch_size: int,
-    max_trials: int,
+    max_metric_calls: int,
 ) -> None:
-    """Warn when the reflection minibatch is too large for GEPA to run any reflection.
+    """Warn when the mini-batch leaves too few reflection iterations in budget.
 
-    The metric budget allows exactly ``max_trials`` candidates
-    (``max_metric_calls = max_trials * effective_n_samples``), so a
-    budget-derived ceiling would equal ``max_trials`` — a single check covers
-    both.
+    A large mini-batch never stops GEPA reflection from running — the gepa
+    engine does not gate iterations on the remaining budget — it just makes
+    each iteration cost ~2*reflection_minibatch_size metric calls, so the
+    metric-call budget stops the run after roughly
+    ``max_metric_calls // (2 * reflection_minibatch_size)`` iterations.
     """
-    if reflection_minibatch_size > max_trials:
-        # TODO(opik_optimizer/#gepa-batching): Centralize reflection minibatch clamping when we consolidate trial budgeting.
+    estimated_iterations = max_metric_calls // (2 * reflection_minibatch_size)
+    if estimated_iterations < MIN_EXPECTED_REFLECTION_ITERATIONS:
+        # TODO(opik_optimizer/#gepa-batching): Centralize reflection minibatch budgeting with the python-backend's resolve_reflection_minibatch_size.
         logger.warning(
-            "reflection_minibatch_size (%s) exceeds max_trials (%s); GEPA reflection will not run. "
-            "Increase max_trials or lower the minibatch.",
+            "reflection_minibatch_size=%s costs ~%s metric calls per reflection "
+            "iteration; the metric-call budget (%s) allows only ~%s iteration(s) "
+            "before GEPA stops. Lower reflection_minibatch_size or raise "
+            "max_trials/n_samples.",
             reflection_minibatch_size,
-            max_trials,
+            2 * reflection_minibatch_size,
+            max_metric_calls,
+            estimated_iterations,
         )
 
 
@@ -321,8 +334,8 @@ class GepaOptimizer(BaseOptimizer):
         experiment_config = context.experiment_config
 
         # Coerce at the boundary: extra_params is user-supplied (Any), and this
-        # value is both compared in _warn_if_reflection_minibatch_too_large and
-        # passed to gepa.optimize — a stray string must not crash setup.
+        # value is both used in _warn_if_reflection_minibatch_exhausts_budget
+        # and passed to gepa.optimize — a stray string must not crash setup.
         reflection_minibatch_size = _coerce_positive_int(
             context.extra_params.get("reflection_minibatch_size"),
             default=context.n_samples_minibatch or 3,
@@ -404,9 +417,9 @@ class GepaOptimizer(BaseOptimizer):
 
         effective_n_samples = len(train_items)
         max_metric_calls = max_trials * effective_n_samples
-        _warn_if_reflection_minibatch_too_large(
+        _warn_if_reflection_minibatch_exhausts_budget(
             reflection_minibatch_size=reflection_minibatch_size,
-            max_trials=max_trials,
+            max_metric_calls=max_metric_calls,
         )
 
         train_insts = helpers.build_data_insts(train_items, input_key, output_key)

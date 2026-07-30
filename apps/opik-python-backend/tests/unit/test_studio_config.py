@@ -1,8 +1,12 @@
 """Unit tests for opik_backend.studio.config sizing policy."""
 
+import importlib
+
 import pytest
 
+from opik_backend.studio import config as config_module
 from opik_backend.studio.config import (
+    GEPA_MIN_REFLECTION_ITERATIONS,
     GEPA_REFLECTION_MINIBATCH_ENV,
     resolve_reflection_minibatch_size,
 )
@@ -10,12 +14,15 @@ from opik_backend.studio.config import (
 
 class TestResolveReflectionMinibatchSize:
     """OPIK-7511: the reflection mini-batch scales with dataset size so coarse
-    0/1 metrics get a usable gradient, within the SDK's max_trials clamp."""
+    0/1 metrics get a usable gradient, capped only by the dataset itself and
+    by the metric-call budget (>= GEPA_MIN_REFLECTION_ITERATIONS iterations)."""
 
     @pytest.mark.parametrize(
         "dataset_size,max_trials,expected",
         [
-            # Tiny dataset: capped at the dataset itself.
+            # Single-item dataset: the batch is that one item.
+            (1, 10, 1),
+            # Tiny dataset below the floor of 5: capped at the dataset itself.
             (3, 10, 3),
             # Small dataset: the floor of 5 (previous fixed value) holds.
             (10, 10, 5),
@@ -23,13 +30,18 @@ class TestResolveReflectionMinibatchSize:
             # 20% scaling kicks in above the floor.
             (30, 10, 6),
             (40, 10, 8),
-            # Capped at max_trials — above it GEPA reflection would not run.
             (50, 10, 10),
-            (1000, 10, 10),
-            # Higher max_trials lets the scaled value through.
-            (100, 25, 20),
-            # max_trials below the floor still wins the clamp.
-            (100, 3, 3),
+            # No max_trials cap: 20% keeps scaling past max_trials=10
+            # (previously clamped to 10 — the OPIK-7511 regression).
+            (100, 10, 20),
+            (1000, 10, 200),
+            # A small trial budget no longer strangles the batch...
+            (100, 3, 20),
+            # ...but the metric-call budget does: 100*1 // (2*5) = 10, which
+            # keeps >= GEPA_MIN_REFLECTION_ITERATIONS reflection iterations.
+            (100, 1, 10),
+            # Degenerate budget: the cap floors at 1.
+            (6, 1, 1),
         ],
     )
     def test_policy(self, dataset_size, max_trials, expected, monkeypatch):
@@ -41,26 +53,51 @@ class TestResolveReflectionMinibatchSize:
             == expected
         )
 
+    def test_budget_cap_guarantees_min_reflection_iterations(self, monkeypatch):
+        """Whenever the resolved batch is > 1, the run's metric budget
+        (max_trials * dataset_size) must fit at least
+        GEPA_MIN_REFLECTION_ITERATIONS iterations at ~2*batch calls each."""
+        monkeypatch.delenv(GEPA_REFLECTION_MINIBATCH_ENV, raising=False)
+        for dataset_size in (1, 5, 30, 100, 1000):
+            for max_trials in (1, 3, 10, 25):
+                batch = resolve_reflection_minibatch_size(
+                    dataset_size=dataset_size, max_trials=max_trials
+                )
+                if batch > 1:
+                    budget = max_trials * dataset_size
+                    assert budget // (2 * batch) >= GEPA_MIN_REFLECTION_ITERATIONS
+
     def test_env_override_wins_verbatim(self, monkeypatch):
         monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "7")
         assert resolve_reflection_minibatch_size(dataset_size=1000, max_trials=10) == 7
-
-    def test_env_override_clamped_to_at_least_one(self, monkeypatch):
-        monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "0")
-        assert resolve_reflection_minibatch_size(dataset_size=50, max_trials=10) == 1
 
     def test_blank_env_falls_back_to_policy(self, monkeypatch):
         monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "  ")
         assert resolve_reflection_minibatch_size(dataset_size=50, max_trials=10) == 10
 
-    def test_invalid_env_falls_back_to_policy(self, monkeypatch):
-        # A malformed operator value must not fail every optimization run.
-        monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "five")
-        assert resolve_reflection_minibatch_size(dataset_size=50, max_trials=10) == 10
+    @pytest.mark.parametrize("bad_value", ["five", "7.5", "0", "-3"])
+    def test_invalid_env_raises_naming_the_variable(self, bad_value, monkeypatch):
+        # A malformed operator value must fail loudly (and at service startup,
+        # see test_module_import_fails_fast_on_malformed_env), never silently
+        # fall back mid-run.
+        monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, bad_value)
+        with pytest.raises(ValueError, match=GEPA_REFLECTION_MINIBATCH_ENV):
+            resolve_reflection_minibatch_size(dataset_size=50, max_trials=10)
 
-    def test_float_env_falls_back_to_policy(self, monkeypatch):
-        monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "7.5")
-        assert resolve_reflection_minibatch_size(dataset_size=50, max_trials=10) == 10
+    def test_invalid_env_error_is_bounded(self, monkeypatch):
+        # The env value is free text — a huge garbage value must not flood the
+        # error message (or any log line that carries it).
+        monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "x" * 5000)
+        with pytest.raises(ValueError) as exc_info:
+            resolve_reflection_minibatch_size(dataset_size=50, max_trials=10)
+        assert len(str(exc_info.value)) < 200
+
+    def test_module_import_fails_fast_on_malformed_env(self, monkeypatch):
+        monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "not-a-number")
+        with pytest.raises(ValueError, match=GEPA_REFLECTION_MINIBATCH_ENV):
+            importlib.reload(config_module)
+        monkeypatch.delenv(GEPA_REFLECTION_MINIBATCH_ENV)
+        importlib.reload(config_module)
 
     def test_never_below_one(self, monkeypatch):
         monkeypatch.delenv(GEPA_REFLECTION_MINIBATCH_ENV, raising=False)

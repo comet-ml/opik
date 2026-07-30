@@ -75,7 +75,9 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
 
     Returns:
         Tuple of (dataset, item_count). The count is returned so callers can
-        size dataset-dependent parameters without re-fetching every item.
+        size dataset-dependent parameters without re-fetching every item; it is
+        capped at DATASET_SAMPLES — only the effective (sampled) size matters
+        downstream, so we never materialize more items just to count them.
 
     Raises:
         DatasetNotFoundError: If dataset not found or inaccessible
@@ -88,12 +90,12 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
         logger.error(f"Failed to load dataset '{dataset_name}': {e}")
         raise DatasetNotFoundError(dataset_name, e)
 
-    # Validate dataset has items
-    dataset_items = list(dataset.get_items())
+    # Validate dataset has items (bounded fetch — see docstring)
+    dataset_items = dataset.get_items(nb_samples=DATASET_SAMPLES)
     if not dataset_items:
         raise EmptyDatasetError(dataset_name)
 
-    logger.debug(f"Dataset has {len(dataset_items)} items")
+    logger.debug(f"Dataset has {len(dataset_items)} items (capped at {DATASET_SAMPLES})")
     return dataset, len(dataset_items)
 
 
@@ -142,7 +144,9 @@ def run_optimization(
     # size — a fixed size starves coarse 0/1 metrics of resolution (OPIK-7511).
     # Ignored by non-GEPA optimizers, like the other GEPA-specific params.
     if dataset_size is None:
-        dataset_size = len(dataset.get_items())
+        # Bounded fetch: only the effective (sampled) size matters, so never
+        # materialize more than DATASET_SAMPLES items just to count them.
+        dataset_size = len(dataset.get_items(nb_samples=DATASET_SAMPLES))
     effective_dataset_size = min(dataset_size, DATASET_SAMPLES)
     reflection_minibatch_size = resolve_reflection_minibatch_size(
         dataset_size=effective_dataset_size,
