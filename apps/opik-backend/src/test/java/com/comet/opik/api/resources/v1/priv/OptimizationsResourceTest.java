@@ -811,15 +811,18 @@ class OptimizationsResourceTest {
                     Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
                     trialCostPerSpan);
 
-            // Reflection-style trace: tagged with the optimization id, but linked to no
-            // experiment item (OPIK-7521). Its span cost must count into the run total.
+            // Reflection trace as the optimizer SDK actually writes it (verified against a
+            // live GEPA run): named gepa_reflection, tagged [<optimization_id>, Reflection,
+            // GEPA], and linked to no experiment item (OPIK-7521). Its span cost must count
+            // into the run total.
             var reflectionCost = BigDecimal.valueOf(0.07);
             Trace reflectionTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(project.id())
                     .projectName(project.name())
+                    .name("gepa_reflection")
                     .startTime(Instant.now().minusSeconds(2))
                     .endTime(Instant.now().minusSeconds(1))
-                    .tags(Set.of(optimizationId.toString(), "Prompt Optimization"))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
                     .guardrailsValidations(null)
                     .threadId(null)
                     .feedbackScores(null)
