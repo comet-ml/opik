@@ -2934,11 +2934,27 @@ class TraceDAOImpl implements TraceDAO {
             <else>
             WITH
             <endif>
-            span_ids AS (
+            span_scores AS (
+                <if(has_legacy_scores)>
+                SELECT project_id, entity_id, name, value,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                UNION ALL
+                <endif>
+                SELECT project_id, entity_id, name, value, author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+            ), scored_span_traces AS (
                 SELECT id
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                AND id IN (SELECT entity_id FROM span_scores)
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
@@ -2977,22 +2993,9 @@ class TraceDAOImpl implements TraceDAO {
                 FROM trace_fs_per_project
                 GROUP BY project_id
             ), span_fs AS (
-                <if(has_legacy_scores)>
-                SELECT project_id, entity_id, name, value,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                  AND entity_id IN (SELECT id FROM span_ids)
-                UNION ALL
-                <endif>
                 SELECT project_id, entity_id, name, value, author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                  AND entity_id IN (SELECT id FROM span_ids)
+                FROM span_scores
+                WHERE entity_id IN (SELECT id FROM scored_span_traces)
             ), span_fs_per_name AS (
                 SELECT project_id, entity_id, name, avg(value) AS value
                 FROM span_fs
