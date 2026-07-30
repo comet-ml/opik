@@ -34,7 +34,6 @@ import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -67,7 +66,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
-import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
@@ -489,9 +487,10 @@ class TraceServiceImpl implements TraceService {
      * Deletes the given trace ids. With an explicit {@code projectId}, deletes only within that project. Without one
      * (delete-by-id, or a batch spanning projects), resolves every owning project for each id and deletes it under the
      * full {@code (workspace_id, project_id, id)} key, once per project group - so an id reused across projects is
-     * removed from all of them and no delete is ever project-less (OPIK-7483). Ids with no live trace row are skipped
-     * (a no-op); delete-by-id does not clean up orphaned child rows of a trace that never existed - that is the child
-     * entities' own lifecycle concern.
+     * removed from all of them and no delete is ever project-less (OPIK-7483). Ids that resolve to no owning project
+     * have no live trace anywhere and are skipped: no {@code TracesDeleted} is emitted for them, because a project-less
+     * cascade would be an unscoped, workspace-wide child delete that could over-delete a concurrently-ingested trace's
+     * children; genuine orphan child rows are cleaned via the child entities' own delete endpoints.
      */
     @Override
     @WithSpan
@@ -500,48 +499,50 @@ class TraceServiceImpl implements TraceService {
         log.info("Deleting traces, count '{}'", ids.size());
 
         if (projectId != null) {
-            return template.nonTransaction(connection -> delete(ids, projectId, connection));
+            var pairs = ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet());
+            return template.nonTransaction(connection -> delete(pairs, connection));
         }
 
-        log.info("Resolving owning projects to delete traces per project group, count '{}'", ids.size());
+        log.info("Resolving owning projects to delete traces, count '{}'", ids.size());
         return resolveOwningProjects(ids)
                 .flatMap(projectsByTrace -> {
-                    var idsByProject = projectsByTrace.entrySet().stream()
+                    // Flatten to (project_id, trace_id) pairs so a reused id maps to one pair per owning project.
+                    var pairs = projectsByTrace.entrySet().stream()
                             .flatMap(entry -> entry.getValue().stream()
-                                    .map(project -> Map.entry(project, entry.getKey())))
-                            .collect(Collectors.groupingBy(Map.Entry::getKey,
-                                    Collectors.mapping(Map.Entry::getValue, Collectors.toSet())));
+                                    .map(project -> Pair.of(project, entry.getKey())))
+                            .collect(Collectors.toUnmodifiableSet());
 
                     // Resolution only returns queried ids, so its key set is a subset of ids.
-                    int unresolvedCount = ids.size() - projectsByTrace.size();
-                    if (unresolvedCount > 0) {
-                        log.info("Skipping trace ids with no owning project, already absent, skipped '{}', total '{}'",
-                                unresolvedCount, ids.size());
+                    var unresolvedIds = ids.stream()
+                            .filter(id -> !projectsByTrace.containsKey(id))
+                            .collect(Collectors.toUnmodifiableSet());
+                    if (!unresolvedIds.isEmpty()) {
+                        // No live trace in any project: skip, emitting no project-less cascade (see delete() javadoc).
+                        log.info(
+                                "Trace ids with no live row (already absent), skipped from trace delete '{}', total '{}'",
+                                unresolvedIds.size(), ids.size());
                     }
 
-                    return template.nonTransaction(connection -> Flux.fromIterable(idsByProject.entrySet())
-                            .concatMap(group -> delete(group.getValue(), group.getKey(), connection))
-                            .then());
+                    return pairs.isEmpty()
+                            ? Mono.empty()
+                            : template.nonTransaction(connection -> delete(pairs, connection));
                 });
     }
 
     /**
-     * Resolves every owning project for each id: a bounded (partition-pruned) fast pass, then an unbounded pass over
-     * only the ids the bounded one left unresolved. Returns id -> set of owning projects; ids absent from the result
-     * have no live row.
+     * Resolves every owning project for each id: a bounded fast pass, then an unbounded pass over only the ids the
+     * bounded one leaves unresolved. Returns id -> owning projects; ids absent from the result have no live row.
      * <p>
-     * The miss set is dominated by ids with no live row (already deleted, client retries), for which the unbounded
-     * pass also finds nothing and the delete is a no-op. Its real job is to still resolve the rare malformed id whose
-     * {@code id_at} is not monotonic in id (e.g. a wrapped timestamp, OPIK-7456) and so falls outside the bounded
-     * window. The bounded query is never the sole resolver for a delete. Once {@code traces} is partitioned, the
-     * bounded predicate prunes as intended and this unbounded fallback can be removed.
+     * The bounded pass's {@code toMonday(id_at)} window can miss a row whose {@code id_at} is not monotonic in its id
+     * (e.g. a wrapped timestamp, OPIK-7456), so the unbounded pass re-resolves the miss set - the bounded query is
+     * never a delete's sole resolver. The resolver-query javadocs cover how each pass prunes.
      */
     private Mono<Map<UUID, Set<UUID>>> resolveOwningProjects(Set<UUID> ids) {
         return dao.getAllProjectIdsByTraceIdsBounded(ids)
                 .flatMap(bounded -> {
                     var missSet = ids.stream()
                             .filter(id -> !bounded.containsKey(id))
-                            .collect(Collectors.toSet());
+                            .collect(Collectors.toUnmodifiableSet());
                     if (missSet.isEmpty()) {
                         return Mono.just(bounded);
                     }
@@ -558,60 +559,57 @@ class TraceServiceImpl implements TraceService {
                 });
     }
 
-    private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
+    private Mono<Void> delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, Connection connection) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
-            return Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
-                    .flatMap(batch -> {
-                        var batchIds = Set.copyOf(batch);
-                        return dao.delete(batchIds, projectId, connection)
-                                .doOnSuccess(_ -> {
-                                    eventBus.post(TracesDeleted.builder()
-                                            .traceIds(batchIds)
-                                            .projectId(projectId)
-                                            .workspaceId(workspaceId)
-                                            .userName(userName)
-                                            .build());
-                                    log.info(
-                                            "Published TracesDeleted event for trace ids count '{}' for project_id '{}' on workspace '{}'",
-                                            batchIds.size(), projectId, workspaceId);
-                                })
-                                .then(captureDeletions(batchIds, projectId, workspaceId, userName));
-                    })
-                    .then();
+            return dao.delete(projectIdTraceIdPairs, connection)
+                    .doOnSuccess(_ -> projectIdTraceIdPairs.stream()
+                            .collect(Collectors.groupingBy(Pair::getLeft,
+                                    Collectors.mapping(Pair::getRight, Collectors.toUnmodifiableSet())))
+                            .forEach((projectId, traceIds) -> {
+                                eventBus.post(TracesDeleted.builder()
+                                        .traceIds(traceIds)
+                                        .projectId(projectId)
+                                        .workspaceId(workspaceId)
+                                        .userName(userName)
+                                        .build());
+                                log.info(
+                                        "Published TracesDeleted event, trace ids count '{}', project id '{}', workspace '{}'",
+                                        traceIds.size(), projectId, workspaceId);
+                            }))
+                    .then(captureDeletions(projectIdTraceIdPairs, workspaceId, userName));
         });
     }
 
     /**
-     * Records the deleted ids in the deletion-events bridge so deletes issued while the table is being migrated
-     * survive the copy. Runs after the delete and is best-effort: capture is auxiliary and must never disrupt
-     * the delete, so failures are logged and swallowed. Running after the delete also avoids recording a delete
-     * that did not happen. No-op unless capture is enabled. Deferred so that nothing is built or run until
-     * subscribed, i.e. only after the delete succeeds.
+     * Records the deleted (project_id, trace_id) pairs in the deletion-events bridge so deletes issued while the table
+     * is being migrated survive the copy. Runs after the delete and is best-effort: capture is auxiliary and must never
+     * disrupt the delete, so failures are logged and swallowed. Running after the delete also avoids recording a delete
+     * that did not happen. No-op unless capture is enabled. Deferred so that nothing is built or run until subscribed,
+     * i.e. only after the delete succeeds.
      */
-    private Mono<Void> captureDeletions(Set<UUID> ids, UUID projectId, String workspaceId, String userName) {
+    private Mono<Void> captureDeletions(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, String workspaceId,
+            String userName) {
         return Mono.defer(() -> {
             if (!config.getDatabaseAnalyticsDataModel().traceDeletionEventsCaptureEnabled()) {
                 return Mono.empty();
             }
-            var events = ids.stream()
-                    .map(id -> DeletionEvent.builder()
+            var events = projectIdTraceIdPairs.stream()
+                    .map(pair -> DeletionEvent.builder()
                             .sourceTable(SourceTable.TRACES)
                             .workspaceId(workspaceId)
-                            .projectId(projectId)
-                            .deletedId(id.toString())
+                            .projectId(pair.getLeft())
+                            .deletedId(pair.getRight().toString())
                             .deletionReason(DeletionReason.USER_REQUEST)
                             .build())
                     .collect(Collectors.toUnmodifiableSet());
             return deletionEventDAO.insert(events, userName)
-                    .doOnSuccess(_ -> log.info(
-                            "Captured trace deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
-                            ids.size(), projectId, workspaceId))
+                    .doOnSuccess(_ -> log.info("Captured trace deletion events, count '{}' on workspace '{}'",
+                            events.size(), workspaceId))
                     .onErrorResume(throwable -> {
-                        log.warn(
-                                "Failed to capture trace deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
-                                ids.size(), projectId, workspaceId, throwable);
+                        log.warn("Failed to capture trace deletion events, count '{}' on workspace '{}'",
+                                projectIdTraceIdPairs.size(), workspaceId, throwable);
                         return Mono.empty();
                     });
         });
@@ -744,7 +742,9 @@ class TraceServiceImpl implements TraceService {
                     }
                     log.info("Found '{}' traces for thread IDs, proceeding with deletion", traceIds.size());
 
-                    return delete(traceIds, projectId, connection);
+                    var pairs = traceIds.stream().map(id -> Pair.of(projectId, id))
+                            .collect(Collectors.toUnmodifiableSet());
+                    return delete(pairs, connection);
                 })));
     }
 

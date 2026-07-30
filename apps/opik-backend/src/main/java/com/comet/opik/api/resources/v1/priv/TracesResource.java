@@ -393,7 +393,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RequiredPermissions(WorkspaceUserPermission.TRACE_DELETE)
     public Response deleteTraces(
-            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDeleteByProject request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDeleteByProject.class))) @NotNull @Valid BatchDeleteByProject request) {
         log.info("Deleting traces, project id '{}' and count '{}'", request.projectId(), request.ids().size());
         service.delete(request.ids(), request.projectId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))

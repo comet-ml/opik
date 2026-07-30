@@ -36,6 +36,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -77,6 +78,7 @@ import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.stats.StatsMapper.mapProjectScoresStats;
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
 import static com.comet.opik.infrastructure.FilterUtils.bindTraceThreadSearchCriteria;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
@@ -104,7 +106,7 @@ public interface TraceDAO {
 
     Mono<Void> update(TraceUpdate traceUpdate, UUID id, Connection connection);
 
-    Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection);
+    Mono<Void> delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, Connection connection);
 
     Mono<Trace> findById(UUID id, Connection connection);
 
@@ -1881,18 +1883,23 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /**
-     * Always filters by the full {@code (workspace_id, project_id, id)} sort key. {@code project_id} is mandatory:
-     * the delete path resolves each id's owning project(s) up front and issues one delete per project group, so a
-     * delete never ignores part of the dedup key and over-deletes a reused id across projects (OPIK-7483). A
-     * project-less delete is also unsupported once {@code traces} is a Distributed table (OPIK-7455). It carries no
-     * {@code id_at}/time predicate on purpose, so it still deletes rows whose {@code id_at} is untrustworthy (e.g. a
-     * wrapped timestamp) - unlike the partition-pruned resolver, correctness here does not depend on {@code id_at}.
+     * Deletes by the full {@code (workspace_id, project_id, id)} sort key, matching on {@code (project_id, id)} tuples
+     * so a single statement can span several projects (e.g. a reused id resolved to all its owning projects, or a
+     * cross-project batch) instead of one delete per project (OPIK-7483). Every deleted row carries its {@code
+     * project_id}, so no delete is ever project-less - also required once {@code traces} is a Distributed table
+     * (OPIK-7455). No {@code id_at}/time predicate on purpose, so it still deletes rows whose {@code id_at} is
+     * untrustworthy (e.g. a wrapped timestamp); correctness here does not depend on {@code id_at}.
+     * <p>
+     * The pairs are bound (never inlined) as two positional string arrays and zipped back into {@code (project_id, id)}
+     * tuples with {@code arrayZip}, so the query text is constant regardless of batch size and no value reaches the SQL
+     * as a literal. {@code arrayZip} is a deterministic function, not a subquery - ClickHouse rejects subqueries in
+     * delete mutations. Callers batch to keep each array within the driver's reliable bind size ({@link
+     * com.comet.opik.infrastructure.FilterUtils#ANALYTICS_DELETE_BATCH_SIZE}).
      */
-    private static final String DELETE_BY_ID = """
+    private static final String DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS = """
             DELETE FROM traces
-            WHERE id IN :ids
-            AND workspace_id = :workspace_id
-            AND project_id = :project_id
+            WHERE workspace_id = :workspace_id
+            AND (project_id, id) IN arrayZip(:project_ids, :trace_ids)
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2160,8 +2167,10 @@ class TraceDAOImpl implements TraceDAO {
      * owning projects - unlike {@code SELECT_PROJECT_IDS_BY_TRACE_IDS}'s {@code any(project_id)} - so the delete path
      * removes it from each under the full sort key (OPIK-7483). {@code DISTINCT} (not FINAL) suffices: lightweight-delete
      * masks are honored at read time, so a deleted pair never surfaces and a live pair always does, regardless of
-     * version. Has no time predicate, so it reads every partition; the delete path uses it only as the fallback for the
-     * ids the bounded pass could not resolve, keeping that scan minimal.
+     * version. Has no time predicate, so it resolves rows regardless of {@code id_at}; the delete path uses it only as
+     * the fallback for the ids the bounded pass could not resolve (malformed wrapped-{@code id_at} rows). Prunes
+     * granules on the {@code idx_traces_id_bf} bloom-filter index (migration 000113): the {@code id IN} lookup skips
+     * granules holding none of the ids instead of scanning the whole workspace, keeping the fallback cheap.
      */
     private static final String SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS = """
             SELECT DISTINCT id, project_id
@@ -2173,12 +2182,13 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /**
-     * Partition-pruned fast pass of {@code SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS}. Bounds {@code toMonday(id_at)} (the
-     * future weekly partition key; {@code id_at} is MATERIALIZED from the UUIDv7 id, migration 000091) to the id set's
-     * own min/max, so it reads only the ids' own weekly partitions instead of every partition. For well-formed UUIDv7
-     * ids {@code id_at} is monotonic in id, so the window resolves them all; malformed ids whose {@code id_at} is not
-     * monotonic (e.g. a wrapped timestamp, OPIK-7456) can fall outside it, so the delete path re-resolves whatever this
-     * pass leaves unresolved via the unbounded query - the bounded query is never the sole resolver for a delete.
+     * Partition-pruning fast pass of {@code SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS}. Constrains {@code toMonday(id_at)}
+     * ({@code id_at} is MATERIALIZED from the UUIDv7 id, migration 000091) to the id set's own min/max week and, like
+     * the unbounded query, prunes granules on the {@code idx_traces_id_bf} bloom index. The week window is a no-op on
+     * the current unpartitioned table but prunes partitions once {@code traces} is partitioned. Well-formed UUIDv7 ids
+     * have {@code id_at} monotonic in id, so the window resolves them; a malformed id whose {@code id_at} wrapped
+     * (OPIK-7456) can fall outside it and is re-resolved by the unbounded fallback, so the bounded query is never a
+     * delete's sole resolver.
      */
     private static final String SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS_BOUNDED = """
             SELECT DISTINCT id, project_id
@@ -3433,24 +3443,32 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(Set<UUID> ids, UUID projectId, @NonNull Connection connection) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
-        log.info("Deleting traces, count '{}', project id '{}'", ids.size(), projectId);
+    public Mono<Void> delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, @NonNull Connection connection) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIdTraceIdPairs),
+                "Argument 'projectIdTraceIdPairs' must not be empty");
+        log.info("Deleting traces by (project_id, id) pairs, count '{}'", projectIdTraceIdPairs.size());
 
-        return makeMonoContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(DELETE_BY_ID, "delete_traces", workspaceId, userName,
-                    "trace_ids_size=%s, project_id=%s".formatted(ids.size(), projectId));
+        return makeMonoContextAware((userName, workspaceId) -> Flux
+                .fromIterable(Lists.partition(List.copyOf(projectIdTraceIdPairs), ANALYTICS_DELETE_BATCH_SIZE))
+                .concatMap(batch -> {
+                    var template = getSTWithLogComment(DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS, "delete_traces",
+                            workspaceId,
+                            userName, "pairs_size=%s".formatted(batch.size()));
 
-            var statement = connection.createStatement(template.render())
-                    .bind("ids", ids.toArray(UUID[]::new))
-                    .bind("project_id", projectId)
-                    .bind("workspace_id", workspaceId);
+                    var projectIds = batch.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
+                    var traceIds = batch.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
 
-            var segment = startSegment("traces", "Clickhouse", "delete");
-            return Mono.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment))
-                    .then();
-        });
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_ids", projectIds)
+                            .bind("trace_ids", traceIds);
+
+                    var segment = startSegment("traces", "Clickhouse", "delete");
+                    return Mono.from(statement.execute())
+                            .doFinally(_ -> endSegment(segment))
+                            .then();
+                })
+                .then());
     }
 
     /**

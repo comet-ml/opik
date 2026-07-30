@@ -3709,6 +3709,39 @@ class TracesResourceTest {
             getAndAssertPage(workspaceName, projectName2, null, List.of(), List.of(trace2), List.of(),
                     List.of(trace2), apiKey);
         }
+
+        @Test
+        void deleteByIdOfAbsentTraceLeavesOrphanChildSpansUntouched() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+            // Orphan spans: a trace_id that never had a trace row (spans ingest independently of traces).
+            var orphanTraceId = generator.generate();
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .traceId(orphanTraceId)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+            getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
+
+            // Delete-by-id of the never-existent trace resolves no owning project, so no project-less cascade fires:
+            // the orphan spans are left untouched. A project-less child delete could over-delete a concurrently
+            // ingested trace's children, so orphans are cleaned via their own endpoints, not this side effect.
+            traceResourceClient.deleteTrace(orphanTraceId, workspaceName, apiKey);
+
+            // Let any (unexpected) async cascade run, then assert the orphan spans still exist.
+            Awaitility.await().pollDelay(2, TimeUnit.SECONDS).atMost(5, TimeUnit.SECONDS).untilAsserted(
+                    () -> getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(),
+                            List.of(), apiKey));
+        }
     }
 
     @Nested
@@ -3979,6 +4012,32 @@ class TracesResourceTest {
 
             var request = factory.manufacturePojo(BatchDeleteByProject.class);
             traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+        }
+
+        @Test
+        void deleteTracesMixingPresentAndAbsentIdsWithoutProjectId() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var present = buildTracesForProject(projectName);
+            traceResourceClient.batchCreateTraces(present, apiKey, workspaceName);
+            getAndAssertPage(workspaceName, projectName, null, List.of(), present, present.reversed(), List.of(),
+                    apiKey);
+
+            // One null-project batch mixing the present ids with ids that never had a trace row: the delete resolves
+            // and removes the present traces per project group and simply skips the absent ids - no error, no
+            // project-less delete - so the request succeeds (204) and only the present traces are gone.
+            var absentIds = Set.of(generator.generate(), generator.generate());
+            var request = BatchDeleteByProject.builder()
+                    .ids(Stream.concat(present.stream().map(Trace::id), absentIds.stream())
+                            .collect(Collectors.toUnmodifiableSet()))
+                    .build();
+            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+
+            getAndAssertPage(workspaceName, projectName, null, List.of(), present, List.of(), List.of(), apiKey);
         }
 
         @Test
