@@ -244,9 +244,21 @@ vertex-ai:
     qualifiedName: "vertex_ai/gemini-3.5-flash"
     label: "Gemini 3.5 Flash"
     structuredOutput: true
+  - id: "gemini-3.5-flash-lite"
+    qualifiedName: "vertex_ai/gemini-3.5-flash-lite"
+    label: "Gemini 3.5 Flash Lite"
+    structuredOutput: true
   - id: "gemini-3.1-pro-preview"
     qualifiedName: "vertex_ai/gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
+    structuredOutput: true
+  - id: "gemini-3.1-flash-lite"
+    qualifiedName: "vertex_ai/gemini-3.1-flash-lite"
+    label: "Gemini 3.1 Flash Lite"
+    structuredOutput: true
+  - id: "gemini-3.1-flash-lite-preview"
+    qualifiedName: "vertex_ai/gemini-3.1-flash-lite-preview"
+    label: "Gemini 3.1 Flash Lite Preview"
     structuredOutput: true
   - id: "gemini-3-pro-preview"
     qualifiedName: "vertex_ai/gemini-3-pro-preview"
