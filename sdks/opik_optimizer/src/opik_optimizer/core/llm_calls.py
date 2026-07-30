@@ -100,9 +100,10 @@ def _strip_duplicate_opik_logger(params: dict[str, Any]) -> dict[str, Any]:
         # call that follows.
         span_already_tracked = opik_context.get_current_span_data() is not None
     except Exception:
-        # Can't tell — leave the callbacks alone. Keeps attribution intact for
-        # every caller; the cost of being wrong is a duplicate span for GEPA,
-        # which is visible in the data rather than silently missing from it.
+        # Can't tell, so leave the callbacks alone. Deliberately broad: this is a
+        # telemetry decision and must never fail the LLM call itself. Being wrong
+        # here costs a duplicate span for whichever caller has a span open, which
+        # is visible in the data, rather than a deleted tag, which is not.
         logger.debug("Could not determine Opik span context", exc_info=True)
         span_already_tracked = False
     if not span_already_tracked:
