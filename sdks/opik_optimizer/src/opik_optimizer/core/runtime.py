@@ -253,7 +253,7 @@ def build_final_result(
         llm_cost_total=optimizer.llm_cost_total or None,
         llm_token_usage_total=(
             dict(optimizer.llm_token_usage_total)
-            if optimizer.llm_token_usage_total.get("total_tokens")
+            if any(optimizer.llm_token_usage_total.values())
             else None
         ),
         dataset_id=context.dataset.id,
@@ -575,7 +575,7 @@ def build_early_stop_result(
         llm_cost_total=optimizer.llm_cost_total or None,
         llm_token_usage_total=(
             dict(optimizer.llm_token_usage_total)
-            if optimizer.llm_token_usage_total.get("total_tokens")
+            if any(optimizer.llm_token_usage_total.values())
             else None
         ),
         dataset_id=context.dataset.id,
@@ -756,13 +756,16 @@ def add_llm_cost(optimizer: BaseOptimizer, cost: float | None) -> None:
 def add_llm_usage(optimizer: BaseOptimizer, usage: dict[str, Any] | None) -> None:
     if not usage:
         return
-    optimizer.llm_token_usage_total["prompt_tokens"] += int(
-        usage.get("prompt_tokens", 0)
+    prompt_tokens = int(usage.get("prompt_tokens", 0))
+    completion_tokens = int(usage.get("completion_tokens", 0))
+    # Not every provider reports a total; derive it so callers that gate on
+    # total_tokens do not discard usage that was reported correctly.
+    total_tokens = (
+        int(usage.get("total_tokens", 0)) or prompt_tokens + completion_tokens
     )
-    optimizer.llm_token_usage_total["completion_tokens"] += int(
-        usage.get("completion_tokens", 0)
-    )
-    optimizer.llm_token_usage_total["total_tokens"] += int(usage.get("total_tokens", 0))
+    optimizer.llm_token_usage_total["prompt_tokens"] += prompt_tokens
+    optimizer.llm_token_usage_total["completion_tokens"] += completion_tokens
+    optimizer.llm_token_usage_total["total_tokens"] += total_tokens
 
 
 def coerce_score(raw_score: Any) -> float:

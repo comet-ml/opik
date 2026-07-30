@@ -441,8 +441,8 @@ class TestCostUsageCapture:
             @property
             def usage(self) -> Any:
                 return SimpleNamespace(
-                    prompt_tokens=float("inf"),  # int() raises OverflowError
-                    completion_tokens="many",  # int() raises ValueError
+                    prompt_tokens=float("inf"),  # non-finite
+                    completion_tokens="many",  # not a number
                     total_tokens=None,
                 )
 
@@ -557,16 +557,15 @@ class TestDuplicateOpikLoggerStripped:
             captured_kwargs.update(kwargs)
             return make_mock_response("ok")
 
-        current_span = object() if span_open else None
-
         with patch(
             "opik_optimizer.core.llm_calls.opik_litellm_monitor."
             "try_add_opik_monitoring_to_params",
             side_effect=fake_monitoring,
         ):
             with patch(
-                "opik_optimizer.core.llm_calls.opik_context.get_current_span_data",
-                return_value=current_span,
+                "opik_optimizer.core.llm_calls.opik_context_storage."
+                "span_data_stack_empty",
+                return_value=not span_open,
             ):
                 with patch(
                     "opik_optimizer.core.llm_calls.track_completion"

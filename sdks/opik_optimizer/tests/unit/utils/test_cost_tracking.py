@@ -90,6 +90,48 @@ def test_apply_cost_usage_to_owner_updates_optimizer() -> None:
     assert opt.llm_token_usage_total["total_tokens"] == 8
 
 
+def test_llm_complete_reads_cost_from_hidden_params() -> None:
+    """OPIK-7521: litellm's ModelResponse has no `.cost`; the figure lives in
+    `_hidden_params["response_cost"]`. Reading only `.cost` meant evaluation
+    spend never reached the optimizer's llm_cost_total."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    opt = DummyOptimizer()
+    agent = LiteLLMAgent(project_name="test")
+    cast(Any, agent)._optimizer_owner = opt
+
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+        usage=SimpleNamespace(prompt_tokens=4, completion_tokens=6, total_tokens=10),
+        _hidden_params={"response_cost": 0.75},
+    )
+
+    with patch("opik_optimizer.agents.litellm_agent.track_completion") as mock_track:
+        mock_track.return_value = lambda completion_fn: lambda **kw: response
+        returned = agent._llm_complete(
+            model="gpt-4o", messages=[user_message("hi")], tools=None
+        )
+
+    agent._apply_cost_usage_to_owner(returned)
+
+    assert opt.llm_cost_total == pytest.approx(0.75)
+    assert opt.llm_token_usage_total["total_tokens"] == 10
+
+
+def test_usage_without_total_tokens_is_still_recorded() -> None:
+    """A provider reporting prompt/completion but no total must not have its
+    usage discarded wholesale."""
+    opt = DummyOptimizer()
+
+    opt._add_llm_usage({"prompt_tokens": 7, "completion_tokens": 3})
+
+    assert opt.llm_token_usage_total["prompt_tokens"] == 7
+    assert opt.llm_token_usage_total["completion_tokens"] == 3
+    # Derived, so downstream gates on total_tokens do not drop everything.
+    assert opt.llm_token_usage_total["total_tokens"] == 10
+
+
 def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(
     tool_prompt: chat_prompt.ChatPrompt,
 ) -> None:
@@ -114,8 +156,8 @@ def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(
 
     tool_call_msg = MagicMock()
     tool_call_msg.tool_calls = tool_calls_data
-    tool_call_msg.__getitem__ = (
-        lambda self, key: tool_calls_data if key == "tool_calls" else None
+    tool_call_msg.__getitem__ = lambda self, key: (
+        tool_calls_data if key == "tool_calls" else None
     )
     tool_call_msg.to_dict = lambda: assistant_message("", tool_calls=tool_calls_data)
 
@@ -131,8 +173,8 @@ def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(
 
     final_msg = MagicMock()
     final_msg.tool_calls = None
-    final_msg.__getitem__ = (
-        lambda self, key: "The weather is Sunny in NYC" if key == "content" else None
+    final_msg.__getitem__ = lambda self, key: (
+        "The weather is Sunny in NYC" if key == "content" else None
     )
     final_msg.to_dict = lambda: assistant_message("The weather is Sunny in NYC")
 

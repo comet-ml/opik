@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 import litellm
 from litellm.exceptions import BadRequestError
-from opik import opik_context
+from opik import context_storage as opik_context_storage
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
@@ -90,8 +90,11 @@ def _strip_duplicate_opik_logger(params: dict[str, Any]) -> dict[str, Any]:
         return params
 
     try:
-        span_already_tracked = opik_context.get_current_span_data() is not None
+        # Cheap existence check: get_current_span_data() would copy the whole
+        # SpanData just to test for None.
+        span_already_tracked = not opik_context_storage.span_data_stack_empty()
     except Exception:
+        # Conservative direction: keep the logger, so a tagged trace is never lost.
         span_already_tracked = False
     if not span_already_tracked:
         return params

@@ -548,9 +548,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 -- arrayExists with an IN-subquery probes a set instead of scanning a constant
                 -- array per row, which matters because optimization_final is the whole
                 -- workspace on the list endpoint (pagination applies to the outer projection).
-                SELECT DISTINCT id
+                SELECT DISTINCT id, project_id
                 FROM traces
                 WHERE workspace_id = :workspace_id
+                -- A trace cannot carry an optimization id before that optimization
+                -- existed, so anything older is not a candidate. idx_traces_created_at
+                -- is a materialized minmax index, so this prunes granules instead of
+                -- reading the workspace's whole history.
+                AND created_at >= (SELECT min(created_at) FROM optimization_final)
                 AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
             ), optimization_tagged_traces AS (
                 -- Traces tagged with the optimization id but linked to no experiment item:
@@ -584,7 +589,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         SELECT workspace_id, project_id, trace_id, parent_span_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
-                        AND project_id IN (SELECT DISTINCT project_id FROM optimization_tagged_traces)
+                        -- Prefix-prune on project_id (trace_id is only the 3rd PK column)
+                        -- from the cheap candidate CTE, so the expensive dedup CTE is not
+                        -- expanded a third time — ClickHouse substitutes CTEs textually.
+                        AND project_id IN (SELECT DISTINCT project_id FROM optimization_tagged_trace_ids)
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
                         ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
@@ -604,7 +612,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     LEFT JOIN experiment_durations ed2 ON ef2.id = ed2.experiment_id
                     UNION ALL
                     SELECT
-                        toFixedString(otc.optimization_id_str, 36) AS optimization_id,
+                        otc.optimization_id_str AS optimization_id,
                         otc.total_estimated_cost AS cost
                     FROM optimization_tagged_costs otc
                 )

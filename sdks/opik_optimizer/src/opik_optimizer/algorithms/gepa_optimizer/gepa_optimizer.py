@@ -333,10 +333,17 @@ class GepaOptimizer(BaseOptimizer):
                 project_name=self.project_name,
                 metadata=_llm_calls.build_llm_call_metadata(self, "gepa_reflection"),
             )
-            # A content-filtered or tool-call-only completion has no content.
-            # Stringifying it would hand gepa the literal instruction "None" and
-            # burn a trial on a corrupted prompt, so fail loudly instead.
+            # A content-filtered or tool-call-only completion has no content, and
+            # gepa's LanguageModel contract requires a str. Raising keeps that
+            # contract with a diagnosable message; gepa isolates the failure to
+            # this proposal (it logs and skips the candidate), so the run
+            # continues. Returning str(None) instead would hand gepa the literal
+            # instruction "None" and burn a trial on a corrupted prompt.
             if not isinstance(result, str) or not result.strip():
+                logger.warning(
+                    "GEPA reflection returned no content from %s; skipping this proposal.",
+                    self.model,
+                )
                 raise ValueError(
                     "GEPA reflection received an empty response from "
                     f"{self.model}; cannot propose a new instruction."
