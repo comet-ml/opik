@@ -542,12 +542,18 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 GROUP BY optim_id
             ), optimization_tagged_trace_ids AS (
                 -- Candidate traces: anything that has ever carried one of these optimization
-                -- ids as a tag. Deliberately a superset — the authoritative check runs below
-                -- on each trace's LATEST version, so a tag removed by a later update stops
-                -- counting. Narrowing here is what keeps that check off a full workspace scan;
-                -- arrayExists with an IN-subquery probes a set instead of scanning a constant
-                -- array per row, which matters because optimization_final is the whole
-                -- workspace on the list endpoint (pagination applies to the outer projection).
+                -- ids as a tag. Deliberately a superset, because the authoritative check runs
+                -- below on the latest version of each trace, so a tag removed by a later
+                -- update stops counting.
+                -- The project_id bound is what keeps this off a workspace-wide scan of an
+                -- unindexed array column. It prunes on the second primary-key column, and it
+                -- is sound because optimizer-internal traces are written to the project of the
+                -- optimization itself, while trial traces live in the project of the dataset
+                -- and are excluded below by the experiment-item filter. An optimization with
+                -- no project_id predates that column, so its cost stays trial-only as today.
+                -- Not bounded by created_at on purpose: that column is not stable across
+                -- re-writes of an optimization row, and a reset would silently drop
+                -- optimizer-internal traces from the total.
                 SELECT DISTINCT id, project_id
                 FROM traces
                 WHERE workspace_id = :workspace_id
@@ -555,7 +561,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 -- existed, so anything older is not a candidate. idx_traces_created_at
                 -- is a materialized minmax index, so this prunes granules instead of
                 -- reading the workspace's whole history.
-                AND created_at >= (SELECT min(created_at) FROM optimization_final)
+                AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
                 AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
             ), optimization_tagged_traces AS (
                 -- Traces tagged with the optimization id but linked to no experiment item:

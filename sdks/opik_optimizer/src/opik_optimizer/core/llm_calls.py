@@ -18,6 +18,8 @@ from opik.integrations.litellm import track_completion
 from ..utils import throttle as _throttle
 from ..utils.helpers import json_to_dict
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:  # pragma: no cover
     pass
 
@@ -137,9 +139,6 @@ def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
         "opik_call_type": call_type,
     }
     return metadata
-
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_schema_for_openai_strict(schema: Any) -> Any:

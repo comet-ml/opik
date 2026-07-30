@@ -30,6 +30,19 @@ describe("OptimizationKPICards", () => {
     expect(screen.getByText("$0.150")).toBeInTheDocument();
   });
 
+  it("falls back to the trial sum when the backend reports zero", () => {
+    // The aggregate comes back as 0 rather than null when it has nothing to
+    // report, so a bare nullish check would render "-" over a known trial cost.
+    render(
+      <OptimizationKPICards
+        experiments={experiments}
+        totalOptimizationCost={0}
+      />,
+    );
+
+    expect(screen.getByText("$0.150")).toBeInTheDocument();
+  });
+
   it("renders a dash when no cost is known", () => {
     render(<OptimizationKPICards experiments={[]} />);
 

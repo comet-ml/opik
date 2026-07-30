@@ -101,9 +101,18 @@ const OptimizationKPICards: React.FunctionComponent<
 }) => {
   const kpiData = useMemo(
     () => ({
+      // The backend aggregate wins when it has a value, because it also covers
+      // optimizer-internal spend that belongs to no trial. It comes back as 0
+      // rather than null when there is nothing to report, so treat 0 as "no
+      // answer" and fall back to the trial sum — otherwise a run whose trials
+      // clearly cost something would render as "-".
       totalOptCost:
-        totalOptimizationCost ??
-        experiments.reduce((sum, e) => sum + (e.total_estimated_cost ?? 0), 0),
+        totalOptimizationCost && totalOptimizationCost > 0
+          ? totalOptimizationCost
+          : experiments.reduce(
+              (sum, e) => sum + (e.total_estimated_cost ?? 0),
+              0,
+            ),
       totalDuration: getCompletedRunDurationSeconds({
         isInProgress,
         optimizationCreatedAt,

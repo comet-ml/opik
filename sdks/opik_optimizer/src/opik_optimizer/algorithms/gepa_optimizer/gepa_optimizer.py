@@ -335,14 +335,18 @@ class GepaOptimizer(BaseOptimizer):
             )
             # A content-filtered or tool-call-only completion has no content, and
             # gepa's LanguageModel contract requires a str. Raising keeps that
-            # contract with a diagnosable message; gepa isolates the failure to
-            # this proposal (it logs and skips the candidate), so the run
-            # continues. Returning str(None) instead would hand gepa the literal
-            # instruction "None" and burn a trial on a corrupted prompt.
+            # contract with a diagnosable message instead of the AttributeError on
+            # None.strip() that gepa's own client raised before this change, so the
+            # control flow is unchanged and only the message improves.
+            # On gepa >= 0.1 the failure is isolated to this proposal
+            # (_propose_texts_batch_safe logs it and drops the candidate) and the run
+            # continues; on older gepa, which the Studio pin still uses, it reaches
+            # raise_on_exception and ends the run — as the AttributeError did.
+            # Returning str(None) instead would hand gepa the literal instruction
+            # "None" and burn a trial on a corrupted prompt.
             if not isinstance(result, str) or not result.strip():
                 logger.warning(
-                    "GEPA reflection returned no content from %s; skipping this proposal.",
-                    self.model,
+                    "GEPA reflection returned no content from %s.", self.model
                 )
                 raise ValueError(
                     "GEPA reflection received an empty response from "

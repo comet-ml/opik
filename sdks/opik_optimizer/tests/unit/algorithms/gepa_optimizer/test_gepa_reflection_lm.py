@@ -11,7 +11,7 @@ accumulation into the final OptimizationResult).
 """
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -38,7 +38,7 @@ def _make_reflection_response(
     cost: float | None = None,
     usage: dict[str, int] | None = None,
 ) -> MagicMock:
-    response = make_mock_response(cast(str, content))
+    response = make_mock_response(content)
     response.cost = cost
     if usage is None:
         response.usage = None

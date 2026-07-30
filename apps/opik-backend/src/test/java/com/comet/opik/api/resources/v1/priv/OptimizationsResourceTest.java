@@ -775,11 +775,19 @@ class OptimizationsResourceTest {
             DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
             datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
 
+            // Production shape: the optimizer writes its internal traces to the
+            // optimization's own project, while trial traces land in the dataset's project.
+            Project optimizerProject = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Optimizer-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(optimizerProject, apiKey, workspaceName);
+
             var objectiveName = "accuracy";
             var optimization = optimizationResourceClient.createPartialOptimization()
                     .datasetId(datasetId)
                     .datasetName(datasetName)
                     .objectiveName(objectiveName)
+                    .projectName(optimizerProject.name())
                     .build();
 
             var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
@@ -828,13 +836,10 @@ class OptimizationsResourceTest {
             // Reflection trace as the optimizer SDK actually writes it (verified against a
             // live GEPA run): named gepa_reflection, tagged [<optimization_id>, Reflection,
             // GEPA], and linked to no experiment item (OPIK-7521). Its span cost must count
-            // into the run total. It also lives in a DIFFERENT project than the trials, as it
-            // does in a real run (trials land in the dataset's project), so the cost query
-            // must not be project-scoped.
-            Project reflectionProject = podamFactory.manufacturePojo(Project.class).toBuilder()
-                    .name("Optimizer-%s".formatted(datasetName))
-                    .build();
-            projectResourceClient.createProject(reflectionProject, apiKey, workspaceName);
+            // into the run total. It lives in the optimization's own project, a DIFFERENT one
+            // from the trials' — so this also pins that the query scopes optimizer-internal
+            // traces to the optimization's project rather than the dataset's.
+            Project reflectionProject = optimizerProject;
 
             var reflectionCost = BigDecimal.valueOf(0.07);
             Trace reflectionTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
@@ -902,17 +907,18 @@ class OptimizationsResourceTest {
             var datasetId = datasetResourceClient.createDataset(
                     Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
 
-            var optimization = optimizationResourceClient.createPartialOptimization()
-                    .datasetId(datasetId)
-                    .datasetName(datasetName)
-                    .objectiveName("accuracy")
-                    .build();
-            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
-
             Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
                     .name("Optimizer-%s".formatted(datasetName))
                     .build();
             projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName("accuracy")
+                    .projectName(project.name())
+                    .build();
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
 
             // A tagged, non-trial trace: counted while the tag is present.
             Trace taggedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
