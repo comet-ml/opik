@@ -294,6 +294,8 @@ The backup server must be enabled **before** the restore, and the backup must al
 
 The restore **replaces data**. `clickhouse-backup` drops and recreates every table contained in the backup (`ON CLUSTER` when `RESTORE_SCHEMA_ON_CLUSTER` is set) before restoring it, so you do not need to drop databases or tables yourself. Tables that are not part of the backup are left untouched.
 
+One exception: if `restore_schema_on_cluster` is set through a config file while the `RESTORE_SCHEMA_ON_CLUSTER` environment variable is empty, `clickhouse-backup` refuses to drop tables that still hold data and the restore aborts. Set it as an environment variable, as the values example below does.
+
 The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSeconds` — 24 hours by default. Raise it for large restores, or Kubernetes will kill the job mid-restore.
 </Warning>
 
@@ -317,8 +319,9 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
     The service, pod and port used throughout this section are the chart defaults, matching the
     `RESTORE_SERVICE` the Job computes. If you set `nameOverride`, a different shard/replica layout, or
     `clickhouse.backupServer.service.name` / `.port`, substitute your own — list them with
-    `kubectl get pods,svc -n <namespace> -l clickhouse.altinity.com/chi` and use
-    `clickhouse.backupServer.port` in place of `7171`.
+    `kubectl get pods,svc -n <namespace> -l clickhouse.altinity.com/chi`. The port is
+    `clickhouse.backupServer.service.port` when set, and otherwise `clickhouse.backupServer.port`
+    (`7171` by default).
   </Step>
   <Step title="Render the job manifest">
     Put the restore settings in their own values file:
@@ -359,8 +362,10 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
     kubectl apply -f clickhouse-restore-job.yaml -n <namespace>
     ```
 
-    The job name is fixed (`opik-clickhouse-restore`), so delete the previous one before restoring
-    again:
+    The job is named `<opik.name>-clickhouse-restore` — `opik-clickhouse-restore` unless you set
+    `nameOverride`, and always readable as `metadata.name` in the manifest you just rendered. Use
+    that name in the commands here and in the next step. It is fixed per release, so delete the
+    previous job before restoring again:
 
     ```bash
     kubectl delete job opik-clickhouse-restore -n <namespace>
