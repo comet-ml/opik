@@ -62,9 +62,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         # accepted candidates on). Used to classify each evaluate() call as a
         # full evaluation ("trial") vs. a mini-batch screening eval ("mini-batch").
         self._gepa_val_item_ids = gepa_val_item_ids or set()
-        # Component keys whose candidate edit the placeholder guard rejected on
-        # the most recent rebuild; surfaced in each evaluation's metadata.
-        self._last_placeholder_reverts: list[str] = []
         self._metric_name = metric.__name__
         self._allowed_roles = (
             context.extra_params.get("optimizable_roles")
@@ -74,16 +71,24 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         # TODO: Replace with native GEPA adapter once available; role constraints may drop candidate edits.
 
         # Pre-compute item ID sets for fast lookup during evaluate()
+        train_items = dataset.get_items()
         self._train_item_ids: set[str] = {
-            str(item.get("id")) for item in dataset.get_items() if item.get("id")
+            str(item.get("id")) for item in train_items if item.get("id")
         }
+        val_items: list[dict[str, Any]] = []
         self._val_item_ids: set[str] = set()
         if validation_dataset is not None:
+            val_items = validation_dataset.get_items()
             self._val_item_ids = {
-                str(item.get("id"))
-                for item in validation_dataset.get_items()
-                if item.get("id")
+                str(item.get("id")) for item in val_items if item.get("id")
             }
+        # The datasets' column names are the authoritative substitutable keys:
+        # get_messages() replaces the literal "{key}" for every one of them, so
+        # the placeholder guard protects these even when a key is not
+        # identifier-shaped (e.g. "{my key}").
+        self._known_placeholder_keys: set[str] = candidate_ops.dataset_placeholder_keys(
+            (*train_items, *val_items)
+        )
 
     def _classify_experiment_type(
         self,
@@ -215,8 +220,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
-    ) -> dict[str, chat_prompt.ChatPrompt]:
-        """Rebuild prompts with optimized messages, preserving tools/function_map/model."""
+    ) -> tuple[dict[str, chat_prompt.ChatPrompt], list[str]]:
+        """Rebuild prompts with optimized messages, preserving tools/function_map/model.
+
+        Returns the rebuilt prompts and the component keys whose candidate edit
+        the placeholder guard rejected (empty when the candidate was clean).
+        """
         rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
         dropped_components = 0
         placeholder_reverts: list[str] = []
@@ -244,6 +253,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 original_messages=original_messages,
                 new_messages=new_messages,
                 prompt_name=prompt_name,
+                known_keys=self._known_placeholder_keys,
             )
             placeholder_reverts.extend(reverted)
 
@@ -266,12 +276,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 "GEPA adapter dropped %s component(s) due to optimize_prompt constraints.",
                 dropped_components,
             )
-        # Read back by evaluate() straight after this call so the rejection lands
-        # in the trial's experiment metadata instead of only the logs. Safe as a
-        # plain attribute: gepa's engine and reflective-mutation proposer both
-        # call adapter.evaluate() sequentially (their only threading lives in the
-        # unrelated optimize_anything adapter).
-        self._last_placeholder_reverts = placeholder_reverts
         if placeholder_reverts:
             logger.warning(
                 "Rejected GEPA candidate edit(s) %s: the rewrite dropped template "
@@ -279,7 +283,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 "the candidate is never evaluated with the user's input missing.",
                 placeholder_reverts,
             )
-        return rebuilt
+        return rebuilt, placeholder_reverts
 
     def evaluate(
         self,
@@ -293,8 +297,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         Rebuilds all prompts with optimized message content from the candidate,
         then uses the agent to evaluate each item.
         """
-        # Rebuild prompts with optimized components from candidate
-        prompt_variants = self._rebuild_prompts_from_candidate(candidate)
+        # Rebuild prompts with optimized components from candidate. The reverts
+        # stay local so concurrent evaluate() calls can never attach another
+        # candidate's rejections to this trial's metadata.
+        prompt_variants, placeholder_reverts = self._rebuild_prompts_from_candidate(
+            candidate
+        )
 
         dataset_item_ids: list[str] = []
         missing_ids = False
@@ -325,7 +333,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                         # Present only when the guard rejected an edit, so a
                         # corrupted-candidate run is auditable after the fact.
                         "rejected_components_missing_variables": (
-                            self._last_placeholder_reverts or None
+                            placeholder_reverts or None
                         ),
                     }
                 )

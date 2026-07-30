@@ -67,6 +67,22 @@ class TestExtractPlaceholders:
         ]
         assert candidate_ops.extract_placeholders(content) == {"image_topic"}
 
+    def test_known_dataset_keys_extend_the_identifier_shape(self) -> None:
+        """A dataset column is substitutable whatever its shape, so its literal
+        "{key}" token counts as a variable when the caller names the columns."""
+        assert candidate_ops.extract_placeholders(
+            "Answer {my key} about {question}", known_keys={"my key", "question"}
+        ) == {"my key", "question"}
+
+    def test_known_keys_require_the_exact_literal_token(self) -> None:
+        """JSON that merely mentions a column name is still not a variable."""
+        assert (
+            candidate_ops.extract_placeholders(
+                'Reply as {"answer": 1}', known_keys={"answer"}
+            )
+            == set()
+        )
+
 
 class TestEnforcePlaceholderPreservation:
     def test_reverts_message_that_dropped_a_variable(self) -> None:
@@ -131,6 +147,28 @@ class TestEnforcePlaceholderPreservation:
         assert guarded == new
         assert reverted == []
 
+    def test_known_keys_protect_non_identifier_placeholders(self) -> None:
+        original = [{"role": "user", "content": "Answer {my key}"}]
+        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=original,
+            new_messages=[{"role": "user", "content": "Answer it"}],
+            prompt_name="p",
+            known_keys={"my key"},
+        )
+        assert guarded == original
+        assert reverted == ["p_user_0"]
+
+    def test_revert_keeps_extra_message_fields(self) -> None:
+        """A revert restores content without stripping other message fields."""
+        original = [{"role": "user", "name": "asker", "content": "Answer {question}"}]
+        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=original,
+            new_messages=[{"role": "user", "content": "Answer it"}],
+            prompt_name="p",
+        )
+        assert guarded[0] == original[0]
+        assert reverted == ["p_user_0"]
+
 
 class TestRebuildAppliesGuard:
     """The guard must hold on every rebuild path, not just one."""
@@ -153,29 +191,60 @@ class TestRebuildAppliesGuard:
         assert messages[0]["content"] == "You are an expert geographer."  # kept
         assert messages[1]["content"] == "Answer {question}"  # rejected
 
+    def test_shared_rebuild_honours_known_dataset_keys(self) -> None:
+        prompt = _prompt([{"role": "user", "content": "Answer {my key}"}])
+        rebuilt = candidate_ops.rebuild_prompts_from_candidate(
+            base_prompts={"p": prompt},
+            candidate={"p_user_0": "Answer it"},
+            known_placeholder_keys={"my key"},
+        )
+        assert rebuilt["p"].get_messages()[0]["content"] == "Answer {my key}"
+
     def test_adapter_rebuild_rejects_and_records(self) -> None:
         prompt = _prompt([{"role": "user", "content": "Answer {question}"}])
         adapter = _make_adapter({"p": prompt})
 
-        rebuilt = adapter._rebuild_prompts_from_candidate(
+        rebuilt, reverted = adapter._rebuild_prompts_from_candidate(
             {"p_user_0": "What is the capital of France?"}
         )
 
         assert rebuilt["p"].get_messages()[0]["content"] == "Answer {question}"
-        assert adapter._last_placeholder_reverts == ["p_user_0"]
+        assert reverted == ["p_user_0"]
 
     def test_adapter_records_nothing_when_candidate_is_clean(self) -> None:
         prompt = _prompt([{"role": "user", "content": "Answer {question}"}])
         adapter = _make_adapter({"p": prompt})
 
-        rebuilt = adapter._rebuild_prompts_from_candidate(
+        rebuilt, reverted = adapter._rebuild_prompts_from_candidate(
             {"p_user_0": "Answer concisely: {question}"}
         )
 
         assert (
             rebuilt["p"].get_messages()[0]["content"] == "Answer concisely: {question}"
         )
-        assert adapter._last_placeholder_reverts == []
+        assert reverted == []
+
+    def test_adapter_protects_non_identifier_dataset_keys(self) -> None:
+        """The dataset's columns are authoritative: "{my key}" is outside the
+        identifier regex, but the adapter knows the column exists and
+        substitution would replace its literal token, so dropping it is a loss."""
+        prompt = _prompt([{"role": "user", "content": "Answer {my key}"}])
+        adapter = _make_adapter({"p": prompt})
+        adapter._known_placeholder_keys = {"id", "my key", "answer"}
+
+        rebuilt, reverted = adapter._rebuild_prompts_from_candidate(
+            {"p_user_0": "What is the capital of France?"}
+        )
+
+        assert rebuilt["p"].get_messages()[0]["content"] == "Answer {my key}"
+        assert reverted == ["p_user_0"]
+
+    def test_adapter_learns_known_keys_from_the_dataset(self) -> None:
+        """__init__ collects the columns itself — no caller wiring required."""
+        prompt = _prompt([{"role": "user", "content": "Answer {question}"}])
+        adapter = _make_adapter({"p": prompt})
+
+        assert adapter._known_placeholder_keys == {"id", "question", "answer"}
 
     def test_metadata_records_the_rejection_through_evaluate(
         self, monkeypatch: Any
@@ -248,7 +317,7 @@ class TestRebuildAppliesGuard:
         prompt = _prompt([{"role": "user", "content": "Answer {question}"}])
         adapter = _make_adapter({"p": prompt})
 
-        rebuilt = adapter._rebuild_prompts_from_candidate(
+        rebuilt, _ = adapter._rebuild_prompts_from_candidate(
             {"p_user_0": "Answer the capital of France"}
         )
 

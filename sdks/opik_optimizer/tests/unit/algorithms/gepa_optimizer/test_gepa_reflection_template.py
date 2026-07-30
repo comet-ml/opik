@@ -21,6 +21,18 @@ class TestTemplateContract:
         """gepa validates the markers itself and raises without them."""
         InstructionProposalSignature.validate_prompt_template(TEMPLATE)
 
+    def test_installed_gepa_uses_the_markers_we_rely_on(self) -> None:
+        """The version floor's real contract, pinned against the installed gepa.
+
+        gepa 0.0.x used <curr_instructions>/<inputs_outputs_feedback>; the
+        pyproject floor is gepa>=0.1.0 precisely because our template speaks
+        the <curr_param>/<side_info> dialect. If this fails, the resolver
+        installed a gepa older (or stranger) than the floor permits.
+        """
+        default = InstructionProposalSignature.default_prompt_template
+        assert "<curr_param>" in default
+        assert "<side_info>" in default
+
     @pytest.mark.parametrize("marker", ["<curr_param>", "<side_info>"])
     def test_required_markers_present(self, marker: str) -> None:
         assert marker in TEMPLATE
@@ -105,6 +117,17 @@ class TestOptimizerWiring:
             GepaOptimizer(
                 model="openai/gpt-4o-mini",
                 prompt_overrides={"reflection_prompt_template": "no markers here"},
+            )
+
+    def test_non_string_override_fails_with_the_same_context(self) -> None:
+        """A non-string override must not escape as a bare TypeError from gepa's
+        validator — it fails at construction with the documented message."""
+        with pytest.raises(
+            ValueError, match="Invalid reflection_prompt_template override"
+        ):
+            GepaOptimizer(
+                model="openai/gpt-4o-mini",
+                prompt_overrides={"reflection_prompt_template": 123},
             )
 
     def test_template_swapped_in_after_construction_is_still_caught(self) -> None:

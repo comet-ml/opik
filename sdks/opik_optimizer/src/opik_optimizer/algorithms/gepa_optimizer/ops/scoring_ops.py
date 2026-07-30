@@ -23,6 +23,7 @@ def rescore_candidates(
     filtered_indexed_candidates: list[tuple[int, dict[str, str]]],
     filtered_val_scores: list[float | None],
     selection_policy: str,
+    known_placeholder_keys: set[str] | None = None,
 ) -> list[float]:
     rescored: list[float] = []
     optimizer._history_builder.clear()
@@ -52,6 +53,7 @@ def rescore_candidates(
                     base_prompts=optimizable_prompts,
                     candidate=candidate,
                     allowed_roles=allowed_roles,
+                    known_placeholder_keys=known_placeholder_keys,
                 )
 
                 try:

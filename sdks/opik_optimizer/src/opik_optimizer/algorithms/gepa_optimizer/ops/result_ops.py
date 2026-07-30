@@ -28,6 +28,7 @@ def build_algorithm_result(
     train_items: list[dict[str, Any]],
     gepa_result: Any,
     experiment_config: dict[str, Any] | None,
+    known_placeholder_keys: set[str] | None = None,
 ) -> AlgorithmResult:
     history_entries = optimizer.get_history_entries()
     if history_entries and best_idx >= 0:
@@ -74,6 +75,7 @@ def build_algorithm_result(
         base_prompts=optimizable_prompts,
         candidate=best_candidate,
         allowed_roles=getattr(optimizer, "_optimizable_roles", None),
+        known_placeholder_keys=known_placeholder_keys,
     )
 
     metadata: dict[str, Any] = {

@@ -28,6 +28,10 @@ tiktoken==0.9.0
 redis==6.4.0
 rq==2.6.0
 opik-optimizer==3.1.0
+# gepa must move to >=0.1.0 in the same commit that bumps opik-optimizer past
+# 3.1.0: newer optimizers require gepa's <curr_param>/<side_info> template
+# markers and the reflection_prompt_template kwarg, neither of which exist on
+# 0.0.x (see OPIK-7510).
 gepa==0.0.17
 pyrate-limiter>=3.0.0,<4.0.0
 python-jsonpath>=2.0.0,<3.0.0
