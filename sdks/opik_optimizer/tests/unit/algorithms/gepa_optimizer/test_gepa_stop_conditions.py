@@ -71,15 +71,6 @@ def _run_optimize(
     return result, captured
 
 
-class TestPerfectScoreDefault:
-    def test_default_perfect_score__no_override__is_full_marks(self) -> None:
-        """perfect_score doubles as GEPA's iteration-skip gate AND the run-level
-        stop threshold; below 1.0 a strong baseline ends runs with zero
-        candidates (OPIK-7511). Must match the gepa package's own default."""
-        assert constants.DEFAULT_PERFECT_SCORE == 1.0
-        assert GepaOptimizer(model="gpt-4o-mini").perfect_score == 1.0
-
-
 class TestGepaStopCallbackWiring:
     def test_stop_callbacks_wired_by_default(
         self,

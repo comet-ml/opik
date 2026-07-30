@@ -41,6 +41,17 @@ OPTIMIZER_RUNTIME_PARAMS = {
     "max_retries": int(os.getenv("OPTIMIZER_HIERARCHICAL_MAX_RETRIES", "2")),
 }
 
+# Studio-run perfect_score (OPIK-7511). perfect_score does double duty in the
+# SDK: it is the baseline/iteration skip threshold AND (for GEPA) the run-level
+# stop threshold via ScoreThresholdStopper. The SDK default (0.95) makes a
+# strong-but-imperfect baseline end a Studio run immediately with zero
+# candidates, presenting as "nothing improved". For Studio runs it must mean
+# "nothing left to optimize", so pin it to 1.0 here (the gepa package's own
+# default) rather than changing the SDK-wide default under every SDK user.
+# Injected as a constructor default by OptimizerFactory.build, so it takes
+# effect on the currently pinned opik_optimizer release — no pin bump needed.
+OPTIMIZER_PERFECT_SCORE = float(os.getenv("OPTIMIZER_PERFECT_SCORE", "1.0"))
+
 # GEPA reflection mini-batch sizing (OPIK-7511).
 # GEPA only promotes a candidate to a full evaluation on a STRICT win over the
 # reflection mini-batch (gepa/core/engine.py "new_sum <= old_sum: skip"). With

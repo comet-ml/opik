@@ -11,6 +11,7 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_re
     HierarchicalReflectiveOptimizer,
 )
 
+from .config import OPTIMIZER_PERFECT_SCORE
 from .exceptions import InvalidOptimizerError
 from opik_backend.utils.env_utils import get_env_int
 
@@ -76,6 +77,13 @@ class OptimizerFactory:
         # Ensure model_params has a reasonable max_tokens to prevent truncation
         # of structured outputs (JSON responses for improved prompts, analysis, etc.)
         model_params = ensure_default_model_params(model_params)
+
+        # Studio runs treat "perfect" as full marks (OPIK-7511) — the SDK's
+        # 0.95 default ends strong-baseline runs with zero candidates. Every
+        # optimizer accepts perfect_score in its constructor; an explicit value
+        # in the run's optimizer_params still wins.
+        optimizer_params = dict(optimizer_params)
+        optimizer_params.setdefault("perfect_score", OPTIMIZER_PERFECT_SCORE)
 
         logger.debug(
             f"Initializing {optimizer_type} optimizer with params: {optimizer_params}"

@@ -22,14 +22,16 @@ from opik_backend.studio.types import KNOWN_FINISH_REASONS
 pytestmark = pytest.mark.e2e
 
 # The SDK half of OPIK-7511 (finish_reason on every stop path, including the
-# baseline-perfect early stop) ships with the same changeset that raised
-# DEFAULT_PERFECT_SCORE to 1.0 — so that constant is an honest feature probe.
-# Until the python-backend's pinned opik_optimizer release contains it, the
-# subprocess can complete without a finish_reason and this test would fail on
-# the pin, not on the backend code under test. It activates automatically on
-# the next optimizer pin bump.
-_sdk_constants = pytest.importorskip("opik_optimizer.constants")
-if _sdk_constants.DEFAULT_PERFECT_SCORE < 1.0:
+# baseline-perfect early stop) ships in the same changeset that introduced
+# MIN_EXPECTED_REFLECTION_ITERATIONS in the GEPA module — so that attribute is
+# an honest feature probe. Until the python-backend's pinned opik_optimizer
+# release contains it, the subprocess can complete without a finish_reason and
+# this test would fail on the pin, not on the backend code under test. It
+# activates automatically on the next optimizer pin bump.
+_gepa_module = pytest.importorskip(
+    "opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer"
+)
+if not hasattr(_gepa_module, "MIN_EXPECTED_REFLECTION_ITERATIONS"):
     pytestmark = [
         pytest.mark.e2e,
         pytest.mark.skip(

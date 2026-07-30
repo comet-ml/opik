@@ -103,6 +103,57 @@ class TestOptimizerFactoryBadParamsRaisesTypedError:
                 )
 
 
+class TestOptimizerFactoryPerfectScoreInjection:
+    """OPIK-7511: Studio runs pin perfect_score to full marks via the optimizer
+    constructor — the SDK's 0.95 default ends strong-baseline runs with zero
+    candidates. Injected as a default so an explicit run value still wins."""
+
+    def test_perfect_score__not_in_params__injected_as_one(self):
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={},
+            )
+        assert recorder.captured_kwargs["perfect_score"] == 1.0
+
+    def test_perfect_score__explicit_in_params__wins_over_injection(self):
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={"perfect_score": 0.8},
+            )
+        assert recorder.captured_kwargs["perfect_score"] == 0.8
+
+    def test_perfect_score__injection__does_not_mutate_caller_params(self):
+        recorder = _make_recording_constructor()
+        caller_params: dict = {}
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params=caller_params,
+            )
+        assert caller_params == {}
+
+    def test_perfect_score__real_gepa_optimizer__constructor_accepts_it(self):
+        """The injection relies on the pinned SDK accepting perfect_score in
+        the constructor — guard that against a pin change."""
+        optimizer = OptimizerFactory.build(
+            optimizer_type="gepa",
+            model="openai/gpt-4o",
+            model_params={},
+            optimizer_params={},
+        )
+        assert optimizer.perfect_score == 1.0
+
+
 class TestOptimizerFactoryListAvailable:
     def test_list_available_returns_known_types(self):
         available = OptimizerFactory.list_available()
@@ -122,3 +173,13 @@ def _make_bad_constructor(exc: Exception):
         def __init__(self, *args, **kwargs):
             raise exc
     return _BadOptimizer
+
+
+def _make_recording_constructor():
+    """Return a fake optimizer class that records its constructor kwargs."""
+    class _RecordingOptimizer:
+        captured_kwargs: dict = {}
+
+        def __init__(self, *args, **kwargs):
+            type(self).captured_kwargs = kwargs
+    return _RecordingOptimizer
