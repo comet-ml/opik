@@ -170,6 +170,37 @@ class TestEnforcePlaceholderPreservation:
         assert reverted == ["p_user_0"]
 
 
+class TestDatasetPlaceholderKeys:
+    """Opik dataset rows carry arbitrary JSON, so columns can differ per row."""
+
+    def test_unions_keys_across_rows_with_different_columns(self) -> None:
+        """A column only some rows carry is still substitutable on those rows,
+        so it belongs in the key set. This is why callers must derive the keys
+        from the *unsampled* items: a run that samples the first rows would
+        otherwise leave a later row's "{my key}" unprotected."""
+        keys = candidate_ops.dataset_placeholder_keys(
+            [
+                {"id": "1", "question": "q"},
+                {"id": "2", "question": "q", "my key": "v"},
+            ]
+        )
+
+        assert keys == {"id", "question", "my key"}
+
+    def test_guard_uses_a_key_seen_on_a_single_row(self) -> None:
+        keys = candidate_ops.dataset_placeholder_keys(
+            [{"id": "1"}, {"id": "2", "my key": "v"}]
+        )
+        _, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=[{"role": "user", "content": "Answer {my key}"}],
+            new_messages=[{"role": "user", "content": "Answer it"}],
+            prompt_name="p",
+            known_keys=keys,
+        )
+
+        assert reverted == ["p_user_0"]
+
+
 class TestRebuildAppliesGuard:
     """The guard must hold on every rebuild path, not just one."""
 

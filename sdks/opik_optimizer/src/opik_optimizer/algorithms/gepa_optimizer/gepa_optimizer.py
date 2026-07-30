@@ -456,8 +456,13 @@ class GepaOptimizer(BaseOptimizer):
                 return items[: plan.nb_samples]
             return items
 
-        train_items = _apply_plan(dataset.get_items(), train_plan)
-        val_items = _apply_plan(val_source.get_items(), val_plan)
+        # Keep the unsampled lists: the placeholder guard derives its known
+        # keys from every column the datasets can supply, not just the rows
+        # this run happens to sample (see known_placeholder_keys below).
+        all_train_items = dataset.get_items()
+        all_val_items = val_source.get_items()
+        train_items = _apply_plan(all_train_items, train_plan)
+        val_items = _apply_plan(all_val_items, val_plan)
 
         effective_n_samples = len(train_items)
         max_metric_calls = max_trials * effective_n_samples
@@ -569,8 +574,11 @@ class GepaOptimizer(BaseOptimizer):
         # Dataset column names extend the placeholder guard to keys the
         # identifier regex cannot see (e.g. "{my key}") on the rescoring and
         # final-assembly rebuild paths, matching the adapter's evaluate() path.
+        # Derived from the *unsampled* items on purpose: rescoring runs against
+        # the full evaluation dataset, and a column carried by rows this run did
+        # not sample would otherwise leave its "{key}" unprotected.
         known_placeholder_keys = candidate_ops.dataset_placeholder_keys(
-            (*train_items, *val_items)
+            (*all_train_items, *all_val_items)
         )
 
         rescored = scoring_ops.rescore_candidates(

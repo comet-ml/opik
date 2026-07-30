@@ -240,6 +240,18 @@ def rebuild_prompts_from_candidate(
 ) -> tuple[dict[str, Any], list[str]]:
     """Rebuild prompts with optimized messages from a GEPA candidate.
 
+    Every rebuild runs through ``enforce_placeholder_preservation``, so the
+    guard's rules apply here as they do on the adapter's evaluate() path:
+
+    * A token counts as a template variable if it is identifier-shaped
+      (``{question}``) or names a dataset column passed in
+      ``known_placeholder_keys``. Arbitrary brace text (JSON, code samples)
+      is deliberately not protected — see ``PLACEHOLDER_PATTERN``.
+    * Comparison is prompt-wide, so a variable a candidate merely *moved*
+      between messages is kept: substitution still reaches it.
+    * Only the messages that both changed and carried a now-missing token are
+      reverted to seed content. Other edits in the same candidate survive.
+
     Returns the rebuilt prompts and the component keys whose candidate edit
     the placeholder guard rejected (empty when the candidate was clean).
     """
