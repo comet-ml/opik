@@ -127,7 +127,10 @@ class TestOptimizerWiring:
         ):
             GepaOptimizer(
                 model="openai/gpt-4o-mini",
-                prompt_overrides={"reflection_prompt_template": 123},
+                # The wrong type is the point of this test: PromptOverrides is
+                # str-valued, so a caller who ignores that must still get the
+                # documented ValueError rather than a bare TypeError.
+                prompt_overrides={"reflection_prompt_template": 123},  # type: ignore[dict-item]
             )
 
     def test_template_swapped_in_after_construction_is_still_caught(self) -> None:
