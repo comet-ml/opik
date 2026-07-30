@@ -455,6 +455,47 @@ class TestCostUsageCapture:
         assert optimizer.llm_token_usage_total["total_tokens"] == 15
 
 
+class TestDuplicateOpikLoggerStripped:
+    """OPIK-7521: track_completion already logs the call; the litellm OpikLogger
+    callback would log a second identical span, doubling the reported cost."""
+
+    def _make_logger(self) -> Any:
+        from litellm.integrations.opik.opik import OpikLogger
+
+        return OpikLogger()
+
+    def test_call_model_strips_opik_logger_callbacks(self) -> None:
+        opik_logger = self._make_logger()
+        other_callback = object()
+        captured_kwargs: dict[str, Any] = {}
+
+        def fake_monitoring(params: dict[str, Any]) -> dict[str, Any]:
+            return {
+                **params,
+                "success_callback": [opik_logger, other_callback],
+                "failure_callback": [opik_logger],
+            }
+
+        def capture(**kwargs: Any) -> Any:
+            captured_kwargs.update(kwargs)
+            return make_mock_response("ok")
+
+        with patch(
+            "opik_optimizer.core.llm_calls.opik_litellm_monitor."
+            "try_add_opik_monitoring_to_params",
+            side_effect=fake_monitoring,
+        ):
+            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+                mock_track.return_value = lambda completion_fn: capture
+                _llm_calls.call_model(
+                    messages=[user_message("test")], model="gpt-4o"
+                )
+
+        assert opik_logger not in captured_kwargs.get("success_callback", [])
+        assert other_callback in captured_kwargs.get("success_callback", [])
+        assert opik_logger not in captured_kwargs.get("failure_callback", [])
+
+
 class TestCounterIncrement:
     def test_increment_llm_counter_walks_stack(self) -> None:
         class MockOptimizer(BaseOptimizer):

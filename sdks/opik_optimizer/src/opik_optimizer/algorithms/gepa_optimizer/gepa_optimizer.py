@@ -2,6 +2,7 @@ import logging
 from collections.abc import Callable
 from typing import Any, cast
 
+import opik
 
 from ...base_optimizer import BaseOptimizer
 from ... import constants
@@ -305,12 +306,19 @@ class GepaOptimizer(BaseOptimizer):
         Routing through call_model creates a span, increments the LLM call
         counter, accumulates cost/usage, and honors model_parameters.
 
+        The call runs inside its own tracked trace, mirroring the evaluation
+        path: the trace carries the optimizer/optimization tags (so the run's
+        cost aggregation can attribute the spend), and the LiteLLM span nests
+        inside it instead of forking a second, untagged trace.
+
         gepa==0.0.17 passes a plain prompt string; gepa>=0.1.x may pass an
         OpenAI-style messages list (multimodal), so both must be accepted.
         """
         optimization_id = context.optimization_id or self.current_optimization_id
 
+        @opik.track(name="gepa_reflection", project_name=self.project_name)
         def _reflection_lm(prompt: str | list[dict[str, Any]]) -> str:
+            self._tag_trace(phase="Reflection")
             messages: list[dict[str, Any]] = (
                 [{"role": "user", "content": prompt}]
                 if isinstance(prompt, str)
@@ -327,7 +335,7 @@ class GepaOptimizer(BaseOptimizer):
             )
             return result if isinstance(result, str) else str(result)
 
-        return _reflection_lm
+        return cast(Callable[[str | list[dict[str, Any]]], str], _reflection_lm)
 
     def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
         """

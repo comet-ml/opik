@@ -60,6 +60,35 @@ def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
     return updated_params
 
 
+def _strip_duplicate_opik_logger(params: dict[str, Any]) -> dict[str, Any]:
+    """
+    Drop Opik's LiteLLM callback from the params handed to a tracked completion.
+
+    `call_model` wraps the call with `track_completion`, which already logs a
+    span. `opik_monitor.try_add_opik_monitoring_to_params` separately injects an
+    `OpikLogger` into success/failure callbacks — its "already decorated" guard
+    inspects the module-level `litellm.completion`, so it cannot see our
+    decorated copy. Leaving both in place logs the same call twice, which
+    double-counts its cost in any span-derived total (OPIK-7521).
+    """
+    try:
+        from litellm.integrations.opik.opik import OpikLogger
+    except Exception:  # pragma: no cover - litellm always ships this
+        return params
+
+    updated: dict[str, Any] | None = None
+    for key in ("success_callback", "failure_callback"):
+        callbacks = params.get(key)
+        if not isinstance(callbacks, list):
+            continue
+        remaining = [cb for cb in callbacks if not isinstance(cb, OpikLogger)]
+        if len(remaining) == len(callbacks):
+            continue
+        updated = updated if updated is not None else {**params}
+        updated[key] = remaining
+    return updated if updated is not None else params
+
+
 def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
     """
     Build standardized metadata for LLM calls across optimizers.
@@ -690,7 +719,7 @@ def call_model(
             messages=attempt_messages,
             seed=seed,
             num_retries=6,
-            **_strip_project_name(attempt_params),
+            **_strip_duplicate_opik_logger(_strip_project_name(attempt_params)),
         )
         _record_cost_usage_if_in_optimizer(response)
 
@@ -874,7 +903,7 @@ async def call_model_async(
             messages=attempt_messages,
             seed=seed,
             num_retries=6,
-            **_strip_project_name(attempt_params),
+            **_strip_duplicate_opik_logger(_strip_project_name(attempt_params)),
         )
         _record_cost_usage_if_in_optimizer(response)
 
