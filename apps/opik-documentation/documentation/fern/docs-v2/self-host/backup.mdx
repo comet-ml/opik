@@ -296,91 +296,90 @@ The restore **replaces data**. `clickhouse-backup` drops and recreates every tab
 The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSeconds` — 24 hours by default. Raise it for large restores, or Kubernetes will kill the job mid-restore.
 </Warning>
 
-#### 1. Find the backup name
+<Steps>
+  <Step title="Find the backup name">
+    `backupName` is required, and must match a name the backup server knows:
 
-`backupName` is required, and must match a name the backup server knows:
+    ```bash
+    kubectl port-forward -n <namespace> svc/chi-opik-clickhouse-cluster-0-0 7171:7171
 
-```bash
-kubectl port-forward -n <namespace> svc/chi-opik-clickhouse-cluster-0-0 7171:7171
+    # Backups in S3
+    curl -s "http://localhost:7171/backup/list/remote"
 
-# Backups in S3
-curl -s "http://localhost:7171/backup/list/remote"
+    # Backups already on local disk
+    curl -s "http://localhost:7171/backup/list/local"
+    ```
 
-# Backups already on local disk
-curl -s "http://localhost:7171/backup/list/local"
-```
+    Use the `name` field, not the S3 prefix. With `S3_PATH: shard-{shard}`, a backup stored at
+    `s3://your-bucket/shard-0/2026-07-28/` has the name `2026-07-28`.
 
-Use the `name` field, not the S3 prefix. With `S3_PATH: shard-{shard}`, a backup stored at
-`s3://your-bucket/shard-0/2026-07-28/` has the name `2026-07-28`.
+    The service, pod and port used throughout this section are the chart defaults, matching the
+    `RESTORE_SERVICE` the Job computes. If you set `nameOverride`, a different shard/replica layout, or
+    `clickhouse.backupServer.service.name` / `.port`, substitute your own — list them with
+    `kubectl get pods,svc -n <namespace> -l clickhouse.altinity.com/chi` and use
+    `clickhouse.backupServer.port` in place of `7171`.
+  </Step>
+  <Step title="Render the job manifest">
+    Put the restore settings in their own values file:
 
-The service, pod and port used throughout this section are the chart defaults, matching the
-`RESTORE_SERVICE` the Job computes. If you set `nameOverride`, a different shard/replica layout, or
-`clickhouse.backupServer.service.name` / `.port`, substitute your own — list them with
-`kubectl get pods,svc -n <namespace> -l clickhouse.altinity.com/chi` and use
-`clickhouse.backupServer.port` in place of `7171`.
+    ```yaml
+    # restore-values.yaml
+    clickhouse:
+      backupServer:
+        enabled: true
+        # S3 settings the backup server needs for restore_remote (downloads from S3)
+        env:
+          REMOTE_STORAGE: s3
+          S3_BUCKET: YOURBUCKET
+          S3_PATH: YOURPATH
+          RESTORE_SCHEMA_ON_CLUSTER: cluster  # so the schema is restored on every replica
+      backup:
+        restore:
+          createJob: true
+          backupName: "2026-07-28"          # from step 1
+          activeDeadlineSeconds: 604800     # 7 days; default is 24h
+          image: "amazon/aws-cli:2.27.49"   # any image with bash and curl
+    ```
 
-#### 2. Render the job manifest
+    Render only the restore job. Pass your existing values file first, so the job inherits the same
+    service account, node selector and tolerations as your ClickHouse pods:
 
-Put the restore settings in their own values file:
+    ```bash
+    helm template opik opik/opik \
+      -f your-values.yaml -f restore-values.yaml \
+      --show-only templates/clickhouse_restore_job.yaml > clickhouse-restore-job.yaml
+    ```
 
-```yaml
-# restore-values.yaml
-clickhouse:
-  backupServer:
-    enabled: true
-    # S3 settings the backup server needs for restore_remote (downloads from S3)
-    env:
-      REMOTE_STORAGE: s3
-      S3_BUCKET: YOURBUCKET
-      S3_PATH: YOURPATH
-      RESTORE_SCHEMA_ON_CLUSTER: cluster  # so the schema is restored on every replica
-  backup:
-    restore:
-      createJob: true
-      backupName: "2026-07-28"          # from step 1
-      activeDeadlineSeconds: 604800     # 7 days; default is 24h
-      image: "amazon/aws-cli:2.27.49"   # any image with bash and curl
-```
+    `helm template` does not write a namespace into the manifest, so either add `namespace:` to the
+    job's metadata or pass `-n` when you apply it.
+  </Step>
+  <Step title="Create the job">
+    ```bash
+    kubectl apply -f clickhouse-restore-job.yaml -n <namespace>
+    ```
 
-Render only the restore job. Pass your existing values file first, so the job inherits the same
-service account, node selector and tolerations as your ClickHouse pods:
+    The job name is fixed (`opik-clickhouse-restore`), so delete the previous one before restoring
+    again:
 
-```bash
-helm template opik opik/opik \
-  -f your-values.yaml -f restore-values.yaml \
-  --show-only templates/clickhouse_restore_job.yaml > clickhouse-restore-job.yaml
-```
+    ```bash
+    kubectl delete job opik-clickhouse-restore -n <namespace>
+    ```
 
-`helm template` does not write a namespace into the manifest, so either add `namespace:` to the
-job's metadata or pass `-n` when you apply it.
+    Re-applying is safe: if this backup was already restored the Job exits without restoring it again,
+    and if a restore is still running — for example after its pod was rescheduled — it follows that one
+    instead of starting a second.
+  </Step>
+  <Step title="Watch the restore">
+    ```bash
+    kubectl get job opik-clickhouse-restore -n <namespace>
 
-#### 3. Create the job
+    kubectl logs -f job/opik-clickhouse-restore -n <namespace>
+    ```
 
-```bash
-kubectl apply -f clickhouse-restore-job.yaml -n <namespace>
-```
-
-The job name is fixed (`opik-clickhouse-restore`), so delete the previous one before restoring
-again:
-
-```bash
-kubectl delete job opik-clickhouse-restore -n <namespace>
-```
-
-Re-applying is safe: if this backup was already restored the Job exits without restoring it again,
-and if a restore is still running — for example after its pod was rescheduled — it follows that one
-instead of starting a second.
-
-#### 4. Watch the restore
-
-```bash
-kubectl get job opik-clickhouse-restore -n <namespace>
-
-kubectl logs -f job/opik-clickhouse-restore -n <namespace>
-```
-
-The job polls every 15 minutes, so the log stays quiet between checks — a large `restore_remote`
-runs for hours. It prints the final status and fails the job if the restore failed.
+    The job polls every 15 minutes, so the log stays quiet between checks — a large `restore_remote`
+    runs for hours. It prints the final status and fails the job if the restore failed.
+  </Step>
+</Steps>
 
 #### Checking progress during a long restore
 
