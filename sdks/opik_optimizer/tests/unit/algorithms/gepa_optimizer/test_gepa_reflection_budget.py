@@ -116,7 +116,7 @@ class TestReflectionLmWiring:
         sample_metric,
     ) -> None:
         calls = _patch_call_model(monkeypatch)
-        _, captured, optimizer = _run_optimize(
+        _, captured, _ = _run_optimize(
             monkeypatch,
             mock_optimization_context,
             simple_chat_prompt,
@@ -130,7 +130,6 @@ class TestReflectionLmWiring:
         assert reflection_lm("improve this prompt") == "new instruction"
         assert reflection_lm("and again") == "new instruction"
 
-        assert optimizer._reflection_call_count == 2
         assert len(calls) == 2
         first = calls[0]
         assert first["messages"] == [{"role": "user", "content": "improve this prompt"}]
@@ -164,6 +163,40 @@ class TestReflectionLmWiring:
         captured["reflection_lm"](messages)
         assert calls[0]["messages"] == messages
 
+    def test_reflection_callable_refuses_calls_beyond_the_budget(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """The stopper only runs between engine iterations, so the callable
+        itself must refuse to spend past max_reflection_calls mid-iteration."""
+        calls = _patch_call_model(monkeypatch)
+
+        def overspend(kwargs: dict[str, Any]) -> None:
+            assert kwargs["reflection_lm"]("first proposal") == "new instruction"
+            assert kwargs["reflection_lm"]("beyond the cap") == ""
+
+        result, _, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            fake_optimize_hook=overspend,
+            max_reflection_calls=1,
+        )
+
+        # Only the in-budget call reached the LLM or was counted.
+        assert len(calls) == 1
+        assert result.details["reflection_call_count"] == 1
+        assert result.details["max_reflection_calls"] == 1
+        assert result.details["finish_reason"] == "reflection_budget"
+
 
 class TestReflectionBudgetStopper:
     def test_stops_only_once_budget_is_spent(self) -> None:
@@ -190,7 +223,7 @@ class TestMaxReflectionCallsKnob:
         sample_dataset_items,
         sample_metric,
     ) -> None:
-        _, captured, _ = _run_optimize(
+        result, captured, _ = _run_optimize(
             monkeypatch,
             mock_optimization_context,
             simple_chat_prompt,
@@ -207,6 +240,7 @@ class TestMaxReflectionCallsKnob:
         ]
         assert len(stoppers) == 1
         assert stoppers[0].max_reflection_calls == 5
+        assert result.details["max_reflection_calls"] == 5
 
     def test_zero_disables_the_cap_but_count_is_still_reported(
         self,
@@ -345,13 +379,18 @@ class TestReflectionBudgetFinishReason:
     ) -> None:
         """A run that spends its whole reflection budget reports it honestly:
         finish_reason, stopped_early, and the call count in details."""
-        _patch_call_model(monkeypatch)
+        calls = _patch_call_model(monkeypatch)
 
         def spend_reflection_budget(kwargs: dict[str, Any]) -> None:
-            kwargs["reflection_lm"]("first proposal")
-            kwargs["reflection_lm"]("second proposal")
+            # Simulate gepa's engine loop: stop callbacks run at the top of
+            # each iteration, then the proposer makes one reflection call.
+            state = SimpleNamespace(program_full_scores_val_set=[0.5])
+            for proposal in ("first proposal", "second proposal", "third proposal"):
+                if any(callback(state) for callback in kwargs["stop_callbacks"]):
+                    break
+                kwargs["reflection_lm"](proposal)
 
-        result, _, optimizer = _run_optimize(
+        result, _, _ = _run_optimize(
             monkeypatch,
             mock_optimization_context,
             simple_chat_prompt,
@@ -361,8 +400,9 @@ class TestReflectionBudgetFinishReason:
             fake_optimize_hook=spend_reflection_budget,
         )
 
-        # max_trials=2 -> default budget of 2 reflection calls, both spent.
-        assert optimizer._reflection_call_count == 2
+        # max_trials=2 -> default budget of 2 reflection calls: the stopper
+        # halts the loop before the third proposal is attempted.
+        assert len(calls) == 2
         assert result.details["reflection_call_count"] == 2
         assert result.details["max_reflection_calls"] == 2
         assert result.details["finish_reason"] == "reflection_budget"

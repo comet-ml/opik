@@ -120,10 +120,12 @@ def _coerce_max_reflection_calls(value: Any, *, max_trials: int) -> int:
 class _ReflectionBudgetStopper:
     """Stop callback that halts GEPA once the reflection-LM call budget is spent.
 
-    Reflection calls are made by the proposer *inside* an iteration, while stop
-    callbacks run at the top of the engine loop — so the cap is enforced with at
-    most one iteration of overshoot (one reflection call per component under the
-    default round-robin selector).
+    Enforcement is two-layer: this stopper ends the run at the top of the next
+    engine iteration, and the callable from _make_reflection_lm refuses to spend
+    past the cap in between. Under GEPA's default round-robin component selector
+    each iteration makes at most one reflection call, so the stopper alone makes
+    the bound exact; the callable guard covers configurations that reflect more
+    than once per iteration.
     """
 
     def __init__(self, optimizer: "GepaOptimizer", max_reflection_calls: int) -> None:
@@ -504,10 +506,28 @@ class GepaOptimizer(BaseOptimizer):
         honor the optimizer's model_parameters, and are counted — both into the
         run-wide llm_call_counter and into _reflection_call_count, which
         _ReflectionBudgetStopper reads to enforce max_reflection_calls.
+
+        The callable also hard-refuses to spend past the cap: the stopper only
+        runs at the top of the engine loop, so it cannot interrupt a proposal
+        that makes several reflection calls within one iteration. Refusal
+        returns an empty proposal rather than raising — with gepa's
+        raise_on_exception=True (our default) an exception here would abort the
+        whole run and lose its results.
         """
         metadata = _llm_calls.build_llm_call_metadata(self, "reflection")
 
         def _reflection_lm(prompt: str | list[dict[str, str]]) -> str:
+            if (
+                self._max_reflection_calls > 0
+                and self._reflection_call_count >= self._max_reflection_calls
+            ):
+                logger.warning(
+                    "GEPA requested a reflection-LM call beyond max_reflection_calls=%s; "
+                    "skipping it. The run will stop with finish_reason='reflection_budget' "
+                    "at the next engine iteration.",
+                    self._max_reflection_calls,
+                )
+                return ""
             messages = (
                 [{"role": "user", "content": prompt}]
                 if isinstance(prompt, str)
