@@ -78,6 +78,29 @@ def collect_placeholders(
     return tokens
 
 
+def protected_tokens(content: Any, known_keys: set[str] | None = None) -> set[str]:
+    """Return the tokens in one message that substitution would actually fill.
+
+    When the caller knows the dataset's columns, those are authoritative: only
+    a token naming a real column can receive a value, so `\\frac{num}{den}` or
+    a literal `{TODO}` in a prompt is ordinary text and stays freely editable.
+    Without that knowledge we fall back to the identifier shape and protect
+    conservatively.
+    """
+    tokens = extract_placeholders(content, known_keys)
+    if known_keys:
+        return tokens & known_keys
+    return tokens
+
+
+def _protected_per_message(
+    messages: list[dict[str, Any]], known_keys: set[str] | None
+) -> list[set[str]]:
+    return [
+        protected_tokens(message.get("content", ""), known_keys) for message in messages
+    ]
+
+
 def enforce_placeholder_preservation(
     *,
     original_messages: list[dict[str, Any]],
@@ -85,46 +108,74 @@ def enforce_placeholder_preservation(
     prompt_name: str = "",
     known_keys: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """Reject candidate edits that drop a template variable from the prompt.
+    """Reject candidate edits that break the prompt's dataset-input contract.
 
-    Comparison is at *prompt* level, not message level: substitution runs over
-    every message, so a variable the candidate merely moved between messages
-    still receives its value and is not a loss. Only a token missing from the
-    whole rebuilt prompt counts.
+    Two ways a candidate breaks it, both silent without this guard because
+    substitution is a plain str.replace:
 
-    Rejection is per-message and minimal — each changed message that carried a
-    now-missing token is reverted to its seed content, which restores that token
-    by construction. Edits to other messages in the same candidate are kept.
-    This mirrors how the existing role-constraint path already substitutes seed
-    content for components it will not accept.
+    * **Loss** — the edit drops a variable, so the model answers without the
+      user's input. A variable the candidate genuinely *moved* to another
+      message is not a loss: substitution runs over every message. "Moved"
+      means some other message now carries the token where the seed did not —
+      a stale duplicate elsewhere does not excuse deleting the real input slot.
+    * **Leakage** — the edit introduces a dataset column the seed never used
+      (typically the label, `{answer}`). Substitution would fill it in, the
+      candidate would score against data it will not have at inference time,
+      and it would win on a lie.
+
+    Rejection is per-message: only offending messages revert to seed content,
+    other edits in the same candidate survive. Reverting is then re-checked to
+    a fixed point, because restoring one message's seed text also discards
+    whatever the candidate had put there — including a variable it had moved
+    in. Worst case every message reverts and the prompt equals the seed, so
+    the loop always terminates with the contract intact.
 
     ``known_keys`` — the dataset's column names, when the caller has them —
-    extends protection to keys the identifier regex cannot see (e.g. "{my key}").
+    makes protection exact in both directions; see ``protected_tokens``.
 
-    Returns the (possibly reverted) messages and the reverted component keys.
+    Returns the (possibly reverted) messages and the rejected component keys.
     """
-    seed_tokens = collect_placeholders(original_messages, known_keys)
-    if not seed_tokens:
-        return new_messages, []
-
-    missing = seed_tokens - collect_placeholders(new_messages, known_keys)
-    if not missing:
-        return new_messages, []
+    seed_per_message = _protected_per_message(original_messages, known_keys)
+    seed_tokens: set[str] = (
+        set().union(*seed_per_message) if seed_per_message else set()
+    )
 
     guarded = list(new_messages)
     reverted: list[str] = []
-    for idx, original in enumerate(original_messages):
-        if idx >= len(guarded):
-            break
-        original_content = original.get("content", "")
-        if guarded[idx].get("content") == original_content:
-            continue  # untouched by the candidate — nothing to reject
-        if not (extract_placeholders(original_content, known_keys) & missing):
-            continue  # this edit is not the one that dropped a token
-        # Revert content only, keeping any other fields the message carries.
-        guarded[idx] = {**original, "content": original_content}
-        reverted.append(f"{prompt_name}_{original.get('role')}_{idx}")
-    return guarded, reverted
+    limit = min(len(original_messages), len(guarded))
+
+    while True:
+        new_per_message = _protected_per_message(guarded, known_keys)
+        offending: list[int] = []
+        for idx in range(limit):
+            original_content = original_messages[idx].get("content", "")
+            if guarded[idx].get("content") == original_content:
+                continue  # untouched by the candidate, or already reverted
+
+            # Leakage: a dataset column the seed never referenced.
+            if known_keys and (new_per_message[idx] & known_keys) - seed_tokens:
+                offending.append(idx)
+                continue
+
+            # Loss: a protected token this message dropped without moving it.
+            for token in seed_per_message[idx] - new_per_message[idx]:
+                moved_elsewhere = any(
+                    token in new_per_message[other]
+                    and token not in seed_per_message[other]
+                    for other in range(limit)
+                )
+                if not moved_elsewhere:
+                    offending.append(idx)
+                    break
+
+        if not offending:
+            return guarded, reverted
+
+        for idx in offending:
+            original = original_messages[idx]
+            # Revert content only, keeping any other fields the message carries.
+            guarded[idx] = {**original, "content": original.get("content", "")}
+            reverted.append(f"{prompt_name}_{original.get('role')}_{idx}")
 
 
 def build_seed_candidate(

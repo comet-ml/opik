@@ -5,11 +5,15 @@ template variables in the user message. When a system message exists we scope
 optimization to it, so the reflection LM is never handed the message holding the
 user's variables. When there is no system message we must still widen to the
 roles that are present — optimizing an empty set leaves GEPA zero editable
-components and it divides by zero while round-robin selecting one.
+components and it divides by zero while round-robin selecting one. A prompt
+with no acceptable role at all cannot be optimized and is rejected outright.
 """
 
 from unittest.mock import MagicMock
 
+import pytest
+
+from opik_backend.studio.exceptions import InvalidConfigError
 from opik_backend.studio.helpers import run_optimization
 
 
@@ -50,5 +54,17 @@ class TestOptimizePromptsRoleScoping:
     def test_user_and_assistant_widen_to_both(self):
         assert _optimize_prompts_for(["user", "assistant"]) == ["assistant", "user"]
 
-    def test_no_recognised_roles_falls_back_to_system(self):
-        assert _optimize_prompts_for([]) == "system"
+    def test_no_recognised_roles_is_rejected(self):
+        """Nothing optimizable must fail loudly, not silently.
+
+        The old fallback returned "system" for a prompt with no acceptable
+        role, which hands GEPA zero editable components — the exact
+        divide-by-zero the widening branch exists to avoid.
+        """
+        with pytest.raises(InvalidConfigError, match="no optimizable message"):
+            _optimize_prompts_for([])
+
+    def test_only_unsupported_roles_is_rejected(self):
+        """`developer` and `tool` are real roles the optimizer does not take."""
+        with pytest.raises(InvalidConfigError, match="no optimizable message"):
+            _optimize_prompts_for(["developer", "tool"])

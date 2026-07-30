@@ -12,6 +12,7 @@ from .types import OptimizationJobContext
 from .exceptions import (
     DatasetNotFoundError,
     EmptyDatasetError,
+    InvalidConfigError,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,14 +129,27 @@ def run_optimization(
         # LM's reach entirely instead of relying on it to preserve them
         # (OPIK-7510). Studio seeds this shape by default.
         optimize_prompts = ["system"]
-    else:
+    elif present_roles:
         # No system message (e.g. a lone user message) — optimizing only
         # `system` would leave the optimizer zero editable components, and GEPA
         # then divides by zero while round-robin selecting one. Widen to
         # whichever roles the prompt actually contains so a run still succeeds
-        # for any prompt shape; the OPIK-7510 candidate guard is what protects
-        # the variables on this path.
-        optimize_prompts = present_roles or "system"
+        # for any prompt shape. This does hand the reflection LM the messages
+        # holding the template variables; the SDK-side candidate guard
+        # (OPIK-7510) is what covers that, and only from the opik-optimizer
+        # release that carries it — see the pin note in requirements.txt.
+        optimize_prompts = present_roles
+    else:
+        # Nothing optimizable at all: no messages, or only roles the optimizer
+        # does not accept (e.g. "developer", "tool"). Falling back to "system"
+        # here would hand GEPA zero editable components and hit the very
+        # divide-by-zero the branch above exists to avoid, so fail with a
+        # message that names the real problem instead.
+        raise InvalidConfigError(
+            "prompt.messages",
+            "no optimizable message found - the prompt needs at least one "
+            "system, user, or assistant message",
+        )
 
     result = optimizer.optimize_prompt(
         optimization_id=optimization_id,

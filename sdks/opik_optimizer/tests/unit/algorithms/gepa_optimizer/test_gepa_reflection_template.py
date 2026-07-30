@@ -12,6 +12,9 @@ from gepa.strategies.instruction_proposal import InstructionProposalSignature
 
 from opik_optimizer.algorithms.gepa_optimizer import prompts as gepa_prompts
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import GepaOptimizer
+from tests.unit.algorithms.gepa_optimizer.gepa_run_harness import (
+    run_optimize_capturing_gepa_kwargs,
+)
 
 TEMPLATE = gepa_prompts.REFLECTION_PROMPT_TEMPLATE
 
@@ -139,3 +142,59 @@ class TestOptimizerWiring:
         optimizer.prompts.set("reflection_prompt_template", "no markers here")
         with pytest.raises(ValueError, match="<side_info>"):
             optimizer._resolve_reflection_prompt_template()
+
+
+class TestTemplateReachesGepa:
+    """Resolving the template is worthless if it never gets handed over.
+
+    Without these, deleting the reflection_prompt_template kwarg from the
+    gepa.optimize() call leaves the whole suite green — fix (b) would be
+    silently inert.
+    """
+
+    def test_default_template_is_passed_to_gepa_optimize(
+        self,
+        monkeypatch,
+        mock_optimization_context,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        captured = run_optimize_capturing_gepa_kwargs(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+        )
+
+        assert captured["reflection_prompt_template"] == TEMPLATE
+
+    def test_override_is_passed_to_gepa_optimize(
+        self,
+        monkeypatch,
+        mock_optimization_context,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        override = "Rewrite <curr_param> using <side_info>. Keep variables."
+        monkeypatch.setattr(
+            GepaOptimizer,
+            "_resolve_reflection_prompt_template",
+            lambda self: override,
+        )
+
+        captured = run_optimize_capturing_gepa_kwargs(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+        )
+
+        assert captured["reflection_prompt_template"] == override

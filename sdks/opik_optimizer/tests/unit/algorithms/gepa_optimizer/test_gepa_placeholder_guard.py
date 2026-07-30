@@ -16,6 +16,9 @@ from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
 from opik_optimizer.algorithms.gepa_optimizer.ops import candidate_ops
 from opik_optimizer.algorithms.gepa_optimizer.types import OpikDataInst
 from tests.unit.fixtures.builders import make_mock_dataset, make_simple_metric
+from tests.unit.algorithms.gepa_optimizer.gepa_run_harness import (
+    run_optimize_capturing_gepa_kwargs,
+)
 
 
 def _prompt(messages: list[dict[str, str]]) -> chat_prompt.ChatPrompt:
@@ -119,6 +122,98 @@ class TestEnforcePlaceholderPreservation:
         guarded, reverted = candidate_ops.enforce_placeholder_preservation(
             original_messages=original, new_messages=new, prompt_name="p"
         )
+        assert guarded == new
+        assert reverted == []
+
+    def test_revert_never_leaves_a_variable_dropped(self) -> None:
+        """A revert also discards what the candidate put in that message.
+
+        Here the candidate moved {question} into the system message and
+        dropped {context}. Reverting system to restore {context} takes
+        {question} with it, so the guard must re-check and revert the user
+        message too — otherwise it drops the very variable it exists to keep.
+        """
+        original = [
+            {"role": "system", "content": "Use {context}"},
+            {"role": "user", "content": "Answer {question}"},
+        ]
+        new = [
+            {"role": "system", "content": "Answer {question} now"},
+            {"role": "user", "content": "Answer it"},
+        ]
+        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=original, new_messages=new, prompt_name="p"
+        )
+
+        assert candidate_ops.collect_placeholders(guarded) == {"context", "question"}
+        assert reverted == ["p_system_0", "p_user_1"]
+
+    def test_stale_duplicate_does_not_excuse_deleting_the_input_slot(self) -> None:
+        """{question} surviving in the system preamble is not a move: the user
+        turn that carried the actual input still lost it."""
+        original = [
+            {"role": "system", "content": "You will be asked: {question}. Rules..."},
+            {"role": "user", "content": "{question}"},
+        ]
+        new = [
+            {"role": "system", "content": "You will be asked: {question}. Rules..."},
+            {"role": "user", "content": "Please answer."},
+        ]
+        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=original, new_messages=new, prompt_name="p"
+        )
+
+        assert guarded[1]["content"] == "{question}"
+        assert reverted == ["p_user_1"]
+
+    def test_identifier_braces_outside_the_dataset_are_editable(self) -> None:
+        """With the columns known, `\\frac{num}{den}` is prose, not a variable —
+        reverting it would stall optimization on every future candidate."""
+        original = [
+            {"role": "user", "content": "Use \\frac{num}{den}. Answer {question}"}
+        ]
+        new = [{"role": "user", "content": "Use fractions. Answer {question}"}]
+        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=original,
+            new_messages=new,
+            prompt_name="p",
+            known_keys={"id", "question", "answer"},
+        )
+
+        assert guarded == new
+        assert reverted == []
+
+    def test_rejects_a_candidate_that_introduces_the_label_column(self) -> None:
+        """Adding {answer} makes substitution hand the model the ground truth:
+        the candidate scores on data it will not have at inference time."""
+        original = [{"role": "user", "content": "Answer {question}"}]
+        new = [
+            {
+                "role": "user",
+                "content": "Answer {question}. The correct answer is {answer}.",
+            }
+        ]
+        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=original,
+            new_messages=new,
+            prompt_name="p",
+            known_keys={"id", "question", "answer"},
+        )
+
+        assert guarded[0]["content"] == "Answer {question}"
+        assert reverted == ["p_user_0"]
+
+    def test_unknown_braces_added_by_a_candidate_are_allowed(self) -> None:
+        """Only dataset columns leak; an invented {foo} is inert literal text."""
+        original = [{"role": "user", "content": "Answer {question}"}]
+        new = [{"role": "user", "content": "Answer {question} in {foo} style"}]
+        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=original,
+            new_messages=new,
+            prompt_name="p",
+            known_keys={"id", "question", "answer"},
+        )
+
         assert guarded == new
         assert reverted == []
 
@@ -356,3 +451,55 @@ class TestRebuildAppliesGuard:
 
         rendered = rebuilt["p"].get_messages({"question": "What is 2+2?"})
         assert rendered[0]["content"] == "Answer What is 2+2?"
+
+
+class TestOptimizerDerivesKeysFromTheWholeDataset:
+    """n_samples must not narrow the guard.
+
+    Rescoring runs against the full evaluation dataset, so keys derived from
+    the sampled rows would leave a column carried only by unsampled rows
+    unprotected — the guard would silently fall back to identifier shape.
+    """
+
+    def test_key_derivation_sees_rows_excluded_by_n_samples(
+        self,
+        monkeypatch,
+        mock_optimization_context,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_metric,
+    ) -> None:
+        items = [
+            {"id": "item-1", "question": "q1", "answer": "a1"},
+            {"id": "item-2", "question": "q2", "answer": "a2"},
+            # Only this row carries the non-identifier column, and n_samples=2
+            # keeps it out of the sampled subset.
+            {"id": "item-3", "question": "q3", "answer": "a3", "my key": "v"},
+        ]
+        seen: list[set[str]] = []
+        real = candidate_ops.dataset_placeholder_keys
+
+        def spy(collected):  # type: ignore[no-untyped-def]
+            keys = real(collected)
+            seen.append(keys)
+            return keys
+
+        monkeypatch.setattr(candidate_ops, "dataset_placeholder_keys", spy)
+
+        run_optimize_capturing_gepa_kwargs(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            items,
+            sample_metric,
+        )
+
+        # Every derivation must see the column, not just the adapter's (which
+        # reads the dataset directly and would mask a sampled optimizer-level
+        # derivation if we only checked the union).
+        assert seen, "the optimizer never derived placeholder keys"
+        assert all("my key" in keys for keys in seen), (
+            "a placeholder-key derivation missed a column carried only by a row "
+            f"outside n_samples: {seen}"
+        )
