@@ -46,8 +46,8 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -473,7 +473,13 @@ class OptimizationStalledReaperServiceTest {
         var experiment = experimentResourceClient.createPartialExperiment()
                 .optimizationId(optimizationId)
                 .build();
-        var createdAt = LocalDateTime.ofInstant(Instant.now().minus(age), ZoneOffset.UTC);
+        // Bind a canonical UTC string, not a LocalDateTime: created_at is DateTime64(9, 'UTC') and
+        // setObject would leave the wire format to the driver's timezone/precision handling, so the
+        // backdating (and with it the whole liveness window this test pins) would drift with the JVM
+        // default timezone (review: baz-reviewer).
+        var createdAt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSSSSS")
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.now().minus(age));
         try (var connection = CLICK_HOUSE_CONTAINER.createConnection("");
                 var statement = connection.prepareStatement(
                         ("INSERT INTO %s.experiments (workspace_id, dataset_id, id, name, optimization_id, "
@@ -484,8 +490,8 @@ class OptimizationStalledReaperServiceTest {
             statement.setString(3, experiment.id().toString());
             statement.setString(4, experiment.name());
             statement.setString(5, optimizationId.toString());
-            statement.setObject(6, createdAt);
-            statement.setObject(7, createdAt);
+            statement.setString(6, createdAt);
+            statement.setString(7, createdAt);
             statement.setString(8, USER);
             statement.setString(9, USER);
             statement.executeUpdate();

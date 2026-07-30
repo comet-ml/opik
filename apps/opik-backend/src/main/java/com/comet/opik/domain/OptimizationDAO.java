@@ -305,12 +305,19 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * {@code experiments} scan is floored by {@code :lookback_seconds} (safe: a candidate run's row
      * timestamp is within the lookback window and its trial experiments are created after the run starts)
      * and the {@code experiment_items} scan by the running timeout — both floors prune via the
-     * {@code minmax} skip indexes of migration 000112.
+     * {@code minmax} skip indexes of migration 000113.
      *
      * <p>{@code :running_hard_timeout_seconds} is the absolute ceiling that survives the progress signal:
      * a RUNNING row older than it is reaped even with recent trial/item writes, so a zombie worker that
      * keeps producing rows without ever reporting a terminal status cannot keep the spinner alive forever
-     * (this preserves the pre-OPIK-7459 "can never stay stuck indefinitely" guarantee).
+     * (this preserves the pre-OPIK-7459 "can never stay stuck indefinitely" guarantee). The ceiling runs
+     * from {@code last_updated_at}, i.e. the newest write to the row, which for a studio run is the
+     * {@code mark_running} transition — the worker writes the row only at transitions, never on a
+     * heartbeat. A non-status write (REST metadata PATCH, SDK re-upsert) therefore postpones the ceiling;
+     * closing that would need a dedicated {@code status_changed_at} column, since {@code last_updated_at}
+     * is this table's {@code ReplacingMergeTree} version (freezing it on non-status updates would make two
+     * versions collide and lose the update) and {@code created_at} is re-stamped by every re-upsert
+     * (review: baz-reviewer).
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
             SELECT
@@ -401,7 +408,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * guard (OPIK-7459) — the fleet-wide reaper query and the ERROR update are not atomic, so a trial or
      * item landing in between must veto the transition, exactly like the status re-read vetoes a
      * terminal-status race. Both scans sit behind the workspace prefix of the primary key plus the
-     * {@code minmax} indexes on {@code optimization_id} (000069) and {@code created_at} (000112).
+     * {@code minmax} indexes on {@code optimization_id} (000069) and {@code created_at} (000113).
      */
     private static final String HAS_RECENT_STUDIO_ACTIVITY = """
             SELECT 1
