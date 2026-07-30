@@ -77,9 +77,11 @@ opt-out of the ladder (`playground-providers.spec.ts` does this).
 ```
 
 Add a `@cap:` for **every** capability the spec actually asserts, not just the
-headline one. A capability counts as covered when a test carrying its tag passed
-in the last 7 days — so an unlisted assertion is invisible coverage, and a listed
-one you don't really assert is a false green.
+headline one — and only for what it really asserts. A capability counts as covered
+when a test carrying its tag **exists**; test health (green/flaky/red) is tracked
+and reported separately, so a broken nightly never makes coverage appear to drop.
+That makes the tag the claim: an unlisted assertion is invisible coverage, and a
+listed one you don't actually assert is a permanent false green.
 
 ### Visual specs
 
@@ -215,12 +217,24 @@ offending line in the PR's Files-changed view.
 
 Enforced:
 
-1. every non-exempt e2e spec has exactly one tier (or a suite opt-out) and one `@area:`
-2. `@area:` / `@cap:` / `@vcap:` all resolve in the taxonomy
-3. `@cap:` sits under the spec's declared area
-4. visual specs carry `@vcap:` and no tier
-5. every visual capability's `state:` is in the enum
-6. no unrecognised tags
+1. every non-exempt e2e spec has a tier (or a suite opt-out) and exactly one `@area:`
+2. every non-visual spec declares at least one `@cap:`
+3. `@area:` / `@cap:` / `@vcap:` all resolve in the taxonomy
+4. `@cap:` sits under the spec's declared area
+5. visual specs carry `@vcap:` and no tier
+6. every visual capability in `taxonomy.yaml` has a `state:` from the enum
+7. no unrecognised tags
+
+**Not** enforced: tier *cardinality*. "Exactly one tier" is a rule about a single
+test after describe-inheritance, and the linter reads string literals, not the TS
+AST — it cannot tell a file whose sibling describes differ (legitimate, and four
+specs do it) from one test carrying two tiers (wrong). Keep it right by hand.
+
+A computed tag is invisible. `tag: [variant.cap]` passes the lint and silently
+contributes nothing to coverage, because both the lint and the builder match
+quoted literals inside `tag: [...]`. If you find yourself generating tests in a
+loop where each iteration covers a *different* capability, write them as separate
+`test()` calls with literal tags — see `prompt-library-smoke.spec.ts`.
 
 Exempt (`rules.exempt_dirs`): `_seed` (harness self-test), `_release-gate`
 (ephemeral, version-stamped).

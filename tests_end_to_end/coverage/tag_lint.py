@@ -3,10 +3,20 @@
 
 Enforces the tag grammar in TESTING-TAGS.md against a taxonomy YAML:
 
-  1. tier_and_area_required     every non-exempt e2e spec declares exactly one
-                                tier tag and exactly one @area: tag
-  2. tags_must_exist_in_taxonomy @area:/@cap:/@vcap: values resolve in taxonomy
-  3. visual_state_enum          every `state:` in a visual: block is in the enum
+  1. tier_and_area_required     every non-exempt e2e spec declares a tier tag
+                                and exactly one @area: tag. A spec carrying a
+                                valid suite selector (@provider-sanity,
+                                @release-gate[:version], @t1-stsaas) may be
+                                tier-less — it runs on its own cadence, outside
+                                the t1/t2/t3 ladder. Tier *cardinality* is not
+                                enforced; see the note in lint_spec().
+  2. cap_required               every non-visual spec declares at least one
+                                @cap:, and every visual spec at least one @vcap:
+  3. tags_must_exist_in_taxonomy @area:/@cap:/@vcap: values resolve in taxonomy,
+                                and a @cap: sits under the spec's declared area
+  4. visual_state_enum          every visual capability in taxonomy.yaml declares
+                                a `state:` from the dimensions.visual.states enum
+                                (this checks the taxonomy, not the spec files)
 
 Exits non-zero on any violation. Read-only; never edits specs.
 
@@ -117,10 +127,17 @@ def lint_spec(path: Path, rel: str, idx, retired: dict, *, visual: bool) -> list
         # A spec carrying only a selector suite (e.g. @provider-sanity) is
         # legitimately tier-less: it runs on its own cadence, deliberately
         # outside the t1/t2/t3 ladder. Documented in playground-providers.spec.ts.
-        elif len({t for _, t in tiers}) > 1 and len(tiers) > 1:
-            # Sibling describes may legitimately differ; only flag one *test*
-            # carrying two tiers, which regex alone can't prove. Report as info.
-            pass
+        #
+        # Tier cardinality is deliberately NOT enforced. "Exactly one tier"
+        # constrains a single test, but tags union from describe to test, so the
+        # scope that must hold the invariant is a test *after* inheritance — not
+        # a file and not a `tag: [...]` block. Four specs legitimately carry
+        # several tiers across sibling describes (ollie-agentic has three).
+        # Checking this correctly needs the TS AST to resolve describe nesting;
+        # a file- or block-level count would fail those valid specs, so the hole
+        # is left open on purpose rather than closed wrongly.
+        if not cap_tags:
+            f.append(Finding(rel, 1, "no @cap: tag: a spec must declare every capability it asserts"))
         if not area_tags:
             f.append(Finding(rel, 1, "no @area: tag"))
         elif len({t for _, t in area_tags}) > 1:
