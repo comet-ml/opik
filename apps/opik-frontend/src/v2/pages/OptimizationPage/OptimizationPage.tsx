@@ -259,6 +259,7 @@ const OptimizationPage: React.FC = () => {
                 optimizationLastUpdatedAt={optimization?.last_updated_at}
                 scoringFailed={isEmptyCompletedRun}
                 scoringHealth={optimization?.metadata?.scoring_health}
+                totalOptimizationCost={optimization?.total_optimization_cost}
                 isInProgress={
                   !!optimization?.status &&
                   IN_PROGRESS_OPTIMIZATION_STATUSES.includes(

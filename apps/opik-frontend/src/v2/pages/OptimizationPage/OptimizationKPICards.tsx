@@ -65,6 +65,12 @@ type OptimizationKPICardsProps = {
   optimizationLastUpdatedAt?: string;
   isInProgress?: boolean;
   /**
+   * Backend aggregate for the whole run (Optimization.total_optimization_cost).
+   * Includes optimizer-internal spend (e.g. GEPA reflection calls) that belongs
+   * to no trial (OPIK-7521), so it wins over the client-side trial sum.
+   */
+  totalOptimizationCost?: number;
+  /**
    * Heuristic flag: the run COMPLETED but scored nothing usable (OPIK-7029). When
    * set, the score card shows a caption so a degenerate run isn't a bare 0%/-.
    */
@@ -91,13 +97,13 @@ const OptimizationKPICards: React.FunctionComponent<
   isInProgress,
   scoringFailed,
   scoringHealth,
+  totalOptimizationCost,
 }) => {
   const kpiData = useMemo(
     () => ({
-      totalOptCost: experiments.reduce(
-        (sum, e) => sum + (e.total_estimated_cost ?? 0),
-        0,
-      ),
+      totalOptCost:
+        totalOptimizationCost ??
+        experiments.reduce((sum, e) => sum + (e.total_estimated_cost ?? 0), 0),
       totalDuration: getCompletedRunDurationSeconds({
         isInProgress,
         optimizationCreatedAt,
@@ -110,6 +116,7 @@ const OptimizationKPICards: React.FunctionComponent<
       optimizationCreatedAt,
       optimizationLastUpdatedAt,
       isInProgress,
+      totalOptimizationCost,
     ],
   );
 
