@@ -17,6 +17,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.lang.reflect.Field;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,24 +63,26 @@ class VertexAIClientGeneratorTest {
                 """.formatted(pem);
     }
 
-    private String apiEndpointForConfiguredLocation(Map<String, String> configuration) {
+    private VertexAI generatedClientFor(Map<String, String> configuration) {
         var request = ChatCompletionRequest.builder().model(MODEL).build();
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey(serviceAccountKey)
                 .configuration(configuration)
                 .build();
 
-        var model = (VertexAiGeminiChatModel) generator.generate(config, request);
+        return vertexAI((VertexAiGeminiChatModel) generator.generate(config, request));
+    }
 
-        return vertexAIApiEndpoint(model);
+    private String apiEndpointForConfiguredLocation(Map<String, String> configuration) {
+        return generatedClientFor(configuration).getApiEndpoint();
     }
 
     /**
-     * The endpoint is only observable through the {@code VertexAI} instance the client was built around. It has to be
-     * reached via the {@code GenerativeModel}, because the constructor this generator uses leaves the chat model's own
-     * {@code vertexAI} field unset.
+     * The endpoint and location are only observable through the {@code VertexAI} instance the client was built around.
+     * It has to be reached via the {@code GenerativeModel}, because the constructor this generator uses leaves the chat
+     * model's own {@code vertexAI} field unset.
      */
-    private static String vertexAIApiEndpoint(VertexAiGeminiChatModel model) {
+    private static VertexAI vertexAI(VertexAiGeminiChatModel model) {
         try {
             Field generativeModelField = VertexAiGeminiChatModel.class.getDeclaredField("generativeModel");
             generativeModelField.setAccessible(true);
@@ -88,9 +91,9 @@ class VertexAIClientGeneratorTest {
             Field vertexAiField = GenerativeModel.class.getDeclaredField("vertexAi");
             vertexAiField.setAccessible(true);
 
-            return ((VertexAI) vertexAiField.get(generativeModel)).getApiEndpoint();
+            return (VertexAI) vertexAiField.get(generativeModel);
         } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Could not read the API endpoint off the generated client", e);
+            throw new AssertionError("Could not read the generated client", e);
         }
     }
 
@@ -108,16 +111,29 @@ class VertexAIClientGeneratorTest {
         }
 
         @ParameterizedTest
-        @CsvSource({"GLOBAL,aiplatform.googleapis.com", "  global  ,aiplatform.googleapis.com",
-                "Eu,aiplatform.eu.rep.googleapis.com"})
-        void toleratesCasingAndSurroundingWhitespace(String location, String expectedEndpoint) {
-            assertThat(VertexAIClientGenerator.apiEndpointFor(location)).contains(expectedEndpoint);
+        @CsvSource({"GLOBAL,global", "'  global  ',global", "Eu,eu", "'US ',us"})
+        void canonicaliseCasingAndSurroundingWhitespace(String location, String expectedCanonical) {
+            assertThat(VertexAIClientGenerator.canonicalLocation(location)).isEqualTo(expectedCanonical);
         }
 
         @Test
         void generatedClientTargetsTheGlobalHost() {
             assertThat(apiEndpointForConfiguredLocation(Map.of("location", "global")))
                     .isEqualTo("aiplatform.googleapis.com");
+        }
+
+        /**
+         * The location also lands in the {@code locations/%s} resource path, so normalising it for the host lookup
+         * alone would leave the client reaching the right host with a malformed path.
+         */
+        @ParameterizedTest
+        @CsvSource({"GLOBAL,aiplatform.googleapis.com", "'  global  ',aiplatform.googleapis.com",
+                "' EU ',aiplatform.eu.rep.googleapis.com"})
+        void generatedClientCanonicalisesBothHostAndLocation(String configured, String expectedEndpoint) {
+            var client = generatedClientFor(Map.of("location", configured));
+
+            assertThat(client.getApiEndpoint()).isEqualTo(expectedEndpoint);
+            assertThat(client.getLocation()).isEqualTo(configured.trim().toLowerCase(Locale.ROOT));
         }
     }
 
