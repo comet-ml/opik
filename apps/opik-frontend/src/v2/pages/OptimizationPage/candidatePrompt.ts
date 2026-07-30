@@ -2,6 +2,7 @@ import get from "lodash/get";
 
 import { Experiment } from "@/types/datasets";
 import { AggregatedCandidate } from "@/types/optimizations";
+import { restorePromptVariableFormat } from "@/lib/optimizations";
 import { ComparisonCandidate } from "@/shared/CodeDiff/promptComparisonTargets";
 
 type CandidateWithExperiments = { experimentIds: string[] };
@@ -24,8 +25,14 @@ export const toComparisonCandidate = (
  * Resolve a candidate's prompt from its trial experiment configuration. The
  * prompt lives on the experiment (not the candidate), under
  * `metadata.configuration.prompt` (or the legacy `prompt_messages`). Returns
- * the raw prompt value — PromptComparison normalizes it — or null when none of
+ * the prompt value — PromptComparison normalizes it — or null when none of
  * the candidate's experiments carry one.
+ *
+ * Template variables are restored to the `{{variable}}` form the user authored
+ * (see {@link restorePromptVariableFormat}); the stored value uses the
+ * optimizer's single-brace form. This is the single resolver behind both v2
+ * prompt surfaces (overview best-trial panel and the trial sidebar), so the
+ * conversion lands once here.
  */
 export const getCandidatePrompt = (
   candidate: CandidateWithExperiments,
@@ -43,7 +50,7 @@ export const getCandidatePrompt = (
         prompt != null &&
         !(typeof prompt === "string" && prompt.trim() === "")
       )
-        return prompt;
+        return restorePromptVariableFormat(prompt);
     }
   }
   return null;

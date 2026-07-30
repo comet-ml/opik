@@ -9,7 +9,7 @@ import { ensureModelAvailable } from '@e2e/pom/model-availability';
  * The Playground has no separate "Save as experiment" step — every Re-run click
  * creates a new experiment automatically (verified Phase 3 discovery).
  */
-test.describe('Playground — smoke', { tag: ['@t1-smoke', '@playground'] }, () => {
+test.describe('Playground — smoke', { tag: ['@t1-smoke', '@area:playground', '@cap:playground.compose-run-prompt', '@cap:playground.run-against-dataset'] }, () => {
   test('Run prompts against a dataset auto-creates an experiment', async ({
     dataset,
     project,

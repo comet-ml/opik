@@ -19,7 +19,7 @@ const PROMPT_VARIANTS = [
 
 test.describe(
   'Playground → save prompt to library',
-  { tag: ['@t2-cuj', '@prompts', '@playground'] },
+  { tag: ['@t2-cuj', '@area:playground', '@cap:playground.save-prompt-version'] },
   () => {
     test.use({ viewport: { width: 1600, height: 900 } });
 

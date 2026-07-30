@@ -68,6 +68,29 @@ def _try_notifying_about_experiment_completion(
         )
 
 
+def _get_experiment_url(
+    client: opik_client.Opik, experiment_id: str, dataset_id: str
+) -> Optional[str]:
+    """Best-effort direct experiment URL; the experiment is already created by
+    the time this runs, so a failure to resolve the workspace or build the URL
+    must not turn a successful evaluation into an error.
+    """
+    try:
+        return url_helpers.get_experiment_url_by_id(
+            experiment_id=experiment_id,
+            dataset_id=dataset_id,
+            base_url=client.config.url_override,
+            workspace=client._dereferenced_workspace(),
+        )
+    except Exception:
+        LOGGER.debug(
+            "Could not resolve the experiment URL. Experiment ID: %s",
+            experiment_id,
+            exc_info=True,
+        )
+        return None
+
+
 def _materialize_for_checkpoint(
     *,
     items_iter: Iterator[dataset_item.DatasetItem],
@@ -406,12 +429,11 @@ def __internal_api__run_test_suite__(
     )
 
     if verbose >= 1:
-        experiment_url = url_helpers.get_experiment_url_by_id(
-            experiment_id=experiment_.id,
-            dataset_id=suite_dataset.id,
-            url_override=client.config.url_override,
+        experiment_url = _get_experiment_url(
+            client, experiment_id=experiment_.id, dataset_id=suite_dataset.id
         )
-        report.display_evaluation_in_progress(experiment_url)
+        if experiment_url is not None:
+            report.display_evaluation_in_progress(experiment_url)
 
     eval_result, total_time = _evaluate_test_suite_task(
         client=client,
@@ -601,13 +623,11 @@ def _evaluate_task(
             dataset.name, total_time, test_results, computed_experiment_scores
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -734,10 +754,8 @@ def _evaluate_test_suite_task(
 
     total_time = time.time() - start_time
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
@@ -880,13 +898,11 @@ def evaluate_experiment(
             computed_experiment_scores,
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset_.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset_.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     _try_notifying_about_experiment_completion(experiment)
 
@@ -1185,13 +1201,11 @@ def evaluate_prompt(
             dataset.name, total_time, test_results, computed_experiment_scores
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 

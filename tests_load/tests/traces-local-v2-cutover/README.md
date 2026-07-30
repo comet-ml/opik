@@ -29,9 +29,15 @@ pip install -r tests_load/tests/traces-local-v2-cutover/requirements.txt
 export OPIK_URL_OVERRIDE=http://localhost:5173/api/
 export OPIK_WORKSPACE=default
 
-# 4. Make clickhouse-client (used by the runbook driver scripts) resolve to the container's client, forwarding the
-#    CLICKHOUSE_* connection env the scripts set. The compose ClickHouse is user/password/db all "opik".
-alias clickhouse-client='docker exec -i -e CLICKHOUSE_HOST -e CLICKHOUSE_USER -e CLICKHOUSE_PASSWORD opik-opik-clickhouse-1 clickhouse-client'
+# 4. The driver scripts invoke `clickhouse-client` and read the standard CLICKHOUSE_* env, exactly as in production. Here
+#    CLICKHOUSE_HOST (set in the rehearsal below) points at the ClickHouse that --port-mapping exposed on the host's
+#    localhost:9000. Provide a clickhouse-client on PATH (matching the server, currently 26.3): either (a) a native
+#    official client already on PATH — nothing to do — or (b) the same official-image wrapper the runbook documents,
+#    symlinked onto PATH under the name the scripts call (needs only Docker):
+mkdir -p ~/bin
+ln -sf "$PWD/apps/opik-backend/data-migrations/traces-local-v2-cutover/scripts/clickhouse-client-docker.sh" ~/bin/clickhouse-client
+export PATH="$HOME/bin:$PATH"
+export CLICKHOUSE_CLIENT_DOCKER_OPTS=--network=host   # (b) only: reach the host-loopback ClickHouse from the container
 ```
 
 ClickHouse connection defaults (user/password/db all `opik`, host `localhost:8123`) match `--port-mapping`; override via
@@ -76,8 +82,12 @@ $RUNBOOK/scripts/verify.sh --database opik            # add --drill-down to list
 
 # 7. EXCHANGE (the data cutover; leaves traces a MergeTree so the backend's deletes keep working). It also renames the
 #    displaced old data to traces_pre_cutover_backup. --skip-wrap defers the sharding-ready Distributed wrap, which
-#    requires the delete DAO to target traces_local first.
-$RUNBOOK/scripts/exchange_and_wrap.sh --database opik --skip-wrap
+#    requires the delete DAO to target traces_local first. Pass the backfill_start from step 4. The two --confirm gates
+#    are operator assertions that hold trivially in this local rehearsal: --confirm-buffer-raised (there is no async
+#    buffer locally — just make sure the traffic scripts have stopped before the swap) and --confirm-retention-paused
+#    (retention is disabled by default). --backfill-start drives the final deletion replay run just before the swap.
+$RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start>' \
+    --confirm-buffer-raised --confirm-retention-paused --skip-wrap
 $RUNBOOK/scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces   # post-swap fidelity
 ```
 
@@ -101,7 +111,38 @@ reset after any completed cutover.
 (a backfilled row plus its delta re-copy), so its raw count runs ahead of the long-merged `traces` even when the logical
 content is identical — that is exactly what `verify.sh` compares (deduped, mask-honored, per week). The parked backup
 also legitimately diverges from the live table: it is a frozen copy (`traces_pre_cutover_backup` after a successful
-cutover, `traces_local_v2` after a rollback) while the live `traces` keeps changing.
+cutover, `traces_post_rollback_backup` after a rollback) while the live `traces` keeps changing.
+
+## Rehearsing rollback
+
+Rollback is driven by `rollback.sh`; pick the stage by how far the forward run got. Stages B/C re-apply the **reverse
+deletion replay**, so to exercise it, delete some traces *after* the EXCHANGE — they are bridged with
+`event_time >= cutover_start`, and the rollback must re-apply them so they do **not** resurrect on the restored `traces`.
+Pass the `cutover_start` that `exchange_and_wrap.sh` printed.
+
+```bash
+# Stage A — forward run stopped before the EXCHANGE: discards the shadow; live `traces` is untouched.
+$RUNBOOK/scripts/rollback.sh --database opik --stage A
+
+# Stage B — after the EXCHANGE, before the wrap. Generate post-cutover deletes first (traces is still a MergeTree):
+python tests_load/tests/traces-local-v2-cutover/delete_traffic.py --tps 4 --duration 30
+$RUNBOOK/scripts/rollback.sh --database opik --stage B --cutover-start '<cutover_start>' \
+    --confirm-retention-paused --accept-post-cutover-write-loss
+
+# Stage C — after the wrap. Issue the post-cutover deletes BEFORE applying the wrap (a Distributed `traces` rejects
+# DELETEs), then roll back:
+$RUNBOOK/scripts/rollback.sh --database opik --stage C --cutover-start '<cutover_start>' \
+    --confirm-retention-paused --accept-post-cutover-write-loss
+
+# If a stage B/C run's reverse-replay was interrupted, re-apply just it (idempotent):
+$RUNBOOK/scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<cutover_start>' \
+    --confirm-retention-paused
+```
+
+Check afterwards that no post-cutover-deleted id is live again on the restored `traces` (the reverse-replay's job), and
+that the estate is canonical (`traces` = original; for B/C the successor is parked as `traces_post_rollback_backup`,
+while stage A just empties the `traces_local_v2` shadow). A rollback leaves `traces` as the Nullable original, so
+re-seeding for the next iteration works without a fresh volume.
 
 ## Committing
 

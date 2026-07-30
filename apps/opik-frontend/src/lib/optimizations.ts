@@ -549,6 +549,101 @@ export const sortCandidates = (
   });
 };
 
+// A template variable as the optimizer SDK writes it: a single-braced Python
+// identifier, optionally dotted/hyphenated.
+//
+// Deliberately NARROWER than convertOptimizationVariableFormat's `[^{}]+`.
+// That function runs on an explicit user action (save to prompt library), where
+// over-matching is recoverable. This one runs on every prompt we *display*, and
+// prompts routinely contain literal single braces that are not variables at all
+// — JSON examples like {"name": "x"}, code like { return x; }. Re-doubling those
+// would corrupt the text the user is reading, so only identifier-shaped tokens
+// are restored. Residual limitation: a literal `{word}` in prose that was never
+// a variable is still converted; that is rare and near-indistinguishable from a
+// real variable without knowing the dataset columns.
+const OPTIMIZER_VARIABLE_TOKEN = /(?<!\{)\{([A-Za-z_][A-Za-z0-9_.-]*)\}(?!\})/g;
+
+const restoreVariableFormatInContent = (content: unknown): unknown => {
+  if (typeof content === "string") {
+    return content.replace(OPTIMIZER_VARIABLE_TOKEN, "{{$1}}");
+  }
+
+  // Multimodal content: a list of parts, only the text ones carry variables.
+  if (Array.isArray(content)) {
+    return content.map((part) =>
+      part &&
+      typeof part === "object" &&
+      (part as { type?: unknown }).type === "text" &&
+      typeof (part as { text?: unknown }).text === "string"
+        ? {
+            ...part,
+            text: (part as { text: string }).text.replace(
+              OPTIMIZER_VARIABLE_TOKEN,
+              "{{$1}}",
+            ),
+          }
+        : part,
+    );
+  }
+
+  return content;
+};
+
+/**
+ * Restore the Mustache-style `{{variable}}` syntax the user authored, for
+ * display, on a prompt that has been through the optimizer.
+ *
+ * The Studio form uses `{{variable}}`; the optimizer SDK uses `{variable}`, and
+ * the python-backend rewrites one into the other on ingest
+ * (`studio/types.py::_convert_template_syntax`). Everything downstream of that
+ * — trial prompts in experiment metadata, the best-prompt panel, the diff view
+ * — therefore shows a single brace, which reads as if the user had typed a
+ * broken prompt. This reverses it at the display boundary only; nothing is
+ * re-sent to the backend in this form.
+ *
+ * Walks the value structurally rather than normalizing it, so every prompt
+ * wrapper shape survives unchanged: a bare message array, a `{ messages: [...] }`
+ * object, the single-prompt `{ "<name>": [...] }` wrapper, and the multi-prompt
+ * named map. Only the `content` of message-like objects is rewritten.
+ */
+const restoreVariableFormatInPrompt = (prompt: unknown): unknown => {
+  if (typeof prompt === "string") {
+    return restoreVariableFormatInContent(prompt);
+  }
+
+  if (Array.isArray(prompt)) {
+    return prompt.map(restoreVariableFormatInPrompt);
+  }
+
+  if (prompt && typeof prompt === "object") {
+    const record = prompt as Record<string, unknown>;
+
+    // A message: rewrite its content and leave every other field alone.
+    if ("role" in record && "content" in record) {
+      return {
+        ...record,
+        content: restoreVariableFormatInContent(record.content),
+      };
+    }
+
+    // A wrapper ({ messages }, a named-prompt map, ...): recurse into values.
+    return Object.fromEntries(
+      Object.entries(record).map(([key, value]) => [
+        key,
+        restoreVariableFormatInPrompt(value),
+      ]),
+    );
+  }
+
+  return prompt;
+};
+
+// Generic wrapper: the transform is shape-preserving, so callers keep the type
+// they passed in (a prompt payload stays assignable to whatever they had) rather
+// than being handed `unknown` and having to re-narrow at every call site.
+export const restorePromptVariableFormat = <T>(prompt: T): T =>
+  restoreVariableFormatInPrompt(prompt) as T;
+
 export const convertOptimizationVariableFormat = (
   content: string | unknown,
 ): string | unknown => {

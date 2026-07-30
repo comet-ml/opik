@@ -167,8 +167,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > ships. The wrap is the sharding-readiness layer, not the cutover.
 >
 > **Applying the deferred wrap later:** once the sharding-aware DAO has shipped, run
-> `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance` — it runs the settle gate and applies **only**
-> the wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`). To roll the wrap back, use
+> `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance --confirm-daos-retargeted` — it runs the settle
+> gate and applies **only** the wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`).
+> `--confirm-daos-retargeted` is required for **any** wrap (same-run or deferred), since the wrap makes `traces`
+> `Distributed` and breaks the delete/mutation DAOs until they target `traces_local`. To roll the wrap back, use
 > `rollback.sh --stage C`.
 >
 > The wrap is **gapless per node**: it pre-builds the `Distributed` wrapper under a temp name, then one atomic
@@ -387,10 +389,24 @@ run by hand.** Each `.sql` file is the single source a driver reads:
 | 3 — EXCHANGE + wrap | `000003_exchange_and_wrap.sql` | `exchange_and_wrap.sh` |
 | QA — fidelity compare (+ `--drill-down`) | `000005_verify_migration.sql` | `verify.sh` |
 | rollback | `000004_rollback_stage_{a,b,c}_*.sql` + `000004_rollback_reverse_replay.sql` | `rollback.sh` |
-| finalize — drop parked backup | — | `finalize.sh` |
+| finalize — retire the parked backup (drop after cutover / recycle to empty shadow after rollback) | — | `finalize.sh` |
 
 Each driver takes the connection from the standard `clickhouse-client` env vars (`CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`,
 `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`) and `--database`.
+
+**`clickhouse-client` is an operator prerequisite on the machine that runs these scripts.** Every driver invokes it and
+reads the env above. It is a **client tool on the operator's host**, separate from ClickHouse itself, which the scripts
+reach through `CLICKHOUSE_HOST` (a production cluster; a locally-exposed port in a rehearsal). Provide it, matching the
+server's major version, either way:
+
+- **Native (recommended for real migrations):** install the official ClickHouse client on the ops host; the bare
+  `clickhouse-client` the scripts call then resolves to it.
+- **Official image (host has Docker but no native client):** put a thin wrapper on `PATH` as `clickhouse-client` that
+  runs the client from the official image over the network. A ready-made one ships as
+  [`scripts/clickhouse-client-docker.sh`](scripts/clickhouse-client-docker.sh) — symlink it onto your `PATH`
+  (`ln -s "$PWD/scripts/clickhouse-client-docker.sh" ~/bin/clickhouse-client`, with `~/bin` on `PATH`). It reuses the
+  official `clickhouse/clickhouse-server` image (set `CLICKHOUSE_CLIENT_IMAGE` to your server version) and dials out to
+  `CLICKHOUSE_HOST`; for a ClickHouse on the host's own loopback, add `--network=host` via `CLICKHOUSE_CLIENT_DOCKER_OPTS`.
 
 **The only manual actions are not SQL:** (1) raising/restoring the async-insert buffer ceiling
 (`databaseAnalytics.asyncInsertBusyTimeoutMaxMs`) around steps 2–3; (2) flipping
@@ -406,18 +422,23 @@ accidental `DROP` of the wrong (irreplaceable) table:
 
 - **`traces`** — always the live table the app reads/writes (the original before the cutover; the successor after it;
   the `Distributed` wrapper after the wrap).
-- **`traces_local_v2`** — always **the successor**: created empty by migration 000101, filled by backfill/delta, and —
-  after a rollback — re-parked as the abandoned successor. It only ever holds "the v2 data," so the `_v2` name is always
-  truthful.
+- **`traces_local_v2`** — the **working successor shadow**: created empty by migration 000101 and filled by
+  backfill/delta before the EXCHANGE. It is disposable — stage A discards it, and it is never a `finalize.sh` target.
 - **`traces_local`** — the successor's live shard after the wrap (standard `Distributed`-over-`_local` idiom).
 - **`traces_pre_cutover_backup`** — **the displaced old original**, produced by renaming it immediately after the
   EXCHANGE. This rename is the whole point: leaving the old data under `traces_local_v2` would label the *oldest*,
   *sole-backup* copy with a `_v2` suffix that reads as "the newer table" — and, post-wrap, sitting next to the live
   `traces_local` it would invite dropping the wrong one. `traces_pre_cutover_backup` says exactly what it is and shares
   no stem with the live shard, so neither confusion is possible.
+- **`traces_post_rollback_backup`** — **the abandoned successor**, parked here by a stage B/C rollback (the original is
+  live again as `traces`). A distinct `_backup` name — not `traces_local_v2` — so a rolled-back estate is
+  self-describing: it reads as a **retained backup** (kept for the soak, recover post-cutover writes from it), and stage
+  A's shadow-discard cannot mistake it for the disposable `traces_local_v2` and truncate it.
 
-The one irreversible drop (`finalize.sh`) targets only the parked backup — `traces_pre_cutover_backup` after a
-successful cutover, `traces_local_v2` after a rollback — and never the live `traces` or `traces_local`.
+The two `*_backup` names are the only retained backups and never co-exist. The one irreversible finalize step
+(`finalize.sh`) retires whichever is present — **dropping** `traces_pre_cutover_backup` after a successful cutover, or
+**recycling** `traces_post_rollback_backup` back into an empty `traces_local_v2` after a rollback (it is physically the
+000101 shadow object, renamed) — and never touches the live `traces`/`traces_local`.
 
 ## Rollback
 
@@ -431,15 +452,18 @@ file** — no single file mixes the `TRUNCATE` (stage A only) with the `EXCHANGE
 file does exactly one stage. No statement drops a data-bearing table: swaps are atomic `EXCHANGE`/`RENAME`, and the only
 `DROP` targets the `Distributed` wrapper, which stores no data (it is a routing definition over `traces_local`). Before
 running, `rollback.sh` **asserts the live `traces` topology matches the requested stage and aborts otherwise** — so a
-wrong-stage run (the only way a `TRUNCATE`/`DROP` could hit the wrong table) makes no change. Every stage lands in the
-same **canonical state**: `traces` = the original data (live), `traces_local_v2` = the successor data (parked backup).
-No leftover `*_new` names. The parked backup is dropped only later, by `finalize.sh`, after the soak.
+wrong-stage run (the only way a `TRUNCATE`/`DROP` could hit the wrong table) makes no change. Stages B and C land in the
+**canonical state**: `traces` = the original data (live), `traces_post_rollback_backup` = the successor data (parked as a
+retained backup), retired only later by `finalize.sh` after the soak — which recycles it into an empty `traces_local_v2`,
+restoring the pre-cutover, Liquibase-consistent estate. Stage A instead discards the shadow (`traces_local_v2` emptied)
+and leaves the untouched live `traces` — there is no backup to soak or finalize. No leftover
+`*_new` names.
 
 > **Stages B/C make post-cutover writes non-live — an accepted, acknowledged trade-off.** Promoting the frozen
 > `traces_pre_cutover_backup` means traces the successor accepted **after** `cutover_start` stop being served by the live
 > table (the reverse-replay carries post-cutover *deletes* forward, but not *writes*). They are **not destroyed**: the
-> successor is parked as `traces_local_v2` and retained until `finalize.sh`, so recover them from there during the soak
-> if the rollback is later judged unnecessary. This is inherent to promoting a point-in-time backup and is *not* auto-repaired
+> successor is parked as `traces_post_rollback_backup` and retained until `finalize.sh`, so recover them from there during
+> the soak if the rollback is later judged unnecessary. This is inherent to promoting a point-in-time backup and is *not* auto-repaired
 > — merging the successor's post-cutover writes back would re-import the very data the rollback exists to discard. Because
 > it is irreversible in the moment, stages B/C require `--accept-post-cutover-write-loss`, and `rollback.sh` prints the
 > recovery pointer before the promote.
@@ -450,12 +474,20 @@ Pick the stage by how far the cutover got (`cutover_start` is the value `exchang
   `traces_local_v2`; the live `traces` was never touched. (Guarded: aborts unless `traces` is still the original schema.)
 - **Stage B — after EXCHANGE, before wrap:** `./scripts/rollback.sh --database opik --stage B --cutover-start '<ts>'
   --confirm-retention-paused --accept-post-cutover-write-loss`. `EXCHANGE` `traces_pre_cutover_backup` back to live
-  `traces`, rename the now-parked successor back to `traces_local_v2`, then the reverse replay. (Guarded: aborts if
-  `traces` is `Distributed` — use C.)
+  `traces`, park the now-displaced successor as `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts
+  if `traces` is `Distributed` — use C.)
 - **Stage C — after wrap:** `./scripts/rollback.sh --database opik --stage C --cutover-start '<ts>'
   --confirm-retention-paused --accept-post-cutover-write-loss`. Drops the `Distributed` wrapper, then one atomic
-  `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces` and parks the successor under
-  `traces_local_v2`, then the reverse replay. (Guarded: aborts unless `traces` is `Distributed`.)
+  `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces` and parks the successor as
+  `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts unless `traces` is `Distributed`.)
+
+> **Multi-replica note (production is multi-replica).** Stages B and C promote via a single `ON CLUSTER` RENAME of the
+> **live** `traces`. It runs synchronously across the shard's replicas — the client blocks until each applies it, or fails
+> loudly naming a laggard, which then converges via the DDL queue — so there is no durable mixed topology, only a brief
+> sub-second cross-replica skew as it propagates, during which a read on a not-yet-renamed replica sees the pre-rollback
+> `traces`. This is the same accepted `ON CLUSTER` skew as the wrap; on a multi-replica cluster run the rollback in a
+> maintenance moment / with reads quiesced. `finalize.sh` is **exempt** — it renames only the parked backup / disposable
+> shadow, never the live `traces`, so it has no live-read skew and needs no maintenance window.
 
 **Recovering from an interrupted rollback.** Each promote stage runs its table-swap and then the reverse-replay as two
 statements, so a failure *between* them needs a restart path:
@@ -464,8 +496,9 @@ statements, so a failure *between* them needs a restart path:
   canonical shape and re-running the stage is (correctly) refused by the topology guard — which would otherwise leave the
   post-cutover deletes unreplayed and let them resurrect. Re-apply just the replay:
   `./scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<ts>' --confirm-retention-paused`. It runs
-  only `000004_rollback_reverse_replay.sql` against the live `traces` (asserts it is a non-`Distributed` `MergeTree`) and
-  is idempotent, so it is safe to run once or repeatedly.
+  only `000004_rollback_reverse_replay.sql` and is idempotent (safe to run once or repeatedly). It refuses unless `traces`
+  is the restored original (Nullable schema) with the successor parked as `traces_post_rollback_backup`, so it cannot be
+  aimed at the live successor (post-EXCHANGE, pre-rollback), where the guard-less replay would mask live rows.
 - **Forward EXCHANGE half-done (stage B says the backup is missing).** If the forward `EXCHANGE` succeeded but its
   post-swap `RENAME` did not, the parked original is still under `traces_local_v2` and stage B aborts pointing at the
   one-line `RENAME` that finishes it (`traces_local_v2` → `traces_pre_cutover_backup`); run that, then re-run stage B.
@@ -478,19 +511,23 @@ sentinel-based absent-value logic against the now-Nullable column, mixing sentin
 write failure, but inconsistent absent-value reads/filters/sorts. The rollback is therefore not fully complete until the
 rolling restart lands on the whole fleet.
 
-**Point of no return.** The `EXCHANGE` is reversible for as long as the parked backup exists (stage B/C). Dropping that
+**Point of no return.** The `EXCHANGE` is reversible for as long as the parked backup exists (stage B/C). Retiring that
 backup with `finalize.sh` is the one irreversible step, so gate it on an explicit soak:
 
-- **Soak duration** — keep the parked backup (`traces_pre_cutover_backup` after a successful cutover; `traces_local_v2`
-  after a rollback) for a defined window (recommend ~2 weeks; it fits well inside the bridge's 2-year TTL) so any latent
-  read/query regression surfaces while rollback is still an option.
-- **Finalize exit criteria** — before dropping: `verify.sh` clean, query p99 within budget over the soak, no
+- **Soak duration** — keep the parked backup (`traces_pre_cutover_backup` after a successful cutover;
+  `traces_post_rollback_backup` after a rollback) for a defined window (recommend ~2 weeks; it fits well inside the
+  bridge's 2-year TTL) so any latent read/query regression surfaces while rollback is still an option.
+- **Finalize exit criteria** — before retiring the backup: `verify.sh` clean, query p99 within budget over the soak, no
   cutover-related incidents open, and (if the wrap was applied) the sharding-aware DAO healthy in production.
 
-Once those hold, drop the parked backup with [`scripts/finalize.sh`](scripts/finalize.sh) — it auto-detects whichever
-parked table is present (`traces_pre_cutover_backup` or `traces_local_v2`), never the live `traces`/`traces_local`. It
-is dry-run by default, `--confirm` to drop, refuses if the live `traces` looks empty while the backup does not, and
-refuses if both parked names somehow exist (ambiguous — resolve by hand).
+Once those hold, run [`scripts/finalize.sh`](scripts/finalize.sh) — it auto-detects whichever parked table is present
+(`traces_pre_cutover_backup` or `traces_post_rollback_backup`), never the live `traces`/`traces_local` or the working
+`traces_local_v2` shadow, and picks the action by case: after a **successful cutover** it **drops**
+`traces_pre_cutover_backup` (committing to the new layout); after a **rollback** it **recycles**
+`traces_post_rollback_backup` into an empty `traces_local_v2` (TRUNCATE + RENAME — discarding the successor data but
+restoring the exact 000101 shadow, so the estate matches the applied Liquibase state and a retry starts clean). It is
+dry-run by default, `--confirm` to act, refuses if the live `traces` looks empty while the backup does not, and refuses
+if both parked names somehow exist (ambiguous — resolve by hand).
 
 ## Deletion bridge lifecycle & future migrations
 
@@ -565,15 +602,17 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 > **frozen** snapshot as of `cutover_start`, but live `traces` keeps taking writes the instant the buffer drains — so
 > the **current (live) week will legitimately show a mismatch** (the live table is a superset of the frozen backup by
 > exactly the post-cutover writes). That is expected, not a leak. To use the post-EXCHANGE compare as a real check,
-> either run it **immediately after the swap before writes resume**, or bound it to the **sealed historical weeks**
-> (`--to-week <last-full-week>`), where a mismatch *would* be a genuine problem. A leak shows up as rows present in the
+> either run it **immediately after the swap before writes resume**, or bound it to the **sealed historical weeks** with
+> `--to-week N` (a **0-based week offset** from the anchor Monday, not a date — e.g. `--to-week 3` to stop before the
+> current partial week), where a mismatch *would* be a genuine problem. A leak shows up as rows present in the
 > backup but absent from `traces`; post-cutover writes are the harmless opposite direction.
 
 **Feasibility at scale.** A full pass reads every partition (heavy but bounded per week — run off-peak). When that is
 infeasible, sample and still get high confidence:
 - `--sample-mod N` compares a deterministic 1/N `id` sample — the *same* rows on both sides, so like-for-like.
 - `--weeks-stride S` compares every S-th weekly partition (partition-pruned, so genuinely cheaper).
-- `--from-week` / `--to-week` bound the range (e.g. verify the most recent weeks fully, older weeks sampled).
+- `--from-week` / `--to-week` bound the range by **0-based week offset** (integers from the anchor Monday, not dates;
+  `--to-week` is inclusive) — e.g. verify the most recent weeks fully, older weeks sampled.
 
 `verify.sh` exits non-zero if any window mismatches and prints the window bounds; re-run with `--drill-down` to list the
 keys that differ or exist on one side only (it runs the `drill-down` block of `000005_verify_migration.sql` for each
