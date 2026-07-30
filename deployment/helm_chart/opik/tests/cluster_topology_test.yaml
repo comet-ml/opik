@@ -65,16 +65,16 @@ tests:
       - notExists:
           path: spec.configuration.clusters[0].layout.shards
 
-  # A zero shard count is already invalid, but it must not produce a null shards
-  # value where the CRD expects an array.
-  - it: never emits a null shards list
+  # A zero shard count is already invalid. Omit the list rather than clamping it to a
+  # single entry, which would contradict the shardsCount alongside it, and rather than
+  # emitting an empty list, which would be a null where the CRD expects an array.
+  - it: omits the shards list for a non-positive shard count
     set:
       clickhouse.shardsCount: 0
       clickhouse.replicasCount: 2
     asserts:
-      - lengthEqual:
+      - notExists:
           path: spec.configuration.clusters[0].layout.shards
-          count: 1
 
   - it: sharding.enabled does not alter the rendered cluster layout
     set:

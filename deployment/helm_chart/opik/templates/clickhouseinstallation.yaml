@@ -97,10 +97,12 @@ spec:
           # list is rendered only then — a single-replica deployment keeps the plain shardsCount /
           # replicasCount layout it has today. This states explicitly what the operator would
           # otherwise infer from replicasCount > 1. Shard names are left unset so the operator keeps
-          # generating them by index — host identity is unchanged.
-          {{- if gt (int .Values.clickhouse.replicasCount) 1 }}
+          # generating them by index — host identity is unchanged. A non-positive shardsCount renders
+          # no list at all rather than one clamped entry, which would contradict the shardsCount
+          # above and leave the operator to reconcile the two.
+          {{- if and (gt (int .Values.clickhouse.replicasCount) 1) (gt (int .Values.clickhouse.shardsCount) 0) }}
           shards:
-            {{- range $i := until (int (max 1 (int .Values.clickhouse.shardsCount))) }}
+            {{- range $i := until (int .Values.clickhouse.shardsCount) }}
             - internalReplication: "true"
             {{- end }}
           {{- end }}
