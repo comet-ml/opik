@@ -314,6 +314,12 @@ curl -s "http://localhost:7171/backup/list/local"
 Use the `name` field, not the S3 prefix. With `S3_PATH: shard-{shard}`, a backup stored at
 `s3://your-bucket/shard-0/2026-07-28/` has the name `2026-07-28`.
 
+The service, pod and port used throughout this section are the chart defaults, matching the
+`RESTORE_SERVICE` the Job computes. If you set `nameOverride`, a different shard/replica layout, or
+`clickhouse.backupServer.service.name` / `.port`, substitute your own — list them with
+`kubectl get pods,svc -n <namespace> -l clickhouse.altinity.com/chi` and use
+`clickhouse.backupServer.port` in place of `7171`.
+
 #### 2. Render the job manifest
 
 Put the restore settings in their own values file:
@@ -361,6 +367,10 @@ again:
 ```bash
 kubectl delete job opik-clickhouse-restore -n <namespace>
 ```
+
+Re-applying is safe: if this backup was already restored the Job exits without restoring it again,
+and if a restore is still running — for example after its pod was rescheduled — it follows that one
+instead of starting a second.
 
 #### 4. Watch the restore
 
@@ -415,16 +425,6 @@ significant I/O to the volume the restore is already saturating.
 <Note>
 The `/backup/actions` history is kept in memory. It is empty if the backup-server container restarted since the restore began, so this is a live-progress tool only — after the fact there is no local record. If you scrape metrics, `kubelet_volume_stats_used_bytes` for the ClickHouse PVC is the durable equivalent and needs no `exec`.
 </Note>
-
-#### How the Restore Job Works
-
-1. **Attaches to an existing restore**: if this backup was already restored it exits successfully
-   without restoring again; if a restore is still running (for example after the pod was
-   rescheduled) it follows that one instead of starting a second.
-2. **Chooses the restore method**: `restore` when the backup is on local disk, `restore_remote`
-   (download and restore in one step) when it is only in S3.
-3. **Monitors progress**: polls `/backup/actions` every 15 minutes for this backup's status.
-4. **Reports completion**: logs success, or the server's error message, and fails the job.
 
 <Note>
 Setting `createJob: true` in your release values works too — `helm upgrade` then creates the same job. If you do that, set it back to `false` afterwards, otherwise the next `helm upgrade` re-creates the job and restores again. The "already restored" check reads the backup server's in-memory action history, so it does not survive a backup server restart.
@@ -556,5 +556,5 @@ Set up monitoring for backup operations:
 For additional help with ClickHouse backups:
 
 - [ClickHouse Backup Documentation](https://github.com/Altinity/clickhouse-backup)
-- [ClickHouse Backup Command Reference](https://clickhouse.com/docs/concepts/features/backup-restore/overview)
+- [ClickHouse Backup and Restore](https://clickhouse.com/docs/concepts/features/backup-restore/overview)
 - [Opik Community Support](https://github.com/comet-ml/opik/issues)
