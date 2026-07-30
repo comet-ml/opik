@@ -49,7 +49,7 @@ def rescore_candidates(
                         candidate, allowed_roles
                     )
                 )
-                prompt_variants = candidate_ops.rebuild_prompts_from_candidate(
+                prompt_variants, _ = candidate_ops.rebuild_prompts_from_candidate(
                     base_prompts=optimizable_prompts,
                     candidate=candidate,
                     allowed_roles=allowed_roles,

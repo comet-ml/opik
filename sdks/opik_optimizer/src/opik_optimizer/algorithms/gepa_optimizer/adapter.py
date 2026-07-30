@@ -14,7 +14,6 @@ from ...core.state import prepare_experiment_config
 from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
 from ...utils.toolcalling.core import metadata as tool_metadata
-from ...utils.toolcalling.core import segment_updates
 from ...utils.scoring import improves_over
 from ...core import runtime
 from ...api_objects import chat_prompt
@@ -223,65 +222,24 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
     ) -> tuple[dict[str, chat_prompt.ChatPrompt], list[str]]:
         """Rebuild prompts with optimized messages, preserving tools/function_map/model.
 
-        Returns the rebuilt prompts and the component keys whose candidate edit
-        the placeholder guard rejected (empty when the candidate was clean).
+        Delegates to the shared candidate_ops pipeline (role constraints,
+        placeholder guard, tool updates) so the rebuild logic lives in one
+        place. Returns the rebuilt prompts and the component keys whose
+        candidate edit the placeholder guard rejected (empty when clean).
         """
-        rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
-        dropped_components = 0
-        placeholder_reverts: list[str] = []
-        for prompt_name, prompt_obj in self._base_prompts.items():
-            original_messages = prompt_obj.get_messages()
-            new_messages = []
-            for idx, msg in enumerate(original_messages):
-                component_key = f"{prompt_name}_{msg['role']}_{idx}"
-                # Use optimized content if available, otherwise keep original
-                original_content = msg.get("content", "")
-                if (
-                    self._allowed_roles is not None
-                    and msg.get("role") not in self._allowed_roles
-                ):
-                    optimized_content = original_content
-                    dropped_components += 1
-                else:
-                    optimized_content = candidate.get(component_key, original_content)
-                new_messages.append({"role": msg["role"], "content": optimized_content})
-
-            # Never evaluate a candidate that dropped one of the seed prompt's
-            # template variables — substitution is a silent str.replace, so the
-            # corrupted prompt would otherwise be scored as-is and could win.
-            new_messages, reverted = candidate_ops.enforce_placeholder_preservation(
-                original_messages=original_messages,
-                new_messages=new_messages,
-                prompt_name=prompt_name,
-                known_keys=self._known_placeholder_keys,
-            )
-            placeholder_reverts.extend(reverted)
-
-            # prompt.copy() preserves tools, function_map, model, model_kwargs
-            new_prompt = prompt_obj.copy()
-            new_prompt.set_messages(new_messages)
-
-            new_prompt = segment_updates.apply_tool_updates_from_candidate(
-                candidate=candidate,
-                prompt=new_prompt,
-                tool_component_prefix=f"{prompt_name}{segment_updates.TOOL_COMPONENT_PREFIX}",
-                tool_param_component_prefix=(
-                    f"{prompt_name}{segment_updates.TOOL_PARAM_COMPONENT_PREFIX}"
-                ),
-            )
-            # Final prompt
-            rebuilt[prompt_name] = new_prompt
+        rebuilt, placeholder_reverts = candidate_ops.rebuild_prompts_from_candidate(
+            base_prompts=self._base_prompts,
+            candidate=candidate,
+            allowed_roles=self._allowed_roles,
+            known_placeholder_keys=self._known_placeholder_keys,
+        )
+        dropped_components = candidate_ops.count_disallowed_candidate_components(
+            candidate, self._allowed_roles
+        )
         if dropped_components:
             logger.warning(
                 "GEPA adapter dropped %s component(s) due to optimize_prompt constraints.",
                 dropped_components,
-            )
-        if placeholder_reverts:
-            logger.warning(
-                "Rejected GEPA candidate edit(s) %s: the rewrite dropped template "
-                "variable(s) present in the seed prompt. Reverted to seed content so "
-                "the candidate is never evaluated with the user's input missing.",
-                placeholder_reverts,
             )
         return rebuilt, placeholder_reverts
 

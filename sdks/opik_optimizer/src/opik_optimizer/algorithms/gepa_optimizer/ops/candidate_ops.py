@@ -237,9 +237,14 @@ def rebuild_prompts_from_candidate(
     candidate: dict[str, str],
     allowed_roles: set[str] | None = None,
     known_placeholder_keys: set[str] | None = None,
-) -> dict[str, Any]:
-    """Rebuild prompts with optimized messages from a GEPA candidate."""
+) -> tuple[dict[str, Any], list[str]]:
+    """Rebuild prompts with optimized messages from a GEPA candidate.
+
+    Returns the rebuilt prompts and the component keys whose candidate edit
+    the placeholder guard rejected (empty when the candidate was clean).
+    """
     rebuilt: dict[str, Any] = {}
+    placeholder_reverts: list[str] = []
     for prompt_name, prompt_obj in base_prompts.items():
         original_messages = prompt_obj.get_messages()
         new_messages = []
@@ -265,12 +270,7 @@ def rebuild_prompts_from_candidate(
             prompt_name=prompt_name,
             known_keys=known_placeholder_keys,
         )
-        if reverted:
-            logger.warning(
-                "Rejected GEPA candidate edit(s) %s: the rewrite dropped template "
-                "variable(s) present in the seed prompt. Reverted to seed content.",
-                reverted,
-            )
+        placeholder_reverts.extend(reverted)
 
         new_prompt = prompt_obj.copy()
         new_prompt.set_messages(new_messages)
@@ -281,7 +281,14 @@ def rebuild_prompts_from_candidate(
             tool_param_component_prefix=f"{prompt_name}{TOOL_PARAM_COMPONENT_PREFIX}",
         )
         rebuilt[prompt_name] = new_prompt
-    return rebuilt
+    if placeholder_reverts:
+        logger.warning(
+            "Rejected GEPA candidate edit(s) %s: the rewrite dropped template "
+            "variable(s) present in the seed prompt. Reverted to seed content so "
+            "the candidate is never evaluated with the user's input missing.",
+            placeholder_reverts,
+        )
+    return rebuilt, placeholder_reverts
 
 
 def count_disallowed_candidate_components(

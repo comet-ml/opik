@@ -180,7 +180,7 @@ class TestRebuildAppliesGuard:
                 {"role": "user", "content": "Answer {question}"},
             ]
         )
-        rebuilt = candidate_ops.rebuild_prompts_from_candidate(
+        rebuilt, reverted = candidate_ops.rebuild_prompts_from_candidate(
             base_prompts={"p": prompt},
             candidate={
                 "p_system_0": "You are an expert geographer.",
@@ -190,15 +190,17 @@ class TestRebuildAppliesGuard:
         messages = rebuilt["p"].get_messages()
         assert messages[0]["content"] == "You are an expert geographer."  # kept
         assert messages[1]["content"] == "Answer {question}"  # rejected
+        assert reverted == ["p_user_1"]
 
     def test_shared_rebuild_honours_known_dataset_keys(self) -> None:
         prompt = _prompt([{"role": "user", "content": "Answer {my key}"}])
-        rebuilt = candidate_ops.rebuild_prompts_from_candidate(
+        rebuilt, reverted = candidate_ops.rebuild_prompts_from_candidate(
             base_prompts={"p": prompt},
             candidate={"p_user_0": "Answer it"},
             known_placeholder_keys={"my key"},
         )
         assert rebuilt["p"].get_messages()[0]["content"] == "Answer {my key}"
+        assert reverted == ["p_user_0"]
 
     def test_adapter_rebuild_rejects_and_records(self) -> None:
         prompt = _prompt([{"role": "user", "content": "Answer {question}"}])
