@@ -8,7 +8,7 @@ prefix, the ``ChatPrompt(model=...)`` construction, role derivation) is actually
 exercised. Only the Java REST enqueue and the RQ queue itself are skipped.
 
 The Anthropic key lives in the backend workspace (stored by the
-``anthropic_workspace_key`` fixture from a CI secret); the optimizer reaches it
+``workspace_provider_key`` fixture from a CI secret); the optimizer reaches it
 only through the gateway, never directly.
 
 Coverage:
@@ -250,7 +250,7 @@ def _assert_only_configured_model_ran(opik_client: opik.Opik, project_name: str)
 @pytest.mark.parametrize("optimizer_type", ["gepa", "hierarchical_reflective"])
 def test_studio_optimization_runs_on_dataset_and_prompt(
     opik_client: opik.Opik,
-    anthropic_workspace_key: None,
+    workspace_provider_key: None,
     project_name: str,
     seeded_sentiment_classification_dataset: opik.Dataset,
     run_studio_optimization: RunStudioOptimization,
@@ -271,7 +271,7 @@ def test_studio_optimization_runs_on_dataset_and_prompt(
 
 def test_studio_optimization_with_code_metric(
     opik_client: opik.Opik,
-    anthropic_workspace_key: None,
+    workspace_provider_key: None,
     project_name: str,
     seeded_sentiment_classification_dataset: opik.Dataset,
     run_studio_optimization: RunStudioOptimization,
@@ -290,7 +290,7 @@ def test_studio_optimization_with_code_metric(
 
 def test_studio_optimization_code_metric_syntax_error_surfaces_as_error(
     opik_client: opik.Opik,
-    anthropic_workspace_key: None,
+    workspace_provider_key: None,
     project_name: str,
     seeded_sentiment_classification_dataset: opik.Dataset,
     run_studio_optimization: RunStudioOptimization,
@@ -336,7 +336,7 @@ def test_studio_optimization_code_metric_syntax_error_surfaces_as_error(
 
 def test_studio_optimization_with_code_metric_arguments_map_rename(
     opik_client: opik.Opik,
-    anthropic_workspace_key: None,
+    workspace_provider_key: None,
     project_name: str,
     seeded_sentiment_classification_dataset: opik.Dataset,
     run_studio_optimization: RunStudioOptimization,
@@ -381,7 +381,7 @@ def test_studio_optimization_with_code_metric_arguments_map_rename(
 
 def test_studio_optimization_with_code_metric_missing_mapped_column(
     opik_client: opik.Opik,
-    anthropic_workspace_key: None,
+    workspace_provider_key: None,
     project_name: str,
     seeded_sentiment_classification_dataset: opik.Dataset,
     run_studio_optimization: RunStudioOptimization,

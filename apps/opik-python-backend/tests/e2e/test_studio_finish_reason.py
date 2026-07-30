@@ -83,7 +83,7 @@ def _wait_for_completed_with_metadata(
 
 def test_finish_reason_is_returned_and_persisted(
     opik_client: opik.Opik,
-    anthropic_workspace_key: None,
+    workspace_provider_key: None,
     project_name: str,
     seeded_sentiment_classification_dataset: opik.Dataset,
     run_studio_optimization: Any,

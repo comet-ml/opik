@@ -26,6 +26,13 @@ from opik_backend.jobs.optimizer import process_optimizer_job
 _PROVIDER = "anthropic"
 
 
+def _provider_for_model(model: str | None) -> str:
+    """Provider required by the e2e model (default model is Anthropic)."""
+    if model and model.startswith("gpt"):
+        return "openai"
+    return _PROVIDER
+
+
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
@@ -46,14 +53,14 @@ def _workspace_headers() -> dict[str, str]:
     return headers
 
 
-def _anthropic_configured(base: str, headers: dict[str, str]) -> bool:
+def _provider_configured(base: str, headers: dict[str, str], provider: str) -> bool:
     listing = httpx.get(
         f"{base}/v1/private/llm-provider-key", headers=headers, timeout=30
     )
     if listing.status_code != 200:
         return False
     return any(
-        item.get("provider") == _PROVIDER for item in listing.json().get("content", [])
+        item.get("provider") == provider for item in listing.json().get("content", [])
     )
 
 
@@ -67,26 +74,31 @@ def opik_client() -> Iterator[opik.Opik]:
 
 
 @pytest.fixture()
-def anthropic_workspace_key() -> None:
-    """Take the Anthropic key from the ANTHROPIC_API_KEY secret and store it in
-    the backend workspace, so the optimization resolves it server-side via the
-    gateway. The key is never handed to the optimizer. Skips if no key is
-    available (and none is already configured)."""
+def workspace_provider_key() -> None:
+    """Ensure the provider required by the e2e model has a key in the backend
+    workspace, so the optimization resolves it server-side via the gateway —
+    the key is never handed to the optimizer. For the default Anthropic model
+    the key comes from the ANTHROPIC_API_KEY secret (CI); for a local stack
+    whose workspace already has the required provider configured (e.g.
+    ``OPTSTUDIO_E2E_MODEL=gpt-5-nano`` with an OpenAI workspace key) this is a
+    no-op. Skips when the provider is neither configured nor obtainable."""
     base = _backend_base()
     if not base:
         pytest.skip("OPIK_URL_OVERRIDE not set; e2e requires a running Opik backend")
+    provider = _provider_for_model(os.getenv("OPTSTUDIO_E2E_MODEL"))
     headers = _workspace_headers()
-    if _anthropic_configured(base, headers):
+    if _provider_configured(base, headers, provider):
         return
-    secret = os.getenv("ANTHROPIC_API_KEY")
+    secret = os.getenv("ANTHROPIC_API_KEY") if provider == _PROVIDER else None
     if not secret:
         pytest.skip(
-            "ANTHROPIC_API_KEY not set and no Anthropic provider configured in the workspace"
+            f"no {provider} provider key configured in the workspace "
+            "(and no secret available to store one)"
         )
     httpx.post(
         f"{base}/v1/private/llm-provider-key",
         headers=headers,
-        json={"provider": _PROVIDER, "api_key": secret},
+        json={"provider": provider, "api_key": secret},
         timeout=30,
     ).raise_for_status()
 
@@ -169,6 +181,12 @@ def run_studio_optimization(
             "config": studio_config,
             "project_name": project_name,
         }
+        # Cloud backends authenticate the gateway and status updates with the
+        # workspace API key ("optional-api-key-for-cloud" in the job contract);
+        # local CI stacks run unauthenticated, so None keeps today's behaviour.
+        api_key = os.getenv("OPIK_API_KEY")
+        if api_key:
+            job_message["opik_api_key"] = api_key
         return process_optimizer_job(job_message)
 
     _run.last_optimization_id = None
