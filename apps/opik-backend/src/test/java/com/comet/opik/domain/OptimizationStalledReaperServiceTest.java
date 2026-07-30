@@ -545,4 +545,23 @@ class OptimizationStalledReaperServiceTest {
     private OptimizationStatus statusOf(UUID id) {
         return optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).status();
     }
+
+    @Test
+    @DisplayName("records the stall reason as structured error_info, not only in the studio log")
+    void recordsStallReasonAsErrorInfo() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+
+        reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
+
+        var reaped = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        assertThat(reaped.status()).isEqualTo(OptimizationStatus.ERROR);
+        // The UI prefers error_info.message and only falls back to scraping the studio log, so a failed
+        // log fetch must not hide a reason the platform knows exactly.
+        assertThat(reaped.errorInfo()).isNotNull();
+        assertThat(reaped.errorInfo().message())
+                .startsWith("[System] Optimization failed")
+                .contains("no progress");
+        assertThat(reaped.errorInfo().exceptionType()).isNotBlank();
+        assertThat(reaped.errorInfo().traceback()).isNotBlank();
+    }
 }

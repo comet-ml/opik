@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationStudioLog;
@@ -111,6 +112,11 @@ class OptimizationServiceImpl implements OptimizationService {
     private static final Set<OptimizationStatus> CANCELLABLE_STATUSES = EnumSet.of(
             OptimizationStatus.INITIALIZED,
             OptimizationStatus.RUNNING);
+    // ErrorInfo for a failure the platform observed instead of the worker reporting it. There is no
+    // stack to attach, and ErrorInfo#traceback is @NotBlank, so it says that explicitly.
+    private static final String SYSTEM_ERROR_TYPE = "SystemDetectedFailure";
+    private static final String SYSTEM_ERROR_TRACEBACK = "[System] No traceback: this failure was detected by "
+            + "the platform, not reported by the optimizer worker.";
 
     @Override
     @WithSpan
@@ -603,9 +609,20 @@ class OptimizationServiceImpl implements OptimizationService {
      * append the {@code [System]} line to the run's logs first (so the UI can surface it even when the worker
      * produced no logs), then reuse the standard {@link #update} path (which finalizes logs + emits the
      * completion event). Callers apply {@link #headlessSystemContext} and their own subscribe/guard semantics.
+     * <p>
+     * The reason is recorded twice on purpose: the UI prefers {@code error_info.message} and only falls back to
+     * scraping the studio log, so a run whose log cannot be fetched (S3 error, expired presigned URL) would
+     * otherwise show a generic "ended with an error" and lose a reason the platform already knows exactly.
      */
     private Mono<Long> appendSystemReasonAndMarkError(String workspaceId, UUID optimizationId, String reason) {
-        var errorUpdate = OptimizationUpdate.builder().status(OptimizationStatus.ERROR).build();
+        var errorUpdate = OptimizationUpdate.builder()
+                .status(OptimizationStatus.ERROR)
+                .errorInfo(ErrorInfo.builder()
+                        .exceptionType(SYSTEM_ERROR_TYPE)
+                        .message(reason)
+                        .traceback(SYSTEM_ERROR_TRACEBACK)
+                        .build())
+                .build();
         return logSyncService.appendSystemLogLine(workspaceId, optimizationId, reason)
                 .then(Mono.defer(() -> update(optimizationId, errorUpdate)));
     }
