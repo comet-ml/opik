@@ -1,0 +1,149 @@
+name: QA Coverage Reconcile
+run-name: "QA Coverage Reconcile ${{ github.ref_name }}"
+
+# Keeps the derived fields in tests_end_to_end/coverage/taxonomy.yaml in step with
+# the actual spec tags, and opens a PR when they drift (OPIK-7631).
+#
+# The tags are the source of truth: a capability is covered when a spec carries
+# its @cap:/@vcap: tag. The `covered:`/`tier:` values in the taxonomy are a cache
+# of that, refreshed here. Nobody edits them by hand.
+#
+# Authored fields — areas, capability keys, notes, cloud_only, state, axes — are
+# never touched by this job. Those change via the discovery job (OPIK-7632) or a
+# human PR.
+#
+# Runs after merges land rather than on PRs: on a PR the tags and the taxonomy
+# are *meant* to disagree until the reviewer accepts the new coverage claim, and
+# tag_lint.yml already gates tag validity there.
+
+on:
+  schedule:
+    - cron: '30 2 * * *'   # 02:30 UTC daily, after the nightly t3 suite settles
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'tests_end_to_end/e2e/tests/**'
+      - 'tests_end_to_end/visual-tests/tests/**'
+      - 'tests_end_to_end/coverage/**'
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false   # never abandon a run that may have opened a PR
+
+permissions:
+  contents: read
+
+jobs:
+
+  reconcile:
+    name: reconcile taxonomy with spec tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      # Tags are read via `playwright test --list`, not a regex, because tags
+      # union from describe to test and a file may hold several tiers. No browser
+      # is launched, so `playwright install` is deliberately skipped.
+      - name: Install e2e deps
+        working-directory: tests_end_to_end/e2e
+        run: npm ci --ignore-scripts
+
+      - name: Install visual-tests deps
+        working-directory: tests_end_to_end/visual-tests
+        run: npm ci --ignore-scripts
+
+      - name: Set branch name
+        run: echo "BRANCH_NAME=github-actions/OPIK-7532-reconcile-qa-taxonomy-$(date +%Y-%m-%d-%H-%M-%S)" >> "$GITHUB_ENV"
+
+      - name: Reconcile
+        id: reconcile
+        run: |
+          set -o pipefail
+          python3 tests_end_to_end/coverage/reconcile.py \
+            --taxonomy tests_end_to_end/coverage/taxonomy.yaml \
+            --estate tests_end_to_end \
+            --summary | tee /tmp/reconcile.txt
+          {
+            echo 'summary<<RECONCILE_EOF'
+            cat /tmp/reconcile.txt
+            echo 'RECONCILE_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          set -ex
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "Github Actions (${{ github.actor }})"
+          git add tests_end_to_end/coverage/taxonomy.yaml
+          git commit -m "[OPIK-7532] [QA] chore: reconcile coverage taxonomy with spec tags"
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.COMET_ACTION_CREATE_PR }}
+          branch: ${{ env.BRANCH_NAME }}
+          title: "[OPIK-7532] [QA] chore: reconcile coverage taxonomy with spec tags"
+          body: |
+            ## Details
+
+            Automated sync of the **derived** fields in
+            `tests_end_to_end/coverage/taxonomy.yaml` with the `@cap:`/`@vcap:` tags
+            actually present in the test estate.
+
+            Only `covered:` and `tier:` are touched. Areas, capability keys, notes,
+            `cloud_only`, `state` and `axes` are authored and left alone.
+
+            ```
+            ${{ steps.reconcile.outputs.summary }}
+            ```
+
+            See the job log for the full change list.
+
+            **Why this is safe to merge on green:** the tags are the source of
+            truth for coverage, so this PR only ever makes the file agree with
+            what the specs already claim. If a line here looks wrong, the tag is
+            wrong — fix the spec, not the taxonomy.
+
+            ## Change checklist
+            - [ ] User facing change
+            - [ ] Documentation update
+
+            ## Issues
+            OPIK-7631
+
+            ## Testing
+            - `tag_lint` + `reconcile --check` pass on this branch
+
+            ## Documentation
+            - `tests_end_to_end/TESTING-TAGS.md`

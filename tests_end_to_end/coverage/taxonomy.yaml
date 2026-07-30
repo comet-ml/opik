@@ -323,7 +323,7 @@ areas:
       sdk-seeded-visible:      { covered: true,  tier: t1-smoke }
       edit-creates-version:    { covered: true,  tier: t1-smoke }
       old-version-preserved:   { covered: true,  tier: t1-smoke }
-      version-history:         { covered: true,  tier: t2-cuj }
+      version-history:         { covered: true,  tier: t1-smoke }
       compare-versions:        { covered: false }
       experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
       delete-prompt:           { covered: false }
