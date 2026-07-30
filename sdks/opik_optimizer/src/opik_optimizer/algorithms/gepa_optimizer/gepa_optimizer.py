@@ -456,13 +456,21 @@ class GepaOptimizer(BaseOptimizer):
                 return items[: plan.nb_samples]
             return items
 
-        # Keep the unsampled lists: the placeholder guard derives its known
-        # keys from every column the datasets can supply, not just the rows
-        # this run happens to sample (see known_placeholder_keys below).
         all_train_items = dataset.get_items()
         all_val_items = val_source.get_items()
+        # Derive the guard's keys from every column the datasets can supply,
+        # not just the rows this run samples: rescoring evaluates against the
+        # full dataset, so a column carried only by an unsampled row would
+        # otherwise go unprotected. Done here, before narrowing, so the full
+        # lists can be released immediately — only the small key set outlives
+        # this block, and holding every item through optimization would undo
+        # the memory benefit of sampling.
+        known_placeholder_keys = candidate_ops.dataset_placeholder_keys(
+            (*all_train_items, *all_val_items)
+        )
         train_items = _apply_plan(all_train_items, train_plan)
         val_items = _apply_plan(all_val_items, val_plan)
+        del all_train_items, all_val_items
 
         effective_n_samples = len(train_items)
         max_metric_calls = max_trials * effective_n_samples
@@ -571,15 +579,10 @@ class GepaOptimizer(BaseOptimizer):
             val_scores=val_scores,
         )
 
-        # Dataset column names extend the placeholder guard to keys the
-        # identifier regex cannot see (e.g. "{my key}") on the rescoring and
-        # final-assembly rebuild paths, matching the adapter's evaluate() path.
-        # Derived from the *unsampled* items on purpose: rescoring runs against
-        # the full evaluation dataset, and a column carried by rows this run did
-        # not sample would otherwise leave its "{key}" unprotected.
-        known_placeholder_keys = candidate_ops.dataset_placeholder_keys(
-            (*all_train_items, *all_val_items)
-        )
+        # known_placeholder_keys was derived from the unsampled items above and
+        # extends the guard to columns the identifier regex cannot see (e.g.
+        # "{my key}") on the rescoring and final-assembly rebuild paths,
+        # matching the adapter's evaluate() path.
 
         rescored = scoring_ops.rescore_candidates(
             optimizer=self,

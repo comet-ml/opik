@@ -217,6 +217,25 @@ class TestEnforcePlaceholderPreservation:
         assert guarded == new
         assert reverted == []
 
+    def test_empty_known_keys_means_nothing_is_a_variable(self) -> None:
+        """An empty column set is knowledge, not ignorance.
+
+        `if known_keys:` used to treat it like None and fall back to the
+        identifier shape, reverting edits to literals a zero-column dataset
+        can never substitute.
+        """
+        original = [{"role": "user", "content": "Answer {question}"}]
+        new = [{"role": "user", "content": "Answer plainly"}]
+        guarded, reverted = candidate_ops.enforce_placeholder_preservation(
+            original_messages=original,
+            new_messages=new,
+            prompt_name="p",
+            known_keys=set(),
+        )
+
+        assert guarded == new
+        assert reverted == []
+
     def test_reverts_only_the_offending_message(self) -> None:
         original = [
             {"role": "system", "content": "Use {context}"},

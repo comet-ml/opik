@@ -88,7 +88,10 @@ def protected_tokens(content: Any, known_keys: set[str] | None = None) -> set[st
     conservatively.
     """
     tokens = extract_placeholders(content, known_keys)
-    if known_keys:
+    if known_keys is not None:
+        # An empty set is knowledge too: a dataset with no columns substitutes
+        # nothing, so nothing in the prompt is a variable. Only ``None`` means
+        # "columns unknown" and falls back to the identifier shape.
         return tokens & known_keys
     return tokens
 
@@ -99,6 +102,39 @@ def _protected_per_message(
     return [
         protected_tokens(message.get("content", ""), known_keys) for message in messages
     ]
+
+
+def _introduces_unseeded_column(
+    new_tokens: set[str], seed_tokens: set[str], known_keys: set[str] | None
+) -> bool:
+    """Leakage: the edit references a dataset column the seed never used."""
+    if known_keys is None:
+        return False
+    return bool((new_tokens & known_keys) - seed_tokens)
+
+
+def _moved_elsewhere(
+    token: str, seed_per_message: list[set[str]], new_per_message: list[set[str]]
+) -> bool:
+    """A token counts as moved only where the seed did not already carry it.
+
+    Otherwise a stale duplicate left in another message would excuse deleting
+    the one that actually holds the input.
+    """
+    return any(
+        token in new_per_message[idx] and token not in seed_per_message[idx]
+        for idx in range(len(new_per_message))
+    )
+
+
+def _drops_an_unmoved_variable(
+    idx: int, seed_per_message: list[set[str]], new_per_message: list[set[str]]
+) -> bool:
+    """Loss: this message dropped a variable that went nowhere else."""
+    return any(
+        not _moved_elsewhere(token, seed_per_message, new_per_message)
+        for token in seed_per_message[idx] - new_per_message[idx]
+    )
 
 
 def enforce_placeholder_preservation(
@@ -145,28 +181,18 @@ def enforce_placeholder_preservation(
     limit = min(len(original_messages), len(guarded))
 
     while True:
-        new_per_message = _protected_per_message(guarded, known_keys)
-        offending: list[int] = []
-        for idx in range(limit):
-            original_content = original_messages[idx].get("content", "")
-            if guarded[idx].get("content") == original_content:
-                continue  # untouched by the candidate, or already reverted
-
-            # Leakage: a dataset column the seed never referenced.
-            if known_keys and (new_per_message[idx] & known_keys) - seed_tokens:
-                offending.append(idx)
-                continue
-
-            # Loss: a protected token this message dropped without moving it.
-            for token in seed_per_message[idx] - new_per_message[idx]:
-                moved_elsewhere = any(
-                    token in new_per_message[other]
-                    and token not in seed_per_message[other]
-                    for other in range(limit)
+        new_per_message = _protected_per_message(guarded[:limit], known_keys)
+        offending = [
+            idx
+            for idx in range(limit)
+            if guarded[idx].get("content") != original_messages[idx].get("content", "")
+            and (
+                _introduces_unseeded_column(
+                    new_per_message[idx], seed_tokens, known_keys
                 )
-                if not moved_elsewhere:
-                    offending.append(idx)
-                    break
+                or _drops_an_unmoved_variable(idx, seed_per_message, new_per_message)
+            )
+        ]
 
         if not offending:
             return guarded, reverted

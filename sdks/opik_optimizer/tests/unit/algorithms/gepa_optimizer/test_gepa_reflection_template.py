@@ -182,11 +182,6 @@ class TestTemplateReachesGepa:
         sample_metric,
     ) -> None:
         override = "Rewrite <curr_param> using <side_info>. Keep variables."
-        monkeypatch.setattr(
-            GepaOptimizer,
-            "_resolve_reflection_prompt_template",
-            lambda self: override,
-        )
 
         captured = run_optimize_capturing_gepa_kwargs(
             monkeypatch,
@@ -195,6 +190,9 @@ class TestTemplateReachesGepa:
             mock_dataset,
             sample_dataset_items,
             sample_metric,
+            optimizer_kwargs={
+                "prompt_overrides": {"reflection_prompt_template": override}
+            },
         )
 
         assert captured["reflection_prompt_template"] == override

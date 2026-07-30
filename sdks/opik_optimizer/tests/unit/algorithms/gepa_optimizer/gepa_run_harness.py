@@ -31,12 +31,20 @@ def run_optimize_capturing_gepa_kwargs(
     mock_dataset,
     dataset_items,
     sample_metric,
+    optimizer_kwargs: dict[str, Any] | None = None,
     **optimize_kwargs: Any,
 ) -> dict[str, Any]:
-    """Return the kwargs gepa.optimize was called with."""
+    """Return the kwargs gepa.optimize was called with.
+
+    ``optimizer_kwargs`` go to the GepaOptimizer constructor, so a test can
+    drive behaviour through the public API (e.g. ``prompt_overrides``) instead
+    of patching internals.
+    """
     mock_optimization_context()
 
-    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    optimizer = GepaOptimizer(
+        model="gpt-4o-mini", verbose=0, seed=42, **(optimizer_kwargs or {})
+    )
     dataset = mock_dataset(dataset_items, name="test-dataset", dataset_id="dataset-123")
     monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
 
