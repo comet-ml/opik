@@ -213,20 +213,8 @@ class AttachmentDAOImpl implements AttachmentDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-
-            var template = TemplateUtils.newST(ATTACHMENTS_BY_ENTITY_IDS);
-            if (containerId != null) {
-                template.add("container_id", containerId);
-            }
-
-            var statement = connection.createStatement(template.render());
-
-            statement.bind("entity_ids", entityIds)
-                    .bind("entity_type", entityType.getValue());
-            if (containerId != null) {
-                statement.bind("container_id", containerId);
-            }
-
+            var statement = bindEntityIdsStatement(connection, ATTACHMENTS_BY_ENTITY_IDS, entityType, entityIds,
+                    containerId);
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> AttachmentInfo.builder()
                             .containerId(row.get("container_id", UUID.class))
@@ -246,24 +234,33 @@ class AttachmentDAOImpl implements AttachmentDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-
-            var template = TemplateUtils.newST(DELETE_ATTACHMENTS_BY_ENTITY_IDS);
-            if (containerId != null) {
-                template.add("container_id", containerId);
-            }
-
-            var statement = connection.createStatement(template.render());
-
-            statement.bind("entity_ids", entityIds.toArray(UUID[]::new))
-                    .bind("entity_type", entityType.getValue());
-            if (containerId != null) {
-                statement.bind("container_id", containerId);
-            }
-
+            var statement = bindEntityIdsStatement(connection, DELETE_ATTACHMENTS_BY_ENTITY_IDS, entityType, entityIds,
+                    containerId);
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)
                     .reduce(0L, Long::sum);
         });
+    }
+
+    /**
+     * Shared statement setup for the by-entity-id SELECT and DELETE: renders the template with the optional
+     * {@code container_id} clause and binds {@code entity_ids}, {@code entity_type}, and (when scoped) {@code
+     * container_id}, so the two paths can't drift on bind order or the optional-scope wiring.
+     */
+    private Statement bindEntityIdsStatement(Connection connection, String sql, EntityType entityType,
+            Set<UUID> entityIds, UUID containerId) {
+        var template = TemplateUtils.newST(sql);
+        if (containerId != null) {
+            template.add("container_id", containerId);
+        }
+
+        var statement = connection.createStatement(template.render())
+                .bind("entity_ids", entityIds.toArray(UUID[]::new))
+                .bind("entity_type", entityType.getValue());
+        if (containerId != null) {
+            statement.bind("container_id", containerId);
+        }
+        return statement;
     }
 
     @Override

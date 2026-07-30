@@ -390,7 +390,8 @@ public class TracesResource {
     @POST
     @Path("/delete")
     @Operation(operationId = "deleteTraces", summary = "Delete traces", description = "Delete traces", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content")})
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RequiredPermissions(WorkspaceUserPermission.TRACE_DELETE)
     public Response deleteTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDeleteByProject.class))) @NotNull @Valid BatchDeleteByProject request) {
