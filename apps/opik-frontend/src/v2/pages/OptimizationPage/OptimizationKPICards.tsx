@@ -18,6 +18,8 @@ import {
   OptimizationScoringHealth,
 } from "@/types/optimizations";
 import {
+  EMPTY_RUN_CAUSE,
+  EmptyRunCause,
   getCompletedRunDurationSeconds,
   getEmptyRunKPICaption,
 } from "./optimizationOverviewHelpers";
@@ -65,15 +67,13 @@ type OptimizationKPICardsProps = {
   optimizationLastUpdatedAt?: string;
   isInProgress?: boolean;
   /**
-   * Heuristic flag: the run COMPLETED but scored nothing usable (OPIK-7029). When
-   * set, the score card shows a caption so a degenerate run isn't a bare 0%/-.
+   * When not `NONE`, the score card shows a caption naming the cause, so a
+   * degenerate run is not a bare 0%/- (OPIK-7029, OPIK-7458).
    */
-  scoringFailed?: boolean;
+  emptyRunCause?: EmptyRunCause;
   /**
-   * Exact scoring-health counts from the backend (OPIK-7159 Wave 2). When
-   * present and `total_count > 0`, the score card caption shows the exact
-   * failed/total numbers. When absent, falls back to the Wave-1 heuristic copy.
-   * Only used when `scoringFailed` is true.
+   * Exact failed/total counts from the backend (OPIK-7159 Wave 2), falling back
+   * to the Wave-1 copy when absent. Only consulted for SCORING_FAILED.
    */
   scoringHealth?: OptimizationScoringHealth;
 };
@@ -89,7 +89,7 @@ const OptimizationKPICards: React.FunctionComponent<
   optimizationCreatedAt,
   optimizationLastUpdatedAt,
   isInProgress,
-  scoringFailed,
+  emptyRunCause = EMPTY_RUN_CAUSE.NONE,
   scoringHealth,
 }) => {
   const kpiData = useMemo(
@@ -119,13 +119,11 @@ const OptimizationKPICards: React.FunctionComponent<
     <div className="grid grid-cols-4 gap-4">
       {configs.map((config) => {
         const field = CANDIDATE_KEY_MAP[config.key];
-        // Caption the score card when the run scored nothing usable, so the
-        // 0%/- reads as "scoring failed" rather than a genuine result.
-        // When scoringHealth is present, show exact counts; otherwise fall back
-        // to the Wave-1 heuristic copy.
+        // Caption the score card so a 0%/- is explained rather than read as a
+        // real result.
         const caption =
           config.key === "score"
-            ? getEmptyRunKPICaption(!!scoringFailed, scoringHealth) ?? undefined
+            ? getEmptyRunKPICaption(emptyRunCause, scoringHealth) ?? undefined
             : undefined;
         return (
           <MetricKPICard
