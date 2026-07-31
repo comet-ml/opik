@@ -12,6 +12,7 @@ from .types import OptimizationJobContext
 from .exceptions import (
     DatasetNotFoundError,
     EmptyDatasetError,
+    InvalidConfigError,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,11 +115,6 @@ def run_optimization(
     Returns:
         Optimization result object
     """
-    # Optimizers default to optimizing only `system` messages. When the user's
-    # prompt has no system message (e.g. a single user message), that leaves the
-    # optimizer with zero editable components — GEPA then divides by zero while
-    # round-robin selecting one. Optimize whichever roles the prompt actually
-    # contains so a run succeeds for any prompt shape.
     present_roles = sorted(
         {
             message.get("role")
@@ -126,7 +122,34 @@ def run_optimization(
             if message.get("role") in {"system", "user", "assistant"}
         }
     )
-    optimize_prompts = present_roles or "system"
+    if "system" in present_roles:
+        # The shape the algorithms are stable on: instructions in the system
+        # message, template variables in the user message. Restricting the
+        # optimizable set to `system` keeps the variables out of the reflection
+        # LM's reach entirely instead of relying on it to preserve them
+        # (OPIK-7510). Studio seeds this shape by default.
+        optimize_prompts = ["system"]
+    elif present_roles:
+        # No system message (e.g. a lone user message) — optimizing only
+        # `system` would leave the optimizer zero editable components, and GEPA
+        # then divides by zero while round-robin selecting one. Widen to
+        # whichever roles the prompt actually contains so a run still succeeds
+        # for any prompt shape. This does hand the reflection LM the messages
+        # holding the template variables; the SDK-side candidate guard
+        # (OPIK-7510) is what covers that, and only from the opik-optimizer
+        # release that carries it — see the pin note in requirements.txt.
+        optimize_prompts = present_roles
+    else:
+        # Nothing optimizable at all: no messages, or only roles the optimizer
+        # does not accept (e.g. "developer", "tool"). Falling back to "system"
+        # here would hand GEPA zero editable components and hit the very
+        # divide-by-zero the branch above exists to avoid, so fail with a
+        # message that names the real problem instead.
+        raise InvalidConfigError(
+            "prompt.messages",
+            "no optimizable message found - the prompt needs at least one "
+            "system, user, or assistant message",
+        )
 
     result = optimizer.optimize_prompt(
         optimization_id=optimization_id,

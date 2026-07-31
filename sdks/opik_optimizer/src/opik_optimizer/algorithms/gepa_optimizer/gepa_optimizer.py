@@ -132,6 +132,78 @@ def _build_gepa_stop_callbacks(
     return stop_callbacks, no_improvement_stopper
 
 
+_GEPA_VERSION_REQUIREMENT = (
+    "opik-optimizer requires gepa>=0.1.0 (the <curr_param>/<side_info> "
+    "reflection-template contract; gepa 0.0.x speaks the older "
+    "<curr_instructions>/<inputs_outputs_feedback> dialect)."
+)
+
+
+def _validate_reflection_prompt_template(template: str) -> None:
+    """Raise if the reflection template is missing a marker gepa requires.
+
+    Checked with gepa's own validator so the rule cannot drift from upstream.
+    Called from __init__ so a bad override fails when the optimizer is
+    constructed — before the baseline evaluation spends real LLM calls — rather
+    than at gepa.optimize() hand-off, which happens after it.
+
+    A rejection is attributed to whoever caused it: a malformed override to the
+    caller (ValueError), an install that cannot honour our template contract to
+    the environment (RuntimeError naming the version floor).
+    """
+    if not isinstance(template, str):
+        raise ValueError(
+            "Invalid reflection_prompt_template override: expected a string, got "
+            f"{type(template).__name__}. The template must contain both the "
+            "<curr_param> and <side_info> markers."
+        )
+
+    # gepa does not document a public validation entry point, so this reaches
+    # into its instruction-proposal strategy; the except below turns a moved or
+    # renamed symbol after a gepa bump into an explicit version error instead of
+    # an opaque ImportError at construction.
+    try:
+        from gepa.strategies.instruction_proposal import InstructionProposalSignature
+
+        validate = InstructionProposalSignature.validate_prompt_template
+    except (ImportError, AttributeError) as exc:
+        raise RuntimeError(
+            "The installed gepa version does not expose the reflection-template "
+            f"validator this optimizer relies on. {_GEPA_VERSION_REQUIREMENT}"
+        ) from exc
+
+    # The branch above only catches gepa <=0.0.17, which has no validator at all.
+    # 0.0.18-0.0.27 do expose one — checking the *old* markers — so control would
+    # reach validate() and reject our own built-in default, and the handler below
+    # would blame an override the caller never passed. Read gepa's own default to
+    # tell the dialect apart. Only a readable str counts as evidence: a future
+    # gepa that renames or reshapes the attribute must not be misreported as too
+    # old (the built-in-default check below still covers that case).
+    installed_default = getattr(
+        InstructionProposalSignature, "default_prompt_template", None
+    )
+    if isinstance(installed_default, str) and "<curr_param>" not in installed_default:
+        raise RuntimeError(
+            "The installed gepa version uses an older reflection-template "
+            f"dialect. {_GEPA_VERSION_REQUIREMENT}"
+        )
+
+    try:
+        validate(template)
+    except ValueError as exc:
+        if template == gepa_prompts.REFLECTION_PROMPT_TEMPLATE:
+            # No override involved — the caller only asked for the optimizer. If
+            # gepa rejects the template we ship, the install is the problem.
+            raise RuntimeError(
+                "The installed gepa version rejects this optimizer's built-in "
+                f"reflection template ({exc}). {_GEPA_VERSION_REQUIREMENT}"
+            ) from exc
+        raise ValueError(
+            f"Invalid reflection_prompt_template override: {exc}. The template "
+            "must contain both the <curr_param> and <side_info> markers."
+        ) from exc
+
+
 def _resolve_gepa_finish_reason(
     *,
     val_scores: list[float],
@@ -185,7 +257,10 @@ class GepaOptimizer(BaseOptimizer):
         n_threads: Number of parallel threads for evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
-        prompt_overrides: Accepted for API parity, but ignored (GEPA does not expose prompt hooks).
+        prompt_overrides: Optional dict or callable overriding the optimizer's own
+            prompts. The one supported key is "reflection_prompt_template", passed
+            through to gepa.optimize() as the instruction-proposal prompt; it must
+            contain the <curr_param> and <side_info> markers.
     """
 
     DEFAULT_PROMPTS = gepa_prompts.DEFAULT_PROMPTS
@@ -229,7 +304,7 @@ class GepaOptimizer(BaseOptimizer):
             name=name,
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
-            prompt_overrides=None,
+            prompt_overrides=prompt_overrides,
         )
         self.n_threads = n_threads
         self._adapter_metric_calls = 0
@@ -245,10 +320,25 @@ class GepaOptimizer(BaseOptimizer):
                 "(e.g., output style inference, prompt generation). "
                 "Provide overrides on the prompt itself if you need precise control."
             )
-        if prompt_overrides is not None:
-            logger.warning(
-                "GEPA prompt overrides are not supported yet and will be ignored."
-            )
+
+        # Fail here, not at the gepa.optimize() hand-off: that happens after the
+        # baseline evaluation, so a malformed override would otherwise cost a
+        # full dataset scoring pass before raising.
+        _validate_reflection_prompt_template(
+            self.prompts.get("reflection_prompt_template")
+        )
+
+    def _resolve_reflection_prompt_template(self) -> str:
+        """Return the reflection template to hand gepa.optimize(), validated.
+
+        __init__ already validated the configured template, so this re-check only
+        catches a template swapped in afterwards via ``optimizer.prompts.set()``.
+        GEPA would also silently ignore the template if the adapter defined
+        propose_new_texts — OpikGEPAAdapter deliberately does not.
+        """
+        template = self.prompts.get("reflection_prompt_template")
+        _validate_reflection_prompt_template(template)
+        return template
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
@@ -399,8 +489,21 @@ class GepaOptimizer(BaseOptimizer):
                 return items[: plan.nb_samples]
             return items
 
-        train_items = _apply_plan(dataset.get_items(), train_plan)
-        val_items = _apply_plan(val_source.get_items(), val_plan)
+        all_train_items = dataset.get_items()
+        all_val_items = val_source.get_items()
+        # Derive the guard's keys from every column the datasets can supply,
+        # not just the rows this run samples: rescoring evaluates against the
+        # full dataset, so a column carried only by an unsampled row would
+        # otherwise go unprotected. Done here, before narrowing, so the full
+        # lists can be released immediately — only the small key set outlives
+        # this block, and holding every item through optimization would undo
+        # the memory benefit of sampling.
+        known_placeholder_keys = candidate_ops.dataset_placeholder_keys(
+            (*all_train_items, *all_val_items)
+        )
+        train_items = _apply_plan(all_train_items, train_plan)
+        val_items = _apply_plan(all_val_items, val_plan)
+        del all_train_items, all_val_items
 
         effective_n_samples = len(train_items)
         max_metric_calls = max_trials * effective_n_samples
@@ -463,6 +566,10 @@ class GepaOptimizer(BaseOptimizer):
                 "task_lm": None,
                 "reflection_lm": self.model,
                 "candidate_selection_strategy": candidate_selection_strategy,
+                # Replaces GEPA's default instruction-proposal prompt, which
+                # instructs the reflection LM to inline example content and so
+                # invites it to overwrite the user's template variables.
+                "reflection_prompt_template": self._resolve_reflection_prompt_template(),
                 "skip_perfect_score": self.skip_perfect_score,
                 "reflection_minibatch_size": reflection_minibatch_size,
                 "perfect_score": self.perfect_score,
@@ -513,6 +620,7 @@ class GepaOptimizer(BaseOptimizer):
             filtered_indexed_candidates=filtered_indexed_candidates,
             filtered_val_scores=filtered_val_scores,
             selection_policy=candidate_selection_strategy,
+            known_placeholder_keys=known_placeholder_keys,
         )
 
         best_idx, best_score = candidate_ops.select_best_candidate_index(
@@ -556,6 +664,7 @@ class GepaOptimizer(BaseOptimizer):
             train_items=train_items,
             gepa_result=gepa_result,
             experiment_config=experiment_config,
+            known_placeholder_keys=known_placeholder_keys,
         )
 
     def _build_optimization_config(self) -> dict[str, Any]:
