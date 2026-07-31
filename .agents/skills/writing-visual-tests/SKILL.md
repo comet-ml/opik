@@ -95,7 +95,7 @@ Construct it from the *page* the panel opens over, in the spec: `new TraceDetail
 The Python SDK behind `test-helper-service` reads `~/.opik.config`. If it points at a cloud environment, seeding creates real data there.
 
 ```bash
-cat ~/.opik.config
+grep url_override ~/.opik.config
 ```
 
 If `url_override` is anything other than `http://localhost:5173/api/`, back it up and point it local:
@@ -162,7 +162,7 @@ Also note: `playwright.config.ts`'s `webServer` directive auto-spawns `test-help
 | `.test-state.json` | Experiment-ID bridge for non-`SKIP_TEARDOWN` runs | Removed automatically by `global-teardown.ts` on a normal run; delete by hand only if you aborted mid-run without ever finishing a non-`SKIP_TEARDOWN` pass. |
 | `.auth/` | Playwright storage state written by `global-setup.ts` | **Not cleaned up by `global-teardown.ts`** — it only removes `.test-state.json` and server-side data. Delete by hand: `rm -rf .auth`. |
 | `screenshots/baseline/*.png` | Your actual baselines | **Not cruft — don't reflexively delete.** Gitignored and per-machine by design (see "Baselines are local and gitignored"); leave them for the next person/session to reuse, unless you specifically want to force a clean re-baseline. |
-| Seeded project (`visual-project` / `visual-empty-project`) in the running Opik instance | Server-side data, not a local file | Deleted by `global-teardown.ts` on a plain `npx playwright test` run (not `SKIP_TEARDOWN=1`). Do a final run *without* `SKIP_TEARDOWN` before you finish (see step 7) so this actually happens — don't leave it to the next person. |
+| Seeded project (`visual-project` / `visual-empty-project` / `visual-sidebar-project`) in the running Opik instance | Server-side data, not a local file | Deleted by `global-teardown.ts` on a plain `npx playwright test` run (not `SKIP_TEARDOWN=1`). Do a final run *without* `SKIP_TEARDOWN` before you finish (see step 7) so this actually happens — don't leave it to the next person. If teardown never ran (e.g. an interrupted `SKIP_TEARDOWN=1` session), delete any of the three by hand via the running instance's UI/API. |
 
 One-shot cleanup for the local-only report/log artifacts (keeps baselines):
 
