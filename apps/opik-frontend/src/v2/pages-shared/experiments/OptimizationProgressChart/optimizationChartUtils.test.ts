@@ -781,7 +781,48 @@ describe("buildStepTickLabels", () => {
     expect(labels.get(1)).toBe("Trials 1–3");
   });
 
-  it("numbers the ghost after every plotted trial on a new step", () => {
+  // The real caller always plots the evaluating candidate: buildCandidateChartData
+  // maps every candidate (scored or not) and inProgressInfo is derived from that
+  // same list. So the ghost's step is numbered from its own trialNumber, and must
+  // not additionally be counted as "one more trial".
+  it("uses the evaluating candidate's own number for its tick", () => {
+    const labels = buildStepTickLabels(
+      [
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+        makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+        makePoint({ candidateId: "t2", stepIndex: 2, trialNumber: 2 }),
+        // Evaluating: plotted with no value, but already numbered.
+        makePoint({
+          candidateId: "t3",
+          stepIndex: 3,
+          trialNumber: 3,
+          value: null,
+        }),
+      ],
+      3,
+    );
+    expect(labels.get(3)).toBe("Trial 3");
+  });
+
+  it("keeps a fan-out step's range exact while one of its trials evaluates", () => {
+    const labels = buildStepTickLabels(
+      [
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+        makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+        makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+        makePoint({
+          candidateId: "t3",
+          stepIndex: 1,
+          trialNumber: 3,
+          value: null,
+        }),
+      ],
+      1,
+    );
+    expect(labels.get(1)).toBe("Trials 1–3");
+  });
+
+  it("synthesises a number only for a ghost step with no numbered trial", () => {
     const labels = buildStepTickLabels(
       [
         makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
@@ -790,17 +831,6 @@ describe("buildStepTickLabels", () => {
       2,
     );
     expect(labels.get(2)).toBe("Trial 2");
-  });
-
-  it("extends the range of the step the ghost joins", () => {
-    const labels = buildStepTickLabels(
-      [
-        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
-        makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
-      ],
-      1,
-    );
-    expect(labels.get(1)).toBe("Trials 1–2");
   });
 
   it("numbers a ghost evaluating right after the baseline Trial 1", () => {

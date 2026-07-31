@@ -640,9 +640,10 @@ export const getUniqueSteps = (items: { stepIndex: number }[]): number[] => {
  * labelled "Baseline" — matching the baseline card's own status label.
  *
  * `ghostStep` is the step of the candidate currently being evaluated (the
- * dashed ghost dot). It has no aggregated candidate yet, so it is numbered
- * after every plotted trial — as its own tick, or extending the range of the
- * step it joins.
+ * dashed ghost dot). That candidate is already plotted — value-less but
+ * numbered — so its step is labelled from its own trial number like any other;
+ * only a ghost step with no numbered trial on it gets a number synthesised,
+ * following every plotted trial.
  */
 export const buildStepTickLabels = (
   chartData: CandidateDataPoint[],
@@ -667,11 +668,16 @@ export const buildStepTickLabels = (
 
   if (ghostStep != null) {
     steps.add(ghostStep);
-    const ghostTrialNumber = maxTrialNumber + 1;
-    const range = rangeByStep.get(ghostStep);
-    if (range) {
-      range.max = Math.max(range.max, ghostTrialNumber);
-    } else {
+    // The evaluating candidate is normally already one of `chartData`'s points
+    // — `buildCandidateChartData` plots every candidate, scored or not, and
+    // `inProgressInfo` is *derived from* that same candidate list — so its step
+    // is numbered by the loop above and needs no help here. Inventing
+    // `maxTrialNumber + 1` unconditionally double-counted it, widening the tick
+    // to "Trials N–N+1" for a step holding a single trial. Only a ghost whose
+    // step carries no numbered trial at all needs a number synthesised, and it
+    // follows every plotted trial.
+    if (!rangeByStep.has(ghostStep)) {
+      const ghostTrialNumber = maxTrialNumber + 1;
       rangeByStep.set(ghostStep, {
         min: ghostTrialNumber,
         max: ghostTrialNumber,
