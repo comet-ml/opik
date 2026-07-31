@@ -12,9 +12,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("Vertex AI multi-region endpoints are configurable")
 class VertexAIClientConfigTest {
@@ -54,7 +56,10 @@ class VertexAIClientConfigTest {
     @ParameterizedTest
     @NullAndEmptySource
     void fallBackToDefaultsWhenNotConfigured(Map<String, String> configured) {
-        var config = new LlmProviderClientConfig.VertexAIClientConfig("scope", configured, null);
+        var config = LlmProviderClientConfig.VertexAIClientConfig.builder()
+                .scope("scope")
+                .multiRegionApiEndpoints(configured)
+                .build();
 
         assertThat(config.multiRegionApiEndpoints()).containsExactlyInAnyOrderEntriesOf(EXPECTED_ENDPOINTS);
     }
@@ -65,8 +70,10 @@ class VertexAIClientConfigTest {
      */
     @Test
     void overlayConfiguredEndpointsOnTheDefaults() {
-        var config = new LlmProviderClientConfig.VertexAIClientConfig("scope",
-                Map.of("global", "custom.googleapis.com"), null);
+        var config = LlmProviderClientConfig.VertexAIClientConfig.builder()
+                .scope("scope")
+                .multiRegionApiEndpoints(Map.of("global", "custom.googleapis.com"))
+                .build();
 
         assertThat(config.multiRegionApiEndpoints())
                 .containsEntry("global", "custom.googleapis.com")
@@ -81,10 +88,40 @@ class VertexAIClientConfigTest {
     @ParameterizedTest
     @ValueSource(strings = {"GLOBAL", "Global", "  global  "})
     void canonicaliseConfiguredKeys(String configuredKey) {
-        var config = new LlmProviderClientConfig.VertexAIClientConfig("scope",
-                Map.of(configuredKey, "custom.googleapis.com"), null);
+        var config = LlmProviderClientConfig.VertexAIClientConfig.builder()
+                .scope("scope")
+                .multiRegionApiEndpoints(Map.of(configuredKey, "custom.googleapis.com"))
+                .build();
 
         assertThat(config.multiRegionApiEndpoints()).containsEntry("global", "custom.googleapis.com");
+    }
+
+    /**
+     * A YAML entry such as {@code global:} with no value deserialises to a null, which would otherwise surface as an
+     * opaque {@code NullPointerException} while building the endpoint map instead of naming the offending config.
+     */
+    @Test
+    void rejectBlankEndpointEntries() {
+        var blankLocation = new HashMap<String, String>();
+        blankLocation.put(null, "custom.googleapis.com");
+
+        var blankEndpoint = new HashMap<String, String>();
+        blankEndpoint.put("global", null);
+
+        assertThatThrownBy(() -> endpointsFor(blankLocation))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("blank location");
+        assertThatThrownBy(() -> endpointsFor(blankEndpoint))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("global");
+    }
+
+    private static Map<String, String> endpointsFor(Map<String, String> configured) {
+        return LlmProviderClientConfig.VertexAIClientConfig.builder()
+                .scope("scope")
+                .multiRegionApiEndpoints(configured)
+                .build()
+                .multiRegionApiEndpoints();
     }
 
     /**
@@ -93,14 +130,13 @@ class VertexAIClientConfigTest {
      */
     @Test
     void defaultTransportToGrpcWhenNotConfigured() {
-        var config = new LlmProviderClientConfig.VertexAIClientConfig("scope", null, null);
+        var config = LlmProviderClientConfig.VertexAIClientConfig.builder().scope("scope").build();
 
         assertThat(config.transport()).isEqualTo(Transport.GRPC);
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"config.yml"})
-    void keepGrpcTransportInProductionConfiguration(String configFile) throws Exception {
-        assertThat(vertexAIClientConfig(configFile).transport()).isEqualTo(Transport.GRPC);
+    @Test
+    void keepGrpcTransportInProductionConfiguration() throws Exception {
+        assertThat(vertexAIClientConfig("config.yml").transport()).isEqualTo(Transport.GRPC);
     }
 }

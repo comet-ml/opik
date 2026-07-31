@@ -148,10 +148,11 @@ class VertexAIClientGeneratorTest {
     private LlmProviderClientConfig clientConfig() {
         var endpoint = wireMockHost() + "/";
         var config = new LlmProviderClientConfig();
-        config.setVertexAIClient(new LlmProviderClientConfig.VertexAIClientConfig(
-                "https://www.googleapis.com/auth/cloud-platform",
-                Map.of("global", endpoint, "eu", endpoint, "us", endpoint),
-                Transport.REST));
+        config.setVertexAIClient(LlmProviderClientConfig.VertexAIClientConfig.builder()
+                .scope("https://www.googleapis.com/auth/cloud-platform")
+                .multiRegionApiEndpoints(Map.of("global", endpoint, "eu", endpoint, "us", endpoint))
+                .transport(Transport.REST)
+                .build());
         return config;
     }
 
