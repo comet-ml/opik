@@ -1,0 +1,87 @@
+suite: clickhouse cluster topology flags (shards, internal_replication, sharding switch)
+
+# Hyperscale topology flags landed ahead of the slices that flip them (OPIK-6880).
+# internal_replication is only meaningful with more than one replica, so the explicit
+# shards[] list is rendered only then and the single-replica default keeps the plain
+# layout it has today. clickhouse.sharding.enabled drives the backend's
+# Distributed-cluster readiness probe, not the rendered topology.
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: keeps the plain single-replica layout by default
+    asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.shardsCount
+          value: 1
+      - equal:
+          path: spec.configuration.clusters[0].layout.replicasCount
+          value: 1
+      - notExists:
+          path: spec.configuration.clusters[0].layout.shards
+
+  - it: pins internal_replication on the shard once there is more than one replica
+    set:
+      clickhouse.replicasCount: 2
+    asserts:
+      - lengthEqual:
+          path: spec.configuration.clusters[0].layout.shards
+          count: 1
+      - equal:
+          path: spec.configuration.clusters[0].layout.shards[0].internalReplication
+          value: "true"
+
+  - it: leaves shard names unset so the operator keeps generating them by index
+    set:
+      clickhouse.replicasCount: 2
+    asserts:
+      - notExists:
+          path: spec.configuration.clusters[0].layout.shards[0].name
+
+  - it: pins internal_replication on every shard when sharded and replicated
+    set:
+      clickhouse.shardsCount: 3
+      clickhouse.replicasCount: 2
+    asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.shardsCount
+          value: 3
+      - lengthEqual:
+          path: spec.configuration.clusters[0].layout.shards
+          count: 3
+      - equal:
+          path: spec.configuration.clusters[0].layout.shards[2].internalReplication
+          value: "true"
+
+  - it: renders no shards list for a sharded single-replica cluster
+    set:
+      clickhouse.shardsCount: 3
+      clickhouse.replicasCount: 1
+    asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.shardsCount
+          value: 3
+      - notExists:
+          path: spec.configuration.clusters[0].layout.shards
+
+  # A zero shard count is already invalid. Omit the list rather than clamping it to a
+  # single entry, which would contradict the shardsCount alongside it, and rather than
+  # emitting an empty list, which would be a null where the CRD expects an array.
+  - it: omits the shards list for a non-positive shard count
+    set:
+      clickhouse.shardsCount: 0
+      clickhouse.replicasCount: 2
+    asserts:
+      - notExists:
+          path: spec.configuration.clusters[0].layout.shards
+
+  - it: sharding.enabled does not alter the rendered cluster layout
+    set:
+      clickhouse.sharding.enabled: true
+    asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.shardsCount
+          value: 1
+      - notExists:
+          path: spec.configuration.clusters[0].layout.shards
