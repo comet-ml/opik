@@ -9,15 +9,20 @@ tests pin the contract: gepa receives a callable that routes through
 `core.llm_calls.call_model` (counter increment, cost accumulation into the final
 OptimizationResult, and an optimization-tagged trace).
 
-`track_completion` is patched only to stand in for the provider call, the same way
-the rest of the optimizer unit suite isolates LiteLLM (see
-`tests/unit/utils/test_llm_calls_call_model.py`). The assertions are on observable
-outcomes — the text handed back to gepa, the request built for the provider, the
-trace tags, and the counters/costs on the result — not on the patch itself.
+The provider is stubbed at the LiteLLM boundary, not by substituting Opik's
+instrumentation: `track_completion` is passed through as identity (the real
+decorator opens spans against a live backend), and `litellm.completion` — the
+outermost third-party call — is what the stub replaces. So `call_model` builds the
+request for real and the assertions read the request that actually reaches the
+provider SDK, rather than one handed to a test double. Same shape as
+`test_call_model_increments_counter` in `tests/unit/utils/test_llm_calls_call_model.py`.
+Everything asserted is observable: the text handed back to gepa, the provider
+request, the trace tags, and the counters/costs on the returned OptimizationResult.
 """
 
+from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -57,6 +62,27 @@ def _make_reflection_response(
             total_tokens=usage.get("total_tokens", 0),
         )
     return response
+
+
+@contextmanager
+def _stub_provider(response: Any) -> Iterator[dict[str, Any]]:
+    """Stub the provider call, yielding the kwargs it received.
+
+    `track_completion` is neutralized to identity rather than replaced with a
+    test-authored callable, so `call_model` keeps building the request itself —
+    including the duplicate-OpikLogger strip — and the yielded kwargs are the ones
+    that reach `litellm.completion` in a real run.
+    """
+    captured: dict[str, Any] = {}
+
+    def fake_completion(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return response
+
+    with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+        mock_track.return_value = lambda completion_fn: completion_fn
+        with patch("litellm.completion", side_effect=fake_completion):
+            yield captured
 
 
 def _run_optimize(
@@ -151,14 +177,8 @@ class TestGepaReflectionLmInstrumentation:
         )
         reflection_lm = captured["reflection_lm"]
 
-        captured_kwargs: dict[str, Any] = {}
-
-        def capture_completion(**kwargs: Any) -> MagicMock:
-            captured_kwargs.update(kwargs)
-            return _make_reflection_response("improved instruction")
-
-        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda completion_fn: capture_completion
+        response = _make_reflection_response("improved instruction")
+        with _stub_provider(response) as captured_kwargs:
             output = reflection_lm("please improve this prompt")
 
         assert output == "improved instruction"
@@ -197,10 +217,7 @@ class TestGepaReflectionLmInstrumentation:
             lambda **kwargs: tag_calls.append(kwargs),
         )
 
-        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda completion_fn: (
-                lambda **kw: _make_reflection_response("improved")
-            )
+        with _stub_provider(_make_reflection_response("improved")):
             reflection_lm("improve this prompt")
 
         assert tag_calls, "reflection must tag its trace for cost attribution"
@@ -233,14 +250,8 @@ class TestGepaReflectionLmInstrumentation:
             {"role": "system", "content": "you are a prompt engineer"},
             {"role": "user", "content": [{"type": "text", "text": "improve this"}]},
         ]
-        captured_kwargs: dict[str, Any] = {}
-
-        def capture_completion(**kwargs: Any) -> MagicMock:
-            captured_kwargs.update(kwargs)
-            return _make_reflection_response("multimodal instruction")
-
-        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda completion_fn: capture_completion
+        response = _make_reflection_response("multimodal instruction")
+        with _stub_provider(response) as captured_kwargs:
             output = reflection_lm(messages)
 
         assert output == "multimodal instruction"
@@ -269,10 +280,7 @@ class TestGepaReflectionLmInstrumentation:
         )
         reflection_lm = captured["reflection_lm"]
 
-        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda completion_fn: (
-                lambda **kw: _make_reflection_response(None)
-            )
+        with _stub_provider(_make_reflection_response(None)):
             with pytest.raises(EmptyLLMResponseError, match="empty response") as exc:
                 reflection_lm("improve this prompt")
 
@@ -304,10 +312,7 @@ class TestGepaReflectionLmInstrumentation:
 
         tracking_lm = TrackingLM(captured["reflection_lm"])
 
-        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-            mock_track.return_value = lambda completion_fn: (
-                lambda **kw: _make_reflection_response("instruction via gepa")
-            )
+        with _stub_provider(_make_reflection_response("instruction via gepa")):
             out = tracking_lm("improve this prompt")
 
         assert isinstance(out, str)
@@ -325,19 +330,16 @@ class TestGepaReflectionLmInstrumentation:
         """Both ends of OPIK-7521: the call is counted AND its cost reaches the result."""
 
         def fake_optimize(**kwargs: Any) -> MagicMock:
-            def completion(**_ignored: Any) -> MagicMock:
-                return _make_reflection_response(
-                    "new instruction",
-                    cost=1.5,
-                    usage={
-                        "prompt_tokens": 20,
-                        "completion_tokens": 10,
-                        "total_tokens": 30,
-                    },
-                )
-
-            with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
-                mock_track.return_value = lambda completion_fn: completion
+            response = _make_reflection_response(
+                "new instruction",
+                cost=1.5,
+                usage={
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                },
+            )
+            with _stub_provider(response):
                 kwargs["reflection_lm"]("please improve this prompt")
             return _make_mock_gepa_result()
 
