@@ -4399,75 +4399,48 @@ class TraceDAOImpl implements TraceDAO {
      * Whether {@code trace_final} can dedup with {@code GROUP BY} + {@code argMax} instead of {@code FINAL}.
      *
      * <p>{@code traces} is a {@code ReplacingMergeTree(last_updated_at)} ordered by
-     * {@code (workspace_id, project_id, id)}, so grouping on that key and taking each value-based predicate's
-     * verdict from the row with the greatest {@code last_updated_at} is exactly what {@code FINAL} + predicate
-     * computes. Because {@code FINAL} has to read and merge every row version, dropping it also lets ClickHouse
-     * apply lazy materialization, which it otherwise blocks.
+     * {@code (workspace_id, project_id, id)}, so grouping on that key and taking a predicate's verdict from the
+     * row with the greatest {@code last_updated_at} is what {@code FINAL} + predicate computes. Dropping
+     * {@code FINAL} also unblocks lazy materialization.
      *
-     * <p>The rewrite is exact but <em>not</em> unconditionally cheaper, so it is gated on two things.
+     * <p>Gated on two conditions. Do not widen either without fresh measurements — see OPIK-7636.
      *
-     * <p>First, no filter slot may pull in a {@code LEFT JOIN}. A join multiplies the row versions inside each
-     * group, and a predicate on a joined alias cannot be evaluated by {@code argMax} over {@code traces} versions
-     * at all. Those slots keep the {@code FINAL} form.
+     * <p><b>No filter slot may pull in a {@code LEFT JOIN}.</b> A join multiplies row versions inside each group,
+     * and a predicate on a joined alias cannot be evaluated by {@code argMax} over {@code traces} versions at all.
      *
-     * <p>Second, {@code search_text} must be present. The rewrite trades a streaming scan that filters row by row
-     * for a hash table holding one group per trace in the key range, with an aggregate state per projected column,
-     * built in full before {@code HAVING} can discard anything. It therefore only pays off when a heavy per-row
-     * scan dominates the query, which is what {@code searchText} over {@code input}/{@code output}/{@code metadata}
-     * does. Measured on production (OPIK-7636): with {@code searchText} it is ~2.8x cheaper in CPU and ~3.4x in
-     * peak memory on {@code SELECT_FEEDBACK_SCORES_STATS}, which re-evaluates this CTE from three scopes; without
-     * it the aggregation state is pure overhead, up to ~6x more CPU and ~85x more peak memory on a 26M-trace
-     * project. Peak memory grows with group count even on the {@code searchText} shapes, so the gate is what keeps
-     * this form on the queries where the scan cost swamps it. Do not widen it without re-measuring both.
+     * <p><b>{@code search_text} must be present.</b> The rewrite trades a streaming scan that filters row by row
+     * for a hash table holding one group per trace in the key range, built in full before {@code HAVING} can
+     * discard anything. That only pays off when a heavy per-row scan dominates the query, which is what
+     * {@code searchText} over {@code input}/{@code output}/{@code metadata} does. Without it the aggregation state
+     * is pure overhead in both CPU and peak memory, and peak memory grows with group count even on the
+     * {@code searchText} shapes.
      *
-     * <p>Dedup-key predicates ({@code workspace_id}, {@code project_id}, the {@code id} range bounds) and the
-     * {@code id IN (...)} slots stay in {@code WHERE}: they either are the key or select whole ids, so they
-     * cannot strand a group on a stale version. Value-based predicates ({@code filters}, {@code search_text})
-     * must move into {@code HAVING argMax(...)} — evaluating them row-level in {@code WHERE} would drop older
-     * versions from the group and make {@code argMax} report the latest <em>surviving</em> version instead of the
-     * true latest, resurfacing content that the current version no longer matches.
+     * <p><b>Predicate placement.</b> Dedup-key predicates ({@code workspace_id}, {@code project_id}, the
+     * {@code id} range bounds) and the {@code id IN (...)} slots stay in {@code WHERE} — they are the key, or they
+     * select whole ids, so they cannot strand a group on a stale version. Value-based predicates
+     * ({@code filters}, {@code search_text}) must move into {@code HAVING argMax(...)}: evaluated row-level in
+     * {@code WHERE} they drop older versions from the group, making {@code argMax} report the latest
+     * <em>surviving</em> version and resurfacing content the current version no longer matches.
      *
-     * <p>In {@code SELECT_TRACES_SPANS_STATS} the projected columns are wrapped in a <em>single</em>
-     * {@code argMax(tuple(...), last_updated_at)} and unpacked by an enclosing SELECT, rather than taken as one
-     * {@code argMax} per column. Per-column {@code argMax} would let row versions that share the greatest
-     * {@code last_updated_at} contribute different columns to the same output row, synthesising a row that never
-     * existed — where {@code FINAL} always yields one whole physical row. One tuple-valued {@code argMax} picks a
-     * single version atomically, so the tie case degrades to "which of the tied versions", exactly as under
-     * {@code FINAL}, instead of "a mixture of them". Verified result-identical to the per-column form on
-     * production data. Peak memory is never worse and is materially better at modest group counts (226 vs
-     * 353 MiB over 133K groups), but the two converge as groups grow — identical 9.43 GiB over 26.4M groups,
-     * where the state is dominated by the grouped values rather than by per-aggregate overhead. So the tuple is
-     * for correctness; it does not soften the cost profile the gate below exists to avoid.
+     * <p><b>One tuple-valued {@code argMax}, not one per column.</b> Per-column {@code argMax} would let versions
+     * sharing the greatest {@code last_updated_at} contribute different columns to one output row, synthesising a
+     * row that never existed. Wrapping the projection in {@code argMax(tuple(...), last_updated_at)} and unpacking
+     * it in an enclosing SELECT picks one version atomically. It also avoids an aliasing hazard: aliasing a
+     * per-version column to its own name wins name resolution inside {@code HAVING} — which reads
+     * {@code thread_id}, {@code error_info} and {@code duration} — nesting {@code argMax} in {@code argMax}, which
+     * ClickHouse rejects with {@code ILLEGAL_AGGREGATION}. A filter on a single unaliased column hides that; the
+     * eight-column {@code searchText} clause trips it every time.
      *
-     * <p><b>Scope of the equivalence.</b> For every key whose latest {@code last_updated_at} is unique, this form
-     * returns exactly the row {@code FINAL} returns. For a key with <em>tied</em> latest versions it returns one of
-     * the tied rows, and <em>which</em> one is not contractually the same row {@code FINAL} would pick: ClickHouse
-     * does not specify {@code argMax}'s tie behaviour, so this is an accepted, bounded difference rather than exact
-     * equivalence. Both forms always return a whole row that was really stored; the difference can only surface on
-     * keys carrying byte-identical {@code last_updated_at} values.
-     *
-     * <p>No tie-breaker is added, because none can close that gap. {@code ReplacingMergeTree} resolves an
-     * equal-{@code ver} tie by the "no {@code ver}" rule — the most recently inserted row wins — and insertion
-     * order is not a column, so no value-based tie-breaker can reproduce it. Adding one (ordering by the payload
-     * tuple, say) would be deterministic but would deliberately pick a different row than {@code FINAL} precisely
-     * in the tie case, converting an unobserved difference into a guaranteed one. Measured on 26.3.16.16 the two
-     * do agree in practice — over 20 tied versions inserted in scrambled order across multiple parts, and in the
-     * adversarial case where the last-inserted row sorts lowest by value, {@code FINAL} and {@code argMax} chose
-     * the same row on every run at 8 threads — but that is observed behaviour, not a guarantee to rely on.
-     *
-     * <p>Ties are also close to unreachable here. {@code last_updated_at} is {@code DateTime64(6)}, and rows
-     * sharing a sort key inside one INSERT are collapsed when the part is written, so a batch that carries the
-     * same trace twice stores one row rather than a tie. Separate batches take distinct {@code now64(6)} values.
-     * What remains is a client supplying an explicit duplicate {@code lastUpdatedAt}, since a caller-provided
-     * value is honoured. Across the four largest production projects (60M+ rows) there are no duplicate row
-     * versions at all.
-     *
-     * <p>Wrapping also avoids an aliasing hazard: aliasing a per-version column to its own name would win name
-     * resolution inside the {@code HAVING} predicate — which reads {@code thread_id}, {@code error_info} and
-     * {@code duration} — nesting {@code argMax} inside {@code argMax}, which ClickHouse rejects with
-     * {@code ILLEGAL_AGGREGATION}. The tuple alias shadows no column, so the predicate always resolves against
-     * the table. That failure only bites once a predicate touches one of those columns, so a filter on a single
-     * unaliased column would hide it while the eight-column {@code searchText} clause trips it every time.
+     * <p><b>Scope of the equivalence.</b> For a key whose latest {@code last_updated_at} is unique this returns
+     * exactly {@code FINAL}'s row. For a key with tied latest versions it returns one of the tied rows, and which
+     * one is not contractually {@code FINAL}'s choice, because ClickHouse does not specify {@code argMax}'s tie
+     * behaviour. Treat that as an accepted, bounded difference rather than exact equivalence: both forms always
+     * return a row that was really stored, so it can only shift which real version is reported, never invent one.
+     * No tie-breaker closes it — {@code ReplacingMergeTree} breaks the tie by insertion order, which is not a
+     * column, so a value-based tie-breaker would deterministically pick a different row than {@code FINAL} in
+     * exactly that case. Ties are close to unreachable anyway: rows sharing a sort key within one INSERT are
+     * collapsed when the part is written, and separate batches take distinct {@code now64(6)} values, leaving only
+     * a caller-supplied duplicate {@code lastUpdatedAt}.
      *
      * <p>When {@code traces} is exchanged for the {@code traces_local_v2} schema, that table is
      * {@code ReplacingMergeTree(last_updated_at, is_deleted)} and {@code FINAL} additionally drops soft-deleted
