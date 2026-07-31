@@ -202,8 +202,14 @@ class OptimizationServiceImpl implements OptimizationService {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String userName = ctx.get(RequestContext.USER_NAME);
 
-                    // Check if optimization already exists to preserve certain fields
+                    // Check if optimization already exists to preserve certain fields.
+                    // Same FIND-independence as applyUpdate, and this path needs it most: an empty result
+                    // here is not a skipped update but a run treated as brand new — forced INITIALIZED,
+                    // a regenerated name, and no preservation of studioConfig, errorInfo or createdAt.
+                    // A FIND mapping regression would therefore resurrect a live run as a fresh one and
+                    // reset the reaper's hard ceiling along with it (review: thiagohora).
                     return optimizationDAO.getById(id)
+                            .switchIfEmpty(Mono.defer(() -> optimizationDAO.getRowById(id)))
                             .map(Optional::of)
                             .defaultIfEmpty(Optional.empty())
                             .flatMap(existingOpt -> {

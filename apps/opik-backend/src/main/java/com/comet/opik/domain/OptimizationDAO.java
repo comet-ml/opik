@@ -9,6 +9,7 @@ import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.FilterUtils;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
@@ -17,6 +18,7 @@ import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -293,20 +295,45 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * keeps writing trial experiments ({@code experiments.optimization_id}) and, within a trial, one
      * experiment item per evaluated dataset item. Liveness is the newest of the row timestamp, the latest
      * trial experiment's {@code created_at}, and the latest experiment item's {@code created_at}; since
-     * the branch already requires {@code latest_updated_at} to be past the threshold, that reduces to the
-     * {@code NOT IN} anti-join below — "and no trial experiment or experiment item was created within the
-     * running timeout either". The item-level signal matters: a single trial evaluates up to
-     * {@code OPTSTUDIO_DATASET_SAMPLES} (1000) items and can legitimately run for a large fraction of the
-     * worker's whole execution timeout ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, 6h), so trial-creation alone
-     * would false-positive mid-trial; items narrow the legitimate silent gap to ~one dataset-item
-     * evaluation, which is what lets the running timeout be minutes. The probe is uncorrelated (evaluated
-     * once per pass); matching on {@code (id, workspace_id)} tuples keeps it workspace-precise anyway —
-     * an experiment or item written in another workspace can never register as this run's progress, the
-     * same scoping {@link #HAS_RECENT_STUDIO_ACTIVITY} applies via its {@code WHERE}. The
-     * {@code experiments} scan is floored by {@code :lookback_seconds} (safe: a candidate run's row
-     * timestamp is within the lookback window and its trial experiments are created after the run starts)
-     * and the {@code experiment_items} scan by the running timeout — both floors prune via the
-     * {@code minmax} skip indexes of migration 000113.
+     * the {@code HAVING} branch already requires {@code latest_updated_at} to be past the threshold, that
+     * reduces to the {@code active_optimizations} anti-join in the outer {@code WHERE} — "and no trial
+     * experiment or experiment item was created within the running timeout either". The item-level signal
+     * matters: a single trial evaluates up to {@code OPTSTUDIO_DATASET_SAMPLES} (1000) items and can
+     * legitimately run for a large fraction of the worker's whole execution timeout
+     * ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, 6h), so trial-creation alone would false-positive mid-trial;
+     * items narrow the legitimate silent gap to ~one dataset-item evaluation, which is what lets the
+     * running timeout be minutes.
+     *
+     * <p>The activity veto cannot sit in the {@code HAVING} above, because it is scoped by the very
+     * candidate set that aggregation produces — hence {@code candidates} is a CTE and the veto moved to
+     * the outer {@code WHERE}. Both probes are bounded by <em>id sets</em> rather than by a time floor
+     * (review: thiagohora): {@code experiments} by {@code (workspace_id, optimization_id) IN candidates},
+     * which the planner resolves through {@code idx_experiments_optimization_id} (minmax, migration
+     * 000069) as a set condition, and {@code experiment_items} by
+     * {@code (workspace_id, experiment_id) IN candidate_trials}, which is the primary-key prefix and so
+     * needs no index at all. Measured on production that is ~3 marks on {@code experiments} and a ~97%
+     * row reduction on {@code experiment_items}, which is why neither table needs a {@code created_at}
+     * index. The {@code created_at} comparisons stay as residual predicates — they are the liveness
+     * semantics, and they cost nothing once the read is bounded by the key. Scoping by the
+     * lookback-bounded candidate set rather than by "all studio runs" is load-bearing: a set spread over
+     * many workspaces degenerates into wide generic-exclusion ranges and recovers only ~3x.
+     *
+     * <p>The tuple form keeps both probes workspace-precise — an experiment or item written in another
+     * workspace can never register as this run's progress, the same scoping
+     * {@link #HAS_RECENT_STUDIO_ACTIVITY} applies via its {@code WHERE}. Dropping the old
+     * {@code :lookback_seconds} floor on {@code experiments} also removes an inconsistency with that
+     * pre-update guard: a trial older than the lookback window but still writing items now counts as
+     * alive here too, not only in the guard.
+     *
+     * <p>Deliberately no {@code experiments.type} filter, unlike the {@code experiment_candidates}
+     * population of {@link #FIND}, which excludes {@code 'mini-batch'} / {@code 'mutation'} (review:
+     * baz-reviewer). That exclusion keeps intermediate evaluations out of displayed trial counts and best
+     * scores; here the only question is "is the worker still writing anything for this run", and every
+     * experiment type carrying this {@code optimization_id} was written by the worker. GEPA records
+     * candidate screening and parent reflection evaluations as {@code 'mini-batch'} and can spend most of
+     * a run in that phase, so filtering those out would make a healthy run look silent — and since the
+     * item probe reaches items through the ids of this same scan, it would drop the item-level signal
+     * along with them.
      *
      * <p>{@code :running_hard_timeout_seconds} is the absolute ceiling that survives the progress signal:
      * a RUNNING row older than it is reaped even with recent trial/item writes, so a zombie worker that
@@ -321,11 +348,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * invariant meaningful.
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
-            SELECT
-                id,
-                workspace_id,
-                latest_status AS status
-            FROM (
+            WITH candidates AS (
                 SELECT
                     id,
                     any(workspace_id) AS workspace_id,
@@ -340,22 +363,40 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         AND less(latest_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
                     OR (latest_status = 'running'
                         AND (less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
-                            OR (less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds))
-                                AND (toString(id), workspace_id) NOT IN (
-                                    SELECT optimization_id, workspace_id
-                                    FROM experiments
-                                    WHERE optimization_id != ''
-                                      AND greaterOrEquals(created_at, subtractSeconds(now64(6), :lookback_seconds))
-                                      AND (greaterOrEquals(created_at, subtractSeconds(now64(6), :running_timeout_seconds))
-                                          OR (id, workspace_id) IN (
-                                              SELECT experiment_id, workspace_id
-                                              FROM experiment_items
-                                              WHERE greaterOrEquals(created_at, subtractSeconds(now64(6), :running_timeout_seconds))
-                                          ))
-                                ))))
-                ORDER BY latest_updated_at ASC
-                LIMIT :limit
+                            OR less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds))))
+            ), candidate_trials AS (
+                SELECT
+                    workspace_id,
+                    id,
+                    optimization_id,
+                    created_at
+                FROM experiments
+                WHERE (workspace_id, optimization_id) IN (SELECT workspace_id, toString(id) FROM candidates)
+            ), active_optimizations AS (
+                SELECT
+                    workspace_id,
+                    optimization_id
+                FROM candidate_trials
+                WHERE greaterOrEquals(created_at, subtractSeconds(now64(6), :running_timeout_seconds))
+                   OR (workspace_id, id) IN (
+                       SELECT workspace_id, experiment_id
+                       FROM experiment_items
+                       WHERE (workspace_id, experiment_id) IN (SELECT workspace_id, id FROM candidate_trials)
+                         AND greaterOrEquals(created_at, subtractSeconds(now64(6), :running_timeout_seconds))
+                   )
             )
+            SELECT
+                id,
+                workspace_id,
+                latest_status AS status
+            FROM candidates
+            WHERE latest_status = 'initialized'
+               OR less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
+               OR (workspace_id, toString(id)) NOT IN (
+                   SELECT workspace_id, optimization_id FROM active_optimizations
+               )
+            ORDER BY latest_updated_at ASC
+            LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -410,25 +451,47 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * write a trial experiment or an experiment item within the window? Used as the pre-update re-read
      * guard (OPIK-7459) — the fleet-wide reaper query and the ERROR update are not atomic, so a trial or
      * item landing in between must veto the transition, exactly like the status re-read vetoes a
-     * terminal-status race. Both scans sit behind the workspace prefix of the primary key plus the
-     * {@code minmax} indexes on {@code optimization_id} (000069) and {@code created_at} (000113).
+     * terminal-status race. Same id-set scoping as the fleet query, one run wide: the {@code trials} CTE
+     * sits behind {@code (workspace_id, optimization_id)} — the workspace prefix of the primary key plus
+     * the {@code minmax} index on {@code optimization_id} (migration 000069) — and the item probe behind
+     * {@code (workspace_id, experiment_id) IN trials}, which is the {@code experiment_items} primary-key
+     * prefix. Neither needs a {@code created_at} index; the timestamps are residual predicates. Scoping
+     * the items by this run's trials, rather than by the workspace alone, is what keeps a busy workspace's
+     * unrelated item traffic out of the scan.
      */
     private static final String HAS_RECENT_STUDIO_ACTIVITY = """
+            WITH trials AS (
+                SELECT
+                    workspace_id,
+                    id,
+                    created_at
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                  AND optimization_id = :optimization_id
+            )
             SELECT 1
-            FROM experiments
-            WHERE workspace_id = :workspace_id
-              AND optimization_id = :optimization_id
-              AND (greaterOrEquals(created_at, subtractSeconds(now64(6), :window_seconds))
-                  OR id IN (
-                      SELECT experiment_id
-                      FROM experiment_items
-                      WHERE workspace_id = :workspace_id
-                        AND greaterOrEquals(created_at, subtractSeconds(now64(6), :window_seconds))
-                  ))
+            FROM trials
+            WHERE greaterOrEquals(created_at, subtractSeconds(now64(6), :window_seconds))
+               OR (workspace_id, id) IN (
+                   SELECT workspace_id, experiment_id
+                   FROM experiment_items
+                   WHERE (workspace_id, experiment_id) IN (SELECT workspace_id, id FROM trials)
+                     AND greaterOrEquals(created_at, subtractSeconds(now64(6), :window_seconds))
+               )
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * Every cell must stay a plain bound placeholder: this is a {@code FORMAT Values} insert, and any
+     * function expression in a tuple cell ({@code COALESCE}, {@code parseDateTime64BestEffortOrNull},
+     * {@code now64}) trips ClickHouse's fast-path parser — the insert still succeeds, but every row
+     * silently increments {@code system.errors} codes 26 / 27 / 43 / 70 and writes to pod stderr
+     * (OPIK-5694, see {@link ClickHouseDateTimeFormat}). Both {@code DateTime64(9, 'UTC')} timestamps are
+     * therefore formatted in Java via {@link ClickHouseDateTimeFormat#formatNanos}, and the column
+     * DEFAULT that {@code now64()} used to supply is substituted in Java too — {@code Instant.toString()}
+     * would not do, since its {@code T}/{@code Z} form is exactly what the fast path rejects.
+     */
     private static final String UPSERT = """
             INSERT INTO optimizations (
                 id,
@@ -459,8 +522,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 :error_info,
                 :created_by,
                 :last_updated_by,
-                COALESCE(parseDateTime64BestEffortOrNull(:last_updated_at, 6), now64(6)),
-                COALESCE(parseDateTime64BestEffortOrNull(:created_at, 9), now64(9))
+                :last_updated_at,
+                :created_at
             )
             ;
             """;
@@ -473,6 +536,16 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * {@code duration_p50} (quantiles over zero finished traces yields NaN — the state a worker
      * killed mid-trial leaves behind, OPIK-7459) and {@code experiment_scores_parsed.value}
      * (JSON-parsed, so unbounded input). Costs are Decimal and cannot be non-finite.
+     *
+     * <p>The score value is parsed with {@code toFloat64OrNull} rather than {@code CAST(... AS Float64)}:
+     * the column holds raw JSON that older or foreign writers may have shaped differently, and a
+     * non-numeric value in a <em>named</em> entry made {@code CAST} throw {@code CANNOT_PARSE_TEXT},
+     * 500-ing the whole endpoint (review: thiagohora). {@code toFloat64OrNull} never throws, and
+     * {@code isFinite(NULL)} is NULL — falsy in the {@code WHERE} — so unparseable and non-finite entries
+     * are dropped alike. The result is re-wrapped in {@code assumeNotNull} so the aggregated map stays
+     * {@code Map(String, Float64)}: {@code getScoresAggregation} calls {@code doubleValue()} on each
+     * value, and a nullable map value would reintroduce exactly the swallowed-mapper-exception row loss
+     * this javadoc is about. The {@code WHERE} already guarantees the value is non-null.
      */
     private static final String FIND = """
             WITH optimization_final AS (
@@ -591,12 +664,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 SELECT
                     e.id AS experiment_id,
                     JSON_VALUE(score, '$.name') AS name,
-                    CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                    assumeNotNull(toFloat64OrNull(JSON_VALUE(score, '$.value'))) AS value
                 FROM experiments_final AS e
                 ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
                 WHERE e.experiment_scores != '' AND e.experiment_scores != '[]'
                   AND length(JSON_VALUE(score, '$.name')) > 0
-                  AND isFinite(CAST(JSON_VALUE(score, '$.value') AS Float64))
+                  AND isFinite(toFloat64OrNull(JSON_VALUE(score, '$.value')))
             ), experiment_scores_agg AS (
                 SELECT
                     experiment_id,
@@ -1123,21 +1196,19 @@ class OptimizationDAOImpl implements OptimizationDAO {
             statement.bindNull("studio_config", String.class);
         }
 
-        if (optimization.lastUpdatedAt() != null) {
-            statement.bind("last_updated_at", optimization.lastUpdatedAt().toString());
-        } else {
-            statement.bindNull("last_updated_at", String.class);
-        }
+        // Both timestamps are bound as canonical ClickHouse DateTime64(9) literals, and the column
+        // DEFAULT that now64() used to supply is substituted here — see the UPSERT javadoc (OPIK-5694).
+        statement.bind("last_updated_at",
+                ClickHouseDateTimeFormat.formatNanos(
+                        optimization.lastUpdatedAt() != null ? optimization.lastUpdatedAt() : Instant.now()));
 
         // created_at used to be absent from the INSERT, so the column DEFAULT re-stamped it on every
         // re-upsert: a run's creation time drifted forward, and the stalled-run reaper's hard ceiling
         // (which is measured from it) could be postponed indefinitely by writes that are not status
         // changes. The service carries the existing row's value in on re-upsert (OPIK-7459).
-        if (optimization.createdAt() != null) {
-            statement.bind("created_at", optimization.createdAt().toString());
-        } else {
-            statement.bindNull("created_at", String.class);
-        }
+        statement.bind("created_at",
+                ClickHouseDateTimeFormat.formatNanos(
+                        optimization.createdAt() != null ? optimization.createdAt() : Instant.now()));
 
         return makeFluxContextAware((userName, workspaceId) -> {
             log.info("Inserting optimization with id '{}', datasetId '{}', datasetName '{}', workspaceId '{}'",
@@ -1171,7 +1242,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     /** Maps the plain {@code optimizations} table columns — everything except FIND's computed aggregates. */
-    private Optimization mapRowColumns(io.r2dbc.spi.Row row) {
+    private Optimization mapRowColumns(Row row) {
         OptimizationStudioConfig studioConfig = null;
         String studioConfigJson = row.get("studio_config", String.class);
         if (StringUtils.isNotEmpty(studioConfigJson)) {

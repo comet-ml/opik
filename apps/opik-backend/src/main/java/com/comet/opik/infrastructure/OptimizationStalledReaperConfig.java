@@ -43,19 +43,24 @@ import java.util.concurrent.TimeUnit;
  *        the worker's between-trial thinking time — or a slow-but-alive run gets reaped mid-flight; the
  *        {@code @MinDuration} floor guards the pathological end of that (same fail-fast intent as
  *        {@link #isLockDurationBelowJobInterval()}).
- * @param runningHardTimeout absolute ceiling for a {@code RUNNING} run measured from its last status
- *        change, reaped even when trial/item writes are still arriving. This preserves the pre-OPIK-7459
+ * @param runningHardTimeout absolute ceiling for a {@code RUNNING} run measured from when the run was
+ *        created, reaped even when trial/item writes are still arriving. This preserves the pre-OPIK-7459
  *        "a run can never stay stuck indefinitely" guarantee against a zombie worker that keeps producing
  *        rows without ever reporting a terminal status. MUST exceed the worker's maximum execution
  *        timeout ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) plus a buffer — the {@code @MinDuration}
  *        floor is pinned to that 6h default — and MUST NOT be below {@link #runningTimeout()}
- *        (enforced by {@link #isRunningHardTimeoutAtLeastRunningTimeout()}).
- * @param lookbackMargin added to {@code max(initializedTimeout, runningTimeout)} to size the
- *        {@code last_updated_at >= now - window} floor of the reaper's scan. It is pure reaper-downtime
- *        insurance: a run that stalled just before the reaper became unavailable is still caught once the
- *        reaper recovers, as long as it was down for less than this margin. It does NOT need to be large
- *        to find fresh stalls (those are always within the timeout), so keep it only as big as the longest
- *        expected reaper outage — a shorter margin also tightens the skip-index granule pruning.
+ *        (enforced by {@link #isRunningHardTimeoutAtLeastRunningTimeout()}). Measuring it from creation
+ *        rather than from {@code last_updated_at} is deliberate: every write to the row refreshes that
+ *        column, so a metadata PATCH or an SDK re-upsert would postpone the backstop indefinitely.
+ * @param lookbackMargin added to {@code max(initializedTimeout, runningTimeout, runningHardTimeout)} to
+ *        size the {@code last_updated_at >= now - window} floor of the reaper's scan. It is pure
+ *        reaper-downtime insurance: a run that stalled just before the reaper became unavailable is still
+ *        caught once the reaper recovers, as long as it was down for less than this margin. It does NOT
+ *        need to be large to find fresh stalls (those are always within the timeout), so keep it only as
+ *        big as the longest expected reaper outage — a shorter margin also tightens the skip-index granule
+ *        pruning. Folding {@code runningHardTimeout} into the maximum is what keeps the floor safe: since
+ *        {@code lookback >= runningHardTimeout}, any run not yet past the ceiling is younger than the
+ *        floor, so it can never be missed by the scan.
  * @param lockDuration lock TTL, held until expiry, that suppresses other instances from reconciling until
  *        it elapses. MUST be kept below {@link #jobInterval()} (the lock is held until expiry, so a
  *        lockDuration &gt;= jobInterval would make every other scheduled tick a no-op and silently halve

@@ -576,6 +576,65 @@ class OptimizationsResourceTest {
         }
 
         @Test
+        @DisplayName("Get optimizer by id when a candidate mixes a finished trial with one still in flight")
+        void getByIdWhenCandidateMixesFinishedAndUnfinishedTrials() {
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .objectiveName(objectiveName)
+                    .build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Both trials share one candidate_id, which is the grain candidate_metrics averages over
+            // (GROUP BY optimization_id, candidate_id). This is the shape the old NaN did not merely lose
+            // the row for, but silently returned a WRONG NUMBER for: isNotNull(NaN) is true, so the
+            // unfinished trial's trace_count entered the weighted-duration denominator while NaN poisoned
+            // the numerator. The NULL this PR introduces is skipped by both sum() and isNotNull(), so the
+            // arithmetic must reflect the finished trial alone (review: thiagohora).
+            var candidateId = UUID.randomUUID().toString();
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));
+
+            var finishedTrial = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(id)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(metadata)
+                    .experimentScores(List.of(ExperimentScore.builder()
+                            .name(objectiveName)
+                            .value(BigDecimal.valueOf(0.9))
+                            .build()))
+                    .build();
+            var finishedTrialId = experimentResourceClient.create(finishedTrial, API_KEY, TEST_WORKSPACE_NAME);
+
+            var unfinishedTrial = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(id)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(metadata)
+                    .build();
+            var unfinishedTrialId = experimentResourceClient.create(unfinishedTrial, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Exactly one finished trace, of exactly one second, so the expected p50 is unambiguous.
+            var traceStart = Instant.now().minusSeconds(30);
+            linkItemWithTrace(finishedTrialId, traceStart, traceStart.plusMillis(1_000));
+            linkItemWithTrace(unfinishedTrialId, Instant.now(), null);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+                        // duration_p50 is milliseconds and weighted_duration divides by 1000, so a single
+                        // one-second trace is 1.0 — not 0.5, which is what averaging the unfinished
+                        // trial's trace_count into the denominator would produce.
+                        assertThat(actual.bestDuration()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestDuration(),
+                                BigDecimal.valueOf(1.0))).isZero();
+                        assertThat(actual.baselineDuration()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineDuration(),
+                                BigDecimal.valueOf(1.0))).isZero();
+                    });
+        }
+
+        @Test
         @DisplayName("Get optimizer by id with feedback scores")
         void getByIdWithFeedbackScores() {
             // Create dataset
@@ -854,6 +913,29 @@ class OptimizationsResourceTest {
 
     private Dataset buildDataset() {
         return DatasetResourceClient.buildDataset(podamFactory);
+    }
+
+    /**
+     * Appends one experiment item to an existing trial, backed by a real trace. A null {@code endTime}
+     * leaves the trace unfinished, so it contributes no duration — letting a caller build a candidate
+     * that mixes finished and in-flight trials.
+     */
+    private void linkItemWithTrace(UUID experimentId, Instant startTime, Instant endTime) {
+        var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .startTime(startTime)
+                .endTime(endTime)
+                .duration(null)
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE_NAME);
+
+        var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .traceId(trace.id())
+                .feedbackScores(null)
+                .build();
+        experimentResourceClient.createExperimentItem(Set.of(item), API_KEY, TEST_WORKSPACE_NAME);
     }
 
     /**

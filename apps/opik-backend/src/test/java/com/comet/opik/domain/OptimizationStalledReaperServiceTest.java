@@ -22,6 +22,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
@@ -46,8 +47,6 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -412,6 +411,82 @@ class OptimizationStalledReaperServiceTest {
                 .isEqualTo(createdAt);
     }
 
+    /**
+     * The pre-update liveness guard is unreachable through the reaper tests by construction: every
+     * "still alive" case is filtered out by the fleet query's anti-join before the Java-side veto in
+     * OptimizationService#isStillDead can fire, so the guard never executes in those tests. It is the
+     * thing standing between a slow-but-alive trial straddling the window boundary and a wrongful ERROR,
+     * so it is asserted directly against the DAO here (review: thiagohora).
+     */
+    @Test
+    @DisplayName("liveness probe sees a trial experiment created inside the window")
+    void hasRecentStudioActivitySeesRecentTrial() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        createTrialExperiment(id);
+
+        assertThat(hasRecentActivity(id, Duration.ofMinutes(5))).isTrue();
+    }
+
+    @Test
+    @DisplayName("liveness probe sees an item created inside the window under a trial older than it")
+    void hasRecentStudioActivitySeesRecentItemUnderOldTrial() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        // The long-single-trial shape: the trial row itself is far outside the window, only the
+        // per-dataset-item writes are recent. This is the branch that lets the running timeout be minutes.
+        var experimentId = createBackdatedTrialExperiment(id, Duration.ofHours(1));
+        createExperimentItem(experimentId);
+
+        assertThat(hasRecentActivity(id, Duration.ofMinutes(5))).isTrue();
+    }
+
+    @Test
+    @DisplayName("liveness probe reports no activity when the only trial is older than the window")
+    void hasRecentStudioActivityIgnoresTrialOutsideWindow() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        createBackdatedTrialExperiment(id, Duration.ofHours(1));
+
+        assertThat(hasRecentActivity(id, Duration.ofMinutes(5))).isFalse();
+    }
+
+    @Test
+    @DisplayName("liveness probe ignores another workspace's experiment carrying the same run id")
+    void hasRecentStudioActivityIgnoresForeignWorkspaceActivity() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        // optimization_id is stored without an existence check, so a client in another workspace can
+        // write an experiment carrying this run's UUID. The probe's workspace scoping is load-bearing:
+        // foreign activity must never veto a reap.
+        experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
+                .optimizationId(id)
+                .build(), OTHER_API_KEY, OTHER_WORKSPACE_NAME);
+
+        assertThat(hasRecentActivity(id, Duration.ofMinutes(5))).isFalse();
+    }
+
+    @Test
+    @DisplayName("raw row fallback reads a run whose unfinished-trace items break the heavyweight GET")
+    void getRowByIdReadsRunUnmappableByGetById() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        var experimentId = createTrialExperiment(id);
+        // An item pointing at a still-unfinished trace is what a worker killed mid-trial leaves behind —
+        // the state that used to make the aggregating FIND drop the run entirely. The raw-row read is the
+        // defense-in-depth fallback for both the status update and the upsert path, so it must return the
+        // run regardless of what the aggregates would do.
+        createExperimentItem(experimentId, false);
+
+        var optimization = injector.getInstance(OptimizationDAO.class)
+                .getRowById(id)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER))
+                .block();
+
+        assertThat(optimization).isNotNull();
+        assertThat(optimization.id()).isEqualTo(id);
+        assertThat(optimization.status()).isEqualTo(OptimizationStatus.RUNNING);
+        // The fallback carries no aggregates — that is the documented tradeoff for FIND-independence.
+        assertThat(optimization.numTrials()).isNull();
+    }
+
     @Test
     @DisplayName("respects the batch size limit per cycle")
     void respectsBatchSizeLimit() {
@@ -505,9 +580,7 @@ class OptimizationStalledReaperServiceTest {
      * {@code min(created_at)} picks up the backdated start.
      */
     private void backdateRunStart(UUID id, Duration startedAgo) {
-        var startedAt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSSSSS")
-                .withZone(ZoneOffset.UTC)
-                .format(Instant.now().minus(startedAgo));
+        var startedAt = ClickHouseDateTimeFormat.formatNanos(Instant.now().minus(startedAgo));
         var sql = ("INSERT INTO %s.optimizations (id, dataset_id, name, workspace_id, project_id, "
                 + "objective_name, status, metadata, studio_config, error_info, created_by, last_updated_by, "
                 + "created_at, last_updated_at) "
@@ -547,10 +620,9 @@ class OptimizationStalledReaperServiceTest {
         // Bind a canonical UTC string, not a LocalDateTime: created_at is DateTime64(9, 'UTC') and
         // setObject would leave the wire format to the driver's timezone/precision handling, so the
         // backdating (and with it the whole liveness window this test pins) would drift with the JVM
-        // default timezone (review: baz-reviewer).
-        var createdAt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSSSSS")
-                .withZone(ZoneOffset.UTC)
-                .format(Instant.now().minus(age));
+        // default timezone (review: baz-reviewer). ClickHouseDateTimeFormat is the shared helper for
+        // exactly this literal form.
+        var createdAt = ClickHouseDateTimeFormat.formatNanos(Instant.now().minus(age));
         try (var connection = CLICK_HOUSE_CONTAINER.createConnection("");
                 var statement = connection.prepareStatement(
                         ("INSERT INTO %s.experiments (workspace_id, dataset_id, id, name, optimization_id, "
@@ -610,6 +682,18 @@ class OptimizationStalledReaperServiceTest {
                 .block();
         assertThat(snapshot).isNotNull();
         return snapshot.status();
+    }
+
+    /** The pre-update liveness guard the reaper consults before writing ERROR. */
+    private boolean hasRecentActivity(UUID id, Duration window) {
+        var active = injector.getInstance(OptimizationDAO.class)
+                .hasRecentStudioActivity(id, window)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER))
+                .block();
+        assertThat(active).isNotNull();
+        return active;
     }
 
     private OptimizationStudioConfig studioConfig() {
