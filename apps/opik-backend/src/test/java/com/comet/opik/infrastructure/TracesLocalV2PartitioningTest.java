@@ -32,9 +32,9 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Exercises the traces_local_v2 partition design (migration 000101) end to end: the {@code id_at DateTime MATERIALIZED
- * UUIDv7ToDateTime(toUUID(id))} → {@code PARTITION BY toMonday(id_at)} chain. Two behaviors are pinned as permanent
- * regression guards:
+ * Exercises the traces_local_v2 partition design (migration 000114) end to end: the {@code id_at DateTime64(0)
+ * MATERIALIZED UUIDv7ToDateTime(toUUID(id))} → {@code PARTITION BY toYYYYMMDD(toMonday(id_at))} chain. Two behaviors are
+ * pinned as permanent regression guards:
  *
  * <ul>
  *   <li><b>Partition stability across upserts.</b> {@code id_at} is computed by ClickHouse from the immutable {@code id},
@@ -42,11 +42,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   partition — the property {@code ReplacingMergeTree}'s in-partition dedup depends on. Regresses if the
  *   {@code id_at} expression or the partition key stops deriving from the immutable {@code id}.</li>
  *   <li><b>Partition pruning.</b> The planner does not infer that {@code id} is monotonic through
- *   {@code UUIDv7ToDateTime} in the partition expression, so an {@code id}-range predicate alone prunes only via the
- *   primary key (every partition is still read). Adding the parallel {@code toMonday(id_at)} bound the {@code TraceDAO}
- *   read path emits — derived from the same UUIDv7 as the id-range bound — is what prunes partitions. Read via
- *   {@code EXPLAIN indexes = 1}: the {@code MinMax} index block reflects part-level pruning on the partition-expression
- *   column, so its selected count drops below the total exactly when partition pruning engages.</li>
+ *   {@code UUIDv7ToDateTime}, so an {@code id}-range predicate alone prunes only via the primary key (every partition is
+ *   still read). Adding the parallel {@code toMonday(id_at)} bound the read path emits — derived from the same UUIDv7 as
+ *   the id-range bound — is what prunes partitions: ClickHouse's partition {@code MinMax} tracks the monotonic
+ *   {@code toMonday(id_at)} sub-expression of the {@code toYYYYMMDD(toMonday(id_at))} key, so a {@code toMonday(id_at)}
+ *   predicate prunes partitions metadata-only — the mechanism cold-tier reads depend on — identically to a bare
+ *   {@code toMonday(id_at)} key. Read via {@code EXPLAIN indexes = 1}: the
+ *   {@code MinMax} block's selected count drops below the total exactly when partition pruning engages.</li>
  * </ul>
  *
  * <p>Runs directly against ClickHouse via {@link TransactionTemplateAsync} over the test container's connection factory
@@ -130,7 +132,8 @@ class TracesLocalV2PartitioningTest {
         var seed = seedConsecutiveWeeklyPartitions();
 
         // The exact predicate the TraceDAO read path emits: each id-range bound carries a parallel toMonday(id_at)
-        // bound derived from the same UUIDv7, expressed on the partition expression itself.
+        // bound derived from the same UUIDv7 — the monotonic sub-expression the partition key toYYYYMMDD(toMonday(id_at))
+        // is built on.
         var actualParts = minMaxParts("""
                 SELECT
                     id
@@ -146,9 +149,9 @@ class TracesLocalV2PartitioningTest {
                 .bind("id_hi", seed.ids().get(2)));
 
         // ids 1..2 are the inner two of the four seeded weeks, so week 0 sits below the range and week 3 above; both
-        // prune away, demonstrating pruning on each bound. ClickHouse folds the toMonday(id_at) bound back onto the
-        // id_at MinMax via toMonday's monotonicity, so the pruning shows on the MinMax entry (the Partition entry then
-        // reports the already-pruned set).
+        // prune away, demonstrating pruning on each bound. ClickHouse's partition MinMax tracks toMonday(id_at) — the
+        // monotonic sub-expression of the toYYYYMMDD(toMonday(id_at)) key — so the toMonday(id_at) bounds prune on the
+        // MinMax entry (the Partition entry then reports the already-pruned set).
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
     }
 
@@ -169,9 +172,27 @@ class TracesLocalV2PartitioningTest {
                 .bind("workspace_id", seed.workspaceId())
                 .bind("id", seed.ids().get(1)));
 
-        // Equality on the partition expression pins the scan to the single week id 1 lands in; the other three seeded
-        // weeks (and every out-of-window part) fall away, so the selected count drops below the total.
+        // Equality on toMonday(id_at) (the partition key's monotonic sub-expression) pins the scan to the single week id
+        // 1 lands in; the other three seeded weeks (and every out-of-window part) fall away, so selected drops below total.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
+    }
+
+    /**
+     * The partition key {@code toYYYYMMDD(toMonday(id_at))} resolves to {@code UInt32} whatever
+     * {@code enable_extended_results_for_datetime_functions} is — a stable type. That is the load-bearing property
+     * (OPIK-7456): far-future ids partition honestly with the setting or wrap cosmetically without it, but the key type
+     * never changes, so existing parts are never detached. A bare {@code Date}/{@code Date32} key flips type when the
+     * setting toggles and orphans every part on the next restart. Pinning the type makes a revert to that detach-prone
+     * key fail here with a clear signal, not only as an opaque partition-id-format mismatch elsewhere.
+     */
+    @Test
+    void partitionKeyResolvesToUInt32ForDetachSafety() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var id = ID_GENERATOR.generateId(weekInstant(0));
+        insert(List.of(id), workspaceId, projectId, weekInstant(0));
+
+        assertThat(partitionKeyTypeFor(workspaceId, projectId, id)).isEqualTo("Tuple(UInt32)");
     }
 
     /**
@@ -241,6 +262,23 @@ class TracesLocalV2PartitioningTest {
                 .bind("id", id)
                 .execute())
                 .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("distinct_partitions", Long.class)))))
+                .block();
+    }
+
+    private String partitionKeyTypeFor(String workspaceId, UUID projectId, UUID id) {
+        return transactionTemplateAsync.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                SELECT toTypeName(_partition_value) AS key_type
+                FROM traces_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id = :id
+                LIMIT 1
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId)
+                .bind("id", id)
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("key_type", String.class)))))
                 .block();
     }
 

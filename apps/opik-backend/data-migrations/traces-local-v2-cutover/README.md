@@ -296,17 +296,20 @@ only `created_at`/`last_updated_at`; the `id` minmax/bloom indexes exist only on
 `id IN (deleted-ids since anchor)` set is tiny (retention off → user-scale deletes), so it is a bounded id-filtered read,
 not a full-table scan. An index still would not rescue `id`-slicing (the ~2201 span is a *data* problem, not an index one). Destination write locality
 is naturally good with `created_at` slicing (`id_at ≈ created_at` once validation holds); slicing by *workspace* would
-instead scatter each insert across every weekly partition that workspace spans → a small-part explosion on a 4 TB table.
+instead scatter each insert across every weekly partition that workspace spans → a small-part explosion on a large table.
 
-**Known issue — far-future partitions from bad ids.** Because the destination partitions by `toMonday(id_at)`, the
-bad-`id` rows create far-future weekly partitions on `traces_local_v2` (inherent to the DDL + the bad data, not to the
-slice choice). Note the year: the ids' embedded UUIDv7 timestamp is ~2201, but `id_at` is a **32-bit `DateTime`** (max
-year 2106), so `UUIDv7ToDateTime` overflows and **wraps ~2201 to ~2065** — that is where the partitions actually land.
-Either way it is bounded (few distinct bad timestamps → few extra partitions) and mostly harmless (those partitions
-never tier to cold and are skipped by
-time-bounded reads); the audit query below finds them regardless of the exact year (it keys on `id_at` being in the
-future, not on a specific year). Quantify it before
-the cutover and decide whether to remediate:
+**Known issue — far-future partitions from bad ids.** The bad-`id` rows' embedded UUIDv7 timestamp is ~2201, so they
+create far-future weekly partitions on `traces_local_v2` (inherent to `PARTITION BY toYYYYMMDD(toMonday(id_at))` + the bad
+data, not the slice choice). Since [OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456), `id_at` is a `DateTime64`
+and the cluster sets `enable_extended_results_for_datetime_functions=1`, so `toMonday(id_at)` resolves to `Date32` and
+these land in an honest **~2201** (`22010601`-shaped) YYYYMMDD partition — obviously bogus and easy to spot — instead of
+wrapping into a plausible-looking recent year. **The setting must be active whenever data is inserted** (this backfill
+and live ingestion), not when the table was created: a row written without it lands in a wrapped-year YYYYMMDD partition
+(cosmetic and recoverable — the `UInt32` partition key never detaches parts), one written with it lands honestly. Verify
+`SELECT value FROM system.settings WHERE name = 'enable_extended_results_for_datetime_functions'` returns `1` before
+backfilling. The bad partitions are bounded (few distinct bad timestamps → few extra partitions) and mostly harmless
+(they never tier to cold and are skipped by time-bounded reads); the audit query below finds them (it keys on `id_at`
+being in the future). Quantify it before the cutover and decide whether to remediate:
 
 ```sql
 -- rows / distinct far-future partitions the bad ids would create
@@ -323,7 +326,7 @@ state is a `ReplacingMergeTree` reduction keyed on `(workspace_id, project_id, i
 — **independent of insert order** — so any run converges to the same live rows; ClickHouse already sorts each insert
 block by the destination `ORDER BY`, and since the source shares that key the rows arrive in order anyway; and
 reconciliation uses order-independent `uniqExact` of the dedup key. An explicit `ORDER BY` would only add sort cost/memory
-on a 4 TB backfill for no gain.
+on a large backfill for no gain.
 
 ## Delta and replay correctness
 

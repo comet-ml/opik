@@ -791,6 +791,8 @@ clickhouse:
                 <enable_time_time64_type>1</enable_time_time64_type>
                 <!-- the new CH 25.x default (1) makes FINAL reads on skip-indexed tables over-read massively; our queries already prune on the PK/project_id, so exact mode isn't needed. -->
                 <use_skip_indexes_if_final_exact_mode>0</use_skip_indexes_if_final_exact_mode>
+                <!-- toMonday / toStartOf* return Date32 / DateTime64 for wide inputs instead of the year-2149/2106-capped Date/DateTime. traces_local_v2 (migration 000114) partitions by toYYYYMMDD(toMonday(id_at)) over a DateTime64 id_at; this makes toMonday return Date32 so far-future bad ids partition into an honest YYYYMMDD instead of a wrapped-year one. Must be a server default so it is active whenever data is inserted (OPIK-7456). Value-preserving no-op for all in-range dates. -->
+                <enable_extended_results_for_datetime_functions>1</enable_extended_results_for_datetime_functions>
             </default>
           </profiles>
         </clickhouse>

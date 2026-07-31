@@ -1439,8 +1439,10 @@ class TracesLocalV2CutoverTest {
      * (count, checksum) over the DETERMINISTIC derived columns of the fidelity cohort — {@code id_at} (the partition
      * key), the three {@code *_length}s, {@code truncated_input} / {@code truncated_output} and {@code output_keys}.
      * Each is the same MATERIALIZED expression over faithfully-copied base columns on both tables, so equal fingerprints
-     * prove the successor's expressions did not drift from the source's. {@code duration} is checked separately
-     * ({@link #durationMismatches}) because its value legitimately differs by up to the ns-to-us truncation.
+     * prove the successor's expressions did not drift from the source's. {@code id_at} is wrapped in {@code toDateTime}
+     * because the source's {@code id_at} is a 32-bit {@code DateTime} while the successor's is a {@code DateTime64} since
+     * OPIK-7456: both are second precision, so the cast only unifies the column type — a raw cross-type hash would differ
+     * even for identical instants.
      */
     private Fingerprint derivedFingerprint(String table, String workspaceId) {
         var sql = """
@@ -1448,7 +1450,7 @@ class TracesLocalV2CutoverTest {
                     count() AS c,
                     sum(cityHash64(
                         id,
-                        id_at,
+                        toDateTime(id_at),
                         input_length,
                         output_length,
                         metadata_length,
