@@ -128,6 +128,22 @@ export const DEFAULT_OPEN_ROUTER_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
+// OrcaRouter is an OpenAI-compatible routing gateway; it reuses the OpenRouter
+// sampling-parameter surface, so its defaults mirror DEFAULT_OPEN_ROUTER_CONFIGS.
+export const DEFAULT_ORCA_ROUTER_CONFIGS = {
+  MAX_TOKENS: 0,
+  TEMPERATURE: 1,
+  TOP_P: 1,
+  TOP_K: 0,
+  FREQUENCY_PENALTY: 0,
+  PRESENCE_PENALTY: 0,
+  REPETITION_PENALTY: 1,
+  MIN_P: 0,
+  TOP_A: 0,
+  THROTTLING: 0,
+  MAX_CONCURRENT_REQUESTS: 5,
+};
+
 export const DEFAULT_VERTEX_AI_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 1024,

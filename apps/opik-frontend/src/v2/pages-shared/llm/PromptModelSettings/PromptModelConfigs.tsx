@@ -25,6 +25,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import OpenAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 import AnthropicModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
 import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/OpenRouterModelConfigs";
+import OrcaRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/OrcaRouterModelConfigs";
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
@@ -78,6 +79,15 @@ const PromptModelConfigs = ({
     if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
       return (
         <OpenRouterModelConfigs
+          configs={configs as LLMOpenRouterConfigsType}
+          onChange={onChange}
+        />
+      );
+    }
+
+    if (provider === PROVIDER_TYPE.ORCA_ROUTER) {
+      return (
+        <OrcaRouterModelConfigs
           configs={configs as LLMOpenRouterConfigsType}
           onChange={onChange}
         />

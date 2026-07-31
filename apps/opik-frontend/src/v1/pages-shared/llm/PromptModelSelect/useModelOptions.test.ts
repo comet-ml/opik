@@ -28,4 +28,24 @@ describe("sortProviderModels", () => {
       { label: "zeta", value: "zeta/model" },
     ]);
   });
+
+  it("sorts OrcaRouter models with bare routers first and A-Z", () => {
+    const models = [
+      { label: "orcarouter/openai/gpt-4o-mini", value: "orcarouter/openai/gpt-4o-mini" },
+      { label: "orcarouter/auto", value: "orcarouter/auto" },
+      { label: "orcarouter/anthropic/claude-opus-4.8", value: "orcarouter/anthropic/claude-opus-4.8" },
+    ];
+
+    expect(sortProviderModels(PROVIDER_TYPE.ORCA_ROUTER, models)).toEqual([
+      { label: "orcarouter/auto", value: "orcarouter/auto" },
+      {
+        label: "orcarouter/anthropic/claude-opus-4.8",
+        value: "orcarouter/anthropic/claude-opus-4.8",
+      },
+      {
+        label: "orcarouter/openai/gpt-4o-mini",
+        value: "orcarouter/openai/gpt-4o-mini",
+      },
+    ]);
+  });
 });

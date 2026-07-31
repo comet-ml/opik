@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
+import com.comet.opik.infrastructure.llm.orcarouter.OrcaRouterModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Inject;
@@ -130,6 +131,12 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         }
         if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
             return LlmProvider.GEMINI;
+        }
+        // OrcaRouter is detected by its dedicated "orcarouter/" prefix so it never collides with
+        // OpenRouter's shared "openai/..." (and other vendor) namespaces. Checked before OpenRouter.
+        if (model.startsWith("orcarouter/")
+                || isModelBelongToProvider(model, OrcaRouterModelName.class, OrcaRouterModelName::toString)) {
+            return LlmProvider.ORCA_ROUTER;
         }
         if (model.startsWith("openrouter/")
                 || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {

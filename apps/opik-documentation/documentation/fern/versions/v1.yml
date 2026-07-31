@@ -600,6 +600,9 @@ navigation:
               - page: OpenRouter
                 path: ../docs/tracing/integrations/openrouter.mdx
                 slug: openrouter
+              - page: OrcaRouter
+                path: ../docs/tracing/integrations/orcarouter.mdx
+                slug: orcarouter
               - page: Portkey
                 path: ../docs/tracing/integrations/portkey.mdx
                 slug: portkey

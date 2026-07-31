@@ -7,6 +7,7 @@ removed (to avoid breaking references across the codebase).
 
 Sources (in priority order):
   - OpenRouter: https://openrouter.ai/api/v1/models (public, no key needed)
+  - OrcaRouter: https://www.orcarouter.ai/api/pricing (public, no key needed)
   - OpenAI: https://api.openai.com/v1/models (needs OPENAI_API_KEY)
   - Anthropic: https://api.anthropic.com/v1/models (needs ANTHROPIC_API_KEY)
   - Gemini: https://generativelanguage.googleapis.com/v1beta/models (needs GEMINI_API_KEY)
@@ -36,6 +37,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # --- File paths (relative to repo root) ---
 JAVA_BASE = Path("apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm")
 OPENROUTER_JAVA = JAVA_BASE / "openrouter" / "OpenRouterModelName.java"
+ORCAROUTER_JAVA = JAVA_BASE / "orcarouter" / "OrcaRouterModelName.java"
 OPENAI_JAVA = JAVA_BASE / "openai" / "OpenaiModelName.java"
 ANTHROPIC_JAVA = JAVA_BASE / "antropic" / "AnthropicModelName.java"
 GEMINI_JAVA = JAVA_BASE / "gemini" / "GeminiModelName.java"
@@ -46,6 +48,13 @@ MODEL_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_and_
 LLM_MODELS_YAML = Path("apps/opik-backend/src/main/resources/llm-models-default.yaml")
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
+ORCAROUTER_API_URL = "https://www.orcarouter.ai/api/pricing"
+
+# Substrings that mark a non-chat OrcaRouter model (image/audio/embedding/etc.).
+ORCAROUTER_EXCLUDE_SUBSTRINGS = [
+    "embedding", "tts", "-speech", "whisper", "transcrib", "rerank",
+    "imagen", "dall-e", "gpt-image", "-image",
+]
 
 # Models from the JSON to exclude per provider
 OPENAI_EXCLUDE_PATTERNS = [
@@ -405,6 +414,41 @@ def fetch_openrouter_models() -> list[str]:
         if "text" in modality:
             chat_ids.append(m["id"])
     return sorted(set(chat_ids))
+
+
+def fetch_orcarouter_models() -> list[str]:
+    """Fetch chat-capable OrcaRouter model IDs from the public pricing endpoint.
+
+    Returns `orcarouter/`-prefixed values (plus the `orcarouter/auto` router) so they
+    match the values stored in OrcaRouterModelName / llm-models-default.yaml. Image,
+    audio, embedding and rerank models are filtered out.
+
+    NOTE: OrcaRouter's catalog is currently maintained directly in
+    OrcaRouterModelName.java and the `orcarouter:` section of
+    llm-models-default.yaml. This helper only provides the fetch/filter primitive;
+    it is intentionally not wired into main()'s regeneration flow yet, to avoid
+    reformatting the hand-maintained enum. Mirror sync_openrouter() to enable it.
+    """
+    resp = requests.get(ORCAROUTER_API_URL, timeout=30)
+    resp.raise_for_status()
+    data = resp.json().get("data", [])
+    ids = set()
+    for m in data:
+        name = m.get("model_name")
+        if not name:
+            continue
+        lowered = name.lower()
+        if any(sub in lowered for sub in ORCAROUTER_EXCLUDE_SUBSTRINGS):
+            continue
+        endpoint_types = [str(t).lower() for t in (m.get("supported_endpoint_types") or [])]
+        if any(k in t for t in endpoint_types for k in ("image", "video", "audio", "speech", "embedding", "rerank")):
+            continue
+        out_modalities = m.get("output_modalities") or []
+        if out_modalities and all(x in ("image", "video", "audio") for x in out_modalities):
+            continue
+        ids.add(f"orcarouter/{name}")
+    ids.add("orcarouter/auto")
+    return sorted(ids)
 
 
 def fetch_openai_models(api_key: str) -> list[str]:

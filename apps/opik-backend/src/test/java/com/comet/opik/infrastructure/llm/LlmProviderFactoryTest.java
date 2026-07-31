@@ -25,6 +25,8 @@ import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModelName;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
+import com.comet.opik.infrastructure.llm.orcarouter.OrcaRouterModelName;
+import com.comet.opik.infrastructure.llm.orcarouter.OrcaRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
@@ -106,6 +108,7 @@ class LlmProviderFactoryTest {
         GeminiModule geminiModule = new GeminiModule();
         OpenAIModule openAIModule = new OpenAIModule();
         OpenRouterModule openRouterModule = new OpenRouterModule();
+        OrcaRouterModule orcaRouterModule = new OrcaRouterModule();
         VertexAIModule vertexAIModule = new VertexAIModule();
 
         AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig);
@@ -119,6 +122,9 @@ class LlmProviderFactoryTest {
 
         OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
+
+        OpenAIClientGenerator orcaRouterClientGenerator = orcaRouterModule.clientGenerator(llmProviderClientConfig);
+        orcaRouterModule.llmServiceProvider(llmProviderFactory, orcaRouterClientGenerator);
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig);
         vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
@@ -138,10 +144,13 @@ class LlmProviderFactoryTest {
                 .map(model -> arguments(model.toString(), LlmProvider.GEMINI, "LlmProviderGemini"));
         var openRouterModels = EnumUtils.getEnumList(OpenRouterModelName.class).stream()
                 .map(model -> arguments(model.toString(), LlmProvider.OPEN_ROUTER, "LlmProviderOpenAi"));
+        var orcaRouterModels = EnumUtils.getEnumList(OrcaRouterModelName.class).stream()
+                .map(model -> arguments(model.toString(), LlmProvider.ORCA_ROUTER, "OrcaRouterProvider"));
         var vertexAiModels = EnumUtils.getEnumList(VertexAIModelName.class).stream()
                 .map(model -> arguments(model.qualifiedName(), LlmProvider.VERTEX_AI, "LlmProviderVertexAI"));
 
-        return Stream.of(openAiModels, anthropicModels, geminiModels, openRouterModels, vertexAiModels)
+        return Stream
+                .of(openAiModels, anthropicModels, geminiModels, openRouterModels, orcaRouterModels, vertexAiModels)
                 .flatMap(Function.identity());
     }
 
@@ -408,6 +417,36 @@ class LlmProviderFactoryTest {
         LlmProvider result = llmProviderFactory.getLlmProvider("openrouter/some-future-router");
 
         // Then
+        assertThat(result).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
+
+    @Test
+    @DisplayName("getLlmProvider returns ORCA_ROUTER for orcarouter-prefixed models (router alias and namespaced)")
+    void testGetLlmProvider_returnsOrcaRouter_forOrcaRouterModels() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        // When / Then - both the bare router alias and a namespaced upstream resolve to ORCA_ROUTER
+        assertThat(llmProviderFactory.getLlmProvider("orcarouter/auto")).isEqualTo(LlmProvider.ORCA_ROUTER);
+        assertThat(llmProviderFactory.getLlmProvider("orcarouter/openai/gpt-5.5")).isEqualTo(LlmProvider.ORCA_ROUTER);
+        // A brand-new router slug not yet in the enum still resolves via the "orcarouter/" prefix
+        assertThat(llmProviderFactory.getLlmProvider("orcarouter/some-future-router"))
+                .isEqualTo(LlmProvider.ORCA_ROUTER);
+    }
+
+    @Test
+    @DisplayName("getLlmProvider keeps shared 'openai/...' namespace on OPEN_ROUTER, not ORCA_ROUTER (collision guard)")
+    void testGetLlmProvider_doesNotMisrouteSharedNamespaceToOrcaRouter() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
+
+        // A bare namespaced model with no "orcarouter/" prefix must stay on OpenRouter.
+        LlmProvider result = llmProviderFactory.getLlmProvider("openai/gpt-4o");
+
         assertThat(result).isEqualTo(LlmProvider.OPEN_ROUTER);
     }
 

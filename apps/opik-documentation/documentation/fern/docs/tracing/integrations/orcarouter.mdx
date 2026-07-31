@@ -1,0 +1,76 @@
+---
+description: Start here to integrate Opik into your OrcaRouter-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: OrcaRouter | Opik Documentation
+og:description: Learn to integrate Opik with OrcaRouter using OpenAI SDK for seamless
+  access to AI models via a unified, cost-, latency-, and quality-aware routing gateway.
+og:site_name: Opik Documentation
+og:title: Integrate OrcaRouter with Opik Easily
+title: Observability for OrcaRouter with Opik
+canonical-url: https://www.comet.com/docs/opik/integrations/orcarouter
+---
+
+This guide explains how to integrate Opik with OrcaRouter using the OpenAI SDK. OrcaRouter is an OpenAI-compatible model-routing gateway: `orcarouter/auto` routes each request across upstreams based on cost, latency, and quality, and named routers can be driven by a routing DSL that selects an upstream per request.
+
+## Getting started
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash
+pip install opik openai
+```
+
+You'll also need an OrcaRouter API key which you can get from the [OrcaRouter console](https://www.orcarouter.ai/console). Keys start with `sk-orca-`.
+
+## Tracking OrcaRouter API calls
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Initialize the OpenAI client with the OrcaRouter base URL
+client = OpenAI(
+    base_url="https://api.orcarouter.ai/v1",
+    api_key="sk-orca-..."
+)
+client = track_openai(client)
+
+response = client.chat.completions.create(
+    model="orcarouter/auto",  # Or name a specific model, e.g. openai/gpt-4o-mini
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ],
+    temperature=0.7,
+    max_tokens=256
+)
+
+print(response.choices[0].message.content)
+```
+
+## Available Models
+
+OrcaRouter provides access to a wide variety of models across many providers through a single OpenAI-compatible interface, plus router aliases such as `orcarouter/auto`.
+
+- OpenAI models (GPT-4o, GPT-5.x)
+- Anthropic models (Opus, Sonnet, Haiku)
+- Google models (Gemini Pro, Flash)
+- And many more, including open source models
+
+You can find the complete list of available models in the [OrcaRouter models catalog](https://www.orcarouter.ai/models).
+
+## Supported Methods
+
+OrcaRouter supports the following methods:
+
+### Chat Completions
+
+- `client.chat.completions.create()`: Works with all models
+- Provides standard chat completion functionality
+- Compatible with the OpenAI SDK interface
+
+### Structured Outputs
+
+- `client.beta.chat.completions.parse()`: Only compatible with OpenAI models
+- For non-OpenAI models, prefer prompt-based JSON instructions
+
+For detailed information about available methods, parameters, and best practices, refer to the [OrcaRouter documentation](https://docs.orcarouter.ai).

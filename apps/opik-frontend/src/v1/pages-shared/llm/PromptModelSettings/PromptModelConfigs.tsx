@@ -24,6 +24,7 @@ import { Button, ButtonProps } from "@/ui/button";
 import OpenAIModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/OpenAIModelConfigs";
 import AnthropicModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/AnthropicModelConfigs";
 import OpenRouterModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/OpenRouterModelConfigs";
+import OrcaRouterModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/OrcaRouterModelConfigs";
 import GeminiModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
@@ -75,6 +76,15 @@ const PromptModelConfigs = ({
     if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
       return (
         <OpenRouterModelConfigs
+          configs={configs as LLMOpenRouterConfigsType}
+          onChange={onChange}
+        />
+      );
+    }
+
+    if (provider === PROVIDER_TYPE.ORCA_ROUTER) {
+      return (
+        <OrcaRouterModelConfigs
           configs={configs as LLMOpenRouterConfigsType}
           onChange={onChange}
         />

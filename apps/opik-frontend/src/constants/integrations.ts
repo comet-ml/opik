@@ -27,6 +27,7 @@ import ollamaWhiteLogoUrl from "/images/integrations/ollama-white.png";
 import openclawLogoUrl from "/images/integrations/openclaw.svg";
 import openrouterLogoUrl from "/images/integrations/openrouter.png";
 import openrouterWhiteLogoUrl from "/images/integrations/openrouter-white.png";
+import orcarouterLogoUrl from "/images/integrations/orcarouter.png";
 import predibaseLogoUrl from "/images/integrations/predibase.png";
 // import pydanticaiLogoUrl from "/images/integrations/pydanticai.png";
 // import smolagentsLogoUrl from "/images/integrations/smolagents.png";
@@ -54,6 +55,7 @@ import ollamaCode from "@/integrations/integration-scripts/Ollama.py?raw";
 import crewaiCode from "@/integrations/integration-scripts/CrewAI.py?raw";
 import adkCode from "@/integrations/integration-scripts/ADK.py?raw";
 import openrouterCode from "@/integrations/integration-scripts/OpenRouter.py?raw";
+import orcarouterCode from "@/integrations/integration-scripts/OrcaRouter.py?raw";
 import agentspecCode from "@/integrations/integration-scripts/AgentSpec.py?raw";
 import autogenCode from "@/integrations/integration-scripts/AutoGen.py?raw";
 import agnoCode from "@/integrations/integration-scripts/Agno.py?raw";
@@ -350,6 +352,16 @@ export const INTEGRATIONS: Integration[] = [
     code: openrouterCode,
     installCommand: "pip install -U opik openai",
     docsLink: buildDocsUrl("/integrations/openrouter"),
+  },
+  {
+    id: "orcarouter",
+    title: "OrcaRouter",
+    description: "Frameworks & tools",
+    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+    icon: orcarouterLogoUrl,
+    code: orcarouterCode,
+    installCommand: "pip install -U opik openai",
+    docsLink: buildDocsUrl("/integrations/orcarouter"),
   },
   {
     id: "autogen",

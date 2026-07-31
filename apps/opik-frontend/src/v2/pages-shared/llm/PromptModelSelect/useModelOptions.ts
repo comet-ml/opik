@@ -41,23 +41,46 @@ export const sortProviderModels = (
   composedProviderType: COMPOSED_PROVIDER_TYPE,
   providerModels: ModelOption[],
 ): ModelOption[] => {
-  if (composedProviderType !== PROVIDER_TYPE.OPEN_ROUTER) {
-    return providerModels;
+  if (composedProviderType === PROVIDER_TYPE.OPEN_ROUTER) {
+    const sorted = [...providerModels];
+    sorted.sort((a, b) => {
+      const aIsOpenRouterRoute = a.value.startsWith("openrouter/");
+      const bIsOpenRouterRoute = b.value.startsWith("openrouter/");
+
+      if (aIsOpenRouterRoute !== bIsOpenRouterRoute) {
+        return aIsOpenRouterRoute ? -1 : 1;
+      }
+
+      return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+    });
+
+    return sorted;
   }
 
-  const sorted = [...providerModels];
-  sorted.sort((a, b) => {
-    const aIsOpenRouterRoute = a.value.startsWith("openrouter/");
-    const bIsOpenRouterRoute = b.value.startsWith("openrouter/");
+  // OrcaRouter values all carry the "orcarouter/" prefix. Surface bare router
+  // names (e.g. orcarouter/auto) ahead of namespaced upstreams
+  // (e.g. orcarouter/openai/gpt-4o), then sort each group A-Z.
+  if (composedProviderType === PROVIDER_TYPE.ORCA_ROUTER) {
+    const isBareRouter = (value: string) =>
+      value.startsWith("orcarouter/") &&
+      !value.slice("orcarouter/".length).includes("/");
 
-    if (aIsOpenRouterRoute !== bIsOpenRouterRoute) {
-      return aIsOpenRouterRoute ? -1 : 1;
-    }
+    const sorted = [...providerModels];
+    sorted.sort((a, b) => {
+      const aIsRoute = isBareRouter(a.value);
+      const bIsRoute = isBareRouter(b.value);
 
-    return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
-  });
+      if (aIsRoute !== bIsRoute) {
+        return aIsRoute ? -1 : 1;
+      }
 
-  return sorted;
+      return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+    });
+
+    return sorted;
+  }
+
+  return providerModels;
 };
 
 export function useModelOptions(
