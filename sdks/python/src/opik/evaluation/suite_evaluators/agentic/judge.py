@@ -26,7 +26,7 @@ from opik.evaluation.suite_evaluators.llm_judge import (
 
 from . import context, loop, prompt
 from .compression import span_tree_serializer
-from .tools import read, registry as tool_registry, scan, search
+from .tools import memory, read, registry as tool_registry, scan, search
 
 LOGGER = logging.getLogger(__name__)
 
@@ -131,5 +131,10 @@ def default_tool_registry() -> tool_registry.ToolRegistry:
             read.ReadTool(),
             scan.ScanTool(),
             search.SearchTool(),
+            # Persistent Short-Term Memory (SAFARI, arXiv:2606.24626v1):
+            # lets the judge offload distilled findings across turns instead
+            # of carrying raw evidence in context — the attention-dilution
+            # failure long traces hit past the model's context budget.
+            memory.ShortTermMemoryTool(),
         ]
     )
