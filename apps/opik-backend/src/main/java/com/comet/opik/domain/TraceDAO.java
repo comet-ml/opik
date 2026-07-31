@@ -4416,7 +4416,7 @@ class TraceDAOImpl implements TraceDAO {
      * scan dominates the query, which is what {@code searchText} over {@code input}/{@code output}/{@code metadata}
      * does. Measured on production (OPIK-7636): with {@code searchText} it is ~2.8x cheaper in CPU and ~3.4x in
      * peak memory on {@code SELECT_FEEDBACK_SCORES_STATS}, which re-evaluates this CTE from three scopes; without
-     * it the aggregation state is pure overhead, up to ~6.3x more CPU and ~85x more peak memory on a 26M-trace
+     * it the aggregation state is pure overhead, up to ~6x more CPU and ~85x more peak memory on a 26M-trace
      * project. Peak memory grows with group count even on the {@code searchText} shapes, so the gate is what keeps
      * this form on the queries where the scan cost swamps it. Do not widen it without re-measuring both.
      *
@@ -4434,7 +4434,10 @@ class TraceDAOImpl implements TraceDAO {
      * existed — where {@code FINAL} always yields one whole physical row. One tuple-valued {@code argMax} picks a
      * single version atomically, so the tie case degrades to "which of the tied versions", exactly as under
      * {@code FINAL}, instead of "a mixture of them". Verified result-identical to the per-column form on
-     * production data, at lower peak memory (one aggregate state rather than seven).
+     * production data. Peak memory is never worse and is materially better at modest group counts (226 vs
+     * 353 MiB over 133K groups), but the two converge as groups grow — identical 9.43 GiB over 26.4M groups,
+     * where the state is dominated by the grouped values rather than by per-aggregate overhead. So the tuple is
+     * for correctness; it does not soften the cost profile the gate below exists to avoid.
      *
      * <p>Wrapping also avoids an aliasing hazard: aliasing a per-version column to its own name would win name
      * resolution inside the {@code HAVING} predicate — which reads {@code thread_id}, {@code error_info} and
