@@ -7,6 +7,7 @@ import com.google.cloud.vertexai.Transport;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Files;
@@ -50,11 +51,40 @@ class VertexAIClientConfigTest {
                 .getVertexAIClient();
     }
 
-    @Test
-    void fallBackToDefaultsWhenNotConfigured() {
-        var config = new LlmProviderClientConfig.VertexAIClientConfig("scope", null, null);
+    @ParameterizedTest
+    @NullAndEmptySource
+    void fallBackToDefaultsWhenNotConfigured(Map<String, String> configured) {
+        var config = new LlmProviderClientConfig.VertexAIClientConfig("scope", configured, null);
 
         assertThat(config.multiRegionApiEndpoints()).containsExactlyInAnyOrderEntriesOf(EXPECTED_ENDPOINTS);
+    }
+
+    /**
+     * Overriding one location must not drop the others: the configured map is overlaid on the defaults, so a partial
+     * override cannot silently leave the remaining multi-region locations resolving to a derived host.
+     */
+    @Test
+    void overlayConfiguredEndpointsOnTheDefaults() {
+        var config = new LlmProviderClientConfig.VertexAIClientConfig("scope",
+                Map.of("global", "custom.googleapis.com"), null);
+
+        assertThat(config.multiRegionApiEndpoints())
+                .containsEntry("global", "custom.googleapis.com")
+                .containsEntry("eu", EXPECTED_ENDPOINTS.get("eu"))
+                .containsEntry("us", EXPECTED_ENDPOINTS.get("us"));
+    }
+
+    /**
+     * The lookup happens on a canonicalised location, so keys have to be canonicalised too or a configured
+     * {@code Global:} would never be matched and would silently fall back to the derived host.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"GLOBAL", "Global", "  global  "})
+    void canonicaliseConfiguredKeys(String configuredKey) {
+        var config = new LlmProviderClientConfig.VertexAIClientConfig("scope",
+                Map.of(configuredKey, "custom.googleapis.com"), null);
+
+        assertThat(config.multiRegionApiEndpoints()).containsEntry("global", "custom.googleapis.com");
     }
 
     /**

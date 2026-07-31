@@ -22,7 +22,6 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -101,10 +100,11 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     /**
      * The location is free-text in the provider configuration but ends up in the {@code locations/%s} resource path as
-     * well as the host, so it has to be canonicalised before either is derived from it.
+     * well as the host, so it has to be canonicalised before either is derived from it. Shared with the endpoint map so
+     * both sides of the lookup agree on the key.
      */
     private static String canonicalLocation(String location) {
-        return location.strip().toLowerCase(Locale.ROOT);
+        return LlmProviderClientConfig.VertexAIClientConfig.canonicalLocation(location);
     }
 
     private Optional<String> apiEndpointFor(String canonicalLocation) {

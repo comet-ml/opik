@@ -8,6 +8,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -32,10 +34,25 @@ public class LlmProviderClientConfig {
                 "eu", "aiplatform.eu.rep.googleapis.com",
                 "us", "aiplatform.us.rep.googleapis.com");
 
+        /**
+         * Configured entries are overlaid on the defaults rather than replacing them, so overriding one location does
+         * not silently drop the others. Keys are canonicalised to match the lookup, which uses the canonicalised
+         * location.
+         */
         public Map<String, String> multiRegionApiEndpoints() {
-            return multiRegionApiEndpoints == null || multiRegionApiEndpoints.isEmpty()
-                    ? DEFAULT_MULTI_REGION_API_ENDPOINTS
-                    : multiRegionApiEndpoints;
+            if (multiRegionApiEndpoints == null || multiRegionApiEndpoints.isEmpty()) {
+                return DEFAULT_MULTI_REGION_API_ENDPOINTS;
+            }
+
+            var endpoints = new HashMap<>(DEFAULT_MULTI_REGION_API_ENDPOINTS);
+            multiRegionApiEndpoints
+                    .forEach((location, endpoint) -> endpoints.put(canonicalLocation(location), endpoint));
+
+            return Map.copyOf(endpoints);
+        }
+
+        public static String canonicalLocation(String location) {
+            return location.strip().toLowerCase(Locale.ROOT);
         }
 
         public Transport transport() {
