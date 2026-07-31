@@ -7,6 +7,7 @@ import com.comet.opik.api.attachment.AttachmentSearchCriteria;
 import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -38,9 +39,9 @@ public interface AttachmentDAO {
 
     Mono<Long> delete(DeleteAttachmentsRequest request);
 
-    Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(EntityType entityType, Set<UUID> entityIds);
+    Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID containerId);
 
-    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID containerId);
 
     Mono<Long> deleteByFileNames(EntityType entityType, Set<UUID> entityIds, Set<String> fileNames);
 }
@@ -127,6 +128,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
             WHERE workspace_id = :workspace_id
             AND entity_type = :entity_type
             AND entity_id IN :entity_ids
+            <if(container_id)>AND container_id = :container_id<endif>
             ;
             """;
 
@@ -145,6 +147,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
             WHERE workspace_id = :workspace_id
             AND entity_type = :entity_type
             AND entity_id IN :entity_ids
+            <if(container_id)>AND container_id = :container_id<endif>
             ;
             """;
 
@@ -204,18 +207,14 @@ class AttachmentDAOImpl implements AttachmentDAO {
     @Override
     @WithSpan
     public Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(@NonNull EntityType entityType,
-            @NonNull Set<UUID> entityIds) {
+            @NonNull Set<UUID> entityIds, UUID containerId) {
         if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(List.of());
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-
-            var statement = connection.createStatement(ATTACHMENTS_BY_ENTITY_IDS);
-
-            statement.bind("entity_ids", entityIds)
-                    .bind("entity_type", entityType.getValue());
-
+            var statement = bindEntityIdsStatement(connection, ATTACHMENTS_BY_ENTITY_IDS, entityType, entityIds,
+                    containerId);
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> AttachmentInfo.builder()
                             .containerId(row.get("container_id", UUID.class))
@@ -228,22 +227,40 @@ class AttachmentDAOImpl implements AttachmentDAO {
     }
 
     @Override
-    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
+    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds,
+            UUID containerId) {
         if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(0L);
         }
 
         return asyncTemplate.nonTransaction(connection -> {
-
-            var statement = connection.createStatement(DELETE_ATTACHMENTS_BY_ENTITY_IDS);
-
-            statement.bind("entity_ids", entityIds.toArray(UUID[]::new))
-                    .bind("entity_type", entityType.getValue());
-
+            var statement = bindEntityIdsStatement(connection, DELETE_ATTACHMENTS_BY_ENTITY_IDS, entityType, entityIds,
+                    containerId);
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)
                     .reduce(0L, Long::sum);
         });
+    }
+
+    /**
+     * Shared statement setup for the by-entity-id SELECT and DELETE: renders the template with the optional
+     * {@code container_id} clause and binds {@code entity_ids}, {@code entity_type}, and (when scoped) {@code
+     * container_id}, so the two paths can't drift on bind order or the optional-scope wiring.
+     */
+    private Statement bindEntityIdsStatement(Connection connection, String sql, EntityType entityType,
+            Set<UUID> entityIds, UUID containerId) {
+        var template = TemplateUtils.newST(sql);
+        if (containerId != null) {
+            template.add("container_id", containerId);
+        }
+
+        var statement = connection.createStatement(template.render())
+                .bind("entity_ids", entityIds.toArray(UUID[]::new))
+                .bind("entity_type", entityType.getValue());
+        if (containerId != null) {
+            statement.bind("container_id", containerId);
+        }
+        return statement;
     }
 
     @Override
