@@ -1,6 +1,7 @@
 # mypy: disable-error-code=no-untyped-def
 
 import logging
+import threading
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -180,6 +181,10 @@ class TestReflectionLmWiring:
         def overspend(kwargs: dict[str, Any]) -> None:
             assert kwargs["reflection_lm"]("first proposal") == "new instruction"
             assert kwargs["reflection_lm"]("beyond the cap") == ""
+            # Then gepa reaches its next stop check and the stopper ends the run,
+            # which is what makes the finish reason below "reflection_budget".
+            state = SimpleNamespace(program_full_scores_val_set=[0.5])
+            assert any(callback(state) for callback in kwargs["stop_callbacks"])
 
         result, _, _ = _run_optimize(
             monkeypatch,
@@ -197,6 +202,58 @@ class TestReflectionLmWiring:
         assert result.details["reflection_call_count"] == 1
         assert result.details["max_reflection_calls"] == 1
         assert result.details["finish_reason"] == "reflection_budget"
+
+    def test_concurrent_callers_cannot_overshoot_the_budget(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """Claiming a slot is atomic: callers racing for the last one must not
+        all read the counter below the cap and all spend."""
+        calls = _patch_call_model(monkeypatch)
+        thread_count = 8
+        barrier = threading.Barrier(thread_count)
+        responses: list[str] = []
+        responses_lock = threading.Lock()
+
+        def race(kwargs: dict[str, Any]) -> None:
+            reflection_lm = kwargs["reflection_lm"]
+
+            def worker() -> None:
+                barrier.wait(timeout=10)
+                response = reflection_lm("proposal")
+                with responses_lock:
+                    responses.append(response)
+
+            threads = [
+                threading.Thread(target=worker, name=f"reflection-{index}")
+                for index in range(thread_count)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=10)
+
+        result, _, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            fake_optimize_hook=race,
+            max_reflection_calls=2,
+        )
+
+        assert len(responses) == thread_count
+        # Exactly the budget was spent; every other caller was refused.
+        assert len(calls) == 2
+        assert len([r for r in responses if r == "new instruction"]) == 2
+        assert result.details["reflection_call_count"] == 2
 
     def test_budget_refusal_warns_once_not_per_refused_call(
         self,
@@ -239,7 +296,9 @@ class TestReflectionLmWiring:
 
 class TestReflectionBudgetStopper:
     def test_stops_only_once_budget_is_spent(self) -> None:
-        optimizer = SimpleNamespace(_reflection_call_count=0)
+        optimizer = SimpleNamespace(
+            _reflection_call_count=0, _reflection_budget_exhausted=False
+        )
         stopper = _ReflectionBudgetStopper(optimizer, 3)  # type: ignore[arg-type]
         state = SimpleNamespace()
 
@@ -250,6 +309,22 @@ class TestReflectionBudgetStopper:
         assert stopper(state) is True
         optimizer._reflection_call_count = 4
         assert stopper(state) is True
+
+    def test_marks_the_optimizer_only_when_it_asks_for_the_stop(self) -> None:
+        """The flag is what lets the finish reason claim this stopper's stop —
+        the call count alone also reaches the cap on an ordinary full run."""
+        optimizer = SimpleNamespace(
+            _reflection_call_count=1, _reflection_budget_exhausted=False
+        )
+        stopper = _ReflectionBudgetStopper(optimizer, 2)  # type: ignore[arg-type]
+        state = SimpleNamespace()
+
+        assert stopper(state) is False
+        assert optimizer._reflection_budget_exhausted is False
+
+        optimizer._reflection_call_count = 2
+        assert stopper(state) is True
+        assert optimizer._reflection_budget_exhausted is True
 
 
 class TestMaxReflectionCallsKnob:
@@ -290,6 +365,19 @@ class TestMaxReflectionCallsKnob:
         sample_dataset_items,
         sample_metric,
     ) -> None:
+        """Cap disabled: no stopper is wired, the callable never refuses (not
+        even past the default cap of max_trials=2), and the run still reports
+        what it spent and does not claim a reflection-budget stop."""
+        calls = _patch_call_model(monkeypatch)
+
+        def keep_reflecting(kwargs: dict[str, Any]) -> None:
+            state = SimpleNamespace(program_full_scores_val_set=[0.5])
+            for proposal in ("first", "second", "third", "fourth"):
+                assert not any(
+                    callback(state) for callback in kwargs["stop_callbacks"]
+                ), "no stopper may halt the run while the cap is disabled"
+                assert kwargs["reflection_lm"](proposal) == "new instruction"
+
         result, captured, _ = _run_optimize(
             monkeypatch,
             mock_optimization_context,
@@ -297,14 +385,17 @@ class TestMaxReflectionCallsKnob:
             mock_dataset,
             sample_dataset_items,
             sample_metric,
+            fake_optimize_hook=keep_reflecting,
             max_reflection_calls=0,
         )
 
         assert not any(
             isinstance(s, _ReflectionBudgetStopper) for s in captured["stop_callbacks"]
         )
+        assert len(calls) == 4
         assert result.details["max_reflection_calls"] == 0
-        assert result.details["reflection_call_count"] == 0
+        assert result.details["reflection_call_count"] == 4
+        assert result.details["finish_reason"] != "reflection_budget"
 
 
 class TestCoerceMaxReflectionCalls:
@@ -327,7 +418,26 @@ class TestCoerceMaxReflectionCalls:
 class TestReflectionBudgetFinishReason:
     # Index 0 of a gepa full-eval list is the seed program's own eval, which the
     # resolver excludes (OPIK-7511), so a candidate score goes in position 1.
-    def test_resolves_reflection_budget_when_budget_spent(self) -> None:
+    def test_resolves_reflection_budget_when_the_stopper_ended_the_run(self) -> None:
+        reason = _resolve_gepa_finish_reason(
+            val_scores=[0.2, 0.3],
+            perfect_score=0.95,
+            no_improvement_stopper=None,
+            no_improvement_iterations=0,
+            total_metric_calls=1,
+            max_metric_calls=4,
+            stop_file_watched=False,
+            reflection_budget_exhausted=True,
+            reflection_calls=4,
+            max_reflection_calls=4,
+        )
+        assert reason == "reflection_budget"
+
+    def test_spent_metric_budget_stays_max_trials_not_reflection_budget(self) -> None:
+        """The default cap is max_trials, so an ordinary run that burns its whole
+        metric budget also ends at the reflection cap. Labelling that
+        "reflection_budget" would relabel every full-budget run; the trial budget
+        is the reason, so the resolver defers to the caller's "max_trials"."""
         reason = _resolve_gepa_finish_reason(
             val_scores=[0.2, 0.3],
             perfect_score=0.95,
@@ -336,10 +446,29 @@ class TestReflectionBudgetFinishReason:
             total_metric_calls=4,
             max_metric_calls=4,
             stop_file_watched=False,
+            reflection_budget_exhausted=True,
             reflection_calls=4,
             max_reflection_calls=4,
         )
-        assert reason == "reflection_budget"
+        assert reason is None
+
+    def test_cap_reached_without_the_stopper_firing_is_not_a_reason(self) -> None:
+        """gepa can leave the loop without consulting a stop callback at all
+        (engine._stop_requested), so a counter sitting at the cap is not by
+        itself evidence that the reflection budget ended the run."""
+        reason = _resolve_gepa_finish_reason(
+            val_scores=[0.2, 0.3],
+            perfect_score=0.95,
+            no_improvement_stopper=None,
+            no_improvement_iterations=0,
+            total_metric_calls=1,
+            max_metric_calls=4,
+            stop_file_watched=False,
+            reflection_budget_exhausted=False,
+            reflection_calls=4,
+            max_reflection_calls=4,
+        )
+        assert reason is None
 
     def test_reflection_budget_is_not_reported_as_an_external_stop(self) -> None:
         """Reflection exhaustion also leaves metric-call budget unspent.
@@ -356,20 +485,24 @@ class TestReflectionBudgetFinishReason:
             total_metric_calls=1,
             max_metric_calls=4,
             stop_file_watched=True,
+            reflection_budget_exhausted=True,
             reflection_calls=4,
             max_reflection_calls=4,
         )
         assert reason == "reflection_budget"
 
     def test_disabled_cap_never_resolves_reflection_budget(self) -> None:
+        # With the cap disabled the stopper is never wired, so the flag stays
+        # False no matter how many reflection calls the run made.
         reason = _resolve_gepa_finish_reason(
             val_scores=[0.2, 0.3],
             perfect_score=0.95,
             no_improvement_stopper=None,
             no_improvement_iterations=0,
-            total_metric_calls=4,
+            total_metric_calls=1,
             max_metric_calls=4,
             stop_file_watched=False,
+            reflection_budget_exhausted=False,
             reflection_calls=100,
             max_reflection_calls=0,
         )
@@ -381,9 +514,10 @@ class TestReflectionBudgetFinishReason:
             perfect_score=0.95,
             no_improvement_stopper=None,
             no_improvement_iterations=0,
-            total_metric_calls=4,
+            total_metric_calls=1,
             max_metric_calls=4,
             stop_file_watched=False,
+            reflection_budget_exhausted=True,
             reflection_calls=4,
             max_reflection_calls=4,
         )
@@ -399,9 +533,10 @@ class TestReflectionBudgetFinishReason:
             perfect_score=0.95,
             no_improvement_stopper=stopper,
             no_improvement_iterations=10,
-            total_metric_calls=4,
+            total_metric_calls=1,
             max_metric_calls=4,
             stop_file_watched=False,
+            reflection_budget_exhausted=True,
             reflection_calls=4,
             max_reflection_calls=4,
         )

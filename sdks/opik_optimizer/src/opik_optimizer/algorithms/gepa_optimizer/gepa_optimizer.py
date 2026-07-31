@@ -1,5 +1,6 @@
 import logging
 import math
+import threading
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -133,7 +134,15 @@ class _ReflectionBudgetStopper:
         self.max_reflection_calls = max_reflection_calls
 
     def __call__(self, _gepa_state: Any) -> bool:
-        return self._optimizer._reflection_call_count >= self.max_reflection_calls
+        if self._optimizer._reflection_call_count < self.max_reflection_calls:
+            return False
+        # Record that *this* stopper asked for the stop. The call counter alone
+        # cannot carry the finish reason: the default cap is max_trials, so an
+        # ordinary run that burns its whole metric budget also ends at the cap,
+        # and gepa exits through paths that never consult a stop callback at all
+        # (engine._stop_requested). See _resolve_gepa_finish_reason.
+        self._optimizer._reflection_budget_exhausted = True
+        return True
 
 
 def _coerce_no_improvement_iterations(value: Any) -> int:
@@ -303,6 +312,21 @@ def _validate_reflection_prompt_template(template: str) -> None:
         ) from exc
 
 
+def _metric_budget_unspent(total_metric_calls: Any, max_metric_calls: int) -> bool:
+    """True when gepa reports metric-call budget still left on the clock.
+
+    Guards the two finish reasons that can only happen *before* the metric
+    budget runs out. Non-int counters (a future gepa dropping the attribute,
+    a MagicMock in tests) read as "spent" so neither reason is claimed on a
+    counter we cannot trust.
+    """
+    return (
+        isinstance(total_metric_calls, int)
+        and not isinstance(total_metric_calls, bool)
+        and total_metric_calls < max_metric_calls
+    )
+
+
 def _resolve_gepa_finish_reason(
     *,
     val_scores: list[float],
@@ -312,6 +336,7 @@ def _resolve_gepa_finish_reason(
     total_metric_calls: Any,
     max_metric_calls: int,
     stop_file_watched: bool,
+    reflection_budget_exhausted: bool = False,
     reflection_calls: int = 0,
     max_reflection_calls: int = 0,
 ) -> FinishReason | None:
@@ -320,11 +345,18 @@ def _resolve_gepa_finish_reason(
     Our own stops ("perfect_score"/"no_improvement") are decided from candidate
     full-eval (valset) scores, exactly like the stop conditions — same seed
     exclusion and same non-finite filtering, so the label can never claim a stop
-    the stopper did not make. "reflection_budget" is decided from the
-    reflection-LM call counter behind _ReflectionBudgetStopper, and is checked
-    before the stop-file branch below: exhausting the reflection budget also
-    ends the run with metric-call budget still on the clock, so the unspent
-    budget alone cannot tell the two apart.
+    the stopper did not make.
+
+    "reflection_budget" follows the same rule and needs two facts, because the
+    reflection counter reaching the cap is not by itself a reason: the default
+    cap is ``max_trials``, so a run that simply burns its whole metric budget
+    ends at the cap too, and calling that "reflection_budget" would relabel
+    ordinary full-budget runs. It is claimed only when
+    ``_ReflectionBudgetStopper`` actually asked for the stop *and* metric-call
+    budget was still unspent — a run that spent both stopped at its trial
+    budget, which is the more informative label. It stays ahead of the stop-file
+    branch below: both exits leave budget on the clock, so the unspent budget
+    alone cannot tell them apart.
 
     One other exit is distinguishable, and only when gepa can actually produce
     it: with ``run_dir`` set, gepa wires a FileStopper on ``<run_dir>/gepa.stop``
@@ -359,18 +391,17 @@ def _resolve_gepa_finish_reason(
             no_improvement_iterations,
         )
         return "no_improvement"
-    if max_reflection_calls > 0 and reflection_calls >= max_reflection_calls:
+    if reflection_budget_exhausted and _metric_budget_unspent(
+        total_metric_calls, max_metric_calls
+    ):
         logger.info(
             "GEPA stopped early: reflection-LM call budget exhausted (%s/%s).",
             reflection_calls,
             max_reflection_calls,
         )
         return "reflection_budget"
-    if (
-        stop_file_watched
-        and isinstance(total_metric_calls, int)
-        and not isinstance(total_metric_calls, bool)
-        and total_metric_calls < max_metric_calls
+    if stop_file_watched and _metric_budget_unspent(
+        total_metric_calls, max_metric_calls
     ):
         logger.info(
             "GEPA stopped after %s of %s metric calls with neither wired stopper "
@@ -458,6 +489,7 @@ class GepaOptimizer(BaseOptimizer):
         self._reflection_call_count = 0
         self._max_reflection_calls = 0
         self._reflection_budget_warned = False
+        self._reflection_budget_exhausted = False
         self._adapter = None  # Will be set during optimization
         self._validation_dataset = None
         self._gepa_rescored_scores: list[float] = []
@@ -516,31 +548,46 @@ class GepaOptimizer(BaseOptimizer):
         whole run and lose its results.
         """
         metadata = _llm_calls.build_llm_call_metadata(self, "reflection")
+        # Claiming a slot has to be atomic, or two callers racing for the last
+        # one both read the count below the cap and both spend. The lock lives in
+        # the closure — this factory runs once per optimize_prompt call, right
+        # after the counter reset — so the optimizer instance stays copyable.
+        budget_lock = threading.Lock()
+
+        def _claim_reflection_call() -> bool:
+            """Reserve one call against the budget; False means refused."""
+            with budget_lock:
+                if (
+                    self._max_reflection_calls > 0
+                    and self._reflection_call_count >= self._max_reflection_calls
+                ):
+                    # Warn once per run: a selector that keeps asking would
+                    # otherwise log this on every refused call. The cap is also
+                    # reported in the result's finish_reason.
+                    if not self._reflection_budget_warned:
+                        self._reflection_budget_warned = True
+                        logger.warning(
+                            "GEPA requested a reflection-LM call beyond max_reflection_calls=%s; "
+                            "skipping it (further refusals are not logged). The run stops at the "
+                            "next engine iteration, reported as finish_reason='reflection_budget' "
+                            "unless its metric-call budget ran out at the same time.",
+                            self._max_reflection_calls,
+                        )
+                    return False
+                # Count while still holding the lock, and before the call goes
+                # out: a failed attempt still spent tokens, and releasing before
+                # the increment would hand the same slot to a concurrent caller.
+                self._reflection_call_count += 1
+                return True
 
         def _reflection_lm(prompt: str | list[dict[str, str]]) -> str:
-            if (
-                self._max_reflection_calls > 0
-                and self._reflection_call_count >= self._max_reflection_calls
-            ):
-                # Warn once per run: a selector that keeps asking would
-                # otherwise log this on every refused call. The cap is also
-                # reported as finish_reason='reflection_budget' in the result.
-                if not self._reflection_budget_warned:
-                    self._reflection_budget_warned = True
-                    logger.warning(
-                        "GEPA requested a reflection-LM call beyond max_reflection_calls=%s; "
-                        "skipping it (further refusals are not logged). The run will stop "
-                        "with finish_reason='reflection_budget' at the next engine iteration.",
-                        self._max_reflection_calls,
-                    )
+            if not _claim_reflection_call():
                 return ""
             messages = (
                 [{"role": "user", "content": prompt}]
                 if isinstance(prompt, str)
                 else list(prompt)
             )
-            # Count before calling: a failed attempt still spent tokens.
-            self._reflection_call_count += 1
             return cast(
                 str,
                 _llm_calls.call_model(
@@ -735,6 +782,7 @@ class GepaOptimizer(BaseOptimizer):
         self._adapter_metric_calls = 0
         self._reflection_call_count = 0
         self._reflection_budget_warned = False
+        self._reflection_budget_exhausted = False
 
         if self.agent is None:
             raise ValueError("GepaOptimizer requires an agent to run evaluations.")
@@ -829,6 +877,7 @@ class GepaOptimizer(BaseOptimizer):
             total_metric_calls=getattr(gepa_result, "total_metric_calls", None),
             max_metric_calls=max_metric_calls,
             stop_file_watched=run_dir is not None,
+            reflection_budget_exhausted=self._reflection_budget_exhausted,
             reflection_calls=self._reflection_call_count,
             max_reflection_calls=max_reflection_calls,
         )
