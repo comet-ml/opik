@@ -1,5 +1,6 @@
 # mypy: disable-error-code=no-untyped-def
 
+import logging
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -196,6 +197,44 @@ class TestReflectionLmWiring:
         assert result.details["reflection_call_count"] == 1
         assert result.details["max_reflection_calls"] == 1
         assert result.details["finish_reason"] == "reflection_budget"
+
+    def test_budget_refusal_warns_once_not_per_refused_call(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+        caplog,
+    ) -> None:
+        """A selector that keeps asking after the cap must not flood the logs:
+        refusal is cheap and already reported via finish_reason, so one warning
+        per run is enough to explain the outcome."""
+        _patch_call_model(monkeypatch)
+
+        def overspend(kwargs: dict[str, Any]) -> None:
+            for proposal in ("in budget", "refused", "refused", "refused"):
+                kwargs["reflection_lm"](proposal)
+
+        with caplog.at_level(logging.WARNING):
+            _run_optimize(
+                monkeypatch,
+                mock_optimization_context,
+                simple_chat_prompt,
+                mock_dataset,
+                sample_dataset_items,
+                sample_metric,
+                fake_optimize_hook=overspend,
+                max_reflection_calls=1,
+            )
+
+        refusals = [
+            record
+            for record in caplog.records
+            if "beyond max_reflection_calls" in record.getMessage()
+        ]
+        assert len(refusals) == 1
 
 
 class TestReflectionBudgetStopper:

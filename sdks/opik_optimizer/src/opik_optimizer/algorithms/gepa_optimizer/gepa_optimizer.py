@@ -457,6 +457,7 @@ class GepaOptimizer(BaseOptimizer):
         self._adapter_metric_calls = 0
         self._reflection_call_count = 0
         self._max_reflection_calls = 0
+        self._reflection_budget_warned = False
         self._adapter = None  # Will be set during optimization
         self._validation_dataset = None
         self._gepa_rescored_scores: list[float] = []
@@ -521,12 +522,17 @@ class GepaOptimizer(BaseOptimizer):
                 self._max_reflection_calls > 0
                 and self._reflection_call_count >= self._max_reflection_calls
             ):
-                logger.warning(
-                    "GEPA requested a reflection-LM call beyond max_reflection_calls=%s; "
-                    "skipping it. The run will stop with finish_reason='reflection_budget' "
-                    "at the next engine iteration.",
-                    self._max_reflection_calls,
-                )
+                # Warn once per run: a selector that keeps asking would
+                # otherwise log this on every refused call. The cap is also
+                # reported as finish_reason='reflection_budget' in the result.
+                if not self._reflection_budget_warned:
+                    self._reflection_budget_warned = True
+                    logger.warning(
+                        "GEPA requested a reflection-LM call beyond max_reflection_calls=%s; "
+                        "skipping it (further refusals are not logged). The run will stop "
+                        "with finish_reason='reflection_budget' at the next engine iteration.",
+                        self._max_reflection_calls,
+                    )
                 return ""
             messages = (
                 [{"role": "user", "content": prompt}]
@@ -728,6 +734,7 @@ class GepaOptimizer(BaseOptimizer):
 
         self._adapter_metric_calls = 0
         self._reflection_call_count = 0
+        self._reflection_budget_warned = False
 
         if self.agent is None:
             raise ValueError("GepaOptimizer requires an agent to run evaluations.")
