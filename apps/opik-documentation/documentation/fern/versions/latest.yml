@@ -906,6 +906,9 @@ navigation:
       - page: Reduce coding agent spend
         path: ../docs-v2/cost_intelligence/reduce-agent-spend.mdx
         slug: reduce-agent-spend
+      - page: Roll out cost policies
+        path: ../docs-v2/cost_intelligence/roll-out-cost-policies.mdx
+        slug: roll-out-cost-policies
       - section: Installation
         slug: install
         contents:

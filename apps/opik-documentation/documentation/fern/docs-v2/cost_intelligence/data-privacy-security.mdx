@@ -231,6 +231,10 @@ One setting governs whether any prompt or response text leaves the device.
   `CIPX_CAPTURE_CONTENT` to `false` explicitly rather than leaving it unset.
 </Warning>
 
+## What policy sync writes on the device
+
+Applying [cost policies](/cost-intelligence/roll-out-cost-policies) writes only the managed policy keys in `~/.claude/settings.json` and `~/.codex/config.toml`; the rest of each file is the developer's own. A settings file that cannot be parsed is left untouched, and failures surface in local logs and error telemetry only.
+
 ## Where the data goes
 
 | Destination | Purpose | Control |
