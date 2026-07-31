@@ -437,7 +437,12 @@ const ProjectsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-4">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="comet-body-accented truncate break-words">Projects</h1>
+        <div className="min-w-0">
+          <h1 className="comet-body-accented truncate break-words">Projects</h1>
+          <p className="comet-body-s text-muted-slate">
+            Metrics reflect the last 30 days
+          </p>
+        </div>
         {canCreateProjects && (
           <Button variant="default" size="xs" onClick={handleNewProjectClick}>
             <Plus className="mr-1 size-4" />
