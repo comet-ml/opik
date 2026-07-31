@@ -9,6 +9,8 @@ This skill adds a screenshot-comparison test to Opik's visual regression suite. 
 
 **Announce at start:** "I'm using the writing-visual-tests skill to add a visual test for X."
 
+**Plan before implementing.** Before writing or editing any file, work through step 1 ("Scope") of "The loop" below and present the user a short plan: which page/panel and states you'll cover, what new seed route/client method (if any) you'll add, which spec file and project the new test(s) will live in (and why, per "One project per screenshot group"), and the resulting screenshot name(s). Wait for the user's explicit approval before starting step 2 (seeding) or any other implementation work. Only skip this pause if the user's request already specifies all of these choices unambiguously.
+
 ## Where tests live
 
 The suite is at `tests_end_to_end/visual-tests/`:
@@ -205,6 +207,7 @@ Regenerate whenever any of these change, not just on first add: the screenshot n
    ```
    A single green run proves nothing — real timestamps, real durations, and font/layout jitter only show up over several runs. If anything fails, open the `*-diff.png` attachment under `test-results/` before touching anything — it tells you exactly which pixels moved. Don't guess. If you change the spec, masks, or seed data in response, go back to step 5 and regenerate the baseline before stress-testing again — a stale baseline will just fail for a different, misleading reason.
    > macOS gotcha: `timeout` is not a built-in command (no coreutils by default) — a loop like `timeout 60 npx playwright test ...` silently no-ops. Don't wrap runs in `timeout`.
+   > Shell-tool gotcha: 5 sequential runs of a multi-test spec easily exceed a shell tool's default ~2-minute timeout, cutting the loop off mid-run. That's a harness timeout, not a test failure — don't read it as one. Pass an explicit longer timeout for the whole loop (e.g. 5+ minutes), or split into separate invocations and resume numbering (`for i in 3 4 5; do ...`) if one gets cut off.
 7. **Final full run, then work through the "Cleanup checklist" above** — one run *without* `SKIP_TEARDOWN` first (so `global-teardown.ts` actually deletes the seeded project server-side), then every item in the checklist. Config restore and stopping `test-helper-service` are only two of several things left behind.
 
 ## Unique screenshot names
@@ -289,7 +292,7 @@ await this.root.getByText('Loading', { exact: true }).waitFor({ state: 'hidden',
 
 ## One project per screenshot group
 
-Don't seed a new spec's data into an existing spec's shared project (e.g. `visual-project`) just because it's already there and already has a `beforeAll` you could piggyback on. Every spec file that seeds its own traces/threads/datasets should create and use its **own dedicated project** in `global-setup.ts`/`global-teardown.ts` (see `visual-sidebar-project` for `trace-sidebar.spec.ts`).
+Don't seed a new spec's data into an *existing spec's* shared project (e.g. `visual-project`) just because it's already there and already has a `beforeAll` you could piggyback on. Every spec **file** that seeds its own traces/threads/datasets should create and use its **own dedicated project** in `global-setup.ts`/`global-teardown.ts` (see `visual-sidebar-project` for `trace-sidebar.spec.ts`).
 
 Reusing a shared project causes two distinct problems, both discovered the hard way while adding `trace-sidebar.spec.ts`:
 
@@ -297,6 +300,12 @@ Reusing a shared project causes two distinct problems, both discovered the hard 
 - **Non-idempotent-seed collisions compound.** Combined with the hook-restart gotcha below, two specs sharing one project multiplies the chance that a retried `beforeAll` collides with another spec's still-present data (dataset/name conflicts, unexpected table rows) — independent of any bug in your own spec.
 
 Cost is low — `global-setup.ts` already loops over project creation — so default to a new project per spec unless it's an empty-state test explicitly reusing `visual-empty-project` on purpose.
+
+**This rule is about *other* specs' projects, not your own.** Adding a new `test()` to a spec file that already owns a project (e.g. adding test `07` to `visual-comparison.spec.ts`, which already owns `visual-project`) correctly reuses that same project — that's the same screenshot group, not a new one. Don't manufacture a new project just because you're adding a test.
+
+**But within that reuse, isolate new seeded entities from ones an existing baseline already depends on.** If your new test needs data the existing `beforeAll` doesn't already produce, add a **new, separate** trace/thread/dataset — don't extend an entity that an earlier, already-baselined test in the same file screenshots. Extending it (e.g. adding a sibling span to a trace whose tree is shown in an earlier screenshot) changes what that earlier screenshot renders (an extra tree row, a shifted count) and silently breaks its baseline. This is the same "cross-pollution" failure mode as above, just within one spec file instead of across two — and it's easy to miss because it's *your own* change causing it, not another spec's. Give the new state its own uniquely-named trace/entity in the same project instead.
+
+If unsure whether "same project, new test" or "same project, new isolated entity" is right for what you're adding, it usually comes down to: does an *already-passing* test in this file screenshot the shared context (a tree, a table, a count) that your new seed data would also appear in? If yes, isolate with a new entity; if no (e.g. a standalone page-level screenshot with its own query), reusing the existing seed is fine.
 
 ## Known Playwright gotcha: hook re-run on failure
 
@@ -314,5 +323,6 @@ If a test in a `describe` block fails, Playwright restarts the worker process be
 | "The decorator's duration always shows 0s, it's fine" | Determinism — "usually 0s" still varies by a sub-pixel width; force it to exactly 0 with matching `start_time`/`end_time`. |
 | "All 4 tests failed, must be a bigger bug" | The hook-restart gotcha — check the *first* failure alone before assuming later ones are independent. |
 | "I'll just seed my new spec into `visual-project`, it's already there" | One project per screenshot group — reusing another spec's project pollutes its table screenshots with your seeded data. |
+| "I'll add my new span/row to the trace an earlier test in this file already screenshots" | Isolating new entities within a reused project — extending a shared entity shifts what an already-baselined screenshot in the same file renders (extra tree row, changed count), breaking it. Seed a new, separate entity instead. |
 | "I'll wrap this panel in `BasePage`" | The panel exception — a non-route panel takes just `Page` + a `root` testid locator, not the full `BasePage` constructor. |
 | "I stopped the test-helper-service, I'm done" | The rest of the cleanup checklist — config restore, a non-`SKIP_TEARDOWN` final run (server-side project deletion), and the local report/log directories (`test-results/`, `visual-report/`, `allure-results/`, `screenshots/comparison/`). |
