@@ -23,8 +23,6 @@ const optimization = {
 
 describe("EmptyRunWarningPanel", () => {
   it("names the optimizer, not the metric, when no candidates were generated", () => {
-    // OPIK-7458: the baseline scored fine, so the panel must not claim the
-    // metric failed on every item.
     render(
       <EmptyRunWarningPanel
         optimization={optimization}
@@ -37,7 +35,6 @@ describe("EmptyRunWarningPanel", () => {
     expect(
       screen.getByText(/produced no prompt variants to score/),
     ).toBeInTheDocument();
-    // Nothing is broken, so there is no "run it again" call to action.
     expect(screen.queryByText(/run it again/)).not.toBeInTheDocument();
   });
 
@@ -66,8 +63,7 @@ describe("EmptyRunWarningPanel", () => {
   });
 
   it("renders nothing when the backend says no item failed", () => {
-    // The client classifier and the item-level counts can legitimately diverge;
-    // the backend wins, so we must not contradict it with a warning.
+    // The classifier and the item counts can diverge; the backend wins.
     const { container } = render(
       <EmptyRunWarningPanel
         optimization={optimization}

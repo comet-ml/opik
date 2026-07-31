@@ -66,19 +66,10 @@ export const getCompletedRunDurationSeconds = ({
   );
 };
 
-/**
- * Why a COMPLETED run has nothing usable to show. Previously a single boolean,
- * which made the panel blame the metric even when the metric worked (OPIK-7458).
- */
+/** Why a COMPLETED run has nothing usable to show (OPIK-7029, OPIK-7458). */
 export const EMPTY_RUN_CAUSE = {
-  /** Nothing to surface: the run is unfinished or errored, or something scored. */
   NONE: "none",
-  /** Nothing was generated beyond the baseline, and the baseline scored. */
   NO_CANDIDATES: "no-candidates",
-  /**
-   * Nothing produced a usable score: every non-baseline candidate is unscored,
-   * or nothing scored at all. The OPIK-7029 "silent COMPLETED" gap.
-   */
   SCORING_FAILED: "scoring-failed",
 } as const;
 
@@ -86,26 +77,15 @@ export type EmptyRunCause =
   (typeof EMPTY_RUN_CAUSE)[keyof typeof EMPTY_RUN_CAUSE];
 
 /**
- * Classifies a run that finished with nothing usable on screen, so the copy can
- * name the real cause.
+ * Classifies a COMPLETED run that shows nothing usable, so the copy can name the
+ * real cause. ERROR is RunErrorPanel's job, and in-progress runs legitimately
+ * have unscored candidates. The baseline (stepIndex 0) never counts as optimizer
+ * output, since a scored baseline is expected on every run.
  *
- * Order matters, because the checks overlap:
- *  1. Only COMPLETED runs qualify. ERROR is handled by RunErrorPanel, and
- *     in-progress runs legitimately have unscored candidates.
- *  2. No non-baseline candidates, baseline scored: NO_CANDIDATES.
- *  3. No non-baseline candidates, baseline unscored: SCORING_FAILED, since
- *     nothing was evaluated at all.
- *  4. Candidates exist but none scored: SCORING_FAILED.
- *
- * The baseline (stepIndex 0) never counts as optimizer output; a scored baseline
- * is expected on every run.
- *
- * `candidates` is the page-1 load capped at MAX_EXPERIMENTS_LOADED, sorted by
- * created_at ascending, so the baseline is always present and only trials past
- * the cap can be missing. Classifying from `scoring_health` instead is not an
- * option: those counts are per dataset item, so they cannot tell "the optimizer
- * generated nothing" from "the candidates failed to score", which is the whole
- * distinction here.
+ * `candidates` is the page-1 load capped at MAX_EXPERIMENTS_LOADED and sorted by
+ * created_at, so the baseline is always present. `scoring_health` cannot replace
+ * it: those counts are per dataset item, so they cannot separate "generated
+ * nothing" from "candidates failed to score" — the distinction this draws.
  */
 export const computeEmptyRunCause = (
   candidates: AggregatedCandidate[],
@@ -129,28 +109,20 @@ export const computeEmptyRunCause = (
     : EMPTY_RUN_CAUSE.NONE;
 };
 
-/** Panel heading. Names the cause instead of always reporting missing scores. */
 export const getEmptyRunTitle = (cause: EmptyRunCause): string =>
   cause === EMPTY_RUN_CAUSE.NO_CANDIDATES
     ? "No candidates generated"
     : "No usable scores";
 
-/**
- * Body copy for NO_CANDIDATES. Carries no call to action on purpose: the metric
- * worked and the baseline was kept, so there is nothing to fix or retry.
- */
+/** No call to action on purpose: nothing is broken, so there is nothing to retry. */
 const NO_CANDIDATES_MESSAGE =
   "The optimizer produced no prompt variants to score, so the baseline prompt was kept. " +
   "This is common when the original prompt already scores well.";
 
 /**
- * The scoring-failure lead sentence, single-sourced so the panel body and the
- * KPI caption cannot drift apart (they only differ in the tail they append).
- *
- * - `suppressed`: backend health data says nothing failed — say nothing.
- * - `all-failed` / `partial`: exact-count copy (OPIK-7159 Wave 2). `lead` has
- *   no trailing punctuation; callers append their own tail.
- * - `unknown`: no usable health data — callers fall back to static Wave-1 copy.
+ * Single-sourced lead sentence for a scoring failure (OPIK-7159 Wave 2), so the
+ * panel body and the KPI caption cannot drift apart. `lead` carries no trailing
+ * punctuation: callers append their own tail.
  */
 type ScoringFailureSummary =
   | { kind: "suppressed" | "unknown"; lead?: never }
@@ -167,8 +139,8 @@ const summarizeScoringFailure = (
   if (failed_count === 0) return { kind: "suppressed" };
 
   if (failed_count >= total_count) {
-    // Every item failed — stronger framing. The noun agrees with total_count,
-    // so a one-item dataset reads "The item …" not "All 1 item …".
+    // The noun agrees with total_count, so one item reads "The item …" not
+    // "All 1 item …".
     return {
       kind: "all-failed",
       lead:
@@ -178,8 +150,7 @@ const summarizeScoringFailure = (
     };
   }
 
-  // Partial failure. It always has total_count >= 2 (failed_count is >= 1 and
-  // strictly less than total), so the noun is always plural ("1 of 5 items").
+  // total_count >= 2 always holds here, so the noun is always plural.
   return {
     kind: "partial",
     lead: `${failed_count} of ${total_count} items failed to score`,
@@ -187,16 +158,8 @@ const summarizeScoringFailure = (
 };
 
 /**
- * Body copy for the empty-run panel.
- *
- * NO_CANDIDATES has its own copy and ignores `scoring_health`: the baseline
- * scored, so per-item failure counts cannot explain it.
- *
- * SCORING_FAILED copy comes from {@link summarizeScoringFailure}: exact-count
- * framing when backend health data exists, static Wave-1 message otherwise.
- *
- * Returns null when there is nothing to say: cause NONE, or health data
- * reporting no failures.
+ * Body copy for the empty-run panel. Returns null when there is nothing to say:
+ * cause NONE, or health data reporting no failures.
  */
 export const getEmptyRunMessage = (
   cause: EmptyRunCause,
@@ -230,12 +193,9 @@ export const getEmptyRunMessage = (
 };
 
 /**
- * Shortened version of {@link getEmptyRunMessage} for the KPI score-card
- * caption, where space is tight. Returns null under the same conditions: cause
- * NONE, or health data reporting no failures.
- *
- * The NO_CANDIDATES caption stays neutral, because the score on the card is the
- * baseline's real score rather than a failure.
+ * Shortened {@link getEmptyRunMessage} for the KPI score card, where space is
+ * tight. Same null conditions. The NO_CANDIDATES caption stays neutral because
+ * the score on the card is the baseline's real score, not a failure.
  */
 export const getEmptyRunKPICaption = (
   cause: EmptyRunCause,

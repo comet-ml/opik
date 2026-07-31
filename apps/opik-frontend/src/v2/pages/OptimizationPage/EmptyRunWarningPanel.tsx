@@ -15,17 +15,11 @@ import {
 
 type EmptyRunWarningPanelProps = {
   optimization: Optimization;
-  /**
-   * Why the run has nothing usable to show, see {@link EMPTY_RUN_CAUSE}. Drives
-   * both the copy and the severity: a run that generated no candidates is not an
-   * error, so it must not read like one.
-   */
+  /** Drives both the copy and the severity, see {@link EMPTY_RUN_CAUSE}. */
   cause: EmptyRunCause;
   /**
-   * Exact scoring-health counts from the backend (OPIK-7159 Wave 2). When
-   * present and `total_count > 0`, the panel body shows the exact failed/total
-   * numbers. When absent, falls back to the Wave-1 heuristic copy. Only
-   * consulted for the SCORING_FAILED cause.
+   * Exact failed/total counts from the backend (OPIK-7159 Wave 2), falling back
+   * to the Wave-1 copy when absent. Only consulted for SCORING_FAILED.
    */
   scoringHealth?: OptimizationScoringHealth;
 };
@@ -39,10 +33,8 @@ type EmptyRunAppearance = {
 };
 
 /**
- * Appearance per cause, in one place so the icon and every class stay in sync.
- * SCORING_FAILED uses the amber warning-box tokens, not the destructive scale:
- * the run did complete, the scores are just unusable. NO_CANDIDATES uses the
- * neutral surface, so a normal outcome does not look like a failure.
+ * SCORING_FAILED uses the amber warning-box tokens rather than the destructive
+ * scale: the run did complete, the scores are just unusable.
  */
 const APPEARANCE: Record<
   Exclude<EmptyRunCause, typeof EMPTY_RUN_CAUSE.NONE>,
@@ -66,21 +58,17 @@ const APPEARANCE: Record<
 
 /**
  * Shown when a run ends in COMPLETED with nothing usable on screen, per
- * computeEmptyRunCause. This is the FE half of the OPIK-7029 "silent COMPLETED"
- * gap: without it the run looks empty with no explanation.
- *
- * Severity follows the cause (OPIK-7458). SCORING_FAILED is a warning and earns
- * the "check the metric and re-run" call to action. NO_CANDIDATES is an
- * informational note: the metric worked and the baseline was kept.
+ * computeEmptyRunCause, which would otherwise look empty with no explanation
+ * (the OPIK-7029 "silent COMPLETED" gap). Severity follows the cause: a warning
+ * with a re-run call to action for SCORING_FAILED, a neutral note otherwise.
  */
 const EmptyRunWarningPanel: React.FC<EmptyRunWarningPanelProps> = ({
   optimization,
   cause,
   scoringHealth,
 }) => {
-  // Null when the cause is NONE, or when the backend reports no failed item. In
-  // the latter case the panel renders nothing rather than contradicting the
-  // backend, since the client classifier and the item counts can diverge.
+  // Null when the backend reports no failed item: it wins over the client
+  // classifier, so the panel stays silent rather than contradicting it.
   const message = getEmptyRunMessage(cause, scoringHealth);
   const [open, setOpen] = useState(false);
   const { data, dataUpdatedAt } = useOptimizationStudioLogs(

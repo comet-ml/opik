@@ -153,8 +153,7 @@ describe("computeEmptyRunCause", () => {
   });
 
   it("reports NO_CANDIDATES when the baseline scored but nothing else was generated", () => {
-    // The OPIK-7458 case: a strong seed prompt, zero non-baseline candidates.
-    // The metric demonstrably worked, so this must NOT read as a scoring failure.
+    // The OPIK-7458 case: a strong seed prompt, so the metric demonstrably worked.
     const candidates = [
       makeCandidate({ candidateId: "base", stepIndex: 0, score: 1 }),
     ];
@@ -164,7 +163,6 @@ describe("computeEmptyRunCause", () => {
   });
 
   it("reports SCORING_FAILED when nothing was generated AND the baseline never scored", () => {
-    // Nothing was evaluated at all, so scoring is the cause, not the optimizer.
     const candidates = [
       makeCandidate({ candidateId: "base", stepIndex: 0, score: undefined }),
     ];
@@ -256,8 +254,6 @@ describe("getEmptyRunMessage", () => {
     const msg = getEmptyRunMessage(EMPTY_RUN_CAUSE.NO_CANDIDATES);
     expect(msg).toContain("produced no prompt variants to score");
     expect(msg).toContain("the baseline prompt was kept");
-    // Nothing is wrong with this outcome, so the copy must not imply the metric
-    // broke or ask the user to re-run.
     expect(msg).not.toContain("failed");
     expect(msg).not.toContain("run it again");
   });

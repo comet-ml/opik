@@ -67,17 +67,13 @@ type OptimizationKPICardsProps = {
   optimizationLastUpdatedAt?: string;
   isInProgress?: boolean;
   /**
-   * Why the COMPLETED run has nothing usable to show (OPIK-7029, OPIK-7458).
-   * When it is not `NONE`, the score card shows a caption so a degenerate run is
-   * not a bare 0%/-. The caption names the actual cause, since a run that
-   * generated no candidates did not suffer a scoring failure.
+   * When not `NONE`, the score card shows a caption naming the cause, so a
+   * degenerate run is not a bare 0%/- (OPIK-7029, OPIK-7458).
    */
   emptyRunCause?: EmptyRunCause;
   /**
-   * Exact scoring-health counts from the backend (OPIK-7159 Wave 2). When
-   * present and `total_count > 0`, the score card caption shows the exact
-   * failed/total numbers. When absent, falls back to the Wave-1 heuristic copy.
-   * Only consulted for the SCORING_FAILED cause.
+   * Exact failed/total counts from the backend (OPIK-7159 Wave 2), falling back
+   * to the Wave-1 copy when absent. Only consulted for SCORING_FAILED.
    */
   scoringHealth?: OptimizationScoringHealth;
 };
@@ -123,10 +119,8 @@ const OptimizationKPICards: React.FunctionComponent<
     <div className="grid grid-cols-4 gap-4">
       {configs.map((config) => {
         const field = CANDIDATE_KEY_MAP[config.key];
-        // Caption the score card when the run has nothing usable to show, so a
-        // 0%/- is explained rather than read as a real result. The copy follows
-        // the cause: a scoring failure earns the "check the logs" framing, a run
-        // with no candidates just says the baseline was kept.
+        // Caption the score card so a 0%/- is explained rather than read as a
+        // real result.
         const caption =
           config.key === "score"
             ? getEmptyRunKPICaption(emptyRunCause, scoringHealth) ?? undefined

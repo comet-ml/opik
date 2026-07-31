@@ -136,9 +136,7 @@ const OptimizationPage: React.FC = () => {
     ? baselineCandidate ?? bestCandidate
     : bestCandidate;
 
-  // Why a COMPLETED run has nothing usable to show (OPIK-7029, OPIK-7458).
-  // Drives the panel copy, its severity, and the KPI score-card caption, so that
-  // "the optimizer generated nothing" does not read as "the metric failed".
+  // Drives the panel copy, its severity, and the KPI score-card caption.
   const emptyRunCause = computeEmptyRunCause(candidates, optimization?.status);
 
   // Single status source for the chart, the trials table, and the sidebar's
