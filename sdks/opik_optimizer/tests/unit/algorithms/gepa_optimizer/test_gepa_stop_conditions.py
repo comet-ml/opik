@@ -24,7 +24,10 @@ def _make_mock_gepa_result(**overrides: Any) -> MagicMock:
     mock_gepa_result = MagicMock()
     mock_gepa_result.history = []
     mock_gepa_result.pareto_front = []
-    mock_gepa_result.total_metric_calls = 1
+    # The runs below use max_trials=2 * n_samples=2, so this stands for a spent
+    # metric-call budget — the reason a real gepa run exits when none of our own
+    # stoppers fired. Tests about an unspent budget override it explicitly.
+    mock_gepa_result.total_metric_calls = 4
     for key, value in overrides.items():
         setattr(mock_gepa_result, key, value)
     return mock_gepa_result
@@ -229,13 +232,13 @@ class TestGepaFinishReason:
     ) -> None:
         """This unit covers the fallback LABELING only: gepa.optimize is mocked
         (its internal MaxMetricCallsStopper never runs), so the test asserts
-        that a gepa exit with neither wired stopper fired is labeled
-        'max_trials' — never 'completed' (OPIK-7511). The claim that budget
-        exhaustion is the only remaining exit path is a property of the gepa
+        that a gepa exit with neither wired stopper fired and the metric-call
+        budget spent is labeled 'max_trials' — never 'completed' (OPIK-7511).
+        That the budget is the remaining exit path is a property of the gepa
         engine (it only ever exits via stop conditions); a real budget-driven
         exit is exercised end-to-end by the imperfect-baseline e2e run."""
         gepa_result = _make_mock_gepa_result(
-            candidates=[], val_aggregate_scores=[0.3, 0.5]
+            candidates=[], val_aggregate_scores=[0.3, 0.5], total_metric_calls=4
         )
         result, _ = _run_optimize(
             monkeypatch,
@@ -249,6 +252,88 @@ class TestGepaFinishReason:
 
         assert result.details["finish_reason"] == "max_trials"
         assert result.details["stop_reason"] == "max_trials"
+
+    def test_finish_reason__budget_unspent__is_cancelled_not_max_trials(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """gepa installs its own FileStopper on <run_dir>/gepa.stop, so a run can
+        exit with neither of our stoppers fired AND budget left on the clock.
+        Labeling that 'max_trials' would report a budget burn that never
+        happened; it is an external stop request."""
+        # max_trials=2 * n_samples=2 = 4 metric calls of budget, 1 spent.
+        gepa_result = _make_mock_gepa_result(
+            candidates=[], val_aggregate_scores=[0.3, 0.5], total_metric_calls=1
+        )
+        result, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            gepa_result=gepa_result,
+        )
+
+        assert result.details["finish_reason"] == "cancelled"
+
+    def test_finish_reason__unknown_spend__still_falls_back_to_max_trials(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """total_metric_calls is optional run metadata on GEPAResult. Without it
+        we cannot tell an external stop from a budget burn, so the label must
+        stay on the old fallback rather than guess 'cancelled'."""
+        gepa_result = _make_mock_gepa_result(
+            candidates=[], val_aggregate_scores=[0.3, 0.5], total_metric_calls=None
+        )
+        result, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            gepa_result=gepa_result,
+        )
+
+        assert result.details["finish_reason"] == "max_trials"
+
+    def test_finish_reason__perfect_score_wins_over_unspent_budget(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """Reaching the target always leaves budget unspent — that must still
+        read as 'perfect_score', not as an external stop."""
+        gepa_result = _make_mock_gepa_result(
+            candidates=[], val_aggregate_scores=[0.5, 1.0], total_metric_calls=1
+        )
+        result, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            gepa_result=gepa_result,
+        )
+
+        assert result.details["finish_reason"] == "perfect_score"
 
     def test_finish_reason__no_improvement_stall__reports_no_improvement(
         self,

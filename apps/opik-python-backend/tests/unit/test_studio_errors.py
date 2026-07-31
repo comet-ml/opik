@@ -63,6 +63,16 @@ def test_empty_dataset_error_is_clean_and_actionable():
     assert "empty" in message.lower()
 
 
+def test_empty_dataset_error_surfaces_why_it_was_unusable():
+    """A dataset with rows but none the optimizer can use must not read as "it
+    is empty" — the operator would go looking for rows that are already there."""
+    message = to_user_facing_message(
+        EmptyDatasetError("my-dataset", reason="has no items the optimizer can use")
+    )
+    assert "no items the optimizer can use" in message
+    assert "is empty" not in message
+
+
 def test_dataset_not_found_does_not_leak_original_error():
     exc = DatasetNotFoundError(
         "my-dataset", original_error=ValueError("clickhouse: connection refused")

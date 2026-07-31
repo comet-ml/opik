@@ -82,11 +82,23 @@ class TestLoadAndValidateDataset:
         with pytest.raises(EmptyDatasetError):
             load_and_validate_dataset(client, "ds")
 
-    def test_items_without_ids_are_not_empty_but_count_zero(self):
-        """Pathological but must not crash: the dataset has rows, none usable."""
+    def test_rows_without_ids_are_rejected_like_an_empty_dataset(self):
+        """Rows the SDK's sampling drops leave the optimizer nothing to train
+        on, so the run must be rejected here instead of reaching optimization
+        with a zero-item trainset."""
         client = _client([{"no_id": 1}])
+
+        with pytest.raises(EmptyDatasetError) as excinfo:
+            load_and_validate_dataset(client, "ds")
+
+        # The operator has to know it is not the "add some rows" case.
+        assert "id" in str(excinfo.value)
+
+    def test_one_usable_row_among_unusable_ones_still_loads(self):
+        """Only a fully unusable dataset is rejected — a partial one is fine."""
+        client = _client([{"no_id": 1}, {"id": "1"}])
 
         dataset, count = load_and_validate_dataset(client, "ds")
 
         assert dataset is not None
-        assert count == 0
+        assert count == 1

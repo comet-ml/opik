@@ -125,9 +125,10 @@ def to_user_facing_message(exc: BaseException) -> str:
     # Our own typed errors — build clean text (avoid the "Original error: ..."
     # suffix some of them append, which can carry low-level detail).
     if isinstance(exc, EmptyDatasetError):
+        reason = getattr(exc, "reason", None) or "is empty"
         return (
-            f"The dataset '{exc.dataset_name}' is empty. "
-            "Add items to it before running the optimization."
+            f"The dataset '{exc.dataset_name}' {reason}. "
+            "Add usable items to it before running the optimization."
         )
     if isinstance(exc, DatasetNotFoundError):
         return (

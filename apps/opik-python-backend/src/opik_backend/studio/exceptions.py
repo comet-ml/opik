@@ -32,16 +32,23 @@ class DatasetNotFoundError(OptimizationError):
 
 
 class EmptyDatasetError(OptimizationError):
-    """Dataset exists but has no items.
-    
-    Raised when a dataset is loaded successfully but contains zero items.
-    Optimization requires at least one dataset item to evaluate against.
+    """Dataset exists but has no items the optimizer can use.
+
+    Raised when a dataset is loaded successfully but contains zero items, or
+    zero items the optimizer can train on — the SDK's sampling drops rows
+    without an id (see helpers.count_optimizable_items), so a dataset made only
+    of those is just as unusable as an empty one. Optimization requires at least
+    one usable dataset item to evaluate against.
+
+    `reason` describes which of the two it was; it defaults to plain emptiness
+    so existing callers keep their original message.
     """
-    
-    def __init__(self, dataset_name: str):
+
+    def __init__(self, dataset_name: str, reason: str = None):
         self.dataset_name = dataset_name
+        self.reason = reason
         message = (
-            f"Dataset '{dataset_name}' is empty. "
+            f"Dataset '{dataset_name}' {reason or 'is empty'}. "
             "Please add items to the dataset before running optimization."
         )
         super().__init__(message)

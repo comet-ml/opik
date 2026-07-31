@@ -97,7 +97,8 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
 
     Raises:
         DatasetNotFoundError: If dataset not found or inaccessible
-        EmptyDatasetError: If dataset has no items
+        EmptyDatasetError: If the dataset has no items, or none the optimizer
+            can train on
     """
     try:
         dataset = client.get_dataset(dataset_name)
@@ -114,6 +115,15 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
         raise EmptyDatasetError(dataset_name)
 
     item_count = count_optimizable_items(dataset_items)
+    if item_count == 0:
+        # The rows exist but the SDK's sampling will drop every one of them, so
+        # the optimizer would train on nothing: an empty trainset and a
+        # mini-batch sized from 0. Reject it here, where the user gets a typed,
+        # actionable error, instead of an opaque failure mid-run.
+        raise EmptyDatasetError(
+            dataset_name,
+            reason="has no items the optimizer can use (every item is missing an id)",
+        )
     logger.debug(
         f"Dataset has {len(dataset_items)} items (capped at {DATASET_SAMPLES}), "
         f"{item_count} usable by the optimizer"
