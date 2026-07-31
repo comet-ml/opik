@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 import litellm
 from litellm.exceptions import BadRequestError
-from opik import opik_context
+from opik import exceptions as opik_exceptions, opik_context
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
@@ -99,11 +99,13 @@ def _strip_duplicate_opik_logger(params: dict[str, Any]) -> dict[str, Any]:
         # internal that can drift. One SpanData copy is nothing next to the HTTP
         # call that follows.
         span_already_tracked = opik_context.get_current_span_data() is not None
-    except Exception:
-        # Can't tell, so leave the callbacks alone. Deliberately broad: this is a
-        # telemetry decision and must never fail the LLM call itself. Being wrong
-        # here costs a duplicate span for whichever caller has a span open, which
-        # is visible in the data, rather than a deleted tag, which is not.
+    except opik_exceptions.OpikException:
+        # Only Opik's own failures are "can't tell"; leave the callbacks alone in
+        # that case. Being wrong here costs a duplicate span for whichever caller
+        # has a span open, which is visible in the data, rather than a deleted tag,
+        # which is not. Anything else out of get_current_span_data() is a bug in
+        # the SDK or in us, so it propagates to centralized handling instead of
+        # being silently absorbed into a telemetry decision.
         logger.debug("Could not determine Opik span context", exc_info=True)
         span_already_tracked = False
     if not span_already_tracked:

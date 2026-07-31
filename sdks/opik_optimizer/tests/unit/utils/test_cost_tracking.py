@@ -8,6 +8,7 @@ import pytest
 from opik_optimizer.agents.litellm_agent import LiteLLMAgent
 from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.base_optimizer import BaseOptimizer
+from opik_optimizer.core import runtime
 from opik_optimizer.core.state import OptimizationContext
 from opik_optimizer.core.results import OptimizationResult
 from tests.unit.fixtures import system_message, user_message
@@ -130,6 +131,45 @@ def test_usage_without_total_tokens_is_still_recorded() -> None:
     assert opt.llm_token_usage_total["completion_tokens"] == 3
     # Derived, so downstream gates on total_tokens do not drop everything.
     assert opt.llm_token_usage_total["total_tokens"] == 10
+
+
+def test_reported_totals_are_none_until_a_provider_reports_something() -> None:
+    """Nothing reported means "unavailable", so the result carries None rather
+    than an invented zero."""
+    opt = DummyOptimizer()
+
+    assert runtime.reported_llm_cost(opt) is None
+    assert runtime.reported_llm_usage(opt) is None
+
+
+def test_reported_totals_keep_an_explicit_zero() -> None:
+    """A free model reports 0.0, and a call can legitimately report zero tokens.
+    Gating on truthiness turned both into None — "unavailable" — which is a
+    different statement from "we measured, and it was zero"."""
+    opt = DummyOptimizer()
+
+    opt._add_llm_cost(0.0)
+    opt._add_llm_usage({"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
+
+    assert runtime.reported_llm_cost(opt) == pytest.approx(0.0)
+    assert runtime.reported_llm_usage(opt) == {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+
+
+def test_reported_usage_is_a_copy_of_the_live_accumulator() -> None:
+    """The result must not alias the accumulator a still-running optimizer keeps
+    mutating."""
+    opt = DummyOptimizer()
+    opt._add_llm_usage({"prompt_tokens": 1, "completion_tokens": 1})
+
+    snapshot = runtime.reported_llm_usage(opt)
+    opt._add_llm_usage({"prompt_tokens": 5, "completion_tokens": 5})
+
+    assert snapshot is not None
+    assert snapshot["prompt_tokens"] == 1
 
 
 def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(

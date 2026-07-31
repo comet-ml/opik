@@ -7,6 +7,7 @@ import opik
 from ...base_optimizer import BaseOptimizer
 from ... import constants
 from ...core import llm_calls as _llm_calls
+from ...core.exceptions import EmptyLLMResponseError
 from ...core.state import (
     AlgorithmResult,
     FinishReason,
@@ -344,14 +345,14 @@ class GepaOptimizer(BaseOptimizer):
             # raise_on_exception and ends the run — as the AttributeError did.
             # Returning str(None) instead would hand gepa the literal instruction
             # "None" and burn a trial on a corrupted prompt.
+            # gepa catches bare Exception around the proposer, so the OpikException
+            # subclass behaves exactly as the ValueError it replaces while keeping
+            # the failure inside the SDK's hierarchy for callers that handle it.
             if not isinstance(result, str) or not result.strip():
                 logger.warning(
                     "GEPA reflection returned no content from %s.", self.model
                 )
-                raise ValueError(
-                    "GEPA reflection received an empty response from "
-                    f"{self.model}; cannot propose a new instruction."
-                )
+                raise EmptyLLMResponseError(model=self.model, purpose="GEPA reflection")
             return result
 
         return cast(Callable[[str | list[dict[str, Any]]], str], _reflection_lm)

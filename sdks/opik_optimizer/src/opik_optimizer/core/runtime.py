@@ -250,12 +250,8 @@ def build_final_result(
         history=history_entries,
         llm_calls=optimizer.llm_call_counter,
         llm_calls_tools=optimizer.llm_call_tools_counter,
-        llm_cost_total=optimizer.llm_cost_total or None,
-        llm_token_usage_total=(
-            dict(optimizer.llm_token_usage_total)
-            if optimizer.llm_token_usage_total.get("total_tokens")
-            else None
-        ),
+        llm_cost_total=reported_llm_cost(optimizer),
+        llm_token_usage_total=reported_llm_usage(optimizer),
         dataset_id=context.dataset.id,
         optimization_id=context.optimization_id,
     )
@@ -572,12 +568,8 @@ def build_early_stop_result(
         history=optimizer._history_builder.get_entries(),
         llm_calls=optimizer.llm_call_counter,
         llm_calls_tools=optimizer.llm_call_tools_counter,
-        llm_cost_total=optimizer.llm_cost_total or None,
-        llm_token_usage_total=(
-            dict(optimizer.llm_token_usage_total)
-            if optimizer.llm_token_usage_total.get("total_tokens")
-            else None
-        ),
+        llm_cost_total=reported_llm_cost(optimizer),
+        llm_token_usage_total=reported_llm_usage(optimizer),
         dataset_id=context.dataset.id,
         optimization_id=context.optimization_id,
     )
@@ -743,6 +735,8 @@ def reset_usage(optimizer: BaseOptimizer) -> None:
         "completion_tokens": 0,
         "total_tokens": 0,
     }
+    optimizer._llm_cost_recorded = False
+    optimizer._llm_usage_recorded = False
 
 
 def increment_llm_call(optimizer: BaseOptimizer) -> None:
@@ -760,6 +754,7 @@ def add_llm_cost(optimizer: BaseOptimizer, cost: float | None) -> None:
         return
     with _usage_lock:
         optimizer.llm_cost_total += float(cost)
+        optimizer._llm_cost_recorded = True
 
 
 def add_llm_usage(optimizer: BaseOptimizer, usage: dict[str, Any] | None) -> None:
@@ -776,6 +771,31 @@ def add_llm_usage(optimizer: BaseOptimizer, usage: dict[str, Any] | None) -> Non
         optimizer.llm_token_usage_total["prompt_tokens"] += prompt_tokens
         optimizer.llm_token_usage_total["completion_tokens"] += completion_tokens
         optimizer.llm_token_usage_total["total_tokens"] += total_tokens
+        optimizer._llm_usage_recorded = True
+
+
+def reported_llm_cost(optimizer: BaseOptimizer) -> float | None:
+    """The run's cost total, or None when no provider reported a cost at all.
+
+    A run whose calls were genuinely free reports ``0.0``, not None — None means
+    "no answer", and the UI renders it as unavailable.
+    """
+    with _usage_lock:
+        if not optimizer._llm_cost_recorded:
+            return None
+        return optimizer.llm_cost_total
+
+
+def reported_llm_usage(optimizer: BaseOptimizer) -> dict[str, int] | None:
+    """The run's token usage, or None when no provider reported usage at all.
+
+    Same contract as `reported_llm_cost`: an explicit zero-token record survives
+    as zeros instead of being flattened into "unavailable".
+    """
+    with _usage_lock:
+        if not optimizer._llm_usage_recorded:
+            return None
+        return dict(optimizer.llm_token_usage_total)
 
 
 def coerce_score(raw_score: Any) -> float:

@@ -11,6 +11,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from opik import exceptions as opik_exceptions
 from pydantic import BaseModel
 
 from opik_optimizer.core import llm_calls as _llm_calls
@@ -589,10 +590,7 @@ class TestDuplicateOpikLoggerStripped:
         # A caller's own callbacks must survive.
         assert other_callback in captured_kwargs.get("success_callback", [])
 
-    def test_keeps_opik_logger_when_span_context_is_unreadable(self) -> None:
-        """If the span predicate itself fails we cannot tell which case we are in.
-        Leave the callbacks alone: a duplicate span is visible in the data,
-        whereas a deleted optimization tag makes the spend silently vanish."""
+    def _call_with_span_probe_raising(self, error: BaseException) -> Any:
         opik_logger = self._make_logger()
         other_callback = object()
         captured_kwargs: dict[str, Any] = {}
@@ -611,7 +609,7 @@ class TestDuplicateOpikLoggerStripped:
         ):
             with patch(
                 "opik_optimizer.core.llm_calls.opik_context.get_current_span_data",
-                side_effect=RuntimeError("opik context unavailable"),
+                side_effect=error,
             ):
                 with patch(
                     "opik_optimizer.core.llm_calls.track_completion"
@@ -621,10 +619,32 @@ class TestDuplicateOpikLoggerStripped:
                         messages=[user_message("test")], model="gpt-4o"
                     )
 
+        return result, opik_logger, other_callback, captured_kwargs
+
+    def test_keeps_opik_logger_when_span_context_is_unreadable(self) -> None:
+        """If Opik itself cannot answer the span question we cannot tell which case
+        we are in. Leave the callbacks alone: a duplicate span is visible in the
+        data, whereas a deleted optimization tag makes the spend silently vanish."""
+        (
+            result,
+            opik_logger,
+            other_callback,
+            captured_kwargs,
+        ) = self._call_with_span_probe_raising(
+            opik_exceptions.OpikException("opik context unavailable")
+        )
+
         # The call still succeeds and the callbacks are untouched.
         assert result == "ok"
         assert opik_logger in captured_kwargs.get("success_callback", [])
         assert other_callback in captured_kwargs.get("success_callback", [])
+
+    def test_non_opik_failure_in_the_span_probe_propagates(self) -> None:
+        """Only Opik's own failures mean "can't tell". Anything else is a bug in
+        the SDK or in us, and swallowing it into a telemetry decision would hide
+        it — so it surfaces instead."""
+        with pytest.raises(RuntimeError, match="boom"):
+            self._call_with_span_probe_raising(RuntimeError("boom"))
 
     def test_keeps_opik_logger_when_no_span_is_open(self) -> None:
         """Without this, non-GEPA optimizers lose optimization-id trace tagging."""

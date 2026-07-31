@@ -2,6 +2,29 @@
 
 from __future__ import annotations
 
+from opik import exceptions as opik_exceptions
+
+
+class EmptyLLMResponseError(opik_exceptions.OpikException):
+    """Raised when an LLM returned no content where the caller required text.
+
+    A content-filtered or tool-call-only completion carries no message content.
+    Callers that must hand the text to another component cannot substitute a
+    placeholder — stringifying ``None`` would pass the literal instruction
+    "None" downstream — so they fail with this instead (OPIK-7521).
+
+    Carries the model and the calling purpose so the message names both.
+    """
+
+    def __init__(self, *, model: str, purpose: str) -> None:
+        self.model = model
+        self.purpose = purpose
+        super().__init__(
+            f"{purpose} received an empty response from {model}: the model "
+            "returned no content (content filter, or a tool-call-only "
+            "completion), so there is nothing to use."
+        )
+
 
 class ScoringFailedError(RuntimeError):
     """Raised when the objective metric failed to score a run's evaluation items.

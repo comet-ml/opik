@@ -6,8 +6,14 @@ Passing `reflection_lm` to gepa as a plain model string makes gepa build its own
 bare litellm client — no Opik span is created and the spend is missing from every
 cost report, even though the call is billed to the user's provider key. These
 tests pin the contract: gepa receives a callable that routes through
-`core.llm_calls.call_model` (span via track_completion, counter increment, cost
-accumulation into the final OptimizationResult).
+`core.llm_calls.call_model` (counter increment, cost accumulation into the final
+OptimizationResult, and an optimization-tagged trace).
+
+`track_completion` is patched only to stand in for the provider call, the same way
+the rest of the optimizer unit suite isolates LiteLLM (see
+`tests/unit/utils/test_llm_calls_call_model.py`). The assertions are on observable
+outcomes — the text handed back to gepa, the request built for the provider, the
+trace tags, and the counters/costs on the result — not on the patch itself.
 """
 
 from types import SimpleNamespace
@@ -15,8 +21,10 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from opik import exceptions as opik_exceptions
 
 from opik_optimizer import GepaOptimizer
+from opik_optimizer.core.exceptions import EmptyLLMResponseError
 
 from tests.unit.fixtures.builders import make_mock_response
 
@@ -99,7 +107,7 @@ def _run_optimize(
 
 
 class TestGepaReflectionLmInstrumentation:
-    def test_reflection_lm_is_instrumented_callable_not_string(
+    def test_reflection_lm__handed_to_gepa_instead_of_a_model_string__is_a_callable(
         self,
         mock_optimization_context,
         monkeypatch,
@@ -122,7 +130,7 @@ class TestGepaReflectionLmInstrumentation:
         assert not isinstance(reflection_lm, str)
         assert callable(reflection_lm)
 
-    def test_reflection_call_goes_through_tracked_completion(
+    def test_reflection_call__invoked_with_a_prompt_string__requests_the_optimizer_model_with_reflection_metadata(
         self,
         mock_optimization_context,
         monkeypatch,
@@ -131,7 +139,8 @@ class TestGepaReflectionLmInstrumentation:
         sample_dataset_items,
         sample_metric,
     ) -> None:
-        """The callable must produce a span (track_completion) with reflection metadata."""
+        """The callable must route the prompt through the optimizer's own model and
+        label the request as reflection, so the spend is attributable."""
         _, captured, _ = _run_optimize(
             monkeypatch,
             mock_optimization_context,
@@ -153,7 +162,6 @@ class TestGepaReflectionLmInstrumentation:
             output = reflection_lm("please improve this prompt")
 
         assert output == "improved instruction"
-        assert mock_track.called
         assert captured_kwargs["model"] == "gpt-4o-mini"
         assert captured_kwargs["messages"] == [
             {"role": "user", "content": "please improve this prompt"}
@@ -161,7 +169,7 @@ class TestGepaReflectionLmInstrumentation:
         metadata = captured_kwargs.get("metadata") or {}
         assert metadata.get("opik_call_type") == "gepa_reflection"
 
-    def test_reflection_trace_is_tagged_with_the_optimization_id(
+    def test_reflection_call__trace_created_for_the_call__tagged_with_the_optimization_id(
         self,
         mock_optimization_context,
         monkeypatch,
@@ -201,7 +209,7 @@ class TestGepaReflectionLmInstrumentation:
         assert "Reflection" in tags
         assert "GEPA" in tags
 
-    def test_reflection_call_accepts_messages_list(
+    def test_reflection_call__gepa_passes_a_messages_list__forwarded_to_the_provider_unchanged(
         self,
         mock_optimization_context,
         monkeypatch,
@@ -238,7 +246,7 @@ class TestGepaReflectionLmInstrumentation:
         assert output == "multimodal instruction"
         assert captured_kwargs["messages"] == messages
 
-    def test_empty_completion_raises_instead_of_proposing_none(
+    def test_reflection_call__completion_carries_no_content__raises_empty_llm_response_error(
         self,
         mock_optimization_context,
         monkeypatch,
@@ -249,7 +257,8 @@ class TestGepaReflectionLmInstrumentation:
     ) -> None:
         """A content-filtered or tool-call-only response yields None content.
         Stringifying it would hand gepa the literal instruction "None" and burn
-        a trial on a corrupted prompt; fail loudly instead."""
+        a trial on a corrupted prompt; fail loudly instead — and inside Opik's
+        exception hierarchy, so callers can handle it with the rest of the SDK."""
         _, captured, _ = _run_optimize(
             monkeypatch,
             mock_optimization_context,
@@ -264,10 +273,13 @@ class TestGepaReflectionLmInstrumentation:
             mock_track.return_value = lambda completion_fn: (
                 lambda **kw: _make_reflection_response(None)
             )
-            with pytest.raises(ValueError, match="empty response"):
+            with pytest.raises(EmptyLLMResponseError, match="empty response") as exc:
                 reflection_lm("improve this prompt")
 
-    def test_callable_satisfies_gepas_real_wrapper_contract(
+        assert isinstance(exc.value, opik_exceptions.OpikException)
+        assert exc.value.model == "gpt-4o-mini"
+
+    def test_reflection_lm__wrapped_in_gepas_real_tracking_lm__returns_a_str(
         self,
         mock_optimization_context,
         monkeypatch,
@@ -301,7 +313,7 @@ class TestGepaReflectionLmInstrumentation:
         assert isinstance(out, str)
         assert out.strip() == "instruction via gepa"
 
-    def test_reflection_cost_lands_in_optimization_result(
+    def test_reflection_call__provider_reports_cost_and_usage__both_reach_the_optimization_result(
         self,
         mock_optimization_context,
         monkeypatch,

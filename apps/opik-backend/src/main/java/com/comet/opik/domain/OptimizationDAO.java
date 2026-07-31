@@ -557,10 +557,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 SELECT DISTINCT id, project_id
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                -- A trace cannot carry an optimization id before that optimization
-                -- existed, so anything older is not a candidate. idx_traces_created_at
-                -- is a materialized minmax index, so this prunes granules instead of
-                -- reading the workspace's whole history.
                 AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
                 AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
             ), optimization_tagged_traces AS (
