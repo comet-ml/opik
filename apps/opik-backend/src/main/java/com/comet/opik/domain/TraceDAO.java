@@ -4439,6 +4439,22 @@ class TraceDAOImpl implements TraceDAO {
      * where the state is dominated by the grouped values rather than by per-aggregate overhead. So the tuple is
      * for correctness; it does not soften the cost profile the gate below exists to avoid.
      *
+     * <p>No further tie-breaker is added, deliberately. {@code ReplacingMergeTree} resolves an equal-{@code ver}
+     * tie by the "no {@code ver}" rule — the most recently inserted row wins — and insertion order is not a column,
+     * so no value-based tie-breaker can reproduce it. Adding one (ordering by the payload tuple, say) would be
+     * deterministic but would deliberately pick a <em>different</em> row than {@code FINAL} precisely in the tie
+     * case, turning an unobserved divergence into a guaranteed one. Empirically the two already agree: over 20
+     * tied versions inserted in scrambled order across multiple parts, and in the adversarial case where the
+     * last-inserted row sorts lowest by value, {@code FINAL} and {@code argMax} selected the same row on every
+     * run at 8 threads — both take the last row seen at the maximum version.
+     *
+     * <p>Ties are also close to unreachable here. {@code last_updated_at} is {@code DateTime64(6)}, and rows
+     * sharing a sort key inside one INSERT are collapsed when the part is written, so a batch that carries the
+     * same trace twice stores one row rather than a tie. Separate batches take distinct {@code now64(6)} values.
+     * What remains is a client supplying an explicit duplicate {@code lastUpdatedAt}, since a caller-provided
+     * value is honoured. Across the four largest production projects (60M+ rows) there are no duplicate row
+     * versions at all.
+     *
      * <p>Wrapping also avoids an aliasing hazard: aliasing a per-version column to its own name would win name
      * resolution inside the {@code HAVING} predicate — which reads {@code thread_id}, {@code error_info} and
      * {@code duration} — nesting {@code argMax} inside {@code argMax}, which ClickHouse rejects with
