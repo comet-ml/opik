@@ -726,14 +726,12 @@ class OptimizationsResourceTest {
                         assertThat(actualOptimization.numTrials()).isEqualTo(2L);
 
                         // Baseline = earliest candidate's objective score
-                        assertThat(actualOptimization.baselineObjectiveScore()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.baselineObjectiveScore(), baselineScore)).isZero();
+                        StatsUtils.assertBigDecimalEquals(
+                                actualOptimization.baselineObjectiveScore(), baselineScore);
 
                         // Best = highest objective score across candidates
-                        assertThat(actualOptimization.bestObjectiveScore()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.bestObjectiveScore(), bestScore)).isZero();
+                        StatsUtils.assertBigDecimalEquals(
+                                actualOptimization.bestObjectiveScore(), bestScore);
 
                         // Duration fields are populated (traces have start/end times)
                         assertThat(actualOptimization.baselineDuration()).isNotNull();
@@ -969,6 +967,112 @@ class OptimizationsResourceTest {
                         var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
                         assertThat(StatsUtils.bigDecimalComparator(
                                 actual.totalOptimizationCost(), BigDecimal.ZERO)).isZero();
+                    });
+        }
+
+        /**
+         * When two candidates tie on the objective score, the best duration and cost are taken from the
+         * earliest-created candidate - the same candidate the baseline resolves to. So under a tie the best and
+         * baseline values must coincide, and because the two candidates are given clearly different costs and
+         * durations, picking the later candidate instead would break that equality. Without a defined tie-break
+         * these two fields are arbitrary: the previous implementation returned different values for the same data
+         * depending only on the query plan.
+         */
+        @Test
+        @DisplayName("Get optimizer by id when candidates tie on score, then best matches the earliest candidate")
+        void getById__whenCandidatesTieOnScore__bestComesFromEarliestCandidate() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "tie-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            var objectiveName = "accuracy";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .build(),
+                    apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Both candidates score identically, so only the tie-break decides which one best_* comes from.
+            var tiedScore = BigDecimal.valueOf(0.75);
+
+            var earliest = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(tiedScore).build()))
+                    .build();
+            experimentResourceClient.create(earliest, apiKey, workspaceName);
+
+            var later = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(tiedScore).build()))
+                    .build();
+            experimentResourceClient.create(later, apiKey, workspaceName);
+
+            // The fixture creates one trace and one span per dataset item, so per-trace cost reduces to the span
+            // cost. The two costs must differ in their integer parts: bigDecimalComparator falls back to comparing
+            // only toBigInteger(), so 0.01 and 0.99 would compare equal and could not tell the candidates apart.
+            var earliestCost = BigDecimal.valueOf(1);
+            var laterCost = BigDecimal.valueOf(9);
+
+            createTracesSpansAndItems(earliest, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(3), Instant.now().minusSeconds(2), earliestCost);
+            createTracesSpansAndItems(later, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(30), Instant.now().minusSeconds(1), laterCost);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual).isNotNull();
+                        assertThat(actual.numTrials()).isEqualTo(2L);
+
+                        // Both candidates score the same, so only the tie-break decides best_*
+                        StatsUtils.assertBigDecimalEquals(actual.bestObjectiveScore(), tiedScore);
+
+                        StatsUtils.assertBigDecimalEquals(actual.baselineObjectiveScore(), tiedScore);
+
+                        // Under a tie the earliest candidate wins. Asserting best equals baseline alone would
+                        // still pass if both rollups picked the later candidate, so also require that neither
+                        // reports the later candidate's cost. Together these catch either rollup drifting,
+                        // without depending on how per-trace cost is derived.
+                        assertThat(actual.bestCost()).isNotNull();
+                        assertThat(actual.baselineCost()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestCost(), laterCost))
+                                .isNotZero();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineCost(), laterCost))
+                                .isNotZero();
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), actual.baselineCost());
+
+                        StatsUtils.assertBigDecimalEquals(actual.bestDuration(), actual.baselineDuration());
                     });
         }
 

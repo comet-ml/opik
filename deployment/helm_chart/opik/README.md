@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.12](https://img.shields.io/badge/Version-2.2.12-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.12](https://img.shields.io/badge/AppVersion-2.2.12-informational?style=flat-square)
+![Version: 2.2.13](https://img.shields.io/badge/Version-2.2.13-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.13](https://img.shields.io/badge/AppVersion-2.2.13-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -199,6 +199,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
 | clickhouse.serviceAccount.create | bool | `false` |  |
 | clickhouse.serviceAccount.name | string | `""` |  |
+| clickhouse.sharding.enabled | bool | `false` |  |
 | clickhouse.shardsCount | int | `1` |  |
 | clickhouse.storage | string | `"50Gi"` |  |
 | clickhouse.templates.podTemplate | string | `"clickhouse-cluster-pod-template"` |  |
@@ -449,6 +450,15 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.waitForRedis.redis.host | string | `""` |  |
 | component.python-backend.waitForRedis.redis.port | int | `6379` |  |
 | component.python-backend.waitForRedis.resources | object | `{}` |  |
+| databaseAnalytics.coldStorageDiskHealthCheckEnabled | bool | `false` |  |
+| databaseAnalytics.uuidV7ValidationAuditOnly | bool | `false` |  |
+| databaseAnalytics.uuidV7ValidationEnabled | bool | `false` |  |
+| databaseAnalytics.uuidV7ValidationWindow | string | `"24h"` |  |
+| databaseAnalyticsDataModel.deletionEventsInsertBatchSize | int | `1000` |  |
+| databaseAnalyticsDataModel.spanColumnsNonNullable | bool | `false` |  |
+| databaseAnalyticsDataModel.spanDeletionEventsCaptureEnabled | bool | `false` |  |
+| databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
+| databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled | bool | `false` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | global.argocd | bool | `false` |  |
@@ -479,6 +489,9 @@ Call opik api on http://localhost:5173/api
 | mysql.primary.persistence.size | string | `"20Gi"` |  |
 | nameOverride | string | `"opik"` |  |
 | nodeSelector | object | `{}` |  |
+| partitionMetrics.enabled | bool | `false` |  |
+| partitionMetrics.interval | string | `"5m"` |  |
+| partitionMetrics.lwdTables | string | `"traces,spans"` |  |
 | redis.architecture | string | `"standalone"` |  |
 | redis.auth.enabled | bool | `true` |  |
 | redis.auth.password | string | `"wFSuJX9nDBdCa25sKZG7bh"` |  |

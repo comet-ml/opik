@@ -542,9 +542,9 @@ public class SpanService {
                         if (spanIds.isEmpty()) {
                             return Mono.empty();
                         }
-                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
+                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds, projectId)
                                 .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
-                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds)))
+                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds, projectId)))
                                 .then(spanDAO.deleteByIds(spanIds, projectId)
                                         .doOnSuccess(__ -> log.info(
                                                 "Deleted '{}' spans for workspace '{}', project '{}'",

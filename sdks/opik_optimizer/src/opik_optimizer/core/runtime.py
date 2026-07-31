@@ -535,7 +535,16 @@ def build_early_stop_details(
     early_stop_details = {
         "initial_score": baseline_score,
         "stopped_early": True,
+        # finish_reason is the canonical machine-readable signal (same key as
+        # build_final_result); stop_reason keeps the legacy descriptive value.
+        "finish_reason": context.finish_reason or "perfect_score",
         "stop_reason": "baseline_score_met_threshold",
+        # The baseline eval's scoring health — build_final_result always carries
+        # this key, and downstream consumers (worker metadata forwarding, the
+        # "No usable scores" UI heuristic) rely on it being present on every
+        # completion path, including this baseline-only one (OPIK-7511 e2e).
+        "scoring_health": context.scoring_health
+        or {"failed_count": 0, "total_count": 0},
         "stop_reason_details": {"best_score": baseline_score},
         "perfect_score": optimizer.perfect_score,
         "skip_perfect_score": optimizer.skip_perfect_score,
