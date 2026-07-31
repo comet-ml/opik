@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -142,17 +143,20 @@ class VertexAIClientGeneratorTest {
     }
 
     /**
-     * Every multi-region location is mapped onto WireMock, so the endpoint the generator resolves becomes observable as
-     * the host it actually calls. {@code Transport.REST} is required because WireMock speaks HTTP, not gRPC.
+     * Starts from the shipped {@code config-test.yml} rather than a hand-built config, so the generator is exercised
+     * against the same block the app boots with. Only the two things the stub needs are overridden: every multi-region
+     * location is remapped onto WireMock, which makes the endpoint the generator resolves observable as the host it
+     * actually calls, and {@code Transport.REST} is required because WireMock speaks HTTP, not gRPC.
      */
     private LlmProviderClientConfig clientConfig() {
         var endpoint = wireMockHost() + "/";
-        var config = new LlmProviderClientConfig();
-        config.setVertexAIClient(LlmProviderClientConfig.VertexAIClientConfig.builder()
-                .scope("https://www.googleapis.com/auth/cloud-platform")
+        var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
+
+        config.setVertexAIClient(config.getVertexAIClient().toBuilder()
                 .multiRegionApiEndpoints(Map.of("global", endpoint, "eu", endpoint, "us", endpoint))
                 .transport(Transport.REST)
                 .build());
+
         return config;
     }
 
