@@ -434,7 +434,7 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     @Override
     public boolean supportsToolCalling(@NonNull LlmProvider provider) {
         return switch (provider) {
-            case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
+            case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, REQUESTY, VERTEX_AI, BEDROCK -> true;
             case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;
         };
     }
