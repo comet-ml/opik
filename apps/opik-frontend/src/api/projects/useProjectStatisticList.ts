@@ -24,6 +24,8 @@ type UseProjectStatisticsListResponse = {
   total: number;
 };
 
+export const PROJECT_STATS_WINDOW_DAYS = 30;
+
 const getProjectStatisticsList = async (
   { signal }: QueryFunctionContext,
   {
@@ -45,6 +47,7 @@ const getProjectStatisticsList = async (
         undefined,
         logsSource ? generateLogsSourceFilter(logsSource) : undefined,
       ),
+      window_days: PROJECT_STATS_WINDOW_DAYS,
       size,
       page,
     },

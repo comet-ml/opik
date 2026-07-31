@@ -210,11 +210,20 @@ public class ProjectResourceClient {
 
     public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
             @NonNull String workspaceName, List<TraceFilter> filters) {
+        return getProjectStatsSummary(projectName, apiKey, workspaceName, filters, null);
+    }
+
+    public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
+            @NonNull String workspaceName, List<TraceFilter> filters, Integer windowDays) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("/stats");
 
         if (StringUtils.isEmpty(projectName)) {
             webTarget = webTarget.queryParam("name", projectName);
+        }
+
+        if (windowDays != null) {
+            webTarget = webTarget.queryParam("window_days", windowDays);
         }
 
         if (filters != null && !filters.isEmpty()) {

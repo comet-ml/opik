@@ -6,6 +6,6 @@ import lombok.Builder;
 import java.util.List;
 
 @Builder(toBuilder = true)
-public record ProjectCriteria(String projectName, List<? extends Filter> filters) {
+public record ProjectCriteria(String projectName, List<? extends Filter> filters, Integer windowDays) {
 
 }

@@ -353,6 +353,7 @@ public class ProjectsResource {
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
             @QueryParam("name") @Schema(description = "Filter projects by name (partial match, case insensitive)") String name,
             @QueryParam("filters") String filters,
+            @QueryParam("window_days") @Min(1) @Schema(description = "When set, scope the metrics to the last N days; omitted keeps the all-time aggregates") Integer windowDays,
             @QueryParam("sorting") String sorting) {
 
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
@@ -360,6 +361,7 @@ public class ProjectsResource {
         var criteria = ProjectCriteria.builder()
                 .projectName(name)
                 .filters(traceFilters)
+                .windowDays(windowDays)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

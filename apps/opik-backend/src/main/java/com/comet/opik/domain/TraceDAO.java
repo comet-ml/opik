@@ -5,6 +5,7 @@ import com.comet.opik.api.ExperimentItemReference;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
@@ -58,6 +59,7 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -142,7 +144,7 @@ public interface TraceDAO {
     Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId,
-            List<? extends Filter> filters);
+            List<? extends Filter> filters, Integer windowDays);
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
@@ -2942,6 +2944,8 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 UNION ALL
                 <endif>
                 SELECT project_id, entity_id, name, value, author
@@ -2949,7 +2953,9 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-            ), scored_span_traces AS (
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+            ), scored_span_ids AS (
                 SELECT id
                 FROM spans
                 WHERE workspace_id = :workspace_id
@@ -2995,7 +3001,7 @@ class TraceDAOImpl implements TraceDAO {
             ), span_fs AS (
                 SELECT project_id, entity_id, name, value, author
                 FROM span_scores
-                WHERE entity_id IN (SELECT id FROM scored_span_traces)
+                WHERE entity_id IN (SELECT id FROM scored_span_ids)
             ), span_fs_per_name AS (
                 SELECT project_id, entity_id, name, avg(value) AS value
                 FROM span_fs
@@ -3144,6 +3150,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull WorkspacesService workspacesService;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     /**
      * Sort mapping applied under {@code traceColumnsNonNullable}: {@code nullIf} restores an absent (epoch)
@@ -4327,10 +4334,15 @@ class TraceDAOImpl implements TraceDAO {
      * {@code filters_present} so the template scopes feedback aggregates to filtered traces.
      */
     private Statement buildFeedbackStatementForProjects(Connection connection, List<UUID> projectIds,
-            String workspaceId, List<? extends Filter> filters, boolean hasLegacyScores) {
+            String workspaceId, List<? extends Filter> filters, boolean hasLegacyScores, String uuidFromTime,
+            String uuidToTime) {
         var logComment = getLogComment("get_trace_stats_feedback_scores", workspaceId, "", projectIds.size());
         var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORES_STATS).add("log_comment", logComment);
         template.add("has_legacy_scores", hasLegacyScores);
+        if (uuidFromTime != null) {
+            template.add("uuid_from_time", true);
+            template.add("uuid_to_time", true);
+        }
         if (!CollectionUtils.isEmpty(filters)) {
             FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
                     .ifPresent(traceFilters -> {
@@ -4342,6 +4354,9 @@ class TraceDAOImpl implements TraceDAO {
         var statement = connection.createStatement(template.render())
                 .bind("project_ids", projectIds)
                 .bind("workspace_id", workspaceId);
+        if (uuidFromTime != null) {
+            statement.bind("uuid_from_time", uuidFromTime).bind("uuid_to_time", uuidToTime);
+        }
         if (!CollectionUtils.isEmpty(filters)) {
             FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
         }
@@ -4399,7 +4414,7 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     public Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(@NonNull List<UUID> projectIds,
-            @NonNull String workspaceId, List<? extends Filter> filters) {
+            @NonNull String workspaceId, List<? extends Filter> filters, Integer windowDays) {
 
         if (projectIds.isEmpty()) {
             return Mono.just(Map.of());
@@ -4409,6 +4424,17 @@ class TraceDAOImpl implements TraceDAO {
         // tolerate two concurrent statements on the same connection. The legacy-scores flag is
         // resolved once (sync JDBI) so both branches can skip the legacy feedback_scores UNION
         // when no data exists there.
+        // Optional moving window: when the caller opts in (windowDays != null, e.g. the Projects table),
+        // scope every metric to [now - N days, now] via uuid_from_time/uuid_to_time on the time-ordered
+        // UUIDv7 id — pruning by the sort key today and by time partitions once the tables are partitioned by
+        // time, with the upper bound excluding (ingestion-tolerated) future-dated ids. When omitted, the
+        // aggregates stay all-time so the public getProjectStats API keeps its existing semantics.
+        Instant now = Instant.now();
+        String uuidFromTime = windowDays == null
+                ? null
+                : instantToUUIDMapper.toLowerBound(now.minus(windowDays, ChronoUnit.DAYS)).toString();
+        String uuidToTime = windowDays == null ? null : instantToUUIDMapper.toUpperBound(now).toString();
+
         return workspacesService.hasLegacyScores(workspaceId)
                 .flatMap(hasLegacyScores -> {
 
@@ -4419,6 +4445,10 @@ class TraceDAOImpl implements TraceDAO {
                                 "get_trace_stats_traces_spans_by_project_ids", workspaceId, "", projectIds.size());
                         template.add("project_stats", true);
                         template.add("has_legacy_scores", hasLegacyScores);
+                        if (uuidFromTime != null) {
+                            template.add("uuid_from_time", true);
+                            template.add("uuid_to_time", true);
+                        }
                         if (!CollectionUtils.isEmpty(filters)) {
                             FilterQueryBuilder
                                     .toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
@@ -4427,6 +4457,9 @@ class TraceDAOImpl implements TraceDAO {
                         var statement = connection.createStatement(template.render())
                                 .bind("project_ids", projectIds)
                                 .bind("workspace_id", workspaceId);
+                        if (uuidFromTime != null) {
+                            statement.bind("uuid_from_time", uuidFromTime).bind("uuid_to_time", uuidToTime);
+                        }
                         if (!CollectionUtils.isEmpty(filters)) {
                             FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                         }
@@ -4443,7 +4476,7 @@ class TraceDAOImpl implements TraceDAO {
                         // trace filters we propagate them so the feedback aggregates are scoped to the
                         // same filtered trace set (filters_present path inside the template).
                         var statement = buildFeedbackStatementForProjects(connection, projectIds, workspaceId,
-                                filters, hasLegacyScores);
+                                filters, hasLegacyScores, uuidFromTime, uuidToTime);
 
                         return Mono.from(statement.execute())
                                 .flatMapMany(result -> result.map(
