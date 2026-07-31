@@ -56,11 +56,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       coupling rather than by drawing each independently;</li>
  *   <li>the text columns follow the prod size skew (median {@code input} 807 B, mean 30 KB), scaled down so the slice
  *       stays a unit test: most spans are short, a tenth are mid-sized, ~1% are large;</li>
- *   <li>of the Delta-coded timestamps only {@code start_time}, {@code created_at} and {@code id_at} are monotonic in
- *       storage order; {@code end_time} (start + duration) and {@code last_updated_at} (the ReplacingMergeTree version
- *       column's last-write value) are not, and are modeled as scrambled — the same split
+ *   <li>of the timestamps only {@code start_time}, {@code created_at} and {@code id_at} are monotonic in storage order;
+ *       {@code end_time} (start + duration) and {@code last_updated_at} (the ReplacingMergeTree version column's
+ *       last-write value) are not, and are modeled as scrambled — the same split
  *       {@code TracesLocalV2BenchmarkTest} documents against {@code TraceDAO}'s upsert coalesce.</li>
  * </ul>
+ *
+ * <p>Where a conclusion turns on the payload's real distribution rather than on its shape, this synthetic slice cannot
+ * settle it, and the tests below say so explicitly. Two such conclusions were <em>reversed</em> by the real-data pass
+ * (OPIK-7400 stage b, 115,925 real production spans): {@code T64} on the {@code *_length} counters, and the storage
+ * effect of the {@code Nullable} to sentinel change. Both are documented in place, so that nobody re-decides a shipped
+ * codec on synthetic evidence alone. The refinements the real-data pass did adopt are migration {@code 000114}.
  * Rows are inserted in {@code (workspace_id, project_id, trace_id, id)} order, so the clustered keys form the same runs
  * a real part has. Data is deterministic (hash-derived, single-threaded insert), so runs are byte-identical and the test
  * doubles as a regression guard. Absolute byte counts hold only for this slice; the validated conclusions are the
@@ -147,9 +153,9 @@ class SpansLocalV2BenchmarkTest {
     /**
      * The intended codec for every {@code spans_local_v2} column, keyed by column name. This is the canonical record of
      * the per-field decisions the benchmarks below justify; {@link #everySpansLocalV2ColumnUsesItsIntendedCodec()}
-     * asserts the live DDL matches it, column for column. It reflects the codecs the live table ships after migration
-     * {@code 000112}, so it moves in lockstep with that migration and any later refinement ALTER — the pin test fails
-     * loudly if the DDL and this map ever drift apart.
+     * asserts the live DDL matches it, column for column. It reflects the codecs the live table ships after migrations
+     * {@code 000112} (create) and {@code 000114} (which applies the refinements the real-data pass identified), so it
+     * moves in lockstep with those migrations — the pin test fails loudly if the DDL and this map ever drift apart.
      */
     private static final Map<String, ExpectedCodec> SPANS_LOCAL_V2_CODECS = Map.ofEntries(
             Map.entry("id", ExpectedCodec.ZSTD1),
@@ -159,14 +165,14 @@ class SpansLocalV2BenchmarkTest {
             Map.entry("parent_span_id", ExpectedCodec.ZSTD1),
             Map.entry("name", ExpectedCodec.ZSTD3),
             Map.entry("type", ExpectedCodec.ZSTD1),
-            Map.entry("start_time", ExpectedCodec.DELTA_ZSTD1),
+            Map.entry("start_time", ExpectedCodec.ZSTD1),
             Map.entry("end_time", ExpectedCodec.DELTA_ZSTD1),
             Map.entry("input", ExpectedCodec.ZSTD3),
             Map.entry("output", ExpectedCodec.ZSTD3),
             Map.entry("metadata", ExpectedCodec.ZSTD3),
             Map.entry("tags", ExpectedCodec.ZSTD3),
-            Map.entry("usage", ExpectedCodec.ZSTD1),
-            Map.entry("created_at", ExpectedCodec.DELTA_ZSTD1),
+            Map.entry("usage", ExpectedCodec.ZSTD3),
+            Map.entry("created_at", ExpectedCodec.ZSTD1),
             Map.entry("last_updated_at", ExpectedCodec.DELTA_ZSTD1),
             Map.entry("created_by", ExpectedCodec.ZSTD3),
             Map.entry("last_updated_by", ExpectedCodec.ZSTD3),
@@ -174,7 +180,7 @@ class SpansLocalV2BenchmarkTest {
             Map.entry("provider", ExpectedCodec.ZSTD1),
             Map.entry("total_estimated_cost", ExpectedCodec.ZSTD1),
             Map.entry("total_estimated_cost_version", ExpectedCodec.ZSTD1),
-            Map.entry("error_info", ExpectedCodec.ZSTD1),
+            Map.entry("error_info", ExpectedCodec.ZSTD3),
             Map.entry("truncation_threshold", ExpectedCodec.ZSTD1),
             Map.entry("input_slim", ExpectedCodec.ZSTD3),
             Map.entry("output_slim", ExpectedCodec.ZSTD3),
@@ -188,7 +194,7 @@ class SpansLocalV2BenchmarkTest {
             Map.entry("truncated_input", ExpectedCodec.ZSTD3),
             Map.entry("truncated_output", ExpectedCodec.ZSTD3),
             Map.entry("duration", ExpectedCodec.ZSTD1),
-            Map.entry("id_at", ExpectedCodec.DELTA_ZSTD1));
+            Map.entry("id_at", ExpectedCodec.ZSTD1));
 
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
@@ -798,11 +804,14 @@ class SpansLocalV2BenchmarkTest {
         long zstd1 = compressed("usage_zstd1");
         long zstd3 = compressed("usage_zstd3");
 
-        // usage is the notable spans-only unknown: a Map(String, Int64) stored as an Array(String) keys subcolumn plus
+        // usage was the notable spans-only unknown: a Map(String, Int64) stored as an Array(String) keys subcolumn plus
         // an Array(Int64) values subcolumn, both under the one column codec. The keys are long, dotted and extremely
         // repetitive ('original_usage.completion_tokens_details.reasoning_tokens'), drawn from a handful of key sets —
-        // exactly the small, repetitive, variable-length String shape ClickHouse 26.3 regressed ZSTD(1) on. So the
-        // ZSTD(1) that 000112 assigned as a best guess is the level at risk here, and ZSTD(3) is expected to win.
+        // exactly the small, repetitive, variable-length String shape ClickHouse 26.3 regressed ZSTD(1) on, which made
+        // the ZSTD(1) that 000112 assigned as a best guess the level at risk. ZSTD(3) wins here by ~5%, and on real
+        // production spans by 19.3% (580,731 -> 468,620 bytes) — real keys are longer and repeat more than this slice's.
+        // Migration 000114 adopts ZSTD(3), and it is no more expensive to read: ZSTD decode is level-independent, so
+        // less stored data is strictly less work (see longTextDecompressionCostIsRecorded).
         assertThat(zstd3).isLessThan(uncompressed);
         assertThat(zstd3).isLessThan(lz4);
         assertThat(zstd3).isLessThanOrEqualTo(zstd1);
@@ -1002,32 +1011,48 @@ class SpansLocalV2BenchmarkTest {
     }
 
     @Test
-    void errorInfoStackTraceColumnStaysOnZstd1() {
+    void errorInfoStackTraceColumnShipsZstd3() {
         long lz4 = compressed("err_lz4");
         long zstd1 = compressed("err_zstd1");
         long zstd3 = compressed("err_zstd3");
 
         // error_info is empty for ~90% of spans; when present it is a JSON stack trace with repetitive traceback text.
-        // ZSTD(1) beats LZ4, and ZSTD(3) does NOT improve on it (the column is mostly empty and ZSTD(1) already captures
-        // the repetitive frames), so the shipped ZSTD(1) is right.
+        // Both ZSTD levels beat LZ4 by a wide margin, which is the robust fact and all this slice can assert: its
+        // synthetic tracebacks are uniform enough that ZSTD(1) already captures the repetition, leaving the two levels
+        // within ~1% of each other (ZSTD(1) marginally ahead). On real production stack traces, which are far more
+        // varied, ZSTD(3) is 8.0% smaller (121,346 -> 111,596 bytes) — structured text behaving like input/output rather
+        // than like the low-cardinality columns. Migration 000114 adopts ZSTD(3); it is pinned by
+        // everySpansLocalV2ColumnUsesItsIntendedCodec.
         assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_5_PCT));
-        log.info("[OPIK-7400] error_info (~10% stack traces) compressed bytes | LZ4: {} | ZSTD(1): {} | ZSTD(3): {}",
-                lz4, zstd1, zstd3);
+        assertThat(zstd3).isLessThan(lz4);
+        log.info("[OPIK-7400] error_info (~10% stack traces) compressed bytes | LZ4: {} | ZSTD(1): {} | ZSTD(3): {} "
+                + "(ships ZSTD(3) on real-data evidence)", lz4, zstd1, zstd3);
     }
 
     @Test
-    void timestampColumnCompressesBestWithDeltaZstd1() {
+    void monotonicTimestampFavoursDeltaOnlyOnTheIdealizedSyntheticSlice() {
         long lz4 = compressed("ts6_lz4");
         long zstd1 = compressed("ts6_zstd1");
         long deltaZstd1 = compressed("ts6_delta_zstd1");
         long doubleDelta = compressed("ts6_dd_zstd1");
 
-        // Delta + ZSTD(1) is the smallest microsecond variant, and beats DoubleDelta: with irregularly-spaced ingestion
-        // timestamps DoubleDelta's constant-second-derivative bet fails.
+        // This family models start_time / created_at as globally monotonic with a regular step, and under that idealized
+        // shape Delta + ZSTD(1) is the smallest microsecond variant — it also beats DoubleDelta, whose
+        // constant-second-derivative bet fails on irregularly-spaced ingestion timestamps.
+        //
+        // Real production spans do not have that shape, and there plain ZSTD(1) is SMALLER than Delta: start_time by
+        // 2.7% and created_at by 18.2%. Two reasons, neither reproducible in a synthetic slice. At microsecond
+        // resolution the raw values within one weekly partition share their high-order bytes, which ZSTD's literal
+        // matching exploits directly while Delta discards it; and created_at is flat across 46.7% of adjacent row pairs,
+        // because batch ingest stamps many spans with the identical microsecond. Delta additionally emits a large
+        // high-entropy 8-byte jump at every workspace/project boundary, and a real weekly partition interleaves ~155k
+        // workspaces. Migration 000114 therefore drops Delta from start_time, created_at and id_at, and the pin map
+        // moves with it. Only the robust orderings are asserted here.
         assertThat(deltaZstd1).isLessThan(lz4);
-        assertThat(deltaZstd1).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_2_PCT));
+        assertThat(zstd1).isLessThan(lz4);
         assertThat(deltaZstd1).isLessThanOrEqualTo(doubleDelta);
+        log.info("[OPIK-7400] monotonic timestamp compressed bytes | LZ4: {} | ZSTD(1): {} | Delta+ZSTD(1): {} | "
+                + "DoubleDelta+ZSTD(1): {} (ships ZSTD(1) on real-data evidence)", lz4, zstd1, deltaZstd1, doubleDelta);
     }
 
     @Test
@@ -1042,18 +1067,22 @@ class SpansLocalV2BenchmarkTest {
     }
 
     @Test
-    void idAtColumnCompressesBestWithDeltaZstd1() {
+    void idAtColumnShipsZstd1FromRealData() {
         long lz4 = compressed("idat_lz4");
         long zstd1 = compressed("idat_zstd1");
         long deltaZstd1 = compressed("idat_delta_zstd1");
         long doubleDelta = compressed("idat_dd_zstd1");
 
-        // id_at is a second-precision DateTime64(0) derived from the id, so it is monotonic within a part; Delta +
-        // ZSTD(1) exploits that and beats plain ZSTD(1) and LZ4. Logged alongside DoubleDelta for the record.
+        // id_at is a second-precision DateTime64(0) derived from the id, so it is monotonic within a part, and on this
+        // slice — where the ids advance by a regular step — Delta exploits that and wins. On real production spans plain
+        // ZSTD(1) is 5.6% smaller (and 9.9% smaller within a single workspace), for the same reason as the other
+        // timestamps: whole-second values inside a weekly partition are highly repetitive, so raw ZSTD matching beats
+        // differencing. Migration 000114 ships ZSTD(1). Only the robust orderings are asserted.
         assertThat(deltaZstd1).isLessThan(lz4);
-        assertThat(deltaZstd1).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_2_PCT));
+        assertThat(zstd1).isLessThan(lz4);
         log.info("[OPIK-7400] id_at (DateTime64(0)) compressed bytes | LZ4: {} | ZSTD(1): {} | Delta+ZSTD(1): {} | "
-                + "DoubleDelta+ZSTD(1): {}", lz4, zstd1, deltaZstd1, doubleDelta);
+                + "DoubleDelta+ZSTD(1): {} (ships ZSTD(1) on real-data evidence)",
+                lz4, zstd1, deltaZstd1, doubleDelta);
     }
 
     @Test
@@ -1102,25 +1131,27 @@ class SpansLocalV2BenchmarkTest {
     }
 
     @Test
-    void wideRangeLengthCounterDoesNotBenefitFromT64() {
+    void tieredLengthCounterUnderstatesT64AndMustNotDecideItsCodec() {
         long zstd1 = compressed("cnt_zstd1");
         long t64Zstd1 = compressed("cnt_t64_zstd1");
         long doubleDelta = compressed("cnt_dd_zstd1");
 
-        // The real input_length / output_length / metadata_length columns are not narrow counters: they inherit the
-        // payload's skew, so on spans they span six orders of magnitude (prod input_length: median 807 B, p99 537 KB,
-        // max 678 MB). Across that range T64's premise fails — the high-order bit planes are no longer near-constant —
-        // and the transposition costs more than it saves, leaving it slightly LARGER than plain ZSTD(1). DoubleDelta is
-        // worse again (no monotonic trend).
+        // A deliberate negative result, kept as a guard rail. This column holds the synthetic text lengths, and because
+        // the slice draws payload sizes from three discrete tiers, those lengths are far more repetitive than real ones:
+        // plain ZSTD matches the repeats directly and comes out ~5% AHEAD of T64, which would suggest dropping the
+        // T64 + ZSTD(1) that 000112 ships on input_length / output_length / metadata_length.
         //
-        // 000112 ships T64 + ZSTD(1) on the three *_length columns, inherited from the traces set, where the evidence
-        // was a narrow synthetic counter (see the test above). This does not make the shipped codec wrong — the gap is
-        // a few percent of three columns that are together ~0.03% of the prod table — but it does make it unvalidated
-        // for the spans value range, so it is carried to the real-data pass rather than refined on synthetic evidence.
+        // That suggestion is wrong, and the real-data pass settled it: on 115,925 real production spans T64 is 14.5% /
+        // 13.9% / 26.0% SMALLER than plain ZSTD(1) on the three columns. Real lengths are continuously distributed over
+        // six orders of magnitude (prod input_length: median 807 B, p99 537 KB, max 678 MB), which is exactly the regime
+        // T64's bit transposition is built for, and there are no artificial repeats for plain ZSTD to exploit.
+        //
+        // So the shipped codec stands, and this test exists to record why the synthetic number disagrees — a tiered size
+        // model cannot decide a codec that keys on the value distribution. DoubleDelta loses under either model.
         assertThat(t64Zstd1).isGreaterThan(zstd1);
         assertThat(t64Zstd1).isLessThan(doubleDelta);
-        log.info("[OPIK-7400] wide-range *_length counter compressed bytes | ZSTD(1): {} | T64+ZSTD(1): {} "
-                + "(T64 is {}% larger) | DoubleDelta+ZSTD(1): {}",
+        log.info("[OPIK-7400] tiered-length counter compressed bytes | ZSTD(1): {} | T64+ZSTD(1): {} (T64 {}% larger "
+                + "here, but 14-26% SMALLER on real data — ships T64) | DoubleDelta+ZSTD(1): {}",
                 zstd1, t64Zstd1, Math.round(100.0 * (t64Zstd1 - zstd1) / zstd1), doubleDelta);
     }
 
@@ -1189,10 +1220,14 @@ class SpansLocalV2BenchmarkTest {
     @Test
     void sentinelColumnsAreNoLargerThanNullable() {
         // end_time/ttft/duration are non-Nullable with epoch/NaN sentinels rather than Nullable. This measures only the
-        // storage effect (codec is ZSTD(1) either way): the sentinel form drops the separate Nullable null-mask stream.
-        // At this row count the null-mask is fixed-overhead-dominated, so treat the delta as directional. On spans the
-        // change matters more than on traces, because prod stores end_time, ttft and duration as Nullable over 1.26 B
-        // rows.
+        // storage effect (codec is ZSTD(1) either way): the sentinel form drops the separate Nullable null-mask stream,
+        // and on this slice it is smaller on all three columns.
+        //
+        // Treat that as directional only — the real-data pass found the change is storage-NEUTRAL, not a saving:
+        // end_time 409,981 vs 410,824 and duration 532,703 vs 533,566 (0.2% each), while ttft is marginally smaller as
+        // Nullable (764 vs 810 bytes, both negligible). A null-mask of one byte per row compresses to almost nothing on
+        // real data, so it never had much to give back. De-nullifying is still right — it removes the null branch from
+        // the read path and keeps Nullable out of the hot aggregates — but it should be justified there, not here.
         long etSentinel = compressed("et_zstd1");
         long etNullable = compressed("et_nullable_zstd1");
         long ttftSentinel = compressed("ttft_zstd1");
@@ -1423,9 +1458,11 @@ class SpansLocalV2BenchmarkTest {
                     truncated_input String MATERIALIZED if(length(input) >= truncation_threshold, substring(input, 1, truncation_threshold), input) CODEC(ZSTD(3)),
                     truncated_output String MATERIALIZED if(length(output) >= truncation_threshold, substring(output, 1, truncation_threshold), output) CODEC(ZSTD(3)),
                     duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
-                    id_at DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1))
+                    id_at DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(ZSTD(1))
                 """;
-        // NEW spans_local_v2 format = the live table's codecs after migration 000112, matching the pin map above.
+        // NEW spans_local_v2 format = the live table's codecs after migrations 000112 (create) and 000114 (the
+        // real-data refinements: usage and error_info on ZSTD(3), start_time / created_at / id_at off Delta), matching
+        // the pin map above.
         execute(("""
                 CREATE TABLE {db}.spans_full_after
                 (
@@ -1433,17 +1470,17 @@ class SpansLocalV2BenchmarkTest {
                     project_id FixedString(36) CODEC(ZSTD(1)), trace_id FixedString(36) CODEC(ZSTD(1)),
                     parent_span_id FixedString(36) DEFAULT '' CODEC(ZSTD(1)), name String CODEC(ZSTD(3)),
                     type Enum8('unknown' = 0, 'general' = 1, 'tool' = 2, 'llm' = 3, 'guardrail' = 4) CODEC(ZSTD(1)),
-                    start_time DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
+                    start_time DateTime64(6, 'UTC') CODEC(ZSTD(1)),
                     end_time DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
                     input String CODEC(ZSTD(3)), output String CODEC(ZSTD(3)), metadata String CODEC(ZSTD(3)),
-                    tags Array(String) CODEC(ZSTD(3)), usage Map(String, Int64) CODEC(ZSTD(1)),
-                    created_at DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
+                    tags Array(String) CODEC(ZSTD(3)), usage Map(String, Int64) CODEC(ZSTD(3)),
+                    created_at DateTime64(6, 'UTC') CODEC(ZSTD(1)),
                     last_updated_at DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
                     created_by String CODEC(ZSTD(3)), last_updated_by String CODEC(ZSTD(3)),
                     model LowCardinality(String) CODEC(ZSTD(1)), provider LowCardinality(String) CODEC(ZSTD(1)),
                     total_estimated_cost Decimal(38, 12) CODEC(ZSTD(1)),
                     total_estimated_cost_version LowCardinality(String) CODEC(ZSTD(1)),
-                    error_info String CODEC(ZSTD(1)), truncation_threshold UInt64 CODEC(ZSTD(1)),
+                    error_info String CODEC(ZSTD(3)), truncation_threshold UInt64 CODEC(ZSTD(1)),
                     input_slim String CODEC(ZSTD(3)), output_slim String CODEC(ZSTD(3)),
                     ttft Float64 CODEC(ZSTD(1)),
                     source Enum8('unknown' = 0, 'sdk' = 1, 'experiment' = 2, 'playground' = 3, 'optimization' = 4, 'evaluator' = 5) CODEC(ZSTD(1)),
