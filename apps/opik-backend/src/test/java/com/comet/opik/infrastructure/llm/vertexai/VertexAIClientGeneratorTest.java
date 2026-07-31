@@ -33,8 +33,11 @@ class VertexAIClientGeneratorTest {
 
     private static LlmProviderClientConfig clientConfig() {
         var config = new LlmProviderClientConfig();
-        config.setVertexAIClient(
-                new LlmProviderClientConfig.VertexAIClientConfig("https://www.googleapis.com/auth/cloud-platform"));
+        config.setVertexAIClient(new LlmProviderClientConfig.VertexAIClientConfig(
+                "https://www.googleapis.com/auth/cloud-platform",
+                Map.of("global", "aiplatform.googleapis.com",
+                        "eu", "aiplatform.eu.rep.googleapis.com",
+                        "us", "aiplatform.us.rep.googleapis.com")));
         return config;
     }
 
@@ -64,7 +67,7 @@ class VertexAIClientGeneratorTest {
                 """.formatted(pem);
     }
 
-    private VertexAI generatedClientFor(Map<String, String> configuration) {
+    private VertexAI generatedClientFor(Map<String, String> configuration) throws ReflectiveOperationException {
         var request = ChatCompletionRequest.builder().model(MODEL).build();
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey(serviceAccountKey)
@@ -74,7 +77,8 @@ class VertexAIClientGeneratorTest {
         return vertexAI((VertexAiGeminiChatModel) generator.generate(config, request));
     }
 
-    private String apiEndpointForConfiguredLocation(Map<String, String> configuration) {
+    private String apiEndpointForConfiguredLocation(Map<String, String> configuration)
+            throws ReflectiveOperationException {
         return generatedClientFor(configuration).getApiEndpoint();
     }
 
@@ -83,19 +87,15 @@ class VertexAIClientGeneratorTest {
      * It has to be reached via the {@code GenerativeModel}, because the constructor this generator uses leaves the chat
      * model's own {@code vertexAI} field unset.
      */
-    private static VertexAI vertexAI(VertexAiGeminiChatModel model) {
-        try {
-            Field generativeModelField = VertexAiGeminiChatModel.class.getDeclaredField("generativeModel");
-            generativeModelField.setAccessible(true);
-            var generativeModel = generativeModelField.get(model);
+    private static VertexAI vertexAI(VertexAiGeminiChatModel model) throws ReflectiveOperationException {
+        Field generativeModelField = VertexAiGeminiChatModel.class.getDeclaredField("generativeModel");
+        generativeModelField.setAccessible(true);
+        var generativeModel = generativeModelField.get(model);
 
-            Field vertexAiField = GenerativeModel.class.getDeclaredField("vertexAi");
-            vertexAiField.setAccessible(true);
+        Field vertexAiField = GenerativeModel.class.getDeclaredField("vertexAi");
+        vertexAiField.setAccessible(true);
 
-            return (VertexAI) vertexAiField.get(generativeModel);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Could not read the generated client", e);
-        }
+        return (VertexAI) vertexAiField.get(generativeModel);
     }
 
     @Nested
@@ -107,34 +107,23 @@ class VertexAIClientGeneratorTest {
                 "global,aiplatform.googleapis.com",
                 "eu,aiplatform.eu.rep.googleapis.com",
                 "us,aiplatform.us.rep.googleapis.com"})
-        void overridesTheLocationDerivedHost(String location, String expectedEndpoint) {
-            assertThat(VertexAIClientGenerator.apiEndpointFor(location)).contains(expectedEndpoint);
-        }
-
-        @ParameterizedTest
-        @CsvSource({"GLOBAL,global", "'  global  ',global", "Eu,eu", "'US ',us"})
-        void canonicaliseCasingAndSurroundingWhitespace(String location, String expectedCanonical) {
-            assertThat(VertexAIClientGenerator.canonicalLocation(location)).isEqualTo(expectedCanonical);
-        }
-
-        @Test
-        void generatedClientTargetsTheGlobalHost() {
-            assertThat(apiEndpointForConfiguredLocation(Map.of("location", "global")))
-                    .isEqualTo("aiplatform.googleapis.com");
+        void overrideTheLocationDerivedHost(String location, String expectedEndpoint) throws Exception {
+            assertThat(apiEndpointForConfiguredLocation(Map.of("location", location)))
+                    .isEqualTo(expectedEndpoint);
         }
 
         /**
-         * The location also lands in the {@code locations/%s} resource path, so normalising it for the host lookup
+         * The location also lands in the {@code locations/%s} resource path, so canonicalising it for the host lookup
          * alone would leave the client reaching the right host with a malformed path.
          */
         @ParameterizedTest
         @CsvSource({"GLOBAL,aiplatform.googleapis.com", "'  global  ',aiplatform.googleapis.com",
                 "' EU ',aiplatform.eu.rep.googleapis.com"})
-        void generatedClientCanonicalisesBothHostAndLocation(String configured, String expectedEndpoint) {
+        void canonicaliseBothHostAndLocation(String configured, String expectedEndpoint) throws Exception {
             var client = generatedClientFor(Map.of("location", configured));
 
             assertThat(client.getApiEndpoint()).isEqualTo(expectedEndpoint);
-            assertThat(client.getLocation()).isEqualTo(configured.trim().toLowerCase(Locale.ROOT));
+            assertThat(client.getLocation()).isEqualTo(configured.strip().toLowerCase(Locale.ROOT));
         }
     }
 
@@ -144,13 +133,7 @@ class VertexAIClientGeneratorTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"europe-west4", "us-central1", "asia-northeast1"})
-        void areNotOverridden(String location) {
-            assertThat(VertexAIClientGenerator.apiEndpointFor(location)).isEmpty();
-        }
-
-        @ParameterizedTest
-        @ValueSource(strings = {"europe-west4", "us-central1"})
-        void generatedClientKeepsTheRegionalHost(String location) {
+        void keepTheRegionalHost(String location) throws Exception {
             assertThat(apiEndpointForConfiguredLocation(Map.of("location", location)))
                     .isEqualTo("%s-aiplatform.googleapis.com".formatted(location));
         }
@@ -166,7 +149,7 @@ class VertexAIClientGeneratorTest {
          */
         @ParameterizedTest
         @ValueSource(strings = {"", "   "})
-        void areTreatedAsAbsent(String location) {
+        void areTreatedAsAbsent(String location) throws Exception {
             assertThat(generatedClientFor(Map.of("location", location)).getLocation())
                     .isEqualTo(generatedClientFor(Map.of()).getLocation());
         }

@@ -570,6 +570,18 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: https://openrouter.ai/api/v1
+  # Configuration for Vertex AI client
+  vertexAIClient:
+    # Default: https://www.googleapis.com/auth/cloud-platform
+    # Description: Vertex AI SCOPE API URL
+    scope: https://www.googleapis.com/auth/cloud-platform
+    # Default: the global, eu and us hosts below
+    # Description: API endpoint per multi-region location. Single-region locations are not listed and keep the host the
+    # SDK derives from the location itself.
+    multiRegionApiEndpoints:
+      global: aiplatform.googleapis.com
+      eu: aiplatform.eu.rep.googleapis.com
+      us: aiplatform.us.rep.googleapis.com
 
 # Configuration for cache manager
 cacheManager:

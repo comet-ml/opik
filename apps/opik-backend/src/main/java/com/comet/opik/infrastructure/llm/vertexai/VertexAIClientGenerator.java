@@ -24,18 +24,12 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 @RequiredArgsConstructor
 @Slf4j
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
-
-    private static final Map<String, String> MULTI_REGION_API_ENDPOINTS = Map.of(
-            "global", "aiplatform.googleapis.com",
-            "eu", "aiplatform.eu.rep.googleapis.com",
-            "us", "aiplatform.us.rep.googleapis.com");
 
     private final @NonNull LlmProviderClientConfig clientConfig;
 
@@ -110,17 +104,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
      * The location is free-text in the provider configuration but ends up in the {@code locations/%s} resource path as
      * well as the host, so it has to be canonicalised before either is derived from it.
      */
-    static String canonicalLocation(String location) {
-        return location.trim().toLowerCase(Locale.ROOT);
+    private static String canonicalLocation(String location) {
+        return location.strip().toLowerCase(Locale.ROOT);
     }
 
-    /**
-     * The Vertex AI SDK derives its host from the location as {@code %s-aiplatform.googleapis.com}, which only holds
-     * for single-region locations. The multi-region locations resolve to their own hosts, so they have to be set
-     * explicitly or the client targets a name that does not exist (e.g. {@code global-aiplatform.googleapis.com}).
-     */
-    static Optional<String> apiEndpointFor(String canonicalLocation) {
-        return Optional.ofNullable(MULTI_REGION_API_ENDPOINTS.get(canonicalLocation));
+    private Optional<String> apiEndpointFor(String canonicalLocation) {
+        return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints().get(canonicalLocation));
     }
 
     private VertexAI getVertexAI(LlmProviderClientApiConfig config) {
