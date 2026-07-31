@@ -132,6 +132,13 @@ def _build_gepa_stop_callbacks(
     return stop_callbacks, no_improvement_stopper
 
 
+_GEPA_VERSION_REQUIREMENT = (
+    "opik-optimizer requires gepa>=0.1.0 (the <curr_param>/<side_info> "
+    "reflection-template contract; gepa 0.0.x speaks the older "
+    "<curr_instructions>/<inputs_outputs_feedback> dialect)."
+)
+
+
 def _validate_reflection_prompt_template(template: str) -> None:
     """Raise if the reflection template is missing a marker gepa requires.
 
@@ -139,6 +146,10 @@ def _validate_reflection_prompt_template(template: str) -> None:
     Called from __init__ so a bad override fails when the optimizer is
     constructed — before the baseline evaluation spends real LLM calls — rather
     than at gepa.optimize() hand-off, which happens after it.
+
+    A rejection is attributed to whoever caused it: a malformed override to the
+    caller (ValueError), an install that cannot honour our template contract to
+    the environment (RuntimeError naming the version floor).
     """
     if not isinstance(template, str):
         raise ValueError(
@@ -158,13 +169,35 @@ def _validate_reflection_prompt_template(template: str) -> None:
     except (ImportError, AttributeError) as exc:
         raise RuntimeError(
             "The installed gepa version does not expose the reflection-template "
-            "validator this optimizer relies on. opik-optimizer requires "
-            "gepa>=0.1.0 (the <curr_param>/<side_info> template contract)."
+            f"validator this optimizer relies on. {_GEPA_VERSION_REQUIREMENT}"
         ) from exc
+
+    # The branch above only catches gepa <=0.0.17, which has no validator at all.
+    # 0.0.18-0.0.27 do expose one — checking the *old* markers — so control would
+    # reach validate() and reject our own built-in default, and the handler below
+    # would blame an override the caller never passed. Read gepa's own default to
+    # tell the dialect apart. Only a readable str counts as evidence: a future
+    # gepa that renames or reshapes the attribute must not be misreported as too
+    # old (the built-in-default check below still covers that case).
+    installed_default = getattr(
+        InstructionProposalSignature, "default_prompt_template", None
+    )
+    if isinstance(installed_default, str) and "<curr_param>" not in installed_default:
+        raise RuntimeError(
+            "The installed gepa version uses an older reflection-template "
+            f"dialect. {_GEPA_VERSION_REQUIREMENT}"
+        )
 
     try:
         validate(template)
     except ValueError as exc:
+        if template == gepa_prompts.REFLECTION_PROMPT_TEMPLATE:
+            # No override involved — the caller only asked for the optimizer. If
+            # gepa rejects the template we ship, the install is the problem.
+            raise RuntimeError(
+                "The installed gepa version rejects this optimizer's built-in "
+                f"reflection template ({exc}). {_GEPA_VERSION_REQUIREMENT}"
+            ) from exc
         raise ValueError(
             f"Invalid reflection_prompt_template override: {exc}. The template "
             "must contain both the <curr_param> and <side_info> markers."
@@ -578,11 +611,6 @@ class GepaOptimizer(BaseOptimizer):
             candidates=candidates,
             val_scores=val_scores,
         )
-
-        # known_placeholder_keys was derived from the unsampled items above and
-        # extends the guard to columns the identifier regex cannot see (e.g.
-        # "{my key}") on the rescoring and final-assembly rebuild paths,
-        # matching the adapter's evaluate() path.
 
         rescored = scoring_ops.rescore_candidates(
             optimizer=self,

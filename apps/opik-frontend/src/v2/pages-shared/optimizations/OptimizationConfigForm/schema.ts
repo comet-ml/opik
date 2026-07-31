@@ -239,6 +239,12 @@ export const convertOptimizationStudioToFormData = (
       // optimizable — and template variables in the user message, so the
       // optimizer never rewrites the message holding the user's variables
       // (OPIK-7510). Seeding a lone user message did the opposite.
+      //
+      // Two cards means the `isMessageEmpty` refinement above requires content
+      // in both before submit (the form validates `onSubmit`, so an untouched
+      // form shows no errors). Deliberate: a user who really wants a lone user
+      // prompt deletes the system card, and that shape is exactly the hazard
+      // this ticket fixes — so it should be an explicit choice, not the default.
       generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.system }),
       generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
     ];
