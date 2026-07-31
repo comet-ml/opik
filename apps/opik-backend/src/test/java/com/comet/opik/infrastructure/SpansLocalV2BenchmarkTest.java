@@ -1040,14 +1040,16 @@ class SpansLocalV2BenchmarkTest {
         // shape Delta + ZSTD(1) is the smallest microsecond variant — it also beats DoubleDelta, whose
         // constant-second-derivative bet fails on irregularly-spaced ingestion timestamps.
         //
-        // Real production spans do not have that shape, and there plain ZSTD(1) is SMALLER than Delta: start_time by
-        // 2.7% and created_at by 18.2%. Two reasons, neither reproducible in a synthetic slice. At microsecond
-        // resolution the raw values within one weekly partition share their high-order bytes, which ZSTD's literal
-        // matching exploits directly while Delta discards it; and created_at is flat across 46.7% of adjacent row pairs,
-        // because batch ingest stamps many spans with the identical microsecond. Delta additionally emits a large
-        // high-entropy 8-byte jump at every workspace/project boundary, and a real weekly partition interleaves ~155k
-        // workspaces. Migration 000114 therefore drops Delta from start_time, created_at and id_at, and the pin map
-        // moves with it. Only the robust orderings are asserted here.
+        // Real production spans do not have that shape, and there plain ZSTD(1) is SMALLER than Delta. Measured per ISO
+        // week, since that is what one partition of this table holds: across the 10 densest weeks of the real sample
+        // plain ZSTD(1) wins 10/10 weeks on created_at (median 19%), 9/10 on start_time (median 3.8%) and 8/10 on id_at
+        // (median 13%). Two reasons, neither reproducible in a synthetic slice. At microsecond resolution the raw values
+        // within one weekly partition share their high-order bytes, which ZSTD's literal matching exploits directly
+        // while Delta discards it; and created_at is flat across 46.7% of adjacent row pairs, because batch ingest
+        // stamps many spans with the identical microsecond. Delta additionally emits a large high-entropy 8-byte jump at
+        // every workspace/project boundary, and a real weekly partition interleaves ~155k workspaces. Migration 000114
+        // therefore drops Delta from start_time, created_at and id_at, and the pin map moves with it. Only the robust
+        // orderings are asserted here.
         assertThat(deltaZstd1).isLessThan(lz4);
         assertThat(zstd1).isLessThan(lz4);
         assertThat(deltaZstd1).isLessThanOrEqualTo(doubleDelta);
@@ -1074,9 +1076,9 @@ class SpansLocalV2BenchmarkTest {
         long doubleDelta = compressed("idat_dd_zstd1");
 
         // id_at is a second-precision DateTime64(0) derived from the id, so it is monotonic within a part, and on this
-        // slice — where the ids advance by a regular step — Delta exploits that and wins. On real production spans plain
-        // ZSTD(1) is 5.6% smaller (and 9.9% smaller within a single workspace), for the same reason as the other
-        // timestamps: whole-second values inside a weekly partition are highly repetitive, so raw ZSTD matching beats
+        // slice — where the ids advance by a regular step — Delta exploits that and wins. On real production spans,
+        // measured per ISO week (what one partition holds), plain ZSTD(1) is smaller in 8 of the 10 densest weeks, by a
+        // median of 13%: whole-second values inside a single week are highly repetitive, so raw ZSTD matching beats
         // differencing. Migration 000114 ships ZSTD(1). Only the robust orderings are asserted.
         assertThat(deltaZstd1).isLessThan(lz4);
         assertThat(zstd1).isLessThan(lz4);

@@ -15,18 +15,25 @@
 --     counts under longer names. That is exactly the small, repetitive, variable-length String shape ClickHouse 26.3
 --     regressed ZSTD level 1 on, so the shipped level was the one at risk. ZSTD(3) is also FASTER to decode here (3.6k
 --     vs 6.7k CPU-us on a single-thread scan): ZSTD decode is level-independent, so less data simply means less work.
---   * created_at, id_at, start_time: drop Delta, i.e. Delta + ZSTD(1) -> ZSTD(1). Smaller by 18.2%, 5.6% and 2.7%.
---     At microsecond resolution the raw values inside one weekly partition share their high-order bytes and ZSTD's
---     literal matching exploits that prefix directly, while Delta discards it and emits a large high-entropy 8-byte
---     jump at every workspace/project boundary. created_at is the extreme case: it is flat across 46.7% of adjacent
---     row pairs, because batch ingest stamps many spans with the identical microsecond.
---     This deliberately diverges from traces_local_v2, where 000107 restored Delta on real traces data. The divergence
---     is measured, not assumed, and only the columns that agree in two independent scopes (the whole byte-weighted
---     sample, and a single workspace in isolation) are changed here.
+--   * created_at, id_at, start_time: drop Delta, i.e. Delta + ZSTD(1) -> ZSTD(1). At microsecond resolution the raw
+--     values inside one weekly partition share their high-order bytes and ZSTD's literal matching exploits that prefix
+--     directly, while Delta discards it and emits a large high-entropy 8-byte jump at every workspace/project boundary.
+--     created_at is the extreme case: it is flat across 46.7% of adjacent row pairs, because batch ingest stamps many
+--     spans with the identical microsecond.
+--     Measured per ISO week, since that is what one partition of this table actually holds -- a codec comparison run
+--     over a multi-month sample would misjudge Delta, whose economics are set by the adjacent-row deltas. Across the 10
+--     densest weeks of the sample, plain ZSTD(1) is smaller in 10/10 weeks for created_at (median 19%), 9/10 for
+--     start_time (median 3.8%) and 8/10 for id_at (median 13%).
+--     This deliberately diverges from traces_local_v2, where 000107 restored Delta on real traces data -- but only for
+--     end_time and last_updated_at, which are exactly the two columns left untouched below. 000107 never compared these
+--     three against plain ZSTD(1) on real data; they carried the original 000101 Delta uncontested.
 -- Deliberately NOT changed, recorded because the evidence is easy to misread later:
---   * end_time and last_updated_at keep Delta + ZSTD(1). On spans they are a wash rather than a win either way:
---     end_time's margin is 0.5%, and last_updated_at flips sign between the two scopes (ZSTD(1) 6.5% smaller over the
---     whole sample, Delta 5.2% smaller within one workspace). A wash does not justify diverging from traces.
+--   * end_time and last_updated_at keep Delta + ZSTD(1), the codec 000107 settled on for traces after its own real-data
+--     pass. On spans, end_time is a genuine wash (plain ZSTD(1) smaller in only 7/10 weeks, every margin under 8% and
+--     both signs present). last_updated_at does lean plain ZSTD(1) (9/10 weeks, median 5.0%, one week -13.4%), so there
+--     is a case for changing it too; it is left alone here because a ~5% swing on a column that is ~0.03% of the table
+--     does not warrant diverging from a merged, real-data-validated traces decision on a same-named column. Worth
+--     revisiting jointly with traces if anyone re-runs that pass week-scoped.
 --   * The *_length counters keep T64 + ZSTD(1): real data puts T64 14-26% ahead of plain ZSTD(1). A synthetic slice had
 --     suggested the opposite, which was an artifact of modelling text sizes as a few discrete tiers.
 --   * total_estimated_cost keeps ZSTD(1): ZSTD(3) ties it, and T64 and Delta are both rejected on Decimal(38, 12),
