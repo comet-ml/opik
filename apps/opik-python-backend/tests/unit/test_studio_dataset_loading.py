@@ -102,3 +102,16 @@ class TestLoadAndValidateDataset:
 
         assert dataset is not None
         assert count == 1
+
+    def test_full_page_of_id_less_rows_is_not_rejected(self):
+        """The fetch is capped at DATASET_SAMPLES, but the SDK draws its sample
+        ids from the whole dataset (sampling._extract_ids calls get_items()
+        unbounded). A full page with no usable id therefore proves nothing about
+        the rows behind it — rejecting on it would fail a dataset the optimizer
+        could still train on. Only a short page is a complete verdict."""
+        client = _client([{"no_id": 1}] * DATASET_SAMPLES)
+
+        dataset, count = load_and_validate_dataset(client, "ds")
+
+        assert dataset is not None
+        assert count == 0

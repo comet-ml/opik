@@ -253,7 +253,38 @@ class TestGepaFinishReason:
         assert result.details["finish_reason"] == "max_trials"
         assert result.details["stop_reason"] == "max_trials"
 
-    def test_finish_reason__budget_unspent__is_cancelled_not_max_trials(
+    def test_finish_reason__budget_unspent_with_run_dir__is_cancelled_not_max_trials(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+        tmp_path,
+    ) -> None:
+        """gepa installs its own FileStopper on <run_dir>/gepa.stop, so a run with
+        run_dir set can exit with neither of our stoppers fired AND budget left on
+        the clock. Labeling that 'max_trials' would report a budget burn that
+        never happened; it is an external stop request."""
+        # max_trials=2 * n_samples=2 = 4 metric calls of budget, 1 spent.
+        gepa_result = _make_mock_gepa_result(
+            candidates=[], val_aggregate_scores=[0.3, 0.5], total_metric_calls=1
+        )
+        result, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            gepa_result=gepa_result,
+            run_dir=str(tmp_path),
+        )
+
+        assert result.details["finish_reason"] == "cancelled"
+
+    def test_finish_reason__budget_unspent_without_run_dir__stays_max_trials(
         self,
         mock_optimization_context,
         monkeypatch,
@@ -262,11 +293,11 @@ class TestGepaFinishReason:
         sample_dataset_items,
         sample_metric,
     ) -> None:
-        """gepa installs its own FileStopper on <run_dir>/gepa.stop, so a run can
-        exit with neither of our stoppers fired AND budget left on the clock.
-        Labeling that 'max_trials' would report a budget burn that never
-        happened; it is an external stop request."""
-        # max_trials=2 * n_samples=2 = 4 metric calls of budget, 1 spent.
+        """Without run_dir gepa wires no FileStopper, so nothing can stop the run
+        externally and an unspent-looking budget can only mean the counter and
+        the stopper's threshold disagree (gepa is pinned open-ended). Guessing
+        'cancelled' there would relabel ordinary budget exits — including every
+        Optimization Studio run, which never sets run_dir."""
         gepa_result = _make_mock_gepa_result(
             candidates=[], val_aggregate_scores=[0.3, 0.5], total_metric_calls=1
         )
@@ -280,7 +311,7 @@ class TestGepaFinishReason:
             gepa_result=gepa_result,
         )
 
-        assert result.details["finish_reason"] == "cancelled"
+        assert result.details["finish_reason"] == "max_trials"
 
     def test_finish_reason__unknown_spend__still_falls_back_to_max_trials(
         self,
@@ -290,10 +321,12 @@ class TestGepaFinishReason:
         mock_dataset,
         sample_dataset_items,
         sample_metric,
+        tmp_path,
     ) -> None:
-        """total_metric_calls is optional run metadata on GEPAResult. Without it
-        we cannot tell an external stop from a budget burn, so the label must
-        stay on the old fallback rather than guess 'cancelled'."""
+        """total_metric_calls is optional run metadata on GEPAResult. Even with a
+        stop file watched, without the counter we cannot tell an external stop
+        from a budget burn, so the label must stay on the old fallback rather
+        than guess 'cancelled'."""
         gepa_result = _make_mock_gepa_result(
             candidates=[], val_aggregate_scores=[0.3, 0.5], total_metric_calls=None
         )
@@ -305,6 +338,7 @@ class TestGepaFinishReason:
             sample_dataset_items,
             sample_metric,
             gepa_result=gepa_result,
+            run_dir=str(tmp_path),
         )
 
         assert result.details["finish_reason"] == "max_trials"
@@ -317,9 +351,11 @@ class TestGepaFinishReason:
         mock_dataset,
         sample_dataset_items,
         sample_metric,
+        tmp_path,
     ) -> None:
         """Reaching the target always leaves budget unspent — that must still
-        read as 'perfect_score', not as an external stop."""
+        read as 'perfect_score', not as an external stop. run_dir is set so the
+        external-stop branch is live and precedence is actually exercised."""
         gepa_result = _make_mock_gepa_result(
             candidates=[], val_aggregate_scores=[0.5, 1.0], total_metric_calls=1
         )
@@ -331,6 +367,7 @@ class TestGepaFinishReason:
             sample_dataset_items,
             sample_metric,
             gepa_result=gepa_result,
+            run_dir=str(tmp_path),
         )
 
         assert result.details["finish_reason"] == "perfect_score"

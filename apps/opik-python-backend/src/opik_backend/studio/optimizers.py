@@ -34,19 +34,19 @@ def ensure_default_model_params(
     it pins the temperature so repeated evaluations of one prompt agree (see
     OPTIMIZER_TASK_TEMPERATURE). An explicit temperature from the run config still
     wins, but a ``null`` one does not — the studio config can carry explicit nulls,
-    and ``setdefault`` would forward that ``None`` to litellm. ``drop_params`` is
-    forced rather than defaulted: it is our guard so a model that fixes its own
-    temperature ignores the pin instead of failing the run, not a user knob.
+    and ``setdefault`` would forward that ``None`` to litellm. Models that fix
+    their own temperature (the gpt-5 family) must ignore the pin rather than fail
+    the run; that is already guaranteed process-wide by ``litellm.drop_params =
+    True`` in ``opik_optimizer/base_optimizer.py``, which the runner imports, so
+    this does not set ``drop_params`` per call.
     Leave ``deterministic`` False for the optimizer/reflection model, which needs
     sampling diversity to propose varied candidates.
     """
     params = dict(model_params or {})
     if params.get("max_tokens") is None:
         params["max_tokens"] = LLM_MAX_TOKENS
-    if deterministic:
-        if params.get("temperature") is None:
-            params["temperature"] = OPTIMIZER_TASK_TEMPERATURE
-        params["drop_params"] = True
+    if deterministic and params.get("temperature") is None:
+        params["temperature"] = OPTIMIZER_TASK_TEMPERATURE
     return params
 
 

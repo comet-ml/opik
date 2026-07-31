@@ -115,14 +115,29 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
         raise EmptyDatasetError(dataset_name)
 
     item_count = count_optimizable_items(dataset_items)
-    if item_count == 0:
+    if item_count == 0 and len(dataset_items) < DATASET_SAMPLES:
         # The rows exist but the SDK's sampling will drop every one of them, so
         # the optimizer would train on nothing: an empty trainset and a
         # mini-batch sized from 0. Reject it here, where the user gets a typed,
         # actionable error, instead of an opaque failure mid-run.
+        #
+        # Only when the fetch above was NOT truncated, though: the SDK's
+        # sampling draws ids from the whole dataset (sampling._extract_ids calls
+        # get_items() unbounded), so a full page of id-less rows says nothing
+        # about the rows past DATASET_SAMPLES. Rejecting on that prefix would
+        # fail a dataset the optimizer could still train on; a short page means
+        # we have seen every row and the verdict is final.
         raise EmptyDatasetError(
             dataset_name,
             reason="has no items the optimizer can use (every item is missing an id)",
+        )
+    if item_count == 0:
+        logger.warning(
+            "Dataset '%s': none of the first %s items has an id, so none of them "
+            "is usable by the optimizer. Continuing because later items may be — "
+            "the SDK samples ids across the whole dataset.",
+            dataset_name,
+            DATASET_SAMPLES,
         )
     logger.debug(
         f"Dataset has {len(dataset_items)} items (capped at {DATASET_SAMPLES}), "

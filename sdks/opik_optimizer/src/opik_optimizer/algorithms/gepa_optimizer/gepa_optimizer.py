@@ -202,6 +202,7 @@ def _resolve_gepa_finish_reason(
     no_improvement_iterations: Any,
     total_metric_calls: Any,
     max_metric_calls: int,
+    stop_file_watched: bool,
 ) -> FinishReason | None:
     """Return why GEPA's search ended, or None to leave the label to the caller.
 
@@ -210,12 +211,16 @@ def _resolve_gepa_finish_reason(
     exclusion and same non-finite filtering, so the label can never claim a stop
     the stopper did not make.
 
-    Any other exit is separated by the spent budget: gepa leaves its loop only
-    through a stop callback, so an exit with budget still on the clock came from
-    a stopper gepa installed itself — most commonly the FileStopper it wires on
-    ``<run_dir>/gepa.stop`` whenever ``run_dir`` is set (gepa/api.py), i.e. an
-    external request to stop. That is "cancelled", not the budget burn the
-    caller's fallback would otherwise report.
+    One other exit is distinguishable, and only when gepa can actually produce
+    it: with ``run_dir`` set, gepa wires a FileStopper on ``<run_dir>/gepa.stop``
+    (gepa/api.py), which ends the run with budget still on the clock. Detecting
+    it by the unspent budget rests on ``GEPAResult.total_metric_calls`` being the
+    same counter ``MaxMetricCallsStopper`` compares (true in gepa 0.1.x, but the
+    dependency has no upper bound), so it is gated on ``stop_file_watched``: with
+    no stop file to watch there is nothing to detect, and a future counter drift
+    would otherwise relabel every ordinary budget exit "cancelled". Callers that
+    never set ``run_dir`` — Optimization Studio among them — keep the plain
+    "max_trials" fallback.
     """
     candidate_scores = _candidate_full_eval_scores(val_scores)
     if (
@@ -240,13 +245,14 @@ def _resolve_gepa_finish_reason(
         )
         return "no_improvement"
     if (
-        isinstance(total_metric_calls, int)
+        stop_file_watched
+        and isinstance(total_metric_calls, int)
         and not isinstance(total_metric_calls, bool)
         and total_metric_calls < max_metric_calls
     ):
         logger.info(
             "GEPA stopped after %s of %s metric calls with neither wired stopper "
-            "fired; treating it as an external stop request (e.g. gepa.stop in "
+            "fired; treating it as an external stop request (gepa.stop in "
             "run_dir).",
             total_metric_calls,
             max_metric_calls,
@@ -582,7 +588,8 @@ class GepaOptimizer(BaseOptimizer):
         # spent, that is "max_trials", not "completed": GEPA's trials_completed
         # only counts Opik-side evaluate() calls, so the base-class fallback
         # would otherwise mislabel every budget-exhausted run. Budget left on
-        # the clock means someone else stopped the run — see the resolver.
+        # the clock means someone else stopped the run, but only a run with a
+        # stop file to watch can be stopped that way — see the resolver.
         gepa_finish_reason = _resolve_gepa_finish_reason(
             val_scores=val_scores,
             perfect_score=self.perfect_score,
@@ -590,6 +597,7 @@ class GepaOptimizer(BaseOptimizer):
             no_improvement_iterations=no_improvement_iterations,
             total_metric_calls=getattr(gepa_result, "total_metric_calls", None),
             max_metric_calls=max_metric_calls,
+            stop_file_watched=run_dir is not None,
         )
         context.finish_reason = (
             context.finish_reason or gepa_finish_reason or "max_trials"

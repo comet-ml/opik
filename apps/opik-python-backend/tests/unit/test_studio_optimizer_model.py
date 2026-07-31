@@ -122,9 +122,6 @@ def test_task_model_temperature_is_pinned_on_the_prompt():
     optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
 
     assert prompt.model_kwargs.get("temperature") == OPTIMIZER_TASK_TEMPERATURE
-    # Guard for models that fix their own temperature: without this the pin
-    # fails the run instead of being ignored.
-    assert prompt.model_kwargs.get("drop_params") is True
     # The reflection model needs sampling diversity — it must NOT be pinned.
     assert "temperature" not in optimizer.model_parameters
 

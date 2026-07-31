@@ -170,9 +170,16 @@ class TestTaskModelTemperaturePinning:
         # environment must not turn a correct implementation red.
         params = ensure_default_model_params({}, deterministic=True)
         assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
-        # Models that fix their temperature (gpt-5 family) must ignore ours
-        # rather than fail the run.
-        assert params["drop_params"] is True
+
+    def test_task_params__pin_is_survivable_on_fixed_temperature_models(self):
+        """Models that fix their own temperature (gpt-5 family) must ignore the
+        pin rather than fail the run. The helper does not set drop_params per
+        call — importing opik_optimizer sets it process-wide
+        (base_optimizer.py), and the runner always imports it. Assert that
+        guarantee here, so losing it fails a test instead of a live run."""
+        import litellm
+
+        assert litellm.drop_params is True
 
     def test_task_params__default_configured_value_is_zero(self, monkeypatch):
         """The shipped default, independent of the ambient environment."""
@@ -195,14 +202,6 @@ class TestTaskModelTemperaturePinning:
             {"temperature": None}, deterministic=True
         )
         assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
-
-    def test_task_params__explicit_false_drop_params__is_forced(self):
-        """drop_params is our guard for fixed-temperature models, not a user knob:
-        leaving it False would fail the whole run on a gpt-5 model."""
-        params = ensure_default_model_params(
-            {"drop_params": False}, deterministic=True
-        )
-        assert params["drop_params"] is True
 
     def test_task_params__explicit_null_max_tokens__is_defaulted(self):
         params = ensure_default_model_params({"max_tokens": None})

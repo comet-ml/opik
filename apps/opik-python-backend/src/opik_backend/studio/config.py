@@ -117,11 +117,14 @@ OPTIMIZER_TASK_TEMPERATURE = _read_float_env(
 #   min(dataset_size,
 #       max(GEPA_REFLECTION_MINIBATCH_MIN,
 #           ceil(dataset_size * GEPA_REFLECTION_MINIBATCH_FRACTION)),
+#       GEPA_REFLECTION_MINIBATCH_MAX,
 #       budget cap — see resolve_reflection_minibatch_size)
 #
 # - grow at ~20% of the (sampled) dataset so resolution scales with data;
 # - floor of 5 keeps the previous behaviour for small datasets;
 # - cap at dataset_size: a mini-batch cannot exceed the trainset;
+# - cap at GEPA_REFLECTION_MINIBATCH_MAX: the batch is serialized into the
+#   reflection prompt, so it is a context-window cost, not just a budget one;
 # - cap by the metric-call budget so the run keeps at least
 #   GEPA_MIN_REFLECTION_ITERATIONS reflection iterations *when the budget allows
 #   it at all* — a batch of 1 cannot be cut further, so a budget below
@@ -134,6 +137,18 @@ OPTIMIZER_TASK_TEMPERATURE = _read_float_env(
 GEPA_REFLECTION_MINIBATCH_ENV = "OPTIMIZER_GEPA_REFLECTION_BATCH_SIZE"
 GEPA_REFLECTION_MINIBATCH_MIN = 5
 GEPA_REFLECTION_MINIBATCH_FRACTION = 0.2
+
+# Absolute ceiling on the mini-batch. gepa serializes the *whole* mini-batch
+# into one reflection prompt — every sample is rendered as markdown and joined
+# (gepa/strategies/instruction_proposal.py, format_samples) — so the prompt
+# grows linearly with the batch. Neither the dataset_size cap nor the budget cap
+# bounds that: at max_trials=10 a 1000-item dataset (DATASET_SAMPLES makes that
+# reachable) would resolve to 200 traces per proposal, likely overflowing the
+# reflection model's context on exactly the large datasets this sizing targets.
+# 25 keeps the resolution win the fraction is here for — 26 distinct mini-batch
+# sums to break ties with, against 6 at the old fixed size of 5 — while keeping
+# the reflection prompt bounded.
+GEPA_REFLECTION_MINIBATCH_MAX = 25
 
 # Each reflection iteration scores the current and the proposed candidate on
 # the same mini-batch (gepa/proposer/reflective_mutation), costing ~2*b metric
@@ -207,7 +222,9 @@ def resolve_reflection_minibatch_size(dataset_size: int, max_trials: int) -> int
             GEPA_MIN_REFLECTION_ITERATIONS,
         )
         budget_cap = 1
-    return max(1, min(dataset_size, scaled, budget_cap))
+    return max(
+        1, min(dataset_size, scaled, GEPA_REFLECTION_MINIBATCH_MAX, budget_cap)
+    )
 
 
 # Fail fast at service startup on a malformed operator override.

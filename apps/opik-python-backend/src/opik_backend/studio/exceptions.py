@@ -44,7 +44,7 @@ class EmptyDatasetError(OptimizationError):
     so existing callers keep their original message.
     """
 
-    def __init__(self, dataset_name: str, reason: str = None):
+    def __init__(self, dataset_name: str, reason: str | None = None):
         self.dataset_name = dataset_name
         self.reason = reason
         message = (

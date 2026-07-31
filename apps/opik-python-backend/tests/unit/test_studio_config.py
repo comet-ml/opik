@@ -6,8 +6,10 @@ import pytest
 
 from opik_backend.studio import config as config_module
 from opik_backend.studio.config import (
+    DATASET_SAMPLES,
     GEPA_MIN_REFLECTION_ITERATIONS,
     GEPA_REFLECTION_MINIBATCH_ENV,
+    GEPA_REFLECTION_MINIBATCH_MAX,
     resolve_reflection_minibatch_size,
 )
 
@@ -69,7 +71,8 @@ class TestFloatEnvValidation:
 
 class TestResolveReflectionMinibatchSize:
     """OPIK-7511: the reflection mini-batch scales with dataset size so coarse
-    0/1 metrics get a usable gradient, capped only by the dataset itself and
+    0/1 metrics get a usable gradient, capped by the dataset itself, by an
+    absolute ceiling (the batch is serialized into the reflection prompt) and
     by the metric-call budget (>= GEPA_MIN_REFLECTION_ITERATIONS iterations)."""
 
     @pytest.mark.parametrize(
@@ -89,7 +92,10 @@ class TestResolveReflectionMinibatchSize:
             # No max_trials cap: 20% keeps scaling past max_trials=10
             # (previously clamped to 10 — the OPIK-7511 regression).
             (100, 10, 20),
-            (1000, 10, 200),
+            # ...up to the absolute ceiling, which bounds the reflection prompt
+            # (the whole mini-batch is serialized into it).
+            (200, 10, 25),
+            (1000, 10, 25),
             # A small trial budget no longer strangles the batch...
             (100, 3, 20),
             # ...but the metric-call budget does: 100*1 // (2*5) = 10, which
@@ -121,6 +127,20 @@ class TestResolveReflectionMinibatchSize:
                 if batch > 1:
                     budget = max_trials * dataset_size
                     assert budget // (2 * batch) >= GEPA_MIN_REFLECTION_ITERATIONS
+
+    def test_batch_never_exceeds_the_prompt_ceiling(self, monkeypatch):
+        """gepa serializes every mini-batch sample into one reflection prompt, so
+        an unbounded batch is an unbounded prompt — no dataset size may push it
+        past the ceiling, including the largest one the Studio can sample."""
+        monkeypatch.delenv(GEPA_REFLECTION_MINIBATCH_ENV, raising=False)
+        for dataset_size in (100, 250, 500, DATASET_SAMPLES):
+            for max_trials in (1, 3, 10, 25, 100):
+                assert (
+                    resolve_reflection_minibatch_size(
+                        dataset_size=dataset_size, max_trials=max_trials
+                    )
+                    <= GEPA_REFLECTION_MINIBATCH_MAX
+                )
 
     def test_env_override_wins_verbatim(self, monkeypatch):
         monkeypatch.setenv(GEPA_REFLECTION_MINIBATCH_ENV, "7")
