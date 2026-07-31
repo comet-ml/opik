@@ -9,6 +9,7 @@ import {
   getEmptyRunTitle,
   getOptimizationDurationSeconds,
   getOptimizationRefetchInterval,
+  findActiveTrialCandidate,
 } from "./optimizationOverviewHelpers";
 import {
   AggregatedCandidate,
@@ -414,5 +415,67 @@ describe("getEmptyRunKPICaption", () => {
   it("falls back to Wave-1 heuristic copy when scoring_health is absent", () => {
     const caption = getEmptyRunKPICaption(FAILED, undefined);
     expect(caption).toBe("No usable scores — check the logs.");
+  });
+});
+
+// OPIK-7589: the baseline stopped being Trial #1, so a `trialNumber` minted
+// before that change means one trial further along than it says. Experiment ids
+// never drifted, so they decide.
+describe("findActiveTrialCandidate", () => {
+  const baseline = makeCandidate({
+    candidateId: "base",
+    stepIndex: 0,
+    trialNumber: null,
+    experimentIds: ["exp-base"],
+  });
+  const first = makeCandidate({
+    candidateId: "c1",
+    stepIndex: 1,
+    trialNumber: 1,
+    experimentIds: ["exp-1"],
+  });
+  const second = makeCandidate({
+    candidateId: "c2",
+    stepIndex: 2,
+    trialNumber: 2,
+    experimentIds: ["exp-2"],
+  });
+  const candidates = [baseline, first, second];
+
+  it("opens the baseline for a legacy link that called it Trial #1", () => {
+    // The exact regression: pre-renumbering the baseline was Trial #1, so its
+    // own deep link pairs the baseline's experiment id with trialNumber=1.
+    // Trusting the number would open candidate c1 instead.
+    expect(findActiveTrialCandidate(candidates, ["exp-base"], 1)).toBe(
+      baseline,
+    );
+  });
+
+  it("opens the named trial for a legacy link one number ahead", () => {
+    expect(findActiveTrialCandidate(candidates, ["exp-1"], 2)).toBe(first);
+  });
+
+  it("resolves current links, where ids and number agree", () => {
+    expect(findActiveTrialCandidate(candidates, ["exp-2"], 2)).toBe(second);
+  });
+
+  it("resolves the baseline, which has no trial number to carry", () => {
+    expect(findActiveTrialCandidate(candidates, ["exp-base"], null)).toBe(
+      baseline,
+    );
+  });
+
+  it("falls back to the trial number when no id is in the loaded page", () => {
+    expect(findActiveTrialCandidate(candidates, ["exp-unloaded"], 2)).toBe(
+      second,
+    );
+  });
+
+  it("resolves nothing when neither the ids nor the number match", () => {
+    expect(
+      findActiveTrialCandidate(candidates, ["exp-unloaded"], 99),
+    ).toBeUndefined();
+    expect(findActiveTrialCandidate(candidates, [], null)).toBeUndefined();
+    expect(findActiveTrialCandidate([], ["exp-1"], 1)).toBeUndefined();
   });
 });
