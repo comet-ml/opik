@@ -2504,13 +2504,13 @@ class TraceDAOImpl implements TraceDAO {
                     workspace_id,
                     project_id,
                     id,
-                    latest_thread_id AS thread_id,
-                    input_count,
-                    output_count,
-                    metadata_count,
-                    tags_length,
-                    latest_duration AS duration,
-                    latest_error_info AS error_info
+                    latest.1 AS thread_id,
+                    latest.2 AS input_count,
+                    latest.3 AS output_count,
+                    latest.4 AS metadata_count,
+                    latest.5 AS tags_length,
+                    latest.6 AS duration,
+                    latest.7 AS error_info
                 FROM (
                 <endif>
                 SELECT
@@ -2518,13 +2518,9 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     id,
                     <if(dedup_by_argmax)>
-                    argMax(thread_id, last_updated_at) AS latest_thread_id,
-                    argMax(if(input_length > 0, 1, 0), last_updated_at) AS input_count,
-                    argMax(if(output_length > 0, 1, 0), last_updated_at) AS output_count,
-                    argMax(if(metadata_length > 0, 1, 0), last_updated_at) AS metadata_count,
-                    argMax(length(tags), last_updated_at) AS tags_length,
-                    argMax(duration, last_updated_at) AS latest_duration,
-                    argMax(error_info, last_updated_at) AS latest_error_info
+                    argMax(tuple(thread_id, if(input_length > 0, 1, 0), if(output_length > 0, 1, 0),
+                                 if(metadata_length > 0, 1, 0), length(tags), duration, error_info),
+                           last_updated_at) AS latest
                     <else>
                     thread_id,
                     if(input_length > 0, 1, 0) as input_count,
@@ -4431,19 +4427,21 @@ class TraceDAOImpl implements TraceDAO {
      * versions from the group and make {@code argMax} report the latest <em>surviving</em> version instead of the
      * true latest, resurfacing content that the current version no longer matches.
      *
-     * <p>In {@code SELECT_TRACES_SPANS_STATS} the per-version columns are aliased to {@code latest_*} and renamed
-     * back by an enclosing SELECT, rather than aliased to their own names. A same-named alias would win name
-     * resolution inside the {@code HAVING} predicate, which reads {@code thread_id}, {@code error_info} and
-     * {@code duration}, nesting {@code argMax} inside {@code argMax} — ClickHouse rejects that with
-     * {@code ILLEGAL_AGGREGATION}. It only bites once a predicate touches one of those columns, so a filter on a
-     * single unaliased column (a plain {@code name} filter, say) hides it entirely while the eight-column
-     * {@code searchText} clause trips it every time.
+     * <p>In {@code SELECT_TRACES_SPANS_STATS} the projected columns are wrapped in a <em>single</em>
+     * {@code argMax(tuple(...), last_updated_at)} and unpacked by an enclosing SELECT, rather than taken as one
+     * {@code argMax} per column. Per-column {@code argMax} would let row versions that share the greatest
+     * {@code last_updated_at} contribute different columns to the same output row, synthesising a row that never
+     * existed — where {@code FINAL} always yields one whole physical row. One tuple-valued {@code argMax} picks a
+     * single version atomically, so the tie case degrades to "which of the tied versions", exactly as under
+     * {@code FINAL}, instead of "a mixture of them". Verified result-identical to the per-column form on
+     * production data, at lower peak memory (one aggregate state rather than seven).
      *
-     * <p>Each projected column comes from its own {@code argMax}, so row versions sharing the greatest
-     * {@code last_updated_at} could in principle contribute different columns to one output row, where
-     * {@code FINAL} picks a single whole row. Not reachable on current production data — the largest projects hold
-     * no duplicate versions at all, {@code traces} being fully merged at rest — but it is a real difference in
-     * kind, not just degree, if a write path ever emits two versions with the same timestamp.
+     * <p>Wrapping also avoids an aliasing hazard: aliasing a per-version column to its own name would win name
+     * resolution inside the {@code HAVING} predicate — which reads {@code thread_id}, {@code error_info} and
+     * {@code duration} — nesting {@code argMax} inside {@code argMax}, which ClickHouse rejects with
+     * {@code ILLEGAL_AGGREGATION}. The tuple alias shadows no column, so the predicate always resolves against
+     * the table. That failure only bites once a predicate touches one of those columns, so a filter on a single
+     * unaliased column would hide it while the eight-column {@code searchText} clause trips it every time.
      *
      * <p>When {@code traces} is exchanged for the {@code traces_local_v2} schema, that table is
      * {@code ReplacingMergeTree(last_updated_at, is_deleted)} and {@code FINAL} additionally drops soft-deleted
