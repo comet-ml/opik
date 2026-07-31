@@ -1139,7 +1139,7 @@ class TracesLocalV2BenchmarkTest {
 
     @Test
     void compressionIsInvariantToWeeklyPartitioning() {
-        // PARTITION BY toMonday(id_at) is a data-lifecycle mechanism (retention + tiering) validated by
+        // The honest Date32 weekly partition is a data-lifecycle mechanism (retention + tiering) validated by
         // TracesLocalV2PartitioningTest, not a codec — and it is required regardless of size. It splits data into weekly
         // parts that each compress independently, so it can only add minor per-part overhead (e.g. one LowCardinality
         // dictionary per part), not change per-column compression. Confirmed here so the benchmark's sizes (measured
@@ -1154,7 +1154,7 @@ class TracesLocalV2BenchmarkTest {
                 + "env LowCardinality(String))";
         execute("CREATE TABLE %s.%s %s ENGINE = MergeTree ORDER BY tuple()"
                 .formatted(DATABASE_NAME, flatTable, columns));
-        execute("CREATE TABLE %s.%s %s ENGINE = MergeTree PARTITION BY toMonday(id_at) ORDER BY tuple()"
+        execute("CREATE TABLE %s.%s %s ENGINE = MergeTree PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) ORDER BY tuple()"
                 .formatted(DATABASE_NAME, weeklyTable, columns));
 
         // id_at spread over ~8 weeks so weekly partitioning yields several parts; env is LowCardinality (per-part

@@ -1,27 +1,29 @@
 --liquibase formatted sql
 --changeset andrescrz:000114_recreate_traces_local_v2_id_at_datetime64
+--comment: Recreate traces_local_v2 with DateTime64(0) id_at and an honest, non-wrapping weekly partition (OPIK-7456)
 
--- Recreate traces_local_v2 with id_at as DateTime64(0) and a human-readable weekly partition id (OPIK-7456).
+-- Recreate traces_local_v2 with id_at as DateTime64(0) and an honest, non-wrapping weekly partition (OPIK-7456).
 --
 -- 000101 declared id_at as a 32-bit DateTime (max 2106): UUIDv7ToDateTime of a bad-id timestamp beyond 2106 (litellm
--- BerriAI/litellm#31294 mints ~2201) overflowed into a plausible-looking recent year, hiding the row in a real-looking
--- weekly partition. id_at only ever needs second resolution — it is the weekly partition input and the far-future audit
--- anchor — so DateTime64(0) is the minimal fix: it keeps that resolution and extends the range to 2299.
+-- BerriAI/litellm#31294 mints ~2201) overflowed into a plausible-looking recent year. Those rows are legitimate,
+-- customer-facing data — a valid UUIDv7 that merely carries a future embedded timestamp — so they must land in their own
+-- honest weekly partition, never mixed with a real recent week (which would defeat per-partition DROP / retention /
+-- tiering). id_at only ever needs second resolution — it is the weekly-partition input and the far-future audit anchor —
+-- so DateTime64(0) is the minimal fix: it makes id_at honest to 2299 (the id_at > now() audit no longer misses ids that,
+-- as a 32-bit DateTime, wrapped into a past year) and compresses best.
 --
--- PARTITION BY toYYYYMMDD(toMonday(id_at)): toMonday returns a 16-bit Date (max 2149) that wraps far-future ids, so the
--- paired change enable_extended_results_for_datetime_functions=1 (added to every deployment's <profiles><default>) makes
--- toMonday return Date32; toYYYYMMDD then yields the honest YYYYMMDD of the week's Monday as a UInt32. The toYYYYMMDD
--- wrapper (over a bare Date32 key) buys two things: (1) the partition id is a human-readable YYYYMMDD like 20250303 —
--- legible in ZooKeeper paths, part directory names and system.parts — where a bare Date32 key's id is an opaque
--- days-since-epoch integer; (2) the key type is UInt32 regardless of the setting, so it is
--- stable: flipping the setting only changes future partition values (an honest vs a wrapped-year YYYYMMDD), never the key
--- type, so existing parts are never detached — a bare Date/Date32 key detaches every existing part when the setting
--- flips. The unchanged toMonday(id_at) read predicates still prune (toYYYYMMDD is monotonic in the Monday).
---
--- The setting matters when data is INSERTED (the cutover backfill and live ingestion), not at this empty CREATE: a row
--- written without it lands in a wrapped-year YYYYMMDD partition — cosmetic and recoverable, the UInt32 key never detaches
--- — and one written with it lands honestly. So this migration does not require the setting: enable it (server default)
--- before the backfill and keep it on, and let the cutover backfill (what actually inserts data) verify it.
+-- PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))): toMonday / toStartOfWeek return a
+-- 16-bit Date (max 2149) that wraps far-future ids into a plausible recent week, and only stop wrapping under the global
+-- enable_extended_results_for_datetime_functions setting — which also changes toStartOfInterval and breaks the metrics
+-- API, so it is not usable. This Date32 arithmetic (the Monday is the day minus its 0-based weekday, computed entirely in
+-- Date32) yields the identical Monday as toMonday across the in-range calendar but never wraps, needs no setting, and via
+-- toYYYYMMDD is a UInt32 so the partition id stays a human-readable YYYYMMDD like 20250303 (legible in ZooKeeper paths,
+-- part directory names and system.parts). The expression is pinned by TracesLocalV2PartitioningTest. The unchanged
+-- toMonday(id_at) read/retention predicates still prune: each is paired with an authoritative id-range and prunes parts
+-- via the id_at minmax ClickHouse keeps for the partition-key columns, independent of the key expression itself.
+-- (toMonday(id_at) does still wrap for a far-future id_at, so a toMonday window derived from an id SET spanning present
+-- and far-future can invert and drop rows — the read/delete layer covers that with id-range-authoritative filters plus
+-- an unbounded fallback, OPIK-7483; a new query deriving a toMonday window from an id set needs the same.)
 --
 -- id_at is the PARTITION BY input, and ClickHouse forbids ALTER of a key column, so the table is dropped and recreated.
 -- traces_local_v2 is empty in every install (the cutover that populates it runs manually, after this migration, and
@@ -101,11 +103,13 @@ ENGINE = ReplicatedReplacingMergeTree(
     '{replica}',
     last_updated_at,
     is_deleted)
-PARTITION BY toYYYYMMDD(toMonday(id_at))
+PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
 ORDER BY (workspace_id, project_id, id)
 -- ~40 MiB per granule so a granule fills toward the 8192-row target on these wide rows, making skip indexes prune effectively.
 SETTINGS index_granularity = 8192, index_granularity_bytes = 41943040;
 
 -- Empty rollback: the recreate destroys the original 000101 table, so there is no clean inverse, and the empty
--- DateTime64 successor is compatible with every consumer (matches 000106/000107).
+-- DateTime64 successor is compatible with every consumer (matches 000106/000107). traces_local_v2 is empty pre-cutover,
+-- so nothing is lost; post-cutover the table has been renamed away and this changeset no longer applies.
 --rollback empty
+

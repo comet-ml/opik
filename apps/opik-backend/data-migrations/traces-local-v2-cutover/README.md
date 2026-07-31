@@ -55,8 +55,8 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 ## Prerequisites (do not start without these)
 
 1. **24h UUIDv7 ingestion validation** live long enough that no un-validated future-dated ids land in newly ingested
-   weeks. This is not tied to a retention cycle (retention never runs — prereq 8). Pre-validation bad-id rows already in
-   the table are *not* blocked by this: they are copied by the `created_at` slice and surfaced by the far-future audit
+   weeks. This is not tied to a retention cycle (retention never runs — prereq 8). Pre-validation far-future-timestamp
+   rows already in the table are *not* blocked by this: they are copied by the `created_at` slice and surfaced by the far-future audit
    query below — this prereq only ensures no *new* out-of-range partitions are created mid-cutover.
 2. **`traces_local_v2` exists and is empty** (migration 000101).
 3. **Successor storage/TTL parity.** `traces_local_v2` must resolve the **same `storage_policy` and TTL-to-cold rules**
@@ -298,28 +298,27 @@ not a full-table scan. An index still would not rescue `id`-slicing (the ~2201 s
 is naturally good with `created_at` slicing (`id_at ≈ created_at` once validation holds); slicing by *workspace* would
 instead scatter each insert across every weekly partition that workspace spans → a small-part explosion on a large table.
 
-**Known issue — far-future partitions from bad ids.** The bad-`id` rows' embedded UUIDv7 timestamp is ~2201, so they
-create far-future weekly partitions on `traces_local_v2` (inherent to `PARTITION BY toYYYYMMDD(toMonday(id_at))` + the bad
-data, not the slice choice). Since [OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456), `id_at` is a `DateTime64`
-and the cluster sets `enable_extended_results_for_datetime_functions=1`, so `toMonday(id_at)` resolves to `Date32` and
-these land in an honest **~2201** (`22010601`-shaped) YYYYMMDD partition — obviously bogus and easy to spot — instead of
-wrapping into a plausible-looking recent year. **The setting must be active whenever data is inserted** (this backfill
-and live ingestion), not when the table was created: a row written without it lands in a wrapped-year YYYYMMDD partition
-(cosmetic and recoverable — the `UInt32` partition key never detaches parts), one written with it lands honestly. Verify
-`SELECT value FROM system.settings WHERE name = 'enable_extended_results_for_datetime_functions'` returns `1` before
-backfilling. The bad partitions are bounded (few distinct bad timestamps → few extra partitions) and mostly harmless
-(they never tier to cold and are skipped by time-bounded reads); the audit query below finds them (it keys on `id_at`
-being in the future). Quantify it before the cutover and decide whether to remediate:
+**Far-future partitions from far-future-timestamp ids.** Some `id`s carry an embedded UUIDv7 timestamp in the far future
+(litellm [BerriAI/litellm#31294](https://github.com/BerriAI/litellm/issues/31294) mints ~2201). The rows are legitimate
+customer data — a valid UUIDv7 that merely carries a future timestamp — so they are copied and kept like any other.
+`traces_local_v2` partitions by the honest `Date32` weekly Monday of `id_at`
+([OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456): `toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))`),
+so each such row lands in its **own honest ~2201 (`22010601`-shaped) weekly partition**, isolated from real recent weeks —
+a per-week `DROP PARTITION` / retention / tiering operation never touches them by accident, and vice versa. `id_at` is a
+`DateTime64`, so it reads back as the true ~2201 and the `id_at > now()` audit surfaces these rows; no server setting is
+involved. The extra partitions are bounded (few distinct far-future timestamps → few extra weeks) and harmless (they
+never tier to cold and are skipped by time-bounded reads). Quantify them in the source before the cutover so their scale
+is known:
 
 ```sql
--- rows / distinct far-future partitions the bad ids would create
-SELECT count() AS bad_rows, uniqExact(toMonday(id_at)) AS bad_partitions, min(id_at) AS earliest, max(id_at) AS latest
+-- rows / distinct far-future weeks the far-future-timestamp ids occupy
+SELECT count() AS far_future_rows, uniqExact(toMonday(id_at)) AS far_future_weeks, min(id_at) AS earliest, max(id_at) AS latest
 FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
 WHERE id_at > now() + INTERVAL 1 DAY;   -- outside the 24h validation window
 ```
 
-If the count is material, remediate the source ids (or exclude/quarantine those rows) first; otherwise accept the few
-far-future partitions.
+If the count is material, remediate the source `id`s at their origin; otherwise no action is needed — they partition
+honestly on their own.
 
 **No explicit `ORDER BY` on the `INSERT ... SELECT`.** Not needed for correctness or reproducibility: the final table
 state is a `ReplacingMergeTree` reduction keyed on `(workspace_id, project_id, id)` with `last_updated_at` as the version

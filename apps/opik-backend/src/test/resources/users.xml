@@ -18,11 +18,6 @@
              so fresh installs need this enabled to replay the migration chain. -->
         <default>
             <enable_time_time64_type>1</enable_time_time64_type>
-            <!-- Makes toMonday / toStartOf* return Date32 / DateTime64 for wide inputs instead of the year-2149/2106-capped
-                 Date/DateTime. traces_local_v2 (migration 000114) partitions by toYYYYMMDD(toMonday(id_at)) over a
-                 DateTime64 id_at; this makes toMonday return Date32 so far-future ids partition honestly, so tests must
-                 run with it active (OPIK-7456). Value-preserving no-op for all in-range dates. -->
-            <enable_extended_results_for_datetime_functions>1</enable_extended_results_for_datetime_functions>
             <!-- Distributed-layer settings the Hyperscale slices (OPIK-6874) depend on. All three
                  are no-ops on the current single-shard schema, but tests must run with them active
                  so the Slice 2 Distributed/_local table shape is exercised under the same profile
