@@ -116,6 +116,39 @@ describe("aggregateCandidates — trial numbering", () => {
     });
     expect(candidates.map((c) => c.trialNumber)).toEqual([null, 1, 2]);
   });
+
+  it("returns no candidates for an empty run", () => {
+    expect(aggregateCandidates([], undefined)).toEqual([]);
+    expect(
+      aggregateCandidates([], undefined, { unnumberedBaseline: true }),
+    ).toEqual([]);
+  });
+
+  it("numbers every candidate from 1 when the run has no step-0 baseline", () => {
+    // A page of experiments that excludes step 0 (filtered or not yet loaded)
+    // has no baseline to exempt, so nothing goes unnumbered and the sequence
+    // still starts at 1 — never at 0, and never skipping a number.
+    const experiments = [
+      makeExperiment({
+        id: "exp-1",
+        created_at: "2025-01-01T00:01:00Z",
+        metadata: { step_index: 1, candidate_id: "c1" },
+      }),
+      makeExperiment({
+        id: "exp-2",
+        created_at: "2025-01-01T00:02:00Z",
+        metadata: {
+          step_index: 2,
+          candidate_id: "c2",
+          parent_candidate_ids: ["c1"],
+        },
+      }),
+    ];
+    const candidates = aggregateCandidates(experiments, undefined, {
+      unnumberedBaseline: true,
+    });
+    expect(candidates.map((c) => c.trialNumber)).toEqual([1, 2]);
+  });
 });
 
 describe("checkIsTestSuite", () => {

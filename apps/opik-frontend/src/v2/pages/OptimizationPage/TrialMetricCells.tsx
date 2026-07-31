@@ -59,6 +59,33 @@ const getBaselinePercentage = (
   );
 };
 
+/**
+ * The baseline delta for a metric cell, withheld while the row is still
+ * evaluating.
+ *
+ * Score, cost and latency all answer the in-progress case the same way, so the
+ * policy lives here once rather than in each of the three cells — a future
+ * change to how provisional rows present their comparison then cannot land on
+ * one metric and miss the others (OPIK-7460).
+ */
+const getTrendPercentage = (
+  context: TrialCellContext,
+  baseline: AggregatedCandidate | undefined,
+  candidateId: string,
+  value: number | undefined,
+  baselineAccessor: (c: AggregatedCandidate) => number | undefined,
+  formatter?: (v: number) => string,
+): number | undefined =>
+  getIsRowInProgress(context, candidateId)
+    ? undefined
+    : getBaselinePercentage(
+        baseline,
+        candidateId,
+        value,
+        baselineAccessor,
+        formatter,
+      );
+
 type TrialMetricCellProps = {
   value?: number;
   formatter: (v: number) => string;
@@ -127,15 +154,14 @@ export const TrialAccuracyCell = (context: TrialCellContext) => {
     isTestSuite?: boolean;
   };
 
-  const percentage = getIsRowInProgress(context, row.candidateId)
-    ? undefined
-    : getBaselinePercentage(
-        baselineCandidate,
-        row.candidateId,
-        row.score,
-        (b) => b.score,
-        formatAsPercentage,
-      );
+  const percentage = getTrendPercentage(
+    context,
+    baselineCandidate,
+    row.candidateId,
+    row.score,
+    (b) => b.score,
+    formatAsPercentage,
+  );
 
   const passRateFraction =
     isTestSuite && isNumber(row.score) && row.totalCount > 0
@@ -165,15 +191,14 @@ export const TrialCandidateCostCell = (context: TrialCellContext) => {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = getIsRowInProgress(context, row.candidateId)
-    ? undefined
-    : getBaselinePercentage(
-        baselineCandidate,
-        row.candidateId,
-        row.runtimeCost,
-        (b) => b.runtimeCost,
-        formatAsCurrency,
-      );
+  const percentage = getTrendPercentage(
+    context,
+    baselineCandidate,
+    row.candidateId,
+    row.runtimeCost,
+    (b) => b.runtimeCost,
+    formatAsCurrency,
+  );
 
   return (
     <CellWrapper
@@ -198,15 +223,14 @@ export const TrialCandidateLatencyCell = (context: TrialCellContext) => {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = getIsRowInProgress(context, row.candidateId)
-    ? undefined
-    : getBaselinePercentage(
-        baselineCandidate,
-        row.candidateId,
-        row.latencyP50,
-        (b) => b.latencyP50,
-        formatAsDuration,
-      );
+  const percentage = getTrendPercentage(
+    context,
+    baselineCandidate,
+    row.candidateId,
+    row.latencyP50,
+    (b) => b.latencyP50,
+    formatAsDuration,
+  );
 
   return (
     <CellWrapper
