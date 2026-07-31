@@ -575,6 +575,9 @@ llmProviderClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
     # Description: Vertex AI SCOPE API URL
     scope: https://www.googleapis.com/auth/cloud-platform
+    # Default: GRPC
+    # Description: Transport used by the Vertex AI SDK. One of GRPC or REST
+    transport: GRPC
     # Default: the global, eu and us hosts below
     # Description: API endpoint per multi-region location. Single-region locations are not listed and keep the host the
     # SDK derives from the location itself.

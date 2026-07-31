@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.google.cloud.vertexai.Transport;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
@@ -19,7 +20,7 @@ public class LlmProviderClientConfig {
     public record AnthropicClientConfig(String url, String version) {
     }
 
-    public record VertexAIClientConfig(String scope, Map<String, String> multiRegionApiEndpoints) {
+    public record VertexAIClientConfig(String scope, Map<String, String> multiRegionApiEndpoints, Transport transport) {
 
         /**
          * The Vertex AI SDK derives its host from the location as {@code %s-aiplatform.googleapis.com}, which only
@@ -35,6 +36,10 @@ public class LlmProviderClientConfig {
             return multiRegionApiEndpoints == null || multiRegionApiEndpoints.isEmpty()
                     ? DEFAULT_MULTI_REGION_API_ENDPOINTS
                     : multiRegionApiEndpoints;
+        }
+
+        public Transport transport() {
+            return transport == null ? Transport.GRPC : transport;
         }
     }
 

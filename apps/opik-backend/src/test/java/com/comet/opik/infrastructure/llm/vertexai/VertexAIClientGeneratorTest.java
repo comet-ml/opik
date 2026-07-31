@@ -1,52 +1,103 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
+import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
-import com.google.cloud.vertexai.VertexAI;
-import com.google.cloud.vertexai.generativeai.GenerativeModel;
+import com.google.cloud.vertexai.Transport;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
-import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiChatModel;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.lang.reflect.Field;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
 import java.security.KeyPairGenerator;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.Base64;
-import java.util.Locale;
 import java.util.Map;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@DisplayName("Vertex AI client generator")
 class VertexAIClientGeneratorTest {
 
     private static final String MODEL = "vertex_ai/gemini-2.5-flash";
+    private static final String PROJECT_ID = "test-project";
 
-    private static String serviceAccountKey;
+    private static final String GENERATE_CONTENT_PATH = ".*:generateContent";
+    private static final String TOKEN_PATH = "/token";
 
-    private final VertexAIClientGenerator generator = new VertexAIClientGenerator(clientConfig());
+    private static final String GENERATE_CONTENT_RESPONSE = """
+            {
+              "candidates": [
+                {
+                  "content": {"role": "model", "parts": [{"text": "hello from the mock"}]},
+                  "finishReason": "STOP"
+                }
+              ],
+              "usageMetadata": {"promptTokenCount": 3, "candidatesTokenCount": 4, "totalTokenCount": 7}
+            }
+            """;
 
-    private static LlmProviderClientConfig clientConfig() {
-        var config = new LlmProviderClientConfig();
-        config.setVertexAIClient(new LlmProviderClientConfig.VertexAIClientConfig(
-                "https://www.googleapis.com/auth/cloud-platform",
-                Map.of("global", "aiplatform.googleapis.com",
-                        "eu", "aiplatform.eu.rep.googleapis.com",
-                        "us", "aiplatform.us.rep.googleapis.com")));
-        return config;
+    private static final String TOKEN_RESPONSE = """
+            {"access_token": "test-access-token", "token_type": "Bearer", "expires_in": 3600}
+            """;
+
+    private final WireMockUtils.WireMockRuntime wireMock = WireMockUtils.startWireMock();
+
+    private String serviceAccountJson;
+
+    /**
+     * WireMock serves a self-signed certificate and the Vertex SDK always talks TLS, so the JVM default has to trust it
+     * for the stub to be reachable at all.
+     */
+    @BeforeAll
+    void trustWireMockCertificate() throws Exception {
+        var trustAll = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
+        };
+
+        var sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, new TrustManager[]{trustAll}, new SecureRandom());
+
+        HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
+        HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> true);
     }
 
     /**
      * {@code ServiceAccountCredentials.fromStream} parses and validates the private key, so the fixture needs a real
-     * RSA key rather than a placeholder string. Generated per run to keep a credential-shaped blob out of the repo.
+     * RSA key rather than a placeholder. It is generated per run and its {@code token_uri} points at WireMock, so the
+     * OAuth exchange is stubbed too and no real credential exists anywhere in the test.
      */
     @BeforeAll
-    static void generateServiceAccountKey() throws Exception {
+    void generateServiceAccountKey() throws Exception {
         var keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048);
         var privateKey = keyPairGenerator.generateKeyPair().getPrivate();
@@ -55,108 +106,135 @@ class VertexAIClientGeneratorTest {
                 + Base64.getEncoder().encodeToString(privateKey.getEncoded())
                 + "\\n-----END PRIVATE KEY-----\\n";
 
-        serviceAccountKey = """
+        serviceAccountJson = """
                 {
                   "type": "service_account",
-                  "project_id": "test-project",
+                  "project_id": "%s",
                   "private_key_id": "test-key-id",
                   "private_key": "%s",
-                  "client_email": "test@test-project.iam.gserviceaccount.com",
-                  "client_id": "1234567890"
+                  "client_email": "test@%s.iam.gserviceaccount.com",
+                  "client_id": "1234567890",
+                  "token_uri": "https://%s%s"
                 }
-                """.formatted(pem);
+                """.formatted(PROJECT_ID, pem, PROJECT_ID, wireMockHost(), TOKEN_PATH);
     }
 
-    private VertexAI generatedClientFor(Map<String, String> configuration) throws ReflectiveOperationException {
-        var request = ChatCompletionRequest.builder().model(MODEL).build();
-        var config = LlmProviderClientApiConfig.builder()
-                .apiKey(serviceAccountKey)
-                .configuration(configuration)
-                .build();
-
-        return vertexAI((VertexAiGeminiChatModel) generator.generate(config, request));
+    @AfterAll
+    void tearDown() {
+        wireMock.server().stop();
     }
 
-    private String apiEndpointForConfiguredLocation(Map<String, String> configuration)
-            throws ReflectiveOperationException {
-        return generatedClientFor(configuration).getApiEndpoint();
+    @BeforeEach
+    void setUp() {
+        wireMock.server().resetAll();
+        wireMock.server().stubFor(post(urlPathMatching(GENERATE_CONTENT_PATH))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(GENERATE_CONTENT_RESPONSE)));
+        wireMock.server().stubFor(post(urlPathMatching(TOKEN_PATH))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(TOKEN_RESPONSE)));
+    }
+
+    private String wireMockHost() {
+        return "localhost:" + wireMock.server().httpsPort();
     }
 
     /**
-     * The endpoint and location are only observable through the {@code VertexAI} instance the client was built around.
-     * It has to be reached via the {@code GenerativeModel}, because the constructor this generator uses leaves the chat
-     * model's own {@code vertexAI} field unset.
+     * Every multi-region location is mapped onto WireMock, so the endpoint the generator resolves becomes observable as
+     * the host it actually calls. {@code Transport.REST} is required because WireMock speaks HTTP, not gRPC.
      */
-    private static VertexAI vertexAI(VertexAiGeminiChatModel model) throws ReflectiveOperationException {
-        Field generativeModelField = VertexAiGeminiChatModel.class.getDeclaredField("generativeModel");
-        generativeModelField.setAccessible(true);
-        var generativeModel = generativeModelField.get(model);
+    private LlmProviderClientConfig clientConfig() {
+        var endpoint = wireMockHost() + "/";
+        var config = new LlmProviderClientConfig();
+        config.setVertexAIClient(new LlmProviderClientConfig.VertexAIClientConfig(
+                "https://www.googleapis.com/auth/cloud-platform",
+                Map.of("global", endpoint, "eu", endpoint, "us", endpoint),
+                Transport.REST));
+        return config;
+    }
 
-        Field vertexAiField = GenerativeModel.class.getDeclaredField("vertexAi");
-        vertexAiField.setAccessible(true);
+    private void completeVia(String configuredLocation) {
+        var generator = new VertexAIClientGenerator(clientConfig());
+        var request = ChatCompletionRequest.builder().model(MODEL).build();
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(serviceAccountJson)
+                .configuration(configuredLocation == null ? Map.of() : Map.of("location", configuredLocation))
+                .build();
 
-        return (VertexAI) vertexAiField.get(generativeModel);
+        generator.generate(config, request).chat(UserMessage.from("hello"));
+    }
+
+    private void assertCalledWithLocation(String expectedLocation) {
+        wireMock.server().verify(postRequestedFor(urlPathMatching(
+                ".*/locations/" + expectedLocation + "/publishers/google/models/.*")));
     }
 
     @Nested
-    @DisplayName("Multi-region locations resolve to their own hosts")
-    class MultiRegionEndpoints {
+    @DisplayName("Multi-region locations")
+    class MultiRegionLocations {
 
         @ParameterizedTest
-        @CsvSource({
-                "global,aiplatform.googleapis.com",
-                "eu,aiplatform.eu.rep.googleapis.com",
-                "us,aiplatform.us.rep.googleapis.com"})
-        void overrideTheLocationDerivedHost(String location, String expectedEndpoint) throws Exception {
-            assertThat(apiEndpointForConfiguredLocation(Map.of("location", location)))
-                    .isEqualTo(expectedEndpoint);
+        @ValueSource(strings = {"global", "eu", "us"})
+        void areCalledOnTheirConfiguredEndpoint(String location) {
+            completeVia(location);
+
+            assertCalledWithLocation(location);
         }
 
         /**
-         * The location also lands in the {@code locations/%s} resource path, so canonicalising it for the host lookup
-         * alone would leave the client reaching the right host with a malformed path.
+         * The location lands in the resource path as well as the host, so canonicalising it for the endpoint lookup
+         * alone would leave the client calling the right host with a malformed {@code locations/} segment.
          */
         @ParameterizedTest
-        @CsvSource({"GLOBAL,aiplatform.googleapis.com", "'  global  ',aiplatform.googleapis.com",
-                "' EU ',aiplatform.eu.rep.googleapis.com"})
-        void canonicaliseBothHostAndLocation(String configured, String expectedEndpoint) throws Exception {
-            var client = generatedClientFor(Map.of("location", configured));
+        @CsvSource({"GLOBAL,global", "'  global  ',global", "' EU ',eu"})
+        void areCanonicalisedInTheRequestPath(String configured, String expectedLocation) {
+            completeVia(configured);
 
-            assertThat(client.getApiEndpoint()).isEqualTo(expectedEndpoint);
-            assertThat(client.getLocation()).isEqualTo(configured.strip().toLowerCase(Locale.ROOT));
+            assertCalledWithLocation(expectedLocation);
         }
     }
 
     @Nested
-    @DisplayName("Single-region locations keep the SDK default")
-    class RegionalEndpoints {
-
-        @ParameterizedTest
-        @ValueSource(strings = {"europe-west4", "us-central1", "asia-northeast1"})
-        void keepTheRegionalHost(String location) throws Exception {
-            assertThat(apiEndpointForConfiguredLocation(Map.of("location", location)))
-                    .isEqualTo("%s-aiplatform.googleapis.com".formatted(location));
-        }
-    }
-
-    @Nested
-    @DisplayName("Blank locations fall back to the SDK default")
-    class BlankLocations {
+    @DisplayName("Locations that keep the SDK-derived host")
+    class SdkDerivedHosts {
 
         /**
-         * The location is not validated for blankness at the API boundary, and the SDK rejects an empty one outright, so
-         * a blank value has to be treated the same as an absent one rather than canonicalised into {@code ""}.
+         * Single-region locations are absent from the endpoint map, so the SDK keeps deriving the host from the location
+         * itself rather than using the configured multi-region endpoint. Asserting on the resolved host keeps this off
+         * the network: actually calling one of those hosts would mean real egress and multi-second DNS timeouts in CI.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {"europe-west4", "us-central1", "asia-northeast1"})
+        void areNotRedirectedToTheMultiRegionEndpoint(String location) {
+            assertThat(resolvedApiEndpoint(location)).isEqualTo("%s-aiplatform.googleapis.com".formatted(location));
+        }
+
+        /**
+         * A blank location is not rejected at the API boundary and the SDK rejects an empty one outright, so it has to
+         * be treated as unset. Were it canonicalised into {@code ""}, building the client would fail with
+         * "location can't be null or empty" instead of defaulting like an absent value.
          */
         @ParameterizedTest
         @ValueSource(strings = {"", "   "})
-        void areTreatedAsAbsent(String location) throws Exception {
-            assertThat(generatedClientFor(Map.of("location", location)).getLocation())
-                    .isEqualTo(generatedClientFor(Map.of()).getLocation());
+        void blankLocationsBehaveLikeAnUnsetOne(String location) {
+            assertThat(resolvedApiEndpoint(location)).isEqualTo(resolvedApiEndpoint(null));
         }
 
-        @Test
-        void doNotFailClientCreation() {
-            assertThatCode(() -> generatedClientFor(Map.of("location", "   "))).doesNotThrowAnyException();
+        /**
+         * Builds a client without calling it, so the host the SDK settled on can be read back. A blank location that
+         * reached {@code setLocation} would surface here as an {@link IllegalArgumentException} instead of a host.
+         */
+        private String resolvedApiEndpoint(String location) {
+            var generator = new VertexAIClientGenerator(clientConfig());
+            var request = ChatCompletionRequest.builder().model(MODEL).build();
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(location == null ? Map.of() : Map.of("location", location))
+                    .build();
+
+            return VertexAITestClients.apiEndpointOf(generator.generate(config, request));
         }
     }
 }

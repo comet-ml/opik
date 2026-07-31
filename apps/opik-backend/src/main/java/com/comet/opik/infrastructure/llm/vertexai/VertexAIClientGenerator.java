@@ -5,7 +5,6 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.google.auth.oauth2.ServiceAccountCredentials;
-import com.google.cloud.vertexai.Transport;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerationConfig;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
@@ -130,7 +129,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             return builder
                     .setProjectId(credentials.getProjectId())
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
-                    .setTransport(Transport.GRPC)
+                    .setTransport(clientConfig.getVertexAIClient().transport())
                     .build();
 
         } catch (Exception e) {
