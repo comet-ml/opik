@@ -147,7 +147,7 @@ Then confirm traces are arriving in the target workspace.
 Two things worth separating, because it determines how often you touch your MDM:
 
 - **Bootstrap configuration**: workspace, API key, base URL, upstream gateway. Changing these means re-deploying the file.
-- **Cost policies**: model defaults, output caps, denied MCP servers and skills, thinking budgets. These do **not** require an MDM push. The daemon fetches the effective policy for the signed-in user from Opik on startup and on an interval, then applies it to the agent's config.
+- **Cost policies**: model defaults, output caps, denied MCP servers and skills, thinking budgets. These do **not** require an MDM push — you manage them from the dashboard and devices pick them up on their own (see [Roll out cost policies](/cost-intelligence/roll-out-cost-policies)).
 
 So you push this file once, and manage cost policy from the Opik dashboard afterwards.
 

@@ -116,7 +116,7 @@ Delivery notes:
 
 ## Activation
 
-Once the app has launched once, everything else is automatic. On launch it activates the system extension, starts the capture engine, enables the proxy configuration, and registers a login item so capture returns after every reboot. With the profile pre-approving the extension, none of this prompts the user.
+Once the app has launched once, everything else is automatic. On launch it activates the system extension, starts the capture engine, enables the proxy configuration, and registers a login item so capture returns after every reboot. The engine also applies your org's [cost policies](/cost-intelligence/roll-out-cost-policies) to the machine automatically. With the profile pre-approving the extension, none of this prompts the user.
 
 Activation is fail-safe: any error in the chain turns capture back off rather than leaving a half-configured proxy.
 

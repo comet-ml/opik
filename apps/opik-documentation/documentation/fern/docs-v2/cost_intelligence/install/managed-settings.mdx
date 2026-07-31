@@ -24,9 +24,11 @@ This is the fastest path to a working rollout. The trade-off is that it has **no
 
 ## Generate the configuration
 
-You can hand-write the JSON, but the product will build it for you, including any [cost policies](/cost-intelligence/reduce-agent-spend#step-3-apply-it-as-policy) you've already configured.
+The managed settings you deliver here are the **bootstrap**: they register the plugin and point it at your Opik workspace. This is a deploy-once artifact — you won't edit it again to change spend behavior.
 
-In Opik, go to **Cost Intelligence → Organization Policies** and use **Copy settings file**. The generated JSON contains the plugin bootstrap that you can use in the Claude Code admin console.
+Your [cost policies](/cost-intelligence/roll-out-cost-policies) are **not** part of this file. Once the plugin is running, policies sync to devices on their own — the same way whether you install with managed settings, [MDM](/cost-intelligence/install/mdm), or the [macOS app](/cost-intelligence/install/macos-app). You choose an install method for the bootstrap; policy delivery is identical either way, managed live from the dashboard.
+
+Start from the template in the next step, or grab a pre-filled bootstrap snippet from Cost Intelligence's **Home** page before data is flowing (replace the API-key placeholder with a workspace-scoped key).
 
 
 ## Apply it in the admin console
@@ -39,7 +41,7 @@ In [Claude.ai](https://claude.ai), go to **Admin Settings → Claude Code → Ma
 
 ### Paste your configuration
 
-If you generated it above, paste it as-is. Otherwise start from this template:
+Paste the bootstrap snippet from Cost Intelligence, or start from this template:
 
 ```json
 {
@@ -95,6 +97,7 @@ Nothing they have to do. On the next Claude Code launch:
 1. The plugin installs and registers a `SessionStart` hook.
 2. The hook runs `opik-cipx sync`, which is idempotent: it installs an OS supervisor (launchd on macOS, systemd on Linux) so the daemon restarts on crash, starts the daemon if it isn't running, and points Claude Code at the local proxy by setting `ANTHROPIC_BASE_URL` in `~/.claude/settings.json`.
 3. Capture begins. Every subsequent session is picked up automatically.
+4. The daemon also applies your org's [cost policies](/cost-intelligence/roll-out-cost-policies) — Claude Code and Codex alike, with no per-change push.
 
 The proxy binds loopback only and Claude Code talks plain HTTP to it, so no certificate is installed and no TLS is intercepted.
 
