@@ -4439,14 +4439,21 @@ class TraceDAOImpl implements TraceDAO {
      * where the state is dominated by the grouped values rather than by per-aggregate overhead. So the tuple is
      * for correctness; it does not soften the cost profile the gate below exists to avoid.
      *
-     * <p>No further tie-breaker is added, deliberately. {@code ReplacingMergeTree} resolves an equal-{@code ver}
-     * tie by the "no {@code ver}" rule — the most recently inserted row wins — and insertion order is not a column,
-     * so no value-based tie-breaker can reproduce it. Adding one (ordering by the payload tuple, say) would be
-     * deterministic but would deliberately pick a <em>different</em> row than {@code FINAL} precisely in the tie
-     * case, turning an unobserved divergence into a guaranteed one. Empirically the two already agree: over 20
-     * tied versions inserted in scrambled order across multiple parts, and in the adversarial case where the
-     * last-inserted row sorts lowest by value, {@code FINAL} and {@code argMax} selected the same row on every
-     * run at 8 threads — both take the last row seen at the maximum version.
+     * <p><b>Scope of the equivalence.</b> For every key whose latest {@code last_updated_at} is unique, this form
+     * returns exactly the row {@code FINAL} returns. For a key with <em>tied</em> latest versions it returns one of
+     * the tied rows, and <em>which</em> one is not contractually the same row {@code FINAL} would pick: ClickHouse
+     * does not specify {@code argMax}'s tie behaviour, so this is an accepted, bounded difference rather than exact
+     * equivalence. Both forms always return a whole row that was really stored; the difference can only surface on
+     * keys carrying byte-identical {@code last_updated_at} values.
+     *
+     * <p>No tie-breaker is added, because none can close that gap. {@code ReplacingMergeTree} resolves an
+     * equal-{@code ver} tie by the "no {@code ver}" rule — the most recently inserted row wins — and insertion
+     * order is not a column, so no value-based tie-breaker can reproduce it. Adding one (ordering by the payload
+     * tuple, say) would be deterministic but would deliberately pick a different row than {@code FINAL} precisely
+     * in the tie case, converting an unobserved difference into a guaranteed one. Measured on 26.3.16.16 the two
+     * do agree in practice — over 20 tied versions inserted in scrambled order across multiple parts, and in the
+     * adversarial case where the last-inserted row sorts lowest by value, {@code FINAL} and {@code argMax} chose
+     * the same row on every run at 8 threads — but that is observed behaviour, not a guarantee to rely on.
      *
      * <p>Ties are also close to unreachable here. {@code last_updated_at} is {@code DateTime64(6)}, and rows
      * sharing a sort key inside one INSERT are collapsed when the part is written, so a batch that carries the
