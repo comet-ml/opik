@@ -114,4 +114,12 @@ test.describe('Visual Comparison - Opik UI', () => {
     await experimentsPage.waitForExperiment(experimentName());
     await screenshot(page, '06-experiments-page', tableMasks(page));
   });
+
+  test('07: Logs - Spans view', { tag: ['@vcap:traces.logs-spans-view'] }, async ({ page }) => {
+    const logsPage = new LogsPage(page, baseUrl, workspace);
+    await logsPage.goto(projectId);
+    await logsPage.switchToSpans();
+    await logsPage.waitForSpansReady('input-0');
+    await screenshot(page, '07-logs-spans', tableMasks(page));
+  });
 });
