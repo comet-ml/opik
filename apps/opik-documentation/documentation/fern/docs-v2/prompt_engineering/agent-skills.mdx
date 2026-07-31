@@ -27,7 +27,7 @@ You rarely call these by name — describe the task and your agent picks the rig
 | `/opik` | **Reference** — Opik SDK knowledge (tracing, span types, integrations, threads, prompts) plus best practices. Consulted automatically; you rarely invoke it. |
 
 <Note>
-`/explain` reasons two ways. By default it fetches the trace via the SDK and root-causes it **against your code**. With the hosted [Opik MCP server](/mcp-server) connected on Opik Cloud, it can escalate to **Ollie** for workspace-wide investigation across many traces.
+`/explain` runs the investigation itself — the agent fetches the trace (and, for a pattern, a broader set) via the SDK and root-causes it **against your code**. No MCP required. When the hosted [Opik MCP server](/mcp-server) is connected, it can optionally hand off to **Ollie** as an alternative reasoner — a convenience, not a requirement.
 </Note>
 
 ## Using skills

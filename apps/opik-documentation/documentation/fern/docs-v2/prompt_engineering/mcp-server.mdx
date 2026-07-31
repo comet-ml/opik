@@ -365,8 +365,9 @@ reachable through the Opik SDK too. Connect the MCP for what only it gives you:
 - **In-chat tool calls** — your agent acts directly, instead of writing and
   running throwaway scripts.
 - **Governance** — per-user OAuth and audit, rather than a shared API key.
-- **Ollie** — `ask_ollie` is the one capability with no SDK path; it's how
-  skills like `/explain` and `/find` escalate to workspace-wide investigation.
+- **Ollie (optional)** — `ask_ollie` is the one tool with no SDK path: an
+  alternative reasoner. It's a convenience, not a gate — `/explain` and `/find`
+  investigate over SDK-fetched data without it, so nothing is MCP-only.
 
 ## Using the MCP server
 
