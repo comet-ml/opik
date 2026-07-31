@@ -523,18 +523,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     AND ec.optimization_id = ospe.optimization_id
                 LEFT JOIN experiment_durations ed ON ec.experiment_id = ed.experiment_id
                 GROUP BY ec.optimization_id, ec.candidate_id
-            ), best_candidate AS (
+            ), candidate_rollup AS (
                 SELECT
                     optim_id AS optimization_id,
-                    max(weighted_score) AS best_score,
-                    argMax(weighted_duration, weighted_score) AS best_duration,
-                    argMax(per_trace_cost, weighted_score) AS best_cost
-                FROM candidate_metrics
-                WHERE isNotNull(weighted_score)
-                GROUP BY optim_id
-            ), baseline_candidate AS (
-                SELECT
-                    optim_id AS optimization_id,
+                    maxIf(weighted_score, isNotNull(weighted_score)) AS best_score,
+                    argMinIf(weighted_duration, tuple(-weighted_score, earliest_created_at),
+                        isNotNull(weighted_score)) AS best_duration,
+                    argMinIf(per_trace_cost, tuple(-weighted_score, earliest_created_at),
+                        isNotNull(weighted_score)) AS best_cost,
                     argMin(weighted_score, earliest_created_at) AS baseline_score,
                     argMin(weighted_duration, earliest_created_at) AS baseline_duration,
                     argMin(per_trace_cost, earliest_created_at) AS baseline_cost
@@ -555,22 +551,97 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 maxMap(fs.feedback_scores) AS feedback_scores,
                 maxMap(es.experiment_scores) AS experiment_scores,
                 any(bc.best_score) AS best_objective_score,
-                any(blc.baseline_score) AS baseline_objective_score,
+                any(bc.baseline_score) AS baseline_objective_score,
                 any(bc.best_duration) AS best_duration,
                 any(bc.best_cost) AS best_cost,
-                any(blc.baseline_duration) AS baseline_duration,
-                any(blc.baseline_cost) AS baseline_cost,
+                any(bc.baseline_duration) AS baseline_duration,
+                any(bc.baseline_cost) AS baseline_cost,
                 any(oc.total_optimization_cost) AS total_optimization_cost
             FROM optimization_final AS o
             LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
-            LEFT JOIN best_candidate AS bc ON o.id = bc.optimization_id
-            LEFT JOIN baseline_candidate AS blc ON o.id = blc.optimization_id
+            LEFT JOIN candidate_rollup AS bc ON o.id = bc.optimization_id
             LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            ;
+            """;
+
+    /**
+     * Does any optimization in scope have an experiment? Deliberately applies only the direct column filters
+     * and omits the narrowing ones ({@code name}, {@code dataset_deleted}, {@code studio_only}, {@code filters}),
+     * so the optimization set considered here is a superset of {@code optimization_final}. That makes a negative
+     * answer conservative: if this finds nothing, the narrowed set has nothing either.
+     */
+    private static final String HAS_EXPERIMENTS_FOR_DIRECT_FILTERS = """
+            SELECT 1 AS has_experiments
+            FROM experiments
+            WHERE workspace_id = :workspace_id
+            AND optimization_id IN (
+                SELECT id
+                FROM optimizations
+                WHERE workspace_id = :workspace_id
+                <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
+                <if(project_id)>AND project_id = :project_id <endif>
+            )
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /**
+     * The check that selects this projection runs as its own statement, so an experiment inserted between the
+     * two reads leaves the aggregates at these empty-input values for that one response. Reads in this system are
+     * already eventually consistent through replica lag, so this sits inside existing behaviour and self-corrects
+     * on the next request rather than needing a shared read boundary.
+     * <p>
+     * The {@link #FIND} projection for the case where no optimization in scope has an experiment. Every
+     * aggregate in {@link #FIND} is derived from {@code experiments_final}, so with no experiments they all
+     * collapse to their empty-input values and the fifteen-CTE pipeline reads nothing useful. The literals below
+     * reproduce those values and their exact declared types - note {@code total_optimization_cost} is a
+     * non-nullable zero, because {@code sum()} over an empty group returns 0 rather than NULL.
+     */
+    private static final String FIND_WITHOUT_EXPERIMENTS = """
+            WITH optimization_final AS (
+                SELECT
+                    *
+                FROM (
+                    SELECT *
+                    FROM optimizations
+                    WHERE workspace_id = :workspace_id
+                    <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                    <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
+                    <if(id)>AND id = :id <endif>
+                    <if(project_id)>AND project_id = :project_id <endif>
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, dataset_id, id
+                )
+                WHERE 1=1
+                <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
+                <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
+                <if(studio_only)>AND studio_config != ''<endif>
+                <if(filters)>AND <filters><endif>
+            )
+            SELECT
+                o.*,
+                o.id as id,
+                toUInt64(0) AS num_trials,
+                CAST(map(), 'Map(String, Float64)') AS feedback_scores,
+                CAST(map(), 'Map(String, Float64)') AS experiment_scores,
+                CAST(NULL, 'Nullable(Float64)') AS best_objective_score,
+                CAST(NULL, 'Nullable(Float64)') AS baseline_objective_score,
+                CAST(NULL, 'Nullable(Float64)') AS best_duration,
+                CAST(NULL, 'Nullable(Decimal(38, 12))') AS best_cost,
+                CAST(NULL, 'Nullable(Float64)') AS baseline_duration,
+                CAST(NULL, 'Nullable(Decimal(38, 12))') AS baseline_cost,
+                CAST(0, 'Decimal(38, 12)') AS total_optimization_cost
+            FROM optimization_final AS o
+            ORDER BY o.id DESC
+            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -815,8 +886,29 @@ class OptimizationDAOImpl implements OptimizationDAO {
     public Mono<Optimization.OptimizationPage> find(int page, int size,
             @NonNull OptimizationSearchCriteria searchCriteria) {
         return getCount(searchCriteria)
-                .flatMap(totalCount -> find(page, size, totalCount, searchCriteria))
+                .filter(totalCount -> totalCount > 0)
+                .flatMap(totalCount -> hasExperimentsForDirectFilters(searchCriteria)
+                        .flatMap(hasExperiments -> find(page, size, totalCount, searchCriteria, hasExperiments)))
                 .defaultIfEmpty(Optimization.OptimizationPage.empty(page, List.of()));
+    }
+
+    private Mono<Boolean> hasExperimentsForDirectFilters(OptimizationSearchCriteria searchCriteria) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = FilterUtils.getSTWithLogComment(HAS_EXPERIMENTS_FOR_DIRECT_FILTERS,
+                            "has_optimization_experiments", workspaceId, userName, "");
+
+                    bindScopeTemplateParams(template, searchCriteria);
+
+                    Statement statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId);
+
+                    bindScopeQueryParams(searchCriteria, statement);
+
+                    return Flux.from(statement.execute());
+                }))
+                .flatMap(result -> result.map(row -> row.get("has_experiments", Integer.class)))
+                .hasElements();
     }
 
     @Override
@@ -857,36 +949,44 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Mono<Optimization.OptimizationPage> find(int page, int size, long total,
-            OptimizationSearchCriteria searchCriteria) {
-        var template = TemplateUtils.newST(FIND);
-
-        bindTemplateParams(template, searchCriteria);
-
+            OptimizationSearchCriteria searchCriteria, boolean hasExperiments) {
         var offset = (page - 1) * size;
 
-        template.add("limit", size);
-        template.add("offset", offset);
-
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = hasExperiments
+                            ? TemplateUtils.newST(FIND)
+                            : FilterUtils.getSTWithLogComment(FIND_WITHOUT_EXPERIMENTS,
+                                    "find_optimizations_without_experiments", workspaceId, userName, "");
+
+                    bindTemplateParams(template, searchCriteria);
+
+                    template.add("limit", size);
+                    template.add("offset", offset);
+
                     Statement statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
                             .bind("limit", size)
                             .bind("offset", offset);
 
-                    bindQueryParams(searchCriteria, statement, true);
+                    // entity_type is only declared by FIND; the fast path omits the feedback-score CTEs that use it,
+                    // and binding a parameter the rendered query does not contain fails the statement.
+                    bindQueryParams(searchCriteria, statement, hasExperiments);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(this::mapToDto)
                 .collectList()
                 .map(optimizations -> new Optimization.OptimizationPage(page, optimizations.size(), total,
                         optimizations, List.of()));
     }
 
-    private void bindTemplateParams(ST template, OptimizationSearchCriteria searchCriteria) {
-
-        Optional.ofNullable(searchCriteria.datasetDeleted())
-                .ifPresent(datasetDeleted -> template.add("dataset_deleted", datasetDeleted.toString()));
+    /**
+     * The subset of criteria that select which optimizations are in scope by identity rather than by attribute.
+     * Shared with {@link #HAS_EXPERIMENTS_FOR_DIRECT_FILTERS}, which declares only these placeholders - binding a
+     * parameter the rendered query does not contain fails the statement, so the two must stay in step.
+     */
+    private void bindScopeTemplateParams(ST template, OptimizationSearchCriteria searchCriteria) {
 
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
@@ -895,15 +995,23 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .filter(ids -> !ids.isEmpty())
                 .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
 
+        Optional.ofNullable(searchCriteria.projectId())
+                .ifPresent(projectId -> template.add("project_id", projectId));
+    }
+
+    private void bindTemplateParams(ST template, OptimizationSearchCriteria searchCriteria) {
+
+        bindScopeTemplateParams(template, searchCriteria);
+
+        Optional.ofNullable(searchCriteria.datasetDeleted())
+                .ifPresent(datasetDeleted -> template.add("dataset_deleted", datasetDeleted.toString()));
+
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
 
         Optional.ofNullable(searchCriteria.studioOnly())
                 .filter(Boolean.TRUE::equals)
                 .ifPresent(studioOnly -> template.add("studio_only", "true"));
-
-        Optional.ofNullable(searchCriteria.projectId())
-                .ifPresent(projectId -> template.add("project_id", projectId));
 
         Optional.ofNullable(searchCriteria.filters())
                 .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.OPTIMIZATION))
@@ -913,10 +1021,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .ifPresent(entityType -> template.add("entity_type", EntityType.TRACE.getType()));
     }
 
-    private void bindQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement, boolean isFindQuery) {
-
-        Optional.ofNullable(searchCriteria.datasetDeleted())
-                .ifPresent(datasetDeleted -> statement.bind("dataset_deleted", datasetDeleted));
+    private void bindScopeQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement) {
 
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
@@ -925,11 +1030,19 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .filter(ids -> !ids.isEmpty())
                 .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds));
 
-        Optional.ofNullable(searchCriteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-
         Optional.ofNullable(searchCriteria.projectId())
                 .ifPresent(projectId -> statement.bind("project_id", projectId.toString()));
+    }
+
+    private void bindQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement, boolean isFindQuery) {
+
+        bindScopeQueryParams(searchCriteria, statement);
+
+        Optional.ofNullable(searchCriteria.datasetDeleted())
+                .ifPresent(datasetDeleted -> statement.bind("dataset_deleted", datasetDeleted));
+
+        Optional.ofNullable(searchCriteria.name())
+                .ifPresent(name -> statement.bind("name", name));
 
         Optional.ofNullable(searchCriteria.filters())
                 .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.OPTIMIZATION));
