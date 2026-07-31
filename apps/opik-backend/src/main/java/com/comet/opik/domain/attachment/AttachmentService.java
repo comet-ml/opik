@@ -66,7 +66,7 @@ public interface AttachmentService {
 
     Mono<Long> delete(DeleteAttachmentsRequest request);
 
-    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID containerId);
 
     /**
      * Get existing attachments for a specific entity as AttachmentInfo objects.
@@ -257,12 +257,12 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
-    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
-        if (entityIds.isEmpty()) {
+    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, Set<UUID> entityIds, UUID containerId) {
+        if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(0L);
         }
 
-        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds, containerId)
                 .flatMap(attachments -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     Set<String> keys = attachments.stream()
@@ -271,7 +271,7 @@ class AttachmentServiceImpl implements AttachmentService {
 
                     return Mono.fromRunnable(() -> fileService.deleteObjects(keys));
                 }))
-                .then(attachmentDAO.deleteByEntityIds(entityType, entityIds));
+                .then(attachmentDAO.deleteByEntityIds(entityType, entityIds, containerId));
     }
 
     private List<Attachment> enhanceWithDownloadUrl(List<Attachment> attachments, AttachmentSearchCriteria criteria,
@@ -447,7 +447,7 @@ class AttachmentServiceImpl implements AttachmentService {
         if (entityIds.isEmpty()) {
             return Mono.just(false);
         }
-        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds, null)
                 .map(list -> !list.isEmpty());
     }
 
@@ -458,7 +458,7 @@ class AttachmentServiceImpl implements AttachmentService {
         if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(List.of());
         }
-        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds);
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds, null);
     }
 
     @Override
@@ -468,7 +468,7 @@ class AttachmentServiceImpl implements AttachmentService {
             return Mono.just(0L);
         }
 
-        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds, null)
                 .flatMap(attachments -> {
                     // Filter to only auto-stripped attachments
                     List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils

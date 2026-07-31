@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   aggregateCandidates,
   convertOptimizationVariableFormat,
+  restorePromptVariableFormat,
   checkIsTestSuite,
   getOptimizationDefaultConfigByProvider,
   extractKwargsKeysFromPython,
@@ -981,5 +982,96 @@ describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
     ) as LLMAnthropicConfigsType;
 
     expect(config.temperature).toBeUndefined();
+  });
+});
+
+describe("restorePromptVariableFormat", () => {
+  it("restores single-brace variables in a message array", () => {
+    expect(
+      restorePromptVariableFormat([
+        { role: "system", content: "You are helpful." },
+        { role: "user", content: "Answer {question} using {context}." },
+      ]),
+    ).toEqual([
+      { role: "system", content: "You are helpful." },
+      { role: "user", content: "Answer {{question}} using {{context}}." },
+    ]);
+  });
+
+  it("leaves already-doubled variables untouched", () => {
+    expect(
+      restorePromptVariableFormat([
+        { role: "user", content: "Answer {{question}}" },
+      ]),
+    ).toEqual([{ role: "user", content: "Answer {{question}}" }]);
+  });
+
+  // The reason this helper uses an identifier-shaped pattern rather than the
+  // broad `[^{}]+` of convertOptimizationVariableFormat: prompts commonly embed
+  // literal braces, and mangling them would corrupt what the user reads.
+  it("does not touch literal JSON or code braces", () => {
+    const content =
+      'Return JSON like {"name": "x"} and never write { return x; } here.';
+    expect(restorePromptVariableFormat([{ role: "user", content }])).toEqual([
+      { role: "user", content },
+    ]);
+  });
+
+  it("preserves the single-prompt {name: messages} wrapper shape", () => {
+    expect(
+      restorePromptVariableFormat({
+        "chat-prompt": [{ role: "user", content: "Hi {name}" }],
+      }),
+    ).toEqual({
+      "chat-prompt": [{ role: "user", content: "Hi {{name}}" }],
+    });
+  });
+
+  it("preserves a { messages: [...] } wrapper and other message fields", () => {
+    expect(
+      restorePromptVariableFormat({
+        messages: [{ role: "user", content: "Hi {name}", name: "u1" }],
+      }),
+    ).toEqual({
+      messages: [{ role: "user", content: "Hi {{name}}", name: "u1" }],
+    });
+  });
+
+  it("restores variables inside multimodal text parts only", () => {
+    expect(
+      restorePromptVariableFormat([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Describe {image_alt}" },
+            { type: "image_url", image_url: { url: "http://x/y{z}.png" } },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Describe {{image_alt}}" },
+          { type: "image_url", image_url: { url: "http://x/y{z}.png" } },
+        ],
+      },
+    ]);
+  });
+
+  it("handles a bare string prompt and non-prompt values", () => {
+    expect(restorePromptVariableFormat("Answer {question}")).toBe(
+      "Answer {{question}}",
+    );
+    expect(restorePromptVariableFormat(null)).toBeNull();
+    expect(restorePromptVariableFormat("-")).toBe("-");
+  });
+
+  it("supports dotted and hyphenated variable names", () => {
+    expect(
+      restorePromptVariableFormat([
+        { role: "user", content: "{user.name} and {user-input}" },
+      ]),
+    ).toEqual([{ role: "user", content: "{{user.name}} and {{user-input}}" }]);
   });
 });

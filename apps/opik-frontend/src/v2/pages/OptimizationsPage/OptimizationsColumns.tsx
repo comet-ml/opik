@@ -14,8 +14,7 @@ import ItemSourceCell, {
 } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import OptimizationStatusCell from "@/v2/pages/OptimizationsPage/OptimizationStatusCell";
 import {
-  OptimizationPassRateCell,
-  OptimizationAccuracyCell,
+  OptimizationObjectiveScoreCell,
   OptimizationLatencyCell,
   OptimizationCostCell,
   OptimizationTotalCostCell,
@@ -91,21 +90,22 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     size: 120,
   },
   {
-    id: "pass_rate",
-    label: "Pass rate",
-    type: COLUMN_TYPE.numberDictionary,
-    size: DEFAULT_METRIC_COLUMN_WIDTH,
-    accessorFn: (row) => row.best_objective_score,
-    cell: OptimizationPassRateCell as never,
-  },
-  {
+    // Merged objective-score column (was the separate "Pass rate" + "Accuracy"
+    // pair, each of which rendered "-" for the run type it did not handle). The
+    // id stays "accuracy" deliberately: it is already present in existing users'
+    // saved selected-columns/order state, so the merged column stays visible and
+    // keeps its position without bumping SELECTED_COLUMNS_KEY and resetting
+    // everyone's column customizations. The now-unused "pass_rate" id simply
+    // no longer matches a column and is ignored.
     id: "accuracy",
-    label: "Accuracy",
+    label: "Best score",
     type: COLUMN_TYPE.numberDictionary,
     size: DEFAULT_METRIC_COLUMN_WIDTH,
     accessorFn: (row) =>
-      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
-    cell: OptimizationAccuracyCell as never,
+      (row.experiment_scores?.length ?? 0) > 0
+        ? row.best_objective_score
+        : getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+    cell: OptimizationObjectiveScoreCell as never,
   },
   {
     id: "latency",
@@ -151,7 +151,6 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "metric",
   "created_at",
   "status",
-  "pass_rate",
   "accuracy",
   "latency",
   "cost",
@@ -166,7 +165,6 @@ export const DEFAULT_COLUMNS_ORDER: string[] = [
   "metric",
   "created_at",
   "status",
-  "pass_rate",
   "accuracy",
   "latency",
   "cost",

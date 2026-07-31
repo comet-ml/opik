@@ -17,17 +17,18 @@
 # enabled through the rollback so no delete is lost.
 #
 # POST-CUTOVER WRITES: stages B/C promote the frozen pre-cutover backup back to live `traces`, so traces WRITTEN to the
-# successor after cutover_start stop being live. They are NOT destroyed — the successor is parked as traces_local_v2 and
-# retained until finalize.sh, so they can be recovered from there during the soak — but the live table no longer serves
-# them. This is inherent to promoting a point-in-time backup and cannot be "fixed" (auto-merging the successor's writes
-# would re-import the very data the rollback is discarding); --accept-post-cutover-write-loss makes the operator
-# acknowledge it before the promote.
+# successor after cutover_start stop being live. They are NOT destroyed — the successor is parked as
+# traces_post_rollback_backup and retained until finalize.sh, so they can be recovered from there during the soak — but
+# the live table no longer serves them. This is inherent to promoting a point-in-time backup and cannot be "fixed"
+# (auto-merging the successor's writes would re-import the very data the rollback is discarding);
+# --accept-post-cutover-write-loss makes the operator acknowledge it before the promote.
 #
 # SAFETY: the stages are mutually exclusive and each lives in its OWN file, so no single file mixes a TRUNCATE with an
 # EXCHANGE/DROP — running any file does exactly one stage. Before running, this asserts the live `traces` topology matches
-# the requested stage and aborts otherwise, so a wrong-stage run cannot destroy data. No data-bearing table is dropped;
-# every stage ends in the canonical state (traces = original data live, traces_local_v2 = successor data parked). The
-# parked backup is dropped only later by finalize.sh, after the soak.
+# the requested stage and aborts otherwise, so a wrong-stage run cannot destroy data. No data-bearing table is dropped.
+# Stages B/C end with traces = original data live and the successor parked as traces_post_rollback_backup (a retained
+# backup that finalize.sh later recycles into an empty traces_local_v2); stage A discards the empty traces_local_v2
+# shadow and leaves traces untouched.
 #
 # Connection: clickhouse-client env vars (CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD).
 
@@ -79,12 +80,12 @@ if [[ ( "$STAGE" == "B" || "$STAGE" == "C" || "$REVERSE_REPLAY_ONLY" == "1" ) &&
     exit 2
 fi
 # Stages B/C promote the frozen pre-cutover backup, so writes the successor accepted after cutover_start stop being live
-# (they are preserved in the parked traces_local_v2 until finalize.sh, recoverable during the soak). This is unavoidable
-# when promoting a point-in-time backup — require the operator to acknowledge it, unlike a precondition they could fix.
+# (they are preserved in the parked traces_post_rollback_backup until finalize.sh, recoverable during the soak). This is
+# unavoidable when promoting a point-in-time backup — require the operator to acknowledge it, not a precondition they fix.
 if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$ACCEPT_WRITE_LOSS" != "1" ]]; then
     echo "ERROR: rollback --stage $STAGE requires --accept-post-cutover-write-loss. Promoting the frozen backup makes" >&2
     echo "       traces written to the successor after cutover_start non-live. They are NOT destroyed — the successor is" >&2
-    echo "       parked as traces_local_v2 until finalize.sh, so recover them from there during the soak — but the live" >&2
+    echo "       parked as traces_post_rollback_backup until finalize.sh, so recover them during the soak — but the live" >&2
     echo "       table will no longer serve them. Re-run with the flag once you accept this." >&2
     exit 2
 fi
@@ -166,11 +167,13 @@ run_file() {
     clickhouse-client --database "$DATABASE" --multiquery --query "$sql"
 }
 
-# Recovery mode: re-apply only the reverse-replay against the current live `traces`. The promote (stage B/C) already ran,
-# so `traces` is the restored original MergeTree; the replay is idempotent, so re-running it just re-masks any deletes it
-# missed. Assert `traces` is present and NOT Distributed (a lightweight DELETE is unsupported on Distributed, and the
-# replay only makes sense on the restored original — a Distributed `traces` means the wrap is still up; roll it back with
-# stage C first).
+# Recovery mode: re-apply only the reverse-replay against the current live `traces`, for a stage B/C run whose promote
+# succeeded but whose reverse-replay was interrupted. It is idempotent, so re-running just re-masks any deletes it missed.
+# CRITICAL: 000004_rollback_reverse_replay.sql carries NO resurrection guard — correct ONLY against the restored ORIGINAL
+# (where a bridged id is present as its pre-cutover version). Against the live SUCCESSOR (post-EXCHANGE, pre-rollback,
+# also a non-Distributed MergeTree) it would unconditionally mask ids deleted-then-recreated after cutover_start — silent
+# deletion of live rows. So assert the post-promote shape, not just "non-Distributed": `traces` is the ORIGINAL schema
+# (Nullable end_time) AND the successor is parked as traces_post_rollback_backup (only a completed promote creates it).
 if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
     [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for --reverse-replay-only" >&2; exit 2; }
     reverse_replay_engine="$(traces_engine traces)"
@@ -180,6 +183,14 @@ if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
         echo "       original MergeTree. Roll the wrap back first with --stage C." >&2
         exit 1
     }
+    if [[ "$(traces_endtime_type traces)" != Nullable* || -z "$(traces_engine traces_post_rollback_backup)" ]]; then
+        echo "ERROR: --reverse-replay-only requires the post-rollback state — 'traces' = the restored ORIGINAL (Nullable" >&2
+        echo "       end_time) with the successor parked as 'traces_post_rollback_backup'. The reverse-replay carries no" >&2
+        echo "       resurrection guard, so run against the live successor (EXCHANGE ran but no rollback did) it would" >&2
+        echo "       mask deleted-then-recreated rows — silent data loss. Roll back with --stage B (or --stage C after the" >&2
+        echo "       wrap) first; only use --reverse-replay-only if that stage's promote succeeded but its replay did not." >&2
+        exit 1
+    fi
     echo "NOTE: re-applying the reverse deletion replay only (no table swap) for deletes since cutover_start" >&2
     echo "      ($CUTOVER_START). Idempotent; use this after a stage B/C run whose reverse-replay was interrupted." >&2
     run_file 000004_rollback_reverse_replay.sql
@@ -191,13 +202,17 @@ assert_topology
 
 if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "NOTE: promoting the frozen backup now. Traces the successor accepted after cutover_start ($CUTOVER_START) will" >&2
-    echo "      stop being live; recover them from the parked traces_local_v2 (kept until finalize.sh) if needed." >&2
+    echo "      stop being live; recover them from the parked traces_post_rollback_backup (kept until finalize.sh) if needed." >&2
+    echo "NOTE: the promote is a single ON CLUSTER RENAME of the live 'traces' — synchronous across the shard's replicas, but" >&2
+    echo "      with a brief sub-second cross-replica read skew as it propagates (a read on a lagging replica sees the" >&2
+    echo "      pre-rollback 'traces'). On a multi-replica cluster run this in a maintenance moment / with reads quiesced, as for the wrap." >&2
 fi
 
 case "$STAGE" in
     A)
         run_file 000004_rollback_stage_a_discard_shadow.sql
-        echo "Stage A done: shadow discarded. Live 'traces' was untouched."
+        echo "Stage A done: shadow 'traces_local_v2' discarded (now empty); live 'traces' was untouched."
+        echo "Nothing to soak or finalize — re-run the backfill to retry the cutover, or stop here."
         ;;
     B)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }
@@ -213,5 +228,8 @@ case "$STAGE" in
         ;;
 esac
 
-echo "Now in the canonical state: traces = original data (live), traces_local_v2 = successor data (parked)."
-echo "Verify (README 'Verifying the migration'), then drop the parked backup with finalize.sh once healthy."
+if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
+    echo "Now in the canonical state: traces = original data (live), traces_post_rollback_backup = successor data (parked)."
+    echo "Verify (README 'Verifying the migration'), then run finalize.sh once healthy — it recycles the backup into an"
+    echo "empty traces_local_v2 (restoring the pre-cutover shadow), the one irreversible step."
+fi

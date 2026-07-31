@@ -3,7 +3,7 @@ import { TestSuitesPage } from '@e2e/pom/test-suites.page';
 import { TestSuiteItemsPage } from '@e2e/pom/test-suite-items.page';
 import { ensureModelAvailable } from '@e2e/pom/model-availability';
 
-test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, () => {
+test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites'] }, () => {
   /**
    * Test A — SDK-create + SDK-run + UI-verify.
    *
@@ -11,7 +11,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
    * LLM-judged assertions. The SDK-run uses task_output="PASS" so the LLM
    * judge's verdict is mechanically predictable (3/3 pass).
    */
-  test('SDK-seeded suite renders + SDK-run produces a 3/3 pass experiment', async ({
+  test('SDK-seeded suite renders + SDK-run produces a 3/3 pass experiment', { tag: ['@cap:test-suites.list-suites', '@cap:test-suites.create-suite-sdk', '@cap:test-suites.view-suite-items', '@cap:test-suites.run-suite-sdk', '@cap:test-suites.pass-rate-display', '@cap:test-suites.global-assertions'] }, async ({
     testSuite,
     sdkClient,
     project,
@@ -83,7 +83,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
    * Exercises the FE write path (create-suite dialog + add-item flow) and the
    * end-to-end Playground "Open in Playground" → run path.
    */
-  test('UI-created suite is visible via SDK; UI-run via Playground produces outputs', async ({
+  test('UI-created suite is visible via SDK; UI-run via Playground produces outputs', { tag: ['@cap:test-suites.create-suite-ui', '@cap:test-suites.run-suite-playground'] }, async ({
     project,
     sdkClient,
     backendClient,
