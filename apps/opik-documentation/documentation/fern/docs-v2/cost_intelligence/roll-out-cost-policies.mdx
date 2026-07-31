@@ -75,6 +75,17 @@ Through the product: if the setting is unlocked, the developer sets their own va
 
 By hand: editing a managed value directly in `~/.claude/settings.json` does not stick. While a policy is set, its values are re-applied on every check, so a hand-edit is corrected within minutes, not at some future rollout. The lock controls what the developer can do in the product, not the file — the file is kept at the resolved policy value either way.
 
+<Note>
+  **Policies are defaults, not hard enforcement.** They're applied to the user
+  settings Claude Code reads, and Claude Code lets higher-precedence settings
+  win over those — a project's own `.claude/settings.json`, or a settings file
+  passed at session start. A developer who sets a value there overrides the
+  policy for that project or session; Cost Intelligence manages the user
+  settings and does not touch those layers. For most teams a visible baseline
+  is enough; if you need values a developer cannot override at all, that's a
+  device-management concern beyond these policies.
+</Note>
+
 ## When you clear a setting
 
 Clearing a setting in the dashboard removes it from devices conservatively: a device deletes the key only while it still holds the exact value the policy applied. Anything else is left in place, so clearing a policy never destroys a value the policy didn't put there. The next-session rule applies here too — clear the org model, and each developer is back on the agent's own default from their next session.
