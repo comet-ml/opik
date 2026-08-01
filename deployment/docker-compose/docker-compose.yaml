@@ -3,7 +3,7 @@ name: opik
 services:
   mysql:
     image: mysql:8.4.2
-    pull_policy: always
+    pull_policy: missing
     hostname: mysql
     environment:
       MYSQL_ROOT_PASSWORD: opik
@@ -20,7 +20,7 @@ services:
 
   redis:
     image: redis:7.2.4-alpine3.19
-    pull_policy: always
+    pull_policy: missing
     hostname: redis
     command: redis-server --requirepass opik
     healthcheck:
@@ -44,7 +44,7 @@ services:
       "
   clickhouse:
     image: clickhouse/clickhouse-server:26.3.16.16-alpine
-    pull_policy: always
+    pull_policy: missing
     hostname: clickhouse
     environment:
       CLICKHOUSE_DB: opik
@@ -75,7 +75,7 @@ services:
 
   zookeeper:
     image: zookeeper:3.9.4
-    pull_policy: always
+    pull_policy: missing
     hostname: zookeeper
     user: root
     entrypoint:
@@ -108,7 +108,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-03-12T18-04-18Z
-    pull_policy: always
+    pull_policy: missing
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
@@ -124,20 +124,15 @@ services:
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
-    pull_policy: always
+    pull_policy: missing
     depends_on:
       - minio
     entrypoint: >
-      /bin/sh -c "
-      sleep 10s;
-      /usr/bin/mc alias set s3 http://minio:9000 ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE} ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} --api S3v4 ;
-      /usr/bin/mc mb --ignore-existing s3/public;
-      /usr/bin/mc anonymous set download s3/public/;
-      "
+      /bin/sh -c " sleep 10s; /usr/bin/mc alias set s3 http://minio:9000 ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE} ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} --api S3v4 ; /usr/bin/mc mb --ignore-existing s3/public; /usr/bin/mc anonymous set download s3/public/; "
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
-    pull_policy: ${OPIK_BACKEND_PULL_POLICY:-always}
+    pull_policy: ${OPIK_BACKEND_PULL_POLICY:-missing}
     profiles:
       - backend
       - opik
@@ -239,7 +234,7 @@ services:
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     # change to 'build' when developing python-backend
-    pull_policy: ${PYTHON_BACKEND_PULL_POLICY:-always}
+    pull_policy: ${PYTHON_BACKEND_PULL_POLICY:-missing}
     profiles:
       - backend
       - opik
@@ -292,7 +287,7 @@ services:
   # multi-arch CPU-only image built from source.
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
-    pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-always}
+    pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-missing}
     profiles:
       - guardrails
     build:
@@ -342,7 +337,7 @@ services:
 
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: missing
     profiles:
       - opik
       - local-be-fe
@@ -365,7 +360,7 @@ services:
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
-    pull_policy: ${OPIK_FRONTEND_PULL_POLICY:-always}
+    pull_policy: ${OPIK_FRONTEND_PULL_POLICY:-missing}
     profiles:
       - opik
       - local-be
@@ -375,11 +370,11 @@ services:
       dockerfile: Dockerfile
       args:
         OPIK_VERSION: ${OPIK_VERSION:-latest}
-    #   cache_from:
-    #     - alpine:latest
-    #     - nginx:1.29.3-alpine-otel
-    #     - node:20.19.5-alpine3.22
-    #     - type=local,src=./.cache
+      #   cache_from:
+      #     - alpine:latest
+      #     - nginx:1.29.3-alpine-otel
+      #     - node:20.19.5-alpine3.22
+      #     - type=local,src=./.cache
       # cache_to:
       #   - type=local,dest=./.cache
     hostname: frontend
@@ -410,7 +405,7 @@ services:
       # NGINX_EXTRA_ACCESS_LOG: access_log syslog:server=otel-collector:5140 logger-json;
       # NGINX_EXTRA_ERROR_LOG: error_log syslog:server=otel-collector:5140 error;
 
-  # Jaeger - receives traces via OTLP
+      # Jaeger - receives traces via OTLP
   jaeger:
     image: jaegertracing/all-in-one:latest
     profiles:
@@ -418,8 +413,8 @@ services:
     hostname: jaeger
     ports:
       - "16686:16686" # UI
-      - "14317:4317"   # OTLP gRPC
-      - "14318:4318"   # OTLP HTTP
+      - "14317:4317" # OTLP gRPC
+      - "14318:4318" # OTLP HTTP
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     healthcheck:
@@ -433,7 +428,7 @@ services:
     profiles:
       - opik-otel
     hostname: otel-collector
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
       - ./otel_data:/otel_data
