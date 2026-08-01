@@ -37,6 +37,10 @@ class FeedbackScoreModel(models.FeedbackScoreModel):
     pass
 
 
-@dataclasses.dataclass
-class AttachmentModel(models.AttachmentModel):
-    pass
+# Aliased, not subclassed. Attachments reach tests via the parent emulator
+# (BackendEmulatorMessageProcessor takes super().trace_trees), so they are always
+# base ``models.AttachmentModel`` instances. Dataclass __eq__ compares only
+# same-class instances, so a subclass here never matches — and because it fails
+# before field comparison, the ANY_BUT_NONE that tests use for the temp file_path
+# is never consulted.
+AttachmentModel = models.AttachmentModel
