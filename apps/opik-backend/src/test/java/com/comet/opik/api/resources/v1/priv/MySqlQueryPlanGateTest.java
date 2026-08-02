@@ -129,21 +129,21 @@ class MySqlQueryPlanGateTest {
     }
 
     /**
-     * Drives one read path and asserts it contributed at least one <b>new</b> captured SELECT, so every endpoint is
-     * vetted independently: a global non-empty check alone would stay green if a single route stopped hitting MySQL
-     * while the others still captured queries. Growth is asserted rather than clearing the capture between paths
-     * because {@link CapturingSqlLogger} deduplicates by rendered SQL — clearing would re-capture the queries shared
-     * across endpoints and inflate the vetted set, and a per-path non-empty check on a cleared capture would fail on
-     * correct code whenever two routes render the same SQL.
+     * Drives one read path and asserts it executed at least one MySQL read, so every endpoint is vetted independently:
+     * a global check alone would stay green if a single route stopped hitting MySQL while the others still captured
+     * queries. Asserts on {@link CapturingSqlLogger#readsObserved()} rather than on the size of the captured plan set,
+     * because the latter deduplicates by rendered SQL: a route whose SELECT an earlier route already captured adds no
+     * entry, so a growth check there would fail on correct code depending on the order the paths run in. The plan of
+     * such a shared SELECT is still vetted — it was captured once, by whichever route reached it first.
      */
     private void getPageAndAssertItWasVetted(String path) {
-        int capturedBefore = capturingSqlLogger.captured().plansByRenderedSql().size();
+        long readsBefore = capturingSqlLogger.readsObserved();
 
         getPage(path);
 
-        assertThat(capturingSqlLogger.captured().plansByRenderedSql().size())
-                .as("read endpoint %s must contribute at least one new MySQL SELECT to the gate", path)
-                .isGreaterThan(capturedBefore);
+        assertThat(capturingSqlLogger.readsObserved())
+                .as("read endpoint %s must execute at least one MySQL read for the gate to vet", path)
+                .isGreaterThan(readsBefore);
     }
 
     private void getPage(String path) {

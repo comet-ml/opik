@@ -13,6 +13,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * JDBI {@link SqlLogger} that captures the {@code EXPLAIN FORMAT=JSON} plan of every read query rendered while it is
@@ -35,6 +36,7 @@ public class CapturingSqlLogger implements SqlLogger {
 
     private final Map<String, String> plansByRenderedSql = new ConcurrentHashMap<>();
     private final Set<String> failedSql = ConcurrentHashMap.newKeySet();
+    private final AtomicLong readsObserved = new AtomicLong();
 
     /**
      * Result of a capture session.
@@ -57,6 +59,11 @@ public class CapturingSqlLogger implements SqlLogger {
         if (!isReadQuery(renderedSql)) {
             return;
         }
+
+        // Counted before the dedup check so it reflects every read query actually executed, not just the ones that were
+        // new. Callers use it to tell "this code path ran no MySQL read" apart from "it ran one already captured".
+        readsObserved.incrementAndGet();
+
         if (plansByRenderedSql.containsKey(renderedSql) || failedSql.contains(renderedSql)) {
             return;
         }
@@ -136,8 +143,19 @@ public class CapturingSqlLogger implements SqlLogger {
         return new CapturedQueries(Map.copyOf(plansByRenderedSql), Set.copyOf(failedSql));
     }
 
+    /**
+     * Total read queries seen since construction, counted before deduplication. Unlike
+     * {@link CapturedQueries#plansByRenderedSql()}, this grows for every read query executed even when its SQL was
+     * already captured, so it is order-independent: a code path that legitimately re-runs SQL an earlier path already
+     * captured still moves this counter.
+     */
+    public long readsObserved() {
+        return readsObserved.get();
+    }
+
     public void clear() {
         plansByRenderedSql.clear();
         failedSql.clear();
+        readsObserved.set(0);
     }
 }
