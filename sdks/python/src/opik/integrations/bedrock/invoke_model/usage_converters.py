@@ -80,7 +80,9 @@ def nova_to_bedrock_usage(nova_usage: Dict[str, Any]) -> Dict[str, Any]:
     cache counters (cacheReadInputTokens, cacheWriteInputTokens) and any field
     Bedrock adds later reach the span instead of being dropped here.
 
-    totalTokens is derived only when Bedrock did not report it.
+    totalTokens stays derived from the input and output counts the caller settled
+    on, so it cannot disagree with them when the stream aggregator overrides those
+    counts from amazon-bedrock-invocationMetrics.
     """
     input_tokens = nova_usage.get("inputTokens", 0)
     output_tokens = nova_usage.get("outputTokens", 0)
@@ -89,5 +91,5 @@ def nova_to_bedrock_usage(nova_usage: Dict[str, Any]) -> Dict[str, Any]:
         **nova_usage,
         "inputTokens": input_tokens,
         "outputTokens": output_tokens,
-        "totalTokens": nova_usage.get("totalTokens", input_tokens + output_tokens),
+        "totalTokens": input_tokens + output_tokens,
     }

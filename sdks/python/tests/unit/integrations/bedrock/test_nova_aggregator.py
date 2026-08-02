@@ -76,15 +76,22 @@ class TestNovaStreamAggregation:
         assert usage["outputTokens"] == 9
         assert usage["cacheReadInputTokens"] == 4096
 
-    def test_aggregate_chunks__total_tokens_reported__reported_value_is_kept(self):
+    def test_aggregate_chunks__metrics_override_reported_total__total_follows_overrides(
+        self,
+    ):
+        # Nova reports totalTokens alongside its own pre-override counts. Preserving
+        # it would leave original_usage.totalTokens disagreeing with the input and
+        # output actually logged on the span once invocationMetrics wins.
         chunks = _stream(
-            reported_usage={"inputTokens": 12, "outputTokens": 7, "totalTokens": 31},
-            invocation_metrics={},
+            reported_usage={"inputTokens": 12, "outputTokens": 7, "totalTokens": 19},
+            invocation_metrics={"inputTokenCount": 15, "outputTokenCount": 9},
         )
 
         usage = chunks_aggregator.aggregate_chunks_to_dataclass(chunks).usage
 
-        assert usage["totalTokens"] == 31
+        assert usage["inputTokens"] == 15
+        assert usage["outputTokens"] == 9
+        assert usage["totalTokens"] == 24
 
     def test_aggregate_chunks__total_tokens_absent__total_is_derived(self):
         chunks = _stream(
