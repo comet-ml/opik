@@ -323,10 +323,12 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
     (`7171` by default).
   </Step>
   <Step title="Render the job manifest">
-    Put the restore settings in their own values file:
+    The backup server has to be running in the release already. The command below renders **only**
+    the Job, so nothing under `backupServer` reaches the cluster through it — if the server is not
+    enabled yet, roll it out with `helm upgrade` first:
 
     ```yaml
-    # restore-values.yaml
+    # part of your release values
     clickhouse:
       backupServer:
         enabled: true
@@ -336,6 +338,13 @@ The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSecon
           S3_BUCKET: YOURBUCKET
           S3_PATH: YOURPATH
           RESTORE_SCHEMA_ON_CLUSTER: cluster  # so the schema is restored on every replica
+    ```
+
+    Then put the restore settings, which are only needed at render time, in their own values file:
+
+    ```yaml
+    # restore-values.yaml
+    clickhouse:
       backup:
         restore:
           createJob: true
@@ -421,9 +430,12 @@ kubectl exec chi-opik-clickhouse-cluster-0-0-0 -c clickhouse-backup -n <namespac
   -- curl -s localhost:7171/backup/list/remote
 ```
 
-Two `df` readings a few minutes apart give the throughput and a usable ETA. Prefer `df` over
-`du -sb` on the backup directory: `du` walks every file in a multi-terabyte tree and adds
-significant I/O to the volume the restore is already saturating.
+Two `df` readings a few minutes apart give a rough throughput and ETA, but treat that as a coarse
+capacity check rather than restore progress: `df` reports the whole volume, so merges, system tables
+and any other writes land in the same delta, and the total can pass the backup's `data_size` before
+the restore is done. The per-table `download_data` lines above are the authoritative signal. Prefer
+`df` over `du -sb` on the backup directory either way: `du` walks every file in a multi-terabyte tree
+and adds significant I/O to the volume the restore is already saturating.
 
 <Note>
 The `/backup/actions` history is kept in memory. It is empty if the backup-server container restarted since the restore began, so this is a live-progress tool only — after the fact there is no local record. If you scrape metrics, `kubelet_volume_stats_used_bytes` for the ClickHouse PVC is the durable equivalent and needs no `exec`.
