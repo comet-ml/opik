@@ -396,6 +396,106 @@ class WorkspacesResourceTest {
     }
 
     @Nested
+    @DisplayName("Authored (online-scoring) feedback scores metrics")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AuthoredFeedbackScoresMetricsTest {
+
+        // Regression for OPIK-7693: the writer routes feedback scores to authored_feedback_scores when an author is
+        // present, which is the case for every score produced by the SDK/UI path (the request user is the author).
+        // Before this fix the workspace-level summary, daily, and daily-by-project queries read only the legacy
+        // feedback_scores table, so any deployment that exclusively created scores through the SDK/UI saw permanently
+        // empty workspace metrics. These tests write scores through createFeedbackScores (the same path the existing
+        // empty-data tests use) and assert the deprecated summary endpoint reports them.
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsSummary_includesAuthoredScores(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            List<String> names = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+            Instant startTime = Instant.now().minus(Duration.ofMinutes(10));
+            Instant endTime = Instant.now();
+
+            // currentScores lands in authored_feedback_scores (the scoreBatchOf writer sets author from the request
+            // user); leaving the prior window empty means the summary reports current = avg(score), previous = null.
+            var currentScores = createFeedbackScores(projectName, names, apiKey, workspaceName,
+                    startTime.plus(Duration.ofMinutes(5)));
+
+            var actualMetricsSummary = workspaceResourceClient.getMetricsSummary(
+                    WorkspaceMetricsSummaryRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId) : null)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedMetricsSummary = names.stream()
+                    .map(name -> WorkspaceMetricsSummaryResponse.Result.builder()
+                            .name(name)
+                            .current(currentScores.get(name))
+                            .previous(null)
+                            .build())
+                    .toList();
+
+            assertThat(actualMetricsSummary.results())
+                    .usingRecursiveComparison()
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "current", "previous")
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedMetricsSummary);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        void metricsDaily_includesAuthoredScores(boolean withProjectIds) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            String projectName2 = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var projectId2 = projectResourceClient.createProject(projectName2, apiKey, workspaceName);
+
+            String name = UUID.randomUUID().toString();
+
+            var project1Scores = createFeedbackScores(projectName, List.of(name), apiKey, workspaceName);
+            var project2Scores = createFeedbackScores(projectName2, List.of(name), apiKey, workspaceName);
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            var actualMetrics = workspaceResourceClient.getMetricsDaily(
+                    WorkspaceMetricRequest.builder()
+                            .intervalStart(startTime)
+                            .intervalEnd(endTime)
+                            .projectIds(withProjectIds ? Set.of(projectId, projectId2) : null)
+                            .name(name)
+                            .build(),
+                    apiKey, workspaceName);
+
+            var expectedMetricsDaily = withProjectIds
+                    ? prepareMetricsDailyPerProjects(project1Scores.values(), project2Scores.values(), name, projectId,
+                            projectId2, WorkspacesResourceTest.this::getAvg)
+                    : prepareMetricsDailyPerWorkspace(project1Scores.values(), project2Scores.values(), name,
+                            WorkspacesResourceTest.this::getAvg);
+
+            assertThat(actualMetrics.results())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::closeToEpsilonComparator, Double.class)
+                    .isEqualTo(expectedMetricsDaily);
+        }
+    }
+
+    @Nested
     @DisplayName("Costs metrics")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CostsMetricsTest {

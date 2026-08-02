@@ -77,12 +77,34 @@ public interface WorkspaceMetricsDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
+    // Workspace feedback-score metrics must read both feedback_scores (legacy) and authored_feedback_scores
+    // (where online-scoring rows land because the writer routes by author presence, see FeedbackScoreDAO). The
+    // dedup chain is shared with ProjectMetricsDAO's pattern; project and name predicates vary per query, so each
+    // query constant is composed with the helper-provided prefix injected via String.format. The prefix itself uses
+    // StringTemplate conditionals so the rendered query still respects the per-request <if(project_ids)> / <if(name)>
+    // decisions made at render time.
+    private static final String SUMMARY_FEEDBACK_SCORES_PREFIX = WorkspaceFeedbackScoresQueries
+            .traceFeedbackScoresPrefix(
+                    "<if(project_ids)> AND project_id IN :project_ids<endif>",
+                    "");
+
+    private static final String DAILY_BY_PROJECT_FEEDBACK_SCORES_PREFIX = WorkspaceFeedbackScoresQueries
+            .traceFeedbackScoresPrefix(
+                    " AND project_id IN :project_ids",
+                    " AND name = :name");
+
+    private static final String DAILY_FEEDBACK_SCORES_PREFIX = WorkspaceFeedbackScoresQueries
+            .traceFeedbackScoresPrefix(
+                    "",
+                    " AND name = :name");
+
     private static final String GET_FEEDBACK_SCORES_SUMMARY = """
+            %s
             SELECT
                 AVGIf(fs.value, t.id >= :id_start AND t.id \\<= :id_end) AS current,
                 AVGIf(fs.value, t.id >= :id_prior_start AND t.id \\< :id_start) AS previous,
                 fs.name
-            FROM feedback_scores fs final
+            FROM feedback_scores_final fs
             JOIN (
                 SELECT
                     id
@@ -95,10 +117,9 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
             ) t ON t.id = fs.entity_id
             WHERE workspace_id = :workspace_id
-                <if(project_ids)> AND project_id IN :project_ids <endif>
-                AND entity_type = 'trace'
             GROUP BY fs.name;
-            """;
+            """
+            .formatted(SUMMARY_FEEDBACK_SCORES_PREFIX);
 
     private static final String GET_COSTS_SUMMARY = """
             SELECT
@@ -115,11 +136,12 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             """;
 
     private static final String GET_FEEDBACK_SCORES_DAILY_BY_PROJECT = """
-            WITH feedback_scores_daily AS (
+            %s,
+            feedback_scores_daily AS (
                 SELECT fs.project_id AS project_id,
                        toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
                        if(COUNT(1) = 0, NULL, avg(fs.value)) AS value
-                FROM feedback_scores fs final
+                FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         id,
@@ -132,10 +154,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                       AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
-                WHERE workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                  AND entity_type = 'trace'
-                  AND name = :name
                 GROUP BY fs.project_id, bucket
                 ORDER BY fs.project_id, bucket
                 WITH FILL
@@ -150,13 +168,15 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             FROM feedback_scores_daily
             GROUP BY project_id
             ;
-            """;
+            """
+            .formatted(DAILY_BY_PROJECT_FEEDBACK_SCORES_PREFIX);
 
     private static final String GET_FEEDBACK_SCORES_DAILY = """
-            WITH feedback_scores_daily AS (
+            %s,
+            feedback_scores_daily AS (
                 SELECT toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
                        if(COUNT(1) = 0, NULL, avg(fs.value)) AS value
-                FROM feedback_scores fs final
+                FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         id,
@@ -168,9 +188,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                       AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                       AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
-                WHERE workspace_id = :workspace_id
-                  AND entity_type = 'trace'
-                  AND name = :name
                 GROUP BY bucket
                 ORDER BY bucket
                 WITH FILL
@@ -184,7 +201,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 groupArray(tuple(bucket, value)) AS data
             FROM feedback_scores_daily
             ;
-            """;
+            """
+            .formatted(DAILY_FEEDBACK_SCORES_PREFIX);
 
     private static final String GET_COSTS_DAILY_BY_PROJECT = """
             WITH costs_daily AS (
