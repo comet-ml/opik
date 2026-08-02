@@ -35,13 +35,10 @@ public class PlanShapeBaseline {
             if (is == null) {
                 throw new IllegalStateException("Plan-shape baseline resource not found: '%s'".formatted(resourcePath));
             }
-            List<Entry> entries = JsonUtils.getMapper().readValue(is, ENTRIES_TYPE);
+            List<Entry> entries = JsonUtils.readValue(is, ENTRIES_TYPE);
             return new PlanShapeBaseline(entries.stream().map(Entry::fingerprint).collect(Collectors.toSet()));
-        } catch (UncheckedIOException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new UncheckedIOException(new IOException(
-                    "Failed to load plan-shape baseline: '%s'".formatted(resourcePath), e));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

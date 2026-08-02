@@ -56,7 +56,8 @@ class MySqlQueryPlanGateTest {
     // tables: the analytics tables (traces, spans, dataset_items, experiments) live in ClickHouse and are out of scope
     // for the MySQL gate.
     private static final Set<String> FULL_SCAN_SENSITIVE_TABLES = Set.of(
-            "datasets", "prompts", "prompt_versions", "feedback_definitions", "projects");
+            "datasets", "prompts", "prompt_versions", "feedback_definitions", "projects",
+            "automation_rules", "automation_rule_evaluators", "automation_rule_projects");
 
     // MySQL-backed list endpoints. Each renders the SELECT of a DAO the gate must vet.
     private static final List<String> READ_PATHS = List.of(
@@ -71,6 +72,12 @@ class MySqlQueryPlanGateTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
+    /**
+     * Shared container + app bootstrap: starts Redis/MySQL/ClickHouse/Zookeeper, runs the migrations and builds the
+     * Dropwizard app. The gate needs a booted app backed by a real MySQL to install the {@link CapturingSqlLogger} on
+     * the app's {@link Jdbi} and to run {@code EXPLAIN} on the live connection, so it reuses the same fixture as the
+     * resource ITs rather than duplicating the container wiring inline.
+     */
     private final TestContainersSetup setup = new TestContainersSetup();
 
     @RegisterApp
@@ -101,13 +108,9 @@ class MySqlQueryPlanGateTest {
     @Test
     @DisplayName("🐬 no MySQL read path introduces a materialized/temporary-table plan or a tenant-table full scan")
     void mySqlReadPathsHaveNoPlanShapeRegressions() {
-        READ_PATHS.forEach(this::getPage);
+        READ_PATHS.forEach(this::getPageAndAssertItWasVetted);
 
         var captured = capturingSqlLogger.captured();
-
-        assertThat(captured.plansByRenderedSql())
-                .as("the gate must capture SELECTs; an empty capture means the read paths did not exercise MySQL")
-                .isNotEmpty();
 
         assertThat(captured.failedSql())
                 .as("every captured SELECT must be EXPLAIN-able; an un-vetted query would pass the gate by omission")
@@ -123,6 +126,24 @@ class MySqlQueryPlanGateTest {
         assertThat(netNew)
                 .withFailMessage(() -> renderFailure(netNew))
                 .isEmpty();
+    }
+
+    /**
+     * Drives one read path and asserts it contributed at least one <b>new</b> captured SELECT, so every endpoint is
+     * vetted independently: a global non-empty check alone would stay green if a single route stopped hitting MySQL
+     * while the others still captured queries. Growth is asserted rather than clearing the capture between paths
+     * because {@link CapturingSqlLogger} deduplicates by rendered SQL — clearing would re-capture the queries shared
+     * across endpoints and inflate the vetted set, and a per-path non-empty check on a cleared capture would fail on
+     * correct code whenever two routes render the same SQL.
+     */
+    private void getPageAndAssertItWasVetted(String path) {
+        int capturedBefore = capturingSqlLogger.captured().plansByRenderedSql().size();
+
+        getPage(path);
+
+        assertThat(capturingSqlLogger.captured().plansByRenderedSql().size())
+                .as("read endpoint %s must contribute at least one new MySQL SELECT to the gate", path)
+                .isGreaterThan(capturedBefore);
     }
 
     private void getPage(String path) {
