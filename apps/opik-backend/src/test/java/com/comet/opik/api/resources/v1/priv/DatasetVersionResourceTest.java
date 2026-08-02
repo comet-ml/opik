@@ -77,6 +77,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -1794,6 +1795,126 @@ class DatasetVersionResourceTest {
                 assertThat(item.data()).containsKey("updated");
                 assertThat(item.data()).containsKey("newField");
             }
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Insert Classification Counts")
+    class InsertClassificationCounts {
+
+        private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
+
+        @Test
+        @DisplayName("Success: Re-inserting existing items counts them as modified, not added")
+        void insertItems__whenItemsAlreadyExistInVersion__thenCountedAsModifiedNotAdded() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(5))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded, DatasetVersion::itemsModified)
+                    .containsExactly(5, 5, 0);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // Re-insert 3 of the existing items (updates) alongside 2 brand-new ones
+            var mixedItems = new ArrayList<DatasetItem>();
+            v1Items.stream().limit(3)
+                    .map(item -> DatasetItem.builder()
+                            .id(item.id())
+                            .datasetItemId(item.datasetItemId())
+                            .source(item.source())
+                            .data(Map.of("updated", JsonUtils.getJsonNodeFromString("true")))
+                            .build())
+                    .forEach(mixedItems::add);
+            mixedItems.addAll(generateDatasetItems(2));
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(mixedItems)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.id()).isEqualTo(version1.id());
+            assertThat(latestVersion)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded, DatasetVersion::itemsModified)
+                    .containsExactly(7, 7, 3);
+        }
+
+        @Test
+        @DisplayName("Success: Duplicate stable id within one batch increments added by one")
+        void insertItems__whenBatchContainsDuplicateStableId__thenCountedOnce() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(2))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(2);
+
+            // Same stable id appearing twice in one batch must count as a single new item.
+            // The stable id must be supplied via `id`: `datasetItemId` is READ_ONLY on the write view
+            // and is derived from `id` server-side.
+            var duplicatedId = idGenerator.generateId();
+            var duplicateBatch = List.of(
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
+                            .build(),
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
+                            .build());
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(duplicateBatch)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.id()).isEqualTo(version1.id());
+            assertThat(latestVersion)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded, DatasetVersion::itemsModified)
+                    .containsExactly(3, 3, 0);
+        }
+
+        @Test
+        @DisplayName("Success: Multi-batch insert into existing version accumulates counts correctly")
+        void insertItems__whenMultipleBatchesIntoExistingVersion__thenCountsAccumulate() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(10))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+
+            for (int i = 0; i < 3; i++) {
+                datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                        .datasetId(datasetId)
+                        .items(generateDatasetItems(10))
+                        .build(), TEST_WORKSPACE, API_KEY);
+            }
+
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(1);
+
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.id()).isEqualTo(version1.id());
+            assertThat(latestVersion)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded, DatasetVersion::itemsModified)
+                    .containsExactly(40, 40, 0);
         }
     }
 
