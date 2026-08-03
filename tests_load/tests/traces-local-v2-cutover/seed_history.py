@@ -5,9 +5,8 @@ back-dated rows, and the backfill slices the source by `created_at`. Each row ge
 UUIDv7 `id` minted at the same instant, so `id_at` (the destination weekly partition) matches `created_at` — the shape
 real accumulated history has. `--bad-ids` optionally adds rows whose `id` is minted in the far future (year ~2201, the
 litellm-bug shape) while `created_at` stays real, to exercise the far-future-partition path. The rows are legitimate;
-only the id's embedded timestamp is future. Since OPIK-7456 the successor's `id_at` is a `DateTime64` and it partitions by
-the honest Date32 weekly Monday, so a 2201 id lands in its own honest ~2201 weekly partition — isolated from real recent
-weeks, no server setting involved.
+only the id's embedded timestamp is future. The successor's `id_at` is a `DateTime64` partitioned by the honest Date32
+weekly Monday, so a 2201 id lands in its own honest ~2201 weekly partition, isolated from real recent weeks.
 
 Every migrated column is populated with VARIED, realistic values so the fidelity compare (verify.sh) actually exercises
 each column — an empty column would match on both sides even if the copy dropped it. Timestamps are written at true
@@ -175,9 +174,9 @@ def main(project, weeks, per_week, bad_ids, batch, workspace_id, project_id):
                 {k: per_week_counts[k] for k in sorted(per_week_counts)})
     if bad_ids:
         LOGGER.info(
-            "Plus %d far-future-id rows (litellm UUIDv7 ~2201) to exercise the far-future-partition path. Since OPIK-7456 "
-            "the successor's DateTime64 id_at partitions by the honest Date32 weekly Monday, so look for them in their "
-            "own honest ~2201 weekly partition.", bad_ids)
+            "Plus %d far-future-id rows (litellm UUIDv7 ~2201) to exercise the far-future-partition path. The successor's "
+            "DateTime64 id_at partitions by the honest Date32 weekly Monday, so look for them in their own honest ~2201 "
+            "weekly partition.", bad_ids)
 
 
 if __name__ == "__main__":

@@ -305,7 +305,7 @@ customer data — a valid UUIDv7 that merely carries a future timestamp — so t
 ([OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456): `toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))`),
 and its `id_at` is a `DateTime64` (honest to 2299), so each such row lands in its **own honest ~2201 (`22010601`-shaped)
 weekly partition**, isolated from real recent weeks — a per-week `DROP PARTITION` / retention / tiering operation never
-touches them by accident, and vice versa. No server setting is involved. The extra partitions are bounded (few distinct
+touches them by accident, and vice versa. The extra partitions are bounded (few distinct
 far-future timestamps → few extra weeks) and harmless (they never tier to cold and are skipped by time-bounded reads).
 
 Quantify them in the **source** before the cutover so their scale is known. The source `traces.id_at` is a 32-bit

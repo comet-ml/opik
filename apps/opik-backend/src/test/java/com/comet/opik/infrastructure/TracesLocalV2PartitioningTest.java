@@ -13,6 +13,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -40,8 +41,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Exercises the traces_local_v2 partition design (migration 000114) end to end: the {@code id_at DateTime64(0)
  * MATERIALIZED UUIDv7ToDateTime(toUUID(id))} → {@code PARTITION BY toYYYYMMDD(toDate32(id_at) -
  * toIntervalDay(toDayOfWeek(id_at, 1)))} chain. The key computes the honest Monday of {@code id_at}'s week in
- * {@code Date32}, so it never wraps a far-future id the way a 16-bit {@code toMonday} {@code Date} would, and needs no
- * server setting. Behaviors pinned as permanent regression guards:
+ * {@code Date32}, so it never wraps a far-future id the way a 16-bit {@code toMonday} {@code Date} would. Behaviors
+ * pinned as permanent regression guards:
  *
  * <ul>
  *   <li><b>Partition stability across upserts.</b> {@code id_at} is computed by ClickHouse from the immutable {@code id},
@@ -242,7 +243,7 @@ class TracesLocalV2PartitioningTest {
 
     /**
      * For far-future dates the {@code Date32} expression stays honest, whereas {@code toMonday}'s 16-bit {@code Date}
-     * wraps into a bogus recent year unless {@code enable_extended_results_for_datetime_functions} is on. Asserts the
+     * wraps into a bogus recent year. Asserts the
      * <em>exact</em> expected Monday as {@code YYYYMMDD}, computed in Java as an independent oracle ({@code toMonday}
      * can't be the oracle here — it wraps). Asserting the exact week, not just the year and Monday-alignment, catches an
      * off-by-one-week regression that would still land on some Monday in the right year.
@@ -326,25 +327,18 @@ class TracesLocalV2PartitioningTest {
     }
 
     private String partitionKeyTypeFor(String workspaceId, UUID projectId, UUID id) {
-        return transactionTemplateAsync.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                SELECT toTypeName(_partition_value) AS key_type
-                FROM traces_local_v2
-                WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND id = :id
-                LIMIT 1
-                """)
-                .bind("workspace_id", workspaceId)
-                .bind("project_id", projectId)
-                .bind("id", id)
-                .execute())
-                .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("key_type", String.class)))))
-                .block();
+        return partitionInfoFor(workspaceId, projectId, id).getRight();
     }
 
     private String partitionIdFor(String workspaceId, UUID projectId, UUID id) {
+        return partitionInfoFor(workspaceId, projectId, id).getLeft();
+    }
+
+    private Pair<String, String> partitionInfoFor(String workspaceId, UUID projectId, UUID id) {
         return transactionTemplateAsync.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                SELECT _partition_id AS partition_id
+                SELECT
+                    _partition_id AS partition_id,
+                    toTypeName(_partition_value) AS key_type
                 FROM traces_local_v2
                 WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -355,7 +349,8 @@ class TracesLocalV2PartitioningTest {
                 .bind("project_id", projectId)
                 .bind("id", id)
                 .execute())
-                .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("partition_id", String.class)))))
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> Pair.of(
+                        row.get("partition_id", String.class), row.get("key_type", String.class))))))
                 .block();
     }
 
