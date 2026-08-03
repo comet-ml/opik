@@ -3326,6 +3326,17 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
+     * Selects the {@code <if(distributed_wrap)>traces_local<else>traces<endif>} branch on a mutation template. The
+     * flag decision lives only here and in {@link #tracesDistributedWrapEnabled()}; every ST-based trace mutation adds
+     * its table through this method so the branches cannot drift apart.
+     */
+    private void addTracesMutationTable(ST template) {
+        if (tracesDistributedWrapEnabled()) {
+            template.add("distributed_wrap", true);
+        }
+    }
+
+    /**
      * Binds input, output, metadata, and their slim versions (input_slim, output_slim) to a statement.
      * Centralizes the JSON conversion and binding logic for consistency across single and batch inserts.
      *
@@ -3493,9 +3504,7 @@ class TraceDAOImpl implements TraceDAO {
                     var template = getSTWithLogComment(DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS, "delete_traces",
                             workspaceId,
                             userName, "pairs_size=%s".formatted(batch.size()));
-                    if (tracesDistributedWrapEnabled()) {
-                        template.add("distributed_wrap", true);
-                    }
+                    addTracesMutationTable(template);
 
                     var projectIds = batch.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
                     var traceIds = batch.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
@@ -5016,9 +5025,7 @@ class TraceDAOImpl implements TraceDAO {
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null, "",
                 workspaceIds.size());
-        if (tracesDistributedWrapEnabled()) {
-            template.add("distributed_wrap", true);
-        }
+        addTracesMutationTable(template);
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {

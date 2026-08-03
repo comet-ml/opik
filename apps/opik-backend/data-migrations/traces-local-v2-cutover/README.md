@@ -495,6 +495,11 @@ Pick the stage by how far the cutover got (`cutover_start` is the value `exchang
   --confirm-retention-paused --accept-post-cutover-write-loss`. Drops the `Distributed` wrapper, then one atomic
   `RENAME` promotes the original (`traces_pre_cutover_backup`) back to `traces` and parks the successor as
   `traces_post_rollback_backup`, then the reverse replay. (Guarded: aborts unless `traces` is `Distributed`.)
+  **Set `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` back to `false` before backends resume** — Stage C
+  makes `traces` a `MergeTree` again and parks `traces_local`, so a still-`true` flag would send `TraceDAO` deletes at
+  the missing `traces_local`. This is the inverse of the flip that enabled the wrap (see "HARD PREREQUISITE for the
+  wrap"); it applies to every deferred `--wrap-only` topology, not the EXCHANGE-only default (where the flag was never
+  set).
 
 > **Multi-replica note (production is multi-replica).** Stages B and C promote via a single `ON CLUSTER` RENAME of the
 > **live** `traces`. It runs synchronously across the shard's replicas — the client blocks until each applies it, or fails
