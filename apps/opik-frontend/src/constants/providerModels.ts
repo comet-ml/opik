@@ -2591,8 +2591,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.5 Flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+      label: "Gemini 3.5 Flash Lite",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      label: "Gemini 3.1 Flash Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+      label: "Gemini 3.1 Flash Lite Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO,
