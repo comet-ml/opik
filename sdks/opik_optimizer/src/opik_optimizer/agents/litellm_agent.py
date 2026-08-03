@@ -7,6 +7,7 @@ owning optimizer for telemetry and budgeting.
 """
 
 from ..api_objects import chat_prompt
+from ..core import llm_calls as _llm_calls
 from ..utils import throttle as _throttle
 from typing import Any
 import json
@@ -231,8 +232,6 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         # `_hidden_params["response_cost"]` — so read both, otherwise evaluation
         # spend never reaches the optimizer's llm_cost_total (OPIK-7521).
         try:
-            from ..core import llm_calls as _llm_calls
-
             response._opik_cost = _llm_calls._extract_response_cost(response)
             response._opik_usage = _llm_calls._extract_response_usage(response)
         except Exception:

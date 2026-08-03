@@ -736,16 +736,21 @@ _usage_lock = threading.Lock()
 
 
 def reset_usage(optimizer: BaseOptimizer) -> None:
-    optimizer.llm_call_counter = 0
-    optimizer.llm_call_tools_counter = 0
-    optimizer.llm_cost_total = 0.0
-    optimizer.llm_token_usage_total = {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-    }
-    optimizer._llm_cost_recorded = False
-    optimizer._llm_usage_recorded = False
+    # Under the same lock as the accumulators: a reset that interleaves with an
+    # in-flight add would either drop that increment or, worse, clear the
+    # "reported" flag just after it was set, turning a real cost into "no
+    # provider reported one" for the rest of the run.
+    with _usage_lock:
+        optimizer.llm_call_counter = 0
+        optimizer.llm_call_tools_counter = 0
+        optimizer.llm_cost_total = 0.0
+        optimizer.llm_token_usage_total = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+        optimizer._llm_cost_recorded = False
+        optimizer._llm_usage_recorded = False
 
 
 def increment_llm_call(optimizer: BaseOptimizer) -> None:
