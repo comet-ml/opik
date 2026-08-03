@@ -35,6 +35,17 @@ import lombok.Builder;
  * far more ids than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split
  * into chunks of this size. Bounded to a positive value so a misconfiguration fails startup rather than silently
  * disabling capture, and to a sensible ceiling that keeps the per-statement bind count in the safe range.</p>
+ *
+ * <p>{@code tracesDistributedWrapEnabled}: the final sharding-readiness step of the traces cutover wraps {@code traces}
+ * as a {@code Distributed} table over the {@code traces_local} shard. A {@code Distributed} table supports
+ * {@code SELECT} and {@code INSERT} but <b>not</b> mutations ({@code DELETE FROM <distributed>} → code 36;
+ * {@code ALTER ... DELETE} → code 48), so once the wrap is live every mutation path must target the local shard.
+ * Left {@code false} at deploy time (and while {@code traces} is still a {@code MergeTree}, where deletes work
+ * directly); set {@code true} in lockstep with applying the {@code Distributed} wrap
+ * ({@code exchange_and_wrap.sh --with-wrap} / {@code --wrap-only}). While {@code true}, {@code TraceDAO} routes its
+ * delete/retention mutations to {@code traces_local} while reads and inserts continue through the Distributed
+ * {@code traces}. <b>General rule:</b> any future mutation / {@code ALTER} / {@code OPTIMIZE} path — or Liquibase
+ * migration — that targets {@code traces} must likewise target {@code traces_local} once this flag is on.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -42,5 +53,6 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean spanColumnsNonNullable,
         boolean traceDeletionEventsCaptureEnabled,
         boolean spanDeletionEventsCaptureEnabled,
-        @Min(1) @Max(2_000) int deletionEventsInsertBatchSize) {
+        @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
+        boolean tracesDistributedWrapEnabled) {
 }

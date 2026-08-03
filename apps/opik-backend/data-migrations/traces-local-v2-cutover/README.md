@@ -159,12 +159,16 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > - `DELETE FROM <distributed>` → `Code 36 BAD_ARGUMENTS: DELETE query is not supported`
 > - `ALTER TABLE <distributed> DELETE` → `Code 48 NOT_IMPLEMENTED: Distributed doesn't support mutations`
 >
-> So the moment the wrap is applied, **both** the product's delete-by-id (`TraceDAO.DELETE_BY_ID`) **and** the retention
-> sweep (`DELETE_FOR_RETENTION`) start returning 500 against `traces`. This is prep work that must ship **before** the
-> wrap: point those DAO paths at `traces_local` (reads and inserts can stay on the Distributed `traces`). The `EXCHANGE`
-> alone is the data cutover and leaves `traces` a `MergeTree` where deletes still work — which is why the wrap is
-> **opt-in** (`--with-wrap`) and the default stops after the EXCHANGE. Defer the wrap until the sharding-aware DAO
-> ships. The wrap is the sharding-readiness layer, not the cutover.
+> So the moment the wrap is applied, **both** the product's delete-by-id path **and** the retention
+> sweep (`DELETE_FOR_RETENTION` / `deleteForRetentionBounded`) start returning 500 against `traces`. This is prep work
+> that shipped **before** the wrap (OPIK-7455): `TraceDAO` renders its mutation table through a single toggle,
+> `databaseAnalyticsDataModel.tracesDistributedWrapEnabled`. Set it **`true` in lockstep with applying the wrap** so those
+> deletes run against `traces_local`; reads and inserts stay on the Distributed `traces`. While it is `false` (the deploy
+> default, and correct while `traces` is still a `MergeTree`) the deletes target `traces` directly. **General rule:** any
+> future mutation / `ALTER` / `OPTIMIZE` path — or Liquibase migration — that touches `traces` must likewise switch to
+> `traces_local` under this flag. The `EXCHANGE` alone is the data cutover and leaves `traces` a `MergeTree` where deletes
+> still work — which is why the wrap is **opt-in** (`--with-wrap`) and the default stops after the EXCHANGE. Defer the
+> wrap until the retarget flag is wired into the deploy. The wrap is the sharding-readiness layer, not the cutover.
 >
 > **Applying the deferred wrap later:** once the sharding-aware DAO has shipped, run
 > `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance --confirm-daos-retargeted` — it runs the settle

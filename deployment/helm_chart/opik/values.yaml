@@ -716,6 +716,9 @@ databaseAnalyticsDataModel:
   spanDeletionEventsCaptureEnabled: false
   # Rows per INSERT into the deletion_events_local bridge.
   deletionEventsInsertBatchSize: 1000
+  # Turn true in lockstep with applying the Distributed wrap, so trace delete/retention mutations target
+  # traces_local (a Distributed traces rejects mutations). Leave false while traces is still a MergeTree.
+  tracesDistributedWrapEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
