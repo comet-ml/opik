@@ -270,8 +270,8 @@ mutation; `000002` / `000004` note how to bound it by partition if it is ever la
 ## Why slice by `created_at` (and not `id` or workspace)
 
 The backfill reads 100% of the table regardless of the slice column — the slice only decides how the work is *batched*,
-and it does **not** decide where a row lands on the destination: that is always `toMonday(id_at)`, derived from the row's
-`id`, independent of the slice. Three forces pick the slice column, and `created_at` is the only one that satisfies all:
+and it does **not** decide where a row lands on the destination: that is always the honest weekly Monday of `id_at`,
+derived from the row's `id`, independent of the slice. Three forces pick the slice column, and `created_at` is the only one that satisfies all:
 
 - **Source read efficiency.** The source `traces` has a **minmax skip index on `created_at`** (migration 000088), so each
   week prunes granules cheaply. It has **no `id` skip index**, and `id` is the *trailing* primary-key column

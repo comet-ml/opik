@@ -13,28 +13,34 @@
 -- as a 32-bit DateTime, wrapped into a past year) and compresses best.
 --
 -- PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))): toMonday / toStartOfWeek return a
--- 16-bit Date (max 2149) that wraps far-future ids into a plausible recent week, and only stop wrapping under the global
--- enable_extended_results_for_datetime_functions setting — which also changes toStartOfInterval and breaks the metrics
--- API, so it is not usable. This Date32 arithmetic (the Monday is the day minus its 0-based weekday, computed entirely in
--- Date32) yields the identical Monday as toMonday across the in-range calendar but never wraps, needs no setting, and via
--- toYYYYMMDD is a UInt32 so the partition id stays a human-readable YYYYMMDD like 20250303 (legible in ZooKeeper paths,
--- part directory names and system.parts). The expression is pinned by TracesLocalV2PartitioningTest. The unchanged
--- toMonday(id_at) read/retention predicates still prune: each is paired with an authoritative id-range and prunes parts
--- via the id_at minmax ClickHouse keeps for the partition-key columns, independent of the key expression itself.
--- (toMonday(id_at) does still wrap for a far-future id_at, so a toMonday window derived from an id SET spanning present
--- and far-future can invert and drop rows — the read/delete layer covers that with id-range-authoritative filters plus
--- an unbounded fallback, OPIK-7483; a new query deriving a toMonday window from an id set needs the same.)
+-- 16-bit Date (1970..2149) that wraps at BOTH ends — a far-future id (litellm ~2201) forward into a plausible recent
+-- week, and an epoch id_at backward to ~2149 (UUIDv7ToDateTime returns 1970-01-01 for a non-v7 id — a v4/nil UUID, no
+-- throw — whose ISO Monday 1969-12-29 underflows the Date min; non-v7 ids are commoner than litellm ones). toMonday only
+-- stops wrapping under the global enable_extended_results_for_datetime_functions setting, which also changes
+-- toStartOfInterval and breaks the metrics API, so it is not usable. This Date32 arithmetic (the Monday is the day minus
+-- its 0-based weekday, entirely in Date32, range 1900..2299) equals toMonday across the in-range calendar except the four
+-- epoch-week days, where it is more correct (1969-12-29 vs toMonday's 2149-06-04 underflow); it never wraps — out-of-range
+-- ids saturate (a beyond-2299 id lands in 22991225, not a real year) — needs no setting, and via toYYYYMMDD is a UInt32
+-- so the partition id stays a human-readable YYYYMMDD like 20250303 (legible in ZooKeeper paths, part directory names and
+-- system.parts). The expression is pinned by TracesLocalV2PartitioningTest. The unchanged toMonday(id_at) read/retention
+-- predicates still prune: each is paired with an authoritative id-range and prunes parts via the id_at minmax ClickHouse
+-- keeps for the partition-key columns, independent of the key expression itself.
+-- (toMonday(id_at) still wraps for an out-of-range id_at — far-future, or epoch from a non-v7 id — so a toMonday window
+-- derived from an id SET spanning normal and wrapped can invert and drop rows; the read/delete layer covers that with
+-- id-range-authoritative filters plus an unbounded fallback, OPIK-7483, and a new such query site needs the same.)
 --
 -- id_at is the PARTITION BY input, and ClickHouse forbids ALTER of a key column, so the table is dropped and recreated.
 -- traces_local_v2 is empty in every install (the cutover that populates it runs manually, after this migration, and
--- renames it away). The DROP carries SETTINGS max_table_size_to_drop = 1 (bytes) so ClickHouse atomically refuses it —
--- rather than silently dropping data — if the table is ever unexpectedly non-empty: 0 means unlimited (the value 000017
--- uses to force-allow large drops), and 1 is the smallest threshold that still refuses any non-empty table (an empty
--- table is 0 bytes). The DROP is SYNC so the ZooKeeper replica path is released before the recreate reuses it.
+-- renames it away). The DROP is IF EMPTY so ClickHouse refuses it — rather than silently dropping data — if the table is
+-- ever unexpectedly non-empty (row-exact; max_table_size_to_drop = 0 disables the byte-size guard, matching 000023 /
+-- 000039). Like the byte-size guard it replaces, IF EMPTY is a per-replica check — which suffices here because the table
+-- is empty on every replica pre-cutover; the cluster-aware live-empty check (max rows over clusterAllReplicas) is
+-- finalize.sh's job at the irreversible swap, not this metadata recreate's. The DROP is SYNC so the ZooKeeper replica
+-- path is released before the recreate reuses it.
 --
 -- Every other column matches 000101 with the 000106 + 000107 codec refinements folded in (they ALTERed the old table and
 -- do not re-run here); the set is pinned by TracesLocalV2BenchmarkTest#everyTracesLocalV2ColumnUsesItsIntendedCodec.
-DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 1;
+DROP TABLE IF EXISTS IF EMPTY ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}'
 (

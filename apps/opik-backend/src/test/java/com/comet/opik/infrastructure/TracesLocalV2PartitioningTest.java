@@ -59,7 +59,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li><b>Honest far-future isolation.</b> A legitimate row whose UUIDv7 carries a far-future timestamp lands in its own
  *   distinct, honest weekly partition, never mixed with a real recent week.</li>
  *   <li><b>Week-expression correctness.</b> The {@code Date32} Monday equals {@code toMonday} across the in-range
- *   calendar and stays an honest Monday in the true year for far-future dates, independent of the datetime setting.</li>
+ *   calendar and stays honest where {@code toMonday} wraps — both far-future ids and the epoch week a non-v7 id lands
+ *   in — independent of the datetime setting.</li>
  * </ul>
  *
  * <p>Runs directly against ClickHouse via {@link TransactionTemplateAsync} over the test container's connection factory
@@ -242,15 +243,16 @@ class TracesLocalV2PartitioningTest {
     }
 
     /**
-     * For far-future dates the {@code Date32} expression stays honest, whereas {@code toMonday}'s 16-bit {@code Date}
-     * wraps into a bogus recent year. Asserts the
-     * <em>exact</em> expected Monday as {@code YYYYMMDD}, computed in Java as an independent oracle ({@code toMonday}
-     * can't be the oracle here — it wraps). Asserting the exact week, not just the year and Monday-alignment, catches an
+     * Where {@code toMonday}'s 16-bit {@code Date} wraps, the {@code Date32} expression stays honest — at both extremes:
+     * far-future ids (litellm ~2201) that {@code toMonday} folds into a recent week, and the epoch week it underflows to
+     * ~2149, reachable by any non-v7 {@code id} (a v4 or nil UUID), for which {@code UUIDv7ToDateTime} returns
+     * {@code 1970-01-01}. Asserts the <em>exact</em> expected Monday as {@code YYYYMMDD} against a Java oracle
+     * ({@code toMonday} can't be the oracle — it wraps), pinning both ends of the {@code Date32} window and catching an
      * off-by-one-week regression that would still land on some Monday in the right year.
      */
     @ParameterizedTest(name = "honest week is the exact Monday of {0}''s week")
-    @ValueSource(strings = {"2160-06-01", "2201-06-01", "2250-06-01", "2298-06-01"})
-    void honestWeekExpressionStaysHonestForFarFuture(String date) {
+    @ValueSource(strings = {"1970-01-01", "2160-06-01", "2201-06-01", "2250-06-01", "2298-06-01"})
+    void honestWeekExpressionStaysHonestWhereToMondayWraps(String date) {
         var expectedMonday = LocalDate.parse(date).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         assertThat(weekProbe(date, "toYYYYMMDD(hw)"))
                 .isEqualTo(Long.parseLong(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE)));
