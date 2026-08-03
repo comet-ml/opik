@@ -131,7 +131,13 @@ export class LogsPage {
     return this.page.locator('tr[data-row-id]');
   }
 
-  /** A trace row, keyed by trace id (the row's data-row-id IS the trace id). */
+  /**
+   * A trace row, keyed by trace id. `data-row-id` is set from the row model by
+   * the shared DataTable, so it is a first-class hook rather than a structural
+   * fallback — the same one datasets/dataset-items/compare-experiments key on.
+   * There is no text-based alternative: the id is a filter field, not a rendered
+   * column, so it appears nowhere in the row's visible cells.
+   */
   traceRow(traceId: string): Locator {
     return this.page.locator(`tr[data-row-id="${traceId}"]`);
   }

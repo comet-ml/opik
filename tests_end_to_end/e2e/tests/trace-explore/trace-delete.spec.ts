@@ -1,6 +1,6 @@
 import { test, expect } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
-import type { SdkClient } from '../../core/sdk';
+import type { SdkClient } from '@e2e/core/sdk';
 
 interface SeededTrace {
   id: string;
