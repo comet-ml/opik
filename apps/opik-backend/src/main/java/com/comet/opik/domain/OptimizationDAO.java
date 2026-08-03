@@ -328,6 +328,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * comment-only edit. {@code -- } with any character after the dashes is fine, but a trailing space is one
      * formatter away from vanishing, so separate comment paragraphs with prose rather than blank
      * {@code --} lines.
+     * <p>
+     * The tagged-cost CTEs ({@code optimization_tagged_trace_ids} onwards) are deliberately duplicated in
+     * {@link #FIND_WITHOUT_EXPERIMENTS} rather than shared through one templated constant: sharing would need a
+     * flag every call site must remember to set, and forgetting it silently double-counts trial spend. The two
+     * copies are held in step by
+     * {@code OptimizationsResourceTest.GetOptimizerById.findAndGetById__whenOptimizationHasNoExperiments__taggedCostAgreesAndFollowsTheTag},
+     * which asserts the list and {@code getById} report the same figure - change one copy and it fails.
      */
     private static final String FIND = """
             WITH optimization_final AS (
@@ -713,6 +720,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * runs list disagree with the run page - {@link #getById(UUID)} always takes the {@link #FIND} path. The
      * three CTEs below are {@link #FIND}'s tagged-cost pipeline minus the experiment-item exclusion, which is
      * unnecessary here because this projection is only chosen when no experiment exists to link a trace to.
+     * Keep them in step with {@link #FIND} - see that field's note on why they are duplicated and which test
+     * fails when they drift.
      * They read nothing when no optimization in scope carries a {@code project_id}, which is every row written
      * before that column existed.
      */
