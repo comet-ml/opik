@@ -284,6 +284,27 @@ assertThat(actual)
 `containsExactly` asserts size and content together — `hasSize` plus per-index checks does not,
 and lets an extra element through.
 
+These `containsExactly*` variants compare elements with the element type's own `equals`, which is
+what you want for exact-valued models. When the elements carry `BigDecimal` or `double`, the same
+exception that justifies a comparator on a single object applies per element — otherwise a
+difference in numeric scale fails the assertion even though the values are equal:
+
+```java
+// ✅ GOOD - inexact numeric elements (see TraceAssertions for the real usage)
+var config = new RecursiveComparisonConfiguration();
+config.ignoreFields(IGNORED_FIELDS_SCORES);
+config.registerComparatorForType(BigDecimal::compareTo, BigDecimal.class);
+
+assertThat(actual.feedbackScores())
+    .usingRecursiveFieldByFieldElementComparator(config)
+    .containsExactlyInAnyOrderElementsOf(expected.feedbackScores());
+```
+
+This is the same escalation rule as for single objects, not a separate one: plain
+`containsExactly*` by default, element comparator only when an element field can't be compared by
+`equals`. `FeedbackScore.value` is a `BigDecimal`, which is why
+`api/resources/utils/traces/TraceAssertions.java` needs it — most models don't.
+
 ### When Per-Field Assertions Are Still Right
 
 - **Spot checks against literals** — `assertThat(result.getName()).isEqualTo("John Doe")` is not
