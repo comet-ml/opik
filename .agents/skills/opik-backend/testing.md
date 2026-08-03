@@ -155,12 +155,16 @@ assertThatThrownBy(() -> service.create(invalid))
     .hasMessageContaining("Name is required");
 ```
 
-### Comparing Two Objects — Use Recursive Comparison
+### Comparing Two Objects — Plain `isEqualTo` by Default
 
 Comparing two objects field by field is the default failure mode to avoid. It isn't just
 verbose: when a field is later added to the record, the test keeps passing while silently not
 covering the new field. Nothing fails and nothing flags it, so coverage erodes with every model
 change.
+
+Compare the whole object instead. `equals`/`hashCode` are the source of truth for equality in
+Java, so plain `isEqualTo` is the default — our API models are overwhelmingly records, whose
+generated `equals` covers every component and picks up new ones automatically:
 
 ```java
 // ❌ BAD - add a field to the record later and this still passes, now covering less
@@ -169,19 +173,40 @@ assertThat(actual.temperature()).isEqualTo(request.temperature());
 assertThat(actual.topP()).isEqualTo(request.topP());
 assertThat(actual.maxOutputTokens()).isEqualTo(request.maxCompletionTokens());
 
-// ✅ GOOD - new fields are compared automatically
+// ✅ GOOD - new components are compared automatically, via the type's own equals
+assertThat(actual).isEqualTo(expected);
+```
+
+Prefer records for new models. For Java POJOs/Beans that need equality, implement it with Lombok
+— `@Value`, `@Data`, `@EqualsAndHashCode`, in that order of preference — rather than reaching for
+reflection-based comparison in the test.
+
+### When to Use `usingRecursiveComparison`
+
+`usingRecursiveComparison` bypasses `equals` and walks fields reflectively via AssertJ internals.
+That is the right tool only for **exceptional cases**:
+
+- **Excluding fields** from the comparison (`ignoringFields`).
+- **Applying an AssertJ feature** during comparison, such as a custom comparator.
+- **The type has no usable `equals`/`hashCode`** — realistically only third-party types we don't
+  control. For our own code, fix the model instead.
+
+```java
+// ✅ GOOD - exceptional case: server-generated fields must be excluded
 assertThat(actual)
     .usingRecursiveComparison()
+    .ignoringFields("id", "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy")
     .isEqualTo(expected);
 ```
 
-`isEqualTo` alone works only when the type's `equals` covers what you mean — which is not true
-once you need to skip server-generated fields or compare `BigDecimal` by value. Prefer recursive
-comparison for object-to-object assertions.
+Recursive comparison is widespread in this codebase, largely as a side effect of JSON views on
+response objects rather than a deliberate default. Existing bare
+`usingRecursiveComparison().isEqualTo(...)` calls with no exclusion or comparator are not the
+pattern to copy — a plain `isEqualTo` is what those want.
 
 ### Partial Comparison — `ignoringFields`, Not Dropped Assertions
 
-When only some fields should match, still use recursive comparison and name the exclusions. The
+When only some fields should match, use recursive comparison and name the exclusions. The
 ignore list is then explicit and reviewable, instead of the exclusions being implied by whichever
 assertions someone chose not to write.
 
@@ -216,9 +241,10 @@ assertThat(actual.lastUpdatedAt()).isAfter(expected.lastUpdatedAt());
 
 ### Comparators, Not Exclusions, for Inexact Types
 
-Don't ignore a field just because it doesn't compare exactly. `BigDecimal.equals` is
-scale-sensitive and doubles need an epsilon, so give the comparison a comparator and keep the
-field covered:
+Inexact types are the second exceptional case: `BigDecimal.equals` is scale-sensitive and doubles
+need an epsilon, so plain `isEqualTo` on the whole object is too strict. Reach for recursive
+comparison here — but give it a comparator rather than ignoring the field, so the field stays
+covered:
 
 ```java
 // ❌ BAD - the field is now untested
@@ -261,12 +287,14 @@ and lets an extra element through.
 ### When Per-Field Assertions Are Still Right
 
 - **Spot checks against literals** — `assertThat(result.getName()).isEqualTo("John Doe")` is not
-  an object comparison and needs no recursive machinery.
+  an object comparison at all.
 - **Non-equality semantics** — `isAfter`, `isNotNull`, `isNotBlank`, `hasMessageContaining`.
 - **Deliberately narrow assertions on an ignored field**, as shown above.
 
 The rule targets *object-to-object* field-by-field comparison, not every use of a single-field
-assertion.
+assertion. In short: compare whole objects with `isEqualTo`, escalate to
+`usingRecursiveComparison` only for the exceptional cases above, and keep per-field assertions for
+the cases in this list.
 
 ## Don't Run Two ClickHouse-Migrating Test Classes in One `mvn` Reactor
 
