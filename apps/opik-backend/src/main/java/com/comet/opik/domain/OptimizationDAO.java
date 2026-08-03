@@ -554,9 +554,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 -- The project_id bound is what keeps this off a workspace-wide scan of an
                 -- unindexed array column. It prunes on the second primary-key column, and it
                 -- is sound because optimizer-internal traces are written to the project of the
-                -- optimization itself, while trial traces live in the project of the dataset
-                -- and are excluded below by the experiment-item filter. An optimization with
-                -- no project_id predates that column, so its cost stays trial-only as today.
+                -- optimization itself. Trial traces may land in a different project (the
+                -- dataset's) or in this same one, depending on how the run was configured, so
+                -- the two guards cover one topology each: this bound excludes them when the
+                -- projects differ, the experiment-item filter below when they do not. Both
+                -- have a test. An optimization with no project_id predates that column, so
+                -- its cost stays trial-only as today.
                 -- Not bounded by created_at on purpose: that column is not stable across
                 -- re-writes of an optimization row, and a reset would silently drop
                 -- optimizer-internal traces from the total.
