@@ -181,6 +181,7 @@ areas:
     specs:
       - trace-explore/trace-explore-smoke.spec.ts
       - trace-explore/trace-spans-depth.spec.ts
+      - trace-explore/trace-delete.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -198,7 +199,8 @@ areas:
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       agent-graph-tab:        { covered: false }
       attachments-media:      { covered: false }
-      delete-traces:          { covered: false }
+      delete-traces:          { covered: true,  tier: t2-cuj }
+      delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----

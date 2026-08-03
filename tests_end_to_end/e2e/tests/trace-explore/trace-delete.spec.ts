@@ -28,7 +28,7 @@ async function seedTraces(
 }
 
 test.describe('Trace deletion — multi-trace', { tag: ['@t2-cuj', '@area:traces'] }, () => {
-  test('Bulk-deleting traces from the Logs table removes them from the UI and the API', { tag: ['@cap:traces.bulk-delete-traces'] }, async ({
+  test('Bulk-deleting traces from the Logs table removes them from the UI and the API', { tag: ['@cap:traces.delete-traces'] }, async ({
     project,
     sdkClient,
     backendClient,
@@ -69,7 +69,7 @@ test.describe('Trace deletion — multi-trace', { tag: ['@t2-cuj', '@area:traces
     });
   });
 
-  test('Traces deleted through the API disappear from the Logs table', { tag: ['@cap:traces.bulk-delete-traces-api'] }, async ({
+  test('Traces deleted through the API disappear from the Logs table', { tag: ['@cap:traces.delete-traces-api'] }, async ({
     project,
     sdkClient,
     backendClient,
