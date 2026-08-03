@@ -1217,6 +1217,6 @@ environment:
   # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
   maxPerWorkspace: 5
 
-traceStats:
+queryOptimizations:
   # testcontainers runs ClickHouse 26.3, so CI covers the materialized path
-  materializeFeedbackScoresCte: true
+  enableCteMaterialization: true

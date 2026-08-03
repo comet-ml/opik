@@ -394,13 +394,15 @@ experimentAggregates:
   # Description: Number of experiment items processed per batch when populating experiment_item_aggregates table. Higher values improve performance but increase memory usage. Recommended range: 100-5000.
   batchSize: ${EXPERIMENT_AGGREGATES_BATCH_SIZE:-1000}
 
-traceStats:
+# Configuration for analytics-query optimisations. Each renders an equivalent query shape, so disabling one costs
+# performance and nothing else.
+queryOptimizations:
   # Default: false
-  # Description: Declare the feedback-scores stats trace_final CTE AS MATERIALIZED, evaluating it once instead of
-  # once per reference (~2x fewer bytes and ~2x less CPU). Requires ClickHouse 26.3+, which the bundled ClickHouse
-  # satisfies; leave disabled when pointing at an older external ClickHouse, where it would fail the query rather
-  # than degrade.
-  materializeFeedbackScoresCte: ${TRACE_STATS_MATERIALIZE_FEEDBACK_SCORES_CTE:-false}
+  # Description: Allow queries to declare a CTE AS MATERIALIZED, evaluating it once instead of once per reference
+  # (~2x fewer bytes and ~2x less CPU on the feedback-scores stats query). Requires ClickHouse 26.3+, which the
+  # bundled ClickHouse satisfies; leave disabled when pointing at an older external ClickHouse, where it fails the
+  # query rather than degrading.
+  enableCteMaterialization: ${ENABLE_CTE_MATERIALIZATION:-false}
 
 # Configuration for experiment denormalization (debounced re-computation of experiment aggregates)
 experimentDenormalization:
