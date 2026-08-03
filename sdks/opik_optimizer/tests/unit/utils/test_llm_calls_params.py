@@ -137,6 +137,7 @@ class TestPrepareModelParams:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When response_model is provided, should add response_format."""
+
         class MyModel(BaseModel):
             field: str
 

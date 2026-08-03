@@ -143,7 +143,9 @@ async def test_async_path_awaits_inside_the_trace(monkeypatch) -> None:
     """A sync wrapper would close the trace on returning the coroutine — before
     the call it is timing has run."""
     monkeypatch.setattr(llm_calls, "_current_span_or_none", lambda: None)
-    monkeypatch.setattr(llm_calls.opik_context, "update_current_trace", lambda **kw: None)
+    monkeypatch.setattr(
+        llm_calls.opik_context, "update_current_trace", lambda **kw: None
+    )
 
     async def fake_acompletion(**kwargs: Any) -> str:
         return "async-ok"
