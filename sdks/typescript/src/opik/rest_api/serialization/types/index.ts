@@ -114,7 +114,6 @@ export * from "./AutomationRuleEvaluatorWriteAction.js";
 export * from "./AutomationRuleEvaluatorWriteTriggerScope.js";
 export * from "./AvgValueStatPublic.js";
 export * from "./BatchDelete.js";
-export * from "./BatchDeleteByProject.js";
 export * from "./BiInformation.js";
 export * from "./BiInformationResponse.js";
 export * from "./BlueprintPageHistory.js";
