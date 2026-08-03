@@ -2499,32 +2499,10 @@ class TraceDAOImpl implements TraceDAO {
             )
             <endif>
             , trace_final AS (
-                <if(dedup_by_argmax)>
                 SELECT
                     workspace_id,
                     project_id,
                     id,
-                    latest.thread_id AS thread_id,
-                    latest.input_count AS input_count,
-                    latest.output_count AS output_count,
-                    latest.metadata_count AS metadata_count,
-                    latest.tags_length AS tags_length,
-                    latest.duration AS duration,
-                    latest.error_info AS error_info
-                FROM (
-                <endif>
-                SELECT
-                    workspace_id,
-                    project_id,
-                    id,
-                    <if(dedup_by_argmax)>
-                    argMax(tuple(thread_id, if(input_length > 0, 1, 0), if(output_length > 0, 1, 0),
-                                 if(metadata_length > 0, 1, 0), length(tags), duration, error_info)
-                           ::Tuple(thread_id String, input_count UInt8, output_count UInt8,
-                                   metadata_count UInt8, tags_length UInt64,
-                                   duration Nullable(Float64), error_info String),
-                           last_updated_at) AS latest
-                    <else>
                     thread_id,
                     if(input_length > 0, 1, 0) as input_count,
                     if(output_length > 0, 1, 0) as output_count,
@@ -2532,8 +2510,7 @@ class TraceDAOImpl implements TraceDAO {
                     length(tags) as tags_length,
                     duration,
                     error_info
-                    <endif>
-                FROM traces <if(!dedup_by_argmax)>final<endif>
+                FROM traces final
                 <if(guardrails_filters)>
                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
                 <endif>
@@ -2552,21 +2529,8 @@ class TraceDAOImpl implements TraceDAO {
                 AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time
                 AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
-                <if(!dedup_by_argmax)>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-                <endif>
-                <if(dedup_by_argmax && filters)>
-                AND id IN (
-                    SELECT id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id IN :project_ids
-                    <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
-                    AND <filters>
-                )
-                <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
@@ -2613,13 +2577,6 @@ class TraceDAOImpl implements TraceDAO {
                     id IN (SELECT trace_id FROM sfsc WHERE sfsc.span_feedback_scores_count = 0)
                         OR
                     id NOT IN (SELECT trace_id FROM sfsc)
-                )
-                <endif>
-                <if(dedup_by_argmax)>
-                GROUP BY workspace_id, project_id, id
-                <if(filters || search_text)>
-                HAVING argMax(<if(filters)>(<filters>)<endif><if(filters && search_text)> AND <endif><if(search_text)>(<search_text>)<endif>, last_updated_at)
-                <endif>
                 )
                 <endif>
             )
@@ -4328,9 +4285,6 @@ class TraceDAOImpl implements TraceDAO {
                                 SELECT_TRACES_SPANS_STATS, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
                         template.add("log_comment", logComment);
                         template.add("has_legacy_scores", hasLegacyScores);
-                        if (canDedupByArgMax(template)) {
-                            template.add("dedup_by_argmax", true);
-                        }
 
                         var statement = connection.createStatement(template.render())
                                 .bind("project_ids", List.of(criteria.projectId()))
@@ -4421,14 +4375,22 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
-     * Whether {@code trace_final} can dedup with {@code GROUP BY} + {@code argMax} instead of {@code FINAL}.
+     * Whether the {@code trace_final} CTE of {@code SELECT_FEEDBACK_SCORES_STATS} can dedup with
+     * {@code GROUP BY} + {@code argMax} instead of {@code FINAL}.
      *
      * <p>{@code traces} is a {@code ReplacingMergeTree(last_updated_at)} ordered by
      * {@code (workspace_id, project_id, id)}, so grouping on that key and taking a predicate's verdict from the
      * row with the greatest {@code last_updated_at} is what {@code FINAL} + predicate computes. Dropping
      * {@code FINAL} also unblocks lazy materialization.
      *
-     * <p>Gated on two conditions. Do not widen either without fresh measurements — see OPIK-7636.
+     * <p><b>Deliberately limited to this template.</b> {@code SELECT_TRACES_SPANS_STATS} keeps {@code FINAL}: its
+     * {@code trace_final} projects seven per-version columns, so the grouped form has to hold an aggregate state
+     * per column per trace and peak memory regresses, worsening as group count grows. This template projects only
+     * {@code id, project_id} — both group keys — so its state is small and memory improves instead. That template
+     * also re-evaluates {@code trace_final} from three scopes, which is where the saving comes from. Measurements
+     * for both are in OPIK-7636; do not extend this to a template with a wider projection without re-measuring.
+     *
+     * <p>Gated on two conditions.
      *
      * <p><b>No filter slot may pull in a {@code LEFT JOIN}.</b> A join multiplies row versions inside each group,
      * and a predicate on a joined alias cannot be evaluated by {@code argMax} over {@code traces} versions at all.
@@ -4440,29 +4402,14 @@ class TraceDAOImpl implements TraceDAO {
      * {@code FilterStrategy.TRACE} field that maps to a joined alias.
      *
      * <p><b>{@code search_text} must be present.</b> The rewrite trades a streaming scan that filters row by row
-     * for a hash table holding one group per trace in the key range, built in full before {@code HAVING} can
-     * discard anything. That only pays off when a heavy per-row scan dominates the query, which is what
-     * {@code searchText} over {@code input}/{@code output}/{@code metadata} does. Without it the aggregation state
-     * is pure overhead in both CPU and peak memory, and peak memory grows with group count even on the
-     * {@code searchText} shapes.
+     * for a hash table built in full before {@code HAVING} can discard anything, so it only pays off when a heavy
+     * per-row scan dominates — which is what {@code searchText} over {@code input}/{@code output}/{@code metadata}
+     * does. Without it the aggregation state is pure overhead in both CPU and peak memory.
      *
-     * <p>Both templates still wrap the {@code HAVING} in {@code <if(filters || search_text)>}, which cannot be false
-     * while the gate requires {@code search_text}. That is deliberate: it keeps the templates independent of the
-     * gate's internals, and it is what stops a bare {@code GROUP BY} with no {@code HAVING} — or an empty
-     * {@code argMax(, last_updated_at)} — from rendering if the gate is ever relaxed to admit a filters-only shape.
-     *
-     * <p><b>Filters are also injected as an {@code id IN (SELECT id FROM traces WHERE <filters>)} semi-join.</b>
-     * Moving a predicate into {@code HAVING} puts it out of reach of the table's skip indexes ({@code thread_id}
-     * bloom, {@code source}/{@code environment} set, {@code created_at}/{@code last_updated_at} minmax), and losing
-     * that pruning costs far more than this rewrite ever saves — a {@code thread_id} equality filter prunes to a
-     * single granule from {@code WHERE} and to none at all from {@code HAVING}. The semi-join restores it: the
-     * subquery is index-visible, and because it selects ids where <em>any</em> version matches it is a superset of
-     * the correct answer, which the {@code HAVING} then narrows to the latest version. Keep the two in step.
-     *
-     * <p>Do not replace it with a list of "prunable" columns. Selectivity is a property of the filter's value, not
-     * its column: {@code source IN ('sdk','unknown')} prunes nothing because those two values cover 98% of rows,
-     * while {@code source = 'playground'} prunes to zero granules — same column, opposite outcomes. A column-level
-     * veto is wrong in both directions.
+     * <p>The template still wraps the {@code HAVING} in {@code <if(filters || search_text)>}, which cannot be false
+     * while the gate requires {@code search_text}. That is deliberate: it keeps the template independent of the
+     * gate's internals, and it is what stops an empty {@code argMax(, last_updated_at)} from rendering if the gate
+     * is ever relaxed to admit a filters-only shape.
      *
      * <p><b>Predicate placement.</b> Dedup-key predicates ({@code workspace_id}, {@code project_id}, the
      * {@code id} range bounds) and the {@code id IN (...)} slots stay in {@code WHERE} — they are the key, or they
@@ -4471,14 +4418,17 @@ class TraceDAOImpl implements TraceDAO {
      * {@code WHERE} they drop older versions from the group, making {@code argMax} report the latest
      * <em>surviving</em> version and resurfacing content the current version no longer matches.
      *
-     * <p><b>One tuple-valued {@code argMax}, not one per column.</b> Per-column {@code argMax} would let versions
-     * sharing the greatest {@code last_updated_at} contribute different columns to one output row, synthesising a
-     * row that never existed. Wrapping the projection in {@code argMax(tuple(...), last_updated_at)} and unpacking
-     * it in an enclosing SELECT picks one version atomically. It also avoids an aliasing hazard: aliasing a
-     * per-version column to its own name wins name resolution inside {@code HAVING} — which reads
-     * {@code thread_id}, {@code error_info} and {@code duration} — nesting {@code argMax} in {@code argMax}, which
-     * ClickHouse rejects with {@code ILLEGAL_AGGREGATION}. A filter on a single unaliased column hides that; the
-     * eight-column {@code searchText} clause trips it every time.
+     * <p><b>Filters are also injected as an {@code id IN (SELECT id FROM traces WHERE <filters>)} semi-join.</b>
+     * Moving a predicate into {@code HAVING} puts it out of reach of the table's skip indexes ({@code thread_id}
+     * bloom, {@code source}/{@code environment} set, {@code created_at}/{@code last_updated_at} minmax), and losing
+     * that pruning costs far more than this rewrite saves — a {@code thread_id} equality filter prunes to a single
+     * granule from {@code WHERE} and to none at all from {@code HAVING}. The semi-join restores it: the subquery is
+     * index-visible, and because it selects ids where <em>any</em> version matches it is a superset of the correct
+     * answer, which the {@code HAVING} then narrows to the latest version. Keep the two in step.
+     *
+     * <p>Do not replace it with a list of "prunable" columns. Selectivity is a property of the filter's value, not
+     * its column: {@code source IN ('sdk','unknown')} prunes nothing because those two values cover 98% of rows,
+     * while {@code source = 'playground'} prunes to zero granules — same column, opposite outcomes.
      *
      * <p><b>Scope of the equivalence.</b> For a key whose latest {@code last_updated_at} is unique this returns
      * exactly {@code FINAL}'s row. For a key with tied latest versions it returns one of the tied rows, and which
@@ -4582,9 +4532,6 @@ class TraceDAOImpl implements TraceDAO {
                             FilterQueryBuilder
                                     .toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
                                     .ifPresent(traceFilters -> template.add("filters", traceFilters));
-                        }
-                        if (canDedupByArgMax(template)) {
-                            template.add("dedup_by_argmax", true);
                         }
                         var statement = connection.createStatement(template.render())
                                 .bind("project_ids", projectIds)
