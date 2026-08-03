@@ -79,27 +79,67 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     // Workspace feedback-score metrics must read both feedback_scores (legacy) and authored_feedback_scores
     // (where online-scoring rows land because the writer routes by author presence, see FeedbackScoreDAO). The
-    // dedup chain is shared with ProjectMetricsDAO's pattern; project and name predicates vary per query, so each
-    // query constant is composed with the helper-provided prefix injected via String.format. The project predicate
-    // is immutable and lives on each UNION leg; the name predicate is mutable per .agents/skills/opik-backend/clickhouse.md
-    // and is applied AFTER the dedup in feedback_scores_final, so a renamed score cannot strand an older version.
-    private static final String SUMMARY_FEEDBACK_SCORES_PREFIX = WorkspaceFeedbackScoresQueries
-            .traceFeedbackScoresPrefix(
-                    "<if(project_ids)> AND project_id IN :project_ids<endif>",
-                    "");
-
-    private static final String DAILY_BY_PROJECT_FEEDBACK_SCORES_PREFIX = WorkspaceFeedbackScoresQueries
-            .traceFeedbackScoresPrefix(
-                    " AND project_id IN :project_ids",
-                    " AND name = :name");
-
-    private static final String DAILY_FEEDBACK_SCORES_PREFIX = WorkspaceFeedbackScoresQueries
-            .traceFeedbackScoresPrefix(
-                    "",
-                    " AND name = :name");
+    // dedup chain mirrors ProjectMetricsDAO.TRACE_FILTERED_PREFIX: union both tables, dedup by
+    // (workspace, project, entity, name, author, source), then collapse to one value per
+    // (workspace, project, entity, name). The mutable `name` filter is applied AFTER the LIMIT 1 BY dedup in
+    // feedback_scores_final (per .agents/skills/opik-backend/clickhouse.md "Mutable column filtering with
+    // LIMIT 1 BY"); the immutable `project_id` filter is on each UNION leg so the dedup scans a smaller
+    // row set. Each query constant below inlines the full CTE preamble with StringTemplate conditionals for
+    // the project_ids / name predicates (no `%s` slots, no `.formatted(...)`); callers enable each
+    // conditional at render time via `template.add("project_ids", ...)` and bind the value via
+    // `statement.bind("project_ids", ...)`.
 
     private static final String GET_FEEDBACK_SCORES_SUMMARY = """
-            %s
+            WITH feedback_scores_deduped AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       source_queue_id
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      <if(project_ids)> AND project_id IN :project_ids <endif>
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author,
+                           source_queue_id
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      <if(project_ids)> AND project_id IN :project_ids <endif>
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_deduped
+                WHERE 1
+                GROUP BY workspace_id, project_id, entity_id, name
+            )
             SELECT
                 AVGIf(fs.value, t.id >= :id_start AND t.id \\<= :id_end) AS current,
                 AVGIf(fs.value, t.id >= :id_prior_start AND t.id \\< :id_start) AS previous,
@@ -118,8 +158,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             ) t ON t.id = fs.entity_id
             WHERE workspace_id = :workspace_id
             GROUP BY fs.name;
-            """
-            .formatted(SUMMARY_FEEDBACK_SCORES_PREFIX);
+            """;
 
     private static final String GET_COSTS_SUMMARY = """
             SELECT
@@ -136,7 +175,57 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             """;
 
     private static final String GET_FEEDBACK_SCORES_DAILY_BY_PROJECT = """
-            %s,
+            WITH feedback_scores_deduped AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       source_queue_id
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author,
+                           source_queue_id
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_deduped
+                WHERE 1
+                  AND name = :name
+                GROUP BY workspace_id, project_id, entity_id, name
+            ),
             feedback_scores_daily AS (
                 SELECT fs.project_id AS project_id,
                        toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
@@ -168,11 +257,58 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             FROM feedback_scores_daily
             GROUP BY project_id
             ;
-            """
-            .formatted(DAILY_BY_PROJECT_FEEDBACK_SCORES_PREFIX);
+            """;
 
     private static final String GET_FEEDBACK_SCORES_DAILY = """
-            %s,
+            WITH feedback_scores_deduped AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       source_queue_id
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author,
+                           source_queue_id
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_deduped
+                WHERE 1
+                  AND name = :name
+                GROUP BY workspace_id, project_id, entity_id, name
+            ),
             feedback_scores_daily AS (
                 SELECT toStartOfInterval(t.start_time, toIntervalDay(1)) AS bucket,
                        if(COUNT(1) = 0, NULL, avg(fs.value)) AS value
@@ -201,8 +337,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 groupArray(tuple(bucket, value)) AS data
             FROM feedback_scores_daily
             ;
-            """
-            .formatted(DAILY_FEEDBACK_SCORES_PREFIX);
+            """;
 
     private static final String GET_COSTS_DAILY_BY_PROJECT = """
             WITH costs_daily AS (
