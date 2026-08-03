@@ -1,11 +1,14 @@
 import logging
+import math
 from typing import Any, cast
 
+from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStopper
 
 from ...base_optimizer import BaseOptimizer
 from ... import constants
 from ...core.state import (
     AlgorithmResult,
+    FinishReason,
     OptimizationContext,
     build_optimization_metadata,
 )
@@ -16,6 +19,318 @@ from .adapter import OpikGEPAAdapter
 from .ops import candidate_ops, result_ops, scoring_ops
 
 logger = logging.getLogger(__name__)
+
+
+# Each reflection iteration scores the current and the proposed candidate on
+# the same mini-batch (gepa/proposer/reflective_mutation), so a batch of b
+# costs ~2*b metric calls per iteration. Warn when fewer than this many
+# iterations fit the budget — the run degenerates into a few mutation shots.
+MIN_EXPECTED_REFLECTION_ITERATIONS = 5
+
+
+def _warn_if_reflection_minibatch_exhausts_budget(
+    *,
+    reflection_minibatch_size: int,
+    max_metric_calls: int,
+) -> None:
+    """Warn when the mini-batch leaves too few reflection iterations in budget.
+
+    A large mini-batch never stops GEPA reflection from running — the gepa
+    engine does not gate iterations on the remaining budget — it just makes
+    each iteration cost ~2*reflection_minibatch_size metric calls, so the
+    metric-call budget stops the run after roughly
+    ``max_metric_calls // (2 * reflection_minibatch_size)`` iterations.
+    """
+    estimated_iterations = max_metric_calls // (2 * reflection_minibatch_size)
+    if estimated_iterations < MIN_EXPECTED_REFLECTION_ITERATIONS:
+        # TODO(opik_optimizer/#gepa-batching): Centralize reflection minibatch budgeting with the python-backend's resolve_reflection_minibatch_size.
+        logger.warning(
+            "reflection_minibatch_size=%s costs ~%s metric calls per reflection "
+            "iteration; the metric-call budget (%s) allows only ~%s iteration(s) "
+            "before GEPA stops. Lower reflection_minibatch_size or raise "
+            "max_trials/n_samples.",
+            reflection_minibatch_size,
+            2 * reflection_minibatch_size,
+            max_metric_calls,
+            estimated_iterations,
+        )
+
+
+def _coerce_positive_int(
+    value: Any, *, default: int, allow_zero: bool, name: str
+) -> int:
+    """Coerce a user-supplied extra_params value to a valid int at the boundary.
+
+    These are best-effort config knobs (typed Any), so this never raises: an
+    absent value (None) uses ``default``; an un-parseable value falls back to
+    ``default``; a non-integer float is floored with a warning (never silently);
+    a value below the minimum uses 0 when ``allow_zero`` (i.e. "disabled") else
+    ``default``. Invalid inputs are logged by type only — the raw value is not
+    dumped, so a stray dict/list can't flood WARNING logs.
+    """
+    if value is None:
+        return default
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError covers float('inf'); ValueError covers NaN / bad strings.
+        logger.warning(
+            "Ignoring invalid %s (got %s); using default %s.",
+            name,
+            type(value).__name__,
+            default,
+        )
+        return default
+    if isinstance(value, float) and not value.is_integer():
+        logger.warning(
+            "%s=%s is not an integer; rounding down to %s.", name, value, coerced
+        )
+    minimum = 0 if allow_zero else 1
+    if coerced < minimum:
+        fallback = 0 if allow_zero else default
+        logger.warning(
+            "%s=%s is below the minimum (%s); using %s.",
+            name,
+            coerced,
+            minimum,
+            fallback,
+        )
+        return fallback
+    return coerced
+
+
+def _coerce_no_improvement_iterations(value: Any) -> int:
+    """Validate the no_improvement_iterations override to a non-negative int.
+
+    ``0`` disables the stall stopper; ``None`` (or an absent/invalid value) uses
+    the default. See _coerce_positive_int for the boundary handling.
+    """
+    return _coerce_positive_int(
+        value,
+        default=constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS,
+        allow_zero=True,
+        name="no_improvement_iterations",
+    )
+
+
+def _candidate_full_eval_scores(val_scores: Any) -> list[float]:
+    """Comparable full-eval scores of gepa's *candidates*, seed excluded.
+
+    Index 0 of gepa's full-eval list is the seed program's own eval
+    (gepa/core/state.py seeds the list with it); everything after it is a
+    candidate. Non-numeric and non-finite entries are dropped so an inf from a
+    custom metric cannot read as "threshold reached".
+    """
+    return [
+        float(score)
+        for score in list(val_scores or [])[1:]
+        if isinstance(score, (int, float))
+        and not isinstance(score, bool)
+        and math.isfinite(score)
+    ]
+
+
+class CandidateScoreThresholdStopper(ScoreThresholdStopper):
+    """Stop when a *candidate* full eval reaches the threshold — never the seed.
+
+    The vendored stopper reads the whole score list, so it can end a run on the
+    seed program's own eval, before any candidate exists. Scores are not
+    reproducible in general (a model may fix its own temperature and stay
+    sampled), so on a coarse metric that turns "stop because the target was
+    reached" into a coin flip — and the run is then reported as a perfect score
+    while showing no improvement (OPIK-7511).
+
+    "The baseline is already good enough" is owned by ``should_skip_optimization``
+    on Opik's own baseline evaluation, which runs before GEPA — so ignoring the
+    seed here loses no stop path, it just stops the two from overlapping.
+    """
+
+    def __call__(self, gepa_state: Any) -> bool:
+        try:
+            scores = getattr(gepa_state, "program_full_scores_val_set", None)
+            return any(
+                score >= self.threshold for score in _candidate_full_eval_scores(scores)
+            )
+        except Exception:
+            # Never take a run down from a stop callback — but do not fail quiet
+            # either: swallowing this silently disables threshold stopping, and a
+            # gepa upgrade that renames the score list would otherwise look like
+            # "the target was simply never reached".
+            logger.warning(
+                "Could not read gepa full-eval scores (%s); threshold stopping is "
+                "inactive for this iteration.",
+                type(gepa_state).__name__,
+                exc_info=True,
+            )
+            return False
+
+
+def _build_gepa_stop_callbacks(
+    perfect_score: float, no_improvement_iterations: Any
+) -> tuple[list[Any], Any]:
+    """Build GEPA stop callbacks and return (stop_callbacks, no_improvement_stopper).
+
+    Both stoppers read full-eval (valset) scores only, keeping the stop decision
+    apples-to-apples with mini-batch screening excluded:
+    - CandidateScoreThresholdStopper stops once a *candidate* full eval reaches
+      perfect_score (only wired for a positive target — see below);
+    - NoImprovementStopper ends the reject/skip spin below the threshold
+      (disabled when no_improvement_iterations coerces to 0).
+
+    gepa always falls back to the max_metric_calls budget, so an empty list here
+    is safe.
+    """
+    iterations = _coerce_no_improvement_iterations(no_improvement_iterations)
+    stop_callbacks: list[Any] = []
+    # A non-positive perfect_score would make the threshold stopper fire on the
+    # very first candidate full eval (any score >= 0), halting the run
+    # immediately — so only wire it for a sensible target.
+    if perfect_score > 0:
+        stop_callbacks.append(CandidateScoreThresholdStopper(perfect_score))
+    no_improvement_stopper: Any = None
+    if iterations:
+        no_improvement_stopper = NoImprovementStopper(iterations)
+        stop_callbacks.append(no_improvement_stopper)
+    return stop_callbacks, no_improvement_stopper
+
+
+_GEPA_VERSION_REQUIREMENT = (
+    "opik-optimizer requires gepa>=0.1.0 (the <curr_param>/<side_info> "
+    "reflection-template contract; gepa 0.0.x speaks the older "
+    "<curr_instructions>/<inputs_outputs_feedback> dialect)."
+)
+
+
+def _validate_reflection_prompt_template(template: str) -> None:
+    """Raise if the reflection template is missing a marker gepa requires.
+
+    Checked with gepa's own validator so the rule cannot drift from upstream.
+    Called from __init__ so a bad override fails when the optimizer is
+    constructed — before the baseline evaluation spends real LLM calls — rather
+    than at gepa.optimize() hand-off, which happens after it.
+
+    A rejection is attributed to whoever caused it: a malformed override to the
+    caller (ValueError), an install that cannot honour our template contract to
+    the environment (RuntimeError naming the version floor).
+    """
+    if not isinstance(template, str):
+        raise ValueError(
+            "Invalid reflection_prompt_template override: expected a string, got "
+            f"{type(template).__name__}. The template must contain both the "
+            "<curr_param> and <side_info> markers."
+        )
+
+    # gepa does not document a public validation entry point, so this reaches
+    # into its instruction-proposal strategy; the except below turns a moved or
+    # renamed symbol after a gepa bump into an explicit version error instead of
+    # an opaque ImportError at construction.
+    try:
+        from gepa.strategies.instruction_proposal import InstructionProposalSignature
+
+        validate = InstructionProposalSignature.validate_prompt_template
+    except (ImportError, AttributeError) as exc:
+        raise RuntimeError(
+            "The installed gepa version does not expose the reflection-template "
+            f"validator this optimizer relies on. {_GEPA_VERSION_REQUIREMENT}"
+        ) from exc
+
+    # The branch above only catches gepa <=0.0.17, which has no validator at all.
+    # 0.0.18-0.0.27 do expose one — checking the *old* markers — so control would
+    # reach validate() and reject our own built-in default, and the handler below
+    # would blame an override the caller never passed. Read gepa's own default to
+    # tell the dialect apart. Only a readable str counts as evidence: a future
+    # gepa that renames or reshapes the attribute must not be misreported as too
+    # old (the built-in-default check below still covers that case).
+    installed_default = getattr(
+        InstructionProposalSignature, "default_prompt_template", None
+    )
+    if isinstance(installed_default, str) and "<curr_param>" not in installed_default:
+        raise RuntimeError(
+            "The installed gepa version uses an older reflection-template "
+            f"dialect. {_GEPA_VERSION_REQUIREMENT}"
+        )
+
+    try:
+        validate(template)
+    except ValueError as exc:
+        if template == gepa_prompts.REFLECTION_PROMPT_TEMPLATE:
+            # No override involved — the caller only asked for the optimizer. If
+            # gepa rejects the template we ship, the install is the problem.
+            raise RuntimeError(
+                "The installed gepa version rejects this optimizer's built-in "
+                f"reflection template ({exc}). {_GEPA_VERSION_REQUIREMENT}"
+            ) from exc
+        raise ValueError(
+            f"Invalid reflection_prompt_template override: {exc}. The template "
+            "must contain both the <curr_param> and <side_info> markers."
+        ) from exc
+
+
+def _resolve_gepa_finish_reason(
+    *,
+    val_scores: list[float],
+    perfect_score: float,
+    no_improvement_stopper: Any,
+    no_improvement_iterations: Any,
+    total_metric_calls: Any,
+    max_metric_calls: int,
+    stop_file_watched: bool,
+) -> FinishReason | None:
+    """Return why GEPA's search ended, or None to leave the label to the caller.
+
+    Our own stops ("perfect_score"/"no_improvement") are decided from candidate
+    full-eval (valset) scores, exactly like the stop conditions — same seed
+    exclusion and same non-finite filtering, so the label can never claim a stop
+    the stopper did not make.
+
+    One other exit is distinguishable, and only when gepa can actually produce
+    it: with ``run_dir`` set, gepa wires a FileStopper on ``<run_dir>/gepa.stop``
+    (gepa/api.py), which ends the run with budget still on the clock. Detecting
+    it by the unspent budget rests on ``GEPAResult.total_metric_calls`` being the
+    same counter ``MaxMetricCallsStopper`` compares (true in gepa 0.1.x, but the
+    dependency has no upper bound), so it is gated on ``stop_file_watched``: with
+    no stop file to watch there is nothing to detect, and a future counter drift
+    would otherwise relabel every ordinary budget exit "cancelled". Callers that
+    never set ``run_dir`` — Optimization Studio among them — keep the plain
+    "max_trials" fallback.
+    """
+    candidate_scores = _candidate_full_eval_scores(val_scores)
+    if (
+        perfect_score > 0
+        and candidate_scores
+        and max(candidate_scores) >= perfect_score
+    ):
+        logger.info(
+            "GEPA stopped early: full-eval score %.4f reached perfect_score %.4f.",
+            max(candidate_scores),
+            perfect_score,
+        )
+        return "perfect_score"
+    if (
+        no_improvement_stopper is not None
+        and no_improvement_stopper.iterations_without_improvement
+        >= no_improvement_stopper.max_iterations_without_improvement
+    ):
+        logger.info(
+            "GEPA stopped early: no full-eval improvement for %s iterations.",
+            no_improvement_iterations,
+        )
+        return "no_improvement"
+    if (
+        stop_file_watched
+        and isinstance(total_metric_calls, int)
+        and not isinstance(total_metric_calls, bool)
+        and total_metric_calls < max_metric_calls
+    ):
+        logger.info(
+            "GEPA stopped after %s of %s metric calls with neither wired stopper "
+            "fired; treating it as an external stop request (gepa.stop in "
+            "run_dir).",
+            total_metric_calls,
+            max_metric_calls,
+        )
+        return "cancelled"
+    return None
 
 
 class GepaOptimizer(BaseOptimizer):
@@ -39,7 +354,10 @@ class GepaOptimizer(BaseOptimizer):
         n_threads: Number of parallel threads for evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
-        prompt_overrides: Accepted for API parity, but ignored (GEPA does not expose prompt hooks).
+        prompt_overrides: Optional dict or callable overriding the optimizer's own
+            prompts. The one supported key is "reflection_prompt_template", passed
+            through to gepa.optimize() as the instruction-proposal prompt; it must
+            contain the <curr_param> and <side_info> markers.
     """
 
     DEFAULT_PROMPTS = gepa_prompts.DEFAULT_PROMPTS
@@ -83,7 +401,7 @@ class GepaOptimizer(BaseOptimizer):
             name=name,
             skip_perfect_score=skip_perfect_score,
             perfect_score=perfect_score,
-            prompt_overrides=None,
+            prompt_overrides=prompt_overrides,
         )
         self.n_threads = n_threads
         self._adapter_metric_calls = 0
@@ -99,10 +417,25 @@ class GepaOptimizer(BaseOptimizer):
                 "(e.g., output style inference, prompt generation). "
                 "Provide overrides on the prompt itself if you need precise control."
             )
-        if prompt_overrides is not None:
-            logger.warning(
-                "GEPA prompt overrides are not supported yet and will be ignored."
-            )
+
+        # Fail here, not at the gepa.optimize() hand-off: that happens after the
+        # baseline evaluation, so a malformed override would otherwise cost a
+        # full dataset scoring pass before raising.
+        _validate_reflection_prompt_template(
+            self.prompts.get("reflection_prompt_template")
+        )
+
+    def _resolve_reflection_prompt_template(self) -> str:
+        """Return the reflection template to hand gepa.optimize(), validated.
+
+        __init__ already validated the configured template, so this re-check only
+        catches a template swapped in afterwards via ``optimizer.prompts.set()``.
+        GEPA would also silently ignore the template if the adapter defined
+        propose_new_texts — OpikGEPAAdapter deliberately does not.
+        """
+        template = self.prompts.get("reflection_prompt_template")
+        _validate_reflection_prompt_template(template)
+        return template
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
@@ -174,15 +507,24 @@ class GepaOptimizer(BaseOptimizer):
         self._validation_dataset = validation_dataset
         experiment_config = context.experiment_config
 
-        reflection_minibatch_size = context.extra_params.get(
-            "reflection_minibatch_size",
-            context.n_samples_minibatch or 3,
+        # Coerce at the boundary: extra_params is user-supplied (Any), and this
+        # value is both used in _warn_if_reflection_minibatch_exhausts_budget
+        # and passed to gepa.optimize — a stray string must not crash setup.
+        reflection_minibatch_size = _coerce_positive_int(
+            context.extra_params.get("reflection_minibatch_size"),
+            default=context.n_samples_minibatch or 3,
+            allow_zero=False,
+            name="reflection_minibatch_size",
         )
         candidate_selection_strategy = context.extra_params.get(
             "candidate_selection_strategy", "pareto"
         )
         use_merge = context.extra_params.get("use_merge", False)
         max_merge_invocations = context.extra_params.get("max_merge_invocations", 5)
+        no_improvement_iterations = context.extra_params.get(
+            "no_improvement_iterations",
+            constants.DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS,
+        )
         run_dir = context.extra_params.get("run_dir", None)
         track_best_outputs = context.extra_params.get("track_best_outputs", False)
         display_progress_bar = context.extra_params.get("display_progress_bar", False)
@@ -244,31 +586,28 @@ class GepaOptimizer(BaseOptimizer):
                 return items[: plan.nb_samples]
             return items
 
-        train_items = _apply_plan(dataset.get_items(), train_plan)
-        val_items = _apply_plan(val_source.get_items(), val_plan)
+        all_train_items = dataset.get_items()
+        all_val_items = val_source.get_items()
+        # Derive the guard's keys from every column the datasets can supply,
+        # not just the rows this run samples: rescoring evaluates against the
+        # full dataset, so a column carried only by an unsampled row would
+        # otherwise go unprotected. Done here, before narrowing, so the full
+        # lists can be released immediately — only the small key set outlives
+        # this block, and holding every item through optimization would undo
+        # the memory benefit of sampling.
+        known_placeholder_keys = candidate_ops.dataset_placeholder_keys(
+            (*all_train_items, *all_val_items)
+        )
+        train_items = _apply_plan(all_train_items, train_plan)
+        val_items = _apply_plan(all_val_items, val_plan)
+        del all_train_items, all_val_items
 
         effective_n_samples = len(train_items)
         max_metric_calls = max_trials * effective_n_samples
-        budget_limited_trials = (
-            max_metric_calls // effective_n_samples if effective_n_samples else 0
+        _warn_if_reflection_minibatch_exhausts_budget(
+            reflection_minibatch_size=reflection_minibatch_size,
+            max_metric_calls=max_metric_calls,
         )
-        if reflection_minibatch_size > max_trials:
-            # TODO(opik_optimizer/#gepa-batching): Centralize reflection minibatch clamping when we consolidate trial budgeting.
-            logger.warning(
-                "reflection_minibatch_size (%s) exceeds max_trials (%s); GEPA reflection will not run. "
-                "Increase max_trials or lower the minibatch.",
-                reflection_minibatch_size,
-                max_trials,
-            )
-        elif (
-            budget_limited_trials and reflection_minibatch_size > budget_limited_trials
-        ):
-            logger.warning(
-                "reflection_minibatch_size (%s) exceeds the number of candidates allowed by the metric budget (%s). "
-                "Consider increasing max_trials or n_samples.",
-                reflection_minibatch_size,
-                budget_limited_trials,
-            )
 
         train_insts = helpers.build_data_insts(train_items, input_key, output_key)
         val_insts = helpers.build_data_insts(val_items, input_key, output_key)
@@ -287,12 +626,22 @@ class GepaOptimizer(BaseOptimizer):
             dataset=dataset,
             experiment_config=experiment_config,
             validation_dataset=validation_dataset,
+            gepa_val_item_ids={
+                str(item["id"]) for item in val_items if item.get("id") is not None
+            },
         )
 
         try:
             import gepa
         except Exception as exc:  # pragma: no cover
             raise ImportError("gepa package is required for GepaOptimizer") from exc
+
+        # gepa.optimize() only stops on its metric-call budget by default, so a
+        # run that hits 100% on a full eval would keep burning budget. Wire in
+        # full-eval-only stoppers (see _build_gepa_stop_callbacks).
+        stop_callbacks, no_improvement_stopper = _build_gepa_stop_callbacks(
+            self.perfect_score, no_improvement_iterations
+        )
 
         use_adapter_progress_bar = display_progress_bar if self.verbose == 0 else False
 
@@ -314,12 +663,17 @@ class GepaOptimizer(BaseOptimizer):
                 "task_lm": None,
                 "reflection_lm": self.model,
                 "candidate_selection_strategy": candidate_selection_strategy,
+                # Replaces GEPA's default instruction-proposal prompt, which
+                # instructs the reflection LM to inline example content and so
+                # invites it to overwrite the user's template variables.
+                "reflection_prompt_template": self._resolve_reflection_prompt_template(),
                 "skip_perfect_score": self.skip_perfect_score,
                 "reflection_minibatch_size": reflection_minibatch_size,
                 "perfect_score": self.perfect_score,
                 "use_merge": use_merge,
                 "max_merge_invocations": max_merge_invocations,
                 "max_metric_calls": max_metric_calls,
+                "stop_callbacks": stop_callbacks,
                 "run_dir": run_dir,
                 "track_best_outputs": track_best_outputs,
                 "display_progress_bar": use_adapter_progress_bar,
@@ -332,6 +686,29 @@ class GepaOptimizer(BaseOptimizer):
 
         candidates: list[dict[str, str]] = getattr(gepa_result, "candidates", []) or []
         val_scores: list[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
+
+        # Surface why the search ended so the run doesn't silently look like a
+        # full budget burn. finish_reason flows into result metadata/logs via
+        # the base class (runtime.build_final_result). The gepa engine only
+        # exits via its stop callbacks, so when neither of ours fired and the
+        # metric-call budget (max_metric_calls = max_trials * n_samples) is
+        # spent, that is "max_trials", not "completed": GEPA's trials_completed
+        # only counts Opik-side evaluate() calls, so the base-class fallback
+        # would otherwise mislabel every budget-exhausted run. Budget left on
+        # the clock means someone else stopped the run, but only a run with a
+        # stop file to watch can be stopped that way — see the resolver.
+        gepa_finish_reason = _resolve_gepa_finish_reason(
+            val_scores=val_scores,
+            perfect_score=self.perfect_score,
+            no_improvement_stopper=no_improvement_stopper,
+            no_improvement_iterations=no_improvement_iterations,
+            total_metric_calls=getattr(gepa_result, "total_metric_calls", None),
+            max_metric_calls=max_metric_calls,
+            stop_file_watched=run_dir is not None,
+        )
+        context.finish_reason = (
+            context.finish_reason or gepa_finish_reason or "max_trials"
+        )
 
         # Filter duplicate candidates based on content
         (
@@ -351,6 +728,7 @@ class GepaOptimizer(BaseOptimizer):
             filtered_indexed_candidates=filtered_indexed_candidates,
             filtered_val_scores=filtered_val_scores,
             selection_policy=candidate_selection_strategy,
+            known_placeholder_keys=known_placeholder_keys,
         )
 
         best_idx, best_score = candidate_ops.select_best_candidate_index(
@@ -394,6 +772,7 @@ class GepaOptimizer(BaseOptimizer):
             train_items=train_items,
             gepa_result=gepa_result,
             experiment_config=experiment_config,
+            known_placeholder_keys=known_placeholder_keys,
         )
 
     def _build_optimization_config(self) -> dict[str, Any]:

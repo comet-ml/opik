@@ -75,6 +75,10 @@ spec:
       {{- toYaml . | nindent 6 }}
       {{- end }}
       {{- end }}
+      {{- if .Values.clickhouse.tieredStorage.enabled }}
+      conf.d/storage.xml: |
+{{ include "opik.clickhouse.storageXml" . | indent 8 }}
+      {{- end }}
     
     {{- if .Values.zookeeper.enabled }}
     zookeeper:
@@ -87,6 +91,26 @@ spec:
         layout:
           shardsCount: {{ .Values.clickhouse.shardsCount }}
           replicasCount: {{ .Values.clickhouse.replicasCount }}
+          # internal_replication pins Distributed-engine inserts to one live replica per shard and
+          # lets ReplicatedMergeTree replication fan the parts out, instead of the Distributed table
+          # writing every replica itself.
+          #
+          # Gated on sharding.enabled so that upgrading the chart never reshapes an existing
+          # ClickHouseInstallation on its own: with the flag off the operator keeps inferring
+          # internal_replication from replicasCount > 1, which is what every current deployment
+          # already runs with. Without that gate, any deployment on 2+ replicas would pick up an
+          # explicit shards list from a plain version bump, with no flag flipped.
+          #
+          # Also requires more than one replica, since internal_replication has nothing to route to
+          # on a single replica, and a positive shardsCount, so an invalid count renders no list at
+          # all rather than a null or a clamped entry contradicting the shardsCount above. Shard
+          # names are left unset so the operator keeps generating them by index.
+          {{- if and .Values.clickhouse.sharding.enabled (gt (int .Values.clickhouse.replicasCount) 1) (gt (int .Values.clickhouse.shardsCount) 0) }}
+          shards:
+            {{- range $i := until (int .Values.clickhouse.shardsCount) }}
+            - internalReplication: "true"
+            {{- end }}
+          {{- end }}
         templates:
           podTemplate: {{ .Values.clickhouse.templates.podTemplate }}
           serviceTemplate: {{ .Values.clickhouse.templates.serviceTemplate }}
@@ -128,9 +152,15 @@ spec:
             readinessProbe:
               {{- toYaml .Values.clickhouse.readinessProbe | nindent 14 }}
             {{- end }}
-            {{- with .Values.clickhouse.extraVolumeMounts }}
+            {{- if or .Values.clickhouse.extraVolumeMounts .Values.clickhouse.tieredStorage.enabled }}
             volumeMounts:
+              {{- with .Values.clickhouse.extraVolumeMounts }}
               {{- toYaml . | nindent 14 }}
+              {{- end }}
+              {{- if .Values.clickhouse.tieredStorage.enabled }}
+              - name: {{ .Values.clickhouse.tieredStorage.cold.cache.volumeName }}
+                mountPath: {{ .Values.clickhouse.tieredStorage.cold.cache.path }}
+              {{- end }}
             {{- end }}
           {{- if .Values.clickhouse.backupServer.enabled }}
           - name: clickhouse-backup
@@ -264,6 +294,19 @@ spec:
           resources:
             requests:
               storage: {{ .Values.clickhouse.storage }}
+      {{- if .Values.clickhouse.tieredStorage.enabled }}
+      {{- $cache := .Values.clickhouse.tieredStorage.cold.cache }}
+      - name: {{ $cache.volumeName }}
+        spec:
+          {{- with ($cache.storageClassName | default .Values.clickhouse.storageClassName) }}
+          storageClassName: {{ . }}
+          {{- end }}
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: {{ $cache.storage }}
+      {{- end }}
       {{- with .Values.clickhouse.extraVolumeClaimTemplates }}
       {{- . | toYaml | nindent 6 }}
       {{- end }}

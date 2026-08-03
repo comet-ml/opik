@@ -52,6 +52,8 @@ export namespace AutomationRuleEvaluatorPublic {
         name: string;
         samplingRate?: number;
         enabled?: boolean;
+        /** Controls whether the rule fires on production traces, experiment traces, or both. Defaults to 'production' if omitted. */
+        triggerScope?: OpikApi.AutomationRuleEvaluatorPublicTriggerScope;
         createdAt?: Date;
         createdBy?: string;
         lastUpdatedAt?: Date;

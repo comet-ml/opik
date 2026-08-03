@@ -231,16 +231,25 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public void deleteTraces(BatchDeleteByProject request, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = deleteTraces(request, workspaceName, apiKey, HttpStatus.SC_NO_CONTENT)) {
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response deleteTraces(BatchDeleteByProject request, String workspaceName, String apiKey,
+            int expectedStatus) {
+        var actualResponse = callDeleteTraces(request, workspaceName, apiKey);
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        return actualResponse;
+    }
+
+    public Response callDeleteTraces(BatchDeleteByProject request, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
+                .post(Entity.json(request));
     }
 
     public void updateTrace(UUID id, TraceUpdate traceUpdate, String apiKey, String workspaceName) {

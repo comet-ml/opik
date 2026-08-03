@@ -568,6 +568,45 @@ export class TestHelperClient {
     }
   }
 
+  async createRichTraceForSidebar(
+    projectName: string,
+    traceName: string,
+    promptName: string,
+    attachmentPath: string
+  ): Promise<{ attachmentName: string; promptName: string }> {
+    try {
+      const response = await this.client.post('/api/traces/create-rich-trace-for-sidebar', {
+        project_name: projectName,
+        trace_name: traceName,
+        prompt_name: promptName,
+        attachment_path: attachmentPath,
+      });
+
+      return {
+        attachmentName: response.data.attachment_name,
+        promptName: response.data.prompt_name,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create rich trace for sidebar');
+    }
+  }
+
+  async createTraceWithAgentGraphSpan(
+    projectName: string,
+    traceName: string
+  ): Promise<{ spanName: string }> {
+    try {
+      const response = await this.client.post('/api/traces/create-trace-with-agent-graph-span', {
+        project_name: projectName,
+        trace_name: traceName,
+      });
+
+      return { spanName: response.data.span_name };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create trace with agent graph span');
+    }
+  }
+
   async searchTraces(
     projectName: string,
     options?: {

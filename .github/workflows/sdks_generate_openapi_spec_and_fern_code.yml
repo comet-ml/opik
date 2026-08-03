@@ -33,12 +33,12 @@ jobs:
         run: npm install -g fern-api@4.71.5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v9.0.0
 
       - name: Install Opik Optimizer SDK (for Fern docs)
         run: |
@@ -88,7 +88,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.check_changes.outputs.has_changes == 'true'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.COMET_ACTION_CREATE_PR }}
           branch: ${{ env.BRANCH_NAME }}

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.Optimization;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
@@ -107,11 +108,7 @@ class OptimizationsResourceFindProjectOptimizationsTest {
                 projectId, apiKey, workspaceName, 1, 10, null, null, null, 200);
 
         assertThat(page.total()).isEqualTo(2);
-        assertThat(page.content())
-                .usingRecursiveComparison()
-                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
-                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                .isEqualTo(expected.reversed());
+        assertOptimizationsMatch(page.content(), expected.reversed());
     }
 
     @Test
@@ -139,11 +136,49 @@ class OptimizationsResourceFindProjectOptimizationsTest {
                 projectId, apiKey, workspaceName, 1, 10, null, matchingName, null, 200);
 
         assertThat(page.total()).isEqualTo(1);
-        assertThat(page.content())
-                .usingRecursiveComparison()
-                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
-                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                .isEqualTo(List.of(matched));
+        assertOptimizationsMatch(page.content(), List.of(matched));
+    }
+
+    /**
+     * An optimization with no experiments is served by a projection that skips the aggregate pipeline, because
+     * every aggregate there derives from the optimization's experiments. The defaults it substitutes must match
+     * what the full pipeline yields for empty input. These fields sit in {@code OPTIMIZATION_IGNORED_FIELDS} for
+     * the other tests in this class, so nothing else covers them - hence the explicit assertions.
+     * {@code totalOptimizationCost} is zero rather than null because {@code sum()} over an empty group returns 0.
+     */
+    @Test
+    @DisplayName("when an optimization has no experiments, then aggregate fields carry their empty-input values")
+    void whenOptimizationHasNoExperiments__thenAggregateFieldsAreEmptyInputValues() {
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        var created = optimizationResourceClient.createPartialOptimization().projectName(projectName).build();
+        var optimizationId = optimizationResourceClient.create(created, apiKey, workspaceName);
+        var expected = created.toBuilder().id(optimizationId).projectId(projectId).build();
+
+        var page = optimizationResourceClient.findByProject(
+                projectId, apiKey, workspaceName, 1, 10, null, null, null, 200);
+
+        assertOptimizationsMatch(page.content(), List.of(expected));
+
+        var optimization = page.content().getFirst();
+
+        assertThat(optimization.numTrials()).isZero();
+        // getScoresAggregation maps an empty score map to null rather than an empty list
+        assertThat(optimization.feedbackScores()).isNull();
+        assertThat(optimization.bestObjectiveScore()).isNull();
+        assertThat(optimization.baselineObjectiveScore()).isNull();
+        assertThat(optimization.bestDuration()).isNull();
+        assertThat(optimization.baselineDuration()).isNull();
+        assertThat(optimization.bestCost()).isNull();
+        assertThat(optimization.baselineCost()).isNull();
+        // sum() over an empty group is 0, not null
+        StatsUtils.assertBigDecimalEquals(optimization.totalOptimizationCost(), BigDecimal.ZERO);
     }
 
     @Test
@@ -191,10 +226,19 @@ class OptimizationsResourceFindProjectOptimizationsTest {
                 projectId, apiKey, workspaceName, 1, 10, dataset.id(), null, null, 200);
 
         assertThat(page.total()).isEqualTo(1);
-        assertThat(page.content())
+        assertOptimizationsMatch(page.content(), List.of(matched));
+    }
+
+    /**
+     * Compares returned optimizations to the expected entities. The aggregate fields in
+     * {@code OPTIMIZATION_IGNORED_FIELDS} are excluded because they are computed from the optimization's
+     * experiments rather than supplied on creation; assert them explicitly where they matter.
+     */
+    private void assertOptimizationsMatch(List<Optimization> actual, List<Optimization> expected) {
+        assertThat(actual)
                 .usingRecursiveComparison()
                 .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
                 .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                .isEqualTo(List.of(matched));
+                .isEqualTo(expected);
     }
 }

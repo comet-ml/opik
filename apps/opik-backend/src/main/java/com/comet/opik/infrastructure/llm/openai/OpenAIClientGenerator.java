@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -50,7 +51,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(openAiClientBuilder::baseUrl);
 
@@ -122,7 +123,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 
@@ -173,7 +174,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 
@@ -208,7 +209,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 

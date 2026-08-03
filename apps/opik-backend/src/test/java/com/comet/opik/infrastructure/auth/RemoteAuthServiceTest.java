@@ -74,6 +74,8 @@ class RemoteAuthServiceTest {
     private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String NOT_LOGGED_USER = "Please login first";
+    private static final String DROPWIZARD_UNAUTHORIZED_BODY = "Credentials are required to access this resource.";
+    private static final String REMOTE_ERROR_MESSAGE = "remote error message";
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -411,6 +413,170 @@ class RemoteAuthServiceTest {
                         .build()))
                 .isExactlyInstanceOf(expectedExceptionClass)
                 .hasMessage(expectedMessage);
+    }
+
+    static Stream<Arguments> nonJsonErrorBodyArgs() {
+        return Stream.of(
+                // Dropwizard's default UnauthorizedHandler, used by the @Auth filter guarding /opik/auth-session
+                arguments(HttpStatus.SC_UNAUTHORIZED, "text/plain", DROPWIZARD_UNAUTHORIZED_BODY, NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_UNAUTHORIZED, "text/html", "<html><body>401</body></html>", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_UNAUTHORIZED, "text/plain", "", NOT_LOGGED_USER),
+                // a proxy error page far larger than the logged-body cap must still resolve to a client error
+                arguments(HttpStatus.SC_UNAUTHORIZED, "text/html", "x".repeat(5_000), NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_BAD_REQUEST, "text/plain", "Bad Request", MISSING_WORKSPACE));
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonJsonErrorBodyArgs")
+    void sessionAuth__whenRemoteErrorBodyIsNotJson__thenClientErrorInsteadOfServerError(
+            int remoteAuthStatusCode, String contentType, String body, String expectedMessage) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .willReturn(aResponse().withStatus(remoteAuthStatusCode)
+                        .withHeader("Content-Type", contentType)
+                        .withBody(body)));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""),
+                sessionCookie(sessionTokenValue),
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(expectedMessage)
+                .satisfies(throwable -> assertThat(((ClientErrorException) throwable).getResponse().getStatus())
+                        .isEqualTo(remoteAuthStatusCode));
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonJsonErrorBodyArgs")
+    void auth__whenRemoteErrorBodyIsNotJson__thenClientErrorInsteadOfServerError(
+            int remoteAuthStatusCode, String contentType, String body, String expectedMessage) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(aResponse().withStatus(remoteAuthStatusCode)
+                        .withHeader("Content-Type", contentType)
+                        .withBody(body)));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, apiKey), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(expectedMessage)
+                .satisfies(throwable -> assertThat(((ClientErrorException) throwable).getResponse().getStatus())
+                        .isEqualTo(remoteAuthStatusCode));
+    }
+
+    /**
+     * The content type claims JSON but the body is not parseable, so the JSON branch is entered and
+     * {@code readEntity} fails. Pins the client-facing outcome of that recovery path: a client error carrying the
+     * fallback message, never a server error. The path also re-reads the raw body for diagnostics, which is what the
+     * up-front buffering enables; the logged body itself is not asserted here.
+     */
+    @ParameterizedTest
+    @MethodSource("malformedJsonErrorBodyArgs")
+    void sessionAuth__whenRemoteErrorBodyIsMalformedJson__thenClientErrorAndBodyReReadForDiagnostics(
+            int remoteAuthStatusCode, String body, String expectedMessage) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .willReturn(aResponse().withStatus(remoteAuthStatusCode)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(body)));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""),
+                sessionCookie(sessionTokenValue),
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(expectedMessage)
+                .satisfies(throwable -> assertThat(((ClientErrorException) throwable).getResponse().getStatus())
+                        .isEqualTo(remoteAuthStatusCode));
+    }
+
+    static Stream<Arguments> malformedJsonErrorBodyArgs() {
+        return Stream.of(
+                arguments(HttpStatus.SC_UNAUTHORIZED, "not json at all", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_UNAUTHORIZED, "{\"msg\":", NOT_LOGGED_USER),
+                // valid JSON, but no usable message for the caller
+                arguments(HttpStatus.SC_UNAUTHORIZED, "{\"msg\":\"   \"}", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_UNAUTHORIZED, "{}", NOT_LOGGED_USER),
+                arguments(HttpStatus.SC_BAD_REQUEST, "not json at all", MISSING_WORKSPACE));
+    }
+
+    static Stream<Arguments> errorBodyContentTypeArgs() {
+        return Stream.of(
+                arguments("application/json", REMOTE_ERROR_MESSAGE),
+                arguments("application/json;charset=utf-8", REMOTE_ERROR_MESSAGE),
+                // Jackson parses a structured +json suffix and a non-application type just as happily, so gating on
+                // APPLICATION_JSON_TYPE.isCompatible would discard a remote message these used to surface
+                arguments("application/problem+json", REMOTE_ERROR_MESSAGE),
+                arguments("text/json", REMOTE_ERROR_MESSAGE),
+                // these say nothing about the body, so the caller-facing fallback is used instead
+                arguments("application/octet-stream", NOT_LOGGED_USER),
+                arguments("text/plain", NOT_LOGGED_USER),
+                arguments("*/*", NOT_LOGGED_USER),
+                // a wildcard is not a legal response content type, so it is not trusted even with the +json suffix
+                arguments("application/*", NOT_LOGGED_USER),
+                arguments("application/*+json", NOT_LOGGED_USER));
+    }
+
+    /**
+     * Pins which content types are read as JSON: subtype {@code json} or a {@code +json} structured suffix. Anything
+     * the Jackson provider can deserialize must keep surfacing the remote {@code msg()}, exactly as it did before this
+     * class started gating on the content type; everything else resolves to the caller-facing fallback instead of a
+     * server error.
+     */
+    @ParameterizedTest
+    @MethodSource("errorBodyContentTypeArgs")
+    void sessionAuth__whenRemoteRepliesUnauthorized__thenJsonSubtypesSurfaceRemoteMessage(
+            String contentType, String expectedMessage) {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .willReturn(aResponse().withStatus(HttpStatus.SC_UNAUTHORIZED)
+                        .withHeader("Content-Type", contentType)
+                        .withBody("{\"msg\":\"%s\",\"code\":401}".formatted(REMOTE_ERROR_MESSAGE))));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""),
+                sessionCookie(sessionTokenValue),
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(expectedMessage)
+                .satisfies(throwable -> assertThat(((ClientErrorException) throwable).getResponse().getStatus())
+                        .isEqualTo(HttpStatus.SC_UNAUTHORIZED));
+    }
+
+    @Test
+    void sessionAuth__whenRemoteRepliesUnauthorizedWithoutContentType__thenFallbackMessage() {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var sessionTokenValue = "session-" + UUID.randomUUID();
+        WIRE_MOCK.server().stubFor(post("/opik/auth-session")
+                .willReturn(aResponse().withStatus(HttpStatus.SC_UNAUTHORIZED)
+                        .withBody("{\"msg\":\"%s\",\"code\":401}".formatted(REMOTE_ERROR_MESSAGE))));
+
+        assertThatThrownBy(() -> remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, ""),
+                sessionCookie(sessionTokenValue),
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build()))
+                .isExactlyInstanceOf(ClientErrorException.class)
+                .hasMessage(NOT_LOGGED_USER);
     }
 
     @Test

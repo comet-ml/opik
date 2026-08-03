@@ -3,7 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { Database } from "lucide-react";
 
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
-import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import { DropdownOption } from "@/types/shared";
 import { usePermissions } from "@/contexts/PermissionsContext";
 

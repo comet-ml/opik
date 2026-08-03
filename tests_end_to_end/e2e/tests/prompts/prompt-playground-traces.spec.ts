@@ -28,7 +28,7 @@ const PROMPT_VARIANTS: PromptVariant[] = [
   },
 ];
 
-test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@prompts', '@playground'] }, () => {
+test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@area:playground', '@cap:playground.verify-trace-from-run', '@cap:playground.playground-logs-sidebar'] }, () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
   for (const variant of PROMPT_VARIANTS) {

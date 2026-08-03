@@ -373,11 +373,73 @@ def test_trace_oql__valid_filters(filter_string, expected):
             'error_info = "something"',
             r"Operator = is not supported for field error_info.*",
         ),
+        # Incomplete filters must raise ValueError (not IndexError)
+        ("duration >", r"Incomplete filter string.*"),
+        ("duration >=", r"Incomplete filter string.*"),
+        ("name =", r"Incomplete filter string.*"),
+        ("duration > 5 and", r"Incomplete filter string.*"),
+        # Whitespace-only query takes the full parser path (unlike None/""),
+        # and must still fail cleanly rather than raising IndexError.
+        ("   ", r"Incomplete filter string.*"),
+        # Unterminated quoted values (keys already covered above).
+        # Raised from _is_valid_escaped_key_char while scanning the value.
+        (
+            'name = "hello',
+            r'Missing closing quote for: "hello',
+        ),
+        # Malformed negative numbers
+        ("duration > -", r"Expected a number after '-' in filter value"),
+        ("duration > --5", r"Expected a number after '-' in filter value"),
+        ("duration > - 5", r"Expected a number after '-' in filter value"),
+        # Decimal point with no digits after it
+        ("duration > 5.", r"Expected digits after decimal point in filter value"),
+        ("duration > -5.", r"Expected digits after decimal point in filter value"),
     ],
 )
 def test_trace_oql__invalid_filters(filter_string, error_pattern):
     with pytest.raises(ValueError, match=error_pattern):
         OpikQueryLanguage.for_traces(filter_string)
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected",
+    [
+        (
+            "duration > -5",
+            [{"field": "duration", "operator": ">", "value": "-5"}],
+        ),
+        (
+            "total_estimated_cost < -0.1",
+            [{"field": "total_estimated_cost", "operator": "<", "value": "-0.1"}],
+        ),
+        (
+            "duration = -1",
+            [{"field": "duration", "operator": "=", "value": "-1"}],
+        ),
+    ],
+)
+def test_trace_oql__negative_numeric_values(filter_string, expected):
+    oql = OpikQueryLanguage.for_traces(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert len(parsed) == len(expected)
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected_value",
+    [
+        # Doubled double-quotes inside a value must unescape, same as keys.
+        ('name = "say ""hi"" there"', 'say "hi" there'),
+        ('name = """quoted"""', '"quoted"'),
+        ('name = ""', ""),
+    ],
+)
+def test_trace_oql__escaped_quotes_in_value(filter_string, expected_value):
+    oql = OpikQueryLanguage.for_traces(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert parsed[0]["value"] == expected_value
 
 
 @pytest.mark.parametrize("filter_string", [None, ""])
@@ -1192,3 +1254,40 @@ def test_span_oql__in_not_in_operators__happyflow(filter_string, expected):
 def test_oql__in_operator__invalid_array_syntax(filter_string, error_pattern):
     with pytest.raises(ValueError, match=error_pattern):
         OpikQueryLanguage.for_traces(filter_string)
+
+
+# ============================================================
+# Cross-factory malformed-input coverage (shared parser path)
+# ============================================================
+# Baz review: incomplete-filter EOF guard lives in _parse_operator /
+# _parse_value, shared by all public factories — not only for_traces.
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        OpikQueryLanguage.for_traces,
+        OpikQueryLanguage.for_spans,
+        OpikQueryLanguage.for_threads,
+        OpikQueryLanguage.for_dataset_items,
+        OpikQueryLanguage.for_prompt_versions,
+    ],
+)
+@pytest.mark.parametrize(
+    "filter_string, error_pattern",
+    [
+        # Ends after a valid field with no operator / value
+        ("id", r"Incomplete filter string.*"),
+        ("id =", r"Incomplete filter string.*"),
+        # Unterminated double-quoted value (shared quote scanner)
+        (
+            'id = "hello',
+            r'Missing closing quote for: "hello',
+        ),
+    ],
+)
+def test_oql_factories__incomplete_and_unterminated_inputs(
+    factory, filter_string, error_pattern
+):
+    with pytest.raises(ValueError, match=error_pattern):
+        factory(filter_string)

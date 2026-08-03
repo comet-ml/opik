@@ -9,6 +9,7 @@ import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -65,7 +66,7 @@ public interface AttachmentService {
 
     Mono<Long> delete(DeleteAttachmentsRequest request);
 
-    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID containerId);
 
     /**
      * Get existing attachments for a specific entity as AttachmentInfo objects.
@@ -119,12 +120,14 @@ class AttachmentServiceImpl implements AttachmentService {
     private final @NonNull ProjectService projectService;
     private final @NonNull OpikConfiguration config;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull IdGenerator idGenerator;
     private static final Tika tika = new Tika();
     private static final int MAX_ATTACHMENTS_PER_ENTITY = 1_000;
 
     @Override
     public StartMultipartUploadResponse startMultiPartUpload(@NonNull StartMultipartUploadRequest startUploadRequest,
             @NonNull String workspaceId, @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(startUploadRequest.entityId(), startUploadRequest.entityType().getValue());
         if (config.getS3Config().isMinIO()) {
             return prepareMinIOUploadResponse(startUploadRequest);
         }
@@ -149,6 +152,8 @@ class AttachmentServiceImpl implements AttachmentService {
     public void completeMultiPartUpload(@NonNull CompleteMultipartUploadRequest completeUploadRequest,
             @NonNull String workspaceId,
             @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(completeUploadRequest.entityId(),
+                completeUploadRequest.entityType().getValue());
         // In case of MinIO complete is not needed, file is uploaded directly via BE
         if (config.getS3Config().isMinIO()) {
             log.info("Skipping completeMultiPartUpload for MinIO");
@@ -190,6 +195,7 @@ class AttachmentServiceImpl implements AttachmentService {
     @Override
     public void uploadAttachmentInternal(@NonNull AttachmentInfo attachmentInfo, byte[] data,
             @NonNull String workspaceId, @NonNull String userName) {
+        idGenerator.validateIdNotInFuture(attachmentInfo.entityId(), attachmentInfo.entityType().getValue());
 
         attachmentInfo = attachmentInfo.toBuilder()
                 .containerId(getProjectIdByName(attachmentInfo.projectName(), workspaceId, userName))
@@ -251,12 +257,12 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
-    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
-        if (entityIds.isEmpty()) {
+    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, Set<UUID> entityIds, UUID containerId) {
+        if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(0L);
         }
 
-        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds, containerId)
                 .flatMap(attachments -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     Set<String> keys = attachments.stream()
@@ -265,7 +271,7 @@ class AttachmentServiceImpl implements AttachmentService {
 
                     return Mono.fromRunnable(() -> fileService.deleteObjects(keys));
                 }))
-                .then(attachmentDAO.deleteByEntityIds(entityType, entityIds));
+                .then(attachmentDAO.deleteByEntityIds(entityType, entityIds, containerId));
     }
 
     private List<Attachment> enhanceWithDownloadUrl(List<Attachment> attachments, AttachmentSearchCriteria criteria,
@@ -441,7 +447,7 @@ class AttachmentServiceImpl implements AttachmentService {
         if (entityIds.isEmpty()) {
             return Mono.just(false);
         }
-        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds, null)
                 .map(list -> !list.isEmpty());
     }
 
@@ -452,7 +458,7 @@ class AttachmentServiceImpl implements AttachmentService {
         if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(List.of());
         }
-        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds);
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds, null);
     }
 
     @Override
@@ -462,7 +468,7 @@ class AttachmentServiceImpl implements AttachmentService {
             return Mono.just(0L);
         }
 
-        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds, null)
                 .flatMap(attachments -> {
                     // Filter to only auto-stripped attachments
                     List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils

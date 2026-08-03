@@ -35,6 +35,35 @@ def test_get_is_alive_ping_url__base_url__returns_expected_ping_url(
 
 
 @pytest.mark.parametrize(
+    ("url_override", "expected_permissions_url"),
+    [
+        (
+            "http://localhost:5173/api",
+            "http://localhost:5173/api/v1/private/workspace-permissions",
+        ),
+        (
+            "http://localhost:5173/api/",
+            "http://localhost:5173/api/v1/private/workspace-permissions",
+        ),
+        (
+            "https://www.comet.com/opik/api",
+            "https://www.comet.com/opik/api/v1/private/workspace-permissions",
+        ),
+        (
+            "https://www.comet.com/opik/api/",
+            "https://www.comet.com/opik/api/v1/private/workspace-permissions",
+        ),
+    ],
+)
+def test_get_user_permissions_url__url_override__keeps_path_prefix(
+    url_override: str, expected_permissions_url: str
+) -> None:
+    assert (
+        url_helpers.get_user_permissions_url(url_override) == expected_permissions_url
+    )
+
+
+@pytest.mark.parametrize(
     ("url_override", "expected_ui_url"),
     [
         # Shipped defaults must keep working.
@@ -108,4 +137,33 @@ def test_get_test_suite_url_by_id__returns_direct_project_scoped_url(
             test_suite_id="suite-id",
         )
         == expected_test_suite_url
+    )
+
+
+@pytest.mark.parametrize(
+    ("base_url", "expected_experiment_url"),
+    [
+        (
+            "http://localhost:5173/api",
+            "http://localhost:5173/opik/my-workspace/experiments/dataset-id"
+            "/compare?experiments=%5B%22experiment-id%22%5D",
+        ),
+        (
+            "https://www.comet.com/opik/api/",
+            "https://www.comet.com/opik/my-workspace/experiments/dataset-id"
+            "/compare?experiments=%5B%22experiment-id%22%5D",
+        ),
+    ],
+)
+def test_get_experiment_url_by_id__returns_direct_dataset_scoped_url(
+    base_url: str, expected_experiment_url: str
+) -> None:
+    assert (
+        url_helpers.get_experiment_url_by_id(
+            dataset_id="dataset-id",
+            experiment_id="experiment-id",
+            base_url=base_url,
+            workspace="my-workspace",
+        )
+        == expected_experiment_url
     )

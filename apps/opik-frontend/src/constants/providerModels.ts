@@ -119,6 +119,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_5,
+      label: "Claude Opus 5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
       label: "Claude Sonnet 5",
     },
@@ -286,8 +290,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-fable-5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_BATCH,
+      label: "anthropic/claude-fable-5:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
       label: "anthropic/claude-haiku-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5_BATCH,
+      label: "anthropic/claude-haiku-4.5:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4,
@@ -298,8 +310,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_1_BATCH,
+      label: "anthropic/claude-opus-4.1:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_5,
       label: "anthropic/claude-opus-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_5_BATCH,
+      label: "anthropic/claude-opus-4.5:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6,
@@ -310,12 +330,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.6-fast",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_BATCH,
+      label: "anthropic/claude-opus-4.6:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7,
       label: "anthropic/claude-opus-4.7",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_FAST,
       label: "anthropic/claude-opus-4.7-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_BATCH,
+      label: "anthropic/claude-opus-4.7:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8,
@@ -326,6 +354,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.8-fast",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8_BATCH,
+      label: "anthropic/claude-opus-4.8:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_5,
+      label: "anthropic/claude-opus-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_5_FAST,
+      label: "anthropic/claude-opus-5-fast",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
@@ -334,12 +374,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-sonnet-4.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5_BATCH,
+      label: "anthropic/claude-sonnet-4.5:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6,
       label: "anthropic/claude-sonnet-4.6",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5,
       label: "anthropic/claude-sonnet-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5_BATCH,
+      label: "anthropic/claude-sonnet-5:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_AFM_4_5B,
@@ -580,6 +628,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_0731,
+      label: "deepseek/deepseek-v4-flash-0731",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
       label: "deepseek/deepseek-v4-flash:free",
     },
@@ -624,8 +676,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-2.5-flash-lite-preview-09-2025",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_LITE_BATCH,
+      label: "google/gemini-2.5-flash-lite:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_PREVIEW_09_2025,
       label: "google/gemini-2.5-flash-preview-09-2025",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_BATCH,
+      label: "google/gemini-2.5-flash:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO,
@@ -640,8 +700,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-2.5-pro-preview-05-06",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO_BATCH,
+      label: "google/gemini-2.5-pro:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW,
       label: "google/gemini-3-flash-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW_BATCH,
+      label: "google/gemini-3-flash-preview:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_IMAGE,
@@ -676,6 +744,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3.1-flash-lite-preview",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE_BATCH,
+      label: "google/gemini-3.1-flash-lite:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_PRO_PREVIEW,
       label: "google/gemini-3.1-pro-preview",
     },
@@ -684,8 +756,32 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3.1-pro-preview-customtools",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_PRO_PREVIEW_BATCH,
+      label: "google/gemini-3.1-pro-preview:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_5_FLASH,
       label: "google/gemini-3.5-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_5_FLASH_LITE,
+      label: "google/gemini-3.5-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_5_FLASH_LITE_BATCH,
+      label: "google/gemini-3.5-flash-lite:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_5_FLASH_BATCH,
+      label: "google/gemini-3.5-flash:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
+      label: "google/gemini-3.6-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH_BATCH,
+      label: "google/gemini-3.6-flash:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
@@ -794,6 +890,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
       label: "inclusionai/ling-2.6-flash:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FREE,
+      label: "inclusionai/ling-3.0-flash:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
@@ -1022,6 +1122,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3,
       label: "minimax/minimax-m3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3_BATCH,
+      label: "minimax/minimax-m3:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
@@ -1489,8 +1593,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5-mini",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_MINI_BATCH,
+      label: "openai/gpt-5-mini:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
       label: "openai/gpt-5-nano",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO_BATCH,
+      label: "openai/gpt-5-nano:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_PRO,
@@ -1517,6 +1629,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.1-codex-mini",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_BATCH,
+      label: "openai/gpt-5.1:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2,
       label: "openai/gpt-5.2",
     },
@@ -1535,6 +1651,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_PRO,
       label: "openai/gpt-5.2-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_BATCH,
+      label: "openai/gpt-5.2:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_3_CHAT,
@@ -1557,12 +1677,24 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.4-mini",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_MINI_BATCH,
+      label: "openai/gpt-5.4-mini:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_NANO,
       label: "openai/gpt-5.4-nano",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_NANO_BATCH,
+      label: "openai/gpt-5.4-nano:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_PRO,
       label: "openai/gpt-5.4-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_BATCH,
+      label: "openai/gpt-5.4:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5,
@@ -1571,6 +1703,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5_PRO,
       label: "openai/gpt-5.5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5_BATCH,
+      label: "openai/gpt-5.5:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA,
@@ -1595,6 +1731,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_TERRA_PRO,
       label: "openai/gpt-5.6-terra-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_BATCH,
+      label: "openai/gpt-5:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_AUDIO,
@@ -1751,6 +1891,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1_FREE,
       label: "poolside/laguna-m.1:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1,
+      label: "poolside/laguna-s-2.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1_FREE,
+      label: "poolside/laguna-s-2.1:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
@@ -2029,6 +2177,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.6-plus:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_FLASH,
+      label: "qwen/qwen3.7-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_MAX,
       label: "qwen/qwen3.7-max",
     },
@@ -2151,6 +2303,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING,
       label: "thinkingmachines/inkling",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_SMALL,
+      label: "thinkingmachines/inkling-small",
     },
     {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
@@ -2345,6 +2501,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "~anthropic/claude-sonnet-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_LATEST,
+      label: "~deepseek/deepseek-v4-flash-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_LATEST,
       label: "~google/gemini-flash-latest",
     },
@@ -2372,8 +2532,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.GEMINI]: [
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
+      label: "Gemini 3.6 Flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
       label: "Gemini 3.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+      label: "Gemini 3.5 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
@@ -2427,12 +2595,28 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.VERTEX_AI]: [
     {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
+      label: "Gemini 3.6 Flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
       label: "Gemini 3.5 Flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+      label: "Gemini 3.5 Flash Lite",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      label: "Gemini 3.1 Flash Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+      label: "Gemini 3.1 Flash Lite Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO,

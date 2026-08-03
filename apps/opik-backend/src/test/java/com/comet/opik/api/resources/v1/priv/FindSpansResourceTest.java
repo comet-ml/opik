@@ -1506,7 +1506,7 @@ class FindSpansResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = generator.generate().toString();
-            var traceId = UUID.randomUUID();
+            var traceId = generator.generate();
 
             // Create 5 spans with the same trace_id (these should be returned by the filter)
             var expectedSpanCount = 5;
@@ -1528,7 +1528,7 @@ class FindSpansResourceTest {
                     .mapToObj(i -> podamFactory.manufacturePojo(Span.class).toBuilder()
                             .projectId(null)
                             .projectName(projectName)
-                            .traceId(UUID.randomUUID())
+                            .traceId(generator.generate())
                             .name("other-span-" + i)
                             .feedbackScores(null)
                             .totalEstimatedCost(null)
@@ -2211,6 +2211,102 @@ class FindSpansResourceTest {
                     .build());
 
             var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"$..test", "$[abc]", "$.key with space", "[", "]", "[..]"})
+        @DisplayName("a malformed or non-matching metadata path returns empty stats rather than failing")
+        void whenFilterMetadataPathIsMalformedOrNonMatching__thenReturnEmptyStats(String key) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key(key)
+                    .value("gpt-4")
+                    .build());
+
+            var actualStats = spanResourceClient.getSpansStats(projectName, null, filters, apiKey, workspaceName,
+                    Map.of());
+
+            assertThat(actualStats.stats()).isEmpty();
+
+            // The list endpoint recovers on a different path than stats, so assert it separately
+            var actualPage = spanResourceClient.findSpans(workspaceName, apiKey, projectName, null, 1, 10, null, null,
+                    filters, null, null);
+
+            assertThat(actualPage.content()).isEmpty();
+            assertThat(actualPage.total()).isZero();
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterMetadataKeyHasSpecialCharacters__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString(
+                                    "{\"hidden_params\":{\"additional_headers\":{\"x-litellm-attempted-retries\":\"0\"}}}"))
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .collect(toCollection(ArrayList::new));
+            spans.set(0, spans.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"hidden_params\":{\"additional_headers\":{\"x-litellm-attempted-retries\":\"3\"}}}"))
+                    .build());
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var expectedSpans = List.of(spans.getFirst());
+            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .build());
+
+            spanResourceClient.batchCreateSpans(unexpectedSpans, apiKey, workspaceName);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("hidden_params.additional_headers.x-litellm-attempted-retries")
+                    .value("3")
+                    .build());
+
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
             testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
                     values.unexpected(),

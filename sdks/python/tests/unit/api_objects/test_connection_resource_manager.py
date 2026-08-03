@@ -5,6 +5,7 @@ from unittest import mock
 
 from opik import config as opik_config
 from opik.api_objects import connection_resources
+from opik.message_processing import data_loss
 
 
 class FakeBundle:
@@ -351,6 +352,7 @@ def _bundle_with_mock_transport(flush_timeout=None):
         replay_manager=mock.Mock(),
         streamer=streamer,
         flush_timeout=flush_timeout,
+        data_loss_tracker=data_loss.DataLossTracker(),
     )
     return bundle, streamer, file_upload_manager, httpx_client
 

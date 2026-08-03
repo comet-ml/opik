@@ -45,9 +45,12 @@ import java.util.UUID;
 @Slf4j
 public class CipxSpendBlockDAO {
 
-    /** Tier names ordered by the residual block_idx ordinal. */
+    /** Tier names ordered by the residual block_idx ordinal. The cache_creation entry (ordinal 2) is a
+     * placeholder: its written label is the per-span TTL variant (cache_creation_5m / cache_creation_1h),
+     * resolved by {@link BlockRow#tierName(int, String)}. */
     private static final String[] TIER_NAMES = {"input", "cache_read", "cache_creation", "output"};
     private static final int RESIDUAL_IDX_BASE = 65531;
+    private static final int CACHE_CREATION_TIER = 2;
     /** Rows per bulk-insert chunk; caps the JSON payload at ~35MB (~650 bytes/row). */
     private static final int INSERT_CHUNK_SIZE = 50_000;
     private static final String SRC_ATTRIBUTED = "a";
@@ -73,12 +76,17 @@ public class CipxSpendBlockDAO {
             @NonNull String toolUseId,
             @NonNull String resource,
             @NonNull String kind,
+            /** Which variant of `category` the block is (memory: auto_memory vs project_instructions
+             * vs rule vs user_global). '' = unknown, incl. every block written before cipx emitted
+             * it -- consumers must treat it as "can't tell", not as a default value. */
+            @NonNull String subcategory,
             @NonNull String tier,
             @NonNull String lane,
             @NonNull String bdLane,
             @NonNull String label,
             int isDefinition,
-            double alloc) {
+            double alloc,
+            @NonNull String contentSha256) {
 
         /**
          * Derives all rows for one cipx span: one attributed row per non-identity block (keeping the
@@ -98,6 +106,15 @@ public class CipxSpendBlockDAO {
                     usage.path("cache_creation_input_tokens").asLong(0),
                     usage.path("output_tokens").asLong(0),
             };
+            // A cipx span is a single LLM call, and Claude Code writes all of a call's cache breakpoints
+            // with one TTL, so every write block on the span inherits the span's TTL. Pick it from the
+            // usage split; when the split is absent (legacy / not reported) fall back to 1h, since CC's
+            // cache writes are overwhelmingly 1h (OPIK-7392).
+            JsonNode cacheCreation = usage.path("cache_creation");
+            String writeTier = cacheCreation.path("ephemeral_5m_input_tokens").asLong(0) > 0
+                    && cacheCreation.path("ephemeral_1h_input_tokens").asLong(0) == 0
+                            ? "cache_creation_5m"
+                            : "cache_creation_1h";
 
             JsonNode blocks = metadata.path("cipx").path("blocks");
             long[] tierChars = new long[TIER_NAMES.length];
@@ -128,19 +145,24 @@ public class CipxSpendBlockDAO {
                     if (isIdentityContext(block)) {
                         continue;
                     }
-                    rows.add(attributed(base, idx, block, tierTokens, tierChars));
+                    rows.add(attributed(base, idx, block, tierTokens, tierChars, writeTier));
                 }
             }
             for (int tier = 0; tier < TIER_NAMES.length; tier++) {
                 if (!tierPresent[tier] && tierTokens[tier] > 0) {
-                    rows.add(residual(base, tier, tierTokens[tier]));
+                    rows.add(residual(base, tier, tierTokens[tier], writeTier));
                 }
             }
             return rows;
         }
 
+        /** cache_creation (ordinal 2) is written as its per-span TTL variant; the rest are fixed. */
+        private static String tierName(int tier, String writeTier) {
+            return tier == CACHE_CREATION_TIER ? writeTier : TIER_NAMES[tier];
+        }
+
         private static BlockRow attributed(BlockRowBuilder base, int idx, JsonNode block, long[] tierTokens,
-                long[] tierChars) {
+                long[] tierChars, String writeTier) {
             String category = block.path("category").asText("");
             String side = block.path("side").asText("");
             String cacheStatus = block.path("cache_status").asText("");
@@ -167,16 +189,18 @@ public class CipxSpendBlockDAO {
                     .toolUseId(block.path("tool_use_id").asText(""))
                     .resource(resource)
                     .kind(kind)
-                    .tier(tier >= 0 ? TIER_NAMES[tier] : "")
+                    .subcategory(block.path("subcategory").asText(""))
+                    .tier(tier >= 0 ? tierName(tier, writeTier) : "")
                     .lane(lane(category, toolServer))
                     .bdLane(bdLane(category, toolServer))
                     .label(label(category, toolServer, toolName, resource, kind, chars))
                     .isDefinition(isDefinition(category))
                     .alloc(alloc)
+                    .contentSha256(block.path("sha256").asText(""))
                     .build();
         }
 
-        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens) {
+        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens, String writeTier) {
             return base
                     .blockIdx(RESIDUAL_IDX_BASE + tier)
                     .src(SRC_RESIDUAL)
@@ -190,12 +214,14 @@ public class CipxSpendBlockDAO {
                     .toolUseId("")
                     .resource("")
                     .kind("")
-                    .tier(TIER_NAMES[tier])
+                    .subcategory("")
+                    .tier(tierName(tier, writeTier))
                     .lane("unattributed")
                     .bdLane("")
                     .label("")
                     .isDefinition(0)
                     .alloc(tokens)
+                    .contentSha256("")
                     .build();
         }
 
@@ -223,6 +249,7 @@ public class CipxSpendBlockDAO {
         private static String lane(String category, String toolServer) {
             return switch (category) {
                 case "tool_io" -> toolServer.isEmpty() ? "built_in_tools" : "mcp_servers";
+                case "system_tools", "system_tools_deferred" -> "built_in_tools";
                 case "user_prompts" -> "user_prompts";
                 case "prior_assistant" -> "prior_assistant";
                 case "mcp_tools_active", "mcp_tools_deferred", "mcp_server_instructions" -> "mcp_servers";
@@ -230,8 +257,8 @@ public class CipxSpendBlockDAO {
                 case "custom_agents" -> "custom_agents";
                 case "memory" -> "memory";
                 case "file_attachments" -> "file_attachments";
-                case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> "static_overhead";
-                case "auto_classifier" -> "static_overhead";
+                case "system_prompt", "env_info" -> "static_overhead";
+                case "auto_classifier", "agent_overhead" -> "static_overhead";
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> "built_in_tool_calls";
@@ -241,26 +268,17 @@ public class CipxSpendBlockDAO {
             };
         }
 
-        /** Breakdown lane: like {@link #lane} but categories with no breakdown rows map to '' (excluded). */
+        /**
+         * Breakdown lane: like {@link #lane} but categories with no breakdown rows map to '' (excluded).
+         * Delegates to {@link #lane} for the shared dispatch table and only overrides the two
+         * intentional differences, so the two tables can't drift apart on a future category addition.
+         */
         private static String bdLane(String category, String toolServer) {
-            return switch (category) {
-                case "tool_io" -> toolServer.isEmpty() ? "built_in_tools" : "mcp_servers";
-                case "user_prompts" -> "user_prompts";
-                case "prior_assistant" -> "prior_assistant";
-                case "mcp_tools_active" -> "mcp_servers";
-                case "skills_menu", "skills_loaded" -> "skills";
-                case "custom_agents" -> "custom_agents";
-                case "memory" -> "memory";
-                case "file_attachments" -> "file_attachments";
-                case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> "static_overhead";
-                case "auto_classifier" -> "static_overhead";
-                case "thinking" -> "thinking";
-                case "assistant_text" -> "assistant_text";
-                case "built_in_tool_calls" -> "built_in_tool_calls";
-                case "mcp_tool_calls" -> "mcp_tool_calls";
-                case "skill_invocations" -> "skill_invocations";
-                default -> "";
-            };
+            if (category.equals("mcp_tools_deferred") || category.equals("mcp_server_instructions")) {
+                return "";
+            }
+            String baseLane = lane(category, toolServer);
+            return baseLane.equals("unattributed") ? "" : baseLane;
         }
 
         /** Breakdown row key; which raw field names the row depends on the category. */
@@ -273,10 +291,10 @@ public class CipxSpendBlockDAO {
                         "skill_invocations" ->
                     resource;
                 case "tool_io" -> toolServer.isEmpty() ? toolName : toolServer;
+                case "system_tools", "system_tools_deferred" -> toolName.isEmpty() ? "(unattributed)" : toolName;
                 case "prior_assistant" -> kind;
                 case "mcp_tools_active", "mcp_tool_calls" -> toolServer;
-                case "system_prompt", "env_info", "system_tools", "system_tools_deferred", "auto_classifier" ->
-                    category;
+                case "system_prompt", "env_info", "auto_classifier", "agent_overhead" -> category;
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> toolName;
@@ -300,7 +318,7 @@ public class CipxSpendBlockDAO {
     /**
      * Bulk insert via the ClickHouse v2 HTTP client using JSONEachRow, NOT the R2DBC statement path
      * the sibling cipx DAOs use. One span event fans out to hundreds of block rows (~350/span, so a
-     * 200-span batch is ~70k rows x 24 columns), and the R2DBC driver resolves every named bind with
+     * 200-span batch is ~70k rows x 26 columns), and the R2DBC driver resolves every named bind with
      * a linear scan over the statement's parameter list — O(n^2) over ~1.7M parameters, hours of CPU
      * for a single event (see ExperimentAggregatesDAO.insertExperimentItems for the same trade-off).
      * The JSONEachRow payload is one HTTP body with no per-parameter work at all.
@@ -369,12 +387,14 @@ public class CipxSpendBlockDAO {
         node.put("tool_use_id", row.toolUseId());
         node.put("resource", row.resource());
         node.put("kind", row.kind());
+        node.put("subcategory", row.subcategory());
         node.put("tier", row.tier());
         node.put("lane", row.lane());
         node.put("bd_lane", row.bdLane());
         node.put("label", row.label());
         node.put("is_definition", row.isDefinition());
         node.put("alloc", row.alloc());
+        node.put("content_sha256", row.contentSha256());
         node.put("start_time", ClickHouseDateTimeFormat.formatNanos(row.startTime()));
         out.append(node).append('\n');
     }

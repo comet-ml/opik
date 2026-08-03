@@ -3445,6 +3445,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Concurrent modification - the latest version changed during
+            the restore; retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/retrieve:
     post:
       tags:
@@ -8470,10 +8477,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BatchDelete"
+              $ref: "#/components/schemas/BatchDeleteByProject"
       responses:
         "204":
           description: No Content
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/feedback-scores/names:
     get:
       tags:
@@ -10452,6 +10465,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10528,6 +10542,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10676,6 +10691,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -11458,13 +11474,22 @@ components:
               rules)
             format: uuid
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -12011,13 +12036,22 @@ components:
               rules)
             format: uuid
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         type:
           type: string
           enum:
@@ -12356,13 +12390,22 @@ components:
           items:
             $ref: "#/components/schemas/ProjectReference_Public"
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -12811,13 +12854,22 @@ components:
           items:
             $ref: "#/components/schemas/ProjectReference_Public"
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -12906,13 +12958,20 @@ components:
       type: object
       properties:
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
           type: number
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          enum:
+          - production
+          - experiment
+          - both
         project_id:
           type: string
           description: "Primary project ID (legacy field, maintained for backwards\
@@ -16236,6 +16295,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17891,6 +17953,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17950,6 +18015,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -18724,6 +18792,8 @@ components:
           $ref: "#/components/schemas/JsonListString"
         studio_config:
           $ref: "#/components/schemas/OptimizationStudioConfig"
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
         dataset_id:
           type: string
           format: uuid
@@ -18858,6 +18928,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StudioMessage"
+    ErrorInfo_Write:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          minLength: 1
+          type: string
+        message:
+          type: string
+        traceback:
+          minLength: 1
+          type: string
     OptimizationStudioConfig_Write:
       required:
       - dataset_name
@@ -18918,6 +19002,8 @@ components:
           $ref: "#/components/schemas/JsonListString_Write"
         studio_config:
           $ref: "#/components/schemas/OptimizationStudioConfig_Write"
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Write"
         last_updated_at:
           type: string
           format: date-time
@@ -18983,6 +19069,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StudioMessage_Write"
+    ErrorInfo_Public:
+      required:
+      - exception_type
+      - traceback
+      type: object
+      properties:
+        exception_type:
+          minLength: 1
+          type: string
+        message:
+          type: string
+        traceback:
+          minLength: 1
+          type: string
     OptimizationPage_Public:
       type: object
       properties:
@@ -19058,6 +19158,8 @@ components:
           $ref: "#/components/schemas/JsonListString_Public"
         studio_config:
           $ref: "#/components/schemas/OptimizationStudioConfig_Public"
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo_Public"
         dataset_id:
           type: string
           format: uuid
@@ -19196,6 +19298,8 @@ components:
           - cancelled
           - initialized
           - error
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
         metadata:
           $ref: "#/components/schemas/JsonListString"
     ActivateRequest:
@@ -19623,6 +19727,7 @@ components:
           - model
           - provider
           - type
+          - guardrail_name
         metadata_key:
           type: string
         sub_metric:
@@ -20789,7 +20894,6 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
-      - agentInsightsEnabled
       - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
@@ -20867,8 +20971,6 @@ components:
         projectHomepageEnabled:
           type: boolean
         agenticToolsEnabled:
-          type: boolean
-        agentInsightsEnabled:
           type: boolean
         onlineScoringTracingEnabled:
           type: boolean
@@ -21022,20 +21124,6 @@ components:
           maxLength: 150
           minLength: 0
           type: string
-    ErrorInfo_Write:
-      required:
-      - exception_type
-      - traceback
-      type: object
-      properties:
-        exception_type:
-          minLength: 1
-          type: string
-        message:
-          type: string
-        traceback:
-          minLength: 1
-          type: string
     Span_Write:
       required:
       - start_time
@@ -21151,20 +21239,6 @@ components:
         source_queue_id:
           type: string
           format: uuid
-    ErrorInfo_Public:
-      required:
-      - exception_type
-      - traceback
-      type: object
-      properties:
-        exception_type:
-          minLength: 1
-          type: string
-        message:
-          type: string
-        traceback:
-          minLength: 1
-          type: string
     FeedbackScore_Public:
       required:
       - name
@@ -21810,11 +21884,17 @@ components:
           minItems: 1
           uniqueItems: true
           type: array
+          description: Ids of the traces to delete
           items:
             type: string
+            description: Ids of the traces to delete
             format: uuid
         project_id:
           type: string
+          description: "Optional. Scopes the deletion to this project. When omitted,\
+            \ each trace's owning project is resolved automatically and the trace\
+            \ is deleted under its full key, so a trace can be deleted without knowing\
+            \ its project."
           format: uuid
     Check_Public:
       type: object
@@ -21824,6 +21904,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -22441,6 +22524,7 @@ components:
           - model
           - provider
           - type
+          - guardrail_name
         metadata_key:
           type: string
         sub_metric:

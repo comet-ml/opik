@@ -5,6 +5,7 @@ import {
   EVALUATORS_RULE_SCOPE,
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
+  EVAL_TRIGGER_SCOPE,
 } from "@/types/automations";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { updateProviderConfig } from "@/lib/modelUtils";
@@ -412,6 +413,9 @@ export const BaseEvaluationRuleFormSchema = z.object({
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
   enabled: z.boolean().default(true),
+  triggerScope: z
+    .nativeEnum(EVAL_TRIGGER_SCOPE)
+    .default(EVAL_TRIGGER_SCOPE.production),
   filters: FiltersSchema.default([]),
 });
 

@@ -7,9 +7,17 @@ import { AggregatedCandidate } from "@/types/optimizations";
 const makeExperiment = (id: string, configuration: unknown): Experiment =>
   ({ id, metadata: { configuration } }) as unknown as Experiment;
 
+// As stored by the optimizer: single-brace (Python-style) variables, because the
+// python-backend rewrites the user's {{text}} to {text} on ingest.
 const messages = [
   { role: "system", content: "You are a classifier." },
   { role: "user", content: "{text}" },
+];
+
+// As displayed: the resolver restores the syntax the user actually authored.
+const restoredMessages = [
+  { role: "system", content: "You are a classifier." },
+  { role: "user", content: "{{text}}" },
 ];
 
 describe("getCandidatePrompt", () => {
@@ -23,7 +31,7 @@ describe("getCandidatePrompt", () => {
       experimentsById,
     );
 
-    expect(prompt).toEqual(messages);
+    expect(prompt).toEqual(restoredMessages);
   });
 
   it("falls back to prompt_messages", () => {
@@ -36,7 +44,25 @@ describe("getCandidatePrompt", () => {
       experimentsById,
     );
 
-    expect(prompt).toEqual(messages);
+    expect(prompt).toEqual(restoredMessages);
+  });
+
+  // The user-visible bug this guards: a prompt authored as {{text}} was being
+  // displayed as {text} everywhere downstream of the run, reading as if the user
+  // had typed a broken prompt.
+  it("restores the authored {{variable}} syntax for display", () => {
+    const experimentsById = new Map([
+      [
+        "e1",
+        makeExperiment("e1", {
+          prompt: [{ role: "user", content: "Answer {question}" }],
+        }),
+      ],
+    ]);
+
+    expect(
+      getCandidatePrompt({ experimentIds: ["e1"] }, experimentsById),
+    ).toEqual([{ role: "user", content: "Answer {{question}}" }]);
   });
 
   it("returns null when no experiment resolves a prompt", () => {

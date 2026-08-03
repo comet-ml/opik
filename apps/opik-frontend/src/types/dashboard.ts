@@ -15,6 +15,7 @@ export enum BREAKDOWN_FIELD {
   MODEL = "model",
   PROVIDER = "provider",
   TYPE = "type",
+  GUARDRAIL_NAME = "guardrail_name",
 }
 
 export interface DashboardRuntimeConfig {

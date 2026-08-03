@@ -22,14 +22,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN ln -sf /usr/bin/python3.10 /usr/bin/python && \
     ln -sf /usr/bin/python3.10 /usr/bin/python3
 
+# uv is a drop-in faster pip whose resolver already handles the pinned
+# torch/transformers/hf_xet wheels, so the pip>=24 bootstrap is no longer needed.
+# The binary (pinned, from the official distroless image) is installed system-wide,
+# used for the one install below, then removed so it doesn't linger in the image.
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /usr/local/bin/uv
+
 WORKDIR /opt/opik-guardrails-backend
 
 COPY requirements.txt .
-# Ubuntu 22.04 ships pip ~22; the pinned torch/transformers/hf_xet wheels need a
-# newer resolver. Float pip forward from a >=24 floor (no rot — it's a lower
-# bound, not a frozen version); dependency versions themselves are in requirements.txt.
-RUN pip install --no-cache-dir -U "pip>=24.0" && \
-    pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
+RUN uv pip install --python /usr/bin/python3.10 --no-cache -r requirements.txt && \
+    rm -f /usr/local/bin/uv
 
 COPY entrypoint.sh .
 RUN chmod u+x entrypoint.sh

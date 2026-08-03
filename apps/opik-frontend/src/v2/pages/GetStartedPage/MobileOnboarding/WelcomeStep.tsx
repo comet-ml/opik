@@ -10,10 +10,14 @@ const PAUSE_AFTER_TYPE = 2500;
 const PAUSE_AFTER_DELETE = 500;
 const TYPING_START_DELAY = 500;
 
-const TypingText: React.FC = () => {
+const TypingText: React.FC<{ active: boolean }> = ({ active }) => {
   const [text, setText] = useState("");
 
   useEffect(() => {
+    // Pause the timer loop entirely while the step is offscreen (the user
+    // swiped to another panel) — no work runs for invisible content.
+    if (!active) return;
+    setText("");
     let timer: ReturnType<typeof setTimeout>;
     let pos = 0;
     let deleting = false;
@@ -45,7 +49,12 @@ const TypingText: React.FC = () => {
     const handleVisibility = () => {
       if (document.hidden) {
         clearTimeout(timer);
+        clearTimeout(startTimer);
       } else {
+        // Clear both timers before restarting so a pending start timer can't
+        // spawn a second concurrent tick chain.
+        clearTimeout(timer);
+        clearTimeout(startTimer);
         tick();
       }
     };
@@ -57,7 +66,7 @@ const TypingText: React.FC = () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, []);
+  }, [active]);
 
   return (
     <>
@@ -67,7 +76,10 @@ const TypingText: React.FC = () => {
   );
 };
 
-const WelcomeStep: React.FC<{ onNext?: () => void }> = ({ onNext }) => {
+const WelcomeStep: React.FC<{ onNext?: () => void; active?: boolean }> = ({
+  onNext,
+  active = true,
+}) => {
   return (
     <>
       <div className="slide-fade-left">
@@ -104,7 +116,7 @@ const WelcomeStep: React.FC<{ onNext?: () => void }> = ({ onNext }) => {
               className="min-h-5 text-sm leading-5 text-foreground"
               translate="no"
             >
-              <TypingText />
+              <TypingText active={active} />
             </div>
             <div className="flex items-center justify-between">
               <Plus className="size-3.5 text-light-slate" />
@@ -112,11 +124,11 @@ const WelcomeStep: React.FC<{ onNext?: () => void }> = ({ onNext }) => {
                 <Mic className="size-3.5 text-light-slate" />
                 <Button
                   variant="ghost"
-                  size="icon-xs"
+                  size="icon"
                   onClick={onNext}
-                  className="size-6 rounded-full bg-foreground hover:bg-foreground"
+                  className="size-9 rounded-full bg-foreground hover:bg-foreground"
                 >
-                  <ArrowUp className="size-3 text-background" />
+                  <ArrowUp className="size-4 text-background" />
                 </Button>
               </div>
             </div>

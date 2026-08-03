@@ -68,6 +68,29 @@ def _try_notifying_about_experiment_completion(
         )
 
 
+def _get_experiment_url(
+    client: opik_client.Opik, experiment_id: str, dataset_id: str
+) -> Optional[str]:
+    """Best-effort direct experiment URL; the experiment is already created by
+    the time this runs, so a failure to resolve the workspace or build the URL
+    must not turn a successful evaluation into an error.
+    """
+    try:
+        return url_helpers.get_experiment_url_by_id(
+            experiment_id=experiment_id,
+            dataset_id=dataset_id,
+            base_url=client.config.url_override,
+            workspace=client._dereferenced_workspace(),
+        )
+    except Exception:
+        LOGGER.debug(
+            "Could not resolve the experiment URL. Experiment ID: %s",
+            experiment_id,
+            exc_info=True,
+        )
+        return None
+
+
 def _materialize_for_checkpoint(
     *,
     items_iter: Iterator[dataset_item.DatasetItem],
@@ -164,9 +187,10 @@ def evaluate(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
             0 - no outputs, 1 - outputs are enabled (default), 2 - outputs are enabled and detailed statistics
@@ -405,12 +429,11 @@ def __internal_api__run_test_suite__(
     )
 
     if verbose >= 1:
-        experiment_url = url_helpers.get_experiment_url_by_id(
-            experiment_id=experiment_.id,
-            dataset_id=suite_dataset.id,
-            url_override=client.config.url_override,
+        experiment_url = _get_experiment_url(
+            client, experiment_id=experiment_.id, dataset_id=suite_dataset.id
         )
-        report.display_evaluation_in_progress(experiment_url)
+        if experiment_url is not None:
+            report.display_evaluation_in_progress(experiment_url)
 
     eval_result, total_time = _evaluate_test_suite_task(
         client=client,
@@ -600,13 +623,11 @@ def _evaluate_task(
             dataset.name, total_time, test_results, computed_experiment_scores
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -733,10 +754,8 @@ def _evaluate_test_suite_task(
 
     total_time = time.time() - start_time
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
@@ -783,9 +802,10 @@ def evaluate_experiment(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
@@ -878,13 +898,11 @@ def evaluate_experiment(
             computed_experiment_scores,
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset_.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset_.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     _try_notifying_about_experiment_completion(experiment)
 
@@ -1003,9 +1021,10 @@ def evaluate_prompt(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
             but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
@@ -1182,13 +1201,11 @@ def evaluate_prompt(
             dataset.name, total_time, test_results, computed_experiment_scores
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -1239,12 +1256,18 @@ def evaluate_optimization_trial(
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
+    experiment_type: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
 
     Args:
         optimization_id: The ID of the optimization associated with the experiment.
+
+        experiment_type: The experiment type recorded for this trial. Optimizers use
+            "mini-batch" for small-sample candidate screening evaluations and "trial"
+            (default) for full evaluations, so that mini-batch scores are excluded
+            from best-score aggregations.
 
         dataset: An Opik Dataset or DatasetVersion instance
 
@@ -1254,9 +1277,10 @@ def evaluate_optimization_trial(
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function includes a scoring method that accepts predefined
             arguments supplied by the evaluation engine:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
-                • task_span - the data collected during the LLM task execution [optional].
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
+            - task_span - the data collected during the LLM task execution [optional].
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
                     but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
@@ -1378,7 +1402,7 @@ def evaluate_optimization_trial(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=checked_prompts,
-        type="trial",
+        type=experiment_type or "trial",
         optimization_id=optimization_id,
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),
@@ -1619,8 +1643,9 @@ def evaluate_on_dict_items(
 
         scoring_functions: List of scorer functions to be executed during evaluation.
             Each scorer function accepts predefined arguments:
-                • dataset_item — a dictionary containing the dataset item content,
-                • task_outputs — a dictionary containing the LLM task output.
+
+            - dataset_item — a dictionary containing the dataset item content,
+            - task_outputs — a dictionary containing the LLM task output.
 
         project_name: The name of the project for logging traces.
 
@@ -1723,7 +1748,7 @@ def _wrap_scoring_functions(
             scoring_functions, project_name=project_name
         )
         if scoring_metrics:
-            scoring_metrics.extend(function_metrics)
+            scoring_metrics = [*scoring_metrics, *function_metrics]
         else:
             scoring_metrics = function_metrics
 

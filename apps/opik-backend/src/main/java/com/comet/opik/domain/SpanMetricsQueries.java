@@ -151,4 +151,26 @@ final class SpanMetricsQueries {
     static String spanFilteredPrefix(String projectPredicate) {
         return SPAN_FILTERED_PREFIX_TEMPLATE.formatted(projectPredicate, projectPredicate, projectPredicate);
     }
+
+    // Distinct span token-usage key names. The %s slot is the project predicate: "project_id = :project_id" (single
+    // project, {@link ProjectMetricsDAO}) or "project_id IN :project_ids" (a resolved set, {@link WorkspaceMetricsDAO});
+    // workspace_id is always bound separately. Shared so the two callers can't drift.
+    private static final String TOKEN_USAGE_NAMES_TEMPLATE = """
+            SELECT DISTINCT name
+            FROM (
+                SELECT usage
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                AND %s
+            )
+            ARRAY JOIN
+                mapKeys(usage) AS name,
+                mapValues(usage) AS value
+            WHERE value > 0
+            SETTINGS log_comment = '<log_comment>';
+            """;
+
+    static String tokenUsageNames(String projectPredicate) {
+        return TOKEN_USAGE_NAMES_TEMPLATE.formatted(projectPredicate);
+    }
 }

@@ -2,6 +2,7 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRule;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import org.jdbi.v3.json.Json;
 
@@ -34,6 +35,15 @@ public sealed interface AutomationRuleEvaluatorModel<T> extends AutomationRuleMo
      * @return a new instance with updated project IDs
      */
     AutomationRuleEvaluatorModel<?> withProjectIds(Set<UUID> projectIds);
+
+    /**
+     * Rebuilds this model with a new trigger scope.
+     * Used by the service layer to default null scope to PRODUCTION for backward compatibility.
+     *
+     * @param triggerScope the trigger scope to set
+     * @return a new instance with the updated trigger scope
+     */
+    AutomationRuleEvaluatorModel<?> withTriggerScope(EvalTriggerScope triggerScope);
 
     /**
      * Rebuilds this model with enriched project details.

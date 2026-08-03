@@ -33,6 +33,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -62,6 +63,8 @@ public class SpanService {
     public static final String PARENT_SPAN_IS_MISMATCH = "parent_span_id does not match the existing span";
     public static final String TRACE_ID_MISMATCH = "trace_id does not match the existing span";
     public static final String SPAN_KEY = "Span";
+    public static final String SPAN_TRACE_KEY = "Span trace";
+    public static final String SPAN_PARENT_KEY = "Span parent";
     public static final String PROJECT_AND_WORKSPACE_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
 
     private final @NonNull SpanDAO spanDAO;
@@ -141,6 +144,23 @@ public class SpanService {
                 .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, true));
     }
 
+    /**
+     * Cheap approximate serialized size (bytes) of all spans across the given trace ids. Used by the
+     * trace-thread online scorers to size the inline-vs-agentic-tools routing decision without fetching
+     * the spans into heap (OPIK-7454). No attachment reinjection — it's a pure aggregate, so it also
+     * skips the per-span attachment resolution that the full fetch pays. Returns 0 for empty input.
+     */
+    @WithSpan
+    public Mono<Long> getSpansSizeByTraceIds(Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(traceIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Estimating spans size for '{}' traces", traceIds.size());
+
+        return spanDAO.getSpansSizeByTraceIds(traceIds);
+    }
+
     @WithSpan
     public Flux<Span> getByIds(@NonNull Set<UUID> ids) {
         if (ids.isEmpty()) {
@@ -159,6 +179,7 @@ public class SpanService {
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return idGenerator
                 .validateIdAsync(id, SPAN_KEY)
+                .then(Mono.fromRunnable(() -> validateSpanReferences(span.traceId(), span.parentSpanId())))
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -220,7 +241,9 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return idGenerator
-                    .validateIdForUpdateAsync(id, SPAN_KEY)
+                    .validateIdNotInFutureAsync(id, SPAN_KEY)
+                    .then(Mono.fromRunnable(
+                            () -> validateSpanReferences(spanUpdate.traceId(), spanUpdate.parentSpanId())))
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -247,7 +270,10 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+            return Mono
+                    .fromRunnable(() -> validateSpanReferences(batchUpdate.update().traceId(),
+                            batchUpdate.update().parentSpanId()))
+                    .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
@@ -384,7 +410,19 @@ public class SpanService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
+        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
+        // creation), so a rejected batch never mutates state. Runs inside deferContextual so the audit
+        // metric can attribute the batch's own ids to the request workspace.
+        return Mono.deferContextual(validationCtx -> {
+            String validationWorkspaceId = validationCtx.get(RequestContext.WORKSPACE_ID);
+            dedupedSpans.forEach(span -> {
+                if (span.id() != null) {
+                    idGenerator.validateId(span.id(), SPAN_KEY, validationWorkspaceId);
+                }
+                validateSpanReferences(span.traceId(), span.parentSpanId());
+            });
+            return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds);
+        })
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
@@ -438,6 +476,13 @@ public class SpanService {
         return result;
     }
 
+    // Shared span reference-id policy: the trace (required) and parent (optional) must be time-ordered
+    // UUIDv7, past allowed. Used by every span write path so the rules can't drift between them.
+    private void validateSpanReferences(UUID traceId, UUID parentSpanId) {
+        idGenerator.validateIdNotInFuture(traceId, SPAN_TRACE_KEY);
+        idGenerator.validateIdNotInFutureIfPresent(parentSpanId, SPAN_PARENT_KEY);
+    }
+
     private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
@@ -458,8 +503,8 @@ public class SpanService {
                         throw new IllegalStateException("Project not found: %s".formatted(span.projectName()));
                     }
 
+                    // Ids are already validated up-front in create(SpanBatch); generated ids are inherently valid.
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
-                    idGenerator.validateId(id, SPAN_KEY);
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })
@@ -497,9 +542,9 @@ public class SpanService {
                         if (spanIds.isEmpty()) {
                             return Mono.empty();
                         }
-                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
+                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds, projectId)
                                 .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
-                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds)))
+                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds, projectId)))
                                 .then(spanDAO.deleteByIds(spanIds, projectId)
                                         .doOnSuccess(__ -> log.info(
                                                 "Deleted '{}' spans for workspace '{}', project '{}'",

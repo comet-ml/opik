@@ -11,10 +11,10 @@ tabs:
     display-name: Self-hosting Opik
     icon: fa-regular fa-server
     slug: /self-host
-  self-improving-agents:
-    display-name: Building Self-Improving Agents
-    icon: fa-regular fa-arrows-rotate
-    slug: /self-improving-agents
+  cost-intelligence:
+    display-name: Cost Intelligence
+    icon: fa-regular fa-chart-pie
+    slug: /cost-intelligence
   reference:
     display-name: SDK & API reference
     icon: fa-regular fa-square-terminal
@@ -441,6 +441,24 @@ navigation:
               - page: Cookbook - Evaluate moderation metric
                 path: ../docs-v2/evaluation/evaluate_moderation_metric.mdx
                 slug: evaluate_moderation_metric
+      - section: Guardrails
+        slug: /guardrails
+        contents:
+          - page: Overview
+            path: ../docs-v2/guardrails/overview.mdx
+            slug: overview
+          - page: Guardrails
+            path: ../docs-v2/guardrails/guardrails.mdx
+            slug: guardrails
+          - page: Prompt injection model
+            path: ../docs-v2/guardrails/prompt-injection-model.mdx
+            slug: prompt-injection-model
+          - page: Custom guardrails
+            path: ../docs-v2/guardrails/custom-guardrails.mdx
+            slug: custom-guardrails
+          - page: Guardrails server
+            path: ../docs-v2/guardrails/server.mdx
+            slug: server
       - section: Production
         slug: /production
         contents:
@@ -450,15 +468,12 @@ navigation:
               - page: Online Evaluation rules
                 path: ../docs-v2/production/online-evaluation/rules.mdx
                 slug: rules
-          - section: Gateway & Guardrails
+          - section: Gateway
             slug: /gateway-guardrails
             contents:
               - page: Gateway
                 path: ../docs-v2/production/gateway-guardrails/gateway.mdx
                 slug: gateway
-              - page: Guardrails
-                path: ../docs-v2/production/gateway-guardrails/guardrails.mdx
-                slug: guardrails
               - page: Anonymizers
                 path: ../docs-v2/production/gateway-guardrails/anonymizers.mdx
                 slug: anonymizers
@@ -731,6 +746,9 @@ navigation:
               - page: Groq
                 path: ../docs-v2/integrations/groq.mdx
                 slug: groq
+              - page: MiniMax
+                path: ../docs-v2/integrations/minimax.mdx
+                slug: minimax
               - page: Mistral AI
                 path: ../docs-v2/integrations/mistral.mdx
                 slug: mistral
@@ -880,14 +898,35 @@ navigation:
           - page: OpenTelemetry
             path: ../docs-v2/integrations/opentelemetry.mdx
             slug: opentelemetry
-  - tab: self-improving-agents
+  - tab: cost-intelligence
     layout:
       - page: Overview
-        path: ../docs-v2/self_improving_agents/overview.mdx
+        path: ../docs-v2/cost_intelligence/overview.mdx
         slug: overview
-      - page: Ollie and your codebase
-        path: ../docs-v2/self_improving_agents/ollie_and_your_codebase.mdx
-        slug: ollie-and-your-codebase
+      - page: Reduce coding agent spend
+        path: ../docs-v2/cost_intelligence/reduce-agent-spend.mdx
+        slug: reduce-agent-spend
+      - page: Roll out cost policies
+        path: ../docs-v2/cost_intelligence/roll-out-cost-policies.mdx
+        slug: roll-out-cost-policies
+      - section: Installation
+        slug: install
+        contents:
+          - page: Overview
+            path: ../docs-v2/cost_intelligence/install/overview.mdx
+            slug: overview
+          - page: Plugin with MDM
+            path: ../docs-v2/cost_intelligence/install/mdm.mdx
+            slug: mdm
+          - page: Plugin with managed settings
+            path: ../docs-v2/cost_intelligence/install/managed-settings.mdx
+            slug: managed-settings
+          - page: macOS app with MDM
+            path: ../docs-v2/cost_intelligence/install/macos-app.mdx
+            slug: macos-app
+      - page: Data, privacy and security
+        path: ../docs-v2/cost_intelligence/data-privacy-security.mdx
+        slug: data-privacy-security
   - tab: self-host
     layout:
       - page: Overview
@@ -941,7 +980,7 @@ navigation:
         slug: python-sdk
         contents:
           - link: Reference
-            href: https://www.comet.com/docs/opik/python-sdk-reference/
+            href: https://www.comet.com/docs/opik/python-sdk-reference/index.html
           - page: REST API Client
             path: ../docs-v2/reference/python-sdk/rest-api.mdx
             slug: rest-api

@@ -7,7 +7,7 @@ import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import CodeBlockWithHeader from "@/shared/CodeBlockWithHeader/CodeBlockWithHeader";
 import CodeSectionTitle from "@/shared/CodeSectionTitle/CodeSectionTitle";
 import InstallOpikSection from "@/shared/InstallOpikSection/InstallOpikSection";
-import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { DATASET_TYPE } from "@/types/datasets";
 import SideDialog from "@/shared/SideDialog/SideDialog";

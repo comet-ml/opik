@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -44,6 +45,9 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_
 class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
     private static final String NOT_LOGGED_USER = "Please login first";
+
+    // Remote error bodies are arbitrary upstream content, so cap what reaches the logs.
+    private static final int MAX_LOGGED_BODY_LENGTH = 512;
 
     // GenericType instances are thread-safe and expensive to build, so reuse a single instance.
     private static final GenericType<List<WorkspaceIdNameResponse>> WORKSPACE_LIST_TYPE = new GenericType<>() {
@@ -284,12 +288,101 @@ class RemoteAuthService implements AuthService {
         return new InternalServerErrorException("Unexpected error while " + operation);
     }
 
+    /**
+     * Reads the response body for diagnostics only, never to be surfaced to the caller. The result is capped at
+     * {@link #MAX_LOGGED_BODY_LENGTH} characters: a remote error body is arbitrary upstream content (a proxy error page
+     * or a stack trace, not necessarily our own JSON), so it must not be able to flood the logs or carry an unbounded
+     * amount of upstream detail into them.
+     */
     private static String readBodySafely(Response response) {
         try {
-            return response.hasEntity() ? response.readEntity(String.class) : "";
+            if (!isEntityReadable(response)) {
+                return "";
+            }
+            return StringUtils.abbreviate(response.readEntity(String.class), MAX_LOGGED_BODY_LENGTH);
         } catch (RuntimeException e) {
-            log.warn("Failed to read remote response body for debugging: {}", e.getMessage());
+            log.warn("Failed to read remote response body for debugging", e);
             return "";
+        }
+    }
+
+    /**
+     * Guards a {@code readEntity} call: reports whether the response carries an entity and that entity was buffered, so
+     * that it can be read, and read again. A client response entity is backed by a single-shot input stream, so without
+     * buffering the first reader consumes it and every later read fails. Buffering is idempotent — an already buffered
+     * entity reports success — so callers do not need to track whether it already happened.
+     *
+     * @return {@code false} when there is no entity, or when it could not be buffered and is therefore unsafe to read
+     */
+    private static boolean isEntityReadable(Response response) {
+        if (!response.hasEntity()) {
+            return false;
+        }
+        try {
+            return response.bufferEntity();
+        } catch (RuntimeException e) {
+            log.warn("Failed to buffer remote response entity, status: '{}'", response.getStatus(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Reports whether the body should be read as JSON, matching what the registered Jackson provider actually parses
+     * rather than only the exact {@code application/json} type. A structured suffix ({@code application/problem+json})
+     * and a non-{@code application} type ({@code text/json}) both deserialize fine, so gating on
+     * {@code APPLICATION_JSON_TYPE.isCompatible} would discard a perfectly good remote message. A wildcard or absent
+     * type tells us nothing about the body and is not treated as JSON — including a wildcard carrying the suffix
+     * ({@code application/*+json}), which is not a legal response content type in the first place.
+     */
+    private static boolean isJson(MediaType mediaType) {
+        if (mediaType == null) {
+            return false;
+        }
+        var subtype = mediaType.getSubtype().toLowerCase(Locale.ROOT);
+        if (subtype.contains(MediaType.MEDIA_TYPE_WILDCARD)) {
+            return false;
+        }
+        return "json".equals(subtype) || subtype.endsWith("+json");
+    }
+
+    /**
+     * Extracts the error message from a non-successful react-service response without assuming the body is JSON.
+     * <p>
+     * The react service does not always answer with a {@link ReactServiceErrorResponse}: endpoints guarded by
+     * Dropwizard's {@code @Auth} filter (for example {@code /opik/auth-session}) reject an expired or invalid session
+     * cookie through the default {@code UnauthorizedHandler}, which replies {@code 401} with a {@code text/plain} body.
+     * Reading such a response as {@link ReactServiceErrorResponse} makes Jersey raise
+     * {@code MessageBodyProviderNotFoundException}, a {@code ProcessingException} that is not a
+     * {@link ClientErrorException} and therefore escapes the auth filter and surfaces as a {@code 500} instead of the
+     * intended client error.
+     * <p>
+     * Only a JSON body is treated as a message intended for the caller. Any other content type is a framework-level
+     * response rather than an application error, so it is logged and the caller-facing {@code fallback} is used instead
+     * of leaking the remote framework's wording. Every read is guarded by {@link #isEntityReadable(Response)}, which
+     * also buffers, so that both the diagnostic logging here and any later reader of the same response can read it
+     * rather than relying on being the first to consume the single-shot entity stream.
+     *
+     * @param fallback message used when the body is absent, not JSON, unreadable or empty
+     */
+    private static String readErrorMessage(Response response, String fallback) {
+        if (!isEntityReadable(response)) {
+            return fallback;
+        }
+        var mediaType = response.getMediaType();
+        if (!isJson(mediaType)) {
+            log.warn("React service replied with a non-JSON error body, status: '{}', contentType: '{}', body: '{}'",
+                    response.getStatus(), mediaType, readBodySafely(response));
+            return fallback;
+        }
+        try {
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            return errorResponse == null || StringUtils.isBlank(errorResponse.msg())
+                    ? fallback
+                    : errorResponse.msg().strip();
+        } catch (RuntimeException e) {
+            log.warn("Failed to read react service error response, status: '{}', body: '{}'",
+                    response.getStatus(), readBodySafely(response), e);
+            return fallback;
         }
     }
 
@@ -371,15 +464,15 @@ class RemoteAuthService implements AuthService {
             }
             return authResponse;
         } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
-            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
-            throw new ClientErrorException(errorResponse.msg(), Response.Status.UNAUTHORIZED);
+            throw new ClientErrorException(readErrorMessage(response, NOT_LOGGED_USER),
+                    Response.Status.UNAUTHORIZED);
         } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             // EM never returns FORBIDDEN as of now
             throw new ClientErrorException(
                     NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
-            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
+            throw new ClientErrorException(readErrorMessage(response, MISSING_WORKSPACE),
+                    Response.Status.BAD_REQUEST);
         }
         throw unexpectedRemoteError("authenticating user", response);
     }
@@ -439,9 +532,10 @@ class RemoteAuthService implements AuthService {
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
             return response.readEntity(String.class);
         } else if (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
-            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
-            log.error("Not found workspace by name : {}", errorResponse.msg());
-            throw new ClientErrorException(errorResponse.msg(), Response.Status.BAD_REQUEST);
+            var message = readErrorMessage(response, MISSING_WORKSPACE);
+            // An unknown workspace name is a caller mistake on the public-endpoint fallback path, not a server fault.
+            log.warn("Workspace not found by name: '{}'", message);
+            throw new ClientErrorException(message, Response.Status.BAD_REQUEST);
         }
 
         throw unexpectedRemoteError("getting workspace id", response);
