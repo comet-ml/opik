@@ -301,9 +301,9 @@ class TestGepaReflectionLmInstrumentation:
         single positional arg, expecting a str back. Pin that against the real
         class so a signature drift in gepa breaks here, not in a live run.
 
-        gepa.lm only exists on newer gepa (the SDK floor is gepa>=0.0.7 and the
-        Studio pin is 0.0.17), so this skips where the class is absent rather
-        than pinning a version the package does not require."""
+        gepa.lm exists in neither the declared floor (gepa>=0.1.0) nor 0.1.1, so
+        this skips where the class is absent rather than pinning a version the
+        package does not require."""
         TrackingLM = pytest.importorskip(
             "gepa.lm", reason="gepa.lm.TrackingLM not present in this gepa version"
         ).TrackingLM

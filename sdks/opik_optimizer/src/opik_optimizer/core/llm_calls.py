@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import sys
+from collections.abc import Mapping
 from decimal import Decimal
 from types import FrameType
 from typing import TYPE_CHECKING, Any, TypeVar, overload
@@ -268,12 +269,24 @@ def _get_project_name_from_optimizer() -> str | None:
 
 
 def _coerce_cost(value: Any) -> float | None:
-    """Return value as a float cost, or None when it is not a usable number."""
+    """Return value as a float cost, or None when it is not a usable number.
+
+    A negative cost is rejected rather than accumulated: `add_llm_cost` only ever
+    adds, so a malformed provider figure would *subtract* from the run total and
+    silently under-report spend — the one failure this accounting exists to
+    prevent. "Unusable" and "free" stay distinguishable downstream because None
+    leaves `_llm_cost_recorded` unset while an explicit 0.0 sets it.
+    """
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float, Decimal)):
         numeric = float(value)
-        return numeric if math.isfinite(numeric) else None
+        if not math.isfinite(numeric):
+            return None
+        if numeric < 0:
+            logger.debug("Ignoring negative LLM cost from provider: %r", numeric)
+            return None
+        return numeric
     return None
 
 
@@ -293,29 +306,44 @@ def _extract_response_cost(response: Any) -> float | None:
 
 
 def _extract_response_usage(response: Any) -> dict[str, int] | None:
-    """Best-effort token usage from a litellm response (object or dict form)."""
-    usage_obj = getattr(response, "usage", None)
+    """Best-effort token usage from a litellm response (object or mapping form).
+
+    Both the response and its `usage` may arrive as a mapping (aggregated stream
+    chunks, custom providers) rather than an object, so each is read both ways.
+
+    Returns None — not a dict of zeros — when no field is a usable number. The
+    caller treats a returned dict as "the provider reported usage", which sets
+    `_llm_usage_recorded` and makes the result claim a real zero-token run; an
+    explicit numeric 0 still counts as reported.
+    """
+    usage_obj = (
+        response.get("usage")
+        if isinstance(response, Mapping)
+        else getattr(response, "usage", None)
+    )
     if usage_obj is None:
         return None
 
-    def _field(name: str) -> int:
+    def _field(name: str) -> int | None:
         raw = (
             usage_obj.get(name)
-            if isinstance(usage_obj, dict)
-            else getattr(usage_obj, name, 0)
+            if isinstance(usage_obj, Mapping)
+            else getattr(usage_obj, name, None)
         )
         if isinstance(raw, bool) or raw is None:
-            return 0
+            return None
         if not isinstance(raw, (int, float, Decimal)):
-            return 0
+            return None
         numeric = float(raw)
-        return int(numeric) if math.isfinite(numeric) else 0
+        return int(numeric) if math.isfinite(numeric) else None
 
-    return {
-        "prompt_tokens": _field("prompt_tokens"),
-        "completion_tokens": _field("completion_tokens"),
-        "total_tokens": _field("total_tokens"),
+    fields = {
+        name: _field(name)
+        for name in ("prompt_tokens", "completion_tokens", "total_tokens")
     }
+    if all(value is None for value in fields.values()):
+        return None
+    return {name: value or 0 for name, value in fields.items()}
 
 
 def _record_cost_usage_if_in_optimizer(response: Any) -> None:

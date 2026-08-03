@@ -566,9 +566,11 @@ class GepaOptimizer(BaseOptimizer):
         cost aggregation can attribute the spend), and the LiteLLM span nests
         inside it instead of forking a second, untagged trace.
 
-        gepa==0.0.17 (the Studio pin) passes a plain prompt string; gepa>=0.1.x
-        may pass an OpenAI-style messages list (multimodal), so both are
-        accepted.
+        gepa's LanguageModel protocol hands the callable either a plain prompt
+        string or an OpenAI-style messages list (multimodal), so both shapes are
+        accepted. This does NOT imply gepa 0.0.x support: the optimizer already
+        requires gepa>=0.1.0 for its reflection-template dialect, enforced at
+        construction by _validate_reflection_prompt_template.
         """
         metadata = _llm_calls.build_llm_call_metadata(self, "gepa_reflection")
         optimization_id = context.optimization_id or self.current_optimization_id
