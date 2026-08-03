@@ -9,10 +9,13 @@ alwaysApply: true
 - Commit .env files or credentials
 - Log sensitive data (passwords, tokens, PII)
 - Trust user input without validation
-- Use string concatenation for SQL queries
+- Build SQL with string operations — `+`, `String.format`/`.formatted(...)`, `StringBuilder`,
+  f-strings, template literals
 
 ## Always
-- Use parameterized queries for SQL
+- Use parameterized queries for SQL — bind every value
+- Express the variable parts of a query as template conditionals, not spliced-in strings
+  (backend: see `.agents/skills/opik-backend/SKILL.md` → SQL Query Construction)
 - Validate input at API boundaries
 - Use environment variables for secrets
 - Sanitize user input before rendering
