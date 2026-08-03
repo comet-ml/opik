@@ -1662,7 +1662,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         UUID latestVersionId = latestVersion.get().id();
         log.info("Inserting '{}' items into existing version '{}'", batch.items().size(), latestVersionId);
 
-        return insertItemsIntoVersion(batch, datasetId, latestVersionId, workspaceId, userName);
+        return insertItemsIntoVersion(batch, datasetId, latestVersionId, workspaceId, userName).then(Mono.empty());
     }
 
     /**
@@ -1670,14 +1670,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Handles validation, classification of new vs updated items, and count updates.
      * Used by mutateLatestVersionWithInsert and handleGroupedInsertion.
      *
+     * Completes empty: no caller reads the resulting version, so the counters are applied with a single atomic
+     * increment and the row is not read back.
+     *
      * @param batch the batch of items to insert
      * @param datasetId the dataset ID
      * @param versionId the version ID to insert into
      * @param workspaceId the workspace ID
      * @param userName the username
-     * @return Mono emitting the updated dataset version
+     * @return Mono completing when the items are inserted and the counts updated
      */
-    private Mono<DatasetVersion> insertItemsIntoVersion(DatasetItemBatch batch, UUID datasetId, UUID versionId,
+    private Mono<Void> insertItemsIntoVersion(DatasetItemBatch batch, UUID datasetId, UUID versionId,
             String workspaceId, String userName) {
         // Validate and prepare items
         List<DatasetItem> validatedItems = addIdIfAbsent(batch);
@@ -1717,11 +1720,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                     // Insert items directly into the existing version
                                     return versionDao
                                             .insertItems(datasetId, versionId, normalizedItems, workspaceId, userName)
-                                            .then(Mono.fromCallable(() -> {
-                                                updateVersionCountsForInsert(versionId, workspaceId, finalNewItemsCount,
-                                                        finalUpdatedItemsCount, userName);
-                                                return versionService.getVersionById(workspaceId, datasetId, versionId);
-                                            }).subscribeOn(Schedulers.boundedElastic()));
+                                            .then(Mono.fromRunnable(() -> updateVersionCountsForInsert(versionId,
+                                                    workspaceId, finalNewItemsCount, finalUpdatedItemsCount, userName))
+                                                    .subscribeOn(Schedulers.boundedElastic()))
+                                            .then();
                                 });
                     }));
         }).contextWrite(c -> c.put(RequestContext.WORKSPACE_ID, workspaceId)
@@ -1742,43 +1744,36 @@ class DatasetItemServiceImpl implements DatasetItemService {
             int updatedItemsCount, String userName) {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            var currentVersion = dao.findById(versionId, workspaceId)
-                    .orElseThrow(() -> new NotFoundException(
-                            "Version not found: '%s'".formatted(versionId)));
 
             // Only increment total by new items (not updates)
-            int newTotal = currentVersion.itemsTotal() + newItemsCount;
-            int newAdded = currentVersion.itemsAdded() + newItemsCount;
-            int newModified = currentVersion.itemsModified() + updatedItemsCount;
+            int updated = dao.incrementCounts(versionId, newItemsCount, newItemsCount, updatedItemsCount, 0,
+                    workspaceId, userName);
 
-            dao.updateCounts(versionId, newTotal, newAdded, newModified,
-                    currentVersion.itemsDeleted(), workspaceId, userName);
+            if (updated == 0) {
+                throw new NotFoundException("Version not found: '%s'".formatted(versionId));
+            }
             return null;
         });
     }
 
     /**
      * Updates version counts after deleting items from an existing version.
-     * Extracted to reduce complexity and improve testability.
+     * <p>
+     * Applies the deltas atomically rather than writing back totals computed from a caller-supplied snapshot, so the
+     * result no longer depends on that snapshot still being current. Unlike the insert path this saves no round-trip:
+     * both callers fetch the version for their own purposes regardless.
      *
      * @param versionId The version ID to update
      * @param workspaceId The workspace ID
-     * @param currentVersion The current version before deletion
      * @param deletedCount Number of items deleted
      * @param userName The user performing the update
      */
-    private void updateVersionCountsForDelete(UUID versionId, String workspaceId, DatasetVersion currentVersion,
-            int deletedCount, String userName) {
-        int newTotal = currentVersion.itemsTotal() - deletedCount;
-        int newDeleted = currentVersion.itemsDeleted() + deletedCount;
-
-        log.info("deleteItemsFromExistingVersion: updating counts - newTotal='{}', newDeleted='{}'",
-                newTotal, newDeleted);
+    private void updateVersionCountsForDelete(UUID versionId, String workspaceId, int deletedCount, String userName) {
+        log.info("deleteItemsFromExistingVersion: updating counts - deletedCount='{}'", deletedCount);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            dao.updateCounts(versionId, newTotal, currentVersion.itemsAdded(),
-                    currentVersion.itemsModified(), newDeleted, workspaceId, userName);
+            dao.incrementCounts(versionId, -deletedCount, 0, 0, deletedCount, workspaceId, userName);
             return null;
         });
     }
@@ -2173,8 +2168,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         // Update version counts in MySQL
                         return Mono.fromCallable(() -> {
-                            updateVersionCountsForDelete(versionId, workspaceId, currentVersion,
-                                    deletedCount.intValue(), userName);
+                            updateVersionCountsForDelete(versionId, workspaceId, deletedCount.intValue(), userName);
                             log.info("Deleted '{}' items from version '{}', new total '{}'",
                                     deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
                             return null;
@@ -2218,8 +2212,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         // Update version counts in MySQL
                         return Mono.fromCallable(() -> {
-                            updateVersionCountsForDelete(versionId, workspaceId, currentVersion,
-                                    deletedCount.intValue(), userName);
+                            updateVersionCountsForDelete(versionId, workspaceId, deletedCount.intValue(), userName);
                             log.info("Deleted '{}' items from version '{}', new total '{}'",
                                     deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
                             return null;
@@ -2344,7 +2337,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         var existingVersion = optionalVersion.get();
                         log.info("Appending '{}' items to existing version '{}' for batch_group_id '{}'",
                                 batch.items().size(), existingVersion.id(), batchGroupId);
-                        return insertItemsIntoVersion(batch, datasetId, existingVersion.id(), workspaceId, userName);
+                        return insertItemsIntoVersion(batch, datasetId, existingVersion.id(), workspaceId, userName)
+                                .then(Mono.<DatasetVersion>empty());
                     } else {
                         // No version with this batch_group_id - create new one
                         log.info("Creating new version with batch_group_id '{}' for dataset '{}'",
