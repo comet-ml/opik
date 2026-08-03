@@ -110,6 +110,7 @@ class DatasetVersionResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -1803,8 +1804,6 @@ class DatasetVersionResourceTest {
     @DisplayName("Insert Classification Counts")
     class InsertClassificationCounts {
 
-        private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
-
         @Test
         @DisplayName("Success: Re-inserting existing items counts them as modified, not added")
         void insertItems__whenItemsAlreadyExistInVersion__thenCountedAsModifiedNotAdded() {
@@ -1863,7 +1862,7 @@ class DatasetVersionResourceTest {
             // Same stable id appearing twice in one batch must count as a single new item.
             // The stable id must be supplied via `id`: `datasetItemId` is READ_ONLY on the write view
             // and is derived from `id` server-side.
-            var duplicatedId = idGenerator.generateId();
+            var duplicatedId = ID_GENERATOR.generateId();
             var duplicateBatch = List.of(
                     DatasetItem.builder()
                             .id(duplicatedId)
@@ -2948,8 +2947,6 @@ class DatasetVersionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ExperimentDatasetVersionLinking {
 
-        private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
-
         private Experiment getExperiment(UUID id) {
             return experimentResourceClient.getExperiment(id, API_KEY, TEST_WORKSPACE);
         }
@@ -3190,7 +3187,7 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(datasetName);
             createDatasetItems(datasetId, 1);
 
-            var nonExistentVersionId = idGenerator.generateId();
+            var nonExistentVersionId = ID_GENERATOR.generateId();
 
             // when - create experiment with non-existent version ID
             var experiment = experimentResourceClient.createPartialExperiment()

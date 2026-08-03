@@ -106,7 +106,8 @@ public interface DatasetItemVersionDAO {
      * to classify an incoming batch as new vs. updated and does not need the hashes. Rows read scale with
      * the batch size instead of the version size.
      *
-     * @param itemIds the stable ids to look up; must be deduplicated by the caller
+     * @param itemIds the stable ids to look up; should be deduplicated by the caller. Null or empty
+     *                yields {@code 0} without querying.
      * @return the number of distinct {@code itemIds} present in the version
      */
     Mono<Long> countExistingItemIds(UUID datasetId, UUID versionId, Set<UUID> itemIds);
@@ -2667,8 +2668,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     @WithSpan
     public Mono<Long> countExistingItemIds(@NonNull UUID datasetId, @NonNull UUID versionId,
-            @NonNull Set<UUID> itemIds) {
-        if (itemIds.isEmpty()) {
+            Set<UUID> itemIds) {
+        if (CollectionUtils.isEmpty(itemIds)) {
             return Mono.just(0L);
         }
 
@@ -2687,8 +2688,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .flatMapMany(result -> result.map((row, metadata) -> row.get("count", Long.class)))
                     .next()
                     .defaultIfEmpty(0L)
-                    .doOnSuccess(count -> log.debug("Found '{}' existing items among '{}' for version '{}'", count,
-                            itemIds.size(), versionId))
+                    .doOnSuccess(count -> log.debug(
+                            "Found existing items for version '{}' among '{}' incoming ids: '{}'", versionId,
+                            itemIds.size(), count))
                     .doFinally(signalType -> endSegment(segment));
         });
     }
