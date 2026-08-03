@@ -1195,6 +1195,17 @@ llmProviderClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
     # Description: Vertex AI SCOPE API URL
     scope: ${LLM_PROVIDER_VERTEXAI_SCOPE:-https://www.googleapis.com/auth/cloud-platform}
+    # Default: GRPC
+    # Description: Transport used by the Vertex AI SDK. One of GRPC or REST
+    transport: ${LLM_PROVIDER_VERTEXAI_TRANSPORT:-GRPC}
+    # Description: API endpoint per multi-region location, keyed by lower-case location. The SDK derives the host from
+    # the location as '<location>-aiplatform.googleapis.com', which is only correct for single-region locations, so
+    # multi-region locations need their host set explicitly. Single-region locations are not listed and keep the SDK
+    # default. Required: these hosts exist only here, the application defines no fallback for them.
+    multiRegionApiEndpoints:
+      global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-aiplatform.googleapis.com}
+      eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-aiplatform.eu.rep.googleapis.com}
+      us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-aiplatform.us.rep.googleapis.com}
 
 # Configuration for cache manager
 cacheManager:

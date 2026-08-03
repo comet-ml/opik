@@ -23,9 +23,12 @@ import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -512,6 +515,49 @@ class TracesLocalV2CutoverTest {
         assertThat(tableExists("traces_local"))
                 .as("no leftover sharding table after rollback")
                 .isFalse();
+    }
+
+    /**
+     * A far-future row survives the cutover with a matching fidelity fingerprint across the {@code id_at} type change.
+     * The source {@code traces.id_at} is a 32-bit {@code DateTime} that wraps a ~2201 UUIDv7 id to ~2065, while the
+     * successor's {@code DateTime64} reads it back as the honest 2201; {@code derivedFingerprint} casts both to
+     * {@code toDateTime} so the comparison is on the same instant regardless of width. Present-day rows exercise that
+     * cast as a no-op, so only a far-future row exercises the wrap — where the successor's honest 2201 must collapse to
+     * the same value the 32-bit source stores, or the fingerprint would falsely report infidelity. Seeds a far-future-id
+     * row into the {@code 'seed-fidelity'} cohort and pins that it is copied, partitions into its own honest ~2201 week,
+     * and leaves the source/destination derived fingerprint identical.
+     */
+    @Test
+    void farFutureRowSurvivesCutoverWithMatchingFingerprint() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        // Present-day all-column cohort, plus one far-future-id row in the same cohort: a real created_at drives the
+        // backfill slice, while the id minted ~2201 drives the destination id_at partition.
+        seedFidelityCohort(workspaceId, projectId);
+        var farFutureInstant = Instant.parse("2201-06-01T00:00:00Z");
+        var farFutureId = ID_GENERATOR.generateId(farFutureInstant);
+        insertRows(List.of(CategorizedId.builder().id(farFutureId).createdAt(weekInstant(0, 1)).build()),
+                workspaceId, projectId, "seed-fidelity", CategorizedId::createdAt);
+
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+
+        assertThat(liveCount("traces_local_v2", Set.of(farFutureId.toString()), workspaceId))
+                .as("far-future-id row is copied by the created_at-sliced backfill")
+                .isEqualTo(1L);
+        // Exact honest Monday (YYYYMMDD) computed in Java from the mint instant — asserting the precise week, not just
+        // the 2201 year, catches an off-by-week regression through the copy, matching the direct-insert tests' bar.
+        var expectedMonday = farFutureInstant.atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .format(DateTimeFormatter.BASIC_ISO_DATE);
+        assertThat(destinationPartitionId(farFutureId, workspaceId))
+                .as("copied far-future row lands in its own honest ~2201 weekly partition, not a wrapped ~2065")
+                .isEqualTo(expectedMonday);
+        assertThat(derivedFingerprint("traces_local_v2", workspaceId))
+                .as("derived fingerprint matches across the id_at type change even with a far-future row present")
+                .isEqualTo(derivedFingerprint("traces", workspaceId));
     }
 
     /**
@@ -1351,6 +1397,24 @@ class TracesLocalV2CutoverTest {
                 .block();
     }
 
+    private String destinationPartitionId(UUID id, String workspaceId) {
+        return template
+                .nonTransaction(connection -> Mono
+                        .from(connection.createStatement("""
+                                SELECT _partition_id AS partition_id
+                                FROM traces_local_v2
+                                WHERE workspace_id = :workspace_id
+                                  AND id = :id
+                                LIMIT 1
+                                """)
+                                .bind("workspace_id", workspaceId)
+                                .bind("id", id.toString())
+                                .execute())
+                        .flatMap(result -> Mono
+                                .from(result.map((row, ignored) -> row.get("partition_id", String.class)))))
+                .block();
+    }
+
     private long liveCountScoped(String table, Set<String> ids, String workspaceId, UUID projectId) {
         var sql = """
                 SELECT uniqExact(id) AS c
@@ -1439,8 +1503,10 @@ class TracesLocalV2CutoverTest {
      * (count, checksum) over the DETERMINISTIC derived columns of the fidelity cohort — {@code id_at} (the partition
      * key), the three {@code *_length}s, {@code truncated_input} / {@code truncated_output} and {@code output_keys}.
      * Each is the same MATERIALIZED expression over faithfully-copied base columns on both tables, so equal fingerprints
-     * prove the successor's expressions did not drift from the source's. {@code duration} is checked separately
-     * ({@link #durationMismatches}) because its value legitimately differs by up to the ns-to-us truncation.
+     * prove the successor's expressions did not drift from the source's. {@code id_at} is wrapped in {@code toDateTime}
+     * because the source's {@code id_at} is a 32-bit {@code DateTime} while the successor's is a {@code DateTime64}: both
+     * are second precision, so the cast only unifies the column type — a raw cross-type hash would differ even for
+     * identical instants.
      */
     private Fingerprint derivedFingerprint(String table, String workspaceId) {
         var sql = """
@@ -1448,7 +1514,7 @@ class TracesLocalV2CutoverTest {
                     count() AS c,
                     sum(cityHash64(
                         id,
-                        id_at,
+                        toDateTime(id_at),
                         input_length,
                         output_length,
                         metadata_length,

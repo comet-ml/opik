@@ -8477,10 +8477,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BatchDelete"
+              $ref: "#/components/schemas/BatchDeleteByProject"
       responses:
         "204":
           description: No Content
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/feedback-scores/names:
     get:
       tags:
@@ -21878,11 +21884,17 @@ components:
           minItems: 1
           uniqueItems: true
           type: array
+          description: Ids of the traces to delete
           items:
             type: string
+            description: Ids of the traces to delete
             format: uuid
         project_id:
           type: string
+          description: "Optional. Scopes the deletion to this project. When omitted,\
+            \ each trace's owning project is resolved automatically and the trace\
+            \ is deleted under its full key, so a trace can be deleted without knowing\
+            \ its project."
           format: uuid
     Check_Public:
       type: object

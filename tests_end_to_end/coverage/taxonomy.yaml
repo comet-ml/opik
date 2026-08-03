@@ -209,8 +209,8 @@ areas:
       trace-sidebar-details:  { covered: true,  state: default, spec: "trace-sidebar.spec.ts S02" }
       trace-sidebar-feedback: { covered: true,  state: default, spec: "trace-sidebar.spec.ts S03" }
       trace-sidebar-prompts:  { covered: true,  state: default, spec: "trace-sidebar.spec.ts S04" }
-      logs-spans-view:        { covered: false, state: default }
-      trace-sidebar-agent-graph: { covered: false, state: default }
+      logs-spans-view:        { covered: true,  state: default, spec: "visual-comparison.spec.ts 07" }
+      trace-sidebar-agent-graph: { covered: true, state: default, spec: "trace-sidebar.spec.ts S05" }
 
     # ---- load dimension (opt-in; axis-shaped; status: planned) ----
     load:
