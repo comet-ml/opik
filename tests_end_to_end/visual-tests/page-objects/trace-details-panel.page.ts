@@ -33,4 +33,20 @@ export class TraceDetailsPanelPage {
     await tabPanel.waitFor({ state: 'visible', timeout: 15000 });
     await tabPanel.getByText('Loading', { exact: true }).waitFor({ state: 'hidden', timeout: 15000 });
   }
+
+  /** A node in the trace/span tree, keyed by the span/trace name. */
+  spanTreeNode(name: string): Locator {
+    return this.root.getByTestId(`trace-tree-node-${name}`);
+  }
+
+  /** Select a span in the tree, switching the data viewer to that span's data. */
+  async selectSpan(name: string): Promise<void> {
+    await this.spanTreeNode(name).click();
+    await this.page.waitForURL((url) => (url.searchParams.get('span') ?? '') !== '');
+  }
+
+  /** Mermaid renders asynchronously with no loading placeholder — wait for its SVG output. */
+  async waitForAgentGraphRendered(): Promise<void> {
+    await this.root.locator('.mermaid svg').waitFor({ state: 'visible', timeout: 15000 });
+  }
 }

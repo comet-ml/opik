@@ -1,0 +1,10 @@
+[
+  {
+    "fingerprint": "MATERIALIZED_SUBQUERY :: select * from ( select p.*, ( select count(pv.id) from prompt_versions pv where pv.workspace_id = p.workspace_id and pv.prompt_id = p.id and pv.version_type = ? ) as version_count from prompts as p where workspace_id = :workspace_id ) as prompt_full order by id desc limit :limit offset :offset",
+    "note": "PromptDAO.getPrompts wraps the prompt list in a derived table that MySQL materializes. Pre-existing; tracked for ratchet-down by OPIK-7450."
+  },
+  {
+    "fingerprint": "MATERIALIZED_SUBQUERY :: select count(id) from ( select p.*, ( select count(pv.id) from prompt_versions pv where pv.workspace_id = p.workspace_id and pv.prompt_id = p.id and pv.version_type = ? ) as version_count from prompts as p where workspace_id = :workspace_id ) as prompt_full",
+    "note": "PromptDAO.count over the same derived table. Pre-existing; tracked for ratchet-down by OPIK-7450."
+  }
+]
