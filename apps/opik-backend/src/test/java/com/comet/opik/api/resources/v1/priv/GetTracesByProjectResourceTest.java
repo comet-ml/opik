@@ -5828,9 +5828,17 @@ class GetTracesByProjectResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TraceStatsLatestVersionOnly {
 
-        private long traceCount(String projectName, List<? extends TraceFilter> filters) {
+        private List<TraceFilter> nameEquals(String name) {
+            return List.of(TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value(name)
+                    .build());
+        }
+
+        private long traceCount(String projectName, List<? extends TraceFilter> filters, String search) {
             var stats = traceResourceClient.getTraceStats(projectName, null, API_KEY, TEST_WORKSPACE, filters,
-                    Map.of());
+                    search == null ? Map.of() : Map.of("search", search));
 
             return stats.stats().stream()
                     .filter(stat -> "trace_count".equals(stat.getName()))
@@ -5838,14 +5846,6 @@ class GetTracesByProjectResourceTest {
                     .mapToLong(Number::longValue)
                     .findFirst()
                     .orElse(0L);
-        }
-
-        private List<TraceFilter> nameEquals(String name) {
-            return List.of(TraceFilter.builder()
-                    .field(TraceField.NAME)
-                    .operator(Operator.EQUAL)
-                    .value(name)
-                    .build());
         }
 
         @Test
@@ -5859,7 +5859,7 @@ class GetTracesByProjectResourceTest {
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
 
-            assertThat(traceCount(projectName, nameEquals(matchedName))).isEqualTo(2);
+            assertThat(traceCount(projectName, nameEquals(matchedName), null)).isEqualTo(2);
 
             // supersede the first trace with a version whose name no longer matches
             traceResourceClient.updateTrace(traces.getFirst().id(),
@@ -5869,7 +5869,7 @@ class GetTracesByProjectResourceTest {
                             .build(),
                     API_KEY, TEST_WORKSPACE);
 
-            assertThat(traceCount(projectName, nameEquals(matchedName))).isEqualTo(1);
+            assertThat(traceCount(projectName, nameEquals(matchedName), null)).isEqualTo(1);
         }
 
         /**
@@ -5891,7 +5891,7 @@ class GetTracesByProjectResourceTest {
                     .build();
             traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
 
-            assertThat(traceCount(projectName, needle)).isEqualTo(1);
+            assertThat(traceCount(projectName, List.of(), needle)).isEqualTo(1);
 
             // supersede it with a version that no longer carries the needle anywhere searchable
             traceResourceClient.updateTrace(trace.id(),
@@ -5901,19 +5901,7 @@ class GetTracesByProjectResourceTest {
                             .build(),
                     API_KEY, TEST_WORKSPACE);
 
-            assertThat(traceCount(projectName, needle)).isZero();
-        }
-
-        private long traceCount(String projectName, String search) {
-            var stats = traceResourceClient.getTraceStats(projectName, null, API_KEY, TEST_WORKSPACE, List.of(),
-                    Map.of("search", search));
-
-            return stats.stats().stream()
-                    .filter(stat -> "trace_count".equals(stat.getName()))
-                    .map(stat -> (Number) stat.getValue())
-                    .mapToLong(Number::longValue)
-                    .findFirst()
-                    .orElse(0L);
+            assertThat(traceCount(projectName, List.of(), needle)).isZero();
         }
 
         @Test
@@ -5929,13 +5917,13 @@ class GetTracesByProjectResourceTest {
                     .build();
             traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
 
-            assertThat(traceCount(projectName, nameEquals(matchedName))).isZero();
+            assertThat(traceCount(projectName, nameEquals(matchedName), null)).isZero();
 
             traceResourceClient.updateTrace(trace.id(),
                     TraceUpdate.builder().projectName(projectName).name(matchedName).build(),
                     API_KEY, TEST_WORKSPACE);
 
-            assertThat(traceCount(projectName, nameEquals(matchedName))).isEqualTo(1);
+            assertThat(traceCount(projectName, nameEquals(matchedName), null)).isEqualTo(1);
         }
 
         /**
@@ -5970,18 +5958,6 @@ class GetTracesByProjectResourceTest {
                     API_KEY, TEST_WORKSPACE);
 
             assertThat(traceCount(projectName, nameEquals(matchedName), idSearch)).isZero();
-        }
-
-        private long traceCount(String projectName, List<? extends TraceFilter> filters, String search) {
-            var stats = traceResourceClient.getTraceStats(projectName, null, API_KEY, TEST_WORKSPACE, filters,
-                    Map.of("search", search));
-
-            return stats.stats().stream()
-                    .filter(stat -> "trace_count".equals(stat.getName()))
-                    .map(stat -> (Number) stat.getValue())
-                    .mapToLong(Number::longValue)
-                    .findFirst()
-                    .orElse(0L);
         }
     }
 

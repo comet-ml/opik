@@ -2184,7 +2184,8 @@ class TraceDAOImpl implements TraceDAO {
     // are no longer referenced by the final SELECT and CH prunes them; the per-trace feedback
     // aggregates are produced in parallel by SELECT_FEEDBACK_SCORES_STATS and merged by
     // StatsMerger.
-    private static final String SELECT_TRACES_SPANS_STATS = """
+    @VisibleForTesting
+    static final String SELECT_TRACES_SPANS_STATS = """
              WITH spans_data AS (
                 SELECT
                     id,
@@ -2504,13 +2505,13 @@ class TraceDAOImpl implements TraceDAO {
                     workspace_id,
                     project_id,
                     id,
-                    latest.1 AS thread_id,
-                    latest.2 AS input_count,
-                    latest.3 AS output_count,
-                    latest.4 AS metadata_count,
-                    latest.5 AS tags_length,
-                    latest.6 AS duration,
-                    latest.7 AS error_info
+                    latest.thread_id AS thread_id,
+                    latest.input_count AS input_count,
+                    latest.output_count AS output_count,
+                    latest.metadata_count AS metadata_count,
+                    latest.tags_length AS tags_length,
+                    latest.duration AS duration,
+                    latest.error_info AS error_info
                 FROM (
                 <endif>
                 SELECT
@@ -2519,7 +2520,10 @@ class TraceDAOImpl implements TraceDAO {
                     id,
                     <if(dedup_by_argmax)>
                     argMax(tuple(thread_id, if(input_length > 0, 1, 0), if(output_length > 0, 1, 0),
-                                 if(metadata_length > 0, 1, 0), length(tags), duration, error_info),
+                                 if(metadata_length > 0, 1, 0), length(tags), duration, error_info)
+                           ::Tuple(thread_id String, input_count UInt8, output_count UInt8,
+                                   metadata_count UInt8, tags_length UInt64,
+                                   duration Nullable(Float64), error_info String),
                            last_updated_at) AS latest
                     <else>
                     thread_id,
@@ -2652,7 +2656,8 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     // Split-B: per-project feedback-score and span-feedback-score aggregates.
-    private static final String SELECT_FEEDBACK_SCORES_STATS = """
+    @VisibleForTesting
+    static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH spans_data AS (
                 SELECT
@@ -4407,6 +4412,12 @@ class TraceDAOImpl implements TraceDAO {
      *
      * <p><b>No filter slot may pull in a {@code LEFT JOIN}.</b> A join multiplies row versions inside each group,
      * and a predicate on a joined alias cannot be evaluated by {@code argMax} over {@code traces} versions at all.
+     * Note {@code filters} is deliberately not vetoed even though {@code TraceField.GUARDRAILS} belongs to
+     * {@code FilterStrategy.TRACE} and renders the joined {@code gagg} alias into it: {@code FilterUtils} always
+     * sets {@code guardrails_filters} alongside, and that is what trips the veto. Keep those two in sync — narrowing
+     * {@code FilterQueryBuilder#hasGuardrailsFilter} while leaving {@code GUARDRAILS} in {@code FilterStrategy.TRACE}
+     * would produce {@code HAVING argMax(gagg.guardrails_result ...)} with no join in scope. It is the only
+     * {@code FilterStrategy.TRACE} field that maps to a joined alias.
      *
      * <p><b>{@code search_text} must be present.</b> The rewrite trades a streaming scan that filters row by row
      * for a hash table holding one group per trace in the key range, built in full before {@code HAVING} can
@@ -4414,6 +4425,11 @@ class TraceDAOImpl implements TraceDAO {
      * {@code searchText} over {@code input}/{@code output}/{@code metadata} does. Without it the aggregation state
      * is pure overhead in both CPU and peak memory, and peak memory grows with group count even on the
      * {@code searchText} shapes.
+     *
+     * <p>Both templates still wrap the {@code HAVING} in {@code <if(filters || search_text)>}, which cannot be false
+     * while the gate requires {@code search_text}. That is deliberate: it keeps the templates independent of the
+     * gate's internals, and it is what stops a bare {@code GROUP BY} with no {@code HAVING} — or an empty
+     * {@code argMax(, last_updated_at)} — from rendering if the gate is ever relaxed to admit a filters-only shape.
      *
      * <p><b>Predicate placement.</b> Dedup-key predicates ({@code workspace_id}, {@code project_id}, the
      * {@code id} range bounds) and the {@code id IN (...)} slots stay in {@code WHERE} — they are the key, or they
