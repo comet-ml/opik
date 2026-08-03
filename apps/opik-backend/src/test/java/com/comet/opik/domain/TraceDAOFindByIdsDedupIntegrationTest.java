@@ -41,6 +41,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -48,25 +49,26 @@ import java.util.function.Function;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Guards the span deduplication in {@code TraceDAO.SELECT_BY_IDS} (OPIK-7676).
  * <p>
  * Both span reads in that query used to be {@code FROM spans FINAL}. They were replaced with an
- * explicit {@code ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC,
- * last_updated_at DESC / LIMIT 1 BY id} dedup applied before the aggregation, which reads far less
- * data. Because {@code spans} is a ReplacingMergeTree and the aggregated columns are mutable, a bare
+ * explicit dedup applied before the aggregation, ordering by and grouping on the full sort key
+ * ({@code workspace_id, project_id, trace_id, parent_span_id, id}) so the result matches
+ * {@code FINAL} even when an upsert conflict gives one span id two different key values. Because
+ * {@code spans} is a ReplacingMergeTree and the aggregated columns are mutable, a bare
  * {@code FINAL} removal without that dedup would double-count every re-inserted span version.
  * <p>
  * Updating a span re-inserts a full row with the same id, so after the update below the table holds
  * two versions of the LLM span. Without dedup the trace would report 4 spans instead of 3, 2 LLM
- * spans instead of 1, and a summed token usage of 80 instead of the latest value of 70.
+ * spans instead of 1, a summed token usage of 80 rather than the latest 70, and a summed cost of
+ * 8.00 rather than 7.00.
  * <p>
- * The duplicate version only exists until a background merge collapses it, which would silently rob
- * this test of its discriminating power. To prevent a false pass, the raw (non-deduplicated) row
- * count is asserted first and the test is skipped — not passed — if the second version is already
- * gone.
+ * That second version only exists until a background merge collapses it, which would silently rob
+ * this test of its discriminating power — every assertion would still hold for a broken query. The
+ * raw (non-deduplicated) row count is therefore asserted before the aggregates, so losing the
+ * precondition fails loudly instead of passing quietly.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("TraceDAO findByIds span dedup Integration Test")
@@ -82,6 +84,8 @@ class TraceDAOFindByIdsDedupIntegrationTest {
     private static final String USAGE_KEY = "completion_tokens";
     private static final int USAGE_BEFORE_UPDATE = 10;
     private static final int USAGE_AFTER_UPDATE = 70;
+    private static final BigDecimal COST_BEFORE_UPDATE = new BigDecimal("1.00");
+    private static final BigDecimal COST_AFTER_UPDATE = new BigDecimal("7.00");
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -157,19 +161,25 @@ class TraceDAOFindByIdsDedupIntegrationTest {
         UUID traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
         UUID llmSpanId = createSpan(projectName, traceId, SpanType.llm,
-                Map.of(USAGE_KEY, USAGE_BEFORE_UPDATE));
-        createSpan(projectName, traceId, SpanType.tool, null);
-        createSpan(projectName, traceId, SpanType.general, null);
+                Map.of(USAGE_KEY, USAGE_BEFORE_UPDATE), COST_BEFORE_UPDATE);
+        createSpan(projectName, traceId, SpanType.tool, null, null);
+        createSpan(projectName, traceId, SpanType.general, null, null);
 
         // Re-inserts a full row under the same id, leaving two versions of the LLM span behind.
         spanResourceClient.updateSpan(llmSpanId, SpanUpdate.builder()
                 .projectName(projectName)
                 .traceId(traceId)
                 .usage(Map.of(USAGE_KEY, USAGE_AFTER_UPDATE))
+                .totalEstimatedCost(COST_AFTER_UPDATE)
                 .build(), API_KEY, TEST_WORKSPACE);
 
-        assumeTrue(rawVersionCount(llmSpanId) == 2,
-                "background merge already collapsed the duplicate span version — nothing left to deduplicate");
+        // Guard the premise. Without two stored versions there is nothing to deduplicate and the
+        // assertions below would hold even for a broken query, so this fails rather than skips —
+        // a silent loss of coverage is worse than a visible failure. Checked immediately after the
+        // update, before a background merge can collapse the versions.
+        assertThat(rawVersionCount(llmSpanId))
+                .as("stored versions of the updated span, pre-merge")
+                .isEqualTo(2);
 
         Trace actual = findByIds(traceId);
 
@@ -177,11 +187,13 @@ class TraceDAOFindByIdsDedupIntegrationTest {
         assertThat(actual.llmSpanCount()).isEqualTo(1);
         assertThat(actual.hasToolSpans()).isTrue();
         assertThat(actual.providers()).containsExactly(PROVIDER);
-        // The latest version only — a summed 80 would mean both versions were aggregated.
+        // Latest version only. Summing both versions would give 80 and 8.00 respectively.
         assertThat(actual.usage()).containsEntry(USAGE_KEY, (long) USAGE_AFTER_UPDATE);
+        assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(COST_AFTER_UPDATE);
     }
 
-    private UUID createSpan(String projectName, UUID traceId, SpanType type, Map<String, Integer> usage) {
+    private UUID createSpan(String projectName, UUID traceId, SpanType type, Map<String, Integer> usage,
+            BigDecimal totalEstimatedCost) {
         Span span = factory.manufacturePojo(Span.class).toBuilder()
                 .projectName(projectName)
                 .traceId(traceId)
@@ -189,7 +201,7 @@ class TraceDAOFindByIdsDedupIntegrationTest {
                 .type(type)
                 .provider(PROVIDER)
                 .usage(usage)
-                .totalEstimatedCost(null)
+                .totalEstimatedCost(totalEstimatedCost)
                 .feedbackScores(null)
                 .comments(null)
                 .build();
