@@ -2383,12 +2383,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      <if(uuid_from_time || uuid_to_time)>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                      <else>
                       AND entity_id IN (SELECT id FROM spans_data)
-                      <endif>
                     UNION ALL
                     <endif>
                     SELECT workspace_id,
@@ -2409,12 +2404,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      <if(uuid_from_time || uuid_to_time)>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                      <else>
                       AND entity_id IN (SELECT id FROM spans_data)
-                      <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -2789,12 +2779,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      <if(uuid_from_time || uuid_to_time)>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                      <else>
                       AND entity_id IN (SELECT id FROM spans_data)
-                      <endif>
                     UNION ALL
                     <endif>
                     SELECT workspace_id,
@@ -2809,12 +2794,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      <if(uuid_from_time || uuid_to_time)>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                      <else>
                       AND entity_id IN (SELECT id FROM spans_data)
-                      <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -2952,8 +2932,6 @@ class TraceDAOImpl implements TraceDAO {
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
             ), scored_span_ids AS (
-                -- The time window is applied here on trace_id, so a span's score is scoped by its trace's
-                -- time (uniform with every other metric) rather than by the span's own id.
                 SELECT id
                 FROM spans
                 WHERE workspace_id = :workspace_id
