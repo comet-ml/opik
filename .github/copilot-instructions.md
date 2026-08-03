@@ -108,6 +108,29 @@ public class ResourcesResource {
 - **JDBI3 interfaces** for DAO implementations
 - **IdGenerator** for UUID v7 generation
 
+### Query Construction
+- **Never assemble SQL from strings**: no `+`, `String.format`/`.formatted(...)`, `StringBuilder` or `MessageFormat`, and no `%s` slot in a query text block for a caller to fill in
+- **Values** go through `:placeholder` + `.bind("placeholder", value)` — never interpolated
+- **Varying fragments** (predicates, sort clauses, projected columns) go through StringTemplate conditionals in the query itself: `<if(project_ids)> AND project_id IN :project_ids <endif>`
+- **Unbounded fragments** (user-chosen sort/filter) come from `SortingQueryBuilder` / `FilterQueryBuilder`, never from raw request strings
+- Flag new occurrences as a **Critical** finding — an injection risk plus a readability one, since the query a DAO runs stops being visible at its declaration site. `.formatted(...)` remains fine for log and exception messages
+
+**Example:**
+```java
+// ❌ BAD - caller splices the predicate in
+static String tokenUsageNames(String projectPredicate) {
+    return TOKEN_USAGE_NAMES_TEMPLATE.formatted(projectPredicate);
+}
+
+// ✅ GOOD - both shapes in the template, caller enables one and binds the value
+private static final String TOKEN_USAGE_NAMES = """
+        SELECT DISTINCT name FROM spans FINAL
+        WHERE workspace_id = :workspace_id
+        <if(project_ids)> AND project_id IN :project_ids <endif>
+        <if(project_id)> AND project_id = :project_id <endif>
+        """;
+```
+
 **Example Service Pattern:**
 ```java
 @Singleton
