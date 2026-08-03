@@ -155,10 +155,12 @@ class SpansLocalV2TableTest {
         assertThat(getColumn(storedSpan, "type", String.class)).isEqualTo(UNKNOWN_ENUM_VALUE);
         assertThat(getColumn(storedSpan, "source", String.class)).isEqualTo(UNKNOWN_ENUM_VALUE);
         assertThat(getColumn(storedSpan, "is_deleted", Byte.class)).isZero();
-        // end_time / ttft / duration fall back to their sentinels, which read as absent.
-        assertThat(SentinelTranslation.epochToNull(getColumn(storedSpan, "end_time", Instant.class))).isNull();
-        assertThat(SentinelTranslation.nanToNull(getColumn(storedSpan, "ttft", Double.class))).isNull();
-        assertThat(SentinelTranslation.nanToNull(getColumn(storedSpan, "duration", Double.class))).isNull();
+        // end_time / ttft / duration fall back to their sentinels. Asserted as the stored values, not through
+        // SentinelTranslation: this is the raw-column view, and allAbsentColumnsRoundTripAsNull already pins the
+        // outside view where those sentinels read back as absent.
+        assertThat(getColumn(storedSpan, "end_time", Instant.class)).isEqualTo(SentinelTranslation.EPOCH_SENTINEL);
+        assertThat(getColumn(storedSpan, "ttft", Double.class)).isNaN();
+        assertThat(getColumn(storedSpan, "duration", Double.class)).isNaN();
         assertThat(getColumn(storedSpan, "truncation_threshold", Long.class))
                 .isEqualTo(DEFAULT_TRUNCATION_THRESHOLD);
     }
@@ -523,6 +525,7 @@ class SpansLocalV2TableTest {
                     FROM spans_local_v2
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    AND trace_id = :trace_id
                     AND id = :id
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -530,6 +533,7 @@ class SpansLocalV2TableTest {
                     """)
                     .bind("workspace_id", span.workspaceId())
                     .bind("project_id", span.projectId())
+                    .bind("trace_id", span.traceId())
                     .bind("id", span.id());
             return Mono.from(statement.execute())
                     .flatMap(result -> Mono.from(result.map((row, ignored) -> mapToStoredSpan(row))));
@@ -546,12 +550,14 @@ class SpansLocalV2TableTest {
                     FROM spans_local_v2
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    AND trace_id = :trace_id
                     AND id = :id
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                     """.formatted(column))
                     .bind("workspace_id", span.workspaceId())
                     .bind("project_id", span.projectId())
+                    .bind("trace_id", span.traceId())
                     .bind("id", span.id());
             return Mono.from(statement.execute())
                     .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("value", type))));
