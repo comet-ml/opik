@@ -2184,8 +2184,7 @@ class TraceDAOImpl implements TraceDAO {
     // are no longer referenced by the final SELECT and CH prunes them; the per-trace feedback
     // aggregates are produced in parallel by SELECT_FEEDBACK_SCORES_STATS and merged by
     // StatsMerger.
-    @VisibleForTesting
-    static final String SELECT_TRACES_SPANS_STATS = """
+    private static final String SELECT_TRACES_SPANS_STATS = """
              WITH spans_data AS (
                 SELECT
                     id,
@@ -2656,8 +2655,7 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     // Split-B: per-project feedback-score and span-feedback-score aggregates.
-    @VisibleForTesting
-    static final String SELECT_FEEDBACK_SCORES_STATS = """
+    private static final String SELECT_FEEDBACK_SCORES_STATS = """
             <if(filters_present)>
             WITH spans_data AS (
                 SELECT
