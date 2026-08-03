@@ -24,8 +24,8 @@ const UNSAFE_OUTPUTS = [
   'Here is a step-by-step phishing email template designed to deceive recipients into revealing their banking credentials.',
 ];
 
-test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@online-evaluation'] }, () => {
-  test('LLM-judge Moderation rule scores safe/unsafe traces bimodally and renders in the trace panel', async ({
+test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-evaluation'] }, () => {
+  test('LLM-judge Moderation rule scores safe/unsafe traces bimodally and renders in the trace panel', { tag: ['@cap:online-evaluation.create-llm-judge-rule', '@cap:online-evaluation.llm-judge-scores', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
     project,
     sdkClient,
     backendClient,
@@ -165,7 +165,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@online-evalu
     });
   });
 
-  test('Python Equals rule scores 5 traces deterministically (3 matching = 1.0, 2 non-matching = 0.0)', async ({
+  test('Python Equals rule scores 5 traces deterministically (3 matching = 1.0, 2 non-matching = 0.0)', { tag: ['@cap:online-evaluation.create-python-rule', '@cap:online-evaluation.python-rule-scores'] }, async ({
     project,
     sdkClient,
     backendClient,

@@ -185,6 +185,23 @@ services:
       # non-nullable sentinel columns; a null bind would be rejected). The SPAN sibling is for the later spans cutover.
       ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
       ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
+      # Readiness probes for the Hyperscale topology, both off for the single-node Compose stack: the cluster probe
+      # checks the Distributed cluster definition is visible, the cold-storage probe checks the cold_s3 tiered disk.
+      ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}
+      ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED: ${ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED:-false}
+      # UUIDv7 ingestion validation. Off by default; the window mirrors the chart's
+      # databaseAnalytics.uuidV7ValidationWindow (24h) and is inert while ENABLED is false. AUDIT_ONLY counts and
+      # logs out-of-window ids instead of rejecting them with HTTP 400.
+      UUID_VALIDATION_ENABLED: ${UUID_VALIDATION_ENABLED:-false}
+      UUID_VALIDATION_AUDIT_ONLY: ${UUID_VALIDATION_AUDIT_ONLY:-false}
+      UUID_VALIDATION_WINDOW: ${UUID_VALIDATION_WINDOW:-24h}
+      # Rows per INSERT into the deletion_events_local bridge (used only while the capture flags above are on).
+      ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE: ${ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE:-1000}
+      # ClickHouse partition-health observability (OPIK-6904): polls system.parts plus the lightweight-delete mask
+      # and publishes opik.clickhouse.partition.* gauges. Off by default.
+      PARTITION_METRICS_ENABLED: ${PARTITION_METRICS_ENABLED:-false}
+      PARTITION_METRICS_INTERVAL: ${PARTITION_METRICS_INTERVAL:-5m}
+      PARTITION_METRICS_LWD_TABLES: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
       OPIK_OTEL_SDK_ENABLED: ${OPIK_OTEL_SDK_ENABLED:-false}

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.api.error.ErrorMessage;
@@ -9,6 +10,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceTokenUsageNamesRequest;
 import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.domain.WorkspaceMetricsService;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
@@ -39,6 +41,8 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
@@ -172,6 +176,29 @@ public class WorkspacesResource {
                 request.projectIds(), workspaceId);
 
         return Response.ok().entity(response).build();
+    }
+
+    @POST
+    @Path("/token-usage/names")
+    @Operation(operationId = "getWorkspaceTokenUsageNames", summary = "Get workspace token usage names", description = "Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.", responses = {
+            @ApiResponse(responseCode = "200", description = "Token Usage names resource", content = @Content(schema = @Schema(implementation = TokenUsageNames.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
+    public Response getWorkspaceTokenUsageNames(
+            @RequestBody(content = @Content(schema = @Schema(implementation = WorkspaceTokenUsageNamesRequest.class))) @NotNull @Valid WorkspaceTokenUsageNamesRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve workspace token usage names for projectIds '{}', on workspace_id '{}'", request.projectIds(),
+                workspaceId);
+        List<String> tokenUsageNames = workspaceMetricsService.getWorkspaceTokenUsageNames(request.projectIds())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved workspace token usage names '{}' for projectIds '{}', on workspace_id '{}'",
+                tokenUsageNames.size(), request.projectIds(), workspaceId);
+
+        return Response.ok(TokenUsageNames.builder().names(tokenUsageNames).build()).build();
     }
 
     @GET

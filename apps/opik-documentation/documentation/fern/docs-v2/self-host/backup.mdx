@@ -282,6 +282,169 @@ spec:
           restartPolicy: OnFailure
 ```
 
+### Automated Restore with Kubernetes Job
+
+The Opik helm chart ships a Kubernetes Job that runs a complete restore: it picks `restore` or
+`restore_remote` depending on whether the backup is already on local disk, starts it through the
+backup server API, and polls until it finishes.
+
+<Warning>
+The backup server must be enabled **before** the restore, and the backup must already exist and have been created **by the backup server** — not by the SQL-based backup in Option 1.
+
+The restore **replaces data**. `clickhouse-backup` drops and recreates every table contained in the backup (`ON CLUSTER` when `RESTORE_SCHEMA_ON_CLUSTER` is set) before restoring it, so you do not need to drop databases or tables yourself. Tables that are not part of the backup are left untouched.
+
+One exception: if `restore_schema_on_cluster` is set through a config file while the `RESTORE_SCHEMA_ON_CLUSTER` environment variable is empty, `clickhouse-backup` refuses to drop tables that still hold data and the restore aborts. Set it as an environment variable, as the values example below does.
+
+The job does not retry (`backoffLimit: 0`) and is capped by `activeDeadlineSeconds` — 24 hours by default. Raise it for large restores, or Kubernetes will kill the job mid-restore.
+</Warning>
+
+<Steps>
+  <Step title="Find the backup name">
+    `backupName` is required, and must match a name the backup server knows:
+
+    ```bash
+    kubectl port-forward -n <namespace> svc/chi-opik-clickhouse-cluster-0-0 7171:7171
+
+    # Backups in S3
+    curl -s "http://localhost:7171/backup/list/remote"
+
+    # Backups already on local disk
+    curl -s "http://localhost:7171/backup/list/local"
+    ```
+
+    Use the `name` field, not the S3 prefix. With `S3_PATH: shard-{shard}`, a backup stored at
+    `s3://your-bucket/shard-0/2026-07-28/` has the name `2026-07-28`.
+
+    The service, pod and port used throughout this section are the chart defaults, matching the
+    `RESTORE_SERVICE` the Job computes. If you set `nameOverride`, a different shard/replica layout, or
+    `clickhouse.backupServer.service.name` / `.port`, substitute your own — list them with
+    `kubectl get pods,svc -n <namespace> -l clickhouse.altinity.com/chi`. The port is
+    `clickhouse.backupServer.service.port` when set, and otherwise `clickhouse.backupServer.port`
+    (`7171` by default).
+  </Step>
+  <Step title="Render the job manifest">
+    The backup server has to be running in the release already. The command below renders **only**
+    the Job, so nothing under `backupServer` reaches the cluster through it — if the server is not
+    enabled yet, roll it out with `helm upgrade` first:
+
+    ```yaml
+    # part of your release values
+    clickhouse:
+      backupServer:
+        enabled: true
+        # S3 settings the backup server needs for restore_remote (downloads from S3)
+        env:
+          REMOTE_STORAGE: s3
+          S3_BUCKET: YOURBUCKET
+          S3_PATH: YOURPATH
+          RESTORE_SCHEMA_ON_CLUSTER: cluster  # so the schema is restored on every replica
+    ```
+
+    Then put the restore settings, which are only needed at render time, in their own values file:
+
+    ```yaml
+    # restore-values.yaml
+    clickhouse:
+      backup:
+        restore:
+          createJob: true
+          backupName: "2026-07-28"          # from step 1
+          activeDeadlineSeconds: 604800     # 7 days; default is 24h
+          image: "amazon/aws-cli:2.27.49"   # any image with bash and curl
+    ```
+
+    Render only the restore job. Pass your existing values file first, so the job inherits the same
+    service account, node selector and tolerations as your ClickHouse pods:
+
+    ```bash
+    helm template opik opik/opik \
+      -f your-values.yaml -f restore-values.yaml \
+      --show-only templates/clickhouse_restore_job.yaml > clickhouse-restore-job.yaml
+    ```
+
+    `helm template` does not write a namespace into the manifest, so either add `namespace:` to the
+    job's metadata or pass `-n` when you apply it.
+  </Step>
+  <Step title="Create the job">
+    ```bash
+    kubectl apply -f clickhouse-restore-job.yaml -n <namespace>
+    ```
+
+    The job is named `<opik.name>-clickhouse-restore` — `opik-clickhouse-restore` unless you set
+    `nameOverride`, and always readable as `metadata.name` in the manifest you just rendered. Use
+    that name in the commands here and in the next step. It is fixed per release, so delete the
+    previous job before restoring again:
+
+    ```bash
+    kubectl delete job opik-clickhouse-restore -n <namespace>
+    ```
+
+    Re-applying is safe: if this backup was already restored the Job exits without restoring it again,
+    and if a restore is still running — for example after its pod was rescheduled — it follows that one
+    instead of starting a second.
+  </Step>
+  <Step title="Watch the restore">
+    ```bash
+    kubectl get job opik-clickhouse-restore -n <namespace>
+
+    kubectl logs -f job/opik-clickhouse-restore -n <namespace>
+    ```
+
+    The job polls every 15 minutes, so the log stays quiet between checks — a large `restore_remote`
+    runs for hours. It prints the final status and fails the job if the restore failed.
+  </Step>
+</Steps>
+
+#### Checking progress during a long restore
+
+The job's own log only reports `in progress`. For actual progress, use these — in increasing
+cost order.
+
+Per-table progress, from the backup server's log:
+
+```bash
+kubectl logs chi-opik-clickhouse-cluster-0-0-0 -c clickhouse-backup -n <namespace> \
+  | grep download_data | tail -5
+```
+
+Each line is one finished table: `progress=9/44 size=457.38GiB table=opik_prod.spans`. Note that
+`9/44` is the table's **position in the list**, not a count of finished tables — count the
+distinct positions you have seen, or the numerator will look stuck while most tables are done.
+
+Current status and start time:
+
+```bash
+kubectl exec chi-opik-clickhouse-cluster-0-0-0 -c clickhouse-backup -n <namespace> \
+  -- curl -s localhost:7171/backup/actions | tail -3
+```
+
+Bytes landed on disk, against the backup's own size:
+
+```bash
+# how much is on the data volume now
+kubectl exec chi-opik-clickhouse-cluster-0-0-0 -c clickhouse-backup -n <namespace> \
+  -- df -h /var/lib/clickhouse
+
+# the size the finished restore should reach (data_size)
+kubectl exec chi-opik-clickhouse-cluster-0-0-0 -c clickhouse-backup -n <namespace> \
+  -- curl -s localhost:7171/backup/list/remote
+```
+
+Two `df` readings a few minutes apart give a rough throughput and ETA, but treat that as a coarse
+capacity check rather than restore progress: `df` reports the whole volume, so merges, system tables
+and any other writes land in the same delta, and the total can pass the backup's `data_size` before
+the restore is done. The per-table `download_data` lines above are the authoritative signal. Prefer
+`df` over `du -sb` on the backup directory either way: `du` walks every file in a multi-terabyte tree
+and adds significant I/O to the volume the restore is already saturating.
+
+<Note>
+The `/backup/actions` history is kept in memory. It is empty if the backup-server container restarted since the restore began, so this is a live-progress tool only — after the fact there is no local record. If you scrape metrics, `kubelet_volume_stats_used_bytes` for the ClickHouse PVC is the durable equivalent and needs no `exec`.
+</Note>
+
+<Note>
+Setting `createJob: true` in your release values works too — `helm upgrade` then creates the same job. If you do that, set it back to `false` afterwards, otherwise the next `helm upgrade` re-creates the job and restores again. The "already restored" check reads the backup server's in-memory action history, so it does not survive a backup server restart.
+</Note>
+
 ## Comparison
 
 | Feature                 | SQL-based Backup | ClickHouse Backup Tool |
@@ -408,5 +571,5 @@ Set up monitoring for backup operations:
 For additional help with ClickHouse backups:
 
 - [ClickHouse Backup Documentation](https://github.com/Altinity/clickhouse-backup)
-- [ClickHouse Backup Command Reference](https://clickhouse.com/docs/operations/backup)
+- [ClickHouse Backup and Restore](https://clickhouse.com/docs/concepts/features/backup-restore/overview)
 - [Opik Community Support](https://github.com/comet-ml/opik/issues)

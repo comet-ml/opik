@@ -19,6 +19,8 @@ import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 @ImplementedBy(WorkspaceMetricsServiceImpl.class)
 public interface WorkspaceMetricsService {
@@ -33,6 +35,8 @@ public interface WorkspaceMetricsService {
     Mono<WorkspaceMetricResponse> getWorkspaceCosts(WorkspaceMetricRequest request);
 
     Mono<WorkspaceMetricResponse> getWorkspaceSpanMetric(WorkspaceSpanMetricRequest request);
+
+    Mono<List<String>> getWorkspaceTokenUsageNames(Set<UUID> projectIds);
 }
 
 @Slf4j
@@ -98,6 +102,22 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
         }
         return projectService.findProjectIdsByWorkspace()
                 .map(projectIds -> request.toBuilder().projectIds(projectIds).build());
+    }
+
+    @Override
+    public Mono<List<String>> getWorkspaceTokenUsageNames(Set<UUID> projectIds) {
+        return resolveProjectIds(projectIds)
+                .flatMap(resolved -> CollectionUtils.isEmpty(resolved)
+                        ? Mono.just(List.<String>of())
+                        : workspaceMetricsDAO.getWorkspaceTokenUsageNames(resolved));
+    }
+
+    // "All projects" (empty projectIds) is resolved into the explicit set of workspace project ids so the DAO always
+    // queries a bounded `project_id IN (...)` list; an explicit selection passes through unchanged.
+    private Mono<Set<UUID>> resolveProjectIds(Set<UUID> projectIds) {
+        return CollectionUtils.isNotEmpty(projectIds)
+                ? Mono.just(projectIds)
+                : projectService.findProjectIdsByWorkspace();
     }
 
     private Mono<List<WorkspaceMetricResponse.Result>> dispatch(WorkspaceSpanMetricRequest request) {

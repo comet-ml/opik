@@ -50,27 +50,15 @@ Every recommendation is priced from your own traffic, so you are choosing betwee
 
 ## Step 3: Apply it as policy
 
-A recommendation you have to chase people to adopt is not a saving. Applying one writes it as policy, and the change reaches developer machines on its own.
+A recommendation you have to chase people to adopt is not a saving. Applying one writes it as policy, and the change reaches developer machines on its own — no push, no restart, typically within about 5 minutes.
 
-Policy works at two levels. **Organization policies** set the fleet-wide baseline every developer should be on. **User policies** handle the exceptions, so one team needing something different never means loosening the baseline for everyone:
-
-- A per-user value overrides the org value for that user.
-- Each setting carries a lock controlling whether the developer can change it themselves.
-- Every resolved setting shows its source, so you can always see where a value came from.
-- Overrides are revertible back to the org value.
+Policy works at two levels: **Organization policies** set the fleet-wide baseline every developer should be on, and **User policies** handle the exceptions, so one team needing something different never means loosening the baseline for everyone.
 
 <Frame>
   <img src="/img/v2/cost-intelligence/user_policies.png" alt="User policies interface" />
 </Frame>
 
-<Tip>
-  Set the org baseline tighter than you think you need and grant exceptions per
-  user. That is far easier to run than a loose baseline you keep trying to
-  tighten later, and the exception list itself becomes useful data about who
-  needs what.
-</Tip>
-
-Delivery is automatic once you are set up. Bootstrap configuration (workspace, API key, base URL) is delivered once via [managed settings](/cost-intelligence/install/managed-settings) or [MDM](/cost-intelligence/install/mdm). Cost policies need no further push: devices fetch the effective policy for the signed-in user and apply it themselves. So you deploy once and manage spend from the dashboard afterwards.
+[**Roll out cost policies**](/cost-intelligence/roll-out-cost-policies) is the full picture — how org and user policies inherit, locks and who can change what, how changes reach devices, and what happens when a developer edits a setting locally or you clear one.
 
 ## Step 4: Confirm it held
 

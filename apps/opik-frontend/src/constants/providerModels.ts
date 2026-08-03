@@ -628,6 +628,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_0731,
+      label: "deepseek/deepseek-v4-flash-0731",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
       label: "deepseek/deepseek-v4-flash:free",
     },
@@ -2301,6 +2305,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "thinkingmachines/inkling",
     },
     {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_SMALL,
+      label: "thinkingmachines/inkling-small",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
       label: "thudm/glm-4.1v-9b-thinking",
     },
@@ -2493,6 +2501,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "~anthropic/claude-sonnet-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_LATEST,
+      label: "~deepseek/deepseek-v4-flash-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_LATEST,
       label: "~google/gemini-flash-latest",
     },
@@ -2591,8 +2603,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.5 Flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE,
+      label: "Gemini 3.5 Flash Lite",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE,
+      label: "Gemini 3.1 Flash Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_FLASH_LITE_PREVIEW,
+      label: "Gemini 3.1 Flash Lite Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO,

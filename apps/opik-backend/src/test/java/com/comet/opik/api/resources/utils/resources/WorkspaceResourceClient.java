@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
@@ -7,6 +8,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
+import com.comet.opik.api.metrics.WorkspaceTokenUsageNamesRequest;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -105,6 +107,21 @@ public class WorkspaceResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request));
+    }
+
+    public TokenUsageNames getWorkspaceTokenUsageNames(WorkspaceTokenUsageNamesRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/token-usage/names")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(TokenUsageNames.class);
+        }
     }
 
     public void upsertWorkspaceConfiguration(WorkspaceConfiguration configuration, String apiKey,

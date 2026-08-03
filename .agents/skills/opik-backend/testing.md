@@ -145,10 +145,7 @@ Awaitility.await()
 ## Assertion Patterns
 
 ```java
-// Object equality when you have expected object
-assertThat(actualUser).isEqualTo(expectedUser);
-
-// Field assertions for specific checks
+// Spot checks against literals - fine, this is not an object comparison
 assertThat(result.getName()).isEqualTo("John Doe");
 assertThat(result.getId()).isNotBlank();
 
@@ -157,6 +154,168 @@ assertThatThrownBy(() -> service.create(invalid))
     .isInstanceOf(BadRequestException.class)
     .hasMessageContaining("Name is required");
 ```
+
+### Comparing Two Objects — Plain `isEqualTo` by Default
+
+Comparing two objects field by field is the default failure mode to avoid. It isn't just
+verbose: when a field is later added to the record, the test keeps passing while silently not
+covering the new field. Nothing fails and nothing flags it, so coverage erodes with every model
+change.
+
+Compare the whole object instead. `equals`/`hashCode` are the source of truth for equality in
+Java, so plain `isEqualTo` is the default — our API models are overwhelmingly records, whose
+generated `equals` covers every component and picks up new ones automatically:
+
+```java
+// ❌ BAD - add a field to the record later and this still passes, now covering less
+assertThat(actual.modelName()).isEqualTo(request.model());
+assertThat(actual.temperature()).isEqualTo(request.temperature());
+assertThat(actual.topP()).isEqualTo(request.topP());
+assertThat(actual.maxOutputTokens()).isEqualTo(request.maxCompletionTokens());
+
+// ✅ GOOD - new components are compared automatically, via the type's own equals
+assertThat(actual).isEqualTo(expected);
+```
+
+Prefer records for new models. For Java POJOs/Beans that need equality, implement it with Lombok
+— `@Value`, `@Data`, `@EqualsAndHashCode`, in that order of preference — rather than reaching for
+reflection-based comparison in the test.
+
+### When to Use `usingRecursiveComparison`
+
+`usingRecursiveComparison` bypasses `equals` and walks fields reflectively via AssertJ internals.
+That is the right tool only for **exceptional cases**:
+
+- **Excluding fields** from the comparison (`ignoringFields`).
+- **Applying an AssertJ feature** during comparison, such as a custom comparator.
+- **The type has no usable `equals`/`hashCode`** — realistically only third-party types we don't
+  control. For our own code, fix the model instead.
+
+```java
+// ✅ GOOD - exceptional case: server-generated fields must be excluded
+assertThat(actual)
+    .usingRecursiveComparison()
+    .ignoringFields("id", "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy")
+    .isEqualTo(expected);
+```
+
+Recursive comparison is widespread in this codebase, largely as a side effect of JSON views on
+response objects rather than a deliberate default. Existing bare
+`usingRecursiveComparison().isEqualTo(...)` calls with no exclusion or comparator are not the
+pattern to copy — a plain `isEqualTo` is what those want.
+
+### Partial Comparison — `ignoringFields`, Not Dropped Assertions
+
+When only some fields should match, use recursive comparison and name the exclusions. The
+ignore list is then explicit and reviewable, instead of the exclusions being implied by whichever
+assertions someone chose not to write.
+
+```java
+// ❌ BAD - which fields are deliberately unchecked? Unknowable from the test
+assertThat(actual.name()).isEqualTo(expected.name());
+assertThat(actual.projectId()).isEqualTo(expected.projectId());
+
+// ✅ GOOD - exclusions are visible and reviewed
+assertThat(actual)
+    .usingRecursiveComparison()
+    .ignoringFields("id", "createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy")
+    .isEqualTo(expected);
+```
+
+Server-generated audit fields (`id`, `createdAt`, `createdBy`, `lastUpdatedAt`, `lastUpdatedBy`)
+are the usual exclusions. Hoist a shared list into a constant when a test class repeats it — see
+`EXPERIMENT_IGNORED_FIELDS` in `api/resources/utils/resources/ExperimentTestAssertions.java`.
+
+Ignoring a field and then asserting it separately is a deliberate, valid idiom — not a
+redundancy — when the field needs different semantics than plain equality:
+
+```java
+// ✅ GOOD - lastUpdatedAt is ignored above so each caller can pick == vs isAfter
+assertThat(actual)
+    .usingRecursiveComparison()
+    .ignoringFields(EXPERIMENT_IGNORED_FIELDS)
+    .isEqualTo(expected);
+
+assertThat(actual.lastUpdatedAt()).isAfter(expected.lastUpdatedAt());
+```
+
+### Comparators, Not Exclusions, for Inexact Types
+
+Inexact types are the second exceptional case: `BigDecimal.equals` is scale-sensitive and doubles
+need an epsilon, so plain `isEqualTo` on the whole object is too strict. Reach for recursive
+comparison here — but give it a comparator rather than ignoring the field, so the field stays
+covered:
+
+```java
+// ❌ BAD - the field is now untested
+.ignoringFields("totalEstimatedCost")
+
+// ✅ GOOD - still asserted, compared by value
+assertThat(actual)
+    .usingRecursiveComparison()
+    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+    .isEqualTo(expected);
+```
+
+### Collections — `containsExactly`, Not Index-by-Index
+
+```java
+// ❌ BAD - misses a 4th unexpected element entirely
+assertThat(page.content().get(0).name()).isEqualTo("Alice");
+assertThat(page.content().get(1).name()).isEqualTo("Bob");
+assertThat(page.content().get(2).name()).isEqualTo("Charlie");
+
+// ✅ GOOD - order matters (sorting/pagination tests)
+assertThat(page.content())
+    .extracting(Entity::getName)
+    .containsExactly("Alice", "Bob", "Charlie");
+
+// ✅ GOOD - order is not part of the contract
+assertThat(actual).containsExactlyInAnyOrderElementsOf(expected);
+
+// ✅ GOOD - whole objects, order-insensitive nested collections
+assertThat(actual)
+    .usingRecursiveComparison()
+    .ignoringCollectionOrderInFields("feedbackScores", "comments")
+    .isEqualTo(expected);
+```
+
+`containsExactly` asserts size and content together — `hasSize` plus per-index checks does not,
+and lets an extra element through.
+
+These `containsExactly*` variants compare elements with the element type's own `equals`, which is
+what you want for exact-valued models. When the elements carry `BigDecimal` or `double`, the same
+exception that justifies a comparator on a single object applies per element — otherwise a
+difference in numeric scale fails the assertion even though the values are equal:
+
+```java
+// ✅ GOOD - inexact numeric elements (see TraceAssertions for the real usage)
+var config = new RecursiveComparisonConfiguration();
+config.ignoreFields(IGNORED_FIELDS_SCORES);
+config.registerComparatorForType(BigDecimal::compareTo, BigDecimal.class);
+
+assertThat(actual.feedbackScores())
+    .usingRecursiveFieldByFieldElementComparator(config)
+    .containsExactlyInAnyOrderElementsOf(expected.feedbackScores());
+```
+
+This is the same escalation rule as for single objects, not a separate one: plain
+`containsExactly*` by default, element comparator only when an element field can't be compared by
+`equals`. `FeedbackScore.value` is a `BigDecimal`, which is why
+`api/resources/utils/traces/TraceAssertions.java` needs it — most models don't.
+
+### When Per-Field Assertions Are Still Right
+
+- **Spot checks against literals** — `assertThat(result.getName()).isEqualTo("John Doe")` is not
+  an object comparison at all.
+- **Non-equality semantics** — `isAfter`, `isNotNull`, `isNotBlank`, `hasMessageContaining`.
+- **Deliberately narrow assertions on an ignored field**, as shown above.
+
+The rule targets *object-to-object* field-by-field comparison, not every use of a single-field
+assertion. In short: compare whole objects with `isEqualTo`, escalate to
+`usingRecursiveComparison` only for the exceptional cases above, and keep per-field assertions for
+the cases in this list.
 
 ## Don't Run Two ClickHouse-Migrating Test Classes in One `mvn` Reactor
 
