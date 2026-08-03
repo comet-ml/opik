@@ -157,7 +157,7 @@ jobs:
         working-directory: sdks/typescript
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v9.0.0
 
       - name: Cache pre-commit environments
         uses: actions/cache@v4
@@ -307,7 +307,7 @@ jobs:
       - name: Find prior timing comment
         id: find_comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
-        uses: peter-evans/find-comment@v3
+        uses: peter-evans/find-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]

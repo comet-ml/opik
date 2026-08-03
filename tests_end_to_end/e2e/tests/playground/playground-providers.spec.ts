@@ -53,7 +53,7 @@ const enabled = Object.values(config.providers).flatMap((p) =>
  *   3. Runs a simple prompt + model-options tweak via the Playground.
  *   4. Asserts a non-empty, non-error response came back.
  */
-test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@playground'] }, () => {
+test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@area:playground', '@cap:playground.select-model-provider'] }, () => {
   for (const { provider, model } of enabled) {
     test(`${provider.display_name} ${model.name} returns a completion`, async ({
       project,

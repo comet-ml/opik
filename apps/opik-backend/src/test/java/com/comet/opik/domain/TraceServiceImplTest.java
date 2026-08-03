@@ -16,6 +16,7 @@ import com.comet.opik.utils.ErrorUtils;
 import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
 import jakarta.ws.rs.NotFoundException;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,8 +32,10 @@ import uk.co.jemos.podam.api.PodamFactoryImpl;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -226,7 +229,7 @@ class TraceServiceImplTest {
             var projectId = idGenerator.generateId();
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
-            when(traceDao.delete(ids, projectId, connection)).thenReturn(Mono.empty());
+            when(traceDao.delete(pairs(projectId, ids), connection)).thenReturn(Mono.empty());
 
             // traceService is built with capture disabled (default config)
             assertDoesNotThrow(() -> traceService
@@ -235,7 +238,7 @@ class TraceServiceImplTest {
                             .put(RequestContext.WORKSPACE_ID, workspaceId))
                     .block());
 
-            verify(traceDao).delete(ids, projectId, connection);
+            verify(traceDao).delete(pairs(projectId, ids), connection);
             verifyTracesDeletedPosted(ids, projectId, workspaceId);
             verifyNoInteractions(deletionEventDAO);
         }
@@ -247,7 +250,7 @@ class TraceServiceImplTest {
             var projectId = idGenerator.generateId();
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
-            when(traceDao.delete(ids, projectId, connection)).thenReturn(Mono.empty());
+            when(traceDao.delete(pairs(projectId, ids), connection)).thenReturn(Mono.empty());
             when(deletionEventDAO.insert(any(), eq(DEFAULT_USER)))
                     .thenReturn(Mono.error(new RuntimeException("Error inserting deletion events")));
 
@@ -261,7 +264,7 @@ class TraceServiceImplTest {
                             .put(RequestContext.WORKSPACE_ID, workspaceId))
                     .block());
 
-            verify(traceDao).delete(ids, projectId, connection);
+            verify(traceDao).delete(pairs(projectId, ids), connection);
             verifyTracesDeletedPosted(ids, projectId, workspaceId);
             verify(deletionEventDAO).insert(any(), eq(DEFAULT_USER));
         }
@@ -273,7 +276,7 @@ class TraceServiceImplTest {
             var projectId = idGenerator.generateId();
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
-            when(traceDao.delete(ids, projectId, connection))
+            when(traceDao.delete(pairs(projectId, ids), connection))
                     .thenReturn(Mono.error(new RuntimeException("Error deleting traces")));
 
             var traceService = newTraceService(DatabaseAnalyticsDataModelConfig.builder()
@@ -288,8 +291,56 @@ class TraceServiceImplTest {
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("Error deleting traces");
 
-            verify(traceDao).delete(ids, projectId, connection);
+            verify(traceDao).delete(pairs(projectId, ids), connection);
             verifyNoInteractions(deletionEventDAO, eventBus);
+        }
+
+        @Test
+        void deleteResolvesBoundedMissesViaUnboundedFallbackAcrossAllProjects() {
+            // The null-project path resolves owning projects in two passes: a bounded fast pass, then an unbounded
+            // pass over ONLY the ids the bounded pass misses (e.g. a wrapped id_at outside the week window). Integration
+            // can't reach this branch (a wrapped-id_at row can't be created through the API), so it's covered here:
+            // the bounded pass resolves one id, the miss set (a second id, reused across two projects) is resolved by
+            // the unbounded pass, and the delete runs over the merged (project_id, id) pairs.
+            var resolvedId = idGenerator.generateId();
+            var missedId = idGenerator.generateId();
+            var ids = Set.of(resolvedId, missedId);
+            var projectA = idGenerator.generateId();
+            var projectB = idGenerator.generateId();
+            var projectC = idGenerator.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+
+            when(traceDao.getAllProjectIdsByTraceIdsBounded(ids))
+                    .thenReturn(Mono.just(Map.of(resolvedId, Set.of(projectA))));
+            // Fallback runs over the miss set only, and resolves the reused id to both its owning projects.
+            when(traceDao.getAllProjectIdsByTraceIds(Set.of(missedId)))
+                    .thenReturn(Mono.just(Map.of(missedId, Set.of(projectB, projectC))));
+
+            var expectedPairs = Set.of(
+                    Pair.of(projectA, resolvedId),
+                    Pair.of(projectB, missedId),
+                    Pair.of(projectC, missedId));
+            when(traceDao.delete(expectedPairs, connection)).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .delete(ids, null)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).getAllProjectIdsByTraceIdsBounded(ids);
+            // The unbounded fallback is narrowed to the miss set, never re-queried over the whole id set.
+            verify(traceDao).getAllProjectIdsByTraceIds(Set.of(missedId));
+            verify(traceDao).delete(expectedPairs, connection);
+        }
+
+        /**
+         * Mirrors {@code TraceServiceImpl}'s non-null-project path: one {@code (project_id, trace_id)} pair per id.
+         * Set equality is order-independent, so this matches whatever order the service iterates the ids in.
+         */
+        private Set<Pair<UUID, UUID>> pairs(UUID projectId, Set<UUID> ids) {
+            return ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet());
         }
 
         private Connection mockDeleteFlow() {

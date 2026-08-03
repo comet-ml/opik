@@ -67,6 +67,15 @@ versions:
     path: ./versions/v1.yml
     slug: v1
 redirects:
+  - source: "/docs/opik/self-improving-agents/ollie-and-your-codebase"
+    destination: "/docs/opik/development/agent-playground"
+    permanent: true
+  - source: "/docs/opik/self-improving-agents/:slug"
+    destination: "/docs/opik/cost-intelligence/overview"
+    permanent: true
+  - source: "/docs/opik/self-improving-agents"
+    destination: "/docs/opik/cost-intelligence/overview"
+    permanent: true
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
     permanent: true
@@ -566,6 +575,10 @@ redirects:
     permanent: true
   - source: "/docs/opik/configuration/ai_providers"
     destination: "/docs/opik/administration/workspace-settings/ai_providers"
+    permanent: true
+  # Guardrails moved to a dedicated top-level section (out of Gateway & Guardrails)
+  - source: "/docs/opik/production/gateway-guardrails/guardrails"
+    destination: "/docs/opik/guardrails/guardrails"
     permanent: true
   # Administration restructure redirects (pages moved to admin-dashboard subsection)
   - source: "/docs/opik/administration/admin_dashboard"

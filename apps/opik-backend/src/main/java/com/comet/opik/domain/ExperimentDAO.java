@@ -2294,6 +2294,7 @@ public class ExperimentDAO {
             var aggregationCriteria = AggregationBranchCountsCriteria.builder()
                     .experimentIds(experimentSearchCriteria.experimentIds())
                     .datasetId(experimentSearchCriteria.datasetId())
+                    .projectId(experimentSearchCriteria.projectId())
                     .build();
 
             var targetProjectIdsMono = getTargetProjectIdsForExperiments(

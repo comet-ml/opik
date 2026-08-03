@@ -68,6 +68,29 @@ def _try_notifying_about_experiment_completion(
         )
 
 
+def _get_experiment_url(
+    client: opik_client.Opik, experiment_id: str, dataset_id: str
+) -> Optional[str]:
+    """Best-effort direct experiment URL; the experiment is already created by
+    the time this runs, so a failure to resolve the workspace or build the URL
+    must not turn a successful evaluation into an error.
+    """
+    try:
+        return url_helpers.get_experiment_url_by_id(
+            experiment_id=experiment_id,
+            dataset_id=dataset_id,
+            base_url=client.config.url_override,
+            workspace=client._dereferenced_workspace(),
+        )
+    except Exception:
+        LOGGER.debug(
+            "Could not resolve the experiment URL. Experiment ID: %s",
+            experiment_id,
+            exc_info=True,
+        )
+        return None
+
+
 def _materialize_for_checkpoint(
     *,
     items_iter: Iterator[dataset_item.DatasetItem],
@@ -406,12 +429,11 @@ def __internal_api__run_test_suite__(
     )
 
     if verbose >= 1:
-        experiment_url = url_helpers.get_experiment_url_by_id(
-            experiment_id=experiment_.id,
-            dataset_id=suite_dataset.id,
-            url_override=client.config.url_override,
+        experiment_url = _get_experiment_url(
+            client, experiment_id=experiment_.id, dataset_id=suite_dataset.id
         )
-        report.display_evaluation_in_progress(experiment_url)
+        if experiment_url is not None:
+            report.display_evaluation_in_progress(experiment_url)
 
     eval_result, total_time = _evaluate_test_suite_task(
         client=client,
@@ -601,13 +623,11 @@ def _evaluate_task(
             dataset.name, total_time, test_results, computed_experiment_scores
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -734,10 +754,8 @@ def _evaluate_test_suite_task(
 
     total_time = time.time() - start_time
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
@@ -880,13 +898,11 @@ def evaluate_experiment(
             computed_experiment_scores,
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset_.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset_.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     _try_notifying_about_experiment_completion(experiment)
 
@@ -1185,13 +1201,11 @@ def evaluate_prompt(
             dataset.name, total_time, test_results, computed_experiment_scores
         )
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment.id,
-        dataset_id=dataset.id,
-        url_override=client.config.url_override,
+    experiment_url = _get_experiment_url(
+        client, experiment_id=experiment.id, dataset_id=dataset.id
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+    if experiment_url is not None:
+        report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
@@ -1242,12 +1256,18 @@ def evaluate_optimization_trial(
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
+    experiment_type: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
 
     Args:
         optimization_id: The ID of the optimization associated with the experiment.
+
+        experiment_type: The experiment type recorded for this trial. Optimizers use
+            "mini-batch" for small-sample candidate screening evaluations and "trial"
+            (default) for full evaluations, so that mini-batch scores are excluded
+            from best-score aggregations.
 
         dataset: An Opik Dataset or DatasetVersion instance
 
@@ -1382,7 +1402,7 @@ def evaluate_optimization_trial(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=checked_prompts,
-        type="trial",
+        type=experiment_type or "trial",
         optimization_id=optimization_id,
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),

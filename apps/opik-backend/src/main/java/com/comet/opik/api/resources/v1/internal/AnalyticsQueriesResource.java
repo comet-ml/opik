@@ -37,7 +37,7 @@ import java.util.concurrent.CompletionException;
 /**
  * Internal, authenticated endpoint that runs Ollie-generated read-only SQL against ClickHouse, bounded to the
  * caller's workspace and the requested project. Authentication is required only to derive the bounding
- * {@code workspace_id} ({@code project_id} comes from the body). Gated behind the {@code agentInsightsEnabled}
+ * {@code workspace_id} ({@code project_id} comes from the body). Gated behind the {@code ollieEnabled}
  * toggle: when off it returns {@code 501 Not Implemented} and performs no ClickHouse access.
  *
  * <p>The caller's final query must return exactly one column named {@code result}, produced via
@@ -67,7 +67,7 @@ public class AnalyticsQueriesResource {
     public Response executeQuery(@PathParam("projectId") @NotNull UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = AnalyticsQueryRequest.class))) @NotNull @Valid AnalyticsQueryRequest request) {
 
-        if (!serviceToggles.isAgentInsightsEnabled()) {
+        if (!serviceToggles.isOllieEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
 

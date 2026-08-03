@@ -14,13 +14,13 @@ from ...core.state import prepare_experiment_config
 from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
 from ...utils.toolcalling.core import metadata as tool_metadata
-from ...utils.toolcalling.core import segment_updates
 from ...utils.scoring import improves_over
 from ...core import runtime
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.candidate_selection import select_candidate
+from .ops import candidate_ops
 from .types import OpikDataInst
 
 if TYPE_CHECKING:
@@ -47,6 +47,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         dataset: Dataset,
         experiment_config: dict[str, Any] | None,
         validation_dataset: Dataset | None = None,
+        gepa_val_item_ids: set[str] | None = None,
     ) -> None:
         self._base_prompts = base_prompts
         self._agent = agent
@@ -56,6 +57,10 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         self._dataset = dataset
         self._validation_dataset = validation_dataset
         self._experiment_config = experiment_config
+        # Exact item ids of the GEPA valset (the sampled subset GEPA evaluates
+        # accepted candidates on). Used to classify each evaluate() call as a
+        # full evaluation ("trial") vs. a mini-batch screening eval ("mini-batch").
+        self._gepa_val_item_ids = gepa_val_item_ids or set()
         self._metric_name = metric.__name__
         self._allowed_roles = (
             context.extra_params.get("optimizable_roles")
@@ -65,16 +70,53 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         # TODO: Replace with native GEPA adapter once available; role constraints may drop candidate edits.
 
         # Pre-compute item ID sets for fast lookup during evaluate()
+        train_items = dataset.get_items()
         self._train_item_ids: set[str] = {
-            str(item.get("id")) for item in dataset.get_items() if item.get("id")
+            str(item.get("id")) for item in train_items if item.get("id")
         }
+        val_items: list[dict[str, Any]] = []
         self._val_item_ids: set[str] = set()
         if validation_dataset is not None:
+            val_items = validation_dataset.get_items()
             self._val_item_ids = {
-                str(item.get("id"))
-                for item in validation_dataset.get_items()
-                if item.get("id")
+                str(item.get("id")) for item in val_items if item.get("id")
             }
+        # The datasets' column names are the authoritative substitutable keys:
+        # get_messages() replaces the literal "{key}" for every one of them, so
+        # the placeholder guard protects these even when a key is not
+        # identifier-shaped (e.g. "{my key}").
+        self._known_placeholder_keys: set[str] = candidate_ops.dataset_placeholder_keys(
+            (*train_items, *val_items)
+        )
+
+    def _classify_experiment_type(
+        self,
+        *,
+        dataset_item_ids: list[str],
+        capture_traces: bool,
+        missing_ids: bool,
+    ) -> str:
+        """Classify an evaluate() call as full eval ("trial") or "mini-batch".
+
+        Mini-batch screening runs must be recorded with their real experiment
+        type so they never mix into best-score aggregations. Parent reflection
+        evals (capture_traces=True) are always mini-batches; otherwise only a
+        batch covering the exact GEPA valset is a full eval. When ids are
+        unknown we keep the legacy "trial" label (safe fallback).
+
+        Assumes a full eval arrives as the complete valset in one call — true
+        with Opik's defaults (FullEvaluationPolicy, no evaluation_cache). If a
+        subsampling val policy or gepa's evaluation_cache is ever enabled, a
+        full eval could arrive as a valset subset and be misclassified as
+        "mini-batch"; revisit this check then.
+        """
+        if missing_ids or not self._gepa_val_item_ids:
+            return "trial"
+        if capture_traces:
+            return "mini-batch"
+        if set(dataset_item_ids) == self._gepa_val_item_ids:
+            return "trial"
+        return "mini-batch"
 
     def _resolve_dataset_for_batch(self, dataset_item_ids: list[str]) -> Dataset:
         """
@@ -177,47 +219,29 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
-    ) -> dict[str, chat_prompt.ChatPrompt]:
-        """Rebuild prompts with optimized messages, preserving tools/function_map/model."""
-        rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
-        dropped_components = 0
-        for prompt_name, prompt_obj in self._base_prompts.items():
-            original_messages = prompt_obj.get_messages()
-            new_messages = []
-            for idx, msg in enumerate(original_messages):
-                component_key = f"{prompt_name}_{msg['role']}_{idx}"
-                # Use optimized content if available, otherwise keep original
-                original_content = msg.get("content", "")
-                if (
-                    self._allowed_roles is not None
-                    and msg.get("role") not in self._allowed_roles
-                ):
-                    optimized_content = original_content
-                    dropped_components += 1
-                else:
-                    optimized_content = candidate.get(component_key, original_content)
-                new_messages.append({"role": msg["role"], "content": optimized_content})
+    ) -> tuple[dict[str, chat_prompt.ChatPrompt], list[str]]:
+        """Rebuild prompts with optimized messages, preserving tools/function_map/model.
 
-            # prompt.copy() preserves tools, function_map, model, model_kwargs
-            new_prompt = prompt_obj.copy()
-            new_prompt.set_messages(new_messages)
-
-            new_prompt = segment_updates.apply_tool_updates_from_candidate(
-                candidate=candidate,
-                prompt=new_prompt,
-                tool_component_prefix=f"{prompt_name}{segment_updates.TOOL_COMPONENT_PREFIX}",
-                tool_param_component_prefix=(
-                    f"{prompt_name}{segment_updates.TOOL_PARAM_COMPONENT_PREFIX}"
-                ),
-            )
-            # Final prompt
-            rebuilt[prompt_name] = new_prompt
+        Delegates to the shared candidate_ops pipeline (role constraints,
+        placeholder guard, tool updates) so the rebuild logic lives in one
+        place. Returns the rebuilt prompts and the component keys whose
+        candidate edit the placeholder guard rejected (empty when clean).
+        """
+        rebuilt, placeholder_reverts = candidate_ops.rebuild_prompts_from_candidate(
+            base_prompts=self._base_prompts,
+            candidate=candidate,
+            allowed_roles=self._allowed_roles,
+            known_placeholder_keys=self._known_placeholder_keys,
+        )
+        dropped_components = candidate_ops.count_disallowed_candidate_components(
+            candidate, self._allowed_roles
+        )
         if dropped_components:
             logger.warning(
                 "GEPA adapter dropped %s component(s) due to optimize_prompt constraints.",
                 dropped_components,
             )
-        return rebuilt
+        return rebuilt, placeholder_reverts
 
     def evaluate(
         self,
@@ -231,8 +255,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         Rebuilds all prompts with optimized message content from the candidate,
         then uses the agent to evaluate each item.
         """
-        # Rebuild prompts with optimized components from candidate
-        prompt_variants = self._rebuild_prompts_from_candidate(candidate)
+        # Rebuild prompts with optimized components from candidate. The reverts
+        # stay local so concurrent evaluate() calls can never attach another
+        # candidate's rejections to this trial's metadata.
+        prompt_variants, placeholder_reverts = self._rebuild_prompts_from_candidate(
+            candidate
+        )
 
         dataset_item_ids: list[str] = []
         missing_ids = False
@@ -245,14 +273,26 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         # Resolve which dataset to use based on item IDs (train vs validation)
         target_dataset = self._resolve_dataset_for_batch(dataset_item_ids)
+        experiment_type = self._classify_experiment_type(
+            dataset_item_ids=dataset_item_ids,
+            capture_traces=capture_traces,
+            missing_ids=missing_ids,
+        )
         # Attach GEPA-specific metadata without disturbing the caller's experiment config.
         configuration_updates = helpers.drop_none(
             {
                 "gepa": helpers.drop_none(
                     {
-                        "phase": "candidate",
+                        "phase": (
+                            "validation" if experiment_type == "trial" else "minibatch"
+                        ),
                         "source": candidate.get("source"),
                         "candidate_id": candidate.get("id"),
+                        # Present only when the guard rejected an edit, so a
+                        # corrupted-candidate run is auditable after the fact.
+                        "rejected_components_missing_variables": (
+                            placeholder_reverts or None
+                        ),
                     }
                 )
             }
@@ -391,6 +431,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 n_samples=None,
                 experiment_config=experiment_config,
                 verbose=0,
+                experiment_type=experiment_type,
             )
         except Exception:
             logger.exception(

@@ -21,7 +21,7 @@ function skipIfOllieDisabled(envConfig: { features: { ollie: boolean } }): void 
 // reliably references even when the surrounding phrasing differs.
 const KEYWORD_PATTERN: Record<'cost' | 'duration', RegExp> = {
   cost: /cost/i,
-  duration: /duration|second|end time|running/i,
+  duration: /duration|second|end time|running|\bms\b|millisecond/i,
 };
 
 // The popover and the sidebar chat bubble render the same markdown through
@@ -32,7 +32,7 @@ const KEYWORD_PATTERN: Record<'cost' | 'duration', RegExp> = {
 // button label) that isn't part of the answer itself.
 const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
 
-test.describe('Ollie — explain cells', { tag: ['@t3-nightly', '@ollie'] }, () => {
+test.describe('Ollie — explain cells', { tag: ['@t3-nightly', '@area:ollie', '@cap:ollie.explain-cells', '@cap:ollie.explain-continue-convo'] }, () => {
   test.beforeEach(({ envConfig }) => skipIfOllieDisabled(envConfig));
 
   test('Explain renders on-topic text for the Errors, Estimated cost, and Duration cell of every seeded trace', async ({
@@ -42,11 +42,16 @@ test.describe('Ollie — explain cells', { tag: ['@t3-nightly', '@ollie'] }, () 
   }) => {
     test.setTimeout(600_000);
     const logs = new LogsPage(page);
+    const ollie = new OlliePage(page, project.id);
 
     await test.step('Open Logs and wait for the seeded traces to render', async () => {
       await logs.goto(project.id);
       await logs.waitForReady();
       expect(await logs.countTraces()).toBe(explainTraces.length);
+      // The explain popover shares the same on-demand Ollie pod/bridge as the
+      // sidebar; opening it before the pod is ready fails instantly with
+      // "unavailable" rather than waiting, so wait for the bridge here.
+      await ollie.waitForSidebarReady();
     });
 
     for (const trace of explainTraces) {
@@ -93,6 +98,7 @@ test.describe('Ollie — explain cells', { tag: ['@t3-nightly', '@ollie'] }, () 
     await test.step('Open Logs and wait for the seeded traces to render', async () => {
       await logs.goto(project.id);
       await logs.waitForReady();
+      await ollie.waitForSidebarReady();
     });
 
     await test.step('Open Explain on the Errors cell and read its settled text', async () => {

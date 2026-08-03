@@ -3,36 +3,93 @@ package com.comet.opik.domain;
 import com.comet.opik.api.OllieReport.OllieReportPage;
 import com.comet.opik.api.OllieReport.ReportStatus;
 import com.comet.opik.api.ReportPreference;
+import com.comet.opik.infrastructure.ReportGenerationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class ReportService {
 
-    private final @NonNull TransactionTemplate transactionTemplate;
-    private final @NonNull IdGenerator idGenerator;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull OrchestratorClient orchestratorClient;
-    private final @NonNull ProjectService projectService;
+    private static final AttributeKey<String> RESULT_KEY = stringKey("result");
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = stringKey("workspace_id");
+    private static final AttributeKey<String> WORKSPACE_NAME_KEY = stringKey("workspace_name");
+
+    private final TransactionTemplate transactionTemplate;
+    private final IdGenerator idGenerator;
+    private final Provider<RequestContext> requestContext;
+    private final OrchestratorClient orchestratorClient;
+    private final ProjectService projectService;
+    private final ReportGenerationConfig reportGenerationConfig;
+
+    private final LongCounter triggeredCounter;
+    private final LongCounter finishedCounter;
+    private final LongHistogram endToEndDuration;
+
+    @Inject
+    public ReportService(
+            @NonNull TransactionTemplate transactionTemplate,
+            @NonNull IdGenerator idGenerator,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull OrchestratorClient orchestratorClient,
+            @NonNull ProjectService projectService,
+            @NonNull @Config("reportGeneration") ReportGenerationConfig reportGenerationConfig) {
+        this.transactionTemplate = transactionTemplate;
+        this.idGenerator = idGenerator;
+        this.requestContext = requestContext;
+        this.orchestratorClient = orchestratorClient;
+        this.projectService = projectService;
+        this.reportGenerationConfig = reportGenerationConfig;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.daily_report");
+
+        this.triggeredCounter = meter
+                .counterBuilder("opik.daily_report.triggered")
+                .setDescription("Number of reports triggered for generation (scheduled and manual)")
+                .build();
+
+        this.finishedCounter = meter
+                .counterBuilder("opik.daily_report.finished")
+                .setDescription("Number of reports finalized via the completion callback or trigger failure, "
+                        + "by result (completed / failed / trigger_failed); stale sweeps are counted separately "
+                        + "by opik.daily_report.stale_swept")
+                .build();
+
+        this.endToEndDuration = meter
+                .histogramBuilder("opik.daily_report.end_to_end_duration")
+                .setDescription("Time from report creation to completion callback")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+    }
 
     public Mono<UUID> generateReport(@NonNull UUID projectId) {
         var ctx = requestContext.get();
@@ -70,7 +127,11 @@ public class ReportService {
         orchestratorClient.triggerReportGeneration(
                 reportId.toString(), projectId.toString(), projectName,
                 workspaceName, customPrompt,
-                () -> markReportFailed(reportId, workspaceId, projectId));
+                () -> markReportFailed(reportId, workspaceId, workspaceName, projectId));
+
+        triggeredCounter.add(1, Attributes.of(
+                WORKSPACE_ID_KEY, workspaceId,
+                WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(workspaceName, workspaceId)));
 
         return reportId;
     }
@@ -78,17 +139,24 @@ public class ReportService {
     public Mono<Void> updateReport(@NonNull UUID projectId, @NonNull UUID reportId,
             @NonNull ReportStatus status, String content, String sessionId,
             JsonNode recommendedActions) {
-        String workspaceId = requestContext.get().getWorkspaceId();
+        var ctx = requestContext.get();
+        String workspaceId = ctx.getWorkspaceId();
+        String workspaceName = ctx.getWorkspaceName();
 
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
-            int updated = handle.attach(OllieReportDAO.class)
-                    .update(reportId, workspaceId, projectId, content, sessionId, recommendedActions,
-                            status.getValue());
+            var dao = handle.attach(OllieReportDAO.class);
+
+            int updated = dao.update(reportId, workspaceId, projectId, content, sessionId, recommendedActions,
+                    status.getValue());
             if (updated == 0) {
                 throw new NotFoundException("Report not found or already processed: " + reportId);
             }
-            return null;
-        })).subscribeOn(Schedulers.boundedElastic()).then();
+
+            return dao.getCreatedAt(reportId, workspaceId);
+        }))
+                .doOnNext(createdAt -> recordCompletionMetrics(workspaceId, workspaceName, status, createdAt))
+                .subscribeOn(Schedulers.boundedElastic())
+                .then();
     }
 
     public Mono<OllieReportPage> getReports(@NonNull UUID projectId, int page, int size) {
@@ -134,26 +202,47 @@ public class ReportService {
                         .findAllEnabledInTimeWindow(windowStart, windowEnd));
     }
 
-    private void markReportFailed(UUID reportId, String workspaceId, UUID projectId) {
+    private void recordCompletionMetrics(String workspaceId, String workspaceName, ReportStatus status,
+            Instant createdAt) {
+        String result = status == ReportStatus.COMPLETED ? "completed" : "failed";
+        Attributes attrs = Attributes.of(
+                RESULT_KEY, result,
+                WORKSPACE_ID_KEY, workspaceId,
+                WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(workspaceName, workspaceId));
+
+        finishedCounter.add(1, attrs);
+        endToEndDuration.record(Instant.now().toEpochMilli() - createdAt.toEpochMilli(), attrs);
+    }
+
+    private void markReportFailed(UUID reportId, String workspaceId, String workspaceName, UUID projectId) {
         try {
-            transactionTemplate.inTransaction(WRITE, handle -> {
-                handle.attach(OllieReportDAO.class)
-                        .update(reportId, workspaceId, projectId, null, null, null, ReportStatus.FAILED.getValue());
-                return null;
-            });
-            log.info("Marked report '{}' as failed", reportId);
+            int updated = transactionTemplate.inTransaction(WRITE, handle -> handle.attach(OllieReportDAO.class)
+                    .update(reportId, workspaceId, projectId, null, null, null, ReportStatus.FAILED.getValue()));
+            if (updated > 0) {
+                finishedCounter.add(1, Attributes.of(
+                        RESULT_KEY, "trigger_failed",
+                        WORKSPACE_ID_KEY, workspaceId,
+                        WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(workspaceName, workspaceId)));
+                log.info("Marked report as failed reportId='{}' workspaceId='{}' projectId='{}'",
+                        reportId, workspaceId, projectId);
+            }
         } catch (Exception e) {
-            log.error("Failed to mark report '{}' as failed", reportId, e);
+            log.error("Failed to mark report as failed reportId='{}' workspaceId='{}' projectId='{}'",
+                    reportId, workspaceId, projectId, e);
         }
     }
 
-    public void failStaleReports() {
-        transactionTemplate.inTransaction(WRITE, handle -> {
-            int failed = handle.attach(OllieReportDAO.class).failStaleReports();
+    public Map<String, Long> failStaleReports() {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(OllieReportDAO.class);
+            Map<String, Long> sweptByWorkspace = dao
+                    .findStalePendingWorkspaceIds(reportGenerationConfig.getStaleReportTimeoutMinutes()).stream()
+                    .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
+            int failed = dao.failStaleReports(reportGenerationConfig.getStaleReportTimeoutMinutes());
             if (failed > 0) {
                 log.info("Marked {} stale pending reports as failed", failed);
             }
-            return null;
+            return sweptByWorkspace;
         });
     }
 }

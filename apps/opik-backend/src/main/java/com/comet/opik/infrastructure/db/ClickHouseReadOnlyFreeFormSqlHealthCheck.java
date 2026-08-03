@@ -16,7 +16,7 @@ import static com.comet.opik.infrastructure.db.DatabaseAnalyticsModule.READ_ONLY
 /**
  * Probes the Agent Insights read-only free-form SQL ClickHouse user via the v2 HTTP client.
  *
- * <p>Gated by {@code agentInsightsEnabled}: when the feature is off the probe reports healthy
+ * <p>Gated by {@code ollieEnabled}: when the feature is off the probe reports healthy
  * without querying ClickHouse, so a misconfigured read-only user never gates overall readiness
  * for an environment that doesn't use the feature.
  */
@@ -31,7 +31,7 @@ public class ClickHouseReadOnlyFreeFormSqlHealthCheck extends AbstractClickHouse
             @NonNull @Named(CLICKHOUSE_HEALTH_CHECK_TIMEOUT) Duration healthCheckTimeout,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles) {
         super(readOnlyClient, healthCheckTimeout, "clickhouse-readonly-freeform-sql");
-        this.enabled = serviceToggles.isAgentInsightsEnabled();
+        this.enabled = serviceToggles.isOllieEnabled();
     }
 
     @Override

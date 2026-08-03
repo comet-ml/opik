@@ -68,7 +68,7 @@ test.describe('Visual Comparison - Opik UI', () => {
     await page.close();
   });
 
-  test('01: Projects page', async ({ page }) => {
+  test('01: Projects page', { tag: ['@vcap:projects.projects-page'] }, async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.waitForTracesReady('input-0');
@@ -79,14 +79,14 @@ test.describe('Visual Comparison - Opik UI', () => {
     await screenshot(page, '01-projects-page', tableMasks(page));
   });
 
-  test('02: Logs - Traces view', async ({ page }) => {
+  test('02: Logs - Traces view', { tag: ['@vcap:traces.logs-traces-view'] }, async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.waitForTracesReady('input-0');
     await screenshot(page, '02-logs-traces', tableMasks(page));
   });
 
-  test('03: Logs - Threads view', async ({ page }) => {
+  test('03: Logs - Threads view', { tag: ['@vcap:threads.logs-threads-view'] }, async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.switchToThreads();
@@ -94,21 +94,21 @@ test.describe('Visual Comparison - Opik UI', () => {
     await screenshot(page, '03-logs-threads', tableMasks(page));
   });
 
-  test('04: Datasets page', async ({ page }) => {
+  test('04: Datasets page', { tag: ['@vcap:datasets.datasets-page'] }, async ({ page }) => {
     const datasetsPage = new DatasetsPage(page, baseUrl, workspace);
     await datasetsPage.goto(projectId);
     await datasetsPage.waitForReady('visual-dataset');
     await screenshot(page, '04-datasets-page', tableMasks(page));
   });
 
-  test('05: Test Suites page', async ({ page }) => {
+  test('05: Test Suites page', { tag: ['@vcap:test-suites.test-suites-page'] }, async ({ page }) => {
     const testSuitesPage = new TestSuitesPage(page, baseUrl, workspace);
     await testSuitesPage.goto(projectId);
     await testSuitesPage.waitForReady('visual-testsuite');
     await screenshot(page, '05-testsuites-page', tableMasks(page));
   });
 
-  test('06: Experiments page', async ({ page }) => {
+  test('06: Experiments page', { tag: ['@vcap:experiments.experiments-page'] }, async ({ page }) => {
     const experimentsPage = new ExperimentsPage(page, baseUrl, workspace);
     await experimentsPage.goto(projectId);
     await experimentsPage.waitForExperiment(experimentName());

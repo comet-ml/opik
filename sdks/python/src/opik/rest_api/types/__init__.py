@@ -186,7 +186,6 @@ from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWrite
 from .automation_rule_evaluator_write_trigger_scope import AutomationRuleEvaluatorWriteTriggerScope
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
-from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
 from .blueprint_page_history import BlueprintPageHistory
@@ -873,7 +872,6 @@ __all__ = [
     "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
-    "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
     "BlueprintPageHistory",

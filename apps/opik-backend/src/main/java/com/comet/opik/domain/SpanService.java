@@ -33,6 +33,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -141,6 +142,23 @@ public class SpanService {
 
         return spanDAO.getByTraceIds(traceIds)
                 .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, true));
+    }
+
+    /**
+     * Cheap approximate serialized size (bytes) of all spans across the given trace ids. Used by the
+     * trace-thread online scorers to size the inline-vs-agentic-tools routing decision without fetching
+     * the spans into heap (OPIK-7454). No attachment reinjection — it's a pure aggregate, so it also
+     * skips the per-span attachment resolution that the full fetch pays. Returns 0 for empty input.
+     */
+    @WithSpan
+    public Mono<Long> getSpansSizeByTraceIds(Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(traceIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Estimating spans size for '{}' traces", traceIds.size());
+
+        return spanDAO.getSpansSizeByTraceIds(traceIds);
     }
 
     @WithSpan
@@ -375,15 +393,6 @@ public class SpanService {
 
         List<Span> dedupedSpans = dedupSpans(batch.spans());
 
-        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
-        // creation), so a rejected batch never mutates state.
-        dedupedSpans.forEach(span -> {
-            if (span.id() != null) {
-                idGenerator.validateId(span.id(), SPAN_KEY);
-            }
-            validateSpanReferences(span.traceId(), span.parentSpanId());
-        });
-
         List<String> projectNames = dedupedSpans
                 .stream()
                 .map(Span::projectName)
@@ -401,7 +410,19 @@ public class SpanService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
+        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
+        // creation), so a rejected batch never mutates state. Runs inside deferContextual so the audit
+        // metric can attribute the batch's own ids to the request workspace.
+        return Mono.deferContextual(validationCtx -> {
+            String validationWorkspaceId = validationCtx.get(RequestContext.WORKSPACE_ID);
+            dedupedSpans.forEach(span -> {
+                if (span.id() != null) {
+                    idGenerator.validateId(span.id(), SPAN_KEY, validationWorkspaceId);
+                }
+                validateSpanReferences(span.traceId(), span.parentSpanId());
+            });
+            return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds);
+        })
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
@@ -482,9 +503,8 @@ public class SpanService {
                         throw new IllegalStateException("Project not found: %s".formatted(span.projectName()));
                     }
 
+                    // Ids are already validated up-front in create(SpanBatch); generated ids are inherently valid.
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
-                    idGenerator.validateId(id, SPAN_KEY);
-                    // trace/parent references are validated up front in create(SpanBatch) before side effects.
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })
@@ -522,9 +542,9 @@ public class SpanService {
                         if (spanIds.isEmpty()) {
                             return Mono.empty();
                         }
-                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
+                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds, projectId)
                                 .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
-                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds)))
+                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds, projectId)))
                                 .then(spanDAO.deleteByIds(spanIds, projectId)
                                         .doOnSuccess(__ -> log.info(
                                                 "Deleted '{}' spans for workspace '{}', project '{}'",

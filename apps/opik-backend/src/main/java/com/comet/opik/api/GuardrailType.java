@@ -7,6 +7,9 @@ import java.util.Arrays;
 public enum GuardrailType {
     TOPIC,
     PII,
+    LLM_JUDGE,
+    PROMPT_INJECTION,
+    CUSTOM_CLASSIFIER,
     ;
 
     @JsonCreator

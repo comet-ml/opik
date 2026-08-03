@@ -30,6 +30,13 @@ export interface StartConnectOpts {
   projectName: string;
   workspace: string;
   apiKey: string;
+  /**
+   * Opik API base URL the daemon talks to. Required: without it the SDK falls
+   * back to `~/.opik.config`, which on a machine that also runs a local stack
+   * points at localhost and makes the daemon miss the target deployment
+   * entirely ("Workspace not found").
+   */
+  apiUrl: string;
   /** Agent working directory the daemon watches (Ollie reads/edits code here). */
   cwd: string;
   /** How long to wait for the pairing URL to appear. */
@@ -67,6 +74,7 @@ export async function startConnectRunner(opts: StartConnectOpts): Promise<Connec
         ...process.env,
         OPIK_API_KEY: opts.apiKey,
         OPIK_WORKSPACE: opts.workspace,
+        OPIK_URL_OVERRIDE: opts.apiUrl,
         // `uv run` resolves the bridge venv from this project dir, so the
         // command uses the same pinned opik the suite seeds with.
         UV_PROJECT: BRIDGE_DIR,
@@ -169,6 +177,7 @@ export async function startEndpointRunner(opts: StartEndpointOpts): Promise<Endp
         ...process.env,
         OPIK_API_KEY: opts.apiKey,
         OPIK_WORKSPACE: opts.workspace,
+        OPIK_URL_OVERRIDE: opts.apiUrl,
         UV_PROJECT: BRIDGE_DIR,
       },
     },

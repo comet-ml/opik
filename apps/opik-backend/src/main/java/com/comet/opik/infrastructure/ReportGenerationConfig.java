@@ -8,4 +8,7 @@ public class ReportGenerationConfig {
 
     @JsonProperty
     private String url = "";
+
+    @JsonProperty
+    private int staleReportTimeoutMinutes = 10;
 }

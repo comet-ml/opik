@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.grouping.GroupBy;
+import com.comet.opik.domain.filter.JsonPathUtils;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
@@ -10,8 +11,6 @@ import org.stringtemplate.v4.ST;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-
-import static com.comet.opik.domain.filter.FilterQueryBuilder.JSONPATH_ROOT;
 
 @Singleton
 @Slf4j
@@ -60,21 +59,8 @@ public class GroupingQueryBuilder {
 
     private String getKeyAndValidate(GroupBy group) {
 
-        String key = getKey(group);
+        String key = JsonPathUtils.toRootedJsonPath(group.key());
         return isValidJsonPath(key) ? key : DUMMY_JSON_KEY;
-    }
-
-    private String getKey(GroupBy group) {
-
-        if (group.key().startsWith(JSONPATH_ROOT)) {
-            return group.key();
-        }
-
-        if (group.key().startsWith("[") || group.key().startsWith(".")) {
-            return "%s%s".formatted(JSONPATH_ROOT, group.key());
-        }
-
-        return "%s.%s".formatted(JSONPATH_ROOT, group.key());
     }
 
     static boolean isValidJsonPath(String path) {

@@ -3,6 +3,9 @@ gunicorn==23.0.0
 torch==2.6.0
 transformers==4.51.1
 accelerate==1.6.0  # for optimized GPU utilization
+peft==0.15.2  # LoRA adapter loading for the prompt injection classifier
+datasets==3.5.0  # dataset handling for in-server custom guardrail training
+scikit-learn==1.6.1  # eval metrics for custom guardrail training
 presidio-analyzer==2.2.358
 spacy==3.8.5  # Download the en_core_web_lg model with: python -m spacy download en_core_web_lg
 huggingface_hub[hf_xet]==0.30.1

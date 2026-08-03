@@ -3668,6 +3668,80 @@ class TracesResourceTest {
 
             getAndAssertTraceNotFound(id, apiKey, workspaceName);
         }
+
+        @Test
+        void deleteByIdOfReusedIdRemovesItFromEveryProject() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName1 = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var projectName2 = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+            // Same id in two projects: externally-ingested ids are not globally unique, and traces dedups by the full
+            // (workspace_id, project_id, id) key, so both rows coexist. A null lastUpdatedAt keeps the single batch
+            // from deduping them by id, so both are created in one call.
+            var sharedId = generator.generate();
+            var trace1 = createTrace().toBuilder()
+                    .id(sharedId)
+                    .projectName(projectName1)
+                    .lastUpdatedAt(null)
+                    .build();
+            var trace2 = createTrace().toBuilder()
+                    .id(sharedId)
+                    .projectName(projectName2)
+                    .lastUpdatedAt(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
+
+            getAndAssertPage(workspaceName, projectName1, null, List.of(), List.of(trace1), List.of(trace1),
+                    List.of(), apiKey);
+            getAndAssertPage(workspaceName, projectName2, null, List.of(), List.of(trace2), List.of(trace2),
+                    List.of(), apiKey);
+
+            // DELETE /traces/{id} carries no project scope: it must resolve both owning projects and delete the id
+            // under each full key, clearing it from both projects (never a project-less over-delete of only one).
+            traceResourceClient.deleteTrace(sharedId, workspaceName, apiKey);
+
+            getAndAssertPage(workspaceName, projectName1, null, List.of(), List.of(trace1), List.of(),
+                    List.of(trace1), apiKey);
+            getAndAssertPage(workspaceName, projectName2, null, List.of(), List.of(trace2), List.of(),
+                    List.of(trace2), apiKey);
+        }
+
+        @Test
+        void deleteByIdOfAbsentTraceLeavesOrphanChildSpansUntouched() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+            // Orphan spans: a trace_id that never had a trace row (spans ingest independently of traces).
+            var orphanTraceId = generator.generate();
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .traceId(orphanTraceId)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+            getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey);
+
+            // Delete-by-id of the never-existent trace resolves no owning project, so no project-less cascade fires:
+            // the orphan spans are left untouched. A project-less child delete could over-delete a concurrently
+            // ingested trace's children, so orphans are cleaned via their own endpoints, not this side effect.
+            traceResourceClient.deleteTrace(orphanTraceId, workspaceName, apiKey);
+
+            // Let any (unexpected) async cascade run, then assert the orphan spans still exist.
+            Awaitility.await().pollDelay(2, TimeUnit.SECONDS).atMost(5, TimeUnit.SECONDS).untilAsserted(
+                    () -> getAndAssertPageSpans(workspaceName, projectName, List.of(), spans, spans.reversed(),
+                            List.of(), apiKey));
+        }
     }
 
     @Nested
@@ -3938,6 +4012,53 @@ class TracesResourceTest {
 
             var request = factory.manufacturePojo(BatchDeleteByProject.class);
             traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+        }
+
+        @Test
+        void deleteTracesMixingPresentAndAbsentIdsWithoutProjectId() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var present = buildTracesForProject(projectName);
+            traceResourceClient.batchCreateTraces(present, apiKey, workspaceName);
+            getAndAssertPage(workspaceName, projectName, null, List.of(), present, present.reversed(), List.of(),
+                    apiKey);
+
+            // One null-project batch mixing the present ids with ids that never had a trace row: the delete resolves
+            // and removes the present traces per project group and simply skips the absent ids - no error, no
+            // project-less delete - so the request succeeds (204) and only the present traces are gone.
+            var absentIds = Set.of(generator.generate(), generator.generate());
+            var request = BatchDeleteByProject.builder()
+                    .ids(Stream.concat(present.stream().map(Trace::id), absentIds.stream())
+                            .collect(Collectors.toUnmodifiableSet()))
+                    .build();
+            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+
+            getAndAssertPage(workspaceName, projectName, null, List.of(), present, List.of(), List.of(), apiKey);
+        }
+
+        @Test
+        void deleteTracesWithNullIdInBatchIsRejected() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // A null element must be rejected at the API boundary rather than reaching resolution and blowing up.
+            var ids = new HashSet<UUID>();
+            ids.add(generator.generate());
+            ids.add(null);
+            var request = BatchDeleteByProject.builder().ids(ids).build();
+
+            try (var response = traceResourceClient.deleteTraces(request, workspaceName, apiKey,
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                assertThat(response.hasEntity()).isTrue();
+                assertThat(response.readEntity(ErrorMessage.class).errors())
+                        .containsExactly("ids[].<iterable element> must not be null");
+            }
         }
     }
 
