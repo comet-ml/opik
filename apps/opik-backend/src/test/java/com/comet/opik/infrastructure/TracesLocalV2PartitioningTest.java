@@ -209,7 +209,7 @@ class TracesLocalV2PartitioningTest {
      * they must occupy their own honest weekly partition, never mixed into a real recent week — otherwise a per-week
      * {@code DROP PARTITION} / retention / tiering operation on that real week would also touch these rows, and vice
      * versa. Seeds a present-day row and a ~2201 row under one (workspace, project) and asserts they land in different
-     * partitions and that the far-future row's partition is its honest ~2201 week (not the ~2021 a 16-bit {@code toMonday}
+     * partitions and that the far-future row's partition is its honest ~2201 week (not the ~2021 that a 16-bit {@code toMonday}
      * would wrap it into).
      */
     @Test
