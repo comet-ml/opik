@@ -145,6 +145,13 @@ databaseAnalyticsDataModel:
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
   #   chunks of this size.
   deletionEventsInsertBatchSize: ${ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE:-1000}
+  #  Default: false
+  #  Description: Allow queries to declare a CTE AS MATERIALIZED so it is evaluated once instead of once per
+  #   reference (~2x fewer bytes and ~2x less CPU on the feedback-scores stats query). Emits the
+  #   enable_materialized_cte setting alongside the keyword; both are required. Requires ClickHouse 26.3+, which the
+  #   bundled ClickHouse satisfies; leave false when pointing at an older external ClickHouse, where it fails the
+  #   query rather than degrading.
+  materializedCteEnabled: ${ANALYTICS_DB_DATA_MODEL_MATERIALIZED_CTE_ENABLED:-false}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -393,16 +400,6 @@ experimentAggregates:
   # Default: 1000
   # Description: Number of experiment items processed per batch when populating experiment_item_aggregates table. Higher values improve performance but increase memory usage. Recommended range: 100-5000.
   batchSize: ${EXPERIMENT_AGGREGATES_BATCH_SIZE:-1000}
-
-# Configuration for analytics-query optimisations. Each renders an equivalent query shape, so disabling one costs
-# performance and nothing else.
-queryOptimizations:
-  # Default: false
-  # Description: Allow queries to declare a CTE AS MATERIALIZED, evaluating it once instead of once per reference
-  # (~2x fewer bytes and ~2x less CPU on the feedback-scores stats query). Requires ClickHouse 26.3+, which the
-  # bundled ClickHouse satisfies; leave disabled when pointing at an older external ClickHouse, where it fails the
-  # query rather than degrading.
-  enableCteMaterialization: ${ENABLE_CTE_MATERIALIZATION:-false}
 
 # Configuration for experiment denormalization (debounced re-computation of experiment aggregates)
 experimentDenormalization:

@@ -118,6 +118,14 @@ databaseAnalyticsDataModel:
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
   #   chunks of this size.
   deletionEventsInsertBatchSize: 1000
+  #  Default: false
+  #  Description: Allow queries to declare a CTE AS MATERIALIZED so it is evaluated once instead of once per
+  #   reference (~2x fewer bytes and ~2x less CPU on the feedback-scores stats query). Emits the
+  #   enable_materialized_cte setting alongside the keyword; both are required. Requires ClickHouse 26.3+, which the
+  #   bundled ClickHouse satisfies; leave false when pointing at an older external ClickHouse, where it fails the
+  #   query rather than degrading.
+  #   Enabled for tests: testcontainers runs ClickHouse 26.3, so CI covers the materialized plan.
+  materializedCteEnabled: true
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -1216,7 +1224,3 @@ optimizationStalledReaper:
 environment:
   # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
   maxPerWorkspace: 5
-
-queryOptimizations:
-  # testcontainers runs ClickHouse 26.3, so CI covers the materialized path
-  enableCteMaterialization: true

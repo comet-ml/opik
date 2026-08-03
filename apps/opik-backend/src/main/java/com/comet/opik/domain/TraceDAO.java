@@ -2667,7 +2667,7 @@ class TraceDAOImpl implements TraceDAO {
      * roughly 2x fewer bytes and 2x less CPU, on both the {@code FINAL} and the {@code argMax} form, so it is not
      * gated on the searchText condition (OPIK-7693).
      *
-     * <p>It <em>is</em> gated on {@code queryOptimizations.enableCteMaterialization}, off by default, because both the
+     * <p>It <em>is</em> gated on {@code databaseAnalyticsDataModel.materializedCteEnabled}, off by default, because both the
      * keyword and the {@code enable_materialized_cte} setting it needs require ClickHouse 26.3+. On 25.8 the keyword
      * is a {@code SYNTAX_ERROR} and the setting an {@code UNKNOWN_SETTING} — either would turn every trace- and
      * project-stats request into a 5xx rather than degrade — so an environment pointed at an older external
@@ -2920,7 +2920,7 @@ class TraceDAOImpl implements TraceDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            , trace_final AS <if(enable_cte_materialization)>MATERIALIZED <endif>(
+            , trace_final AS <if(enable_materialized_cte)>MATERIALIZED <endif>(
                 SELECT id, project_id
                 FROM traces <if(!dedup_by_argmax)>final<endif>
                 <if(guardrails_filters)>
@@ -3093,7 +3093,7 @@ class TraceDAOImpl implements TraceDAO {
                 s.span_feedback_scores AS span_feedback_scores
             FROM trace_feedback_scores t
             FULL OUTER JOIN span_feedback_scores s ON t.project_id = s.project_id
-            SETTINGS log_comment = '<log_comment>'<if(enable_cte_materialization)>, enable_materialized_cte = 1<endif>
+            SETTINGS log_comment = '<log_comment>'<if(enable_materialized_cte)>, enable_materialized_cte = 1<endif>
             ;
             """;
 
@@ -4397,8 +4397,8 @@ class TraceDAOImpl implements TraceDAO {
         if (canDedupByArgMax(template)) {
             template.add("dedup_by_argmax", true);
         }
-        if (configuration.getQueryOptimizations().isEnableCteMaterialization()) {
-            template.add("enable_cte_materialization", true);
+        if (configuration.getDatabaseAnalyticsDataModel().materializedCteEnabled()) {
+            template.add("enable_materialized_cte", true);
         }
 
         var statement = connection.createStatement(template.render())
@@ -4429,8 +4429,8 @@ class TraceDAOImpl implements TraceDAO {
         if (canDedupByArgMax(template)) {
             template.add("dedup_by_argmax", true);
         }
-        if (configuration.getQueryOptimizations().isEnableCteMaterialization()) {
-            template.add("enable_cte_materialization", true);
+        if (configuration.getDatabaseAnalyticsDataModel().materializedCteEnabled()) {
+            template.add("enable_materialized_cte", true);
         }
 
         var statement = connection.createStatement(template.render())

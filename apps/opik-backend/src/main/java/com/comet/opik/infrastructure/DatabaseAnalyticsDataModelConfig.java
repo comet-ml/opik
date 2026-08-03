@@ -5,7 +5,8 @@ import jakarta.validation.constraints.Min;
 import lombok.Builder;
 
 /**
- * Toggles for the schema state of the analytics database (non-nullable trace-column migration).
+ * Toggles for the state and capabilities of the analytics database (non-nullable trace-column migration,
+ * deletion-event capture, and query constructs whose availability depends on the ClickHouse version).
  *
  * <p>{@code traceColumnsNonNullable}: while the {@code traces} table still has {@code Nullable(...)} columns (default,
  * {@code false}) trace writes bind {@code null} for an absent {@code end_time}/{@code ttft}.
@@ -31,6 +32,13 @@ import lombok.Builder;
  * {@code spans} table copy. Left {@code false} at deploy time and turned on once the span backfill begins, independently
  * of the trace flag.</p>
  *
+ * <p>{@code materializedCteEnabled}: when {@code true}, queries may declare a CTE {@code AS MATERIALIZED} so it is
+ * evaluated once instead of once per reference, emitting the {@code enable_materialized_cte} setting alongside the
+ * keyword — both are required, since with the setting absent the keyword parses and is silently ignored. Requires
+ * ClickHouse 26.3+: on 25.8 the keyword is a {@code SYNTAX_ERROR} and the setting an {@code UNKNOWN_SETTING}, either of
+ * which fails the query outright rather than degrading, so an environment pointed at an older external ClickHouse must
+ * leave this {@code false}. The bundled ClickHouse is 26.3.</p>
+ *
  * <p>{@code deletionEventsInsertBatchSize}: rows per {@code INSERT} into the bridge (shared by trace and span capture). A single delete batch can carry
  * far more ids than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split
  * into chunks of this size. Bounded to a positive value so a misconfiguration fails startup rather than silently
@@ -42,5 +50,6 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean spanColumnsNonNullable,
         boolean traceDeletionEventsCaptureEnabled,
         boolean spanDeletionEventsCaptureEnabled,
+        boolean materializedCteEnabled,
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize) {
 }
