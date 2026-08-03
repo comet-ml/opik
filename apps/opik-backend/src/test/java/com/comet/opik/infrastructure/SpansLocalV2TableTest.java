@@ -294,17 +294,21 @@ class SpansLocalV2TableTest {
      * makes it read back as the honest 2201 (so the {@code id_at > now()} audit surfaces it, where a 32-bit
      * {@code DateTime} would wrap it into a plausible past year), and the honest {@code Date32} weekly partition places
      * the row in its own honest ~2201 week — not the recent week a 16-bit {@code toMonday} would fold it into, where a
-     * per-week DROP PARTITION / retention / tiering operation would then touch it alongside real rows. Pins both the
-     * {@code id_at} year and the partition.
+     * per-week DROP PARTITION / retention / tiering operation would then touch it alongside real rows.
+     * <p>
+     * The partition is what this adds over {@link #farFutureIdBeyondDateTimeCeilingKeepsItsInstant}, which covers the
+     * {@code id_at} column itself. The {@code id_at} assertions here are still not redundant with it: the expected
+     * Monday is derived from the value read back, so without anchoring that value to 2201 the partition assertion would
+     * pass just as happily if {@code id_at} and the partition wrapped together.
      */
     @Test
     void farFutureIdLandsInHonestPartitionNotAWrappedYear() {
-        var badId = ID_GENERATOR.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+        var farFutureId = ID_GENERATOR.generateId(Instant.parse("2201-06-01T00:00:00Z"));
         var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var storedSpan = newStoredSpan(startTime, randomFutureInstantFrom(startTime), DEFAULT_TRUNCATION_THRESHOLD)
                 .toBuilder()
-                .id(badId)
-                .idAt(idAtOf(badId))
+                .id(farFutureId)
+                .idAt(idAtOf(farFutureId))
                 .build();
         insert(storedSpan);
 
@@ -313,7 +317,7 @@ class SpansLocalV2TableTest {
 
         // id_at is the honest 2201, not a wrapped year — and it is in the future, so the audit catches it.
         assertThat(idAt.atZone(ZoneOffset.UTC).getYear()).isEqualTo(2201);
-        assertThat(idAt).isEqualTo(idAtOf(badId)).isAfter(Instant.now());
+        assertThat(idAt).isEqualTo(idAtOf(farFutureId)).isAfter(Instant.now());
         // The partition is the honest 2201 Monday (YYYYMMDD ~22010601), not the recent week a 16-bit toMonday would
         // wrap it into — the Date32 weekly expression never wraps.
         var expectedMonday = idAt.atZone(ZoneOffset.UTC).toLocalDate()
