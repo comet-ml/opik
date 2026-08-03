@@ -23,8 +23,11 @@ DEFAULT_CASE_SENSITIVE = False
 
 # Execution timeout for optimization jobs (default: 6 hours). The backend
 # stalled-run reaper's runningHardTimeout MUST stay above this (config.yml, default 24h);
-# its progress-based runningTimeout (default 30m) doesn't need to — it is fed by the trial
-# experiments and experiment items this worker writes throughout a run (OPIK-7459).
+# its progress-based runningTimeout (default 1h) doesn't need to — it is fed by the trial
+# experiments and experiment items this worker writes throughout a run (OPIK-7459). What that
+# 1h does bound is the silent head start below: dataset fetch + sampling, and the GEPA baseline,
+# all before the first trial experiment exists. Slow that stretch down past an hour and the
+# reaper will read a healthy run as dead, so raise runningTimeout with it.
 OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "21600"))
 
 # Dataset sampling (limits items used during optimization to prevent OOM)

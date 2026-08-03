@@ -290,7 +290,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * upper-bound thresholds. The caller-supplied {@code lookbackMargin} sets the floor width and its
      * reaper-downtime tradeoff.
      *
-     * <p>The {@code RUNNING} branch measures liveness against run <em>progress</em>, not only the row
+     * <p>Liveness is measured against run <em>progress</em>, not only the row
      * timestamp (OPIK-7459): {@code last_updated_at} advances only on a status change, but a healthy run
      * keeps writing trial experiments ({@code experiments.optimization_id}) and, within a trial, one
      * experiment item per evaluated dataset item. Liveness is the newest of the row timestamp, the latest
@@ -303,6 +303,18 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, 6h), so trial-creation alone would false-positive mid-trial;
      * items narrow the legitimate silent gap to ~one dataset-item evaluation, which is what lets the
      * running timeout be minutes.
+     *
+     * <p>The veto applies to {@code INITIALIZED} as well, not only to {@code RUNNING}: a run writing trial
+     * experiments is by definition not "failed to start", even if its {@code mark_running} callback never
+     * landed (a transient network failure on that one call used to get a healthy, actively-evaluating run
+     * ERRORed after {@code initializedTimeout} and its trials orphaned). Both statuses share the single
+     * {@code :running_timeout_seconds} activity window rather than each using its own: the question the
+     * probe answers ("is the worker still writing rows for this run") does not depend on which status the
+     * row got stuck on, and the wider window is the safe direction — a genuinely never-started run has no
+     * trials at all, so it is still reaped on {@code initializedTimeout} by the {@code latest_updated_at}
+     * branch of the {@code HAVING}. The hard ceiling below therefore had to grow an
+     * {@code INITIALIZED} branch too, or a zombie worker writing rows without ever reporting a status
+     * could keep such a run alive forever — the exact guarantee this job exists to hold.
      *
      * <p>The activity veto cannot sit in the {@code HAVING} above, because it is scoped by the very
      * candidate set that aggregation produces — hence {@code candidates} is a CTE and the veto moved to
@@ -317,6 +329,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * semantics, and they cost nothing once the read is bounded by the key. Scoping by the
      * lookback-bounded candidate set rather than by "all studio runs" is load-bearing: a set spread over
      * many workspaces degenerates into wide generic-exclusion ranges and recovers only ~3x.
+     *
+     * <p>Note when reading the shape: ClickHouse <em>inlines</em> {@code WITH} subqueries instead of
+     * materialising them, so a CTE referenced N times is evaluated N times (the same property
+     * {@link #FIND}'s consolidation work in OPIK-7611 was built around). Here {@code candidate_trials} is
+     * expanded twice inside {@code active_optimizations} — once as its {@code FROM}, once in the nested
+     * item {@code IN} — and {@code candidates} once per expansion plus once in the outer {@code FROM}. So
+     * one reaper tick aggregates {@code optimizations} 3x, scans {@code experiments} 2x and
+     * {@code experiment_items} 1x. That is deliberate rather than overlooked: at the measured 3 / 77 marks
+     * the duplicated work is a rounding error against a 5-minute cadence, and every alternative (a
+     * temporary table, two round trips, or hoisting the trial ids into Java) trades that for either
+     * statement-level state or a second non-atomic read of the same fleet. Do not "simplify" the nested
+     * {@code (workspace_id, experiment_id) IN (SELECT ... FROM candidate_trials)} away, though: the outer
+     * {@code IN} already makes it redundant for <em>correctness</em>, and it is the only thing keeping the
+     * item probe from scanning every recent {@code experiment_items} row in the deployment.
      *
      * <p>The tuple form keeps both probes workspace-precise — an experiment or item written in another
      * workspace can never register as this run's progress, the same scoping
@@ -336,34 +362,55 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * along with them.
      *
      * <p>{@code :running_hard_timeout_seconds} is the absolute ceiling that survives the progress signal:
-     * a RUNNING row older than it is reaped even with recent trial/item writes, so a zombie worker that
-     * keeps producing rows without ever reporting a terminal status cannot keep the spinner alive forever
-     * (this preserves the pre-OPIK-7459 "can never stay stuck indefinitely" guarantee). The ceiling runs
-     * from {@code min(created_at)} — the run's start — and deliberately not from {@code last_updated_at}:
-     * every write to the row refreshes that column, so a metadata PATCH or an SDK re-upsert would postpone
-     * the backstop indefinitely (review: baz-reviewer). {@code created_at} is preserved across re-upserts
-     * by the upsert path, and {@code min} ignores any legacy row version left over from when it was not,
-     * so no client write can move the ceiling. This is also the frame the worker's own execution timeout
+     * a non-terminal row older than it is reaped even with recent trial/item writes, so a zombie worker
+     * that keeps producing rows without ever reporting a terminal status cannot keep the spinner alive
+     * forever (this preserves the pre-OPIK-7459 "can never stay stuck indefinitely" guarantee). It is
+     * guarded by {@code latest_status IN ('initialized', 'running')} — the same set as
+     * {@code OptimizationService#CANCELLABLE_STATUSES} — and NOT hoisted to a bare top-level {@code OR}:
+     * without the status guard every studio run that merely <em>finished</em> longer ago than the ceiling
+     * would become a candidate, and since the result is {@code LIMIT :limit}-ed those would crowd genuine
+     * stalls out of the batch while the service's own status re-read silently discarded each one.
+     *
+     * <p>The ceiling runs from {@code min(created_at)} — the run's start — and deliberately not from
+     * {@code last_updated_at}: every write to the row refreshes that column, so a metadata PATCH or an SDK
+     * re-upsert would postpone the backstop indefinitely (review: baz-reviewer). {@code created_at} is
+     * preserved across re-upserts by the upsert path, and {@code min} ignores any legacy row version left
+     * over from when it was not, so no client write can move the ceiling. {@code min} rather than
+     * {@code argMax(created_at, last_updated_at)} is the point (review: thiagohora): {@code argMax} would
+     * read {@code created_at} off the winning row version, which for any run created <em>before</em> this
+     * PR is exactly the value a later re-upsert re-stamped forward — reintroducing the postponed backstop.
+     * {@code min} is wrong only if some version ever carried a {@code created_at} <em>earlier</em> than the
+     * real start, which nothing writes; and erring early is the safe direction here, with a 24h ceiling
+     * against a 6h worker timeout. This is also the frame the worker's own execution timeout
      * (OPTSTUDIO_EXECUTION_TIMEOUT) is measured in, which is what makes the "hard cap must exceed it"
      * invariant meaningful.
+     *
+     * <p>{@code GROUP BY workspace_id, id} (not {@code id} alone with {@code any(workspace_id)}) makes the
+     * grouping workspace-correct by construction and drops the {@code any()} wrapper (review: thiagohora).
+     * {@code dataset_id} is deliberately left out even though the table's sorting key is
+     * {@code (workspace_id, dataset_id, id)}: {@code getOrCreateDataset} resolves by dataset <em>name</em>,
+     * so an SDK re-upsert naming a different dataset writes a row under a different sorting key that
+     * {@code ReplacingMergeTree} never dedupes. Grouping by the full key would emit that run twice with
+     * independent statuses, letting the reaper ERROR a live run off a stale half.
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
             WITH candidates AS (
                 SELECT
+                    workspace_id,
                     id,
-                    any(workspace_id) AS workspace_id,
                     argMax(status, last_updated_at) AS latest_status,
                     max(last_updated_at) AS latest_updated_at,
                     min(created_at) AS started_at
                 FROM optimizations
                 WHERE studio_config != ''
                   AND greaterOrEquals(last_updated_at, subtractSeconds(now64(6), :lookback_seconds))
-                GROUP BY id
-                HAVING (latest_status = 'initialized'
+                GROUP BY workspace_id, id
+                HAVING (latest_status IN ('initialized', 'running')
+                        AND less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds)))
+                    OR (latest_status = 'initialized'
                         AND less(latest_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
                     OR (latest_status = 'running'
-                        AND (less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
-                            OR less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds))))
+                        AND less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds)))
             ), candidate_trials AS (
                 SELECT
                     workspace_id,
@@ -390,8 +437,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 workspace_id,
                 latest_status AS status
             FROM candidates
-            WHERE latest_status = 'initialized'
-               OR less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
+            WHERE less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds))
                OR (workspace_id, toString(id)) NOT IN (
                    SELECT workspace_id, optimization_id FROM active_optimizations
                )
@@ -457,7 +503,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * {@code (workspace_id, experiment_id) IN trials}, which is the {@code experiment_items} primary-key
      * prefix. Neither needs a {@code created_at} index; the timestamps are residual predicates. Scoping
      * the items by this run's trials, rather than by the workspace alone, is what keeps a busy workspace's
-     * unrelated item traffic out of the scan.
+     * unrelated item traffic out of the scan. As in the fleet query, {@code trials} is inlined twice (its
+     * own {@code FROM} plus the nested item {@code IN}), so {@code experiments} is scanned twice per call;
+     * the call only happens for candidates that are not already past the hard ceiling.
      */
     private static final String HAS_RECENT_STUDIO_ACTIVITY = """
             WITH trials AS (
@@ -1344,14 +1392,43 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                 .experimentScores(getFeedbackScores(row, "experiment_scores"))
                 .numTrials(row.get("num_trials", Long.class))
-                .baselineObjectiveScore(row.get("baseline_objective_score", BigDecimal.class))
-                .bestObjectiveScore(row.get("best_objective_score", BigDecimal.class))
-                .baselineDuration(row.get("baseline_duration", BigDecimal.class))
-                .bestDuration(row.get("best_duration", BigDecimal.class))
+                .baselineObjectiveScore(getFiniteBigDecimal(row, "baseline_objective_score"))
+                .bestObjectiveScore(getFiniteBigDecimal(row, "best_objective_score"))
+                .baselineDuration(getFiniteBigDecimal(row, "baseline_duration"))
+                .bestDuration(getFiniteBigDecimal(row, "best_duration"))
                 .baselineCost(row.get("baseline_cost", BigDecimal.class))
                 .bestCost(row.get("best_cost", BigDecimal.class))
                 .totalOptimizationCost(row.get("total_optimization_cost", BigDecimal.class))
                 .build());
+    }
+
+    /**
+     * Reads a {@code Nullable(Float64)} aggregate as a {@code BigDecimal}, mapping any non-finite value to
+     * {@code null} rather than letting it reach the driver's {@code BigDecimal} conversion.
+     *
+     * <p>This is the mapper-side half of the same defence {@link #FIND} applies in SQL, and it is here
+     * because the mapper is where the failure actually happens and how badly it fails is out of all
+     * proportion to the cause: {@code BigDecimal.valueOf(NaN)} throws {@code NumberFormatException},
+     * clickhouse-r2dbc rethrows it as a misleading {@code NoSuchElementException}, and
+     * {@code ClickHouseResult.map} catches every mapper exception, logs it, and <em>silently drops the
+     * row</em> — so one non-finite cell 404s a whole run and erases it from the paginated list
+     * (OPIK-7459). {@code FIND} guards the two places non-finite values can <em>enter</em>
+     * ({@code duration_p50}, the JSON-parsed score), but the columns read here are <em>derived</em> from
+     * those by the divisions and sums in {@code candidate_metrics}, so any future arithmetic added there
+     * that can overflow to +/-Inf would reopen the same class of bug in the same invisible way. Guarding at
+     * the boundary makes the row-loss mode unreachable regardless of what the query does upstream.
+     *
+     * <p>The finite path deliberately re-reads through {@code BigDecimal.class} instead of converting the
+     * {@code Double} itself, so the value's scale and representation stay byte-identical to what the driver
+     * produced before this guard existed. Both reads hit an already-decoded in-memory cell. Costs are
+     * {@code Decimal} and cannot be non-finite, so they keep the direct read.
+     */
+    private static BigDecimal getFiniteBigDecimal(Row row, String column) {
+        Double value = row.get(column, Double.class);
+        if (value == null || !Double.isFinite(value)) {
+            return null;
+        }
+        return row.get(column, BigDecimal.class);
     }
 
     /** Maps the plain {@code optimizations} table columns — everything except FIND's computed aggregates. */

@@ -342,19 +342,43 @@ class OptimizationStalledReaperServiceTest {
     }
 
     @Test
-    @DisplayName("reaps a stale INITIALIZED run regardless of trial rows (progress liveness is RUNNING-only)")
-    void reapsStaleInitializedRunDespiteTrialRows() {
-        // Backdated INITIALIZED seed: single upsert, the create path forces INITIALIZED anyway.
-        var optimization = optimizationResourceClient.createPartialOptimization()
-                .studioConfig(studioConfig())
-                .lastUpdatedAt(Instant.now().minus(Duration.ofHours(1)))
-                .build();
-        var id = optimizationResourceClient.upsert(optimization, API_KEY, TEST_WORKSPACE_NAME);
+    @DisplayName("keeps a stale INITIALIZED run alive on trial progress (a failed mark_running is not a dead run)")
+    void keepsStaleInitializedRunWithRecentTrialProgress() {
+        var id = seedBackdatedInitializedStudioRun(Duration.ofHours(1));
         createTrialExperiment(id);
 
-        // An INITIALIZED run with experiment rows is an inconsistent state; the worker still never called
-        // mark_running, so the initialized branch must reap it without consulting the progress signal.
-        reconcile(Duration.ofMinutes(5), NEVER, BATCH_SIZE);
+        // An INITIALIZED run with trial rows means mark_running never landed while the worker went on doing
+        // real work — a single failed callback, not a run that failed to start. Reaping it here used to
+        // ERROR a healthy, actively-evaluating run and orphan its trials, so the progress veto covers
+        // INITIALIZED too, on the runningTimeout window.
+        reconcile(IMMEDIATE, NEVER, BATCH_SIZE);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.INITIALIZED);
+    }
+
+    @Test
+    @DisplayName("reaps a stale INITIALIZED run that never produced a trial")
+    void reapsStaleInitializedRunWithoutTrials() {
+        var id = seedBackdatedInitializedStudioRun(Duration.ofHours(1));
+
+        // The common case the initializedTimeout exists for: no trials at all, so the progress probe finds
+        // nothing and the last_updated_at branch still reaps it. Extending the veto must not weaken this.
+        reconcile(IMMEDIATE, IMMEDIATE, BATCH_SIZE);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+    }
+
+    @Test
+    @DisplayName("reaps an INITIALIZED run past the hard ceiling despite fresh trial progress")
+    void reapsInitializedRunPastHardCapDespiteProgress() {
+        var id = seedStudioRun(OptimizationStatus.INITIALIZED);
+        createTrialExperiment(id);
+        backdateRunStart(id, Duration.ofHours(2));
+
+        // The ceiling had to grow an INITIALIZED branch along with the veto: otherwise a zombie worker
+        // writing rows for a run whose mark_running never landed would keep the spinner alive forever,
+        // which is the one guarantee this job must never lose.
+        reconcile(NEVER, NEVER, Duration.ofHours(1), BATCH_SIZE);
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
     }
@@ -567,6 +591,22 @@ class OptimizationStalledReaperServiceTest {
                 .build(), API_KEY, TEST_WORKSPACE_NAME);
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.RUNNING);
+        return id;
+    }
+
+    /**
+     * Seeds an INITIALIZED studio run whose {@code last_updated_at} is backdated by {@code age}. One upsert
+     * is enough here — the create path forces INITIALIZED for new studio runs anyway — so unlike
+     * {@link #seedBackdatedRunningStudioRun(Duration)} there is no second version to out-rank.
+     */
+    private UUID seedBackdatedInitializedStudioRun(Duration age) {
+        var optimization = optimizationResourceClient.createPartialOptimization()
+                .studioConfig(studioConfig())
+                .lastUpdatedAt(Instant.now().minus(age))
+                .build();
+        var id = optimizationResourceClient.upsert(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.INITIALIZED);
         return id;
     }
 

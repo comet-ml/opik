@@ -29,7 +29,7 @@ class OptimizationStalledReaperConfigTest {
                 .startupDelay(Duration.minutes(5))
                 .jobInterval(Duration.minutes(5))
                 .initializedTimeout(Duration.minutes(5))
-                .runningTimeout(Duration.minutes(30))
+                .runningTimeout(Duration.hours(1))
                 .runningHardTimeout(Duration.hours(24))
                 .lookbackMargin(Duration.days(7))
                 .lockDuration(Duration.minutes(4))

@@ -28,25 +28,35 @@ import java.util.concurrent.TimeUnit;
  *        workers are still warming up and consuming the backlog.
  * @param jobInterval how often the reaper runs. A single instance runs per cycle (distributed lock with
  *        hold-until-expiry), so the query cost stays negligible.
- * @param initializedTimeout a run stuck in {@code INITIALIZED} longer than this is transitioned to
- *        {@code ERROR}. The worker is expected to call mark_running within seconds of picking the job
- *        up, so this can be short — but it is kept comfortably above normal queue latency to avoid
- *        killing a run that is merely waiting behind a backlog.
- * @param runningTimeout a {@code RUNNING} run showing no <em>activity</em> for longer than this is
+ * @param initializedTimeout a run stuck in {@code INITIALIZED} with no <em>activity</em> for longer than
+ *        this is transitioned to {@code ERROR}. The worker is expected to call mark_running within seconds
+ *        of picking the job up, so this can be short — but it is kept comfortably above normal queue
+ *        latency to avoid killing a run that is merely waiting behind a backlog. Note this bounds the
+ *        no-status-change side only: a run that never left {@code INITIALIZED} but is writing trials or
+ *        items is spared by the same progress veto {@code runningTimeout} governs, measured on the
+ *        {@code runningTimeout} window (OPIK-7459) — a single failed mark_running callback must not kill a
+ *        run that is actually evaluating.
+ * @param runningTimeout a non-terminal run showing no <em>activity</em> for longer than this is
  *        transitioned to {@code ERROR}. Activity is liveness derived from run progress (OPIK-7459): the
  *        newest of the row's {@code last_updated_at}, the latest trial experiment's {@code created_at},
  *        and the latest experiment item's {@code created_at} — a healthy run keeps creating trial
  *        experiments and, within a trial, one experiment item per evaluated dataset item, so this no
  *        longer needs to exceed the worker's maximum execution timeout
- *        ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) and can be minutes. What it MUST stay above is
- *        the longest legitimate gap between progress signals — roughly one dataset-item evaluation plus
- *        the worker's between-trial thinking time — or a slow-but-alive run gets reaped mid-flight; the
+ *        ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) and can be under an hour. It is the activity
+ *        window for {@code INITIALIZED} candidates too, not only {@code RUNNING} ones. What it MUST stay
+ *        above is the longest legitimate gap between progress signals, and that gap is not the
+ *        steady-state item cadence but the run's <em>head start</em>: between mark_running and the first
+ *        trial experiment the worker fetches and samples the dataset (up to
+ *        {@code OPTSTUDIO_DATASET_SAMPLES}) and, for GEPA, builds the baseline, writing nothing. Sized
+ *        below that, a slow-but-alive run is reaped before it ever produces a trial; the
  *        {@code @MinDuration} floor guards the pathological end of that (same fail-fast intent as
  *        {@link #isLockDurationBelowJobInterval()}).
- * @param runningHardTimeout absolute ceiling for a {@code RUNNING} run measured from when the run was
+ * @param runningHardTimeout absolute ceiling for a non-terminal run ({@code INITIALIZED} or
+ *        {@code RUNNING}) measured from when the run was
  *        created, reaped even when trial/item writes are still arriving. This preserves the pre-OPIK-7459
  *        "a run can never stay stuck indefinitely" guarantee against a zombie worker that keeps producing
- *        rows without ever reporting a terminal status. MUST exceed the worker's maximum execution
+ *        rows without ever reporting a terminal status — including one whose run never left
+ *        {@code INITIALIZED}, which is why the ceiling covers that status too. MUST exceed the worker's maximum execution
  *        timeout ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) plus a buffer — the {@code @MinDuration}
  *        floor is pinned to that 6h default — and MUST NOT be below {@link #runningTimeout()}
  *        (enforced by {@link #isRunningHardTimeoutAtLeastRunningTimeout()}). Measuring it from creation

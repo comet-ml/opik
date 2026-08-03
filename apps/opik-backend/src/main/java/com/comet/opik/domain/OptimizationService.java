@@ -766,15 +766,20 @@ class OptimizationServiceImpl implements OptimizationService {
     }
 
     /**
-     * Re-check that a RUNNING candidate is still dead by the reaper's own liveness definition. Runs past
-     * the hard ceiling are reaped regardless of recent trial/item writes (that ceiling exists precisely
-     * for zombies that keep producing rows), so the activity probe only runs — and only costs a query —
-     * for the rare non-hard-capped candidate. Non-RUNNING candidates (INITIALIZED) have no progress
-     * signal to re-check.
+     * Re-check that a candidate is still dead by the reaper's own liveness definition. Runs past the hard
+     * ceiling are reaped regardless of recent trial/item writes (that ceiling exists precisely for zombies
+     * that keep producing rows), so the activity probe only runs — and only costs a query — for the rare
+     * non-hard-capped candidate.
+     *
+     * <p>The probe covers {@code INITIALIZED} as well as {@code RUNNING}, and with the same
+     * {@code runningTimeout} window the fleet query uses for both: a run writing trial experiments is alive
+     * whichever status its row got stuck on, and this guard must stay identical to the query's veto or a run
+     * the query spared could still be reaped here (or vice versa). A run that genuinely never started has no
+     * trials, so the probe finds nothing and it is still reaped on {@code initializedTimeout}.
      */
     private Mono<Boolean> isStillDead(OptimizationDAO.OptimizationStatusSnapshot current, UUID id,
             Duration runningTimeout, Duration runningHardTimeout) {
-        if (current.status() != OptimizationStatus.RUNNING || isPastHardCap(current, runningHardTimeout)) {
+        if (isPastHardCap(current, runningHardTimeout)) {
             return Mono.just(true);
         }
         return optimizationDAO.hasRecentStudioActivity(id, runningTimeout).map(active -> !active);
@@ -792,21 +797,29 @@ class OptimizationServiceImpl implements OptimizationService {
         return current.startedAt().isBefore(Instant.now().minus(runningHardTimeout));
     }
 
+    /**
+     * The hard-ceiling case is checked before the status split, because that ceiling now applies to
+     * {@code INITIALIZED} runs too — a run stuck on INITIALIZED while a zombie worker keeps writing rows is
+     * reaped by the ceiling, and "failed to start" would be the wrong thing to tell the user about it.
+     * Every duration is rendered with {@link DurationFormatUtils} rather than a fixed unit, so sub-hour and
+     * multi-hour configurations both read correctly (a raw {@code toMinutes()} rendered the 24h maximum
+     * {@code initializedTimeout} allows as "1440 minutes").
+     */
     private String buildStalledReason(OptimizationDAO.OptimizationStatusSnapshot current,
             Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout) {
+        if (isPastHardCap(current, runningHardTimeout)) {
+            return ("[System] Optimization failed: the run exceeded the maximum running time of %s without "
+                    + "completing and was marked as failed. The optimizer worker may be stuck.")
+                    .formatted(DurationFormatUtils.formatDurationWords(runningHardTimeout.toMillis(), true, true));
+        }
         if (current.status() == OptimizationStatus.RUNNING) {
-            if (isPastHardCap(current, runningHardTimeout)) {
-                return ("[System] Optimization failed: the run exceeded the maximum running time of %s without "
-                        + "completing and was marked as failed. The optimizer worker may be stuck.")
-                        .formatted(DurationFormatUtils.formatDurationWords(runningHardTimeout.toMillis(), true, true));
-            }
             return ("[System] Optimization failed: the run made no progress (no status change, new trial, or "
                     + "evaluated item) for over %s and was marked as failed. The optimizer worker may have crashed "
                     + "or been terminated.")
                     .formatted(DurationFormatUtils.formatDurationWords(runningTimeout.toMillis(), true, true));
         }
-        return ("[System] Optimization failed to start: the optimizer worker did not begin processing within %d "
-                + "minutes and may be unavailable. The run was marked as failed.")
-                .formatted(initializedTimeout.toMinutes());
+        return ("[System] Optimization failed to start: the optimizer worker did not begin processing within %s "
+                + "and may be unavailable. The run was marked as failed.")
+                .formatted(DurationFormatUtils.formatDurationWords(initializedTimeout.toMillis(), true, true));
     }
 }

@@ -51,6 +51,14 @@ class ExperimentItemDAO {
     /**
      * The query validates if already exists with this id. Failing if so.
      * That way only insert is allowed, but not update.
+     *
+     * <p>{@code created_at} is deliberately absent from the column list, so the column DEFAULT
+     * ({@code now64}) stamps it server-side. Keep it that way: this is the only write path to
+     * {@code experiment_items}, which makes {@code created_at} a monotonic, never-rewritten clock — and the
+     * stalled-run reaper reads it as its item-level liveness signal
+     * ({@code OptimizationDAO#FIND_STALLED_STUDIO_OPTIMIZATIONS}, OPIK-7459). Binding it from the client,
+     * or adding an update path that re-stamps it, would let a dead run look alive (or a live one look dead)
+     * and silently break the reaper.
      */
     private static final String INSERT = """
             INSERT INTO experiment_items (
