@@ -47,11 +47,18 @@ tests:
       - notExists:
           path: spec.configuration.clusters[0].layout.shards
 
-  - it: pins internal_replication once sharding is switched on
+  # Deliberately still pinned on a SINGLE shard: internal_replication governs replica
+  # fan-out within a shard, so on 1 shard x 2 replicas it decides whether a Distributed
+  # INSERT writes one replica or both. That is the near-term target topology, so this
+  # must not be gated on shardsCount > 1.
+  - it: pins internal_replication on a single shard once sharding is switched on
     set:
       clickhouse.sharding.enabled: true
       clickhouse.replicasCount: 2
     asserts:
+      - equal:
+          path: spec.configuration.clusters[0].layout.shardsCount
+          value: 1
       - lengthEqual:
           path: spec.configuration.clusters[0].layout.shards
           count: 1
