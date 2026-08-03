@@ -8,6 +8,7 @@ import {
   getMetricKPICardConfigs,
 } from "@/v2/pages-shared/experiments/KPICard/KPICard";
 import { StatCard } from "@/ui/stat-card";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import {
   formatAsDuration,
   formatAsCurrency,
@@ -102,12 +103,16 @@ const OptimizationKPICards: React.FunctionComponent<
   const kpiData = useMemo(
     () => ({
       // The backend aggregate wins when it has a value, because it also covers
-      // optimizer-internal spend that belongs to no trial. It comes back as 0
-      // rather than null when there is nothing to report, so treat 0 as "no
-      // answer" and fall back to the trial sum — otherwise a run whose trials
-      // clearly cost something would render as "-".
+      // optimizer-internal spend that belongs to no trial, and because it spans
+      // the whole run — the client-side sum below only sees the current page of
+      // trials, so it under-reports any run with more trials than fit one page.
+      // The aggregate comes back as 0 rather than null when there is nothing to
+      // report, so treat 0 as "no answer" and fall back — otherwise a run whose
+      // trials clearly cost something would render as "-".
+      usesBackendTotal:
+        totalOptimizationCost != null && totalOptimizationCost > 0,
       totalOptCost:
-        totalOptimizationCost && totalOptimizationCost > 0
+        totalOptimizationCost != null && totalOptimizationCost > 0
           ? totalOptimizationCost
           : experiments.reduce(
               (sum, e) => sum + (e.total_estimated_cost ?? 0),
@@ -156,13 +161,24 @@ const OptimizationKPICards: React.FunctionComponent<
       })}
 
       <KPICard icon={Coins} label="Optimization cost">
-        <StatCard.Value
-          className={kpiData.totalOptCost > 0 ? "" : "text-muted-slate"}
-        >
-          {kpiData.totalOptCost > 0
-            ? formatAsCurrency(kpiData.totalOptCost)
-            : "-"}
-        </StatCard.Value>
+        {kpiData.totalOptCost > 0 ? (
+          // The value can exceed the sum of the trials in the table below, both
+          // because optimizer-internal calls belong to no trial and because the
+          // table is paginated. Say so, or it reads as an arithmetic error.
+          <TooltipWrapper
+            content={
+              kpiData.usesBackendTotal
+                ? `${kpiData.totalOptCost}. Whole-run spend, including optimizer-internal LLM calls (e.g. reflection) that belong to no trial.`
+                : `${kpiData.totalOptCost}. Summed from the trials loaded on this page.`
+            }
+          >
+            <StatCard.Value>
+              {formatAsCurrency(kpiData.totalOptCost)}
+            </StatCard.Value>
+          </TooltipWrapper>
+        ) : (
+          <StatCard.Value className="text-muted-slate">-</StatCard.Value>
+        )}
         {isInProgress && optimizationCreatedAt ? (
           <ElapsedDuration startedAt={optimizationCreatedAt} />
         ) : (

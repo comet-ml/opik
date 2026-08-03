@@ -811,9 +811,11 @@ class OptimizationsResourceTest {
 
             experimentResourceClient.create(experiment, apiKey, workspaceName);
 
-            // Trial traces are tagged with the optimization id too — a real run tags every
-            // evaluation trace. They must be counted once (via their experiment), never twice,
-            // which is what the cost query's experiment-item exclusion is for.
+            // Trial traces are tagged with the optimization id too - a real run tags every
+            // evaluation trace. In THIS topology they are kept out of the tagged-cost branch by
+            // the query's project bound, since they live in a different project from the
+            // optimization. The experiment-item exclusion is what protects the single-project
+            // topology instead, and it has its own test below.
             var trialCostPerSpan = BigDecimal.valueOf(0.05);
             List<Trace> trialTraces = createTracesSpansAndItems(
                     experiment, items, project, apiKey, workspaceName,
@@ -829,6 +831,33 @@ class OptimizationsResourceTest {
                         Trace storedTrial = traceResourceClient.getById(
                                 trialTraces.getFirst().id(), workspaceName, apiKey);
                         assertThat(storedTrial.tags()).contains(optimizationId.toString());
+                    });
+
+            var expectedTrialCost = trialCostPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            // Cost is asserted with isEqualByComparingTo, not StatsUtils.bigDecimalComparator:
+            // that helper falls through to comparing only the integer parts, so for sub-dollar
+            // costs it returns "equal" for any two values (0.50 vs 0.25 included) and no cost
+            // assertion using it can fail.
+            //
+            // Phase 1, before any non-trial trace exists: the total is the trial cost, counted
+            // once. Asserting this separately is what makes the combined figure below meaningful
+            // - without it, a total that happens to match could be a partially-ingested state on
+            // the way to a wrong one.
+            //
+            // baseline_cost and num_trials are the independent signals that the experiment-item
+            // path is already live: both need the experiment items AND the spans, the same rows
+            // the tagged branch reads, and a single query sees one snapshot of both. So there is
+            // no window where the total is momentarily right for the wrong reason.
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var trialOnly = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(trialOnly.numTrials()).isEqualTo(1L);
+                        assertThat(trialOnly.baselineCost()).isNotNull();
+                        assertThat(trialOnly.totalOptimizationCost()).isEqualByComparingTo(expectedTrialCost);
                     });
 
             // Reflection trace as the optimizer SDK actually writes it (verified against a
@@ -866,7 +895,6 @@ class OptimizationsResourceTest {
                     .build();
             spanResourceClient.batchCreateSpans(List.of(reflectionSpan), apiKey, workspaceName);
 
-            var expectedTrialCost = trialCostPerSpan.multiply(BigDecimal.valueOf(items.size()));
             var expectedTotalCost = expectedTrialCost.add(reflectionCost);
 
             await().atMost(10, TimeUnit.SECONDS)
@@ -878,23 +906,134 @@ class OptimizationsResourceTest {
                         assertThat(actualOptimization).isNotNull();
 
                         // The run total includes the tagged non-trial trace's spend
-                        assertThat(actualOptimization.totalOptimizationCost()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.totalOptimizationCost(), expectedTotalCost)).isZero();
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(expectedTotalCost);
 
                         // best/baseline stay trial-scoped per-trace comparison metrics
-                        assertThat(actualOptimization.bestCost()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.bestCost(), trialCostPerSpan)).isZero();
-                        assertThat(actualOptimization.baselineCost()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.baselineCost(), trialCostPerSpan)).isZero();
+                        assertThat(actualOptimization.bestCost()).isEqualByComparingTo(trialCostPerSpan);
+                        assertThat(actualOptimization.baselineCost()).isEqualByComparingTo(trialCostPerSpan);
                     });
         }
 
+        /**
+         * The other topology, and the one that pins {@code id NOT IN (SELECT trace_id FROM
+         * experiment_items_final)}: trials and optimizer-internal traces in the SAME project, which is what
+         * Studio produces when the run and its evaluations share a project. Here the query's project bound
+         * cannot separate them, so only the experiment-item exclusion stops the trial spend from being charged
+         * a second time as optimizer-internal. Delete that clause and the total settles at twice the trial
+         * cost - a stable wrong answer, which is why phase one asserts the trial-only figure before any
+         * non-trial trace exists rather than asserting the combined figure alone.
+         */
         @Test
-        @DisplayName("Total optimization cost drops a tagged trace once its tag is removed")
-        void getById__whenOptimizationTagRemovedFromTrace__totalCostExcludesIt() {
+        @DisplayName("Trials and internal traces in one project: trial cost is not charged twice")
+        void getById__whenTrialAndInternalTracesShareTheProject__trialCostIsNotCountedTwice() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "shared-project-cost-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            // One project for the run, its trials and its optimizer-internal traces.
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Shared-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var objectiveName = "accuracy";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(BigDecimal.valueOf(0.7)).build()))
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trialCostPerSpan = BigDecimal.valueOf(0.05);
+            createTracesSpansAndItems(experiment, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    trialCostPerSpan, optimizationId.toString());
+
+            var expectedTrialCost = trialCostPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var trialOnly = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(trialOnly.numTrials()).isEqualTo(1L);
+                        assertThat(trialOnly.baselineCost()).isNotNull();
+                        assertThat(trialOnly.totalOptimizationCost()).isEqualByComparingTo(expectedTrialCost);
+                    });
+
+            // Now an optimizer-internal trace in that same project: its spend is additive.
+            var reflectionCost = BigDecimal.valueOf(0.07);
+            Trace reflectionTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(reflectionTrace), apiKey, workspaceName);
+
+            spanResourceClient.batchCreateSpans(List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(reflectionTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(reflectionCost)
+                    .feedbackScores(null)
+                    .build()), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual.totalOptimizationCost())
+                                .isEqualByComparingTo(expectedTrialCost.add(reflectionCost));
+                    });
+        }
+
+        /**
+         * This fixture has no experiment at all, which is what makes it cover both projections: the paginated
+         * list then takes the {@code FIND_WITHOUT_EXPERIMENTS} fast path while {@code getById} always takes
+         * {@code FIND}. They each carry their own copy of the tagged-cost pipeline, so this pins the two
+         * against each other - a run that died before its first experiment must not read as free in the list
+         * and priced on the run page - and pins that both apply the tag check after the per-trace dedup.
+         */
+        @Test
+        @DisplayName("Tagged cost without experiments: list and detail agree, and both follow the tag")
+        void findAndGetById__whenOptimizationHasNoExperiments__taggedCostAgreesAndFollowsTheTag() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
             String workspaceId = UUID.randomUUID().toString();
@@ -950,7 +1089,20 @@ class OptimizationsResourceTest {
                     .pollInterval(1, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
-                        assertThat(StatsUtils.bigDecimalComparator(actual.totalOptimizationCost(), cost)).isZero();
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(cost);
+                    });
+
+            // Same number from the list, which reaches this optimization through the
+            // no-experiments fast path rather than through FIND.
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        assertThat(page.content()).hasSize(1);
+                        assertThat(page.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(cost);
                     });
 
             // Re-ingest the same trace id without the optimization tag. The cost query must
@@ -965,8 +1117,14 @@ class OptimizationsResourceTest {
                     .pollInterval(1, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actual.totalOptimizationCost(), BigDecimal.ZERO)).isZero();
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(BigDecimal.ZERO);
+
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        assertThat(page.content()).hasSize(1);
+                        assertThat(page.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(BigDecimal.ZERO);
                     });
         }
 
