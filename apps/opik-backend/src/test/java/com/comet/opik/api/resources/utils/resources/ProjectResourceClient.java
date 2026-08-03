@@ -23,6 +23,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -210,11 +211,11 @@ public class ProjectResourceClient {
 
     public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
             @NonNull String workspaceName, List<TraceFilter> filters) {
-        return getProjectStatsSummary(projectName, apiKey, workspaceName, filters, null);
+        return getProjectStatsSummary(projectName, apiKey, workspaceName, filters, null, null);
     }
 
     public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
-            @NonNull String workspaceName, List<TraceFilter> filters, Integer windowDays) {
+            @NonNull String workspaceName, List<TraceFilter> filters, Instant fromTime, Instant toTime) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("/stats");
 
@@ -222,8 +223,12 @@ public class ProjectResourceClient {
             webTarget = webTarget.queryParam("name", projectName);
         }
 
-        if (windowDays != null) {
-            webTarget = webTarget.queryParam("window_days", windowDays);
+        if (fromTime != null) {
+            webTarget = webTarget.queryParam("from_time", fromTime);
+        }
+
+        if (toTime != null) {
+            webTarget = webTarget.queryParam("to_time", toTime);
         }
 
         if (filters != null && !filters.isEmpty()) {

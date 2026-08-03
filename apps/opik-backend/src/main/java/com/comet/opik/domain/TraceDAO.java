@@ -59,12 +59,12 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -144,7 +144,7 @@ public interface TraceDAO {
     Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId,
-            List<? extends Filter> filters, Integer windowDays);
+            List<? extends Filter> filters, Instant fromTime, Instant toTime);
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
@@ -4341,6 +4341,8 @@ class TraceDAOImpl implements TraceDAO {
         template.add("has_legacy_scores", hasLegacyScores);
         if (uuidFromTime != null) {
             template.add("uuid_from_time", true);
+        }
+        if (uuidToTime != null) {
             template.add("uuid_to_time", true);
         }
         if (!CollectionUtils.isEmpty(filters)) {
@@ -4355,7 +4357,10 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("project_ids", projectIds)
                 .bind("workspace_id", workspaceId);
         if (uuidFromTime != null) {
-            statement.bind("uuid_from_time", uuidFromTime).bind("uuid_to_time", uuidToTime);
+            statement.bind("uuid_from_time", uuidFromTime);
+        }
+        if (uuidToTime != null) {
+            statement.bind("uuid_to_time", uuidToTime);
         }
         if (!CollectionUtils.isEmpty(filters)) {
             FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
@@ -4414,7 +4419,7 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     public Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(@NonNull List<UUID> projectIds,
-            @NonNull String workspaceId, List<? extends Filter> filters, Integer windowDays) {
+            @NonNull String workspaceId, List<? extends Filter> filters, Instant fromTime, Instant toTime) {
 
         if (projectIds.isEmpty()) {
             return Mono.just(Map.of());
@@ -4424,16 +4429,14 @@ class TraceDAOImpl implements TraceDAO {
         // tolerate two concurrent statements on the same connection. The legacy-scores flag is
         // resolved once (sync JDBI) so both branches can skip the legacy feedback_scores UNION
         // when no data exists there.
-        // Optional moving window: when the caller opts in (windowDays != null, e.g. the Projects table),
-        // scope every metric to [now - N days, now] via uuid_from_time/uuid_to_time on the time-ordered
+        // Optional time window: when the caller opts in (fromTime/toTime set, e.g. the Projects table),
+        // scope every metric to [fromTime, toTime] via uuid_from_time/uuid_to_time on the time-ordered
         // UUIDv7 id — pruning by the sort key today and by time partitions once the tables are partitioned by
-        // time, with the upper bound excluding (ingestion-tolerated) future-dated ids. When omitted, the
-        // aggregates stay all-time so the public getProjectStats API keeps its existing semantics.
-        Instant now = Instant.now();
-        String uuidFromTime = windowDays == null
-                ? null
-                : instantToUUIDMapper.toLowerBound(now.minus(windowDays, ChronoUnit.DAYS)).toString();
-        String uuidToTime = windowDays == null ? null : instantToUUIDMapper.toUpperBound(now).toString();
+        // time, with the upper bound excluding (ingestion-tolerated) future-dated ids. Each bound is optional
+        // and applied independently; when both are omitted the aggregates stay all-time so the public
+        // getProjectStats API keeps its existing semantics.
+        String uuidFromTime = Objects.toString(instantToUUIDMapper.toLowerBound(fromTime), null);
+        String uuidToTime = Objects.toString(instantToUUIDMapper.toUpperBound(toTime), null);
 
         return workspacesService.hasLegacyScores(workspaceId)
                 .flatMap(hasLegacyScores -> {
@@ -4447,6 +4450,8 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("has_legacy_scores", hasLegacyScores);
                         if (uuidFromTime != null) {
                             template.add("uuid_from_time", true);
+                        }
+                        if (uuidToTime != null) {
                             template.add("uuid_to_time", true);
                         }
                         if (!CollectionUtils.isEmpty(filters)) {
@@ -4458,7 +4463,10 @@ class TraceDAOImpl implements TraceDAO {
                                 .bind("project_ids", projectIds)
                                 .bind("workspace_id", workspaceId);
                         if (uuidFromTime != null) {
-                            statement.bind("uuid_from_time", uuidFromTime).bind("uuid_to_time", uuidToTime);
+                            statement.bind("uuid_from_time", uuidFromTime);
+                        }
+                        if (uuidToTime != null) {
+                            statement.bind("uuid_to_time", uuidToTime);
                         }
                         if (!CollectionUtils.isEmpty(filters)) {
                             FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);

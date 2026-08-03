@@ -20,6 +20,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
+import { PROJECT_STATS_WINDOW_DAYS } from "@/api/projects/useProjectStatisticList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
 import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
@@ -112,6 +113,8 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
   },
 ];
 
+const WINDOW_SUFFIX = ` (${PROJECT_STATS_WINDOW_DAYS}d)`;
+
 const ProjectsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -141,44 +144,44 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "duration.p50",
-        label: "Avg duration",
+        label: `Avg duration${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
       },
       {
         id: "duration.p90",
-        label: "Duration (p90)",
+        label: `Duration (p90)${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p90,
         cell: DurationCell as never,
       },
       {
         id: "duration.p99",
-        label: "Duration (p99)",
+        label: `Duration (p99)${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p99,
         cell: DurationCell as never,
       },
       {
         id: "total_estimated_cost_sum",
-        label: "Total cost",
+        label: `Total cost${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
       },
       {
         id: "trace_count",
-        label: "Trace count",
+        label: `Trace count${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
       },
       {
         id: "thread_count",
-        label: "Thread count",
+        label: `Thread count${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
       },
       {
         id: "error_count",
-        label: "Errors",
+        label: `Errors${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.errors,
         cell: ErrorsCountCell as never,
         customMeta: {
@@ -206,7 +209,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.total_tokens",
-        label: "Avg total tokens",
+        label: `Avg total tokens${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.total_tokens)
@@ -215,7 +218,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.prompt_tokens",
-        label: "Avg input tokens",
+        label: `Avg input tokens${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.prompt_tokens)
@@ -224,7 +227,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.completion_tokens",
-        label: "Avg output tokens",
+        label: `Avg output tokens${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.completion_tokens)
@@ -233,7 +236,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Avg feedback scores",
+        label: `Avg feedback scores${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: (row) => get(row, "feedback_scores", []),
         cell: FeedbackScoreListCell as never,
@@ -247,7 +250,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         ? [
             {
               id: COLUMN_GUARDRAILS_ID,
-              label: "Guardrails",
+              label: `Guardrails${WINDOW_SUFFIX}`,
               type: COLUMN_TYPE.category,
               iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: ProjectWithStatistic) =>
@@ -437,12 +440,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-4">
       <div className="mb-4 flex items-center justify-between">
-        <div className="min-w-0">
-          <h1 className="comet-body-accented truncate break-words">Projects</h1>
-          <p className="comet-body-s text-muted-slate">
-            Metrics reflect the last 30 days
-          </p>
-        </div>
+        <h1 className="comet-body-accented truncate break-words">Projects</h1>
         {canCreateProjects && (
           <Button variant="default" size="xs" onClick={handleNewProjectClick}>
             <Plus className="mr-1 size-4" />

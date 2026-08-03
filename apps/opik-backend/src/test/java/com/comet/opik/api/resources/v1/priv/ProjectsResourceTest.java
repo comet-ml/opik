@@ -2308,7 +2308,7 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when window_days is set, then out-of-window (future-dated) traces are excluded")
+        @DisplayName("when a time window is requested, then traces outside either bound are excluded")
         void getProjectStats__whenWindowRequested__thenExcludesOutOfWindowTraces() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -2319,23 +2319,22 @@ class ProjectsResourceTest {
             UUID projectId = createProject(project, apiKey, workspaceName);
 
             Instant now = Instant.now();
-            // Two in-window (recent) traces plus one future-dated trace whose id is ahead of now. The future id
-            // is within the ingestion tolerance so the write is accepted, but the window's upper bound (now)
-            // must exclude it — so a requested window sees only the two recent traces, not all three.
+            Instant fromTime = now.minus(2, ChronoUnit.HOURS);
+            Instant toTime = now;
             List<Trace> traces = List.of(
-                    traceWithId(project.name(), now.minus(2, ChronoUnit.HOURS)),
-                    traceWithId(project.name(), now.minus(30, ChronoUnit.MINUTES)),
+                    traceWithId(project.name(), now.minus(3, ChronoUnit.HOURS)),
+                    traceWithId(project.name(), now.minus(1, ChronoUnit.HOURS)),
                     traceWithId(project.name(), now.plus(3, ChronoUnit.HOURS)));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
             ProjectStatsSummaryItem item = projectResourceClient
-                    .getProjectStatsSummary(project.name(), apiKey, workspaceName, null, 1)
+                    .getProjectStatsSummary(project.name(), apiKey, workspaceName, null, fromTime, toTime)
                     .content().stream()
                     .filter(i -> projectId.equals(i.projectId()))
                     .findFirst()
                     .orElseThrow();
 
-            assertThat(item.traceCount()).isEqualTo(2L);
+            assertThat(item.traceCount()).isEqualTo(1L);
         }
 
         private Trace traceWithId(String projectName, Instant idInstant) {

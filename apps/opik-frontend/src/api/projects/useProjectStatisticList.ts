@@ -37,6 +37,11 @@ const getProjectStatisticsList = async (
     logsSource,
   }: UseProjectStatisticsListParams,
 ) => {
+  const now = new Date();
+  const fromTime = new Date(
+    now.getTime() - PROJECT_STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  );
+
   const { data } = await api.get(`${PROJECTS_REST_ENDPOINT}stats`, {
     signal,
     params: {
@@ -47,7 +52,8 @@ const getProjectStatisticsList = async (
         undefined,
         logsSource ? generateLogsSourceFilter(logsSource) : undefined,
       ),
-      window_days: PROJECT_STATS_WINDOW_DAYS,
+      from_time: fromTime.toISOString(),
+      to_time: now.toISOString(),
       size,
       page,
     },
