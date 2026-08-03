@@ -80,9 +80,9 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     // Workspace feedback-score metrics must read both feedback_scores (legacy) and authored_feedback_scores
     // (where online-scoring rows land because the writer routes by author presence, see FeedbackScoreDAO). The
     // dedup chain is shared with ProjectMetricsDAO's pattern; project and name predicates vary per query, so each
-    // query constant is composed with the helper-provided prefix injected via String.format. The prefix itself uses
-    // StringTemplate conditionals so the rendered query still respects the per-request <if(project_ids)> / <if(name)>
-    // decisions made at render time.
+    // query constant is composed with the helper-provided prefix injected via String.format. The project predicate
+    // is immutable and lives on each UNION leg; the name predicate is mutable per .agents/skills/opik-backend/clickhouse.md
+    // and is applied AFTER the dedup in feedback_scores_final, so a renamed score cannot strand an older version.
     private static final String SUMMARY_FEEDBACK_SCORES_PREFIX = WorkspaceFeedbackScoresQueries
             .traceFeedbackScoresPrefix(
                     "<if(project_ids)> AND project_id IN :project_ids<endif>",
