@@ -4375,77 +4375,52 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
-     * Whether the {@code trace_final} CTE of {@code SELECT_FEEDBACK_SCORES_STATS} can dedup with
-     * {@code GROUP BY} + {@code argMax} instead of {@code FINAL}.
+     * Whether {@code SELECT_FEEDBACK_SCORES_STATS}'s {@code trace_final} CTE can dedup with {@code GROUP BY} +
+     * {@code argMax} instead of {@code FINAL}. {@code traces} is a {@code ReplacingMergeTree(last_updated_at)}
+     * ordered by {@code (workspace_id, project_id, id)}, so grouping on that key and taking a predicate's verdict
+     * from the greatest {@code last_updated_at} is what {@code FINAL} + predicate computes.
      *
-     * <p>{@code traces} is a {@code ReplacingMergeTree(last_updated_at)} ordered by
-     * {@code (workspace_id, project_id, id)}, so grouping on that key and taking a predicate's verdict from the
-     * row with the greatest {@code last_updated_at} is what {@code FINAL} + predicate computes. Dropping
-     * {@code FINAL} also unblocks lazy materialization.
+     * <p>Scoped to this template on purpose. It projects only group keys, so its aggregate state is small and peak
+     * memory improves, and it re-evaluates the CTE from three scopes, which is where the saving comes from.
+     * {@code SELECT_TRACES_SPANS_STATS} projects seven per-version columns and regresses on memory, so it keeps
+     * {@code FINAL}. Numbers in OPIK-7636; re-measure before extending this to a wider projection.
      *
-     * <p><b>Deliberately limited to this template.</b> {@code SELECT_TRACES_SPANS_STATS} keeps {@code FINAL}: its
-     * {@code trace_final} projects seven per-version columns, so the grouped form has to hold an aggregate state
-     * per column per trace and peak memory regresses, worsening as group count grows. This template projects only
-     * {@code id, project_id} — both group keys — so its state is small and memory improves instead. That template
-     * also re-evaluates {@code trace_final} from three scopes, which is where the saving comes from. Measurements
-     * for both are in OPIK-7636; do not extend this to a template with a wider projection without re-measuring.
+     * <p>Two gates:
      *
-     * <p>Gated on two conditions.
+     * <ul>
+     * <li>No filter slot may pull in a {@code LEFT JOIN} — a join multiplies row versions inside a group, and a
+     * predicate on a joined alias cannot be evaluated by {@code argMax} over {@code traces} versions.</li>
+     * <li>{@code search_text} must be present — without a heavy per-row scan to amortise it, the aggregation state
+     * is pure overhead in CPU and memory.</li>
+     * </ul>
      *
-     * <p><b>No filter slot may pull in a {@code LEFT JOIN}.</b> A join multiplies row versions inside each group,
-     * and a predicate on a joined alias cannot be evaluated by {@code argMax} over {@code traces} versions at all.
-     * Note {@code filters} is deliberately not vetoed even though {@code TraceField.GUARDRAILS} belongs to
-     * {@code FilterStrategy.TRACE} and renders the joined {@code gagg} alias into it: {@code FilterUtils} always
-     * sets {@code guardrails_filters} alongside, and that is what trips the veto. Keep those two in sync — narrowing
-     * {@code FilterQueryBuilder#hasGuardrailsFilter} while leaving {@code GUARDRAILS} in {@code FilterStrategy.TRACE}
-     * would produce {@code HAVING argMax(gagg.guardrails_result ...)} with no join in scope. It is the only
-     * {@code FilterStrategy.TRACE} field that maps to a joined alias.
+     * <p>{@code filters} is <em>not</em> vetoed even though {@code TraceField.GUARDRAILS} renders the joined
+     * {@code gagg} alias into it: {@code FilterUtils} always sets {@code guardrails_filters} alongside, and that is
+     * what vetoes. Keep those two in sync — {@code GUARDRAILS} is the only {@code FilterStrategy.TRACE} field
+     * mapping to a joined alias.
      *
-     * <p><b>{@code search_text} must be present.</b> The rewrite trades a streaming scan that filters row by row
-     * for a hash table built in full before {@code HAVING} can discard anything, so it only pays off when a heavy
-     * per-row scan dominates — which is what {@code searchText} over {@code input}/{@code output}/{@code metadata}
-     * does. Without it the aggregation state is pure overhead in both CPU and peak memory.
+     * <p>Dedup-key predicates and the {@code id IN (...)} slots stay in {@code WHERE}; they are the key, or they
+     * select whole ids. Value-based predicates ({@code filters}, {@code search_text}) must move into
+     * {@code HAVING argMax(...)} — evaluated row-level in {@code WHERE} they drop older versions from the group,
+     * making {@code argMax} report the latest <em>surviving</em> version and resurfacing content the current version
+     * no longer matches.
      *
-     * <p>The template still wraps the {@code HAVING} in {@code <if(filters || search_text)>}, which cannot be false
-     * while the gate requires {@code search_text}. That is deliberate: it keeps the template independent of the
-     * gate's internals, and it is what stops an empty {@code argMax(, last_updated_at)} from rendering if the gate
-     * is ever relaxed to admit a filters-only shape.
+     * <p>{@code filters} is <em>also</em> injected as {@code id IN (SELECT id FROM traces WHERE <filters>)}, because
+     * a predicate inside {@code HAVING} is invisible to the table's skip indexes and losing that pruning costs far
+     * more than this rewrite saves. The subquery needs no dedup: it selects ids where <em>any</em> version matches,
+     * a superset of the answer, which the {@code HAVING} then narrows to the latest version. Keep the two in step.
+     * Do not swap it for a list of "prunable" columns — selectivity depends on the filter's value, not its column.
      *
-     * <p><b>Predicate placement.</b> Dedup-key predicates ({@code workspace_id}, {@code project_id}, the
-     * {@code id} range bounds) and the {@code id IN (...)} slots stay in {@code WHERE} — they are the key, or they
-     * select whole ids, so they cannot strand a group on a stale version. Value-based predicates
-     * ({@code filters}, {@code search_text}) must move into {@code HAVING argMax(...)}: evaluated row-level in
-     * {@code WHERE} they drop older versions from the group, making {@code argMax} report the latest
-     * <em>surviving</em> version and resurfacing content the current version no longer matches.
+     * <p>Equivalence is scoped, not exact: for a unique latest {@code last_updated_at} this returns exactly
+     * {@code FINAL}'s row, but for tied versions it returns one of them and not contractually the one {@code FINAL}
+     * picks, since {@code argMax}'s tie behaviour is unspecified. Both always return a really-stored row, so it can
+     * only shift which version is reported. No tie-breaker helps — {@code ReplacingMergeTree} breaks ties by
+     * insertion order, which is not a column.
      *
-     * <p><b>Filters are also injected as an {@code id IN (SELECT id FROM traces WHERE <filters>)} semi-join.</b>
-     * Moving a predicate into {@code HAVING} puts it out of reach of the table's skip indexes ({@code thread_id}
-     * bloom, {@code source}/{@code environment} set, {@code created_at}/{@code last_updated_at} minmax), and losing
-     * that pruning costs far more than this rewrite saves — a {@code thread_id} equality filter prunes to a single
-     * granule from {@code WHERE} and to none at all from {@code HAVING}. The semi-join restores it: the subquery is
-     * index-visible, and because it selects ids where <em>any</em> version matches it is a superset of the correct
-     * answer, which the {@code HAVING} then narrows to the latest version. Keep the two in step.
-     *
-     * <p>Do not replace it with a list of "prunable" columns. Selectivity is a property of the filter's value, not
-     * its column: {@code source IN ('sdk','unknown')} prunes nothing because those two values cover 98% of rows,
-     * while {@code source = 'playground'} prunes to zero granules — same column, opposite outcomes.
-     *
-     * <p><b>Scope of the equivalence.</b> For a key whose latest {@code last_updated_at} is unique this returns
-     * exactly {@code FINAL}'s row. For a key with tied latest versions it returns one of the tied rows, and which
-     * one is not contractually {@code FINAL}'s choice, because ClickHouse does not specify {@code argMax}'s tie
-     * behaviour. Treat that as an accepted, bounded difference rather than exact equivalence: both forms always
-     * return a row that was really stored, so it can only shift which real version is reported, never invent one.
-     * No tie-breaker closes it — {@code ReplacingMergeTree} breaks the tie by insertion order, which is not a
-     * column, so a value-based tie-breaker would deterministically pick a different row than {@code FINAL} in
-     * exactly that case. Ties are close to unreachable anyway: rows sharing a sort key within one INSERT are
-     * collapsed when the part is written, and separate batches take distinct {@code now64(6)} values, leaving only
-     * a caller-supplied duplicate {@code lastUpdatedAt}.
-     *
-     * <p>When {@code traces} is exchanged for the {@code traces_local_v2} schema, that table is
-     * {@code ReplacingMergeTree(last_updated_at, is_deleted)} and {@code FINAL} additionally drops soft-deleted
-     * rows. The {@code HAVING} must then also require {@code argMax(is_deleted, last_updated_at) = 0}, or
-     * soft-deleted traces reappear. Deliberately not emitted here: {@code is_deleted} does not exist on the
-     * current table, so the guard cannot be written or tested until the cutover.
+     * <p>On a future cutover to {@code traces_local_v2}, that table is
+     * {@code ReplacingMergeTree(last_updated_at, is_deleted)} and {@code FINAL} also drops soft-deleted rows, so the
+     * {@code HAVING} must then require {@code argMax(is_deleted, last_updated_at) = 0} or soft-deleted traces
+     * reappear. Not emitted today because the column does not exist on {@code traces}.
      */
     @VisibleForTesting
     static boolean canDedupByArgMax(ST template) {
