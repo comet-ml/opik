@@ -20,7 +20,6 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
-import { PROJECT_STATS_WINDOW_DAYS } from "@/api/projects/useProjectStatisticList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
 import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
@@ -113,6 +112,7 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
   },
 ];
 
+const PROJECT_STATS_WINDOW_DAYS = 30;
 const WINDOW_SUFFIX = ` (${PROJECT_STATS_WINDOW_DAYS}d)`;
 
 const ProjectsPage: React.FunctionComponent = () => {
@@ -341,6 +341,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         page: page!,
         size: size!,
         logsSource: LOGS_SOURCE.sdk,
+        windowDays: PROJECT_STATS_WINDOW_DAYS,
       },
       {
         placeholderData: keepPreviousData,

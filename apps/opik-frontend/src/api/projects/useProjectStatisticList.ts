@@ -17,14 +17,13 @@ type UseProjectStatisticsListParams = {
   page: number;
   size: number;
   logsSource?: LOGS_SOURCE;
+  windowDays?: number;
 };
 
 type UseProjectStatisticsListResponse = {
   content: ProjectStatistic[];
   total: number;
 };
-
-export const PROJECT_STATS_WINDOW_DAYS = 30;
 
 const getProjectStatisticsList = async (
   { signal }: QueryFunctionContext,
@@ -35,12 +34,20 @@ const getProjectStatisticsList = async (
     size,
     page,
     logsSource,
+    windowDays,
   }: UseProjectStatisticsListParams,
 ) => {
-  const now = new Date();
-  const fromTime = new Date(
-    now.getTime() - PROJECT_STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-  );
+  // Opt-in rolling window. Based on windowParams only if present for compatibility with v1.
+  const now = Date.now();
+  const windowParams =
+    windowDays != null
+      ? {
+          from_time: new Date(
+            now - windowDays * 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          to_time: new Date(now).toISOString(),
+        }
+      : undefined;
 
   const { data } = await api.get(`${PROJECTS_REST_ENDPOINT}stats`, {
     signal,
@@ -52,8 +59,7 @@ const getProjectStatisticsList = async (
         undefined,
         logsSource ? generateLogsSourceFilter(logsSource) : undefined,
       ),
-      from_time: fromTime.toISOString(),
-      to_time: now.toISOString(),
+      ...windowParams,
       size,
       page,
     },

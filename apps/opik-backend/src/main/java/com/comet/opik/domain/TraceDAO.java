@@ -2944,8 +2944,6 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 UNION ALL
                 <endif>
                 SELECT project_id, entity_id, name, value, author
@@ -2953,9 +2951,9 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
             ), scored_span_ids AS (
+                -- The time window is applied here on trace_id, so a span's score is scoped by its trace's
+                -- time (uniform with every other metric) rather than by the span's own id.
                 SELECT id
                 FROM spans
                 WHERE workspace_id = :workspace_id
@@ -4425,16 +4423,16 @@ class TraceDAOImpl implements TraceDAO {
             return Mono.just(Map.of());
         }
 
-        // Each branch runs on its own connection from the pool — R2DBC connections do not
-        // tolerate two concurrent statements on the same connection. The legacy-scores flag is
-        // resolved once (sync JDBI) so both branches can skip the legacy feedback_scores UNION
-        // when no data exists there.
-        // Optional time window: when the caller opts in (fromTime/toTime set, e.g. the Projects table),
-        // scope every metric to [fromTime, toTime] via uuid_from_time/uuid_to_time on the time-ordered
-        // UUIDv7 id — pruning by the sort key today and by time partitions once the tables are partitioned by
-        // time, with the upper bound excluding (ingestion-tolerated) future-dated ids. Each bound is optional
-        // and applied independently; when both are omitted the aggregates stay all-time so the public
-        // getProjectStats API keeps its existing semantics.
+        // Each branch runs on its own pooled connection — R2DBC forbids concurrent statements on one
+        // connection. The legacy-scores flag is resolved once (sync JDBI) so both branches can skip the
+        // legacy feedback_scores UNION when it's empty.
+        // Optional window: when the caller opts in (fromTime/toTime, e.g. the Projects table), every metric
+        // is scoped to [fromTime, toTime] via uuid_from_time/uuid_to_time on the UUIDv7 id, the upper bound
+        // excluding (ingestion-tolerated) future-dated ids. Bounds are independent; omitting both keeps the
+        // all-time semantics of the public getProjectStats API. The window is on TRACE time: only the traces
+        // scan carries the parallel toMonday(id_at) predicate, so only it prunes by partition once traces is
+        // partitioned; the spans scan is bounded by trace_id (correct — a span id may predate its trace) and
+        // will still read all partitions. Span feedback scores follow the trace window via scored_span_ids.
         String uuidFromTime = Objects.toString(instantToUUIDMapper.toLowerBound(fromTime), null);
         String uuidToTime = Objects.toString(instantToUUIDMapper.toUpperBound(toTime), null);
 
