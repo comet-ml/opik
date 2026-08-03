@@ -2556,6 +2556,17 @@ class TraceDAOImpl implements TraceDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <endif>
+                <if(dedup_by_argmax && filters)>
+                AND id IN (
+                    SELECT id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                    AND <filters>
+                )
+                <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
@@ -2916,6 +2927,17 @@ class TraceDAOImpl implements TraceDAO {
                 <if(!dedup_by_argmax)>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <endif>
+                <if(dedup_by_argmax && filters)>
+                AND id IN (
+                    SELECT id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                    AND <filters>
+                )
                 <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
@@ -4428,6 +4450,19 @@ class TraceDAOImpl implements TraceDAO {
      * while the gate requires {@code search_text}. That is deliberate: it keeps the templates independent of the
      * gate's internals, and it is what stops a bare {@code GROUP BY} with no {@code HAVING} — or an empty
      * {@code argMax(, last_updated_at)} — from rendering if the gate is ever relaxed to admit a filters-only shape.
+     *
+     * <p><b>Filters are also injected as an {@code id IN (SELECT id FROM traces WHERE <filters>)} semi-join.</b>
+     * Moving a predicate into {@code HAVING} puts it out of reach of the table's skip indexes ({@code thread_id}
+     * bloom, {@code source}/{@code environment} set, {@code created_at}/{@code last_updated_at} minmax), and losing
+     * that pruning costs far more than this rewrite ever saves — a {@code thread_id} equality filter prunes to a
+     * single granule from {@code WHERE} and to none at all from {@code HAVING}. The semi-join restores it: the
+     * subquery is index-visible, and because it selects ids where <em>any</em> version matches it is a superset of
+     * the correct answer, which the {@code HAVING} then narrows to the latest version. Keep the two in step.
+     *
+     * <p>Do not replace it with a list of "prunable" columns. Selectivity is a property of the filter's value, not
+     * its column: {@code source IN ('sdk','unknown')} prunes nothing because those two values cover 98% of rows,
+     * while {@code source = 'playground'} prunes to zero granules — same column, opposite outcomes. A column-level
+     * veto is wrong in both directions.
      *
      * <p><b>Predicate placement.</b> Dedup-key predicates ({@code workspace_id}, {@code project_id}, the
      * {@code id} range bounds) and the {@code id IN (...)} slots stay in {@code WHERE} — they are the key, or they
