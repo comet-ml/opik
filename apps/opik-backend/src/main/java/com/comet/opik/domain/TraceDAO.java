@@ -2661,21 +2661,26 @@ class TraceDAOImpl implements TraceDAO {
     /**
      * Split-B: per-project feedback-score and span-feedback-score aggregates.
      *
-     * <p>{@code trace_final} is declared {@code AS MATERIALIZED} because this template references it from three
-     * scopes — its own definition plus two {@code id IN (SELECT id FROM trace_final)} subqueries — and without it
-     * ClickHouse re-evaluates the CTE once per reference. Materialising it evaluates it once into a temporary table.
-     * Measured on production at roughly 2x fewer bytes and 2x less CPU, on both the {@code FINAL} and the
-     * {@code argMax} form, so it is applied unconditionally rather than gated (OPIK-7693).
+     * <p>{@code trace_final} is referenced from three scopes here — its own definition plus two
+     * {@code id IN (SELECT id FROM trace_final)} subqueries — and ClickHouse re-evaluates it once per reference.
+     * Declaring it {@code AS MATERIALIZED} evaluates it once into a temporary table: measured on production at
+     * roughly 2x fewer bytes and 2x less CPU, on both the {@code FINAL} and the {@code argMax} form, so it is not
+     * gated on the searchText condition (OPIK-7693).
      *
-     * <p>{@code enable_materialized_cte = 1} on the statement is <b>required</b> and its absence is silent: the
-     * keyword parses and is simply ignored, giving back the unmaterialised plan with no error. The setting is
-     * Experimental and defaults to 0, so it is set here per-statement rather than session- or server-wide. It also
-     * needs {@code enable_analyzer = 1}, which is already the default. If either the keyword or the setting is
-     * dropped, the query still returns correct results — only ~2x slower — so nothing will fail loudly.
+     * <p>It <em>is</em> gated on {@code traceStats.materializeFeedbackScoresCte}, off by default, because both the
+     * keyword and the {@code enable_materialized_cte} setting it needs require ClickHouse 26.3+. On 25.8 the keyword
+     * is a {@code SYNTAX_ERROR} and the setting an {@code UNKNOWN_SETTING} — either would turn every trace- and
+     * project-stats request into a 5xx rather than degrade — so an environment pointed at an older external
+     * ClickHouse must leave it off. The bundled ClickHouse is 26.3.
+     *
+     * <p>The setting is emitted per-statement alongside the keyword, and both are required: with the setting absent
+     * the keyword parses and is silently ignored, giving back the unmaterialised plan with no error. A trailing
+     * {@code SETTINGS} clause is sufficient despite being applied after parsing — verified to produce the same plan
+     * as passing the setting pre-parse.
      *
      * <p>Do not extend this to a CTE that projects wide columns. The temporary table honours
-     * {@code default_temporary_table_engine}, which is {@code Memory} in production, so materialising a CTE that
-     * carries {@code input}/{@code output}/{@code metadata} pushes that text into memory. This one projects only
+     * {@code default_temporary_table_engine}, which is {@code Memory} in production, so materialising a CTE carrying
+     * {@code input}/{@code output}/{@code metadata} pushes that text into memory. This one projects only
      * {@code id, project_id}, which is why it is safe.
      */
     private static final String SELECT_FEEDBACK_SCORES_STATS = """
@@ -2915,7 +2920,7 @@ class TraceDAOImpl implements TraceDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            , trace_final AS MATERIALIZED (
+            , trace_final AS <if(materialize_trace_final)>MATERIALIZED <endif>(
                 SELECT id, project_id
                 FROM traces <if(!dedup_by_argmax)>final<endif>
                 <if(guardrails_filters)>
@@ -3088,7 +3093,7 @@ class TraceDAOImpl implements TraceDAO {
                 s.span_feedback_scores AS span_feedback_scores
             FROM trace_feedback_scores t
             FULL OUTER JOIN span_feedback_scores s ON t.project_id = s.project_id
-            SETTINGS log_comment = '<log_comment>', enable_materialized_cte = 1
+            SETTINGS log_comment = '<log_comment>'<if(materialize_trace_final)>, enable_materialized_cte = 1<endif>
             ;
             """;
 
@@ -4392,6 +4397,9 @@ class TraceDAOImpl implements TraceDAO {
         if (canDedupByArgMax(template)) {
             template.add("dedup_by_argmax", true);
         }
+        if (configuration.getTraceStats().isMaterializeFeedbackScoresCte()) {
+            template.add("materialize_trace_final", true);
+        }
 
         var statement = connection.createStatement(template.render())
                 .bind("project_ids", List.of(criteria.projectId()))
@@ -4420,6 +4428,9 @@ class TraceDAOImpl implements TraceDAO {
         }
         if (canDedupByArgMax(template)) {
             template.add("dedup_by_argmax", true);
+        }
+        if (configuration.getTraceStats().isMaterializeFeedbackScoresCte()) {
+            template.add("materialize_trace_final", true);
         }
 
         var statement = connection.createStatement(template.render())
