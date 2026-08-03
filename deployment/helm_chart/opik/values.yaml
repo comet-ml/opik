@@ -730,11 +730,16 @@ partitionMetrics:
 clickhouse:
   enabled: true
   shardsCount: 1
-  # Switches the deployment to the sharded (Hyperscale) topology. A no-op while shardsCount is 1: it
-  # only drives the backend's `clickhouse-cluster` readiness probe, which verifies the Distributed
-  # cluster definition is visible from the node (ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED — set that
-  # key explicitly under component.backend.env to decouple the two). Turn on together with
-  # shardsCount > 1 once the Distributed tables are in place.
+  # Switches the deployment to the sharded (Hyperscale) topology. Turn on together with
+  # shardsCount > 1 once the Distributed tables are in place. While off, nothing here is rendered,
+  # so upgrading the chart never reshapes an existing cluster on its own. Turning it on does two
+  # things:
+  #   - enables the backend's `clickhouse-cluster` readiness probe, which verifies the Distributed
+  #     cluster definition is visible from the node (ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED — set
+  #     that key explicitly under component.backend.env to decouple the two)
+  #   - pins internal_replication on each shard of the ClickHouseInstallation, when replicasCount > 1.
+  #     With the flag off the operator infers it from replicasCount > 1 instead, which is the
+  #     behaviour every deployment already has.
   sharding:
     enabled: false
   # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
