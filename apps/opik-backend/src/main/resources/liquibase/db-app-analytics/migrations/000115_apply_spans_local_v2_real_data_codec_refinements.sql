@@ -6,7 +6,7 @@
 -- covering ~94% of the table's payload) on ClickHouse 26.3, the LTS this table is deployed on. spans_local_v2 is still
 -- empty (pre-cutover), so each MODIFY COLUMN is metadata-only with no data to re-compress; this MUST run before the
 -- Slice-3 backfill, or it degrades into a full re-compress plus a recompute of the materialized columns.
--- Five columns, in two groups. Each is at worst neutral against the codec 000114 ships, so adopting now is low-regret.
+-- Five columns, in three groups. Each is at worst neutral against the codec 000114 ships, so adopting now is low-regret.
 --   * usage: ZSTD(1) -> ZSTD(3), 19.3% smaller. 000114 assigned ZSTD(1) as an explicit best guess, this being the one
 --     spans-only column with no traces evidence. A Map is stored as an Array(String) keys subcolumn plus an
 --     Array(Int64) values subcolumn under the single column codec, and the keys are long, dotted and extremely
@@ -15,6 +15,11 @@
 --     counts under longer names. That is exactly the small, repetitive, variable-length String shape ClickHouse 26.3
 --     regressed ZSTD level 1 on, so the shipped level was the one at risk. ZSTD(3) is also FASTER to decode here (3.6k
 --     vs 6.7k CPU-us on a single-thread scan): ZSTD decode is level-independent, so less data simply means less work.
+--   * error_info: ZSTD(1) -> ZSTD(3), 8.0% smaller. It is empty on ~90% of spans, but when present it is a JSON stack
+--     trace whose traceback is long repetitive text, so it belongs with input/output/metadata rather than with the small
+--     low-cardinality columns. A synthetic slice had put ZSTD(1) marginally ahead, because its generated tracebacks were
+--     uniform enough for level 1 to capture the repetition; real traces vary far more. Decode is unaffected (ZSTD decode
+--     is level-independent), so this is free on the read path.
 --   * created_at, id_at, start_time: drop Delta, i.e. Delta + ZSTD(1) -> ZSTD(1). At microsecond resolution the raw
 --     values inside one weekly partition share their high-order bytes and ZSTD's literal matching exploits that prefix
 --     directly, while Delta discards it and emits a large high-entropy 8-byte jump at every workspace/project boundary.
@@ -52,6 +57,12 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ON CLUSTER '{cluster}'
     MODIFY COLUMN IF EXISTS error_info  String                 DEFAULT ''       CODEC(ZSTD(3)),
     MODIFY COLUMN IF EXISTS id_at       DateTime64(0, 'UTC')   MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(ZSTD(1));
 
--- Empty rollback: an in-place codec change is not cleanly reversible, and restoring the superseded 000114 codecs is
--- never a wanted recovery step (matches 000106 / 000107 on traces_local_v2).
+-- Empty rollback, i.e. forward-only: an in-place codec change is not cleanly reversible, and restoring the superseded
+-- 000114 codecs is never a wanted recovery step (matches 000106 / 000107 on traces_local_v2). Recovery, if it were ever
+-- needed, is a new forward ALTER setting the wanted codecs -- never a rollback, and never a restore. Nothing here is at
+-- risk either way: this runs while spans_local_v2 is empty and unread, so there is no data to lose and no query path to
+-- break, and a codec is metadata until the next part is written. Note the asymmetry the ordering requirement creates: if
+-- this were instead applied after the Slice-3 backfill, both the change and any later correction would be a full
+-- re-compress mutation over the whole table rather than a metadata edit -- which is the reason for the MUST above, and
+-- the reason a backup restore is not part of the recovery story.
 --rollback empty
