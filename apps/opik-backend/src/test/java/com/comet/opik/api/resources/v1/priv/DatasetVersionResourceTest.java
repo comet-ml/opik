@@ -5576,6 +5576,22 @@ class DatasetVersionResourceTest {
         void incrementCounts__whenVersionDoesNotExist__thenNoRowsAffected() {
             assertThat(incrementCounts(UUID.randomUUID(), 1, 1, 0, 0)).isZero();
         }
+
+        @Test
+        @DisplayName("Success: increment scoped to another workspace affects no rows")
+        void incrementCounts__whenVersionBelongsToAnotherWorkspace__thenNoRowsAffected() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            var seed = getLatestVersion(datasetId);
+
+            // Real version id, wrong workspace: the workspace predicate must keep the update from matching, which is
+            // what lets both count-update helpers detect a missing/foreign version from the affected-row count alone.
+            int updated = mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .incrementCounts(seed.id(), 1, 1, 0, 0, UUID.randomUUID().toString(), USER));
+
+            assertThat(updated).isZero();
+            assertThat(getLatestVersion(datasetId).itemsTotal()).isEqualTo(seed.itemsTotal());
+        }
     }
 
     @Nested
