@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000112_create_spans_local_v2_table
+--changeset thiagohora:000114_create_spans_local_v2_table
 --comment: Create the spans_local_v2 table, a weekly-partitioned successor to spans, empty (no data cutover here)
 
 -- spans_local_v2 is the target layout for `spans` under partitioned + tiered storage, the counterpart of
