@@ -37,6 +37,11 @@ env:
 jobs:
   select-matrix:
     name: Select Python version matrix
+    # select-e2e-matrix lists changed files via the PR files API; without
+    # pull-requests: read that call 403s and fails every job needing this one.
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:

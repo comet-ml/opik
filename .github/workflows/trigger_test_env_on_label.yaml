@@ -89,11 +89,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
     needs:
       - start
-    # build_apps.yml pushes images to GHCR; pass down packages: write here (a
-    # called workflow's permissions can only be maintained or reduced from the
+    # build_apps.yml pushes images to GHCR, and with is_release: false its
+    # create-git-tag job pushes a tag; pass down both grants here (a called
+    # workflow's permissions can only be maintained or reduced from the
     # caller's, never elevated).
     permissions:
-      contents: read
+      contents: write
       packages: write
     uses: ./.github/workflows/build_apps.yml
     secrets: inherit
