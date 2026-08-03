@@ -278,11 +278,47 @@ class SpansLocalV2TableTest {
 
         var partitionId = getColumn(storedSpan, "_partition_id", String.class);
 
-        // PARTITION BY toMonday(id_at): the row must land in the partition for the Monday of the week its UUIDv7 id
-        // encodes — not the current week. Backdated ids prove the partition follows id_at, not wall-clock (the reason
-        // the design chose an id-derived key over created_at). ClickHouse names a Date partition YYYYMMDD.
+        // PARTITION BY the honest Date32 weekly Monday of id_at: the row must land in the partition for the Monday of
+        // the week its UUIDv7 id encodes — not the current week. Backdated ids prove the partition follows id_at, not
+        // wall-clock (the reason the design chose an id-derived key over created_at). The partition id is that Monday's
+        // YYYYMMDD.
         var expectedMonday = idAt.atZone(ZoneOffset.UTC).toLocalDate()
                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(partitionId).isEqualTo(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE));
+    }
+
+    /**
+     * The far-future id guard (OPIK_7456), the spans counterpart of {@code TracesLocalV2TableTest}. A litellm bug
+     * (BerriAI/litellm#31294) mints UUIDv7 ids whose embedded timestamp is ~2201, and prod already holds ids dated 2199
+     * — the rows are legitimate customer data, just carrying a future timestamp. {@code id_at} as {@code DateTime64(0)}
+     * makes it read back as the honest 2201 (so the {@code id_at > now()} audit surfaces it, where a 32-bit
+     * {@code DateTime} would wrap it into a plausible past year), and the honest {@code Date32} weekly partition places
+     * the row in its own honest ~2201 week — not the recent week a 16-bit {@code toMonday} would fold it into, where a
+     * per-week DROP PARTITION / retention / tiering operation would then touch it alongside real rows. Pins both the
+     * {@code id_at} year and the partition.
+     */
+    @Test
+    void farFutureIdLandsInHonestPartitionNotAWrappedYear() {
+        var badId = ID_GENERATOR.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+        var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var storedSpan = newStoredSpan(startTime, randomFutureInstantFrom(startTime), DEFAULT_TRUNCATION_THRESHOLD)
+                .toBuilder()
+                .id(badId)
+                .idAt(idAtOf(badId))
+                .build();
+        insert(storedSpan);
+
+        var idAt = getById(storedSpan).idAt();
+        var partitionId = getColumn(storedSpan, "_partition_id", String.class);
+
+        // id_at is the honest 2201, not a wrapped year — and it is in the future, so the audit catches it.
+        assertThat(idAt.atZone(ZoneOffset.UTC).getYear()).isEqualTo(2201);
+        assertThat(idAt).isEqualTo(idAtOf(badId)).isAfter(Instant.now());
+        // The partition is the honest 2201 Monday (YYYYMMDD ~22010601), not the recent week a 16-bit toMonday would
+        // wrap it into — the Date32 weekly expression never wraps.
+        var expectedMonday = idAt.atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(expectedMonday.getYear()).isEqualTo(2201);
         assertThat(partitionId).isEqualTo(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 

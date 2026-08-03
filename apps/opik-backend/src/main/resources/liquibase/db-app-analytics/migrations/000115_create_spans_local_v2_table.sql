@@ -1,14 +1,35 @@
 --liquibase formatted sql
---changeset thiagohora:000114_create_spans_local_v2_table
+--changeset thiagohora:000115_create_spans_local_v2_table
 --comment: Create the spans_local_v2 table, a weekly-partitioned successor to spans, empty (no data cutover here)
 
 -- spans_local_v2 is the target layout for `spans` under partitioned + tiered storage, the counterpart of
 -- 000101 (traces_local_v2). It is created empty next to the live `spans` table; populating it and swapping it in
 -- happen in later migrations. The schema mirrors `spans` so a later `INSERT INTO spans_local_v2 SELECT ... FROM spans`
 -- maps by column name, with these differences folded in:
---   * PARTITION BY toMonday(id_at) (weekly). id_at is derived from the row's UUIDv7 id at insert time, so it
---     is a deterministic function of the immutable id: a row always lands in the same weekly partition across
---     ReplacingMergeTree upserts.
+--   * Weekly partitioning on id_at, which is derived from the row's UUIDv7 id at insert time, so it is a
+--     deterministic function of the immutable id: a row always lands in the same weekly partition across
+--     ReplacingMergeTree upserts. The key is
+--     PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))), matching traces_local_v2 as of
+--     000114 (OPIK_7456) rather than the toMonday(id_at) that table originally shipped with. toMonday / toStartOfWeek
+--     return a 16-bit Date (1970..2149) that wraps at BOTH ends: a far-future id (litellm BerriAI/litellm#31294 mints
+--     ~2201, and prod already holds ids dated 2199) forward into a plausible recent week, and an epoch id_at backward
+--     to ~2149 (UUIDv7ToDateTime returns 1970-01-01 for a non-v7 id — a v4 or nil UUID, no throw — whose ISO Monday
+--     1969-12-29 underflows the Date min; non-v7 ids are commoner than litellm ones). Those rows are legitimate
+--     customer data, so folding them into a real recent week is a correctness/operability hazard: a per-week
+--     DROP PARTITION / retention / tiering operation would then touch corrupt-timestamp rows and real rows together.
+--     toMonday only stops wrapping under the global enable_extended_results_for_datetime_functions setting, which also
+--     changes toStartOfInterval and breaks the metrics API, so it is not usable. This Date32 arithmetic (the Monday is
+--     the day minus its 0-based weekday, entirely in Date32, range 1900..2299) equals toMonday across the in-range
+--     calendar except the four epoch-week days, where it is more correct; it never wraps — an out-of-range id
+--     saturates rather than folding into a real year — needs no setting, and via toYYYYMMDD is a UInt32, so the
+--     partition id stays a human-readable YYYYMMDD like 20250303 (legible in ZooKeeper paths, part directory names and
+--     system.parts). Pinned by SpansLocalV2TableTest and SpansLocalV2PartitioningTest.
+--     SpanDAO's toMonday(id_at) read predicates are deliberately unchanged and still prune: each is paired with an
+--     authoritative id-range and prunes parts via the id_at minmax ClickHouse keeps for the partition-key columns,
+--     independent of the key expression itself. (toMonday(id_at) still wraps for an out-of-range id_at, so a toMonday
+--     window derived from an id SET spanning normal and wrapped values can invert; the read/delete layer covers that
+--     with id-range-authoritative filters plus an unbounded fallback, OPIK_7483, and a new such query site needs the
+--     same.)
 --   * Event timestamps stored at microsecond precision (DateTime64(6)); nothing ingested needs finer resolution. This
 --     narrows start_time/end_time/created_at from the DateTime64(9) the live table uses (last_updated_at is already
 --     microseconds); sub-microsecond digits are truncated, never rounded, so a row cannot shift a microsecond.
@@ -51,7 +72,9 @@
 --     The child-of-a-span access path is kept by a bloom filter on the column instead (see the indexes below).
 --     The cutover has to swap the (workspace_id, project_id, trace_id, parent_span_id, id) tiebreakers in SpanDAO's
 --     LIMIT 1 BY reads to the new key; they still target the live table here, so they are untouched.
---   * PARTITION BY toMonday(id_at) (weekly, see above).
+--   * PARTITION BY the honest Date32 weekly Monday of id_at (see above). id_at is a partition-key input, and
+--     ClickHouse forbids ALTER of a key column, so getting both the column type and the key expression right at
+--     creation is what spares this table the recreate traces_local_v2 needed in 000114.
 --   * ReplicatedReplacingMergeTree version (last_updated_at) + is_deleted meta-columns: the engine and its
 --     parameters are immutable after creation. The live table has no is_deleted, so this is the one engine-parameter
 --     difference; adding it now avoids a second rewrite when the delete path lands.
@@ -134,9 +157,11 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ON CLUST
         if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6),
             toFloat64('nan'),
             dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
-    -- Partition input, see header. Whole seconds: UUIDv7ToDateTime returns DateTime64(3) and the millisecond is dropped,
-    -- which is all a weekly partition and the id-range filters need. DateTime64 rather than DateTime is for range, not
-    -- precision — DateTime wraps past 2106-02-07, and prod holds ids dated 2199.
+    -- Partition input and far-future audit anchor, see header. Whole seconds: UUIDv7ToDateTime returns DateTime64(3)
+    -- and the millisecond is dropped, which is all a weekly partition and the id-range filters need. DateTime64 rather
+    -- than DateTime is for range, not precision — a 32-bit DateTime wraps mod-2^32 past 2106-02-07, and prod holds ids
+    -- dated 2199, so it would report those as a plausible past year and the id_at > now() audit would miss them.
+    -- DateTime64(0) is honest to 2299.
     id_at                        DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1)),
     -- id-only lookups (project and trace unknown) can't use the primary key, where id is the last key column. Two
     -- complementary indexes, as traces_local_v2 has: minmax for the id-range predicates the retention/read paths use
@@ -160,7 +185,7 @@ ENGINE = ReplicatedReplacingMergeTree(
     '{replica}',
     last_updated_at,
     is_deleted)
-PARTITION BY toMonday(id_at)
+PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
 ORDER BY (workspace_id, project_id, trace_id, id)
 -- ~40 MiB per granule so a granule fills toward the 8192-row target on these wide rows, making skip indexes prune effectively.
 SETTINGS index_granularity = 8192, index_granularity_bytes = 41943040;
