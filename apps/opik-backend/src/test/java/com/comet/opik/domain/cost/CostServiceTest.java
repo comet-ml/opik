@@ -778,6 +778,49 @@ class CostServiceTest {
     }
 
     /**
+     * Covers both branches of registering {@code snowflake} as a canonical provider so that the
+     * 21 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "snowflake"} (Snowflake Cortex-hosted claude, deepseek and llama
+     * models) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>Snowflake model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Snowflake model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI}; Snowflake's cost entry in
+     *       LiteLLM exposes OpenAI-shape {@code cache_read_input_token_cost}, so cached tokens
+     *       arrive flattened under {@code prompt_tokens_details.cached_tokens} like the other
+     *       OpenAI-compatible providers.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideSnowflakeProviderCases")
+    void calculateCostHandlesSnowflakeModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "snowflake", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideSnowflakeProviderCases() {
+        // snowflake/deepseek-r1: input 1.35e-6, output 5.4e-6 (no cache rates) -> textGenerationCost
+        // 1000 * 1.35e-6 + 200 * 5.4e-6 = 0.00135 + 0.00108 = 0.00243
+        // snowflake/claude-3-5-sonnet: input 3e-6, output 1.5e-5, cache_read 3e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 3e-7 = 0.0021 + 0.003 + 0.00009 = 0.00519
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "snowflake/deepseek-r1",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00243"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "snowflake/claude-3-5-sonnet",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00519"));
+    }
+
+    /**
      * Covers the provider-prefix fallback in {@link CostService#findModelPrice}. Callers that
      * route a model through an aggregator ({@link com.comet.opik.api.resources.v1.events.BudgetGuard}
      * calls {@code CostService.calculateCost} via {@code LlmProviderFactoryImpl.getResolvedModelInfo},
