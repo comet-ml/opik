@@ -109,7 +109,7 @@ public class ResourcesResource {
 - **IdGenerator** for UUID v7 generation
 
 ### Query Construction
-- **Never assemble SQL from strings** in Java sources: no `+`, `String.format`/`.formatted(...)`, `StringBuilder` or `MessageFormat`, and no `%s` slot in a query text block for a caller to fill in
+- **Never assemble SQL from strings** in Java sources: no `+`, `String.format`/`.formatted(...)`, `StringBuilder`, `MessageFormat` or `String.join` over clauses, and no `%s` slot in a query text block for a caller to fill in
 - **Values** go through `:placeholder` + `.bind("placeholder", value)` — never interpolated
 - **Varying fragments** (predicates, sort clauses, projected columns) go through StringTemplate conditionals in the query itself: `<if(project_ids)> AND project_id IN :project_ids <endif>`
 - **Unbounded fragments** (user-chosen sort/filter) come from `SortingQueryBuilder` / `FilterQueryBuilder`, never from raw request strings
