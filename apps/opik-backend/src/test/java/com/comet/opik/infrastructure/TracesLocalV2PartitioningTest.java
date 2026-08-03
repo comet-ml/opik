@@ -16,7 +16,6 @@ import lombok.Builder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -24,9 +23,12 @@ import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -239,18 +241,18 @@ class TracesLocalV2PartitioningTest {
     }
 
     /**
-     * For far-future dates the {@code Date32} expression stays honest — a Monday in the true year — independent of
-     * {@code enable_extended_results_for_datetime_functions}, whereas {@code toMonday}'s 16-bit {@code Date} wraps into
-     * a bogus recent year unless that setting is on. Asserts the honest week is Monday-aligned ({@code toDayOfWeek == 0})
-     * and sits in the expected far-future year, so a legitimate row carrying a far-future UUIDv7 timestamp partitions
-     * into its own honest week rather than a real recent one. Deliberately does not assert against {@code toMonday}
-     * itself, whose result is setting-dependent.
+     * For far-future dates the {@code Date32} expression stays honest, whereas {@code toMonday}'s 16-bit {@code Date}
+     * wraps into a bogus recent year unless {@code enable_extended_results_for_datetime_functions} is on. Asserts the
+     * <em>exact</em> expected Monday as {@code YYYYMMDD}, computed in Java as an independent oracle ({@code toMonday}
+     * can't be the oracle here — it wraps). Asserting the exact week, not just the year and Monday-alignment, catches an
+     * off-by-one-week regression that would still land on some Monday in the right year.
      */
-    @ParameterizedTest(name = "honest week is an honest Monday in {1} for {0}")
-    @CsvSource({"2160-06-01, 2160", "2201-06-01, 2201", "2250-06-01, 2250", "2298-06-01, 2298"})
-    void honestWeekExpressionStaysHonestForFarFuture(String date, int expectedYear) {
-        assertThat(weekProbe(date, "toYear(hw)")).isEqualTo((long) expectedYear);
-        assertThat(weekProbe(date, "toDayOfWeek(hw, 1)")).isZero();
+    @ParameterizedTest(name = "honest week is the exact Monday of {0}''s week")
+    @ValueSource(strings = {"2160-06-01", "2201-06-01", "2250-06-01", "2298-06-01"})
+    void honestWeekExpressionStaysHonestForFarFuture(String date) {
+        var expectedMonday = LocalDate.parse(date).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(weekProbe(date, "toYYYYMMDD(hw)"))
+                .isEqualTo(Long.parseLong(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE)));
     }
 
     /**
@@ -359,15 +361,17 @@ class TracesLocalV2PartitioningTest {
 
     /**
      * Evaluates {@code expr} against a single date bound to {@code d} (a {@code DateTime64} at noon UTC, as {@code id_at}
-     * is) with {@code hw} pre-bound to the candidate honest weekly-Monday expression. Returns the scalar as a long
-     * ({@code toInt64} normalizes booleans/dates for a uniform read), so callers assert a plain value.
+     * is), with {@code hw} pre-bound to the honest weekly-Monday expression. The date is a value, so it is a bind
+     * parameter; {@code expr} is a SQL fragment the test supplies (a bind can't stand in for a fragment), so it is
+     * interpolated. Returns the scalar as a long ({@code toInt64} normalizes booleans/dates for a uniform read).
      */
     private long weekProbe(String date, String expr) {
         return transactionTemplateAsync.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                WITH toDateTime64('%s 12:00:00', 0, 'UTC') AS d,
+                WITH toDateTime64(:date, 0, 'UTC') AS d,
                      toDate32(d) - toIntervalDay(toDayOfWeek(d, 1)) AS hw
                 SELECT toInt64(%s) AS v
-                """.formatted(date, expr))
+                """.formatted(expr))
+                .bind("date", date + " 12:00:00")
                 .execute())
                 .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("v", Long.class)))))
                 .block();

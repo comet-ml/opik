@@ -303,22 +303,31 @@ instead scatter each insert across every weekly partition that workspace spans �
 customer data — a valid UUIDv7 that merely carries a future timestamp — so they are copied and kept like any other.
 `traces_local_v2` partitions by the honest `Date32` weekly Monday of `id_at`
 ([OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456): `toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))`),
-so each such row lands in its **own honest ~2201 (`22010601`-shaped) weekly partition**, isolated from real recent weeks —
-a per-week `DROP PARTITION` / retention / tiering operation never touches them by accident, and vice versa. `id_at` is a
-`DateTime64`, so it reads back as the true ~2201 and the `id_at > now()` audit surfaces these rows; no server setting is
-involved. The extra partitions are bounded (few distinct far-future timestamps → few extra weeks) and harmless (they
-never tier to cold and are skipped by time-bounded reads). Quantify them in the source before the cutover so their scale
-is known:
+and its `id_at` is a `DateTime64` (honest to 2299), so each such row lands in its **own honest ~2201 (`22010601`-shaped)
+weekly partition**, isolated from real recent weeks — a per-week `DROP PARTITION` / retention / tiering operation never
+touches them by accident, and vice versa. No server setting is involved. The extra partitions are bounded (few distinct
+far-future timestamps → few extra weeks) and harmless (they never tier to cold and are skipped by time-bounded reads).
+
+Quantify them in the **source** before the cutover so their scale is known. The source `traces.id_at` is a 32-bit
+`DateTime` (migration 000091) that overflows for far-future values, so derive the timestamp from `id` via
+`UUIDv7ToDateTime` (honest) rather than reading the stored `id_at`, and count distinct weeks with the same honest
+expression the destination partitions by — a wrapped `toMonday(id_at)` would collapse several weeks into one and
+undercount:
 
 ```sql
 -- rows / distinct far-future weeks the far-future-timestamp ids occupy
-SELECT count() AS far_future_rows, uniqExact(toMonday(id_at)) AS far_future_weeks, min(id_at) AS earliest, max(id_at) AS latest
+-- (timestamp derived from id; the stored 32-bit traces.id_at wraps far-future values)
+WITH UUIDv7ToDateTime(toUUID(id)) AS ts
+SELECT count()                                                                 AS far_future_rows,
+       uniqExact(toYYYYMMDD(toDate32(ts) - toIntervalDay(toDayOfWeek(ts, 1)))) AS far_future_weeks,
+       min(ts) AS earliest, max(ts) AS latest
 FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
-WHERE id_at > now() + INTERVAL 1 DAY;   -- outside the 24h validation window
+WHERE ts > now() + INTERVAL 1 DAY;   -- outside the 24h validation window
 ```
 
-If the count is material, remediate the source `id`s at their origin; otherwise no action is needed — they partition
-honestly on their own.
+`far_future_weeks` uses the destination's honest partition expression, so it equals the number of extra weekly partitions
+`traces_local_v2` will hold. If the count is material, remediate the source `id`s at their origin; otherwise no action is
+needed — they partition honestly on their own.
 
 **No explicit `ORDER BY` on the `INSERT ... SELECT`.** Not needed for correctness or reproducibility: the final table
 state is a `ReplacingMergeTree` reduction keyed on `(workspace_id, project_id, id)` with `last_updated_at` as the version
