@@ -2898,7 +2898,7 @@ class TraceDAOImpl implements TraceDAO {
             <endif>
             , trace_final AS (
                 SELECT id, project_id
-                FROM traces final
+                FROM traces <if(!dedup_by_argmax)>final<endif>
                 <if(guardrails_filters)>
                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
                 <endif>
@@ -2917,8 +2917,21 @@ class TraceDAOImpl implements TraceDAO {
                 AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time
                 AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
+                <if(!dedup_by_argmax)>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+                <endif>
+                <if(dedup_by_argmax && filters)>
+                AND id IN (
+                    SELECT id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id IN :project_ids
+                    <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                    AND <filters>
+                )
+                <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
@@ -2966,6 +2979,12 @@ class TraceDAOImpl implements TraceDAO {
                         OR
                     id NOT IN (SELECT trace_id FROM sfsc)
                 )
+                <endif>
+                <if(dedup_by_argmax)>
+                GROUP BY workspace_id, project_id, id
+                <if(filters || search_text)>
+                HAVING argMax(<if(filters)>(<filters>)<endif><if(filters && search_text)> AND <endif><if(search_text)>(<search_text>)<endif>, last_updated_at)
+                <endif>
                 <endif>
             ),
             <else>
@@ -4351,6 +4370,9 @@ class TraceDAOImpl implements TraceDAO {
             template.add("filters_present", true);
         }
         template.add("has_legacy_scores", hasLegacyScores);
+        if (canDedupByArgMax(template)) {
+            template.add("dedup_by_argmax", true);
+        }
 
         var statement = connection.createStatement(template.render())
                 .bind("project_ids", List.of(criteria.projectId()))
@@ -4377,6 +4399,9 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("filters_present", true);
                     });
         }
+        if (canDedupByArgMax(template)) {
+            template.add("dedup_by_argmax", true);
+        }
 
         var statement = connection.createStatement(template.render())
                 .bind("project_ids", projectIds)
@@ -4385,6 +4410,64 @@ class TraceDAOImpl implements TraceDAO {
             FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
         }
         return statement;
+    }
+
+    /**
+     * Whether {@code SELECT_FEEDBACK_SCORES_STATS}'s {@code trace_final} CTE can dedup with {@code GROUP BY} +
+     * {@code argMax} instead of {@code FINAL}. {@code traces} is a {@code ReplacingMergeTree(last_updated_at)}
+     * ordered by {@code (workspace_id, project_id, id)}, so grouping on that key and taking a predicate's verdict
+     * from the greatest {@code last_updated_at} is what {@code FINAL} + predicate computes.
+     *
+     * <p>Scoped to this template on purpose. It projects only group keys, so its aggregate state is small and peak
+     * memory improves, and it re-evaluates the CTE from three scopes, which is where the saving comes from.
+     * {@code SELECT_TRACES_SPANS_STATS} projects seven per-version columns and regresses on memory, so it keeps
+     * {@code FINAL}. Numbers in OPIK-7636; re-measure before extending this to a wider projection.
+     *
+     * <p>Two gates:
+     *
+     * <ul>
+     * <li>No filter slot may pull in a {@code LEFT JOIN} — a join multiplies row versions inside a group, and a
+     * predicate on a joined alias cannot be evaluated by {@code argMax} over {@code traces} versions.</li>
+     * <li>{@code search_text} must be present — without a heavy per-row scan to amortise it, the aggregation state
+     * is pure overhead in CPU and memory.</li>
+     * </ul>
+     *
+     * <p>{@code filters} is <em>not</em> vetoed even though {@code TraceField.GUARDRAILS} renders the joined
+     * {@code gagg} alias into it: {@code FilterUtils} always sets {@code guardrails_filters} alongside, and that is
+     * what vetoes. Keep those two in sync — {@code GUARDRAILS} is the only {@code FilterStrategy.TRACE} field
+     * mapping to a joined alias.
+     *
+     * <p>Dedup-key predicates and the {@code id IN (...)} slots stay in {@code WHERE}; they are the key, or they
+     * select whole ids. Value-based predicates ({@code filters}, {@code search_text}) must move into
+     * {@code HAVING argMax(...)} — evaluated row-level in {@code WHERE} they drop older versions from the group,
+     * making {@code argMax} report the latest <em>surviving</em> version and resurfacing content the current version
+     * no longer matches.
+     *
+     * <p>{@code filters} is <em>also</em> injected as {@code id IN (SELECT id FROM traces WHERE <filters>)}, because
+     * a predicate inside {@code HAVING} is invisible to the table's skip indexes and losing that pruning costs far
+     * more than this rewrite saves. The subquery needs no dedup: it selects ids where <em>any</em> version matches,
+     * a superset of the answer, which the {@code HAVING} then narrows to the latest version. Keep the two in step.
+     * Do not swap it for a list of "prunable" columns — selectivity depends on the filter's value, not its column.
+     *
+     * <p>Equivalence is scoped, not exact: for a unique latest {@code last_updated_at} this returns exactly
+     * {@code FINAL}'s row, but for tied versions it returns one of them and not contractually the one {@code FINAL}
+     * picks, since {@code argMax}'s tie behaviour is unspecified. Both always return a really-stored row, so it can
+     * only shift which version is reported. No tie-breaker helps — {@code ReplacingMergeTree} breaks ties by
+     * insertion order, which is not a column.
+     *
+     * <p>On a future cutover to {@code traces_local_v2}, that table is
+     * {@code ReplacingMergeTree(last_updated_at, is_deleted)} and {@code FINAL} also drops soft-deleted rows, so the
+     * {@code HAVING} must then require {@code argMax(is_deleted, last_updated_at) = 0} or soft-deleted traces
+     * reappear. Not emitted today because the column does not exist on {@code traces}.
+     */
+    @VisibleForTesting
+    static boolean canDedupByArgMax(ST template) {
+        return template.getAttribute("search_text") != null
+                && template.getAttribute("guardrails_filters") == null
+                && template.getAttribute("feedback_scores_empty_filters") == null
+                && template.getAttribute("span_feedback_scores_empty_filters") == null
+                && template.getAttribute("annotation_queue_filters") == null
+                && template.getAttribute("annotation_queue_id") == null;
     }
 
     private static boolean hasAnyTraceFilter(ST template) {
