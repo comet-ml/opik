@@ -6,8 +6,8 @@ Passing `reflection_lm` to gepa as a plain model string makes gepa build its own
 bare litellm client — no Opik span is created and the spend is missing from every
 cost report, even though the call is billed to the user's provider key. These
 tests pin the contract: gepa receives a callable that routes through
-`core.llm_calls.call_model` (counter increment, cost accumulation into the final
-OptimizationResult, and an optimization-tagged trace).
+`core.llm_calls.call_model`, so the call produces a counted, optimization-tagged
+span the backend can price like any other LLM span.
 
 The provider is stubbed at the LiteLLM boundary, not by substituting Opik's
 instrumentation: `track_completion` is passed through as identity (the real
@@ -17,7 +17,10 @@ request for real and the assertions read the request that actually reaches the
 provider SDK, rather than one handed to a test double. Same shape as
 `test_call_model_increments_counter` in `tests/unit/utils/test_llm_calls_call_model.py`.
 Everything asserted is observable: the text handed back to gepa, the provider
-request, the trace tags, and the counters/costs on the returned OptimizationResult.
+request, the trace tags, and the call counter on the returned OptimizationResult.
+Cost is not asserted anywhere — pricing is the backend's job (SpanDAO ->
+CostService.calculateCost from the span's model/provider/usage), and this PR
+deliberately keeps cost arithmetic out of the SDK.
 """
 
 from contextlib import contextmanager
@@ -49,11 +52,9 @@ def _make_reflection_response(
     # None models a content-filtered / tool-call-only completion.
     content: str | None = "new instruction",
     *,
-    cost: float | None = None,
     usage: dict[str, int] | None = None,
 ) -> MagicMock:
     response = make_mock_response(content)
-    response.cost = cost
     if usage is None:
         response.usage = None
     else:
@@ -325,7 +326,7 @@ class TestGepaReflectionLmInstrumentation:
         assert isinstance(out, str)
         assert out.strip() == "instruction via gepa"
 
-    def test_reflection_call__provider_reports_cost_and_usage__both_reach_the_optimization_result(
+    def test_reflection_call__made_through_the_callable__is_counted_into_the_run(
         self,
         mock_optimization_context,
         monkeypatch,
@@ -334,12 +335,17 @@ class TestGepaReflectionLmInstrumentation:
         sample_dataset_items,
         sample_metric,
     ) -> None:
-        """Both ends of OPIK-7521: the call is counted AND its cost reaches the result."""
+        """The reflection call is counted into the run's LLM call total.
+
+        Cost is deliberately NOT asserted here: pricing belongs to the backend,
+        which computes it from the span's model/provider/usage
+        (SpanDAO -> CostService.calculateCost). The SDK's job is to make sure the
+        call produces a priced-able, optimization-tagged span at all — that is
+        what the tests above pin."""
 
         def fake_optimize(**kwargs: Any) -> MagicMock:
             response = _make_reflection_response(
                 "new instruction",
-                cost=1.5,
                 usage={
                     "prompt_tokens": 20,
                     "completion_tokens": 10,
@@ -361,8 +367,4 @@ class TestGepaReflectionLmInstrumentation:
         )
 
         assert optimizer.llm_call_counter >= 1
-        assert optimizer.llm_cost_total == pytest.approx(1.5)
         assert result.llm_calls >= 1
-        assert result.llm_cost_total == pytest.approx(1.5)
-        assert result.llm_token_usage_total is not None
-        assert result.llm_token_usage_total["total_tokens"] == 30

@@ -323,10 +323,10 @@ class OptimizableAgent(ABC):
         """The optimizer this agent reports telemetry to, under either name.
 
         ``BaseOptimizer._attach_agent_owner`` sets both ``optimizer`` and
-        ``_optimizer_owner``, but the two names are read in different places
-        (cost travels by ``_optimizer_owner``, counters by ``optimizer``), so a
-        caller that sets only one silently loses half the telemetry. Resolving
-        both here keeps the owner a single concept (OPIK-7521).
+        ``_optimizer_owner``, but the two names were read in different places —
+        ``_apply_cost_usage_to_owner`` by one, the counters by the other — so a
+        caller that set only one silently lost half the telemetry. Resolving both
+        here keeps the owner a single concept (OPIK-7521).
         """
         return self.optimizer or getattr(self, "_optimizer_owner", None)
 

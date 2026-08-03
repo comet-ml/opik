@@ -7,7 +7,6 @@ owning optimizer for telemetry and budgeting.
 """
 
 from ..api_objects import chat_prompt
-from ..core import llm_calls as _llm_calls
 from ..utils import throttle as _throttle
 from typing import Any
 import json
@@ -227,23 +226,18 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             },
             **(model_kwargs or {}),
         )
-        # Surface token usage/cost if litellm returned it. LiteLLM's ModelResponse
-        # has no `.cost` attribute — the figure lives in
-        # `_hidden_params["response_cost"]` — so read both, otherwise evaluation
-        # spend never reaches the optimizer's llm_cost_total (OPIK-7521).
+        # Surface token usage/cost if litellm returned it
         try:
-            response._opik_cost = _llm_calls._extract_response_cost(response)
-            response._opik_usage = _llm_calls._extract_response_usage(response)
+            response._opik_cost = getattr(response, "cost", None)
+            if hasattr(response, "usage") and response.usage is not None:
+                usage_obj = response.usage
+                response._opik_usage = {
+                    "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
+                    "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
+                    "total_tokens": getattr(usage_obj, "total_tokens", 0),
+                }
         except Exception:
-            # Still best-effort — telemetry must not fail a scored run — but not
-            # silent: an unexpected response shape here makes the run's cost and
-            # usage vanish, which otherwise looks like "the provider is free"
-            # rather than "extraction broke".
-            logger.debug(
-                "Failed to extract cost/usage from the %s response",
-                model,
-                exc_info=True,
-            )
+            pass
 
         # Normalize span data after LiteLLM call to ensure input/output are dicts
         # This prevents issues where the LiteLLM integration might set these to lists
@@ -334,10 +328,10 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             model_kwargs=self._sanitize_model_kwargs(prompt.model_kwargs),
         )
         # Explicit owner, not the call-stack walk: evaluation dispatches agent
-        # calls onto a worker pool (adapter passes num_threads=n_threads,
+        # calls onto a worker pool (the GEPA adapter passes num_threads=n_threads,
         # default 12), and the optimizer's frames are not on a worker thread's
-        # stack — the walk finds nothing there and the call goes uncounted while
-        # its cost, which travels by _optimizer_owner, is recorded (OPIK-7521).
+        # stack, so the walk found nothing there and every threaded call went
+        # uncounted (OPIK-7521).
         self._increment_llm_counter()
         self._apply_cost_usage_to_owner(response)
         return response

@@ -1,10 +1,7 @@
 import copy
 import json
 import logging
-import math
 import sys
-from collections.abc import Mapping
-from decimal import Decimal
 from types import FrameType
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
@@ -266,100 +263,6 @@ def _get_project_name_from_optimizer() -> str | None:
     if optimizer is not None:
         return getattr(optimizer, "project_name", None)
     return None
-
-
-def _coerce_cost(value: Any) -> float | None:
-    """Return value as a float cost, or None when it is not a usable number.
-
-    A negative cost is rejected rather than accumulated: `add_llm_cost` only ever
-    adds, so a malformed provider figure would *subtract* from the run total and
-    silently under-report spend — the one failure this accounting exists to
-    prevent. "Unusable" and "free" stay distinguishable downstream because None
-    leaves `_llm_cost_recorded` unset while an explicit 0.0 sets it.
-    """
-    if isinstance(value, bool) or value is None:
-        return None
-    if isinstance(value, (int, float, Decimal)):
-        numeric = float(value)
-        if not math.isfinite(numeric):
-            return None
-        if numeric < 0:
-            logger.debug("Ignoring negative LLM cost from provider: %r", numeric)
-            return None
-        return numeric
-    return None
-
-
-def _extract_response_cost(response: Any) -> float | None:
-    """Best-effort cost from a litellm response (`.cost`, else hidden params).
-
-    LiteLLM's own `ModelResponse` has no `.cost`; the figure lives in
-    `_hidden_params["response_cost"]`, so the fallback is the common path.
-    """
-    cost = _coerce_cost(getattr(response, "cost", None))
-    if cost is not None:
-        return cost
-    hidden_params = getattr(response, "_hidden_params", None)
-    if isinstance(hidden_params, dict):
-        return _coerce_cost(hidden_params.get("response_cost"))
-    return None
-
-
-def _extract_response_usage(response: Any) -> dict[str, int] | None:
-    """Best-effort token usage from a litellm response (object or mapping form).
-
-    Both the response and its `usage` may arrive as a mapping (aggregated stream
-    chunks, custom providers) rather than an object, so each is read both ways.
-
-    Returns None — not a dict of zeros — when no field is a usable number. The
-    caller treats a returned dict as "the provider reported usage", which sets
-    `_llm_usage_recorded` and makes the result claim a real zero-token run; an
-    explicit numeric 0 still counts as reported.
-    """
-    usage_obj = (
-        response.get("usage")
-        if isinstance(response, Mapping)
-        else getattr(response, "usage", None)
-    )
-    if usage_obj is None:
-        return None
-
-    def _field(name: str) -> int | None:
-        raw = (
-            usage_obj.get(name)
-            if isinstance(usage_obj, Mapping)
-            else getattr(usage_obj, name, None)
-        )
-        if isinstance(raw, bool) or raw is None:
-            return None
-        if not isinstance(raw, (int, float, Decimal)):
-            return None
-        numeric = float(raw)
-        return int(numeric) if math.isfinite(numeric) else None
-
-    fields = {
-        name: _field(name)
-        for name in ("prompt_tokens", "completion_tokens", "total_tokens")
-    }
-    if all(value is None for value in fields.values()):
-        return None
-    return {name: value or 0 for name, value in fields.items()}
-
-
-def _record_cost_usage_if_in_optimizer(response: Any) -> None:
-    """Accumulate the response's cost/usage onto the nearest optimizer (OPIK-7521).
-
-    Best-effort by design: this is telemetry, so a provider returning something
-    exotic must never abort an otherwise-successful optimization run.
-    """
-    try:
-        optimizer = _find_optimizer_in_stack()
-        if optimizer is None:
-            return
-        optimizer._add_llm_cost(_extract_response_cost(response))
-        optimizer._add_llm_usage(_extract_response_usage(response))
-    except Exception:
-        logger.debug("Failed to record LLM cost/usage", exc_info=True)
 
 
 def _build_call_time_params(
@@ -811,7 +714,6 @@ def call_model(
             num_retries=6,
             **_strip_duplicate_opik_logger(_strip_project_name(attempt_params)),
         )
-        _record_cost_usage_if_in_optimizer(response)
 
         choices = getattr(response, "choices", None)
         choices_count = len(choices) if isinstance(choices, list) else "unknown"
@@ -995,7 +897,6 @@ async def call_model_async(
             num_retries=6,
             **_strip_duplicate_opik_logger(_strip_project_name(attempt_params)),
         )
-        _record_cost_usage_if_in_optimizer(response)
 
         choices = getattr(response, "choices", None)
         logger.debug(

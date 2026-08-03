@@ -556,10 +556,12 @@ class GepaOptimizer(BaseOptimizer):
         Passing a model string makes gepa construct its own bare litellm client:
         the call is still billed (it inherits OPENAI_API_BASE and hits the Opik
         gateway) but creates no span, so its cost is missing from every report.
-        Routing through call_model creates a span, increments the run-wide LLM
-        call counter, accumulates cost/usage, honors model_parameters, and feeds
+        Routing through call_model creates that span, increments the run-wide
+        LLM call counter, honors model_parameters, and feeds
         _reflection_call_count, which _ReflectionBudgetStopper reads to enforce
-        an opt-in max_reflection_calls.
+        an opt-in max_reflection_calls. The SDK does not price the call: the
+        backend computes cost from the span's model/provider/usage, the same way
+        it prices every other LLM span.
 
         The call runs inside its own tracked trace, mirroring the evaluation
         path: the trace carries the optimizer/optimization tags (so the run's
