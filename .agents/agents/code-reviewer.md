@@ -84,7 +84,7 @@ git status               # Modified files
 - ClickHouse queries use LIMIT 1 BY for deduplication
 - Proper error mapping to API responses
 - No StringTemplate memory leaks
-- **SQL is never assembled from strings**: flag any query built with `+`, `String.format`/`.formatted(...)`, `StringBuilder` or `MessageFormat`, including `%s` slots in a query text block that a caller fills in. Values belong in `.bind(...)`; varying fragments belong in `<if(x)>…<endif>` template conditionals. Treat a new occurrence as Critical even when the spliced fragment is currently a constant — the next caller is what makes it injectable
+- **SQL is never assembled from strings**: in Java sources, flag any query built with `+`, `String.format`/`.formatted(...)`, `StringBuilder` or `MessageFormat`, including `%s` slots in a query text block that a caller fills in. Values belong in `.bind(...)`; varying fragments belong in `<if(x)>…<endif>` template conditionals. Critical when the diff **adds or modifies** such a query, even if the spliced fragment is currently a constant — the next caller is what makes it injectable. Scope it to the diff: pre-existing occurrences the change doesn't touch are known debt, not a finding, and `❌ BAD` snippets in docs or skill files are illustrations, not code
 - **Multi-tenant isolation**: For changes involving data storage, retrieval, auth, or request context, check if identifiers (cache keys, session IDs, file paths, lookup keys) could collide across users. Verify: (1) Can two users generate the same identifier? (2) If data is stored in multiple places, do ALL use consistent isolation? (3) Is retrieved data validated before use? (4) Are there tests with multiple users accessing same-named resources?
 
 **Frontend (React/TypeScript)**

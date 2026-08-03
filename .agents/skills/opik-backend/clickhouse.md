@@ -111,10 +111,15 @@ WHERE workspace_id = :workspace_id
 ```
 
 ```java
-// per-project caller                    // workspace-level caller
-template.add("project_id", true);        template.add("project_ids", true);
-statement.bind("project_id",             statement.bind("project_ids",
-        projectId.toString());                   projectIds.toArray(new UUID[0]));
+// per-project caller (ProjectMetricsDAO)
+template.add("project_id", true);
+statement.bind("project_id", projectId.toString());
+```
+
+```java
+// workspace-level caller (WorkspaceMetricsDAO)
+template.add("project_ids", true);
+statement.bind("project_ids", projectIds.toArray(new UUID[0]));
 ```
 
 This keeps the scan shape visible at the template: the predicate is what prunes on the `spans` /

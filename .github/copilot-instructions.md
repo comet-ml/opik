@@ -109,11 +109,11 @@ public class ResourcesResource {
 - **IdGenerator** for UUID v7 generation
 
 ### Query Construction
-- **Never assemble SQL from strings**: no `+`, `String.format`/`.formatted(...)`, `StringBuilder` or `MessageFormat`, and no `%s` slot in a query text block for a caller to fill in
+- **Never assemble SQL from strings** in Java sources: no `+`, `String.format`/`.formatted(...)`, `StringBuilder` or `MessageFormat`, and no `%s` slot in a query text block for a caller to fill in
 - **Values** go through `:placeholder` + `.bind("placeholder", value)` — never interpolated
 - **Varying fragments** (predicates, sort clauses, projected columns) go through StringTemplate conditionals in the query itself: `<if(project_ids)> AND project_id IN :project_ids <endif>`
 - **Unbounded fragments** (user-chosen sort/filter) come from `SortingQueryBuilder` / `FilterQueryBuilder`, never from raw request strings
-- Flag new occurrences as a **Critical** finding — an injection risk plus a readability one, since the query a DAO runs stops being visible at its declaration site. `.formatted(...)` remains fine for log and exception messages
+- Flag as **Critical** when the diff adds or modifies such a query — an injection risk plus a readability one, since the query a DAO runs stops being visible at its declaration site. Pre-existing occurrences the change doesn't touch are known debt, not a finding, and `❌ BAD` snippets in docs or skill files are illustrations, not code. `.formatted(...)` remains fine for log and exception messages
 
 **Example:**
 ```java
