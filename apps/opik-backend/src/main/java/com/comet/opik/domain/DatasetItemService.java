@@ -1780,13 +1780,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @param workspaceId The workspace ID
      * @param deletedCount Number of items deleted
      * @param userName The user performing the update
+     * @throws NotFoundException if the version no longer exists or does not belong to the workspace
      */
     private void updateVersionCountsForDelete(UUID versionId, String workspaceId, int deletedCount, String userName) {
-        log.info("deleteItemsFromExistingVersion: updating counts - deletedCount='{}'", deletedCount);
-
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            dao.incrementCounts(versionId, -deletedCount, 0, 0, deletedCount, workspaceId, userName);
+
+            int updated = dao.incrementCounts(versionId, -deletedCount, 0, 0, deletedCount, workspaceId, userName);
+
+            if (updated == 0) {
+                throw new NotFoundException("Version not found: '%s'".formatted(versionId));
+            }
             return null;
         });
     }
