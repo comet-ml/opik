@@ -22,7 +22,8 @@ request, the trace tags, and the counters/costs on the returned OptimizationResu
 
 from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import Any, Iterator
+from typing import Any
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
