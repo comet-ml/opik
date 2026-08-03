@@ -67,8 +67,7 @@ def make_simple_metric() -> MetricFunction:
 
 
 def make_mock_response(
-    # None models a content-filtered / tool-call-only completion.
-    content: str | None,
+    content: str,
     *,
     finish_reason: str = "stop",
     model: str = "gpt-4",

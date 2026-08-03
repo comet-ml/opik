@@ -160,12 +160,6 @@ class BaseOptimizer(ABC):
             "completion_tokens": 0,
             "total_tokens": 0,
         }
-        # Whether any provider actually reported cost / usage. The totals start at
-        # zero, so the totals alone cannot distinguish "nothing was reported" from
-        # "a free or zero-token call was reported", and the result must not collapse
-        # a real zero into "unavailable" (OPIK-7521).
-        self._llm_cost_recorded: bool = False
-        self._llm_usage_recorded: bool = False
         self._reporter: Any | None = None
         self._display: RunDisplay = display or OptimizationRunDisplay(verbose=verbose)
 

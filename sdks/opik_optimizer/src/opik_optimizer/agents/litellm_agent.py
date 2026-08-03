@@ -227,15 +227,16 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             },
             **(model_kwargs or {}),
         )
-        # Surface token usage/cost if litellm returned it. LiteLLM's ModelResponse
-        # has no `.cost` attribute — the figure lives in
-        # `_hidden_params["response_cost"]` — so read both, otherwise evaluation
-        # spend never reaches the optimizer's llm_cost_total (OPIK-7521).
+        # Surface token usage/cost if litellm returned it
         try:
-            from ..core import llm_calls as _llm_calls
-
-            response._opik_cost = _llm_calls._extract_response_cost(response)
-            response._opik_usage = _llm_calls._extract_response_usage(response)
+            response._opik_cost = getattr(response, "cost", None)
+            if hasattr(response, "usage") and response.usage is not None:
+                usage_obj = response.usage
+                response._opik_usage = {
+                    "prompt_tokens": getattr(usage_obj, "prompt_tokens", 0),
+                    "completion_tokens": getattr(usage_obj, "completion_tokens", 0),
+                    "total_tokens": getattr(usage_obj, "total_tokens", 0),
+                }
         except Exception:
             pass
 

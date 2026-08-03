@@ -1,15 +1,11 @@
 import logging
 import math
-from collections.abc import Callable
 from typing import Any, cast
 
-import opik
 from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStopper
 
 from ...base_optimizer import BaseOptimizer
 from ... import constants
-from ...core import llm_calls as _llm_calls
-from ...core.exceptions import EmptyLLMResponseError
 from ...core.state import (
     AlgorithmResult,
     FinishReason,
@@ -414,12 +410,11 @@ class GepaOptimizer(BaseOptimizer):
         self._gepa_rescored_scores: list[float] = []
         self._gepa_filtered_val_scores: list[float | None] = []
 
-        # Reflection calls honor model_parameters via _build_reflection_lm; other
-        # gepa-internal calls (e.g. output style inference) still may not.
+        # FIXME: When we have an Opik adapter, map this into GEPA's LLM calls directly
         if model_parameters:
             logger.warning(
                 "GEPAOptimizer does not surface LiteLLM `model_parameters` for every internal call "
-                "(e.g., output style inference). "
+                "(e.g., output style inference, prompt generation). "
                 "Provide overrides on the prompt itself if you need precise control."
             )
 
@@ -481,68 +476,6 @@ class GepaOptimizer(BaseOptimizer):
             "max_trials": context.max_trials,
             "n_samples": context.n_samples or "all",
         }
-
-    def _build_reflection_lm(
-        self, context: OptimizationContext
-    ) -> Callable[[str | list[dict[str, Any]]], str]:
-        """
-        Build the reflection LM callable handed to gepa.optimize (OPIK-7521).
-
-        Passing a model string makes gepa construct its own bare litellm client:
-        the call is still billed (it inherits OPENAI_API_BASE and hits the Opik
-        gateway) but creates no span, so its cost is missing from every report.
-        Routing through call_model creates a span, increments the LLM call
-        counter, accumulates cost/usage, and honors model_parameters.
-
-        The call runs inside its own tracked trace, mirroring the evaluation
-        path: the trace carries the optimizer/optimization tags (so the run's
-        cost aggregation can attribute the spend), and the LiteLLM span nests
-        inside it instead of forking a second, untagged trace.
-
-        gepa==0.0.17 passes a plain prompt string; gepa>=0.1.x may pass an
-        OpenAI-style messages list (multimodal), so both must be accepted.
-        """
-        optimization_id = context.optimization_id or self.current_optimization_id
-
-        @opik.track(name="gepa_reflection", project_name=self.project_name)
-        def _reflection_lm(prompt: str | list[dict[str, Any]]) -> str:
-            self._tag_trace(phase="Reflection")
-            messages: list[dict[str, Any]] = (
-                [{"role": "user", "content": prompt}]
-                if isinstance(prompt, str)
-                else prompt
-            )
-            result = _llm_calls.call_model(
-                messages=messages,
-                model=self.model,
-                seed=self.seed,
-                model_parameters=self.model_parameters,
-                optimization_id=optimization_id,
-                project_name=self.project_name,
-                metadata=_llm_calls.build_llm_call_metadata(self, "gepa_reflection"),
-            )
-            # A content-filtered or tool-call-only completion has no content, and
-            # gepa's LanguageModel contract requires a str. Raising keeps that
-            # contract with a diagnosable message instead of the AttributeError on
-            # None.strip() that gepa's own client raised before this change, so the
-            # control flow is unchanged and only the message improves.
-            # On gepa >= 0.1 the failure is isolated to this proposal
-            # (_propose_texts_batch_safe logs it and drops the candidate) and the run
-            # continues; on older gepa, which the Studio pin still uses, it reaches
-            # raise_on_exception and ends the run — as the AttributeError did.
-            # Returning str(None) instead would hand gepa the literal instruction
-            # "None" and burn a trial on a corrupted prompt.
-            # gepa catches bare Exception around the proposer, so the OpikException
-            # subclass behaves exactly as the ValueError it replaces while keeping
-            # the failure inside the SDK's hierarchy for callers that handle it.
-            if not isinstance(result, str) or not result.strip():
-                logger.warning(
-                    "GEPA reflection returned no content from %s.", self.model
-                )
-                raise EmptyLLMResponseError(model=self.model, purpose="GEPA reflection")
-            return result
-
-        return cast(Callable[[str | list[dict[str, Any]]], str], _reflection_lm)
 
     def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
         """
@@ -728,7 +661,7 @@ class GepaOptimizer(BaseOptimizer):
                 "valset": val_insts,
                 "adapter": adapter,
                 "task_lm": None,
-                "reflection_lm": self._build_reflection_lm(context),
+                "reflection_lm": self.model,
                 "candidate_selection_strategy": candidate_selection_strategy,
                 # Replaces GEPA's default instruction-proposal prompt, which
                 # instructs the reflection LM to inline example content and so
