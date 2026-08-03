@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
+from opik_optimizer import ChatPrompt
 from opik_optimizer.agents.litellm_agent import LiteLLMAgent
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.core.state import OptimizationContext
@@ -36,11 +37,13 @@ class _CountingOptimizer(BaseOptimizer):
 
 def _fake_llm_complete(self, model, messages, tools, seed, model_kwargs=None):
     return SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
+        choices=[
+            SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))
+        ]
     )
 
 
-_PROMPT = SimpleNamespace(model="gpt-4o-mini", model_kwargs=None)
+_PROMPT = ChatPrompt(messages=[{"role": "user", "content": "hi"}], model="gpt-4o-mini")
 
 
 def _agent_with_owner() -> tuple[_CountingOptimizer, LiteLLMAgent]:
