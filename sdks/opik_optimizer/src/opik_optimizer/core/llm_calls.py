@@ -1,7 +1,9 @@
 import copy
 import json
 import logging
+import math
 import sys
+from decimal import Decimal
 from types import FrameType
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
@@ -9,11 +11,14 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 import litellm
 from litellm.exceptions import BadRequestError
+from opik import exceptions as opik_exceptions, opik_context
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.integrations.litellm import track_completion
 
 from ..utils import throttle as _throttle
 from ..utils.helpers import json_to_dict
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover
     pass
@@ -60,6 +65,65 @@ def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
     return updated_params
 
 
+def _strip_duplicate_opik_logger(params: dict[str, Any]) -> dict[str, Any]:
+    """
+    Drop Opik's LiteLLM callback, but only when it would duplicate our own span.
+
+    `call_model` wraps the call with `track_completion`, which logs a span.
+    `opik_monitor.try_add_opik_monitoring_to_params` separately injects an
+    `OpikLogger` into success/failure callbacks — its "already decorated" guard
+    inspects the module-level `litellm.completion`, so it cannot see our
+    decorated copy.
+
+    Whether that is a duplicate depends on the surrounding trace context:
+
+    * A tracked span is open (GEPA reflection under ``@opik.track``): the
+      OpikLogger nests a second, identically-priced span into the same trace,
+      double-counting the call in any per-trace cost sum (OPIK-7521).
+    * No span is open (every other ``call_model`` caller): the OpikLogger
+      creates its own trace and is the only thing that stamps
+      ``metadata["opik"]["tags"] = [optimization_id, ...]`` onto it —
+      ``track_completion`` hardcodes ``tags=["litellm"]``. Dropping it here
+      would delete the sole optimization-tagged trace and hide that spend.
+    """
+    try:
+        from litellm.integrations.opik.opik import OpikLogger
+    except Exception:  # pragma: no cover - litellm always ships this
+        return params
+
+    try:
+        # Deliberately the documented public API rather than a cheaper internal
+        # stack probe: neither failure direction here is safe (misreading an open
+        # span double-counts reflection cost, misreading a closed one deletes the
+        # only optimization-tagged trace), so the predicate must not depend on an
+        # internal that can drift. One SpanData copy is nothing next to the HTTP
+        # call that follows.
+        span_already_tracked = opik_context.get_current_span_data() is not None
+    except opik_exceptions.OpikException:
+        # Only Opik's own failures are "can't tell"; leave the callbacks alone in
+        # that case. Being wrong here costs a duplicate span for whichever caller
+        # has a span open, which is visible in the data, rather than a deleted tag,
+        # which is not. Anything else out of get_current_span_data() is a bug in
+        # the SDK or in us, so it propagates to centralized handling instead of
+        # being silently absorbed into a telemetry decision.
+        logger.debug("Could not determine Opik span context", exc_info=True)
+        span_already_tracked = False
+    if not span_already_tracked:
+        return params
+
+    updated: dict[str, Any] | None = None
+    for key in ("success_callback", "failure_callback"):
+        callbacks = params.get(key)
+        if not isinstance(callbacks, list):
+            continue
+        remaining = [cb for cb in callbacks if not isinstance(cb, OpikLogger)]
+        if len(remaining) == len(callbacks):
+            continue
+        updated = updated if updated is not None else {**params}
+        updated[key] = remaining
+    return updated if updated is not None else params
+
+
 def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
     """
     Build standardized metadata for LLM calls across optimizers.
@@ -78,9 +142,6 @@ def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
         "opik_call_type": call_type,
     }
     return metadata
-
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_schema_for_openai_strict(schema: Any) -> Any:
@@ -160,68 +221,117 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 _T = TypeVar("_T", bound=BaseModel)
 
 
-def _increment_llm_counter_if_in_optimizer() -> None:
-    """
-    Walk up the call stack and increment the first optimizer's counter if found.
-    """
+def _find_optimizer_in_stack() -> Any | None:
+    """Return the nearest BaseOptimizer bound as `self` on the call stack."""
     try:
         from ..base_optimizer import BaseOptimizer
     except Exception:
-        return
+        return None
 
     try:
         frame: FrameType | None = sys._getframe()
     except ValueError:
-        return
+        return None
 
     while frame is not None:
         optimizer_candidate = frame.f_locals.get("self")
         if isinstance(optimizer_candidate, BaseOptimizer):
-            optimizer_candidate._increment_llm_counter()
-            break
+            return optimizer_candidate
         frame = frame.f_back
+    return None
+
+
+def _increment_llm_counter_if_in_optimizer() -> None:
+    """
+    Walk up the call stack and increment the first optimizer's counter if found.
+    """
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        optimizer._increment_llm_counter()
 
 
 def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
     """
     Walk up the call stack and increment the first optimizer's counter if found.
     """
-    try:
-        from ..base_optimizer import BaseOptimizer
-    except Exception:
-        return
-
-    try:
-        frame: FrameType | None = sys._getframe()
-    except ValueError:
-        return
-
-    while frame is not None:
-        optimizer_candidate = frame.f_locals.get("self")
-        if isinstance(optimizer_candidate, BaseOptimizer):
-            optimizer_candidate._increment_llm_call_tools_counter()
-            break
-        frame = frame.f_back
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        optimizer._increment_llm_call_tools_counter()
 
 
 def _get_project_name_from_optimizer() -> str | None:
     """Return project_name from the nearest optimizer on the call stack."""
-    try:
-        from ..base_optimizer import BaseOptimizer
-    except Exception:
-        return None
-
-    try:
-        frame: FrameType | None = sys._getframe()
-    except ValueError:
-        return None
-
-    while frame is not None:
-        optimizer_candidate = frame.f_locals.get("self")
-        if isinstance(optimizer_candidate, BaseOptimizer):
-            return getattr(optimizer_candidate, "project_name", None)
-        frame = frame.f_back
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        return getattr(optimizer, "project_name", None)
     return None
+
+
+def _coerce_cost(value: Any) -> float | None:
+    """Return value as a float cost, or None when it is not a usable number."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float, Decimal)):
+        numeric = float(value)
+        return numeric if math.isfinite(numeric) else None
+    return None
+
+
+def _extract_response_cost(response: Any) -> float | None:
+    """Best-effort cost from a litellm response (`.cost`, else hidden params).
+
+    LiteLLM's own `ModelResponse` has no `.cost`; the figure lives in
+    `_hidden_params["response_cost"]`, so the fallback is the common path.
+    """
+    cost = _coerce_cost(getattr(response, "cost", None))
+    if cost is not None:
+        return cost
+    hidden_params = getattr(response, "_hidden_params", None)
+    if isinstance(hidden_params, dict):
+        return _coerce_cost(hidden_params.get("response_cost"))
+    return None
+
+
+def _extract_response_usage(response: Any) -> dict[str, int] | None:
+    """Best-effort token usage from a litellm response (object or dict form)."""
+    usage_obj = getattr(response, "usage", None)
+    if usage_obj is None:
+        return None
+
+    def _field(name: str) -> int:
+        raw = (
+            usage_obj.get(name)
+            if isinstance(usage_obj, dict)
+            else getattr(usage_obj, name, 0)
+        )
+        if isinstance(raw, bool) or raw is None:
+            return 0
+        if not isinstance(raw, (int, float, Decimal)):
+            return 0
+        numeric = float(raw)
+        return int(numeric) if math.isfinite(numeric) else 0
+
+    return {
+        "prompt_tokens": _field("prompt_tokens"),
+        "completion_tokens": _field("completion_tokens"),
+        "total_tokens": _field("total_tokens"),
+    }
+
+
+def _record_cost_usage_if_in_optimizer(response: Any) -> None:
+    """Accumulate the response's cost/usage onto the nearest optimizer (OPIK-7521).
+
+    Best-effort by design: this is telemetry, so a provider returning something
+    exotic must never abort an otherwise-successful optimization run.
+    """
+    try:
+        optimizer = _find_optimizer_in_stack()
+        if optimizer is None:
+            return
+        optimizer._add_llm_cost(_extract_response_cost(response))
+        optimizer._add_llm_usage(_extract_response_usage(response))
+    except Exception:
+        logger.debug("Failed to record LLM cost/usage", exc_info=True)
 
 
 def _build_call_time_params(
@@ -671,8 +781,9 @@ def call_model(
             messages=attempt_messages,
             seed=seed,
             num_retries=6,
-            **_strip_project_name(attempt_params),
+            **_strip_duplicate_opik_logger(_strip_project_name(attempt_params)),
         )
+        _record_cost_usage_if_in_optimizer(response)
 
         choices = getattr(response, "choices", None)
         choices_count = len(choices) if isinstance(choices, list) else "unknown"
@@ -854,8 +965,9 @@ async def call_model_async(
             messages=attempt_messages,
             seed=seed,
             num_retries=6,
-            **_strip_project_name(attempt_params),
+            **_strip_duplicate_opik_logger(_strip_project_name(attempt_params)),
         )
+        _record_cost_usage_if_in_optimizer(response)
 
         choices = getattr(response, "choices", None)
         logger.debug(

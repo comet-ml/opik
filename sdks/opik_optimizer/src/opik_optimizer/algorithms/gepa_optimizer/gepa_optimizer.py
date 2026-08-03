@@ -4,11 +4,16 @@ import threading
 from collections.abc import Callable
 from typing import Any, cast
 
+import opik
 from gepa.utils.stop_condition import NoImprovementStopper, ScoreThresholdStopper
 
 from ...base_optimizer import BaseOptimizer
 from ... import constants
 from ...core import llm_calls as _llm_calls
+from ...core.exceptions import (
+    EmptyLLMResponseError,
+    ReflectionBudgetExceededError,
+)
 from ...core.state import (
     AlgorithmResult,
     FinishReason,
@@ -102,17 +107,23 @@ def _coerce_positive_int(
     return coerced
 
 
-def _coerce_max_reflection_calls(value: Any, *, max_trials: int) -> int:
+def _coerce_max_reflection_calls(value: Any) -> int:
     """Validate the max_reflection_calls override to a non-negative int.
 
-    Defaults to ``max_trials``: with GEPA's default round-robin component
-    selector each proposal iteration makes at most one reflection-LM call, and
-    the metric budget admits exactly ``max_trials`` candidates — so a healthy
-    run never needs more reflections than trials. ``0`` disables the cap.
+    Defaults to ``0`` — no cap, i.e. GEPA's search is unchanged unless the
+    caller opts in. The knob is *not* defaulted to ``max_trials``: reflection
+    calls scale with engine iterations, not with trials, and iterations are far
+    cheaper than a trial in metric calls. An iteration whose candidate does not
+    beat its parent on the minibatch costs only ``2 * reflection_minibatch_size``
+    metric calls (gepa engine skips the valset pass, engine.py), while the budget
+    is ``max_trials * n_samples``. Measured against gepa 0.1.1, a run therefore
+    makes far more reflection calls than ``max_trials`` — 38 vs 10 on a 25-item
+    dataset, 150 vs 10 on 100 items — so a ``max_trials`` default would truncate
+    ordinary runs by 1.5-30x and report them as stopped early.
     """
     return _coerce_positive_int(
         value,
-        default=max_trials,
+        default=0,
         allow_zero=True,
         name="max_reflection_calls",
     )
@@ -121,12 +132,19 @@ def _coerce_max_reflection_calls(value: Any, *, max_trials: int) -> int:
 class _ReflectionBudgetStopper:
     """Stop callback that halts GEPA once the reflection-LM call budget is spent.
 
+    Only wired when the caller sets ``max_reflection_calls`` (default 0 = off),
+    so it never shortens a default run.
+
     Enforcement is two-layer: this stopper ends the run at the top of the next
-    engine iteration, and the callable from _make_reflection_lm refuses to spend
+    engine iteration, and the callable from _build_reflection_lm refuses to spend
     past the cap in between. Under GEPA's default round-robin component selector
     each iteration makes at most one reflection call, so the stopper alone makes
     the bound exact; the callable guard covers configurations that reflect more
     than once per iteration.
+
+    NOTE the attribute is deliberately NOT named ``max_metric_calls``: gepa's
+    engine._get_remaining_budget scans every stopper in the CompositeStopper for
+    that attribute and takes the first int it finds as the *metric* budget.
     """
 
     def __init__(self, optimizer: "GepaOptimizer", max_reflection_calls: int) -> None:
@@ -137,10 +155,10 @@ class _ReflectionBudgetStopper:
         if self._optimizer._reflection_call_count < self.max_reflection_calls:
             return False
         # Record that *this* stopper asked for the stop. The call counter alone
-        # cannot carry the finish reason: the default cap is max_trials, so an
-        # ordinary run that burns its whole metric budget also ends at the cap,
-        # and gepa exits through paths that never consult a stop callback at all
-        # (engine._stop_requested). See _resolve_gepa_finish_reason.
+        # cannot carry the finish reason: gepa exits through paths that never
+        # consult a stop callback at all (engine._stop_requested), and a run can
+        # reach the cap on its final iteration while the metric budget runs out
+        # too. See _resolve_gepa_finish_reason.
         self._optimizer._reflection_budget_exhausted = True
         return True
 
@@ -348,13 +366,14 @@ def _resolve_gepa_finish_reason(
     the stopper did not make.
 
     "reflection_budget" follows the same rule and needs two facts, because the
-    reflection counter reaching the cap is not by itself a reason: the default
-    cap is ``max_trials``, so a run that simply burns its whole metric budget
-    ends at the cap too, and calling that "reflection_budget" would relabel
-    ordinary full-budget runs. It is claimed only when
-    ``_ReflectionBudgetStopper`` actually asked for the stop *and* metric-call
-    budget was still unspent — a run that spent both stopped at its trial
-    budget, which is the more informative label. It stays ahead of the stop-file
+    reflection counter reaching the cap is not by itself a reason: a capped run
+    can reach the cap on the same iteration that exhausts its metric budget, and
+    labelling that "reflection_budget" would hide the trial budget. It is
+    claimed only when ``_ReflectionBudgetStopper`` actually asked for the stop
+    *and* metric-call budget was still unspent — a run that spent both stopped
+    at its trial budget, which is the more informative label. (The stopper only
+    exists when the caller opted into a cap; the default is uncapped, so a
+    default run can never carry this label.) It stays ahead of the stop-file
     branch below: both exits leave budget on the clock, so the unspent budget
     alone cannot tell them apart.
 
@@ -495,11 +514,12 @@ class GepaOptimizer(BaseOptimizer):
         self._gepa_rescored_scores: list[float] = []
         self._gepa_filtered_val_scores: list[float | None] = []
 
-        # FIXME: When we have an Opik adapter, map this into GEPA's LLM calls directly
+        # Reflection calls honor model_parameters via _build_reflection_lm; other
+        # gepa-internal calls (e.g. output style inference) still may not.
         if model_parameters:
             logger.warning(
                 "GEPAOptimizer does not surface LiteLLM `model_parameters` for every internal call "
-                "(e.g., output style inference, prompt generation). "
+                "(e.g., output style inference). "
                 "Provide overrides on the prompt itself if you need precise control."
             )
 
@@ -528,26 +548,30 @@ class GepaOptimizer(BaseOptimizer):
             "n_threads": self.n_threads,
         }
 
-    def _make_reflection_lm(
+    def _build_reflection_lm(
         self, context: OptimizationContext
-    ) -> Callable[[str | list[dict[str, str]]], str]:
-        """Build the reflection-LM callable handed to gepa.optimize().
+    ) -> Callable[[str | list[dict[str, Any]]], str]:
+        """Build the reflection-LM callable handed to gepa.optimize() (OPIK-7521).
 
-        Passing a callable (instead of the bare model name) routes GEPA's
-        reflection calls through core.llm_calls.call_model, so they are traced
-        as Opik spans (opik_call_type="reflection", cost visible per call),
-        honor the optimizer's model_parameters, and are counted — both into the
-        run-wide llm_call_counter and into _reflection_call_count, which
-        _ReflectionBudgetStopper reads to enforce max_reflection_calls.
+        Passing a model string makes gepa construct its own bare litellm client:
+        the call is still billed (it inherits OPENAI_API_BASE and hits the Opik
+        gateway) but creates no span, so its cost is missing from every report.
+        Routing through call_model creates a span, increments the run-wide LLM
+        call counter, accumulates cost/usage, honors model_parameters, and feeds
+        _reflection_call_count, which _ReflectionBudgetStopper reads to enforce
+        an opt-in max_reflection_calls.
 
-        The callable also hard-refuses to spend past the cap: the stopper only
-        runs at the top of the engine loop, so it cannot interrupt a proposal
-        that makes several reflection calls within one iteration. Refusal
-        returns an empty proposal rather than raising — with gepa's
-        raise_on_exception=True (our default) an exception here would abort the
-        whole run and lose its results.
+        The call runs inside its own tracked trace, mirroring the evaluation
+        path: the trace carries the optimizer/optimization tags (so the run's
+        cost aggregation can attribute the spend), and the LiteLLM span nests
+        inside it instead of forking a second, untagged trace.
+
+        gepa==0.0.17 (the Studio pin) passes a plain prompt string; gepa>=0.1.x
+        may pass an OpenAI-style messages list (multimodal), so both are
+        accepted.
         """
-        metadata = _llm_calls.build_llm_call_metadata(self, "reflection")
+        metadata = _llm_calls.build_llm_call_metadata(self, "gepa_reflection")
+        optimization_id = context.optimization_id or self.current_optimization_id
         # Claiming a slot has to be atomic, or two callers racing for the last
         # one both read the count below the cap and both spend. The lock lives in
         # the closure — this factory runs once per optimize_prompt call, right
@@ -568,7 +592,7 @@ class GepaOptimizer(BaseOptimizer):
                         self._reflection_budget_warned = True
                         logger.warning(
                             "GEPA requested a reflection-LM call beyond max_reflection_calls=%s; "
-                            "skipping it (further refusals are not logged). The run stops at the "
+                            "refusing it (further refusals are not logged). The run stops at the "
                             "next engine iteration, reported as finish_reason='reflection_budget' "
                             "unless its metric-call budget ran out at the same time.",
                             self._max_reflection_calls,
@@ -580,25 +604,45 @@ class GepaOptimizer(BaseOptimizer):
                 self._reflection_call_count += 1
                 return True
 
-        def _reflection_lm(prompt: str | list[dict[str, str]]) -> str:
+        @opik.track(name="gepa_reflection", project_name=self.project_name)
+        def _tracked_reflection_call(messages: list[dict[str, Any]]) -> str:
+            self._tag_trace(phase="Reflection")
+            result = _llm_calls.call_model(
+                messages=messages,
+                model=self.model,
+                seed=self.seed,
+                model_parameters=self.model_parameters,
+                metadata=metadata,
+                optimization_id=optimization_id,
+                project_name=self.project_name,
+            )
+            # A content-filtered or tool-call-only completion has no content, and
+            # gepa's LanguageModel contract requires a str. Raising keeps that
+            # contract with a diagnosable message instead of the AttributeError on
+            # None.strip() that gepa's own client raised before this change, so the
+            # control flow is unchanged and only the message improves. Returning ""
+            # instead would be worse than either: gepa's output_extractor maps it to
+            # an empty instruction and evaluates that candidate for real.
+            if not isinstance(result, str) or not result.strip():
+                logger.warning(
+                    "GEPA reflection returned no content from %s.", self.model
+                )
+                raise EmptyLLMResponseError(model=self.model, purpose="GEPA reflection")
+            return result
+
+        def _reflection_lm(prompt: str | list[dict[str, Any]]) -> str:
+            # Claim the slot BEFORE the tracked call so a refusal creates no
+            # trace: a refused reflection spends nothing and is not a run event.
             if not _claim_reflection_call():
-                return ""
-            messages = (
+                raise ReflectionBudgetExceededError(
+                    max_reflection_calls=self._max_reflection_calls
+                )
+            messages: list[dict[str, Any]] = (
                 [{"role": "user", "content": prompt}]
                 if isinstance(prompt, str)
                 else list(prompt)
             )
-            return cast(
-                str,
-                _llm_calls.call_model(
-                    messages=messages,
-                    model=self.model,
-                    model_parameters=self.model_parameters,
-                    metadata=metadata,
-                    optimization_id=context.optimization_id,
-                    project_name=context.project_name,
-                ),
-            )
+            return cast(str, _tracked_reflection_call(messages))
 
         return _reflection_lm
 
@@ -771,8 +815,7 @@ class GepaOptimizer(BaseOptimizer):
         # Reflection-LM calls are not metric calls, so max_metric_calls does not
         # bound them — they get their own ceiling (OPIK-7521). 0 disables the cap.
         max_reflection_calls = _coerce_max_reflection_calls(
-            context.extra_params.get("max_reflection_calls"),
-            max_trials=max_trials,
+            context.extra_params.get("max_reflection_calls")
         )
         self._max_reflection_calls = max_reflection_calls
 
@@ -833,7 +876,7 @@ class GepaOptimizer(BaseOptimizer):
                 "valset": val_insts,
                 "adapter": adapter,
                 "task_lm": None,
-                "reflection_lm": self._make_reflection_lm(context),
+                "reflection_lm": self._build_reflection_lm(context),
                 "candidate_selection_strategy": candidate_selection_strategy,
                 # Replaces GEPA's default instruction-proposal prompt, which
                 # instructs the reflection LM to inline example content and so

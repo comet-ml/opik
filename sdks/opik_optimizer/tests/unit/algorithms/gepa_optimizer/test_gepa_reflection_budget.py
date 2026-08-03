@@ -6,7 +6,10 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from opik_optimizer import GepaOptimizer
+from opik_optimizer.core.exceptions import ReflectionBudgetExceededError
 from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import (
     _coerce_max_reflection_calls,
     _ReflectionBudgetStopper,
@@ -137,7 +140,7 @@ class TestReflectionLmWiring:
         assert first["messages"] == [{"role": "user", "content": "improve this prompt"}]
         assert first["model"] == "gpt-4o-mini"
         assert first["model_parameters"] == {"temperature": 0.1}
-        assert first["metadata"]["opik_call_type"] == "reflection"
+        assert first["metadata"]["opik_call_type"] == "gepa_reflection"
         assert first["metadata"]["optimizer_name"] == "GepaOptimizer"
         assert first["optimization_id"] == "test-opt-123"
 
@@ -180,7 +183,10 @@ class TestReflectionLmWiring:
 
         def overspend(kwargs: dict[str, Any]) -> None:
             assert kwargs["reflection_lm"]("first proposal") == "new instruction"
-            assert kwargs["reflection_lm"]("beyond the cap") == ""
+            # Refusal RAISES: returning "" would make gepa's output_extractor
+            # build a candidate whose prompt is empty and evaluate it for real.
+            with pytest.raises(ReflectionBudgetExceededError):
+                kwargs["reflection_lm"]("beyond the cap")
             # Then gepa reaches its next stop check and the stopper ends the run,
             # which is what makes the finish reason below "reflection_budget".
             state = SimpleNamespace(program_full_scores_val_set=[0.5])
@@ -225,7 +231,10 @@ class TestReflectionLmWiring:
 
             def worker() -> None:
                 barrier.wait(timeout=10)
-                response = reflection_lm("proposal")
+                try:
+                    response = reflection_lm("proposal")
+                except ReflectionBudgetExceededError:
+                    response = "refused"
                 with responses_lock:
                     responses.append(response)
 
@@ -272,7 +281,10 @@ class TestReflectionLmWiring:
 
         def overspend(kwargs: dict[str, Any]) -> None:
             for proposal in ("in budget", "refused", "refused", "refused"):
-                kwargs["reflection_lm"](proposal)
+                try:
+                    kwargs["reflection_lm"](proposal)
+                except ReflectionBudgetExceededError:
+                    pass
 
         with caplog.at_level(logging.WARNING):
             _run_optimize(
@@ -399,20 +411,25 @@ class TestMaxReflectionCallsKnob:
 
 
 class TestCoerceMaxReflectionCalls:
-    def test_default_is_max_trials(self) -> None:
-        assert _coerce_max_reflection_calls(None, max_trials=7) == 7
+    def test_default_is_no_cap(self) -> None:
+        """Default 0 = uncapped, so GEPA's search is unchanged unless the caller
+        opts in. A max_trials default would truncate ordinary runs: reflection
+        calls scale with engine iterations, and an iteration whose candidate
+        loses on the minibatch costs only 2*reflection_minibatch_size metric
+        calls out of a max_trials*n_samples budget."""
+        assert _coerce_max_reflection_calls(None) == 0
 
     def test_zero_disables(self) -> None:
-        assert _coerce_max_reflection_calls(0, max_trials=7) == 0
+        assert _coerce_max_reflection_calls(0) == 0
 
     def test_numeric_string_parsed(self) -> None:
-        assert _coerce_max_reflection_calls("3", max_trials=7) == 3
+        assert _coerce_max_reflection_calls("3") == 3
 
-    def test_invalid_value_falls_back_to_max_trials(self) -> None:
-        assert _coerce_max_reflection_calls("lots", max_trials=7) == 7
+    def test_invalid_value_falls_back_to_no_cap(self) -> None:
+        assert _coerce_max_reflection_calls("lots") == 0
 
     def test_negative_disables(self) -> None:
-        assert _coerce_max_reflection_calls(-1, max_trials=7) == 0
+        assert _coerce_max_reflection_calls(-1) == 0
 
 
 class TestReflectionBudgetFinishReason:
@@ -434,10 +451,10 @@ class TestReflectionBudgetFinishReason:
         assert reason == "reflection_budget"
 
     def test_spent_metric_budget_stays_max_trials_not_reflection_budget(self) -> None:
-        """The default cap is max_trials, so an ordinary run that burns its whole
-        metric budget also ends at the reflection cap. Labelling that
-        "reflection_budget" would relabel every full-budget run; the trial budget
-        is the reason, so the resolver defers to the caller's "max_trials"."""
+        """A capped run can reach the cap on the same iteration that exhausts the
+        metric budget. Labelling that "reflection_budget" would hide the trial
+        budget, which is the more informative reason, so the resolver defers to
+        the caller's "max_trials"."""
         reason = _resolve_gepa_finish_reason(
             val_scores=[0.2, 0.3],
             perfect_score=0.95,
@@ -572,12 +589,50 @@ class TestReflectionBudgetFinishReason:
             sample_dataset_items,
             sample_metric,
             fake_optimize_hook=spend_reflection_budget,
+            max_reflection_calls=2,
         )
 
-        # max_trials=2 -> default budget of 2 reflection calls: the stopper
-        # halts the loop before the third proposal is attempted.
+        # The stopper halts the loop before the third proposal is attempted.
         assert len(calls) == 2
         assert result.details["reflection_call_count"] == 2
         assert result.details["max_reflection_calls"] == 2
         assert result.details["finish_reason"] == "reflection_budget"
         assert result.details["stopped_early"] is True
+
+    def test_default_run_is_uncapped_and_never_reports_reflection_budget(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        """The knob is opt-in: with no max_reflection_calls, GEPA reflects as
+        often as its own search wants and the run is never labelled as stopped
+        by a reflection budget. Pinning this keeps the default from silently
+        shortening searches — reflection calls scale with engine iterations, not
+        with max_trials, so a max_trials default would truncate ordinary runs."""
+        calls = _patch_call_model(monkeypatch)
+
+        def reflect_more_often_than_max_trials(kwargs: dict[str, Any]) -> None:
+            state = SimpleNamespace(program_full_scores_val_set=[0.5])
+            # max_trials=2, but a real run reflects far more often than that.
+            for index in range(8):
+                assert not any(cb(state) for cb in kwargs["stop_callbacks"])
+                kwargs["reflection_lm"](f"proposal {index}")
+
+        result, _, _ = _run_optimize(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+            fake_optimize_hook=reflect_more_often_than_max_trials,
+        )
+
+        assert len(calls) == 8
+        assert result.details["reflection_call_count"] == 8
+        assert result.details["max_reflection_calls"] == 0
+        assert result.details["finish_reason"] != "reflection_budget"
