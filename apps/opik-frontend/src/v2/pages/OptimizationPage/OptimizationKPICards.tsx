@@ -27,6 +27,15 @@ import {
 
 type MetricValue = number | undefined;
 
+/**
+ * Unrounded cost for the tooltip, where the card's 2-4 decimal places would hide
+ * the difference this run actually made. Six significant digits keep sub-cent
+ * figures intact ($0.00095615) while dropping the float noise a client-side sum
+ * produces (0.1 + 0.05 = 0.15000000000000002).
+ */
+const exactCost = (dollars: number): string =>
+  String(Number(dollars.toPrecision(6)));
+
 const CANDIDATE_KEY_MAP: Record<string, keyof AggregatedCandidate> = {
   score: "score",
   latency: "latencyP50",
@@ -136,6 +145,15 @@ const OptimizationKPICards: React.FunctionComponent<
 
   const configs = getMetricKPICardConfigs({ isTestSuite, objectiveName });
 
+  // The value can exceed the sum of the trials in the table below, both because
+  // optimizer-internal calls belong to no trial and because that table is
+  // paginated. Name the source, or the card reads as an arithmetic error.
+  const costTooltip = `$${exactCost(kpiData.totalOptCost)}. ${
+    kpiData.usesBackendTotal
+      ? "Whole-run spend, including optimizer-internal LLM calls (e.g. reflection) that belong to no trial."
+      : "Summed from the trials loaded on this page."
+  }`;
+
   return (
     <div className="grid grid-cols-4 gap-4">
       {configs.map((config) => {
@@ -162,16 +180,7 @@ const OptimizationKPICards: React.FunctionComponent<
 
       <KPICard icon={Coins} label="Optimization cost">
         {kpiData.totalOptCost > 0 ? (
-          // The value can exceed the sum of the trials in the table below, both
-          // because optimizer-internal calls belong to no trial and because the
-          // table is paginated. Say so, or it reads as an arithmetic error.
-          <TooltipWrapper
-            content={
-              kpiData.usesBackendTotal
-                ? `${kpiData.totalOptCost}. Whole-run spend, including optimizer-internal LLM calls (e.g. reflection) that belong to no trial.`
-                : `${kpiData.totalOptCost}. Summed from the trials loaded on this page.`
-            }
-          >
+          <TooltipWrapper content={costTooltip}>
             <StatCard.Value>
               {formatAsCurrency(kpiData.totalOptCost)}
             </StatCard.Value>
