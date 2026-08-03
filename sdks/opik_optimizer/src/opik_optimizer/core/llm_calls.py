@@ -89,10 +89,10 @@ def _nest_under_current_span(params: dict[str, Any], span: Any) -> dict[str, Any
     if isinstance(opik_metadata, dict) and "current_span_data" in opik_metadata:
         return params  # an explicit caller hint wins
 
+    # Only the span hint: both callers pipe the result through
+    # _strip_project_name, so a project_name copied off the span here would be
+    # deleted on the next line.
     updated_opik = {**(opik_metadata or {}), "current_span_data": span}
-    project_name = getattr(span, "project_name", None)
-    if project_name is not None:
-        updated_opik.setdefault("project_name", project_name)
     return {
         **params,
         "metadata": {
