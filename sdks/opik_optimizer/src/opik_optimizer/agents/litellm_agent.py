@@ -7,7 +7,6 @@ owning optimizer for telemetry and budgeting.
 """
 
 from ..api_objects import chat_prompt
-from ..core import llm_calls as _llm_calls
 from ..utils import throttle as _throttle
 from typing import Any
 import json
@@ -255,7 +254,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
     def _apply_cost_usage_to_owner(self, response: Any) -> None:
         """Propagate cost/usage to the owning optimizer if available."""
         try:
-            optimizer_candidate = getattr(self, "_optimizer_owner", None)
+            optimizer_candidate = self._owning_optimizer()
             if optimizer_candidate is not None:
                 optimizer_candidate._add_llm_cost(getattr(response, "_opik_cost", None))
                 optimizer_candidate._add_llm_usage(
@@ -328,7 +327,12 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             seed=seed,
             model_kwargs=self._sanitize_model_kwargs(prompt.model_kwargs),
         )
-        _llm_calls._increment_llm_counter_if_in_optimizer()
+        # Explicit owner, not the call-stack walk: evaluation dispatches agent
+        # calls onto a worker pool (the GEPA adapter passes num_threads=n_threads,
+        # default 12), and the optimizer's frames are not on a worker thread's
+        # stack, so the walk found nothing there and every threaded call went
+        # uncounted (OPIK-7521).
+        self._increment_llm_counter()
         self._apply_cost_usage_to_owner(response)
         return response
 
@@ -452,7 +456,9 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                         result=tool_result,
                         tool_call_id=tool_call["id"],
                     )
-                    _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()
+                    # Owner, not stack walk — tool calls run on the same worker
+                    # threads as the completions above (see _run_completion).
+                    self._increment_llm_call_tools_counter()
             else:
                 final_response = msg["content"]
                 if msg["content"]:
@@ -538,7 +544,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             seed=seed,
             model_kwargs=self._sanitize_model_kwargs(prompt.model_kwargs),
         )
-        _llm_calls._increment_llm_counter_if_in_optimizer()
+        self._increment_llm_counter()  # see _run_completion: owner, not stack walk
         self._apply_cost_usage_to_owner(response)
 
         global _WARNED_NO_LOGPROBS
