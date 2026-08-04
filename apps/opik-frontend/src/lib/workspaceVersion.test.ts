@@ -6,10 +6,10 @@ describe("resolveSyncWorkspaceVersion", () => {
     localStorage.clear();
   });
 
-  // Opik V2 is the only supported experience. This must hold regardless of any legacy local
-  // state — a stale `opik-version-override=v1` / cached `v1` is exactly what forced a workspace
-  // into V1App and produced the "Opik Connect requires Opik 2.0" error screen. Forcing v2 here is
-  // the client-side replacement for the removed backend forceWorkspaceVersion default.
+  // Regression guard: resolveSyncWorkspaceVersion must always return v2 and must not read legacy
+  // local state. Each case seeds a key the function must ignore (override, per-workspace cache); if
+  // a future change re-introduces the localStorage read — the stale-v1 read behind the Opik Connect
+  // incident — the override/cache case would resolve "v1" and fail here.
   it.each([
     ["no local state", () => {}],
     [

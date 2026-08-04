@@ -40,8 +40,8 @@ public interface WorkspacesDAO {
     /**
      * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the
      * workspace row doesn't exist yet — callers treat it as TRUE (safe-include UNION), same as
-     * the column default. An admin/backfill flow flips workspaces with no legacy data to FALSE
-     * so their stats queries skip the empty-table scan.
+     * the column default. The column has no writer, so it stays at its {@code TRUE} default and the
+     * legacy {@code feedback_scores} UNION is always included until that table is decommissioned.
      */
     @SqlQuery("SELECT has_legacy_scores FROM workspaces WHERE id = :id")
     Optional<Boolean> findHasLegacyScores(@Bind("id") String id);
