@@ -248,25 +248,28 @@ class TrackedNeedsMissingArgument(base_metric.BaseMetric):
         return score_result.ScoreResult(name=self.name, value=1.0)
 
 
-def test_evaluate__tolerated_failure__is_reported_on_a_span(fake_backend):
+def test_evaluate__tolerated_failure__is_reported_on_the_argument_span(fake_backend):
     # Without this the failure is invisible in the backend: no score is persisted,
-    # and a metric that never runs produces no span of its own.
+    # and a metric that never runs produces no score span of its own.
     _run_evaluation(
         [AlwaysPasses(), TrackedNeedsMissingArgument()],
         error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
     )
 
-    spans = _spans_named(fake_backend, "tracked_needs_missing_arg")
+    spans = _spans_named(fake_backend, "tracked_needs_missing_arg.score_arguments")
     assert len(spans) == 2  # one per dataset item
     assert spans[0].error_info["exception_type"] == "ScoreMethodMissingArguments"
     assert "expected_label" in spans[0].error_info["message"]
 
+    # The metric itself was never entered, so it has no span of its own.
+    assert _spans_named(fake_backend, "tracked_needs_missing_arg") == []
 
-def test_evaluate__tolerated_failure__untracked_metric_gets_no_span(fake_backend):
-    # track=False is an explicit opt-out of tracing; a failure must not work around it.
-    _run_evaluation(
-        [AlwaysPasses(), NeedsMissingArgument()],
-        error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
-    )
 
-    assert _spans_named(fake_backend, "needs_missing_arg") == []
+def test_evaluate__argument_span__is_created_for_successful_scores_too(fake_backend):
+    # The argument span is the engine's own step, not the metric's, so it exists
+    # regardless of the outcome and regardless of the metric's `track` setting.
+    _run_evaluation([AlwaysPasses()])
+
+    spans = _spans_named(fake_backend, "always_passes.score_arguments")
+    assert len(spans) == 2
+    assert all(span.error_info is None for span in spans)

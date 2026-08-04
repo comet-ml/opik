@@ -1,13 +1,12 @@
-import contextlib
 import inspect
 import logging
-from typing import List, Dict, Any, Iterator, Optional, Callable, Tuple
+from typing import List, Dict, Any, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
-from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik.decorator import error_info_collector
+from opik.decorator.context_manager import span_context_manager
 from opik.evaluation.metrics import (
     arguments_helpers,
     base_metric,
@@ -19,8 +18,6 @@ from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 from opik.evaluation.types import ErrorTolerance, ScoringKeyMappingType
 from opik.message_processing.emulation import models
-from opik import datetime_helpers
-import opik.opik_context as opik_context
 
 from . import exception_analyzer
 
@@ -29,6 +26,7 @@ LOGGER = logging.getLogger(__name__)
 
 EVALUATION_SPAN_PARAMETER_NAME = "task_span"
 TRACE_TOOL_CONTEXT_PARAMETER_NAME = "trace_tool_context"
+SCORE_ARGUMENTS_SPAN_SUFFIX = "score_arguments"
 
 
 def _has_evaluation_span_parameter(func: Callable) -> bool:
@@ -148,54 +146,6 @@ def _build_failed_score_result(
     )
 
 
-@contextlib.contextmanager
-def _reporting_pre_scoring_failures(
-    metric: base_metric.BaseMetric,
-) -> Iterator[None]:
-    """Give whatever runs before ``score`` the span the metric would have had.
-
-    ``score`` is ``@track``-wrapped, so a metric that fails *inside* it already
-    reports on its own span. A metric that never gets that far has no span at
-    all, which is why a tolerated failure would otherwise be invisible in the
-    backend: no feedback score is persisted for a failed score either.
-
-    The span is created only on failure. Creating it on entry — as
-    ``start_as_current_span`` does — would add a second span named after the
-    metric to every successful score.
-    """
-    try:
-        yield
-    except Exception as exception:
-        # ``track=False`` is an explicit opt-out of tracing for this metric;
-        # a failure is not a reason to work around it.
-        if hasattr(metric.score, "opik_tracked"):
-            _log_failed_metric_span(metric.name, exception)
-        raise
-
-
-def _log_failed_metric_span(metric_name: str, exception: Exception) -> None:
-    """Emit the span the metric would have had if it had been entered.
-
-    Callers are responsible for deciding whether the metric should be traced at
-    all: this builds the span unconditionally.
-    """
-    parent_span = opik_context.get_current_span_data()
-    if parent_span is None:
-        # No surrounding metrics_calculation span — nothing to attach to.
-        return
-
-    timestamp = datetime_helpers.local_timestamp()
-    opik_client.get_client_cached().span(
-        trace_id=parent_span.trace_id,
-        parent_span_id=parent_span.id,
-        name=metric_name,
-        start_time=timestamp,
-        end_time=timestamp,
-        error_info=error_info_collector.collect(exception),
-        project_name=parent_span.project_name,
-    )
-
-
 def _extract_item_evaluators(
     item: dataset_item.DatasetItem,
     evaluator_model: Optional[str],
@@ -248,7 +198,6 @@ def _extract_item_evaluators(
             )
             if error_tolerance < ErrorTolerance.ALL_SCORING_ERRORS:
                 raise
-            _log_failed_metric_span(evaluator_item.name, exception)
             skipped_evaluator_scores.append(
                 _build_failed_score_result(evaluator_item.name, exception)
             )
@@ -332,27 +281,35 @@ def _compute_metric_scores(
                         task_outputs=task_output,
                     )
             else:
-                with _reporting_pre_scoring_failures(metric):
+                # Everything that prepares the call runs inside its own span, so a
+                # failure here is reported the same way a failure inside `score`
+                # is: `score` is `@track`-wrapped and gets its own span, while a
+                # metric that never gets that far would otherwise leave no trace
+                # of why — no feedback score is persisted for a failed score.
+                with span_context_manager.start_as_current_span(
+                    name=f"{metric.name}.{SCORE_ARGUMENTS_SPAN_SUFFIX}",
+                ):
                     arguments_validator.validate_score_arguments(
                         metric=metric,
                         kwargs=mapped_scoring_inputs,
                         scoring_key_mapping=scoring_key_mapping,
                     )
-                # Only inject trace_tool_context into metrics whose
-                # signature can absorb it; otherwise the call would fail
-                # with "unexpected keyword argument" for narrow metrics.
-                if trace_tool_context is not None and _accepts_trace_tool_context(
-                    metric.score
-                ):
-                    score_kwargs = {
-                        **mapped_scoring_inputs,
-                        TRACE_TOOL_CONTEXT_PARAMETER_NAME: trace_tool_context,
-                    }
-                else:
-                    score_kwargs = mapped_scoring_inputs
-                positional_arguments, keyword_arguments = _select_score_arguments(
-                    metric.score, score_kwargs
-                )
+                    # Only inject trace_tool_context into metrics whose
+                    # signature can absorb it; otherwise the call would fail
+                    # with "unexpected keyword argument" for narrow metrics.
+                    if trace_tool_context is not None and _accepts_trace_tool_context(
+                        metric.score
+                    ):
+                        score_kwargs = {
+                            **mapped_scoring_inputs,
+                            TRACE_TOOL_CONTEXT_PARAMETER_NAME: trace_tool_context,
+                        }
+                    else:
+                        score_kwargs = mapped_scoring_inputs
+                    positional_arguments, keyword_arguments = _select_score_arguments(
+                        metric.score, score_kwargs
+                    )
+
                 result = metric.score(*positional_arguments, **keyword_arguments)
 
             LOGGER.debug("Metric %s score ended", metric.name)
