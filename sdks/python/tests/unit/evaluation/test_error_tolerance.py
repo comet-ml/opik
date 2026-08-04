@@ -220,3 +220,53 @@ def test_evaluate__error_tolerance_accepts_plain_ints(fake_backend):
 def test_evaluate__error_tolerance_rejects_unknown_values(fake_backend):
     with pytest.raises(ValueError, match="not a valid ErrorTolerance"):
         _run_evaluation([AlwaysPasses()], error_tolerance=15)
+
+
+def _spans_named(fake_backend, name: str):
+    def walk(spans):
+        for span in spans:
+            yield span
+            yield from walk(span.spans)
+
+    return [
+        span
+        for trace in fake_backend.trace_trees
+        for span in walk(trace.spans)
+        if span.name == name
+    ]
+
+
+class TrackedNeedsMissingArgument(base_metric.BaseMetric):
+    """Same as NeedsMissingArgument but traced, which is the default."""
+
+    def __init__(self) -> None:
+        super().__init__(name="tracked_needs_missing_arg")
+
+    def score(
+        self, output: str, expected_label: str, **ignored: Any
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(name=self.name, value=1.0)
+
+
+def test_evaluate__tolerated_failure__is_reported_on_a_span(fake_backend):
+    # Without this the failure is invisible in the backend: no score is persisted,
+    # and a metric that never runs produces no span of its own.
+    _run_evaluation(
+        [AlwaysPasses(), TrackedNeedsMissingArgument()],
+        error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
+    )
+
+    spans = _spans_named(fake_backend, "tracked_needs_missing_arg")
+    assert len(spans) == 2  # one per dataset item
+    assert spans[0].error_info["exception_type"] == "ScoreMethodMissingArguments"
+    assert "expected_label" in spans[0].error_info["message"]
+
+
+def test_evaluate__tolerated_failure__untracked_metric_gets_no_span(fake_backend):
+    # track=False is an explicit opt-out of tracing; a failure must not work around it.
+    _run_evaluation(
+        [AlwaysPasses(), NeedsMissingArgument()],
+        error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
+    )
+
+    assert _spans_named(fake_backend, "needs_missing_arg") == []

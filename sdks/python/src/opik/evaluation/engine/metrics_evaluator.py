@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
+from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik.decorator import error_info_collector
 from opik.evaluation.metrics import (
@@ -17,6 +18,8 @@ from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 from opik.evaluation.types import ErrorTolerance, ScoringKeyMappingType
 from opik.message_processing.emulation import models
+from opik import datetime_helpers
+import opik.opik_context as opik_context
 
 from . import exception_analyzer
 
@@ -124,6 +127,31 @@ def _build_failed_score_result(
     )
 
 
+def _log_failed_metric_span(metric_name: str, exception: Exception) -> None:
+    """Emit the span the metric would have had if it had been entered.
+
+    A metric that raises inside ``score`` already lands on its own span as
+    ``error_info``, because ``score`` is ``@track``-wrapped. A metric that never
+    gets that far has no span at all, so a tolerated failure would otherwise be
+    invisible in the backend — blank cell, no error, nothing to click.
+    """
+    parent_span = opik_context.get_current_span_data()
+    if parent_span is None:
+        # No surrounding metrics_calculation span — nothing to attach to.
+        return
+
+    timestamp = datetime_helpers.local_timestamp()
+    opik_client.get_client_cached().span(
+        trace_id=parent_span.trace_id,
+        parent_span_id=parent_span.id,
+        name=metric_name,
+        start_time=timestamp,
+        end_time=timestamp,
+        error_info=error_info_collector.collect(exception),
+        project_name=parent_span.project_name,
+    )
+
+
 def _extract_item_evaluators(
     item: dataset_item.DatasetItem,
     evaluator_model: Optional[str],
@@ -181,6 +209,7 @@ def _extract_item_evaluators(
             )
             if error_tolerance < ErrorTolerance.ALL_SCORING_ERRORS:
                 raise
+            _log_failed_metric_span(evaluator_item.name, exception)
             skipped_evaluators.append(
                 _build_failed_score_result(evaluator_item.name, exception)
             )
@@ -300,6 +329,10 @@ def _compute_metric_scores(
                 metric.name,
                 exception,
             )
+            # Only when the metric would have been traced anyway — `track=False`
+            # is an explicit opt-out we must not work around.
+            if hasattr(metric.score, "opik_tracked"):
+                _log_failed_metric_span(metric.name, exception)
             score_results.append(_build_failed_score_result(metric.name, exception))
         except Exception as exception:
             LOGGER.error(

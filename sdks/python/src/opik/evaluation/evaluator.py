@@ -259,7 +259,14 @@ def evaluate(
               built. Note that a misconfiguration affecting every item will then
               consume the whole dataset instead of stopping on the first one.
 
-            A failure of the evaluation task itself always aborts, at every level.
+            Two failures always abort, at every level: a failure of the evaluation
+            task itself, and a ``scoring_key_mapping`` callable that raises — neither
+            belongs to a single metric, so neither can be reported as one metric's
+            failed score.
+
+            Tolerated failures are also recorded on a span named after the metric,
+            carrying the same ``error_info``, so they are visible in the trace even
+            though a failed score is never persisted as a feedback score.
 
             Tolerated failures are accumulated in the returned ``EvaluationResult``:
             every one is a ``ScoreResult`` with ``scoring_failed=True``, ``reason``
