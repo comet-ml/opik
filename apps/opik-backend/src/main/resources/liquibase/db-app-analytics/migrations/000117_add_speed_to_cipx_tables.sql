@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aadereiko:000116_add_speed_to_cipx_tables
+--changeset aadereiko:000117_add_speed_to_cipx_tables
 --comment: Add the fast-mode rate modifier to cipx_spends and cipx_spend_blocks
 
 -- Read from cipx.call.config (alongside effort / thinking_type / max_tokens), NOT from the top
