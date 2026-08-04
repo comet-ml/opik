@@ -98,9 +98,13 @@ export const useOptimizationColumns = ({
         horizontalAlignment: CELL_HORIZONTAL_ALIGNMENT.end,
         accessorFn: (row) => row.score,
         cell: TrialAccuracyCell,
+        // statusMap lets the metric cells drop the baseline delta while a trial
+        // is still evaluating — a partial average is not comparable to the
+        // fully evaluated baseline (OPIK-7460).
         customMeta: {
           baselineCandidate,
           isTestSuite,
+          statusMap,
         },
       },
       {
@@ -112,6 +116,7 @@ export const useOptimizationColumns = ({
         cell: TrialCandidateCostCell,
         customMeta: {
           baselineCandidate,
+          statusMap,
         },
       },
       {
@@ -123,6 +128,7 @@ export const useOptimizationColumns = ({
         cell: TrialCandidateLatencyCell,
         customMeta: {
           baselineCandidate,
+          statusMap,
         },
       },
       {

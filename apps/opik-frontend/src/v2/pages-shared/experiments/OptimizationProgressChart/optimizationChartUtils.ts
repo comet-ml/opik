@@ -57,11 +57,35 @@ export const TRIAL_BEST_COLOR = "var(--trial-best)";
 export const TRIAL_BEST_RING_COLOR = "var(--trial-best-ring)";
 
 /**
+ * Statuses a trial holds while its evaluation is still in flight. These are not
+ * outcomes, so the chart must never paint them in an outcome colour — see
+ * {@link getTrialDotColor} and the dataset-run legend.
+ */
+export const IN_PROGRESS_TRIAL_STATUSES: readonly TrialStatus[] = [
+  "evaluating",
+  "running",
+] as const;
+
+export const isInProgressTrialStatus = (status: TrialStatus): boolean =>
+  IN_PROGRESS_TRIAL_STATUSES.includes(status);
+
+/**
+ * Statuses a dataset run shows in their own colour rather than collapsing into
+ * an outcome — the in-progress pair plus "failed", which getTrialDotColor
+ * already keeps red. Every one of these needs a legend entry when present, or
+ * the chart carries a colour the legend does not explain.
+ */
+const DATASET_UNCOLLAPSED_STATUSES: readonly TrialStatus[] = [
+  ...IN_PROGRESS_TRIAL_STATUSES,
+  "failed",
+] as const;
+
+/**
  * Fill colour for a trial dot on the progress chart:
  * - the best trial always wins, in its own darkest fuchsia;
  * - test-suite runs colour every status (their legend distinguishes all states);
- * - dataset runs only distinguish passed vs discarded, so every non-pruned
- *   status collapses to the solid "passed" colour.
+ * - dataset runs collapse *outcomes* to passed vs discarded, but keep the
+ *   in-progress states in their own colours (see below).
  */
 export const getTrialDotColor = ({
   status,
@@ -78,6 +102,11 @@ export const getTrialDotColor = ({
   // red (it scored nothing — it is not a passing trial) and pruned stays faded.
   if (status === "pruned") return TRIAL_STATUS_COLORS.pruned;
   if (status === "failed") return TRIAL_STATUS_COLORS.failed;
+  // An in-progress trial is not an outcome. Collapsing it into the solid
+  // "passed" fuchsia made the chart assert a pass for a trial the trials table
+  // simultaneously labelled "Evaluating" — the chart claimed a result that did
+  // not exist yet. Keep the orange/yellow so both surfaces agree (OPIK-7460).
+  if (isInProgressTrialStatus(status)) return TRIAL_STATUS_COLORS[status];
   return TRIAL_STATUS_COLORS.passed;
 };
 
@@ -91,39 +120,12 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   failed: "Failed",
 };
 
-/**
- * Full status label for the trial tooltip header, including the step it
- * happened at (e.g. "Passed step 1", "Discarded in step 2"). The baseline has
- * no step suffix, and the best trial is labelled separately by the caller.
- */
-export const getTrialStatusLabel = (
-  status: TrialStatus,
-  stepIndex: number,
-): string => {
-  switch (status) {
-    case "baseline":
-      return "Baseline";
-    case "passed":
-      return `Passed step ${stepIndex}`;
-    case "pruned":
-      return `Discarded in step ${stepIndex}`;
-    case "evaluating":
-      return `Evaluating step ${stepIndex}`;
-    case "running":
-      return `Running step ${stepIndex}`;
-    case "failed":
-      return `Failed step ${stepIndex}`;
-    default:
-      return TRIAL_STATUS_LABELS[status];
-  }
-};
-
 export type TrialCardRow = { label: string; value: string };
 
 export type TrialCardModel = {
   /** Header title, e.g. "Trial #20". */
   title: string;
-  /** Header status label, e.g. "Passed step 1" or "Best trial". */
+  /** Header status label, e.g. "Passed" or "Best trial". */
   statusLabel: string;
   /** Fill colour of the header status dot. */
   dotColor: string;
@@ -142,17 +144,20 @@ export type TrialCardModel = {
  * The score row shows a percentage; test-suite runs relabel it "Pass rate" and
  * append the passed/total fraction. Latency and cost rows are omitted when the
  * candidate has no value for them.
+ *
+ * The status label deliberately carries no step reference ("Passed", not
+ * "Passed step 3"): trial numbers are the chart's one user-facing numbering
+ * (see {@link buildStepTickLabels}), and quoting a second, zero-based sequence
+ * next to "Trial #4" read as an off-by-one bug (OPIK-7589).
  */
 export const buildTrialCardModel = ({
   candidate,
   status,
-  stepIndex,
   isTestSuite,
   isBest,
 }: {
   candidate: AggregatedCandidate;
   status: TrialStatus;
-  stepIndex: number;
   isTestSuite?: boolean;
   isBest?: boolean;
 }): TrialCardModel => {
@@ -184,8 +189,12 @@ export const buildTrialCardModel = ({
   }
 
   return {
-    title: `Trial #${candidate.trialNumber}`,
-    statusLabel: isBest ? "Best trial" : getTrialStatusLabel(status, stepIndex),
+    // The baseline carries no trial number — it is not a trial (OPIK-7589).
+    title:
+      candidate.trialNumber == null
+        ? "Baseline"
+        : `Trial #${candidate.trialNumber}`,
+    statusLabel: isBest ? "Best trial" : TRIAL_STATUS_LABELS[status],
     dotColor: isBest ? TRIAL_BEST_COLOR : TRIAL_STATUS_COLORS[status],
     dotRingColor: isBest ? TRIAL_BEST_RING_COLOR : undefined,
     rows,
@@ -204,10 +213,50 @@ export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
 export type CandidateDataPoint = {
   candidateId: string;
   stepIndex: number;
+  /** 1-based creation-order number — the "Trial #N" identity used across the
+   *  run view (table, sidebar, deep links). The baseline is not a trial and
+   *  carries `null`; candidates count 1..N, matching max_trials (OPIK-7589). */
+  trialNumber: number | null;
   parentCandidateIds: string[];
   value: number | null;
   status: TrialStatus;
   name: string;
+};
+
+export type TrialLegendItem = { color: string; label: string };
+
+/**
+ * Legend for the progress chart, listing only statuses actually plotted.
+ *
+ * Test-suite runs distinguish every status, so the legend mirrors the full
+ * status order. Dataset runs collapse outcomes to passed vs discarded — those
+ * two are always listed, since the trend line is read against them — and then
+ * add each uncollapsed status that is present, so no dot on the chart carries a
+ * colour the legend leaves unexplained (OPIK-7460).
+ *
+ * Pure and exported so the mapping is unit-testable without mounting recharts.
+ */
+export const buildTrialLegendItems = (
+  chartData: CandidateDataPoint[],
+  isTestSuite?: boolean,
+): TrialLegendItem[] => {
+  const present = (s: TrialStatus) => chartData.some((d) => d.status === s);
+
+  if (isTestSuite) {
+    return TRIAL_STATUS_ORDER.filter(present).map((s) => ({
+      color: TRIAL_STATUS_COLORS[s],
+      label: TRIAL_STATUS_LABELS[s],
+    }));
+  }
+
+  return [
+    { color: TRIAL_STATUS_COLORS.passed, label: "Passed trial" },
+    { color: TRIAL_STATUS_COLORS.pruned, label: "Discarded trial" },
+    ...DATASET_UNCOLLAPSED_STATUSES.filter(present).map((s) => ({
+      color: TRIAL_STATUS_COLORS[s],
+      label: `${TRIAL_STATUS_LABELS[s]} trial`,
+    })),
+  ];
 };
 
 export type ParentChildEdge = {
@@ -226,7 +275,109 @@ type CandidateLookups = {
   parentSiblings: Map<string, string[]>;
   bestScore: number | undefined;
   bestCandidate: AggregatedCandidate | undefined;
+  expectedItemCount: number;
 };
+
+/**
+ * Number of evaluated items a *finished* full evaluation has in this run, used
+ * as the denominator for "has this trial finished evaluating?".
+ *
+ * There is no planned/expected item count anywhere in the API: every count on
+ * AggregatedCandidate is derived from rows that already exist in
+ * `experiment_items`, so they report items **completed so far**, never items
+ * planned (backend: `trace_count = count(DISTINCT ei.trace_id)`, and
+ * `total_count` / `passed_count` come from the `pass_rate_agg` CTE over the same
+ * table). `Experiment.status` is no help either — the SDK never sets it, so
+ * trial experiments are created already marked "completed".
+ *
+ * What the run does give us is its own denominator. Every full evaluation in one
+ * optimization scores the same item set: the baseline evaluates
+ * `validation_dataset or dataset` capped at `n_samples`
+ * (base_optimizer._select_evaluation_dataset) and GEPA builds its valset from
+ * that same source and cap (gepa_optimizer's `val_source` / `val_plan`). So the
+ * step-0 baseline's completed count is the count every other trial must reach.
+ *
+ * Deliberately baseline-derived rather than a `max()` over all candidates: a
+ * candidate groups *all* its experiments and `aggregateExperimentMetrics` sums
+ * their counts, so one double-counted candidate would inflate the denominator
+ * and freeze every finished trial on "Evaluating". Under-estimating (the
+ * baseline itself still running) only delays the gate, which is the safe
+ * direction — step 0 is always labelled "baseline" and never pruned anyway.
+ */
+const getExpectedItemCount = (candidates: AggregatedCandidate[]): number => {
+  let baseline: AggregatedCandidate | undefined;
+  for (const c of candidates) {
+    if (c.stepIndex !== 0) continue;
+    if (!baseline || c.created_at < baseline.created_at) baseline = c;
+  }
+  return baseline?.totalDatasetItemCount ?? 0;
+};
+
+/**
+ * True while a candidate's evaluation is still in flight — it has scored fewer
+ * items than a full evaluation in this run covers. Its score is therefore a
+ * partial average and must not be read as a final result.
+ *
+ * `0` denominators mean "unknown" (no baseline yet, or counts not reported) and
+ * fail open, leaving the pre-existing behaviour untouched.
+ */
+const isStillEvaluating = (
+  c: AggregatedCandidate,
+  expectedItemCount: number,
+): boolean =>
+  expectedItemCount > 0 && c.totalDatasetItemCount < expectedItemCount;
+
+/**
+ * Candidates eligible to be "the best trial".
+ *
+ * A partial average is not a result, so it must not win — and must not become
+ * the `bestScore` threshold other trials are pruned against. Without this
+ * filter a candidate three items into its evaluation could top the run on an
+ * easy sample, take the "Best trial" badge, and prune the genuinely-best
+ * *completed* trial down to "Discarded" — reintroducing the very symptom the
+ * status gate removes, sourced from a different row (OPIK-7460).
+ *
+ * Falls back to the unfiltered set when nothing has completed yet (or counts
+ * are unknown), so a run never loses its best marker: with a scored baseline
+ * the filtered set is non-empty by construction, since the baseline is what
+ * defines the denominator.
+ */
+const getBestEligibleCandidates = (
+  candidates: AggregatedCandidate[],
+  expectedItemCount: number,
+): AggregatedCandidate[] => {
+  const completed = candidates.filter(
+    (c) => !isStillEvaluating(c, expectedItemCount),
+  );
+  return completed.length ? completed : candidates;
+};
+
+/** Highest-scoring candidate, earliest-created winning a tie. */
+const reduceBestCandidate = (
+  pool: AggregatedCandidate[],
+): AggregatedCandidate | undefined =>
+  pool.reduce<AggregatedCandidate | undefined>((best, c) => {
+    if (c.score == null) return best;
+    if (!best || best.score == null) return c;
+    if (c.score > best.score) return c;
+    if (c.score === best.score && c.created_at < best.created_at) return c;
+    return best;
+  }, undefined);
+
+/**
+ * The run's best trial, ignoring trials that have not finished evaluating.
+ *
+ * Exported so the page-level "best trial" (badge, best-prompt panel,
+ * improved-over-baseline) is derived exactly the same way as the chart's — these
+ * were two independent reduces before, and only one of them applying the
+ * completion filter would put the table and the header in disagreement.
+ */
+export const selectBestCandidate = (
+  candidates: AggregatedCandidate[],
+): AggregatedCandidate | undefined =>
+  reduceBestCandidate(
+    getBestEligibleCandidates(candidates, getExpectedItemCount(candidates)),
+  );
 
 const buildCandidateLookups = (
   candidates: AggregatedCandidate[],
@@ -234,8 +385,9 @@ const buildCandidateLookups = (
 ): CandidateLookups => {
   const hasChildren = new Set<string>();
   const parentSiblings = new Map<string, string[]>();
-  let bestScore: number | undefined;
 
+  // Topology is derived from every candidate — an unfinished trial still has a
+  // real parent and real siblings.
   for (const c of candidates) {
     for (const pid of c.parentCandidateIds) {
       hasChildren.add(pid);
@@ -245,10 +397,6 @@ const buildCandidateLookups = (
     const siblings = parentSiblings.get(parentKey) ?? [];
     siblings.push(c.candidateId);
     parentSiblings.set(parentKey, siblings);
-
-    if (c.score != null && (bestScore == null || c.score > bestScore)) {
-      bestScore = c.score;
-    }
   }
 
   if (inProgressInfo) {
@@ -257,29 +405,55 @@ const buildCandidateLookups = (
     }
   }
 
-  const bestCandidate = candidates.reduce<AggregatedCandidate | undefined>(
-    (best, c) => {
-      if (c.score == null) return best;
-      if (!best || best.score == null) return c;
-      if (c.score > best.score) return c;
-      if (c.score === best.score && c.created_at < best.created_at) return c;
-      return best;
-    },
-    undefined,
-  );
+  // Scores are not. bestScore is the threshold trials get pruned against, so
+  // letting a partial average set it would prune finished trials against a
+  // number that is not a result yet.
+  const expectedItemCount = getExpectedItemCount(candidates);
+  const bestPool = getBestEligibleCandidates(candidates, expectedItemCount);
 
-  return { hasChildren, parentSiblings, bestScore, bestCandidate };
+  let bestScore: number | undefined;
+  for (const c of bestPool) {
+    if (c.score != null && (bestScore == null || c.score > bestScore)) {
+      bestScore = c.score;
+    }
+  }
+
+  return {
+    hasChildren,
+    parentSiblings,
+    bestScore,
+    bestCandidate: reduceBestCandidate(bestPool),
+    expectedItemCount,
+  };
 };
 
 const computeInProgressStatus = (
   c: AggregatedCandidate,
   lookups: CandidateLookups,
 ): TrialStatus => {
-  const { hasChildren, parentSiblings, bestScore, bestCandidate } = lookups;
+  const {
+    hasChildren,
+    parentSiblings,
+    bestScore,
+    bestCandidate,
+    expectedItemCount,
+  } = lookups;
   if (c.score == null) return "running";
   const isBest = bestCandidate?.candidateId === c.candidateId;
 
   if (isBest || hasChildren.has(c.candidateId)) return "passed";
+
+  // A trial that has not finished its items is ineligible for "pruned"
+  // (user-facing "Discarded") no matter how low its score looks: mid-evaluation
+  // the score is a partial average over the items done so far, so a value below
+  // the running best is not evidence the trial lost. Sits ahead of BOTH pruned
+  // branches below — the score comparison and the sibling-progress one — because
+  // an unfinished trial has no final result for either to judge (OPIK-7460).
+  //
+  // Trials with children or the current best are exempt above: children only
+  // spawn from an accepted candidate, so those evaluations are already done.
+  if (isStillEvaluating(c, expectedItemCount)) return "evaluating";
+
   if (bestScore != null && c.score < bestScore) return "pruned";
 
   const parentKey = [...c.parentCandidateIds].sort().join(",");
@@ -395,6 +569,7 @@ export const buildCandidateChartData = (
     .map((c) => ({
       candidateId: c.candidateId,
       stepIndex: c.stepIndex,
+      trialNumber: c.trialNumber,
       parentCandidateIds: c.parentCandidateIds,
       value: c.score ?? null,
       status: statusMap.get(c.candidateId) ?? "pruned",
@@ -447,6 +622,85 @@ export const buildTrendLineEdges = (
 export const getUniqueSteps = (items: { stepIndex: number }[]): number[] => {
   const steps = new Set(items.map((item) => item.stepIndex));
   return Array.from(steps).sort((a, b) => a - b);
+};
+
+/**
+ * X-axis tick labels for the progress chart, keyed by step index.
+ *
+ * The axis stays *positioned* by optimizer step — branching runs put several
+ * sibling trials on one step, and they must stack on a single x — but steps
+ * are an internal grouping the rest of the run view never leads with: the
+ * trials table, the sidebar, deep links and the trial cards all identify a dot
+ * as "Trial #N". Labelling the same dot "Step 3" on the axis and "Trial #4"
+ * in its card read as an off-by-one bug (OPIK-7589), so the ticks speak trial
+ * numbers too: a single-trial step is "Trial N", a fan-out step is the range
+ * "Trials N–M" (trial numbers follow creation order, so one step's trials are
+ * contiguous). The baseline is not a trial: it carries no number (candidates
+ * count 1..N, so the last number matches max_trials) and its step 0 is
+ * labelled "Baseline" — matching the baseline card's own status label.
+ *
+ * `ghostStep` is the step of the candidate currently being evaluated (the
+ * dashed ghost dot). That candidate is already plotted — value-less but
+ * numbered — so its step is labelled from its own trial number like any other;
+ * only a ghost step with no numbered trial on it gets a number synthesised,
+ * following every plotted trial.
+ */
+export const buildStepTickLabels = (
+  chartData: CandidateDataPoint[],
+  ghostStep?: number | null,
+): Map<number, string> => {
+  const steps = new Set<number>();
+  const rangeByStep = new Map<number, { min: number; max: number }>();
+  let maxTrialNumber = 0;
+  for (const d of chartData) {
+    steps.add(d.stepIndex);
+    // The baseline is unnumbered; its step is labelled "Baseline" below.
+    if (d.trialNumber == null) continue;
+    maxTrialNumber = Math.max(maxTrialNumber, d.trialNumber);
+    const range = rangeByStep.get(d.stepIndex);
+    if (range) {
+      range.min = Math.min(range.min, d.trialNumber);
+      range.max = Math.max(range.max, d.trialNumber);
+    } else {
+      rangeByStep.set(d.stepIndex, { min: d.trialNumber, max: d.trialNumber });
+    }
+  }
+
+  if (ghostStep != null) {
+    steps.add(ghostStep);
+    // The evaluating candidate is normally already one of `chartData`'s points
+    // — `buildCandidateChartData` plots every candidate, scored or not, and
+    // `inProgressInfo` is *derived from* that same candidate list — so its step
+    // is numbered by the loop above and needs no help here. Inventing
+    // `maxTrialNumber + 1` unconditionally double-counted it, widening the tick
+    // to "Trials N–N+1" for a step holding a single trial. Only a ghost whose
+    // step carries no numbered trial at all needs a number synthesised, and it
+    // follows every plotted trial.
+    if (!rangeByStep.has(ghostStep)) {
+      const ghostTrialNumber = maxTrialNumber + 1;
+      rangeByStep.set(ghostStep, {
+        min: ghostTrialNumber,
+        max: ghostTrialNumber,
+      });
+    }
+  }
+
+  const labels = new Map<number, string>();
+  for (const stepIndex of steps) {
+    if (stepIndex === 0) {
+      labels.set(stepIndex, "Baseline");
+      continue;
+    }
+    const range = rangeByStep.get(stepIndex);
+    if (!range) continue;
+    labels.set(
+      stepIndex,
+      range.min === range.max
+        ? `Trial ${range.min}`
+        : `Trials ${range.min}–${range.max}`,
+    );
+  }
+  return labels;
 };
 
 export type DotHit = { candidateId: string; cx: number; cy: number };

@@ -8,6 +8,7 @@ from ..core.request_options import RequestOptions
 from ..types.breakdown_config import BreakdownConfig
 from ..types.result import Result
 from ..types.span_filter import SpanFilter
+from ..types.token_usage_names import TokenUsageNames
 from ..types.workspace_configuration import WorkspaceConfiguration
 from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
@@ -323,6 +324,38 @@ class WorkspacesClient:
             interval_end=interval_end,
             start_before_end=start_before_end,
             request_options=request_options,
+        )
+        return _response.data
+
+    def get_workspace_token_usage_names(
+        self,
+        *,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TokenUsageNames:
+        """
+        Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
+
+        Parameters
+        ----------
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        TokenUsageNames
+            Token Usage names resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.workspaces.get_workspace_token_usage_names()
+        """
+        _response = self._raw_client.get_workspace_token_usage_names(
+            project_ids=project_ids, request_options=request_options
         )
         return _response.data
 
@@ -732,6 +765,41 @@ class AsyncWorkspacesClient:
             interval_end=interval_end,
             start_before_end=start_before_end,
             request_options=request_options,
+        )
+        return _response.data
+
+    async def get_workspace_token_usage_names(
+        self,
+        *,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TokenUsageNames:
+        """
+        Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
+
+        Parameters
+        ----------
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        TokenUsageNames
+            Token Usage names resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.workspaces.get_workspace_token_usage_names()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_workspace_token_usage_names(
+            project_ids=project_ids, request_options=request_options
         )
         return _response.data
 

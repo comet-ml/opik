@@ -9241,6 +9241,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/workspaces/token-usage/names:
+    post:
+      tags:
+      - Workspaces
+      summary: Get workspace token usage names
+      description: "Gets the distinct span token usage key names aggregated across\
+        \ the workspace. When project_ids is empty, all projects in the workspace\
+        \ are included; otherwise only the given projects."
+      operationId: getWorkspaceTokenUsageNames
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceTokenUsageNamesRequest"
+      responses:
+        "200":
+          description: Token Usage names resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenUsageNames"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/versions:
     get:
       tags:
@@ -22584,6 +22611,15 @@ components:
           format: date-time
         start_before_end:
           type: boolean
+    WorkspaceTokenUsageNamesRequest:
+      type: object
+      properties:
+        project_ids:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     WorkspaceVersion:
       type: object
       properties:
