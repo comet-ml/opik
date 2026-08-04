@@ -593,6 +593,11 @@ component:
     # deployment turns it on the same way on both comet.com (comet-helm) and
     # single-tenant SaaS (comet-ml-helm-chart). rootPath-aware, so it works
     # whether opik is served at the root or under /opik.
+    #
+    # This also exposes cost-api's version endpoint at <rootPath>/cost-api/ver
+    # (exact match only, so none of cost-api's other routes become reachable),
+    # mirroring opik's own <rootPath>/api/is-alive/ver so release tooling can read
+    # the deployed cost-api version.
     aiSpendBackend:
       enabled: false
       host: ai-cost-backend
