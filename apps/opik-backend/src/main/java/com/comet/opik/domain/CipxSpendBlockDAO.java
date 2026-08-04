@@ -64,9 +64,10 @@ public class CipxSpendBlockDAO {
             @NonNull String projectId,
             @NonNull Instant startTime,
             @NonNull String model,
-            /** Per-call rate modifiers, denormalized off cipx.call.config alongside `model`: a
-             * block's cost is only computable with the rate that produced it. '' = standard speed /
-             * global routing, which is also what every row written before these columns reads as. */
+            /** Per-call rate modifiers, read from cipx.call.config and denormalized onto every block
+             * next to `model` (which comes from cipx.call itself): a block's cost is only computable
+             * with the rate that produced it. '' = standard speed / global routing, which is also
+             * what every row written before these columns reads as. */
             @NonNull String speed,
             @NonNull String inferenceGeo,
             int blockIdx,

@@ -2,8 +2,13 @@
 --changeset aadereiko:000116_add_rate_modifiers_to_cipx_tables
 --comment: Add the two per-call rate modifiers to cipx_spends and cipx_spend_blocks (fast mode + inference geography)
 
--- speed and inference_geo ride at the top level of the request body, next to model, and unlike the
--- other config knobs they change the *rate* rather than the token count:
+-- Read from cipx.call.config (alongside effort / thinking_type / max_tokens), NOT from the top
+-- level of cipx.call where model lives — see CipxSpendDAO.SpanRow.from. Claude Code sends them at
+-- the top level of the *Anthropic* request body, next to that body's `model`, and the proxy
+-- promotes them onto cipx.call.config with the rest of the per-request configuration; the two
+-- "top levels" are different objects, so don't infer the wire path from where CC puts them.
+--
+-- Unlike the other config knobs they change the *rate* rather than the token count:
 --   speed = 'fast'      prices Opus 5 / 4.8 at $10/$50 per MTok instead of $5/$25
 --   inference_geo = 'us' applies a 1.1x multiplier to every token category on Claude 4.6+
 -- The two stack multiplicatively, and prompt-cache multipliers stack on top of both. Both must be
