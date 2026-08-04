@@ -191,6 +191,8 @@ class OptimizationStalledReaperServiceTest {
     @DisplayName("records the stall reason as structured error_info, not only in the studio log")
     void recordsStallReasonAsErrorInfo() {
         var id = seedStudioRun(OptimizationStatus.RUNNING);
+        // The seed leaves errorInfo null, so everything asserted below is the reaper's own write.
+        assertThat(optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).errorInfo()).isNull();
 
         reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
 
@@ -202,8 +204,12 @@ class OptimizationStalledReaperServiceTest {
         assertThat(reaped.errorInfo().message())
                 .startsWith("[System] Optimization failed")
                 .contains("no progress");
-        assertThat(reaped.errorInfo().exceptionType()).isNotBlank();
-        assertThat(reaped.errorInfo().traceback()).isNotBlank();
+        // Pin the exact constants: these are what the UI renders as the failure's type and stack, and
+        // isNotBlank() would keep passing if either were replaced by any other string.
+        assertThat(reaped.errorInfo().exceptionType()).isEqualTo("SystemDetectedFailure");
+        assertThat(reaped.errorInfo().traceback())
+                .isEqualTo("[System] No traceback: this failure was detected by the platform, not reported by "
+                        + "the optimizer worker.");
     }
 
     @ParameterizedTest
@@ -366,6 +372,9 @@ class OptimizationStalledReaperServiceTest {
         reconcile(IMMEDIATE, IMMEDIATE, BATCH_SIZE);
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+        // Pins the INITIALIZED branch of buildStalledReason. Without this, an inverted branch order
+        // would diagnose this run as "no progress" and only the status assertion above would run.
+        assertThat(reasonOf(id)).contains("failed to start");
     }
 
     @Test
@@ -381,6 +390,11 @@ class OptimizationStalledReaperServiceTest {
         reconcile(NEVER, NEVER, Duration.ofHours(1), BATCH_SIZE);
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+        // The ceiling branch must win over the INITIALIZED one: telling the user this run "failed to
+        // start" would be wrong — it started and kept writing trials.
+        assertThat(reasonOf(id))
+                .contains("exceeded the maximum running time")
+                .doesNotContain("failed to start");
     }
 
     @Test
@@ -415,6 +429,11 @@ class OptimizationStalledReaperServiceTest {
         reconcile(NEVER, Duration.ofMinutes(5), Duration.ofHours(1), BATCH_SIZE);
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+        // The ceiling branch must also win over the RUNNING one, and must quote the ceiling's own
+        // duration — "no progress for over 5 minutes" would be both the wrong cause and the wrong number.
+        assertThat(reasonOf(id))
+                .contains("exceeded the maximum running time")
+                .doesNotContain("no progress");
     }
 
     @Test
@@ -433,6 +452,46 @@ class OptimizationStalledReaperServiceTest {
         // ceiling (measured from it) drift forward forever.
         assertThat(optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).createdAt())
                 .isEqualTo(createdAt);
+    }
+
+    @Test
+    @DisplayName("restarting a finished run resets its creation time and clears the old failure")
+    void restartFromTerminalStatusResetsCreatedAtAndErrorInfo() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        // Reap it, so the row carries a terminal status and a platform-written errorInfo.
+        reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+        var reaped = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        assertThat(reaped.errorInfo()).isNotNull();
+        // The first attempt started well beyond any ceiling we will configure below.
+        backdateRunStart(id, Duration.ofHours(48));
+
+        // Reusing the id with a non-terminal status is a RESTART, which the SDK does on job redelivery.
+        // Same datasetName as the original on purpose: optimizations is ORDER BY (workspace_id,
+        // dataset_id, id), so a different dataset would write a second row the dedup never merges.
+        // createdAt/lastUpdatedAt are left null so this models what the SDK actually sends.
+        optimizationResourceClient.upsert(optimizationResourceClient.createPartialOptimization()
+                .id(id)
+                .datasetName(reaped.datasetName())
+                .name(reaped.name())
+                .status(OptimizationStatus.RUNNING)
+                .studioConfig(studioConfig())
+                .errorInfo(null)
+                .createdAt(null)
+                .lastUpdatedAt(null)
+                .build(), API_KEY, TEST_WORKSPACE_NAME);
+
+        var restarted = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        // Inheriting the first attempt's clock would put the new attempt past the ceiling the moment it
+        // starts: isPastHardCap short-circuits the activity veto, so it would be reaped on the next tick
+        // no matter how much progress it writes (review: thiagohora).
+        assertThat(restarted.createdAt()).isAfter(Instant.now().minus(Duration.ofHours(1)));
+        // And the previous attempt's failure must not be pinned on it — nothing else ever clears the field.
+        assertThat(restarted.errorInfo()).isNull();
+
+        reconcile(NEVER, NEVER, Duration.ofHours(24), BATCH_SIZE);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.RUNNING);
     }
 
     /**
@@ -561,6 +620,11 @@ class OptimizationStalledReaperServiceTest {
         var optimization = optimizationResourceClient.createPartialOptimization()
                 .status(status)
                 .studioConfig(studioConfig)
+                // createPartialOptimization only nulls scores/costs/studioConfig, so Podam otherwise
+                // seeds a random non-blank ErrorInfo that the upsert persists. Every "the reaper wrote
+                // an ErrorInfo" assertion would then pass on the fixture value instead of on anything
+                // the reaper did (review: thiagohora).
+                .errorInfo(null)
                 .build();
         return optimizationResourceClient.upsert(optimization, API_KEY, TEST_WORKSPACE_NAME);
     }
@@ -715,13 +779,24 @@ class OptimizationStalledReaperServiceTest {
      */
     private OptimizationStatus statusSnapshotOf(UUID id) {
         var snapshot = injector.getInstance(OptimizationDAO.class)
-                .getStatusSnapshotById(id)
+                .getStatusSnapshotById(id, NEVER, NEVER, NEVER, LOOKBACK_MARGIN)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER))
                 .block();
         assertThat(snapshot).isNotNull();
         return snapshot.status();
+    }
+
+    /**
+     * The reason the reaper recorded, as the UI reads it. buildStalledReason has three mutually
+     * exclusive branches (hard ceiling / RUNNING no-progress / INITIALIZED failed-to-start) and asserting
+     * only the resulting status cannot tell them apart.
+     */
+    private String reasonOf(UUID id) {
+        var errorInfo = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).errorInfo();
+        assertThat(errorInfo).isNotNull();
+        return errorInfo.message();
     }
 
     /** The pre-update liveness guard the reaper consults before writing ERROR. */

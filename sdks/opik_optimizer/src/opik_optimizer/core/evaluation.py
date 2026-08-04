@@ -575,8 +575,14 @@ def _evaluate_internal(
     # (OPIK-7459): with them absent, a healthy run stops looking alive as soon as its status stops
     # changing and gets marked ERROR at runningTimeout. So inside an optimization we always take the
     # optimization-aware evaluator, and use_evaluate_on_dict_items only governs standalone
-    # evaluation. Today this changes nothing — constants.ENABLE_EVALUATE_ON_DICT_ITEMS is False, so
-    # the flag is never True here — it is the flag flip in that TODO that this guards.
+    # evaluation.
+    #
+    # This is reachable today, not just after the TODO below. constants.ENABLE_EVALUATE_ON_DICT_ITEMS
+    # supplies only the DEFAULT (base_optimizer.evaluate_prompt applies it when the argument is None),
+    # so an explicit use_evaluate_on_dict_items=True — a public, documented parameter — reaches here
+    # with the constant still False. For such a caller this is a behaviour change: inside an
+    # optimization they now get trial experiments and experiment items where they previously got
+    # none. The flag flip in the TODO would merely make that the default path.
     if use_evaluate_on_dict_items and optimization_id is None:
         # TODO(opik-sdk): remove this branch once dict-item evaluation is the default. Making it the
         # default for optimization runs additionally requires optimization_id support in

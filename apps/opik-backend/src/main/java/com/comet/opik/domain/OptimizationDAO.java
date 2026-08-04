@@ -119,7 +119,29 @@ public interface OptimizationDAO {
             @NonNull Instant startedAt) {
     }
 
-    Mono<OptimizationStatusSnapshot> getStatusSnapshotById(UUID id);
+    /**
+     * @param lookbackMargin must be the same value passed to {@link #findStalledStudioOptimizations}, and the
+     *                       remaining timeouts likewise: {@code started_at} is aggregated over the row versions
+     *                       inside the lookback window, so a snapshot taken over a different window than the
+     *                       fleet query used can report a different start for the same run and make
+     *                       {@code isPastHardCap} fire on a run the fleet query selected on a soft timeout —
+     *                       skipping the activity veto and mislabelling the failure. Callers should derive both
+     *                       from {@link #stalledScanLookbackSeconds} (review: thiagohora).
+     */
+    Mono<OptimizationStatusSnapshot> getStatusSnapshotById(UUID id, Duration initializedTimeout,
+            Duration runningTimeout, Duration runningHardTimeout, Duration lookbackMargin);
+
+    /**
+     * The {@code last_updated_at} floor shared by the reaper's fleet query and its per-run re-read. Single
+     * definition on purpose — the two queries aggregate {@code started_at} over whatever version set
+     * this floor admits, so if they ever computed it differently the same run would have two different
+     * start instants (review: thiagohora).
+     */
+    static long stalledScanLookbackSeconds(Duration initializedTimeout, Duration runningTimeout,
+            Duration runningHardTimeout, Duration lookbackMargin) {
+        return Math.max(Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds()),
+                runningHardTimeout.toSeconds()) + lookbackMargin.toSeconds();
+    }
 
     /**
      * The optimization row alone — no experiment/trace/score joins, so the aggregate fields
@@ -134,6 +156,12 @@ public interface OptimizationDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class OptimizationDAOImpl implements OptimizationDAO {
+
+    /**
+     * How many times the reaper's batch size the {@code candidates} CTE may hold — see the bound's
+     * rationale at its use site in {@link #findStalledStudioOptimizations}.
+     */
+    private static final int CANDIDATE_SCAN_FACTOR = 10;
 
     private static final String HAS_VERSION1_OPTIMIZATIONS = """
             SELECT 1 FROM optimizations
@@ -371,17 +399,22 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * would become a candidate, and since the result is {@code LIMIT :limit}-ed those would crowd genuine
      * stalls out of the batch while the service's own status re-read silently discarded each one.
      *
-     * <p>The ceiling runs from {@code min(created_at)} — the run's start — and deliberately not from
+     * <p>The ceiling runs from {@code created_at} — the run's start — and deliberately not from
      * {@code last_updated_at}: every write to the row refreshes that column, so a metadata PATCH or an SDK
-     * re-upsert would postpone the backstop indefinitely (review: baz-reviewer). {@code created_at} is
-     * preserved across re-upserts by the upsert path, and {@code min} ignores any legacy row version left
-     * over from when it was not, so no client write can move the ceiling. {@code min} rather than
-     * {@code argMax(created_at, last_updated_at)} is the point (review: thiagohora): {@code argMax} would
-     * read {@code created_at} off the winning row version, which for any run created <em>before</em> this
-     * PR is exactly the value a later re-upsert re-stamped forward — reintroducing the postponed backstop.
-     * {@code min} is wrong only if some version ever carried a {@code created_at} <em>earlier</em> than the
-     * real start, which nothing writes; and erring early is the safe direction here, with a 24h ceiling
-     * against a 6h worker timeout. This is also the frame the worker's own execution timeout
+     * re-upsert would postpone the backstop indefinitely (review: baz-reviewer). What keeps that true is
+     * the upsert path carrying {@code created_at} forward, not the aggregate: an ordinary re-upsert writes
+     * back the same instant, so the ceiling does not move.
+     *
+     * <p>{@code argMax(created_at, last_updated_at)} rather than {@code min(created_at)} (review:
+     * thiagohora). {@code min} looked safer — it ignores a legacy version whose {@code created_at} a
+     * pre-OPIK-7459 re-upsert re-stamped forward — but it makes restarting a run under an existing id
+     * impossible to honour: old versions live on in a {@code ReplacingMergeTree}, so {@code min} keeps
+     * returning the FIRST attempt's start forever and the restarted run is born past the ceiling,
+     * short-circuiting the activity veto and getting reaped seconds after it started. Reading the winning
+     * version is what lets the upsert path's restart reset (see {@code OptimizationService}) actually take
+     * effect. The legacy-re-stamp case {@code min} was guarding against only postpones the ceiling, which
+     * is the safe direction, and it cannot recur now that ordinary re-upserts preserve the column.
+     * This is also the frame the worker's own execution timeout
      * (OPTSTUDIO_EXECUTION_TIMEOUT) is measured in, which is what makes the "hard cap must exceed it"
      * invariant meaningful.
      *
@@ -400,7 +433,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     id,
                     argMax(status, last_updated_at) AS latest_status,
                     max(last_updated_at) AS latest_updated_at,
-                    min(created_at) AS started_at
+                    argMax(created_at, last_updated_at) AS started_at
                 FROM optimizations
                 WHERE studio_config != ''
                   AND greaterOrEquals(last_updated_at, subtractSeconds(now64(6), :lookback_seconds))
@@ -411,6 +444,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         AND less(latest_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
                     OR (latest_status = 'running'
                         AND less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds)))
+                ORDER BY latest_updated_at ASC
+                LIMIT :candidate_limit
             ), candidate_trials AS (
                 SELECT
                     workspace_id,
@@ -479,15 +514,25 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * would make the CH 26.3 analyzer resolve the {@code argMax} ordering argument to the alias (an
      * aggregate inside an aggregate, ILLEGAL_AGGREGATION) — same analyzer quirk as
      * {@link #BATCH_SET_PROJECT_ID}'s subquery guard.
+     *
+     * <p>The {@code :lookback_seconds} floor is not a scan bound here (this reads one id) — it is here so
+     * {@code started_at} aggregates over exactly the version set {@code FIND_STALLED_STUDIO_OPTIMIZATIONS}
+     * used. Without it this query saw versions the fleet query had filtered out and could return an earlier
+     * start for the same run, which matters because {@code created_at} was re-stamped on every re-upsert
+     * before this branch: for any legacy run the oldest version carries a start the fleet query never
+     * considered, and reading it here flipped {@code isPastHardCap} on a run selected by a soft timeout —
+     * short-circuiting the activity veto and reporting "exceeded the maximum running time" for a run that
+     * had not (review: thiagohora).
      */
     private static final String GET_STATUS_SNAPSHOT = """
             SELECT
                 argMax(status, last_updated_at) AS latest_status,
                 max(last_updated_at) AS latest_updated_at,
-                min(created_at) AS started_at
+                argMax(created_at, last_updated_at) AS started_at
             FROM optimizations
             WHERE workspace_id = :workspace_id
               AND id = :id
+              AND greaterOrEquals(last_updated_at, subtractSeconds(now64(6), :lookback_seconds))
             GROUP BY id
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -1671,11 +1716,22 @@ class OptimizationDAOImpl implements OptimizationDAO {
         // the floor is purely a scan bound and never a coverage gap — a run's last status change is only
         // older than this if the reaper was down longer than the margin, in which case that run is not
         // reaped (documented tradeoff, review: thiagohora).
-        long lookbackSeconds = Math.max(Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds()),
-                runningHardTimeout.toSeconds()) + lookbackMargin.toSeconds();
-        var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, runningHardTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d"
+        long lookbackSeconds = OptimizationDAO.stalledScanLookbackSeconds(initializedTimeout, runningTimeout,
+                runningHardTimeout, lookbackMargin);
+        // Bound on the CTE the two liveness probes fan out from. Without it `candidates` is "every
+        // non-terminal studio run whose row has not changed in runningTimeout" — and because
+        // last_updated_at only advances on a status change, that includes every HEALTHY in-flight run
+        // older than the timeout, so the probes' cost would scale with fleet size rather than with
+        // configuration. Deliberately a multiple of the batch size rather than the batch size itself:
+        // the ordering puts the stalest first, and a healthy long run sorts alongside a dead one (that
+        // is the premise of this whole feature), so a bound of exactly `limit` could let live runs
+        // crowd dead ones out of every pass. With the multiplier, starving a dead run needs that many
+        // simultaneously-alive stale runs ahead of it, and alive runs eventually turn terminal and drop
+        // out of the CTE entirely (review: thiagohora).
+        int candidateLimit = limit * CANDIDATE_SCAN_FACTOR;
+        var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, runningHardTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d, candidateLimit=%d"
                 .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(),
-                        runningHardTimeout.toSeconds(), lookbackSeconds, limit);
+                        runningHardTimeout.toSeconds(), lookbackSeconds, limit, candidateLimit);
         var template = FilterUtils.getSTWithLogComment(FIND_STALLED_STUDIO_OPTIMIZATIONS,
                 "find_stalled_studio_optimizations", "", "", details);
         return Mono.from(connectionFactory.create())
@@ -1685,6 +1741,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             .bind("running_timeout_seconds", runningTimeout.toSeconds())
                             .bind("running_hard_timeout_seconds", runningHardTimeout.toSeconds())
                             .bind("lookback_seconds", lookbackSeconds)
+                            .bind("candidate_limit", candidateLimit)
                             .bind("limit", limit);
                     return Flux.from(statement.execute());
                 })
@@ -1696,13 +1753,19 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     @Override
-    public Mono<OptimizationStatusSnapshot> getStatusSnapshotById(@NonNull UUID id) {
+    public Mono<OptimizationStatusSnapshot> getStatusSnapshotById(@NonNull UUID id,
+            @NonNull Duration initializedTimeout, @NonNull Duration runningTimeout,
+            @NonNull Duration runningHardTimeout, @NonNull Duration lookbackMargin) {
+        long lookbackSeconds = OptimizationDAO.stalledScanLookbackSeconds(initializedTimeout, runningTimeout,
+                runningHardTimeout, lookbackMargin);
         var template = FilterUtils.getSTWithLogComment(GET_STATUS_SNAPSHOT,
-                "get_optimization_status_snapshot", "", "", "id=%s".formatted(id));
+                "get_optimization_status_snapshot", "", "",
+                "id=%s, lookbackSeconds=%d".formatted(id, lookbackSeconds));
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     var statement = connection.createStatement(template.render())
-                            .bind("id", id);
+                            .bind("id", id)
+                            .bind("lookback_seconds", lookbackSeconds);
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
                 .flatMap(result -> result.map((row, metadata) -> OptimizationStatusSnapshot.builder()

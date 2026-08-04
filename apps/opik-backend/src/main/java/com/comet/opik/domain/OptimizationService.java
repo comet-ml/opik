@@ -229,11 +229,25 @@ class OptimizationServiceImpl implements OptimizationService {
                                         builder.studioConfig(existing.studioConfig());
                                     }
 
+                                    // A re-upsert that moves a finished run back to a non-terminal status is
+                                    // a RESTART of that id, not another write to the same attempt: the
+                                    // preservations below are scoped to exclude it. Carrying createdAt over
+                                    // would give the new attempt the first attempt's clock, so a run whose
+                                    // original start is older than runningHardTimeout is born past the
+                                    // ceiling — isPastHardCap short-circuits the veto and the reaper ERRORs
+                                    // it on the next tick, seconds after it started. Carrying errorInfo over
+                                    // would likewise pin the previous attempt's failure on it forever, since
+                                    // nothing ever clears that field (review: thiagohora).
+                                    boolean isRestart = existing.status() != null
+                                            && existing.status().isTerminal()
+                                            && optimization.status() != null
+                                            && !optimization.status().isTerminal();
+
                                     // Preserve the persisted failure reason if not provided in update
                                     // (upsert does a full-row replace; the SDK re-upserts with a null
                                     // errorInfo and would otherwise clobber a previously recorded failure).
                                     // errorInfo is normally set through the PATCH/update path.
-                                    if (optimization.errorInfo() == null
+                                    if (!isRestart && optimization.errorInfo() == null
                                             && existing.errorInfo() != null) {
                                         builder.errorInfo(existing.errorInfo());
                                     }
@@ -243,9 +257,15 @@ class OptimizationServiceImpl implements OptimizationService {
                                     // every re-upsert. Beyond the wrong timestamp on screen, the
                                     // stalled-run reaper's hard ceiling is measured from created_at, and a
                                     // drifting value would let non-status writes postpone it forever
-                                    // (OPIK-7459).
-                                    if (existing.createdAt() != null) {
+                                    // (OPIK-7459). A restart is the one case that must NOT inherit it.
+                                    if (!isRestart && existing.createdAt() != null) {
                                         builder.createdAt(existing.createdAt());
+                                    }
+
+                                    if (isRestart) {
+                                        log.info(
+                                                "Optimization '{}' restarted from terminal status '{}': resetting createdAt and errorInfo",
+                                                id, existing.status());
                                     }
 
                                     // Preserve original name only if incoming name is blank
@@ -708,7 +728,7 @@ class OptimizationServiceImpl implements OptimizationService {
                 lookbackMargin, batchSize)
                 // Sequential: stalled runs are rare and this keeps the reaper's DB/Redis footprint small.
                 .concatMap(stalled -> markStalledOptimizationAsError(stalled, initializedTimeout, runningTimeout,
-                        runningHardTimeout))
+                        runningHardTimeout, lookbackMargin))
                 .reduce(0L, Long::sum);
     }
 
@@ -719,7 +739,8 @@ class OptimizationServiceImpl implements OptimizationService {
      * the overall pass: a single row's failure is logged and counted as 0.
      */
     private Mono<Long> markStalledOptimizationAsError(OptimizationDAO.StalledOptimization stalled,
-            Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout) {
+            Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout,
+            Duration lookbackMargin) {
         UUID id = stalled.id();
         String workspaceId = stalled.workspaceId();
 
@@ -730,9 +751,11 @@ class OptimizationServiceImpl implements OptimizationService {
         // completion or a slow-but-alive trial straddling the window boundary gets overwritten with ERROR.
         // The re-read is a bare status snapshot, NOT getById: see OptimizationDAO#getStatusSnapshotById
         // for why the full FIND must not gate reaping.
-        return optimizationDAO.getStatusSnapshotById(id)
+        return optimizationDAO
+                .getStatusSnapshotById(id, initializedTimeout, runningTimeout, runningHardTimeout, lookbackMargin)
                 .filter(current -> CANCELLABLE_STATUSES.contains(current.status()))
-                .filterWhen(current -> isStillDead(current, id, runningTimeout, runningHardTimeout))
+                .filterWhen(current -> isStillDead(current, id, initializedTimeout, runningTimeout,
+                        runningHardTimeout))
                 .flatMap(current -> {
                     // Build the reason from the RE-READ current status, not the reaper's stale query
                     // status: a run that moved INITIALIZED -> RUNNING between the query and here must get
@@ -776,11 +799,27 @@ class OptimizationServiceImpl implements OptimizationService {
      * whichever status its row got stuck on, and this guard must stay identical to the query's veto or a run
      * the query spared could still be reaped here (or vice versa). A run that genuinely never started has no
      * trials, so the probe finds nothing and it is still reaped on {@code initializedTimeout}.
+     *
+     * <p>Liveness is the newest of three signals, and all three are checked here — the row's own
+     * {@code last_updated_at} included. Checking only the trial/item probe left the guard strictly weaker
+     * than the fleet query it is supposed to mirror: the batch drains sequentially (up to {@code batchSize}
+     * runs, each a snapshot read + activity probe + log append + update), so seconds to minutes pass between
+     * the scan and a given row's update. A run selected as a stale {@code INITIALIZED} candidate whose
+     * worker calls {@code mark_running} in that gap comes back {@code RUNNING} with a fresh row timestamp
+     * and no trials yet — the fleet query would not select it under the {@code RUNNING} branch, so neither
+     * may this guard (review: thiagohora). The threshold therefore follows the RE-READ status, exactly like
+     * the query's {@code HAVING} branches.
      */
     private Mono<Boolean> isStillDead(OptimizationDAO.OptimizationStatusSnapshot current, UUID id,
-            Duration runningTimeout, Duration runningHardTimeout) {
+            Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout) {
         if (isPastHardCap(current, runningHardTimeout)) {
             return Mono.just(true);
+        }
+        Duration rowTimeout = current.status() == OptimizationStatus.INITIALIZED
+                ? initializedTimeout
+                : runningTimeout;
+        if (current.lastUpdatedAt().isAfter(Instant.now().minus(rowTimeout))) {
+            return Mono.just(false);
         }
         return optimizationDAO.hasRecentStudioActivity(id, runningTimeout).map(active -> !active);
     }
@@ -789,8 +828,15 @@ class OptimizationServiceImpl implements OptimizationService {
      * The ceiling runs from the run's creation, not from {@code last_updated_at}: any write to the row
      * refreshes the latter (a metadata PATCH, an SDK re-upsert), which would let a run postpone the
      * backstop forever — exactly the eternal spinner this job exists to end. {@code created_at} is now
-     * preserved across re-upserts (see the upsert path in this class), so nothing a client writes can move
-     * it (review: baz-reviewer, OPIK-7459).
+     * preserved across re-upserts (see the upsert path in this class), so an ordinary client write cannot
+     * move it (review: baz-reviewer, OPIK-7459).
+     *
+     * <p>Restarting a finished run under the same id is the one case that DOES reset it, deliberately: that
+     * is a new attempt, and inheriting the old clock would make it born past the ceiling. The upsert path
+     * scopes its {@code createdAt} preservation to exclude that transition.
+     *
+     * <p>{@code startedAt} is only comparable across the fleet query and this re-read because both derive
+     * it over the same lookback window — see {@link OptimizationDAO#getStatusSnapshotById}.
      */
     private static boolean isPastHardCap(OptimizationDAO.OptimizationStatusSnapshot current,
             Duration runningHardTimeout) {
