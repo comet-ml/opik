@@ -777,6 +777,20 @@ class CostServiceTest {
                         "0.000965"));
     }
 
+    @Test
+    void calculateCostHandlesCerebrasModels() {
+        // Registering cerebras as a canonical provider loads its 7 non-zero-cost entries in
+        // model_prices_and_context_window.json (llama and qwen models served on Cerebras Cloud),
+        // which drop at load time otherwise. No Cerebras model publishes cache rates, so requests
+        // route through SpanCostCalculator.textGenerationCost.
+        // cerebras/llama-3.3-70b: input 8.5e-7, output 1.2e-6
+        // 1000 * 8.5e-7 + 200 * 1.2e-6 = 0.00085 + 0.00024 = 0.00109
+        BigDecimal cost = CostService.calculateCost("cerebras/llama-3.3-70b", "cerebras",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00109");
+    }
+
     /**
      * Covers registering {@code sambanova} as a canonical provider so that the 19 non-zero-cost
      * entries in {@code model_prices_and_context_window.json} tagged with
