@@ -2268,6 +2268,127 @@ class ProjectsResourceTest {
             assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
         }
 
+        @Test
+        @DisplayName("when a time window is requested, then traces outside either bound are excluded")
+        void getProjectStats__whenWindowRequested__thenExcludesOutOfWindowTraces() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            Instant now = Instant.now();
+            Instant fromTime = now.minus(2, ChronoUnit.HOURS);
+            Instant toTime = now;
+            List<Trace> traces = List.of(
+                    traceWithId(project.name(), now.minus(3, ChronoUnit.HOURS)),
+                    traceWithId(project.name(), now.minus(1, ChronoUnit.HOURS)),
+                    traceWithId(project.name(), now.plus(3, ChronoUnit.HOURS)));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            ProjectStatsSummaryItem item = projectResourceClient
+                    .getProjectStatsSummary(project.name(), apiKey, workspaceName, null, fromTime, toTime)
+                    .content().stream()
+                    .filter(i -> projectId.equals(i.projectId()))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertThat(item.traceCount()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("when a window covers the data, then every metric column matches the all-time result")
+        void getProjectStats__whenWindowCoversData__thenAllColumnsMatchAllTime() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            Instant now = Instant.now();
+            Instant traceInstant = now.minus(60, ChronoUnit.MINUTES);
+
+            // Traces get controlled in-window ids. Spans deliberately get near-now ids that fall OUTSIDE the
+            // window below — so if span feedback scores were scoped by the span's own id instead of its
+            // trace's time, they would drop out and this comparison would fail.
+            List<Trace> traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> {
+                        Instant start = now.minus(30, ChronoUnit.MINUTES);
+                        Instant end = start.plusMillis(PodamUtils.getIntegerInRange(1, 1000));
+                        return trace.toBuilder()
+                                .projectName(project.name())
+                                .id(idGenerator.generateId(traceInstant))
+                                .startTime(start)
+                                .endTime(end)
+                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(start, end))
+                                .build();
+                    })
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            traces.forEach(trace -> guardrailsResourceClient.addBatch(
+                    guardrailsGenerator.generateGuardrailsForTrace(trace.id(), idGenerator.generateId(),
+                            trace.projectName()),
+                    apiKey, workspaceName));
+
+            traces.forEach(trace -> {
+                List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                        .map(span -> span.toBuilder()
+                                .id(idGenerator.generateId(now))
+                                .usage(spanResourceClient.getTokenUsage())
+                                .model(spanResourceClient.randomModel().toString())
+                                .provider(spanResourceClient.provider())
+                                .traceId(trace.id())
+                                .projectName(trace.projectName())
+                                .totalEstimatedCost(null)
+                                .build())
+                        .toList();
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+                List<FeedbackScoreBatchItem> manufactured = PodamFactoryUtils.manufacturePojoList(factory,
+                        FeedbackScoreBatchItem.class);
+                List<FeedbackScoreBatchItem> traceScores = manufactured.stream()
+                        .map(score -> score.toBuilder()
+                                .projectId(projectId).projectName(project.name()).id(trace.id()).build())
+                        .collect(Collectors.toList());
+                traceResourceClient.feedbackScores(traceScores, apiKey, workspaceName);
+
+                List<FeedbackScoreBatchItem> spanScores = spans.stream()
+                        .map(span -> {
+                            FeedbackScoreBatchItem item = factory.manufacturePojo(FeedbackScoreBatchItem.class);
+                            return item.toBuilder()
+                                    .projectId(projectId).projectName(project.name()).id(span.id()).build();
+                        })
+                        .collect(Collectors.toList());
+                spanResourceClient.feedbackScores(spanScores, apiKey, workspaceName);
+            });
+
+            var allTime = projectResourceClient.getProjectStatsSummary(project.name(), apiKey, workspaceName);
+            var windowed = projectResourceClient.getProjectStatsSummary(project.name(), apiKey, workspaceName, null,
+                    now.minus(90, ChronoUnit.MINUTES), now.minus(20, ChronoUnit.MINUTES));
+
+            // The all-time path is the trusted one (asserted against exact expected values elsewhere); a window
+            // that contains all the data must reproduce it column-for-column — counts, duration, tokens, cost,
+            // errors, guardrails, and trace+span feedback scores.
+            assertThat(windowed.content())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .isEqualTo(allTime.content());
+        }
+
+        private Trace traceWithId(String projectName, Instant idInstant) {
+            return factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .id(idGenerator.generateId(idInstant))
+                    .build();
+        }
+
         private void assertSummaryResponse(ProjectStatsSummary actualProjectsSummary,
                 List<ProjectStatsSummaryItem> expectedProjectsSummary) {
             assertThat(actualProjectsSummary.content()).hasSize(expectedProjectsSummary.size());
