@@ -15,6 +15,9 @@ type TrialSidebarProps = {
   open: boolean;
   onClose: () => void;
   trialNumber?: number;
+  /** The open candidate is the run's baseline, which is not a trial and has
+   *  no number — the header says "Baseline" instead of "Trial #N". */
+  isBaseline?: boolean;
   /** The trial's experiments, resolved from the run's already-loaded list. */
   trialExperiments: Experiment[];
   children?: React.ReactNode;
@@ -30,6 +33,7 @@ const TrialSidebar: React.FC<TrialSidebarProps> = ({
   open,
   onClose,
   trialNumber,
+  isBaseline,
   trialExperiments,
   children,
 }) => {
@@ -38,7 +42,11 @@ const TrialSidebar: React.FC<TrialSidebarProps> = ({
   } = usePermissions();
 
   const experiment = trialExperiments[0];
-  const title = trialNumber ? `Trial #${trialNumber}` : "Trial";
+  const title = isBaseline
+    ? "Baseline"
+    : trialNumber
+      ? `Trial #${trialNumber}`
+      : "Trial";
 
   return (
     <ResizableSidePanel
