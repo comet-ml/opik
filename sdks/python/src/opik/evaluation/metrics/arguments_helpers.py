@@ -62,7 +62,12 @@ def create_scoring_inputs(
                 mapped_inputs[key] = value(mapped_inputs)
             else:
                 if value not in mapped_inputs:
-                    LOGGER.debug(
+                    # A mapping that matches nothing is always a mistake, and
+                    # it only surfaces later if the metric happens to have no
+                    # default for that argument. When it does have one, the
+                    # metric silently scores the wrong thing, so this cannot
+                    # stay at debug level (OPIK-6925).
+                    LOGGER.warning(
                         f"Scoring key mapping value '{value}' not found in dataset item. "
                         f"Available keys: {list(mapped_inputs.keys())}"
                     )

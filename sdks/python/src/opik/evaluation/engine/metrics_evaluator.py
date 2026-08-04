@@ -52,6 +52,35 @@ def _accepts_trace_tool_context(func: Callable) -> bool:
     return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
 
 
+def _select_accepted_kwargs(
+    score_function: Callable, kwargs: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Narrow the scoring inputs to what the score signature can actually accept.
+
+    Every dataset item key and task output key is offered to every metric. A
+    metric that does not declare ``**kwargs`` used to fail with an
+    ``unexpected keyword argument`` TypeError on every single item — a message
+    that reads like an SDK bug rather than a signature mismatch.
+
+    Missing arguments are still reported: ``validate_score_arguments`` runs
+    before this and only checks the parameters the metric declares, so
+    filtering here cannot hide a key the metric actually asked for.
+    """
+    try:
+        parameters = inspect.signature(score_function).parameters
+    except (ValueError, TypeError):
+        # Signature is not introspectable — pass everything, as before.
+        return kwargs
+
+    if any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    ):
+        return kwargs
+
+    return {name: value for name, value in kwargs.items() if name in parameters}
+
+
 def split_into_regular_and_task_span_metrics(
     scoring_metrics: List[base_metric.BaseMetric],
 ) -> Tuple[List[base_metric.BaseMetric], List[base_metric.BaseMetric]]:
@@ -79,7 +108,7 @@ def split_into_regular_and_task_span_metrics(
 def _extract_item_evaluators(
     item: dataset_item.DatasetItem,
     evaluator_model: Optional[str],
-) -> List[base_metric.BaseMetric]:
+) -> Tuple[List[base_metric.BaseMetric], List[score_result.ScoreResult]]:
     """
     Extract evaluators from dataset item.
 
@@ -90,12 +119,14 @@ def _extract_item_evaluators(
         evaluator_model: Optional model name to use for LLMJudge evaluators.
 
     Returns:
-        List of evaluator instances extracted from the item.
+        Tuple of (evaluator instances extracted from the item, failed score
+        results for the evaluators that were configured but could not be run).
     """
     if not item.evaluators:
-        return []
+        return [], []
 
     evaluators: List[base_metric.BaseMetric] = []
+    skipped_evaluators: List[score_result.ScoreResult] = []
     for evaluator_item in item.evaluators:
         try:
             if evaluator_item.type == "llm_judge":
@@ -105,9 +136,22 @@ def _extract_item_evaluators(
                 )
                 evaluators.append(evaluator)
             else:
-                LOGGER.warning(
-                    "Unsupported evaluator type: %s. Only 'llm_judge' is supported.",
-                    evaluator_item.type,
+                # Not an error the caller can act on mid-run (an older SDK
+                # against a newer dataset), so it must not abort the
+                # evaluation. It must not disappear either: without a result
+                # the item just looks under-evaluated (OPIK-6925).
+                reason = (
+                    f"Unsupported evaluator type: {evaluator_item.type}. "
+                    "Only 'llm_judge' is supported."
+                )
+                LOGGER.warning(reason)
+                skipped_evaluators.append(
+                    score_result.ScoreResult(
+                        name=evaluator_item.name,
+                        value=0.0,
+                        reason=reason,
+                        scoring_failed=True,
+                    )
                 )
         except Exception:
             LOGGER.error(
@@ -117,7 +161,7 @@ def _extract_item_evaluators(
             )
             raise
 
-    return evaluators
+    return evaluators, skipped_evaluators
 
 
 def build_metrics_evaluator(
@@ -128,8 +172,9 @@ def build_metrics_evaluator(
 ) -> "MetricsEvaluator":
     """Build a MetricsEvaluator with suite-level + item-level metrics."""
     all_metrics: List[base_metric.BaseMetric] = list(regular_metrics)
+    skipped_evaluators: List[score_result.ScoreResult] = []
     if item is not None:
-        item_evaluators = _extract_item_evaluators(
+        item_evaluators, skipped_evaluators = _extract_item_evaluators(
             item, evaluator_model=evaluator_model
         )
         all_metrics.extend(item_evaluators)
@@ -143,6 +188,7 @@ def build_metrics_evaluator(
     return MetricsEvaluator(
         scoring_metrics=all_metrics,
         scoring_key_mapping=scoring_key_mapping,
+        skipped_evaluators=skipped_evaluators,
     )
 
 
@@ -208,7 +254,9 @@ def _compute_metric_scores(
                     }
                 else:
                     score_kwargs = mapped_scoring_inputs
-                result = metric.score(**score_kwargs)
+                result = metric.score(
+                    **_select_accepted_kwargs(metric.score, score_kwargs)
+                )
 
             LOGGER.debug("Metric %s score ended", metric.name)
 
@@ -256,10 +304,12 @@ class MetricsEvaluator:
         self,
         scoring_metrics: List[base_metric.BaseMetric],
         scoring_key_mapping: ScoringKeyMappingType,
+        skipped_evaluators: Optional[List[score_result.ScoreResult]] = None,
     ):
         self._scoring_key_mapping = scoring_key_mapping
         self._regular_metrics: List[base_metric.BaseMetric] = []
         self._task_span_metrics: List[base_metric.BaseMetric] = []
+        self._skipped_evaluators = skipped_evaluators or []
 
         self._analyze_metrics(scoring_metrics)
 
@@ -323,7 +373,7 @@ class MetricsEvaluator:
             scoring_key_mapping=self._scoring_key_mapping,
         )
 
-        score_results = _compute_metric_scores(
+        score_results = self._skipped_evaluators + _compute_metric_scores(
             scoring_metrics=self._regular_metrics,
             mapped_scoring_inputs=mapped_scoring_inputs,
             scoring_key_mapping=self._scoring_key_mapping,
