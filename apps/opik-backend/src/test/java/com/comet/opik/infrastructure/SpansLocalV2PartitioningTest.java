@@ -33,21 +33,24 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Exercises the spans_local_v2 partition design (migration 000112) end to end: the {@code id_at DateTime64(0)
- * MATERIALIZED UUIDv7ToDateTime(toUUID(id))} → {@code PARTITION BY toMonday(id_at)} chain. The counterpart of
- * {@link TracesLocalV2PartitioningTest}, pinning the same two behaviors as permanent regression guards:
+ * Exercises the spans_local_v2 partition design (migration 000115) end to end: the {@code id_at DateTime64(0)
+ * MATERIALIZED UUIDv7ToDateTime(toUUID(id))} → {@code PARTITION BY toYYYYMMDD(toDate32(id_at) -
+ * toIntervalDay(toDayOfWeek(id_at, 1)))} chain. The key computes the honest Monday of {@code id_at}'s week in
+ * {@code Date32}, so it never wraps a far-future id the way a 16-bit {@code toMonday} {@code Date} would. The
+ * counterpart of {@link TracesLocalV2PartitioningTest}, pinning the same two behaviors as permanent regression guards:
  *
  * <ul>
  *   <li><b>Partition stability across upserts.</b> {@code id_at} is computed by ClickHouse from the immutable
  *   {@code id}, so two versions of the same logical row (differing only in {@code last_updated_at}) must land in one
  *   weekly partition — the property {@code ReplacingMergeTree}'s in-partition dedup depends on. Regresses if the
  *   {@code id_at} expression or the partition key stops deriving from the immutable {@code id}.</li>
- *   <li><b>Partition pruning.</b> The planner does not infer that {@code id} is monotonic through
- *   {@code UUIDv7ToDateTime} in the partition expression, so an {@code id}-range predicate alone prunes only via the
- *   primary key (every partition is still read). Adding the parallel {@code toMonday(id_at)} bound the {@code SpanDAO}
- *   read path emits — derived from the same UUIDv7 as the id-range bound — is what prunes partitions. Read via
- *   {@code EXPLAIN indexes = 1}: the {@code MinMax} index block reflects part-level pruning on the partition-expression
- *   column, so its selected count drops below the total exactly when partition pruning engages.</li>
+ *   <li><b>Pruning with the unchanged read predicates.</b> The {@code SpanDAO} read path emits {@code toMonday(id_at)}
+ *   bounds paired with its id-range. The key expression is not {@code toMonday}, yet those bounds still prune:
+ *   {@code id_at} is a column of the partition key, so ClickHouse keeps a {@code MinMax} over {@code id_at} per part,
+ *   and {@code toMonday(id_at)} is monotonic over a part's narrow {@code id_at} range — so the predicate prunes parts
+ *   via that {@code MinMax}. An id-range predicate alone does not prune (the planner doesn't infer
+ *   {@code id → id_at} monotonicity through {@code UUIDv7ToDateTime}). Read via {@code EXPLAIN indexes = 1}: the
+ *   {@code MinMax} block's selected count drops below the total exactly when pruning engages.</li>
  * </ul>
  *
  * <p>Spans add a third guard with no traces analogue: a {@code trace_id}-keyed scan must keep every partition. Spans
@@ -129,18 +132,19 @@ class SpansLocalV2PartitioningTest {
                 .bind("id_hi", seed.ids().get(2)));
 
         // Queries the same inner id range (weeks 1..2 of the four seeded) as idRangeWithToMondayBoundPrunesPartitions,
-        // so the two are a controlled pair whose only difference is the added toMonday(id_at) bound. No id_at predicate:
-        // the MinMax index on the partition column has nothing to prune by, so every part is read. Should the target
-        // LTS start inferring id monotonicity through UUIDv7ToDateTime, this fails — the signal to revisit whether the
-        // read path still needs its explicit id_at predicate.
+        // so the two are a controlled pair whose only difference is the added toMonday(id_at) bound. With no id_at
+        // predicate the id_at MinMax has nothing to constrain (the planner doesn't infer id -> id_at monotonicity
+        // through UUIDv7ToDateTime), so every part is read. Should the target LTS start inferring that, this fails —
+        // the signal to revisit whether the read path still needs its explicit id_at predicate.
         assertThat(actualParts.selected()).isEqualTo(actualParts.total());
     }
 
     /**
      * The predicate the SpanDAO read path emits: each id-range bound carries a parallel {@code toMonday(id_at)} bound
-     * derived from the same UUIDv7, expressed on the partition expression itself. ClickHouse folds it back onto the
-     * {@code id_at} MinMax via {@code toMonday}'s monotonicity, so the pruning shows on the MinMax entry (the Partition
-     * entry then reports the already-pruned set).
+     * derived from the same UUIDv7. The key expression is not {@code toMonday}, but {@code id_at} is one of its
+     * columns, so ClickHouse keeps a {@code MinMax} over {@code id_at} per part and {@code toMonday} is monotonic over
+     * a part's narrow {@code id_at} range — the bounds prune through that {@code MinMax} (the Partition entry then
+     * reports the already-pruned set).
      * <p>
      * Both bounds are pinned independently rather than through a single {@code selected < total}, which one bound
      * working alone would already satisfy. ids 1..2 are the inner two of the four seeded weeks, so week 0 sits below
