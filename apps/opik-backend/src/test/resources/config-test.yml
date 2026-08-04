@@ -118,6 +118,16 @@ databaseAnalyticsDataModel:
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
   #   chunks of this size.
   deletionEventsInsertBatchSize: 1000
+  #  Default: false
+  #  Description: The final sharding-readiness step wraps `traces` as a Distributed table over the `traces_local`
+  #   shard. A Distributed table supports SELECT and INSERT but NOT mutations, so once the wrap is live every trace
+  #   mutation must target the local shard. Leave false at deploy time and while `traces` is still a MergeTree (deletes
+  #   work directly); set true in lockstep with applying the wrap (exchange_and_wrap.sh --with-wrap / --wrap-only). While
+  #   true, TraceDAO routes delete/retention mutations to `traces_local`; reads and inserts stay on the Distributed
+  #   `traces`. Post-wrap, changes to `traces` split by kind: row mutations (DELETE) + MATERIALIZE COLUMN/ADD INDEX/
+  #   MODIFY TTL target `traces_local` only (the Distributed `traces` rejects them); ADD/DROP/MODIFY COLUMN must target
+  #   both `traces_local` and `traces`, else reads can't see the column (code 47).
+  tracesDistributedWrapEnabled: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
