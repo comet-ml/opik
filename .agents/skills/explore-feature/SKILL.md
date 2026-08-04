@@ -208,8 +208,16 @@ dev's local stack."
 
 ## Phase 5 — Confirm
 
-- The spec exists at `targetPath`, tagged `@release-gate` + `@release-gate:<version>` + a feature
-  tag.
+- The spec exists at `targetPath`, tagged `@release-gate` + `@release-gate:<version>` +
+  `@area:<area>`, with a `@cap:` per test.
+- Those `@area:`/`@cap:` values resolve in `tests_end_to_end/coverage/taxonomy.yaml`, and the
+  taxonomy was updated in the same change (spec added to `specs:`, covered capabilities flipped to
+  `covered: true`).
+- `tag_lint.py` reports `0 problem(s)` — this is the CI `tag-lint` job, so a miss here is a red
+  build:
+  ```bash
+  python3 tests_end_to_end/coverage/tag_lint.py --taxonomy tests_end_to_end/coverage/taxonomy.yaml --estate tests_end_to_end
+  ```
 - It runs green locally: `cd tests_end_to_end/e2e && npm run test:release-gate`.
 - The plan was posted to Jira (or printed for manual posting).
 - Report the committed spec path and the Jira comment link back to the dev.
