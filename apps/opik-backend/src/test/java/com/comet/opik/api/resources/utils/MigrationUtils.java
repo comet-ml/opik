@@ -7,6 +7,7 @@ import liquibase.database.jvm.JdbcConnection;
 import liquibase.exception.LiquibaseException;
 import liquibase.exception.UnexpectedLiquibaseException;
 import liquibase.resource.ClassLoaderResourceAccessor;
+import liquibase.resource.ResourceAccessor;
 import lombok.experimental.UtilityClass;
 import org.jdbi.v3.core.Jdbi;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -39,10 +40,15 @@ public class MigrationUtils {
     }
 
     public static void runClickhouseDbMigration(ClickHouseContainer container) {
+        runClickhouseDbMigration(container, new ClassLoaderResourceAccessor());
+    }
+
+    public static void runClickhouseDbMigration(ClickHouseContainer container, ResourceAccessor resourceAccessor) {
         try (var connection = container.createConnection("")) {
             DatabaseConnection dbConnection = new JdbcConnection(
                     new ClickHouseConnectionImpl(connection.getMetaData().getURL()));
-            runDbMigration(CLICKHOUSE_CHANGELOG_FILE, ClickHouseContainerUtils.migrationParameters(), dbConnection);
+            runDbMigration(CLICKHOUSE_CHANGELOG_FILE, ClickHouseContainerUtils.migrationParameters(), dbConnection,
+                    resourceAccessor);
         } catch (SQLException e) {
             throw new RuntimeException("Failed to run ClickHouse DB migration", e);
         }
@@ -50,10 +56,15 @@ public class MigrationUtils {
 
     private static void runDbMigration(String changeLogFile, Map<String, String> parameters,
             DatabaseConnection connection) {
+        runDbMigration(changeLogFile, parameters, connection, new ClassLoaderResourceAccessor());
+    }
+
+    private static void runDbMigration(String changeLogFile, Map<String, String> parameters,
+            DatabaseConnection connection, ResourceAccessor resourceAccessor) {
         try {
             var database = DatabaseFactory.getInstance()
                     .findCorrectDatabaseImplementation(connection);
-            try (var liquibase = new Liquibase(changeLogFile, new ClassLoaderResourceAccessor(), database)) {
+            try (var liquibase = new Liquibase(changeLogFile, resourceAccessor, database)) {
                 parameters.forEach(liquibase::setChangeLogParameter);
                 liquibase.update("updateSql");
             }
