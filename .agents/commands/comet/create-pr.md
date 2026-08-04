@@ -17,7 +17,7 @@ This workflow will:
 - Pre-fill PR template with extracted information
 - Validate PR title and description against pr-lint rules before submission
 - Create GitHub draft PR using GitHub CLI (fallback to GitHub MCP only when CLI is unavailable)
-- Update Jira ticket status to "In Review" (for OPIK branches)
+- Update Jira ticket status to "In Review" (for OPIK branches, and only once the PR is no longer a draft)
 - Document progress directly in Jira for OPIK branches using the same analysis logic as `share-progress-in-jira`
 
 ---
@@ -238,10 +238,23 @@ Before creating the PR, validate the generated title and body against the same r
 ### 10. Update Jira Status
 
 - **Fetch Jira ticket**: For `OPIK-<number>` branches, use Jira MCP to get ticket details
-- **Transition status**: If branch key is `OPIK-<number>`, change ticket status to "In Review"
-- **Verify transition**: Confirm status was updated successfully (for OPIK branches)
-- **If transition fails**: Show error details but continue
-- **Post progress summary**: For OPIK branches, after successful status update, add a progress comment directly to Jira using `addCommentToJiraIssue` with the standard 2-section format:
+- **Read the PR's actual draft state**: Query the PR itself — do not infer it from the flags passed in step 9:
+
+  ```bash
+  gh pr view --json isDraft,url --jq '.isDraft'
+  ```
+
+  Step 9 creates the PR as a draft by default, so on the normal happy path this returns `true`.
+
+- **Transition status — only when the PR is ready for review**: If branch key is `OPIK-<number>` **and** `isDraft` is `false`, change ticket status to "In Review".
+  - **Verify transition**: Confirm status was updated successfully
+  - **If transition fails**: Show error details but continue
+- **If the PR is a draft**: Do **not** transition. Leave the ticket in its current status (typically "In Progress") and tell the user the transition was deliberately skipped, why, and how to unblock it:
+
+  > Jira status left at "In Progress" — the PR is still a draft. Moving it to "In Review" now would tell anyone watching the board that a PR is waiting on them. Mark the PR ready for review (`gh pr ready`), then move the ticket to "In Review".
+
+  A ticket already sitting in "In Review" is left alone rather than moved backwards — a stale forward signal is less disruptive than a status that flaps. Mention it so the user can correct it by hand if the PR went back to draft.
+- **Post progress summary**: For OPIK branches, add a progress comment directly to Jira using `addCommentToJiraIssue` with the standard 2-section format. This is independent of the transition above — post it whether or not the status changed, including on the draft path:
   - **Release Notes**: User-facing changes for Product Managers, including feature toggle changes (or "No user-facing changes were made in this ticket" if none)
   - **Docs**: Developer-focused technical details and implementation notes
 - **No Jira branch key**: If branch key is `issue-<number>` or `NA`, skip Jira transition/comment and continue.
@@ -258,7 +271,7 @@ Before creating the PR, validate the generated title and body against the same r
   - ✅ PR template pre-filled
   - ✅ PR title and description pass pr-lint validation
   - ✅ GitHub PR created successfully
-  - ✅ Jira ticket status updated to "In Review" (for OPIK branches)
+  - ✅ Jira ticket status updated to "In Review" — or ⏸️ **skipped, PR is still a draft** (for OPIK branches). Report the skip as its own explicit line; an omitted ✅ reads as a failure rather than as intent.
   - ✅ Progress documented in Jira (for OPIK branches)
 - **Show summary**: Display PR URL and Jira ticket status (if applicable)
 - **Next steps**: Provide guidance on PR review process
@@ -310,6 +323,7 @@ Before creating the PR, validate the generated title and body against the same r
 
 ### **Jira Status Update Failures**
 
+- Status intentionally unchanged: If the PR is still a draft, the "In Review" transition is skipped by design — this is not a failure. Run `gh pr ready`, then move the ticket.
 - Transition not allowed: Check workflow permissions
 - Ticket not found: Verify ticket exists and is accessible
 - Network issues: Verify connectivity to Atlassian services
@@ -335,7 +349,7 @@ The command is successful when:
 8. ✅ PR template is pre-filled with meaningful content
 9. ✅ PR title and description pass pr-lint validation before submission
 10. ✅ GitHub PR is created successfully
-11. ✅ Jira ticket status is updated to "In Review" (for OPIK branches)
+11. ✅ Jira ticket status is updated to "In Review" when the PR is ready for review, or deliberately left unchanged (with the reason reported) while the PR is a draft — for OPIK branches
 12. ✅ Progress is documented in Jira (via direct MCP call, for OPIK branches)
 13. ✅ All operations complete with clear feedback
 
