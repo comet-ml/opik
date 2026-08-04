@@ -81,6 +81,14 @@ public interface OptimizationDAO {
 
     Mono<Long> update(UUID id, OptimizationUpdate update);
 
+    /**
+     * As {@link #update(UUID, OptimizationUpdate)}, but when {@code clearErrorInfo} is true the
+     * {@code error_info} column is blanked instead of carried forward. Used only when a worker report
+     * supersedes a failure the platform detected rather than the worker reporting it: the recorded
+     * reason described a run that turned out to be alive, and nothing else ever clears that column.
+     */
+    Mono<Long> update(UUID id, OptimizationUpdate update, boolean clearErrorInfo);
+
     Mono<Long> updateDatasetDeleted(Set<UUID> datasetIds);
 
     Mono<Optimization.OptimizationPage> find(int page, int size, @NonNull OptimizationSearchCriteria searchCriteria);
@@ -938,7 +946,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 created_by,
                 :user_name as last_updated_by,
                 studio_config,
-                <if(error_info)> :error_info <else> error_info <endif> as error_info
+                <if(clear_error_info)> '' <elseif(error_info)> :error_info <else> error_info <endif> as error_info
             FROM optimizations
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -1086,10 +1094,15 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     @Override
     public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
+        return update(id, update, false);
+    }
+
+    @Override
+    public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update, boolean clearErrorInfo) {
         log.info("Update optimization by id '{}'", id);
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> update(id, update, connection))
+                .flatMapMany(connection -> update(id, update, clearErrorInfo, connection))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(Long::sum)
                 .doFinally(signalType -> {
@@ -1440,10 +1453,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    private Flux<? extends Result> update(UUID id, OptimizationUpdate update, Connection connection) {
-        var template = buildUpdateTemplate(update);
+    private Flux<? extends Result> update(UUID id, OptimizationUpdate update, boolean clearErrorInfo,
+            Connection connection) {
+        var template = buildUpdateTemplate(update, clearErrorInfo);
 
-        var statement = createUpdateStatement(id, update, connection, template.render());
+        var statement = createUpdateStatement(id, update, clearErrorInfo, connection, template.render());
 
         return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
     }
@@ -1455,7 +1469,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    private ST buildUpdateTemplate(OptimizationUpdate update) {
+    private ST buildUpdateTemplate(OptimizationUpdate update, boolean clearErrorInfo) {
         var template = TemplateUtils.newST(UPDATE_BY_ID);
 
         Optional.ofNullable(update.name())
@@ -1464,8 +1478,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(update.status())
                 .ifPresent(status -> template.add("status", status.getValue()));
 
-        Optional.ofNullable(update.errorInfo())
-                .ifPresent(errorInfo -> template.add("error_info", errorInfo));
+        if (clearErrorInfo) {
+            template.add("clear_error_info", true);
+        } else {
+            Optional.ofNullable(update.errorInfo())
+                    .ifPresent(errorInfo -> template.add("error_info", errorInfo));
+        }
 
         // When absent, the SELECT carries the existing metadata column forward untouched. When present,
         // the update.metadata() is already the FULL merged object (see OptimizationService.update) — a
@@ -1476,7 +1494,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
         return template;
     }
 
-    private Statement createUpdateStatement(UUID id, OptimizationUpdate update, Connection connection, String sql) {
+    private Statement createUpdateStatement(UUID id, OptimizationUpdate update, boolean clearErrorInfo,
+            Connection connection, String sql) {
         Statement statement = connection.createStatement(sql);
 
         Optional.ofNullable(update.name())
@@ -1485,8 +1504,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(update.status())
                 .ifPresent(status -> statement.bind("status", status.getValue()));
 
-        Optional.ofNullable(update.errorInfo())
-                .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.writeValueAsString(errorInfo)));
+        if (!clearErrorInfo) {
+            Optional.ofNullable(update.errorInfo())
+                    .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.writeValueAsString(errorInfo)));
+        }
 
         Optional.ofNullable(update.metadata())
                 .ifPresent(metadata -> statement.bind("metadata", getStringOrDefault(metadata)));

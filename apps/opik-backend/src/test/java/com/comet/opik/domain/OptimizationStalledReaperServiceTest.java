@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.OptimizationStatus;
@@ -453,6 +454,66 @@ class OptimizationStalledReaperServiceTest {
         // ceiling (measured from it) drift forward forever.
         assertThat(optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).createdAt())
                 .isEqualTo(createdAt);
+    }
+
+    @Test
+    @DisplayName("a worker report after a wrongful reap supersedes the system failure and clears it")
+    void workerReportSupersedesSystemDetectedFailure() {
+        var id = seedStudioRun(OptimizationStatus.INITIALIZED);
+
+        // The queue-depth case: only OPTSTUDIO_MAX_CONCURRENT_JOBS jobs run at once, so a submission
+        // behind a full queue is untouched for hours and is indistinguishable from one whose worker never
+        // started. The reaper ERRORs it on the initialized branch.
+        reconcile(IMMEDIATE, IMMEDIATE, BATCH_SIZE);
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+        assertThat(reasonOf(id)).contains("failed to start");
+
+        // The worker then dequeues it and calls mark_running. Before this fix the terminal-overwrite
+        // guard silently dropped that write and every later one, so the run displayed ERROR for good
+        // while the subprocess ran to completion and spent the full LLM budget.
+        transition(id, OptimizationStatus.RUNNING);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.RUNNING);
+        // The recorded reason described a failure that did not happen; nothing else ever clears it, so it
+        // would otherwise ride along into the run's eventual COMPLETED version.
+        assertThat(optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200).errorInfo()).isNull();
+
+        // And the run finishes normally from there.
+        transition(id, OptimizationStatus.COMPLETED);
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.COMPLETED);
+    }
+
+    @Test
+    @DisplayName("a worker-reported failure is not superseded by a later worker report")
+    void workerReportedFailureIsNotSuperseded() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+
+        // A failure the WORKER reported is a real outcome, not the platform's guess, so it must keep
+        // winning — only the reaper's own SystemDetectedFailure yields.
+        optimizationResourceClient.update(id, OptimizationUpdate.builder()
+                .status(OptimizationStatus.ERROR)
+                .errorInfo(ErrorInfo.builder()
+                        .exceptionType("ValueError")
+                        .message("the optimizer raised")
+                        .traceback("Traceback (most recent call last): ...")
+                        .build())
+                .build(), API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        transition(id, OptimizationStatus.RUNNING);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+    }
+
+    @Test
+    @DisplayName("a user cancellation is not superseded by a later worker report")
+    void cancellationIsNotSuperseded() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        transition(id, OptimizationStatus.CANCELLED);
+
+        // CANCELLED is the user's decision and outranks anything the worker says afterwards.
+        transition(id, OptimizationStatus.RUNNING);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.CANCELLED);
     }
 
     @Test

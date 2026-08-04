@@ -427,6 +427,23 @@ class OptimizationServiceImpl implements OptimizationService {
                                 Response.Status.CONFLICT));
                     }
 
+                    // A reaper-written ERROR is a GUESS — "no worker has reported for a while" — and the
+                    // worker is the authority on its own run. If it reports afterwards the guess was
+                    // wrong, so the run recovers instead of being frozen on a failure that never
+                    // happened. This is what makes a wrongful reap self-healing, and it matters most for
+                    // a run that sat queued behind OPTSTUDIO_MAX_CONCURRENT_JOBS longer than
+                    // initializedTimeout: previously the reaper ERRORed it, every later worker write was
+                    // dropped by the guard below, and the subprocess ran to completion spending the full
+                    // LLM budget on a run permanently displayed as failed (review: thiagohora).
+                    //
+                    // Deliberately narrow. Only ERROR, and only an ERROR this service wrote itself
+                    // (SYSTEM_ERROR_TYPE) — a worker-reported failure and a user CANCELLED are real
+                    // outcomes and still win. A genuinely dead run reports nothing, so nothing supersedes
+                    // it, and the hard ceiling still bounds a zombie that reports without ever finishing.
+                    boolean supersedesSystemFailure = isSystemDetectedFailure(optimization)
+                            && update.status() != null
+                            && update.status() != OptimizationStatus.ERROR;
+
                     // Never let a late status write overwrite an already-terminal Studio run with a
                     // different terminal status — e.g. the worker's delayed ERROR after a user CANCELLED,
                     // or the reaper racing a COMPLETED that landed just after its stale read (OPIK-7159).
@@ -435,7 +452,8 @@ class OptimizationServiceImpl implements OptimizationService {
                     boolean isTerminalOverwrite = optimization.studioConfig() != null
                             && update.status() != null
                             && optimization.status().isTerminal()
-                            && update.status() != optimization.status();
+                            && update.status() != optimization.status()
+                            && !supersedesSystemFailure;
                     if (isTerminalOverwrite) {
                         log.info(
                                 "Skipping status update for optimization '{}': already terminal '{}', ignoring requested '{}'",
@@ -454,8 +472,12 @@ class OptimizationServiceImpl implements OptimizationService {
                                     .metadata(JsonUtils.merge(optimization.metadata(), update.metadata()))
                                     .build();
 
+                    // Superseding also clears the recorded reason: it described a failure that did not
+                    // happen, and nothing else ever clears that column, so it would otherwise ride along
+                    // into the run's eventual COMPLETED version.
                     return signalCancellationIfNeeded(id, optimization, update)
-                            .then(optimizationDAO.update(id, effectiveUpdate))
+                            .then(optimizationDAO.update(id, effectiveUpdate,
+                                    supersedesSystemFailure && update.errorInfo() == null))
                             .doOnSuccess(__ -> {
                                 // Sync logs when optimization reaches terminal status
                                 // Safe to call multiple times - just syncs and reduces TTL
@@ -820,6 +842,18 @@ class OptimizationServiceImpl implements OptimizationService {
             return Mono.just(false);
         }
         return optimizationDAO.hasRecentStudioActivity(id, runningTimeout).map(active -> !active);
+    }
+
+    /**
+     * Was this run's ERROR written by the platform observing a stall, rather than reported by the worker?
+     * Keyed on the {@code exceptionType} this service stamps, which is the only marker distinguishing the
+     * two — both land in the same column through the same update path.
+     */
+    private static boolean isSystemDetectedFailure(Optimization optimization) {
+        return optimization.studioConfig() != null
+                && optimization.status() == OptimizationStatus.ERROR
+                && optimization.errorInfo() != null
+                && SYSTEM_ERROR_TYPE.equals(optimization.errorInfo().exceptionType());
     }
 
     /**

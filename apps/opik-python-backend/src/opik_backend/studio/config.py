@@ -29,19 +29,21 @@ DEFAULT_CASE_SENSITIVE = False
 # all before the first trial experiment exists. Slow that stretch down past an hour and the
 # reaper will read a healthy run as dead, so raise runningTimeout with it.
 #
-# This timeout is also coupled to the reaper's initializedTimeout (default 5m), via QUEUE DEPTH, and
-# that is the coupling with a real failure mode. Only MAX_CONCURRENT_JOBS slots
-# run at once and each may hold one for the full timeout below, so a submission beyond that can sit
-# queued for hours. A queued run's row is untouched — the backend writes INITIALIZED at create and
-# then only enqueues — and it has no trial experiments, so it is indistinguishable from a run whose
-# worker never started: the reaper matches it on the initialized branch and writes ERROR. That ERROR
-# is terminal, so the worker's later RUNNING/COMPLETED writes are then silently dropped by the
-# update path's terminal-overwrite guard, while the subprocess still runs to completion and spends
-# the full LLM budget. So initializedTimeout must exceed the worst-case queue wait, roughly
-# ceil(queued_jobs / MAX_CONCURRENT_JOBS) * OPTIMIZATION_TIMEOUT_SECS. Raising this timeout or
-# lowering MAX_CONCURRENT_JOBS raises the wrongful-reap risk for queued runs.
-# TODO(OPIK-7459 follow-up): close the hole rather than bound it — have the worker report a
-# queued/accepted heartbeat so a queued run stops looking like one that never started.
+# This timeout also interacts with the reaper's initializedTimeout (default 5m) via QUEUE DEPTH. Only
+# MAX_CONCURRENT_JOBS slots run at once and each may hold one for the full timeout below, so a
+# submission beyond that can sit queued for hours. A queued run's row is untouched — the backend
+# writes INITIALIZED at create and then only enqueues — and it has no trial experiments, so while it
+# waits it is indistinguishable from a run whose worker never started, and the reaper marks it ERROR.
+#
+# That is no longer terminal for the run: a reaper-written ERROR carries exceptionType
+# "SystemDetectedFailure", and the backend lets a later worker report supersede exactly that (see
+# OptimizationService#isSystemDetectedFailure). So when the worker finally dequeues the job,
+# mark_running restores the run and clears the stale reason instead of being silently dropped — the
+# subprocess no longer spends its whole LLM budget on a run permanently displayed as failed.
+#
+# What remains is cosmetic and self-healing: a deeply queued run can show ERROR until its worker
+# starts. Raising initializedTimeout above the worst-case queue wait, roughly
+# ceil(queued_jobs / MAX_CONCURRENT_JOBS) * OPTIMIZATION_TIMEOUT_SECS, avoids even that.
 OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "21600"))
 
 # Dataset sampling (limits items used during optimization to prevent OOM)
