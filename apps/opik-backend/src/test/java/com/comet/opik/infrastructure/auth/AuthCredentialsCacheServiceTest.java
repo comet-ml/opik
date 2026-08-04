@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.infrastructure.RedisConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
@@ -14,10 +13,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
+import org.redisson.api.RedissonReactiveClient;
 import org.testcontainers.lifecycle.Startables;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -32,6 +33,7 @@ public class AuthCredentialsCacheServiceTest {
     private static final int CACHE_TTL_IN_SECONDS = 1;
 
     private final AuthCredentialsCacheService cacheService;
+    private final RedissonReactiveClient redisClient;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -41,8 +43,8 @@ public class AuthCredentialsCacheServiceTest {
         Startables.deepStart(REDIS).join();
         RedisConfig redisConfig = new RedisConfig();
         redisConfig.setSingleNodeUrl(REDIS.getRedisURI());
-        cacheService = new AuthCredentialsCacheService(Redisson.create(redisConfig.build()).reactive(),
-                CACHE_TTL_IN_SECONDS);
+        redisClient = Redisson.create(redisConfig.build()).reactive();
+        cacheService = new AuthCredentialsCacheService(redisClient, CACHE_TTL_IN_SECONDS);
     }
 
     @ParameterizedTest
@@ -206,27 +208,38 @@ public class AuthCredentialsCacheServiceTest {
         assertThat(resolvedWithEmptyList.get().userName()).isEqualTo(userName);
     }
 
-    Stream<Arguments> testCacheAndRetrieveOpikVersion() {
-        return Stream.of(
-                arguments(named("opikVersion=null", null)),
-                arguments(named("opikVersion=version_1", OpikVersion.VERSION_1)),
-                arguments(named("opikVersion=version_2", OpikVersion.VERSION_2)));
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    void testCacheAndRetrieveOpikVersion(OpikVersion opikVersion) {
+    /**
+     * A cache record written by a pre-upgrade backend still carries the removed {@code opikVersion}
+     * hash field. Resolution requests only the modeled fields, so the stale field must be ignored
+     * and the credentials resolve normally — old entries keep working across a rolling upgrade
+     * until they age out.
+     */
+    @Test
+    void resolveV2Cache__whenRecordHasStaleLegacyField__thenIgnoredAndResolves() {
         var apiKey = "apiKey-" + UUID.randomUUID();
-        var expectedAuthCredentials = podamFactory.manufacturePojo(CacheService.AuthCredentials.class).toBuilder()
-                .opikVersion(opikVersion)
+        var workspaceName = "workspace-" + getRandomId();
+        var userName = "user-" + getRandomId();
+        var workspaceId = UUID.randomUUID().toString();
+
+        // Built in the pre-upgrade storage shape on purpose; the key literal mirrors the SUT's
+        // private V2_KEY_FORMAT, which can't be referenced without widening its visibility.
+        var legacyRecord = redisClient.<String, String>getMap("authV2-%s-%s".formatted(apiKey, workspaceName));
+        legacyRecord.putAll(Map.of(
+                "userName", userName,
+                "workspaceId", workspaceId,
+                "workspaceName", workspaceName,
+                "quotas", "[]",
+                "opikVersion", "version_1")).block();
+
+        var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, null);
+
+        var expected = CacheService.AuthCredentials.builder()
+                .userName(userName)
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .quotas(List.of())
                 .build();
-        cacheService.cache(apiKey, expectedAuthCredentials.workspaceName(), List.of(), expectedAuthCredentials);
-
-        var actualAuthCredentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(
-                apiKey, expectedAuthCredentials.workspaceName(), List.of());
-
-        assertThat(actualAuthCredentials).isPresent();
-        assertThat(actualAuthCredentials.get()).isEqualTo(expectedAuthCredentials);
+        assertThat(resolved).contains(expected);
     }
 
     private void resolveAndAssertOnValidCache(String apiKey, String workspaceName, List<String> bothPermissions,

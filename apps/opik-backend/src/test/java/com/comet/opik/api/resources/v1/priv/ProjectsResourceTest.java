@@ -52,7 +52,6 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.retention.RetentionUtils;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -1448,14 +1447,14 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when has_legacy_scores is flipped, stats endpoint stays consistent")
-        void getProjects__whenHasLegacyScoresFlipped__thenStatsStayConsistent(WorkspacesService workspacesService) {
+        @DisplayName("when has_legacy_scores gate is on, stats endpoint stays consistent")
+        void getProjects__whenHasLegacyScoresGateOn__thenStatsStayConsistent() {
             // Test infra writes feedback scores through the authenticated path, so data lands in
             // authored_feedback_scores (not the legacy feedback_scores table). This test can't
             // observe the legacy-UNION gate directly — that surface is covered by the existing
             // FilterTest variants and by manual benchmarking against real legacy data. What this
-            // test does verify: flipping the workspace flag does not break the endpoint and the
-            // response stays correct for data that lives in authored_feedback_scores.
+            // test does verify: with the default has_legacy_scores gate on, the endpoint stays
+            // correct for data that lives in authored_feedback_scores.
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -1464,8 +1463,6 @@ class ProjectsResourceTest {
 
             Comparator<Project> comparator = Comparator.comparing(Project::id).reversed();
             var expectedStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
-
-            workspacesService.upsertHasLegacyScores(workspaceId, false, USER);
 
             var response = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("/stats")
