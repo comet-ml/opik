@@ -64,6 +64,11 @@ public class CipxSpendBlockDAO {
             @NonNull String projectId,
             @NonNull Instant startTime,
             @NonNull String model,
+            /** Per-call rate modifiers, denormalized off cipx.call.config alongside `model`: a
+             * block's cost is only computable with the rate that produced it. '' = standard speed /
+             * global routing, which is also what every row written before these columns reads as. */
+            @NonNull String speed,
+            @NonNull String inferenceGeo,
             int blockIdx,
             @NonNull String src,
             @NonNull String category,
@@ -99,6 +104,7 @@ public class CipxSpendBlockDAO {
                 Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
             JsonNode usage = call.path("usage");
+            JsonNode config = call.path("config");
             String model = call.path("model").asText("");
             long[] tierTokens = {
                     usage.path("input_tokens").asLong(0),
@@ -138,7 +144,9 @@ public class CipxSpendBlockDAO {
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
-                    .model(model);
+                    .model(model)
+                    .speed(config.path("speed").asText(""))
+                    .inferenceGeo(config.path("inference_geo").asText(""));
             if (blocks.isArray()) {
                 for (int idx = 0; idx < blocks.size(); idx++) {
                     JsonNode block = blocks.get(idx);
@@ -376,6 +384,8 @@ public class CipxSpendBlockDAO {
         node.put("span_id", row.spanId());
         node.put("block_idx", row.blockIdx());
         node.put("model", row.model());
+        node.put("speed", row.speed());
+        node.put("inference_geo", row.inferenceGeo());
         node.put("src", row.src());
         node.put("category", row.category());
         node.put("side", row.side());

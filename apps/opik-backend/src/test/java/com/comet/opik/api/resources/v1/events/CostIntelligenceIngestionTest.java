@@ -147,6 +147,19 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().thinkingType()).isEqualTo("adaptive");
                 assertThat(row.get().maxTokens()).isEqualTo(64000L);
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
+                // rate modifiers — these pick the rate table, so losing them mis-prices the call
+                assertThat(row.get().speed()).isEqualTo("fast");
+                assertThat(row.get().inferenceGeo()).isEqualTo("us");
+            });
+
+            // The modifiers are denormalized onto every block row too — the per-user lane
+            // breakdowns price from cipx_spend_blocks, so a block that lost them would be
+            // priced at the standard rate no matter what cipx_spends says.
+            var blocks = getCipxBlocks(cipxSpan.id(), ws.workspaceId());
+            assertThat(blocks).isNotEmpty();
+            assertThat(blocks).allSatisfy(block -> {
+                assertThat(block.speed()).isEqualTo("fast");
+                assertThat(block.inferenceGeo()).isEqualTo("us");
             });
 
             // The non-cipx span shared the same create event, so once the cipx row is present the
@@ -533,7 +546,9 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast",
+                                "inference_geo": "us"
                               }
                             },
                             "blocks": [
@@ -597,7 +612,9 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast",
+                                "inference_geo": "us"
                               }
                             },
                             "blocks": [
@@ -657,7 +674,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management
+                    effort, thinking_type, max_tokens, context_management, speed, inference_geo
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -679,7 +696,9 @@ class CostIntelligenceIngestionTest {
                             row.get("effort", String.class),
                             row.get("thinking_type", String.class),
                             row.get("max_tokens", Long.class),
-                            row.get("context_management", String.class)))));
+                            row.get("context_management", String.class),
+                            row.get("speed", String.class),
+                            row.get("inference_geo", String.class)))));
         }).blockOptional();
     }
 
@@ -691,6 +710,7 @@ class CostIntelligenceIngestionTest {
                     toInt32(is_definition) AS is_definition,
                     alloc,
                     model,
+                    speed, inference_geo,
                     side, cache_status, parent_category, chars,
                     tool_name, tool_server, tool_use_id, resource, kind, subcategory,
                     content_sha256,
@@ -715,6 +735,8 @@ class CostIntelligenceIngestionTest {
                             row.get("is_definition", Integer.class),
                             row.get("alloc", Double.class),
                             row.get("model", String.class),
+                            row.get("speed", String.class),
+                            row.get("inference_geo", String.class),
                             row.get("side", String.class),
                             row.get("cache_status", String.class),
                             row.get("parent_category", String.class),
@@ -802,11 +824,12 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement) {
+            String thinkingType, Long maxTokens, String contextManagement, String speed, String inferenceGeo) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
-            String bdLane, String label, Integer isDefinition, Double alloc, String model, String side,
+            String bdLane, String label, Integer isDefinition, Double alloc, String model, String speed,
+            String inferenceGeo, String side,
             String cacheStatus, String parentCategory, Long chars, String toolName, String toolServer,
             String toolUseId, String resource, String kind, String subcategory, String contentSha256, Long startMs) {
     }
