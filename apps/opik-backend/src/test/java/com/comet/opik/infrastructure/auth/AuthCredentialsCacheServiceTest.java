@@ -7,12 +7,14 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
 import org.redisson.api.RedissonReactiveClient;
 import org.testcontainers.lifecycle.Startables;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -33,6 +35,7 @@ public class AuthCredentialsCacheServiceTest {
     private static final int CACHE_TTL_IN_SECONDS = 1;
 
     private final AuthCredentialsCacheService cacheService;
+    private final RedissonClient redissonClient;
     private final RedissonReactiveClient redisClient;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -43,8 +46,16 @@ public class AuthCredentialsCacheServiceTest {
         Startables.deepStart(REDIS).join();
         RedisConfig redisConfig = new RedisConfig();
         redisConfig.setSingleNodeUrl(REDIS.getRedisURI());
-        redisClient = Redisson.create(redisConfig.build()).reactive();
+        redissonClient = Redisson.create(redisConfig.build());
+        redisClient = redissonClient.reactive();
         cacheService = new AuthCredentialsCacheService(redisClient, CACHE_TTL_IN_SECONDS);
+    }
+
+    @AfterAll
+    void tearDownAll() {
+        // Shut down the owning RedissonClient (RedissonReactiveClient#shutdown() is deprecated);
+        // the reactive client is just a view over it.
+        redissonClient.shutdown();
     }
 
     @ParameterizedTest

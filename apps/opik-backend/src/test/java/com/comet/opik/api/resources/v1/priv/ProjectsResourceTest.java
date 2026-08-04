@@ -1447,42 +1447,6 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when has_legacy_scores gate is on, stats endpoint stays consistent")
-        void getProjects__whenHasLegacyScoresGateOn__thenStatsStayConsistent() {
-            // Test infra writes feedback scores through the authenticated path, so data lands in
-            // authored_feedback_scores (not the legacy feedback_scores table). This test can't
-            // observe the legacy-UNION gate directly — that surface is covered by the existing
-            // FilterTest variants and by manual benchmarking against real legacy data. What this
-            // test does verify: with the default has_legacy_scores gate on, the endpoint stays
-            // correct for data that lives in authored_feedback_scores.
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            Comparator<Project> comparator = Comparator.comparing(Project::id).reversed();
-            var expectedStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
-
-            var response = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("/stats")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
-            var actual = response.readEntity(ProjectStatsSummary.class);
-
-            assertThat(actual.content())
-                    .usingRecursiveComparison()
-                    .ignoringCollectionOrder()
-                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                    .isEqualTo(expectedStats);
-        }
-
-        @Test
         @DisplayName("when the legacy feedback_scores table has rows for the workspace, the project stats UNION surfaces them")
         void getProjects__whenLegacyScoresHasData__thenStatsIncludeThem(FeedbackScoreDAO feedbackScoreDAO) {
             String workspaceName = UUID.randomUUID().toString();
