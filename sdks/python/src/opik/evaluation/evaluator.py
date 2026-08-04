@@ -42,7 +42,12 @@ from .suite_evaluators.llm_judge import (
 )
 from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
-from .types import ExperimentScoreFunction, LLMTask, ScoringKeyMappingType
+from .types import (
+    ErrorTolerance,
+    ExperimentScoreFunction,
+    LLMTask,
+    ScoringKeyMappingType,
+)
 from .. import url_helpers, exceptions
 from ..api_objects.dataset.test_suite import suite_result_constructor
 
@@ -151,6 +156,7 @@ def evaluate(
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
     blueprint_id: Optional[str] = None,
+    error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -240,7 +246,30 @@ def evaluate(
             - `tags contains "failed"` - Items with 'failed' tag
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
+
+        error_tolerance: How much failure the run absorbs before it gives up.
+            Accepts an ``opik.ErrorTolerance`` member or the equivalent int.
+
+            - ``ErrorTolerance.METRIC_ERRORS`` (1, default): errors raised *inside*
+              ``score`` are recorded as failed score results and the run continues.
+              Anything else aborts. This is the long-standing behaviour.
+            - ``ErrorTolerance.ALL_SCORING_ERRORS`` (2): additionally tolerate errors
+              that stop a metric from being scored at all — a required score argument
+              the dataset does not provide, or an item-level evaluator that cannot be
+              built. Note that a misconfiguration affecting every item will then
+              consume the whole dataset instead of stopping on the first one.
+
+            A failure of the evaluation task itself always aborts, at every level.
+
+            Tolerated failures are accumulated in the returned ``EvaluationResult``:
+            every one is a ``ScoreResult`` with ``scoring_failed=True``, ``reason``
+            set to the error message and ``metadata["error_info"]`` holding the
+            structured payload (``exception_type``, ``message``, ``traceback``).
+            They are excluded from the aggregated statistics and are never sent to
+            the backend, so the score cell stays empty rather than showing a zero.
     """
+    error_tolerance = ErrorTolerance(error_tolerance)
+
     if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
         dataset = dataset.__internal_api__dataset__
@@ -334,6 +363,7 @@ def evaluate(
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
         source="experiment",
+        error_tolerance=error_tolerance,
     )
 
 
@@ -583,6 +613,7 @@ def _evaluate_task(
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
     source: TraceSource,
+    error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -598,6 +629,7 @@ def _evaluate_task(
             workers=task_threads,
             verbose=verbose,
             source=source,
+            error_tolerance=error_tolerance,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=items_iter,

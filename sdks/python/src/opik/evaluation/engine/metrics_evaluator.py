@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional, Callable, Tuple
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
 from opik.api_objects.dataset import dataset_item
+from opik.decorator import error_info_collector
 from opik.evaluation.metrics import (
     arguments_helpers,
     base_metric,
@@ -14,7 +15,7 @@ from opik.evaluation.metrics import (
 from opik.evaluation.scorers import scorer_wrapper_metric
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
-from opik.evaluation.types import ScoringKeyMappingType
+from opik.evaluation.types import ErrorTolerance, ScoringKeyMappingType
 from opik.message_processing.emulation import models
 
 from . import exception_analyzer
@@ -105,9 +106,28 @@ def split_into_regular_and_task_span_metrics(
     return regular_metrics, task_span_metrics
 
 
+def _build_failed_score_result(
+    metric_name: str, exception: Exception
+) -> score_result.ScoreResult:
+    """Represent an error raised outside the metric body as a failed score.
+
+    ``reason`` is the exception message, matching what a failure raised inside
+    ``score`` already produces. The structured payload goes to ``metadata``
+    under the same ``error_info`` key used on spans and traces.
+    """
+    return score_result.ScoreResult(
+        name=metric_name,
+        value=0.0,
+        reason=str(exception),
+        metadata={"error_info": error_info_collector.collect(exception)},
+        scoring_failed=True,
+    )
+
+
 def _extract_item_evaluators(
     item: dataset_item.DatasetItem,
     evaluator_model: Optional[str],
+    error_tolerance: ErrorTolerance,
 ) -> Tuple[List[base_metric.BaseMetric], List[score_result.ScoreResult]]:
     """
     Extract evaluators from dataset item.
@@ -153,13 +173,17 @@ def _extract_item_evaluators(
                         scoring_failed=True,
                     )
                 )
-        except Exception:
+        except Exception as exception:
             LOGGER.error(
                 "Failed to instantiate evaluator from config: %s",
                 evaluator_item.config,
                 exc_info=True,
             )
-            raise
+            if error_tolerance < ErrorTolerance.ALL_SCORING_ERRORS:
+                raise
+            skipped_evaluators.append(
+                _build_failed_score_result(evaluator_item.name, exception)
+            )
 
     return evaluators, skipped_evaluators
 
@@ -169,13 +193,14 @@ def build_metrics_evaluator(
     regular_metrics: List[base_metric.BaseMetric],
     scoring_key_mapping: ScoringKeyMappingType,
     evaluator_model: Optional[str],
+    error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
 ) -> "MetricsEvaluator":
     """Build a MetricsEvaluator with suite-level + item-level metrics."""
     all_metrics: List[base_metric.BaseMetric] = list(regular_metrics)
     skipped_evaluators: List[score_result.ScoreResult] = []
     if item is not None:
         item_evaluators, skipped_evaluators = _extract_item_evaluators(
-            item, evaluator_model=evaluator_model
+            item, evaluator_model=evaluator_model, error_tolerance=error_tolerance
         )
         all_metrics.extend(item_evaluators)
 
@@ -189,6 +214,7 @@ def build_metrics_evaluator(
         scoring_metrics=all_metrics,
         scoring_key_mapping=scoring_key_mapping,
         skipped_evaluators=skipped_evaluators,
+        error_tolerance=error_tolerance,
     )
 
 
@@ -199,6 +225,7 @@ def _compute_metric_scores(
     dataset_item_content: Dict[str, Any],
     task_output: Dict[str, Any],
     trace_tool_context: Any,
+    error_tolerance: ErrorTolerance,
 ) -> List[score_result.ScoreResult]:
     """
     Compute scores using given metrics.
@@ -265,8 +292,15 @@ def _compute_metric_scores(
             else:
                 score_results.append(result)
 
-        except exceptions.ScoreMethodMissingArguments:
-            raise
+        except exceptions.ScoreMethodMissingArguments as exception:
+            if error_tolerance < ErrorTolerance.ALL_SCORING_ERRORS:
+                raise
+            LOGGER.error(
+                "Metric %s cannot be scored. Its score will be marked as failed. %s",
+                metric.name,
+                exception,
+            )
+            score_results.append(_build_failed_score_result(metric.name, exception))
         except Exception as exception:
             LOGGER.error(
                 "Failed to compute metric %s. Score result will be marked as failed.",
@@ -279,14 +313,7 @@ def _compute_metric_scores(
                     logging_messages.LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION
                 )
 
-            score_results.append(
-                score_result.ScoreResult(
-                    name=metric.name,
-                    value=0.0,
-                    reason=str(exception),
-                    scoring_failed=True,
-                )
-            )
+            score_results.append(_build_failed_score_result(metric.name, exception))
 
     return score_results
 
@@ -305,11 +332,13 @@ class MetricsEvaluator:
         scoring_metrics: List[base_metric.BaseMetric],
         scoring_key_mapping: ScoringKeyMappingType,
         skipped_evaluators: Optional[List[score_result.ScoreResult]] = None,
+        error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
     ):
         self._scoring_key_mapping = scoring_key_mapping
         self._regular_metrics: List[base_metric.BaseMetric] = []
         self._task_span_metrics: List[base_metric.BaseMetric] = []
         self._skipped_evaluators = skipped_evaluators or []
+        self._error_tolerance = error_tolerance
 
         self._analyze_metrics(scoring_metrics)
 
@@ -380,6 +409,7 @@ class MetricsEvaluator:
             dataset_item_content=dataset_item_content,
             task_output=task_output,
             trace_tool_context=trace_tool_context,
+            error_tolerance=self._error_tolerance,
         )
 
         return score_results, mapped_scoring_inputs
@@ -419,6 +449,7 @@ class MetricsEvaluator:
             dataset_item_content=dataset_item_content,
             task_output=task_output,
             trace_tool_context=None,
+            error_tolerance=self._error_tolerance,
         )
 
         return score_results, mapped_scoring_inputs_with_span
