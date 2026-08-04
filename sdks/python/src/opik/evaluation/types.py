@@ -18,14 +18,15 @@ class ErrorTolerance(enum.IntEnum):
     """How many failures an evaluation absorbs before it gives up.
 
     Higher values tolerate more. Plain ints work too, since this is an ``IntEnum``.
-    Numbering starts at 1 to leave room for a stricter level below the default.
+    Values are spaced by ten so levels can be inserted above, below or between the
+    existing ones without renumbering.
     """
 
-    METRIC_ERRORS = 1
+    METRIC_ERRORS = 10
     """Default. Errors raised *inside* ``score`` are recorded as failed score
     results and the run continues; anything else aborts."""
 
-    ALL_SCORING_ERRORS = 2
+    ALL_SCORING_ERRORS = 20
     """Also tolerate errors that prevent a metric from being scored at all — a
     required score argument the dataset does not provide, or an item-level
     evaluator that cannot be built. A failure of the evaluation task itself

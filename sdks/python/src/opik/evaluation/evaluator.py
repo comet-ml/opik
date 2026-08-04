@@ -250,10 +250,10 @@ def evaluate(
         error_tolerance: How much failure the run absorbs before it gives up.
             Accepts an ``opik.ErrorTolerance`` member or the equivalent int.
 
-            - ``ErrorTolerance.METRIC_ERRORS`` (1, default): errors raised *inside*
+            - ``ErrorTolerance.METRIC_ERRORS`` (10, default): errors raised *inside*
               ``score`` are recorded as failed score results and the run continues.
               Anything else aborts. This is the long-standing behaviour.
-            - ``ErrorTolerance.ALL_SCORING_ERRORS`` (2): additionally tolerate errors
+            - ``ErrorTolerance.ALL_SCORING_ERRORS`` (20): additionally tolerate errors
               that stop a metric from being scored at all — a required score argument
               the dataset does not provide, or an item-level evaluator that cannot be
               built. Note that a misconfiguration affecting every item will then

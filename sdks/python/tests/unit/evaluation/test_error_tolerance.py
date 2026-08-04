@@ -211,7 +211,7 @@ def test_evaluate__tolerated_failures__are_not_sent_to_the_backend(fake_backend)
 
 def test_evaluate__error_tolerance_accepts_plain_ints(fake_backend):
     result = _run_evaluation(
-        [AlwaysPasses(), NeedsMissingArgument()], error_tolerance=2
+        [AlwaysPasses(), NeedsMissingArgument()], error_tolerance=20
     )
 
     assert _score_by_name(result, "needs_missing_arg").scoring_failed is True
@@ -219,4 +219,4 @@ def test_evaluate__error_tolerance_accepts_plain_ints(fake_backend):
 
 def test_evaluate__error_tolerance_rejects_unknown_values(fake_backend):
     with pytest.raises(ValueError, match="not a valid ErrorTolerance"):
-        _run_evaluation([AlwaysPasses()], error_tolerance=7)
+        _run_evaluation([AlwaysPasses()], error_tolerance=15)
