@@ -37,7 +37,13 @@ import lombok.Builder;
  * keyword — both are required, since with the setting absent the keyword parses and is silently ignored. Requires
  * ClickHouse 26.3+: on 25.8 the keyword is a {@code SYNTAX_ERROR} and the setting an {@code UNKNOWN_SETTING}, either of
  * which fails the query outright rather than degrading, so an environment pointed at an older external ClickHouse must
- * leave this {@code false}. The bundled ClickHouse is 26.3.</p>
+ * leave this {@code false}. The bundled ClickHouse is 26.3.
+ *
+ * <p>Leave this {@code false} everywhere for now, including tests: on 26.3 and 26.4 a materialized CTE reused from
+ * {@code IN} subqueries — the shape the feedback-scores stats query uses — intermittently raises
+ * {@code LOGICAL_ERROR "Reading from materialized CTE before it has been materialized"}, which surfaces as a 500. Fixed
+ * upstream on {@code master} by ClickHouse/ClickHouse#105041; the 26.3 backport is still outstanding. Turn this on once
+ * ClickHouse is 26.5+ or the backport lands. See https://github.com/ClickHouse/ClickHouse/issues/101940</p>
  *
  * <p>{@code deletionEventsInsertBatchSize}: rows per {@code INSERT} into the bridge (shared by trace and span capture). A single delete batch can carry
  * far more ids than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split

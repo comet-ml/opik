@@ -151,6 +151,10 @@ databaseAnalyticsDataModel:
   #   enable_materialized_cte setting alongside the keyword; both are required. Requires ClickHouse 26.3+, which the
   #   bundled ClickHouse satisfies; leave false when pointing at an older external ClickHouse, where it fails the
   #   query rather than degrading.
+  #   Keep false until ClickHouse is 26.5+ or the 26.3 backport lands: reusing a materialized CTE from IN subqueries
+  #   hits LOGICAL_ERROR "Reading from materialized CTE before it has been materialized" on 26.3 and 26.4, surfacing
+  #   as a 500. Fixed upstream on master by ClickHouse/ClickHouse#105041, tracked in
+  #   https://github.com/ClickHouse/ClickHouse/issues/101940
   materializedCteEnabled: ${ANALYTICS_DB_DATA_MODEL_MATERIALIZED_CTE_ENABLED:-false}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
