@@ -181,9 +181,21 @@ def _small_batches(monkeypatch, size: int = 2) -> None:
     monkeypatch.setattr(constants, "DATASET_ITEMS_MAX_BATCH_SIZE", size)
 
 
+def _mock_rest_client(backend_version: str = "2.2.8") -> Mock:
+    """A rest client whose reported backend version supports parallel insert.
+
+    A bare Mock() would return a Mock from version(), which the parallel gate
+    treats as undeterminable and downgrades to a sequential upload — so tests
+    that mean to exercise the thread pool must pin a supported version.
+    """
+    mock_rest_client = Mock()
+    mock_rest_client.version.return_value = {"version": backend_version}
+    return mock_rest_client
+
+
 def test_insert__parallel__all_batches_sent_under_one_batch_group_id(monkeypatch):
     _small_batches(monkeypatch, size=2)
-    mock_rest_client = Mock()
+    mock_rest_client = _mock_rest_client()
     dataset = Dataset(
         name="test_dataset",
         description="Test description",
@@ -218,7 +230,7 @@ def test_insert__parallel_and_sequential_send_identical_items(monkeypatch):
     items = _make_items(10)
 
     def sent_inputs(num_threads: int) -> list:
-        mock_rest_client = Mock()
+        mock_rest_client = _mock_rest_client()
         dataset = Dataset(
             name="test_dataset",
             description="Test description",
@@ -240,7 +252,7 @@ def test_insert__parallel_and_sequential_send_identical_items(monkeypatch):
 
 def test_insert__parallel__batch_failure_raises(monkeypatch):
     _small_batches(monkeypatch, size=2)
-    mock_rest_client = Mock()
+    mock_rest_client = _mock_rest_client()
 
     # Any batch failing must surface to the caller. Fail unconditionally so the
     # assertion is deterministic regardless of worker scheduling.
@@ -276,3 +288,100 @@ def test_insert__invalid_num_threads__raises_before_upload(bad_value):
         dataset.insert(_make_items(3), num_threads=bad_value)
 
     mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
+
+
+def _insert_and_capture_num_threads(
+    monkeypatch, mock_rest_client: Mock, requested_num_threads: int
+) -> int:
+    """Run an insert and report the num_threads that reached the send stage."""
+    _small_batches(monkeypatch, size=2)
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
+
+    captured = {}
+    original_send_batches = dataset._send_batches
+
+    def spy(batches, batch_group_id, num_threads):
+        captured["num_threads"] = num_threads
+        return original_send_batches(batches, batch_group_id, num_threads)
+
+    monkeypatch.setattr(dataset, "_send_batches", spy)
+    dataset.insert(_make_items(10), num_threads=requested_num_threads)
+    return captured["num_threads"]
+
+
+@pytest.mark.parametrize("backend_version", ["2.2.8", "2.2.9", "2.3.0", "3.0.0"])
+def test_insert__backend_supports_parallel__requested_threads_used(
+    monkeypatch, backend_version
+):
+    used = _insert_and_capture_num_threads(
+        monkeypatch, _mock_rest_client(backend_version), requested_num_threads=4
+    )
+
+    assert used == 4, (
+        f"Backend {backend_version} supports parallel insert, threads must not be capped"
+    )
+
+
+@pytest.mark.parametrize("backend_version", ["2.2.7", "2.1.0", "1.9.9"])
+def test_insert__backend_older_than_minimum__downgrades_to_sequential(
+    monkeypatch, backend_version
+):
+    used = _insert_and_capture_num_threads(
+        monkeypatch, _mock_rest_client(backend_version), requested_num_threads=4
+    )
+
+    assert used == 1, (
+        f"Backend {backend_version} predates parallel insert support, must fall back "
+        "to a sequential upload"
+    )
+
+
+def test_insert__self_hosted_build_version__parsed_and_supported(monkeypatch):
+    # Self-hosted / PR-environment builds report a suffixed version; only
+    # major.minor.patch is compared, so this must still count as supported.
+    used = _insert_and_capture_num_threads(
+        monkeypatch,
+        _mock_rest_client("2.2.12-7671-merge-2777"),
+        requested_num_threads=4,
+    )
+
+    assert used == 4
+
+
+def test_insert__unparseable_backend_version__downgrades_to_sequential(monkeypatch):
+    used = _insert_and_capture_num_threads(
+        monkeypatch, _mock_rest_client("dev-local"), requested_num_threads=4
+    )
+
+    assert used == 1, (
+        "An undeterminable backend version must fall back to a sequential upload"
+    )
+
+
+def test_insert__version_endpoint_unreachable__downgrades_to_sequential(monkeypatch):
+    mock_rest_client = Mock()
+    mock_rest_client.version.side_effect = ConnectionError("backend unreachable")
+
+    used = _insert_and_capture_num_threads(
+        monkeypatch, mock_rest_client, requested_num_threads=4
+    )
+
+    assert used == 1, (
+        "A failing version probe must not break insert; it falls back to sequential"
+    )
+
+
+def test_insert__sequential__version_endpoint_not_probed(monkeypatch):
+    # The default path must not pay an extra request.
+    mock_rest_client = _mock_rest_client()
+
+    _insert_and_capture_num_threads(
+        monkeypatch, mock_rest_client, requested_num_threads=1
+    )
+
+    mock_rest_client.version.assert_not_called()

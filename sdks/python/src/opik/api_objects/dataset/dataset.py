@@ -26,7 +26,7 @@ from opik.rest_api.types import (
     execution_policy_write as rest_execution_policy,
 )
 from opik.message_processing.batching import sequence_splitter
-from opik import id_helpers
+from opik import id_helpers, semantic_version
 import opik.exceptions as exceptions
 import opik.config as config
 from .. import constants
@@ -41,6 +41,11 @@ if TYPE_CHECKING:
     import pandas as pd
 
 LOGGER = logging.getLogger(__name__)
+
+# Parallel insert relies on the backend serializing concurrent dataset version
+# writes; before this release, concurrent batches sharing one batch_group_id
+# raced and could 500 or silently drop rows (OPIK-7264, backend PR #7518).
+MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT = "2.2.8"
 
 
 class DatasetExportOperations(abc.ABC):
@@ -611,6 +616,43 @@ class Dataset(DatasetExportOperations):
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
 
+    def _resolve_num_threads(self, num_threads: int) -> int:
+        """Downgrade to a sequential upload when the backend predates parallel support.
+
+        Older backends race on concurrent batches that share a batch_group_id,
+        so parallelism is only safe from
+        ``MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` onwards. When the version
+        cannot be determined at all — unreachable endpoint, non-semver build
+        string — we fall back to sequential rather than risk the race.
+        """
+        try:
+            backend_version = self._rest_client.version()["version"]
+            supported = (
+                semantic_version.SemanticVersion.parse(backend_version)
+                >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
+            )
+        except Exception:
+            LOGGER.warning(
+                "Could not determine the Opik backend version, falling back to a "
+                "sequential dataset upload. Parallel upload requires backend %s "
+                "or newer.",
+                MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                exc_info=True,
+            )
+            return 1
+
+        if not supported:
+            LOGGER.warning(
+                "Opik backend %s does not support parallel dataset upload, falling "
+                "back to a sequential upload. Upgrade to backend %s or newer to use "
+                "num_threads.",
+                backend_version,
+                MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+            )
+            return 1
+
+        return num_threads
+
     def _send_batches(
         self,
         batches: List[List[rest_dataset_item.DatasetItemWrite]],
@@ -703,12 +745,19 @@ class Dataset(DatasetExportOperations):
                 succeeded remain persisted. Items are keyed by their ``id``, so
                 parallel and sequential inserts of the same items produce
                 identical dataset content; the input order is not a read-back
-                guarantee.
+                guarantee. Requires an Opik backend of at least
+                ``MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` (2.2.8); against
+                older backends, or when the backend version cannot be
+                determined, the upload falls back to sequential and logs a
+                warning.
         """
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
+
+        if num_threads > 1:
+            num_threads = self._resolve_num_threads(num_threads)
 
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
