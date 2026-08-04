@@ -359,4 +359,22 @@ repos:
         # workflow / composite action to this leg by path. Covers both workflows
         # and composite `action.yml`/`action.yaml` files (zizmor audits both).
         files: (^\.github/workflows/.+\.(yml|yaml)$)|((^|/)action\.(yml|yaml)$)
+
+  # ---------------------------------------------------------------------------
+  # Java backend — semgrep, running this repo's own rules from .semgrep/ (no
+  # upstream rule packs; broader SAST adoption is OPIK-6678). The `semgrep` hook
+  # is language: python, so pre-commit provisions it in an isolated env and
+  # contributors need no local semgrep install.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/semgrep/pre-commit
+    rev: v1.172.0
+    hooks:
+      - id: semgrep
+        name: 🛡️ semgrep — java backend sql
+        # Explicit files: regex, same reason as hadolint above — the CI matrix
+        # builder routes on paths, not on the hook's own file selection. Covers
+        # the test tree too: it is clean today, and including it stops test
+        # fixtures from teaching the pattern this rule exists to block.
+        files: ^apps/opik-backend/.*\.java$
+        args: ['--config', '.semgrep', '--error', '--disable-version-check', '--quiet', '--skip-unknown-extensions']
 ...

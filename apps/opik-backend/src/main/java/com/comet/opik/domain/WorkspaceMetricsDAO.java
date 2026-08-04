@@ -243,8 +243,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     // projects: WorkspaceMetricsService resolves the "all projects" request into every project id up front, so the
     // predicate is always a bounded `project_id IN :project_ids` list that prunes on the spans primary key
     // (workspace_id, project_id, ...) — never an unconstrained workspace-wide scan.
-    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries
-            .spanFilteredPrefix("project_id IN :project_ids");
+    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries.SPAN_FILTERED_PREFIX;
 
     // Span filtering is reused from ProjectMetricsDAO's SPAN_FILTERED_PREFIX (above), but the output is shaped in the
     // workspace-native style like GET_COSTS_DAILY: each row is a finished series {project_id, name, data}, where data is
@@ -307,8 +306,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     // Distinct span token-usage key names across an explicit project set, all-time. Shares SpanMetricsQueries with
     // ProjectMetricsDAO's per-project query; only the project predicate differs (a bounded project_id IN (...) list).
-    private static final String GET_WORKSPACE_TOKEN_USAGE_NAMES = SpanMetricsQueries
-            .tokenUsageNames("project_id IN :project_ids");
+    private static final String GET_WORKSPACE_TOKEN_USAGE_NAMES = SpanMetricsQueries.TOKEN_USAGE_NAMES;
 
     private static final String WORKSPACE_METRIC_QUERY_NAME_PREFIX = "WorkspaceMetrics_";
 
@@ -387,6 +385,9 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             var stTemplate = getSTWithLogComment(GET_WORKSPACE_TOKEN_USAGE_NAMES,
                     WORKSPACE_METRIC_QUERY_NAME_PREFIX + "tokenUsageNames", workspaceId, userName, projectIds.size());
 
+            // Selects the project-set predicate in the shared SpanMetricsQueries query; project_ids is bound below.
+            stTemplate.add("project_ids", true);
+
             var statement = connection.createStatement(stTemplate.render())
                     .bind("workspace_id", workspaceId)
                     .bind("project_ids", projectIds.toArray(new UUID[0]));
@@ -412,6 +413,9 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
             var stTemplate = getSTWithLogComment(query, WORKSPACE_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
                     userName, request.projectIds().size());
+
+            // Selects the project-set predicate in the shared SpanMetricsQueries CTE; project_ids is bound below.
+            stTemplate.add("project_ids", true);
 
             if (isTotal) {
                 stTemplate.add("bucket", "toDateTime(UUIDv7ToDateTime(toUUID(:uuid_from_time)))");

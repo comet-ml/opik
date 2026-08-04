@@ -304,9 +304,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             """;
 
-    // Shared with WorkspaceMetricsDAO via SpanMetricsQueries; per-project aggregation fixes a single project_id.
-    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries
-            .spanFilteredPrefix("project_id = :project_id");
+    // Shared with WorkspaceMetricsDAO via SpanMetricsQueries; per-project aggregation fixes a single project_id, which
+    // getMetric() selects with template.add("project_id", true).
+    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries.SPAN_FILTERED_PREFIX;
 
     private static final String THREAD_FILTERED_PREFIX = """
             WITH trace_threads_final AS (
@@ -1181,8 +1181,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
-    private static final String GET_PROJECT_TOKEN_USAGE_NAMES = SpanMetricsQueries
-            .tokenUsageNames("project_id = :project_id");
+    private static final String GET_PROJECT_TOKEN_USAGE_NAMES = SpanMetricsQueries.TOKEN_USAGE_NAMES;
 
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
@@ -1575,6 +1574,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             var template = getSTWithLogComment(query, PROJECT_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
                     userName, projectId.toString());
 
+            // Selects the single-project predicate in the shared SpanMetricsQueries CTE; project_id is bound below.
+            template.add("project_id", true);
+
             if (isTotal) {
                 template.add("bucket", "toDateTime(UUIDv7ToDateTime(toUUID(:uuid_from_time)))");
             } else {
@@ -1801,6 +1803,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> {
             var stTemplate = getSTWithLogComment(GET_PROJECT_TOKEN_USAGE_NAMES, "getProjectTokenUsageNames",
                     workspaceId, "", projectId.toString());
+
+            // Selects the single-project predicate in the shared SpanMetricsQueries query; project_id is bound below.
+            stTemplate.add("project_id", true);
 
             var statement = connection.createStatement(stTemplate.render())
                     .bind("project_id", projectId)

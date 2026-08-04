@@ -1,0 +1,46 @@
+rules:
+  - id: sql-query-with-format-slot
+    languages: [java]
+    severity: ERROR
+    message: >-
+      This SQL query is assembled by string formatting: a `%s` slot sits where a SQL
+      clause belongs. Bind values with `:named` parameters, and use a StringTemplate
+      `<if(flag)>` conditional for fragments that vary structurally (see
+      ProjectMetricsDAO / WorkspaceMetricsDAO). String-formatted SQL invites injection
+      and is harder to read and maintain. If this is a genuinely dynamic query builder
+      that binds its values separately, add `// nosemgrep: sql-query-with-format-slot`
+      with a comment explaining why.
+    # Match where the query is DECLARED, not where it is executed. Opik holds SQL in
+    # `static final` text blocks rendered through StringTemplate and passed to
+    # `connection.createStatement(template.render())`, so the literal and the execution
+    # are connected only through a template object — call-site patterns such as
+    # `query($X + $Y)` match nothing in this codebase.
+    #
+    # `pattern: $X` binds every expression node; `metavariable-regex` then inspects the
+    # string literal's own contents, text blocks included. Requiring the SQL and the
+    # `%s` to live in the SAME literal node is what keeps this precise: the ~450
+    # legitimate `.formatted(` call sites carry no SQL.
+    #
+    # The regex is deliberately narrow, because "contains a SQL keyword" alone is not a
+    # usable signal in this repo. It requires ALL of:
+    #
+    #   1. A line that STARTS with SELECT or WITH (after whitespace) — a real query,
+    #      not prose that happens to contain a keyword. Without this anchor, an LLM
+    #      prompt template in TestSuitePromptConstants matches on the jq expression
+    #      `..|select(.error_info?)`, and log messages like "Completed bulk update for
+    #      '%s' dataset items" match on the word "update".
+    #   2. A FROM clause on its own line — a second, independent structural marker.
+    #   3. A `%s` that is NOT inside a single-quoted SQL string. A slot spliced into a
+    #      quoted literal (`WHERE cluster = '%s'`) is a value position, which the
+    #      health checks fill from a compile-time constant; those are a readability
+    #      concern, not injection, and are out of scope here (OPIK-7726). This gate
+    #      targets the clause-position splice the review actually flagged.
+    #
+    # Deliberately `%s` only, not `%d`: MetadataDAO contains the real SQL literal
+    # `STR_TO_DATE(value, '%Y-%m-%d')`, which pattern matching cannot distinguish from
+    # an integer format slot. No real violation uses `%d`.
+    patterns:
+      - pattern: $X
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?sm)^"(?=.*^\s*(?i:SELECT|WITH)\b)(?=.*^\s*(?i:FROM)\b)(?=.*^[^\n]*\S[^\n]*(?<!')%s(?!')).*"$
