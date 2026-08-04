@@ -118,3 +118,37 @@ def test_evaluate__metric_without_kwargs__missing_argument_still_raises(fake_bac
 
     with pytest.raises(exceptions.ScoreMethodMissingArguments):
         _run_evaluation([NarrowSignature()], items=items)
+
+
+class PositionalOnlySignature(base_metric.BaseMetric):
+    """`output` cannot be passed by keyword, so this metric could never be scored."""
+
+    def __init__(self) -> None:
+        super().__init__(name="positional_only_metric", track=False)
+
+    def score(self, output: str, /) -> score_result.ScoreResult:
+        return score_result.ScoreResult(name=self.name, value=len(output) / 10)
+
+
+def test_evaluate__positional_only_parameter__is_passed_positionally(fake_backend):
+    result = _run_evaluation([PositionalOnlySignature()])
+
+    score = result.test_results[0].score_results[0]
+    assert score.scoring_failed is False
+    assert score.value == 0.1  # len("a") / 10
+
+
+def test_evaluate__positional_only_parameter_is_missing__reported_as_missing_argument(
+    fake_backend,
+):
+    # Previously this surfaced as a generic TypeError from the call itself, which
+    # bypassed the dedicated missing-argument message.
+    class NeedsPositionalOnly(base_metric.BaseMetric):
+        def __init__(self) -> None:
+            super().__init__(name="needs_positional_only", track=False)
+
+        def score(self, gold_label: str, /) -> score_result.ScoreResult:
+            return score_result.ScoreResult(name=self.name, value=1.0)
+
+    with pytest.raises(exceptions.ScoreMethodMissingArguments, match="gold_label"):
+        _run_evaluation([NeedsPositionalOnly()])

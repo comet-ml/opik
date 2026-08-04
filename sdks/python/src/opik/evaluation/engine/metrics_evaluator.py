@@ -1,6 +1,7 @@
+import contextlib
 import inspect
 import logging
-from typing import List, Dict, Any, Optional, Callable, Tuple
+from typing import List, Dict, Any, Iterator, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
@@ -56,33 +57,53 @@ def _accepts_trace_tool_context(func: Callable) -> bool:
     return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
 
 
-def _select_accepted_kwargs(
+def _select_score_arguments(
     score_function: Callable, kwargs: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Narrow the scoring inputs to what the score signature can actually accept.
+) -> Tuple[List[Any], Dict[str, Any]]:
+    """Split the scoring inputs into what the score signature can accept.
 
-    Every dataset item key and task output key is offered to every metric. A
-    metric that does not declare ``**kwargs`` used to fail with an
-    ``unexpected keyword argument`` TypeError on every single item — a message
-    that reads like an SDK bug rather than a signature mismatch.
+    Every dataset item key and task output key is offered to every metric, which
+    breaks two kinds of signature:
+
+    - A metric that does not declare ``**kwargs`` used to fail on every single
+      item with an ``unexpected keyword argument`` TypeError — a message that
+      reads like an SDK bug rather than a signature mismatch. Those keys are
+      dropped now.
+    - A positional-only parameter cannot be passed by keyword at all, so such a
+      metric could never be scored. Those are returned separately, in signature
+      order, to be passed positionally.
 
     Missing arguments are still reported: ``validate_score_arguments`` runs
-    before this and only checks the parameters the metric declares, so
-    filtering here cannot hide a key the metric actually asked for.
+    before this and only checks the parameters the metric declares, so filtering
+    here cannot hide a key the metric actually asked for.
     """
     try:
         parameters = inspect.signature(score_function).parameters
     except (ValueError, TypeError):
         # Signature is not introspectable — pass everything, as before.
-        return kwargs
+        return [], kwargs
 
-    if any(
+    positional_arguments = [
+        kwargs[name]
+        for name, parameter in parameters.items()
+        if parameter.kind == inspect.Parameter.POSITIONAL_ONLY and name in kwargs
+    ]
+
+    accepts_any_keyword = any(
         parameter.kind == inspect.Parameter.VAR_KEYWORD
         for parameter in parameters.values()
-    ):
-        return kwargs
+    )
 
-    return {name: value for name, value in kwargs.items() if name in parameters}
+    keyword_arguments: Dict[str, Any] = {}
+    for name, value in kwargs.items():
+        parameter = parameters.get(name)
+        if parameter is None:
+            if accepts_any_keyword:
+                keyword_arguments[name] = value
+        elif parameter.kind != inspect.Parameter.POSITIONAL_ONLY:
+            keyword_arguments[name] = value
+
+    return positional_arguments, keyword_arguments
 
 
 def split_into_regular_and_task_span_metrics(
@@ -127,13 +148,36 @@ def _build_failed_score_result(
     )
 
 
+@contextlib.contextmanager
+def _reporting_pre_scoring_failures(
+    metric: base_metric.BaseMetric,
+) -> Iterator[None]:
+    """Give whatever runs before ``score`` the span the metric would have had.
+
+    ``score`` is ``@track``-wrapped, so a metric that fails *inside* it already
+    reports on its own span. A metric that never gets that far has no span at
+    all, which is why a tolerated failure would otherwise be invisible in the
+    backend: no feedback score is persisted for a failed score either.
+
+    The span is created only on failure. Creating it on entry — as
+    ``start_as_current_span`` does — would add a second span named after the
+    metric to every successful score.
+    """
+    try:
+        yield
+    except Exception as exception:
+        # ``track=False`` is an explicit opt-out of tracing for this metric;
+        # a failure is not a reason to work around it.
+        if hasattr(metric.score, "opik_tracked"):
+            _log_failed_metric_span(metric.name, exception)
+        raise
+
+
 def _log_failed_metric_span(metric_name: str, exception: Exception) -> None:
     """Emit the span the metric would have had if it had been entered.
 
-    A metric that raises inside ``score`` already lands on its own span as
-    ``error_info``, because ``score`` is ``@track``-wrapped. A metric that never
-    gets that far has no span at all, so a tolerated failure would otherwise be
-    invisible in the backend — blank cell, no error, nothing to click.
+    Callers are responsible for deciding whether the metric should be traced at
+    all: this builds the span unconditionally.
     """
     parent_span = opik_context.get_current_span_data()
     if parent_span is None:
@@ -174,7 +218,7 @@ def _extract_item_evaluators(
         return [], []
 
     evaluators: List[base_metric.BaseMetric] = []
-    skipped_evaluators: List[score_result.ScoreResult] = []
+    skipped_evaluator_scores: List[score_result.ScoreResult] = []
     for evaluator_item in item.evaluators:
         try:
             if evaluator_item.type == "llm_judge":
@@ -188,18 +232,13 @@ def _extract_item_evaluators(
                 # against a newer dataset), so it must not abort the
                 # evaluation. It must not disappear either: without a result
                 # the item just looks under-evaluated (OPIK-6925).
-                reason = (
+                unsupported_type = exceptions.EvaluationError(
                     f"Unsupported evaluator type: {evaluator_item.type}. "
                     "Only 'llm_judge' is supported."
                 )
-                LOGGER.warning(reason)
-                skipped_evaluators.append(
-                    score_result.ScoreResult(
-                        name=evaluator_item.name,
-                        value=0.0,
-                        reason=reason,
-                        scoring_failed=True,
-                    )
+                LOGGER.warning(str(unsupported_type))
+                skipped_evaluator_scores.append(
+                    _build_failed_score_result(evaluator_item.name, unsupported_type)
                 )
         except Exception as exception:
             LOGGER.error(
@@ -210,11 +249,11 @@ def _extract_item_evaluators(
             if error_tolerance < ErrorTolerance.ALL_SCORING_ERRORS:
                 raise
             _log_failed_metric_span(evaluator_item.name, exception)
-            skipped_evaluators.append(
+            skipped_evaluator_scores.append(
                 _build_failed_score_result(evaluator_item.name, exception)
             )
 
-    return evaluators, skipped_evaluators
+    return evaluators, skipped_evaluator_scores
 
 
 def build_metrics_evaluator(
@@ -226,9 +265,9 @@ def build_metrics_evaluator(
 ) -> "MetricsEvaluator":
     """Build a MetricsEvaluator with suite-level + item-level metrics."""
     all_metrics: List[base_metric.BaseMetric] = list(regular_metrics)
-    skipped_evaluators: List[score_result.ScoreResult] = []
+    skipped_evaluator_scores: List[score_result.ScoreResult] = []
     if item is not None:
-        item_evaluators, skipped_evaluators = _extract_item_evaluators(
+        item_evaluators, skipped_evaluator_scores = _extract_item_evaluators(
             item, evaluator_model=evaluator_model, error_tolerance=error_tolerance
         )
         all_metrics.extend(item_evaluators)
@@ -242,7 +281,7 @@ def build_metrics_evaluator(
     return MetricsEvaluator(
         scoring_metrics=all_metrics,
         scoring_key_mapping=scoring_key_mapping,
-        skipped_evaluators=skipped_evaluators,
+        skipped_evaluator_scores=skipped_evaluator_scores,
         error_tolerance=error_tolerance,
     )
 
@@ -293,11 +332,12 @@ def _compute_metric_scores(
                         task_outputs=task_output,
                     )
             else:
-                arguments_validator.validate_score_arguments(
-                    metric=metric,
-                    kwargs=mapped_scoring_inputs,
-                    scoring_key_mapping=scoring_key_mapping,
-                )
+                with _reporting_pre_scoring_failures(metric):
+                    arguments_validator.validate_score_arguments(
+                        metric=metric,
+                        kwargs=mapped_scoring_inputs,
+                        scoring_key_mapping=scoring_key_mapping,
+                    )
                 # Only inject trace_tool_context into metrics whose
                 # signature can absorb it; otherwise the call would fail
                 # with "unexpected keyword argument" for narrow metrics.
@@ -310,9 +350,10 @@ def _compute_metric_scores(
                     }
                 else:
                     score_kwargs = mapped_scoring_inputs
-                result = metric.score(
-                    **_select_accepted_kwargs(metric.score, score_kwargs)
+                positional_arguments, keyword_arguments = _select_score_arguments(
+                    metric.score, score_kwargs
                 )
+                result = metric.score(*positional_arguments, **keyword_arguments)
 
             LOGGER.debug("Metric %s score ended", metric.name)
 
@@ -329,10 +370,6 @@ def _compute_metric_scores(
                 metric.name,
                 exception,
             )
-            # Only when the metric would have been traced anyway — `track=False`
-            # is an explicit opt-out we must not work around.
-            if hasattr(metric.score, "opik_tracked"):
-                _log_failed_metric_span(metric.name, exception)
             score_results.append(_build_failed_score_result(metric.name, exception))
         except Exception as exception:
             LOGGER.error(
@@ -364,13 +401,13 @@ class MetricsEvaluator:
         self,
         scoring_metrics: List[base_metric.BaseMetric],
         scoring_key_mapping: ScoringKeyMappingType,
-        skipped_evaluators: Optional[List[score_result.ScoreResult]] = None,
+        skipped_evaluator_scores: Optional[List[score_result.ScoreResult]] = None,
         error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
     ):
         self._scoring_key_mapping = scoring_key_mapping
         self._regular_metrics: List[base_metric.BaseMetric] = []
         self._task_span_metrics: List[base_metric.BaseMetric] = []
-        self._skipped_evaluators = skipped_evaluators or []
+        self._skipped_evaluator_scores = skipped_evaluator_scores or []
         self._error_tolerance = error_tolerance
 
         self._analyze_metrics(scoring_metrics)
@@ -435,7 +472,7 @@ class MetricsEvaluator:
             scoring_key_mapping=self._scoring_key_mapping,
         )
 
-        score_results = self._skipped_evaluators + _compute_metric_scores(
+        score_results = self._skipped_evaluator_scores + _compute_metric_scores(
             scoring_metrics=self._regular_metrics,
             mapped_scoring_inputs=mapped_scoring_inputs,
             scoring_key_mapping=self._scoring_key_mapping,

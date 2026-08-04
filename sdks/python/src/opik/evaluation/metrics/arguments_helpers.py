@@ -7,6 +7,8 @@ from .. import types as evaluation_types
 
 LOGGER = logging.getLogger(__name__)
 
+MAX_REPORTED_AVAILABLE_KEYS = 20
+
 
 def raise_if_score_arguments_are_missing(
     score_function: Callable,
@@ -25,6 +27,7 @@ def raise_if_score_arguments_are_missing(
             continue
 
         if param.default == inspect.Parameter.empty and param.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
             inspect.Parameter.KEYWORD_ONLY,
         ):
@@ -66,10 +69,19 @@ def create_scoring_inputs(
                     # it only surfaces later if the metric happens to have no
                     # default for that argument. When it does have one, the
                     # metric silently scores the wrong thing, so this cannot
-                    # stay at debug level (OPIK-6925).
+                    # stay at debug level (OPIK-6925). The available keys are
+                    # the actionable part, but they are user data and can be
+                    # numerous, so only a sample goes into the warning.
+                    available_keys = list(mapped_inputs.keys())
+                    sample = available_keys[:MAX_REPORTED_AVAILABLE_KEYS]
+                    remaining = len(available_keys) - len(sample)
                     LOGGER.warning(
-                        f"Scoring key mapping value '{value}' not found in dataset item. "
-                        f"Available keys: {list(mapped_inputs.keys())}"
+                        "Scoring key mapping value '%s' not found in dataset item. "
+                        "Available keys (%d): %s%s",
+                        value,
+                        len(available_keys),
+                        sample,
+                        f" and {remaining} more" if remaining > 0 else "",
                     )
                 else:
                     mapped_inputs[key] = mapped_inputs[value]
