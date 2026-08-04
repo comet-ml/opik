@@ -725,41 +725,57 @@ def finalize_finish_reason(context: OptimizationContext) -> None:
             context.finish_reason = "completed"
 
 
+# Evaluation runs agent calls on a worker pool, so these accumulators are written
+# concurrently. A bare += loses increments, which under-reports the run's LLM call
+# count (OPIK-7521).
+_usage_lock = threading.Lock()
+
+
 def reset_usage(optimizer: BaseOptimizer) -> None:
-    optimizer.llm_call_counter = 0
-    optimizer.llm_call_tools_counter = 0
-    optimizer.llm_cost_total = 0.0
-    optimizer.llm_token_usage_total = {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-    }
+    # Under the same lock as the accumulators: a reset that interleaves with an
+    # in-flight increment would drop it, leaving the run reporting fewer LLM
+    # calls than it made.
+    with _usage_lock:
+        optimizer.llm_call_counter = 0
+        optimizer.llm_call_tools_counter = 0
+        optimizer.llm_cost_total = 0.0
+        optimizer.llm_token_usage_total = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
 
 def increment_llm_call(optimizer: BaseOptimizer) -> None:
-    optimizer.llm_call_counter += 1
+    with _usage_lock:
+        optimizer.llm_call_counter += 1
 
 
 def increment_llm_tool_call(optimizer: BaseOptimizer) -> None:
-    optimizer.llm_call_tools_counter += 1
+    with _usage_lock:
+        optimizer.llm_call_tools_counter += 1
 
 
 def add_llm_cost(optimizer: BaseOptimizer, cost: float | None) -> None:
     if cost is None:
         return
-    optimizer.llm_cost_total += float(cost)
+    with _usage_lock:
+        optimizer.llm_cost_total += float(cost)
 
 
 def add_llm_usage(optimizer: BaseOptimizer, usage: dict[str, Any] | None) -> None:
     if not usage:
         return
-    optimizer.llm_token_usage_total["prompt_tokens"] += int(
-        usage.get("prompt_tokens", 0)
-    )
-    optimizer.llm_token_usage_total["completion_tokens"] += int(
-        usage.get("completion_tokens", 0)
-    )
-    optimizer.llm_token_usage_total["total_tokens"] += int(usage.get("total_tokens", 0))
+    with _usage_lock:
+        optimizer.llm_token_usage_total["prompt_tokens"] += int(
+            usage.get("prompt_tokens", 0)
+        )
+        optimizer.llm_token_usage_total["completion_tokens"] += int(
+            usage.get("completion_tokens", 0)
+        )
+        optimizer.llm_token_usage_total["total_tokens"] += int(
+            usage.get("total_tokens", 0)
+        )
 
 
 def coerce_score(raw_score: Any) -> float:
