@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from opik import exceptions
 from opik.rest_api import types as rest_api_types
@@ -170,18 +170,29 @@ def _to_rest_feedback_score(
 def to_rest_record(
     record: bulk_item.ExperimentItemBulkRecord,
 ) -> rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView:
+    # Only set the fields the caller actually provided. The backend maps
+    # evaluate_task_result to a Jackson JsonNode, so an explicit JSON null
+    # deserializes to NullNode rather than Java null — sending
+    # "evaluate_task_result": null next to a trace trips the
+    # "cannot provide both" validator. Unset fields are omitted from the
+    # request body, which is what the backend expects.
+    optional_fields: Dict[str, Any] = {}
+
+    if record.evaluate_task_result is not None:
+        optional_fields["evaluate_task_result"] = record.evaluate_task_result
+
+    if record.trace is not None:
+        optional_fields["trace"] = _to_rest_trace(record.trace)
+
+    if record.spans is not None:
+        optional_fields["spans"] = [_to_rest_span(span) for span in record.spans]
+
+    if record.feedback_scores is not None:
+        optional_fields["feedback_scores"] = [
+            _to_rest_feedback_score(score) for score in record.feedback_scores
+        ]
+
     return rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView(
         dataset_item_id=record.dataset_item_id,
-        evaluate_task_result=record.evaluate_task_result,
-        trace=_to_rest_trace(record.trace) if record.trace is not None else None,
-        spans=(
-            [_to_rest_span(span) for span in record.spans]
-            if record.spans is not None
-            else None
-        ),
-        feedback_scores=(
-            [_to_rest_feedback_score(score) for score in record.feedback_scores]
-            if record.feedback_scores is not None
-            else None
-        ),
+        **optional_fields,
     )

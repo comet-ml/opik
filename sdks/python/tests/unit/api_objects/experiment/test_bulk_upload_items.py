@@ -10,9 +10,14 @@ import pytest
 from opik import exceptions
 from opik.api_objects import constants
 from opik.api_objects.experiment import bulk_item, experiment as experiment_module
+from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 
 START_TIME = datetime.datetime(2026, 8, 4, 12, 0, 0)
+
+
+class _StopAfterCapture(Exception):
+    """Aborts the request once the encoded body has been captured."""
 
 
 def _create_experiment(
@@ -137,6 +142,72 @@ class TestBulkUploadItemsBatching:
         assert len(batch_sizes) > 1
         # Each batch must stay under the backend's per-request ceiling.
         assert all(size <= 3 for size in batch_sizes)
+
+
+class TestBulkUploadItemsSerialization:
+    """Assert on the serialized request body rather than the mocked call.
+
+    The backend maps ``evaluate_task_result`` to a Jackson ``JsonNode``, so an
+    explicit JSON null deserializes to ``NullNode`` instead of Java ``null``.
+    Sending ``"evaluate_task_result": null`` next to a trace therefore trips the
+    "cannot provide both" validator with a 422. A mock-based test cannot see
+    this — only the encoded body can.
+    """
+
+    @staticmethod
+    def _sent_item(records: List[bulk_item.ExperimentItemBulkRecord]) -> Any:
+        rest_client = rest_api_client.OpikApi(base_url="http://testserver", api_key="k")
+        captured: dict = {}
+
+        def capture(request: Any, **kwargs: Any) -> Any:
+            captured["body"] = request.read()
+            raise _StopAfterCapture()
+
+        rest_client._client_wrapper.httpx_client.httpx_client._transport.handle_request = capture
+
+        experiment = experiment_module.Experiment(
+            id="experiment-id",
+            name="experiment-name",
+            dataset_name="dataset-name",
+            rest_client=rest_client,
+            streamer=Mock(),
+            experiments_client=Mock(),
+        )
+
+        with pytest.raises(_StopAfterCapture):
+            experiment.bulk_upload_items(records)
+
+        return json.loads(captured["body"])["items"][0]
+
+    def test_bulk_upload_items__trace_only__evaluate_task_result_is_omitted(
+        self,
+    ) -> None:
+        sent_item = self._sent_item(
+            [
+                _record(
+                    trace=bulk_item.ExperimentItemBulkTrace(
+                        start_time=START_TIME, output={"answer": "a"}
+                    )
+                )
+            ]
+        )
+
+        assert "evaluate_task_result" not in sent_item
+        assert "trace" in sent_item
+
+    def test_bulk_upload_items__evaluate_task_result_only__trace_is_omitted(
+        self,
+    ) -> None:
+        sent_item = self._sent_item([_record(evaluate_task_result={"answer": "a"})])
+
+        assert "trace" not in sent_item
+        assert sent_item["evaluate_task_result"] == {"answer": "a"}
+
+    def test_bulk_upload_items__no_spans_or_scores__keys_are_omitted(self) -> None:
+        sent_item = self._sent_item([_record(evaluate_task_result={"answer": "a"})])
+
+        assert "spans" not in sent_item
+        assert "feedback_scores" not in sent_item
 
 
 class TestBulkUploadItemsConcurrency:
