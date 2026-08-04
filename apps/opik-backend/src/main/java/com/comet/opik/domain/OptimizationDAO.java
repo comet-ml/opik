@@ -587,12 +587,24 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 -- through this branch rather than through experiment_durations, and moves
                 -- over once the link lands. Either way it is counted exactly once, so the
                 -- ingestion race cannot double-charge a run.
-                -- Attribution is scoped to the queried page: experiment_items_final covers
-                -- only experiments of the optimizations in scope, and the candidate CTE only
-                -- their projects. So a trace tagged with run X but stored in another run's
-                -- project, or linked to an experiment outside the page, could be attributed
-                -- differently by the list and by getById. The optimizer produces neither
-                -- shape today, and a dedicated attribution column would remove the question.
+                -- The experiment-item exclusion is keyed on (trace, owning optimization), not
+                -- on the trace alone. It exists to stop a trial trace that also carries its
+                -- run's id as a tag from being charged twice - once through
+                -- experiment_durations and once here - so it must only fire for the run that
+                -- owns the trial. Excluding on trace_id alone would drop a trace tagged with
+                -- run X because it happens to be a trial of run Y, and since the set of
+                -- experiments in scope differs between the list (every optimization matching
+                -- the filters) and getById (one), the two would report different totals for
+                -- the same run. Which is why the tuple test lives out here, after the ARRAY
+                -- JOIN, where the tag is available - not as a cheaper trace_id prefilter in
+                -- the subquery below.
+                -- One scope-dependence is left, in the candidate CTE rather than here: it
+                -- prunes to the projects of the optimizations in scope, so a trace tagged
+                -- with run X but stored in another run's project is found by the list and
+                -- not by getById. The optimizer does not produce that shape - it writes
+                -- optimizer-internal traces to the optimization's own project - and removing
+                -- the project bound would turn this into a workspace-wide scan of an
+                -- unindexed array column. A dedicated attribution column would settle it.
                 -- project_id is deliberately not projected: it would split one trace into
                 -- one row per project it was ever written to, and the cost join below keys
                 -- on trace_id alone, so that would charge the same spend twice.
@@ -604,12 +616,16 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT id FROM optimization_tagged_trace_ids)
-                    AND id NOT IN (SELECT trace_id FROM experiment_items_final)
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, id
                 )
                 ARRAY JOIN tags AS tag
                 WHERE tag IN (SELECT toString(id) FROM optimization_final)
+                AND (toString(trace_id), tag) NOT IN (
+                    SELECT toString(ei.trace_id), ef.optimization_id
+                    FROM experiment_items_final ei
+                    INNER JOIN experiments_final ef ON ei.experiment_id = ef.id
+                )
             ), optimization_tagged_costs AS (
                 SELECT
                     ott.optimization_id_str AS optimization_id_str,

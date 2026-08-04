@@ -28,13 +28,19 @@ import {
 type MetricValue = number | undefined;
 
 /**
+ * Six significant digits keep sub-cent figures intact ($0.00095615) while
+ * dropping the float noise a client-side sum produces
+ * (0.1 + 0.05 = 0.15000000000000002). Lowering this starts truncating real
+ * reflection-scale spend; raising it puts the noise back.
+ */
+const COST_TOOLTIP_SIGNIFICANT_DIGITS = 6;
+
+/**
  * Unrounded cost for the tooltip, where the card's 2-4 decimal places would hide
- * the difference this run actually made. Six significant digits keep sub-cent
- * figures intact ($0.00095615) while dropping the float noise a client-side sum
- * produces (0.1 + 0.05 = 0.15000000000000002).
+ * the difference this run actually made.
  */
 const exactCost = (dollars: number): string =>
-  String(Number(dollars.toPrecision(6)));
+  String(Number(dollars.toPrecision(COST_TOOLTIP_SIGNIFICANT_DIGITS)));
 
 const CANDIDATE_KEY_MAP: Record<string, keyof AggregatedCandidate> = {
   score: "score",

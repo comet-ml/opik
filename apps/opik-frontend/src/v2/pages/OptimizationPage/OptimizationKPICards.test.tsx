@@ -3,12 +3,31 @@ import { render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "@/ui/tooltip";
 import OptimizationKPICards from "./OptimizationKPICards";
-import { Experiment } from "@/types/datasets";
+import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
+
+/**
+ * A whole trial, not a cost-shaped stub. A cast fixture lets a new branch of the
+ * card read `status` or `created_at` and silently get `undefined`, instead of
+ * the test data failing at compile time.
+ */
+const createExperiment = (overrides: Partial<Experiment> = {}): Experiment => ({
+  id: "e1",
+  dataset_id: "d1",
+  dataset_name: "dataset",
+  type: EXPERIMENT_TYPE.TRIAL,
+  status: "completed",
+  name: "trial",
+  trace_count: 1,
+  total_estimated_cost: 0,
+  created_at: "2026-07-30T10:00:00Z",
+  last_updated_at: "2026-07-30T10:05:00Z",
+  ...overrides,
+});
 
 const experiments = [
-  { id: "e1", total_estimated_cost: 0.1 },
-  { id: "e2", total_estimated_cost: 0.05 },
-] as unknown as Experiment[];
+  createExperiment({ id: "e1", total_estimated_cost: 0.1 }),
+  createExperiment({ id: "e2", total_estimated_cost: 0.05 }),
+];
 
 // The cost value carries a tooltip naming its source, so it needs the provider
 // the app mounts at its root (v2/App.tsx).

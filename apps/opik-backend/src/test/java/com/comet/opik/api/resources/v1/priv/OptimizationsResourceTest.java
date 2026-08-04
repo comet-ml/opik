@@ -916,13 +916,13 @@ class OptimizationsResourceTest {
         }
 
         /**
-         * The other topology, and the one that pins {@code id NOT IN (SELECT trace_id FROM
-         * experiment_items_final)}: trials and optimizer-internal traces in the SAME project, which is what
-         * Studio produces when the run and its evaluations share a project. Here the query's project bound
-         * cannot separate them, so only the experiment-item exclusion stops the trial spend from being charged
-         * a second time as optimizer-internal. Delete that clause and the total settles at twice the trial
-         * cost - a stable wrong answer, which is why phase one asserts the trial-only figure before any
-         * non-trial trace exists rather than asserting the combined figure alone.
+         * The other topology, and the one that pins the {@code (toString(trace_id), tag) NOT IN (...)}
+         * exclusion: trials and optimizer-internal traces in the SAME project, which is what Studio produces
+         * when the run and its evaluations share a project. Here the query's project bound cannot separate
+         * them, so only the experiment-item exclusion stops the trial spend from being charged a second time
+         * as optimizer-internal. Delete that clause and the total settles at twice the trial cost - a stable
+         * wrong answer, which is why phase one asserts the trial-only figure before any non-trial trace exists
+         * rather than asserting the combined figure alone.
          */
         @Test
         @DisplayName("Trials and internal traces in one project: trial cost is not charged twice")
@@ -1021,6 +1021,127 @@ class OptimizationsResourceTest {
 
                         assertThat(actual.totalOptimizationCost())
                                 .isEqualByComparingTo(expectedTrialCost.add(reflectionCost));
+                    });
+        }
+
+        /**
+         * The experiment-item exclusion must be keyed on (trace, owning optimization), not on the trace alone.
+         * Here one trace is a trial of run Y and also carries run X's id as a tag. Excluding on trace_id alone
+         * drops it from X - and only when Y is in scope, which is true of the list (every optimization on the
+         * dataset) and false of {@code getById(X)} (just X). So the same run reads as free in the list and
+         * priced on the run page. Revert the exclusion to {@code id NOT IN (SELECT trace_id FROM
+         * experiment_items_final)} and the list assertion below fails at 0 while the detail one passes.
+         * <p>
+         * Y is asserted too, because the narrower exclusion must still fire for the run that owns the trial:
+         * if it stopped firing, Y's trial spend would be charged once through {@code experiment_durations} and
+         * again through the tagged branch.
+         */
+        @Test
+        @DisplayName("Trace tagged with another run: list and detail attribute it the same way")
+        void findAndGetById__whenTaggedTraceIsAnotherRunsTrial__attributionDoesNotDependOnScope() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "cross-run-tag-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            // One project for both runs, so the query's project bound cannot separate them and the
+            // experiment-item exclusion is the only thing deciding attribution.
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Shared-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var objectiveName = "accuracy";
+
+            // Run Y: a real trial run, tagging its evaluation traces the way the SDK does.
+            var optimizationYId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            Experiment experimentY = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationYId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(BigDecimal.valueOf(0.7)).build()))
+                    .build();
+            experimentResourceClient.create(experimentY, apiKey, workspaceName);
+
+            var costPerSpan = BigDecimal.valueOf(0.05);
+            List<Trace> trialTraces = createTracesSpansAndItems(experimentY, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    costPerSpan, optimizationYId.toString());
+
+            var expectedYCost = costPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            // Run X: same dataset and project, so the list returns both, but no experiment of its own.
+            var optimizationXId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var y = optimizationResourceClient.get(optimizationYId, apiKey, workspaceName, 200);
+
+                        assertThat(y.numTrials()).isEqualTo(1L);
+                        assertThat(y.totalOptimizationCost()).isEqualByComparingTo(expectedYCost);
+                    });
+
+            // Re-ingest one of Y's trial traces carrying X's id as well. The trace stays linked to Y's
+            // experiment item, so it must keep counting once for Y and start counting for X.
+            Trace crossTagged = trialTraces.getFirst();
+            traceResourceClient.batchCreateTraces(
+                    List.of(crossTagged.toBuilder()
+                            .tags(Set.of(optimizationYId.toString(), optimizationXId.toString(), "Evaluation"))
+                            .build()),
+                    apiKey, workspaceName);
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var x = optimizationResourceClient.get(optimizationXId, apiKey, workspaceName, 200);
+                        assertThat(x.totalOptimizationCost()).isEqualByComparingTo(costPerSpan);
+
+                        // The same figure through the paginated list, where Y is in scope too. This is the
+                        // assertion the trace_id-only exclusion fails.
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        var xFromList = page.content().stream()
+                                .filter(o -> o.id().equals(optimizationXId))
+                                .findFirst()
+                                .orElseThrow();
+                        assertThat(xFromList.totalOptimizationCost()).isEqualByComparingTo(costPerSpan);
+
+                        // Y is unchanged: still charged exactly once for the same trace.
+                        var yFromList = page.content().stream()
+                                .filter(o -> o.id().equals(optimizationYId))
+                                .findFirst()
+                                .orElseThrow();
+                        assertThat(yFromList.totalOptimizationCost()).isEqualByComparingTo(expectedYCost);
                     });
         }
 
