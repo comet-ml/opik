@@ -1,40 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import api, { QueryConfig, WORKSPACES_REST_ENDPOINT } from "@/api/api";
+import { QueryConfig } from "@/api/api";
 import { WorkspaceVersion, useActiveWorkspaceName } from "@/store/AppStore";
-import { DEFAULT_WORKSPACE_VERSION } from "@/lib/workspaceVersion";
 
-type WorkspaceVersionResponse = {
-  opik_version: "version_1" | "version_2";
-};
-
-const VERSION_MAP: Record<
-  WorkspaceVersionResponse["opik_version"],
-  WorkspaceVersion
-> = {
-  version_1: "v1",
-  version_2: "v2",
-};
-
-export async function fetchWorkspaceVersion(opts?: {
-  workspaceName?: string;
-  signal?: AbortSignal;
-}): Promise<WorkspaceVersion> {
-  try {
-    const { workspaceName, signal } = opts ?? {};
-    const config = {
-      ...(signal && { signal }),
-      ...(workspaceName && {
-        headers: { "Comet-Workspace": workspaceName },
-      }),
-    };
-    const { data } = await api.get<WorkspaceVersionResponse>(
-      WORKSPACES_REST_ENDPOINT + "versions",
-      config,
-    );
-    return VERSION_MAP[data.opik_version] ?? DEFAULT_WORKSPACE_VERSION;
-  } catch {
-    return DEFAULT_WORKSPACE_VERSION;
-  }
+// Opik V1 is deprecated and the backend /v1/private/workspaces/versions endpoint
+// has been removed. Every workspace now resolves to V2, so this no longer hits the
+// backend and always reports "v2".
+export async function fetchWorkspaceVersion(): Promise<WorkspaceVersion> {
+  return "v2";
 }
 
 export default function useWorkspaceVersionQuery(
@@ -43,7 +15,7 @@ export default function useWorkspaceVersionQuery(
   const workspaceName = useActiveWorkspaceName();
   return useQuery({
     queryKey: ["workspace-version", { workspaceName }],
-    queryFn: ({ signal }) => fetchWorkspaceVersion({ workspaceName, signal }),
+    queryFn: () => fetchWorkspaceVersion(),
     staleTime: 5 * 60 * 1000,
     ...options,
     enabled: !!workspaceName && (options?.enabled ?? true),

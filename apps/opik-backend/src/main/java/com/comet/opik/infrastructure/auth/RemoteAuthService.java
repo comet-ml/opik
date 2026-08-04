@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.ProjectService;
@@ -101,7 +100,7 @@ class RemoteAuthService implements AuthService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder(toBuilder = true)
     record AuthResponse(
-            String user, String workspaceId, String workspaceName, List<Quota> quotas, OpikVersion opikVersion) {
+            String user, String workspaceId, String workspaceName, List<Quota> quotas) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -114,8 +113,7 @@ class RemoteAuthService implements AuthService {
             String userName,
             String workspaceId,
             String workspaceName,
-            List<Quota> quotas,
-            OpikVersion opikVersion) {
+            List<Quota> quotas) {
 
         static ValidatedAuthCredentials from(AuthResponse authResponse) {
             return ValidatedAuthCredentials.builder()
@@ -124,7 +122,6 @@ class RemoteAuthService implements AuthService {
                     .workspaceId(authResponse.workspaceId())
                     .workspaceName(authResponse.workspaceName())
                     .quotas(authResponse.quotas())
-                    .opikVersion(authResponse.opikVersion())
                     .build();
         }
 
@@ -135,7 +132,6 @@ class RemoteAuthService implements AuthService {
                     .workspaceId(authCredentials.workspaceId())
                     .workspaceName(authCredentials.workspaceName())
                     .quotas(authCredentials.quotas())
-                    .opikVersion(authCredentials.opikVersion())
                     .build();
         }
 
@@ -145,7 +141,6 @@ class RemoteAuthService implements AuthService {
                     .workspaceId(workspaceId)
                     .workspaceName(workspaceName)
                     .quotas(quotas)
-                    .opikVersion(opikVersion)
                     .build();
         }
     }
@@ -481,14 +476,12 @@ class RemoteAuthService implements AuthService {
             ValidatedAuthCredentials credentials, String fallbackWorkspaceName, String apiKey) {
         var workspaceName = Optional.ofNullable(credentials.workspaceName()).orElse(fallbackWorkspaceName);
         log.debug(
-                "setting credentials into context, userName: '{}', workspaceId: '{}', workspaceName: '{}', quotas: '{}', opikVersion '{}'",
-                credentials.userName(), credentials.workspaceId(), workspaceName, credentials.quotas(),
-                credentials.opikVersion());
+                "setting credentials into context, userName: '{}', workspaceId: '{}', workspaceName: '{}', quotas: '{}'",
+                credentials.userName(), credentials.workspaceId(), workspaceName, credentials.quotas());
         requestContext.get().setUserName(credentials.userName());
         requestContext.get().setWorkspaceId(credentials.workspaceId());
         requestContext.get().setWorkspaceName(workspaceName);
         requestContext.get().setQuotas(credentials.quotas());
-        requestContext.get().setOpikVersion(credentials.opikVersion());
         requestContext.get().setApiKey(apiKey);
     }
 
