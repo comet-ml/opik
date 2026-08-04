@@ -15,13 +15,12 @@ const MAX_RELOADS = 2;
 
 /**
  * Pair routes (/pair/v1 and the /opik/pair/v1 OSS alias) render outside
- * WorkspaceGuard — they must work without a logged-in session. Their URLs
- * carry critical state in search/hash (?workspace=X#payload), so unlike
- * workspace shells (which use WorkspaceVersionResolver's optimistic
- * render), we block rendering here until the workspace version is
- * verified — so no router can touch the URL on the wrong version. On
- * mismatch, window.location.reload() preserves the full URL so the
- * correct App's router can complete pairing.
+ * WorkspaceGuard — they must work without a logged-in session — and carry
+ * critical state in search/hash (?workspace=X#payload). This guard sets the
+ * active workspace from the URL and renders the pairing page. Since Opik V2 is
+ * the only supported experience, the version is always v2 (the backend
+ * `/workspaces/versions` lookup has been removed), so the mismatch-driven reload
+ * below is unreachable; the guard is kept until the V1 UI is removed separately.
  */
 const PairRouteVersionGuard: React.FC<{ children: React.ReactNode }> = ({
   children,

@@ -2,13 +2,10 @@ import React, { useEffect, useRef } from "react";
 import useAppStore, {
   useActiveWorkspaceName,
   useWorkspaceVersion,
+  WorkspaceVersion,
 } from "@/store/AppStore";
 import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
-import {
-  getNewExperienceOptIn,
-  getVersionOverride,
-  setCachedWorkspaceVersion,
-} from "@/lib/workspaceVersion";
+import { setCachedWorkspaceVersion } from "@/lib/workspaceVersion";
 
 const VERSION_RELOAD_PREFIX = "opik-version-reload:";
 const MAX_RELOADS = 2;
@@ -18,34 +15,16 @@ type WorkspaceVersionResolverProps = {
 };
 
 /**
- * Renders children immediately using the Gate's optimistic version guess
- * (override > opt-in > per-workspace cache > default v2) and verifies
- * against `/workspaces/versions` asynchronously. On mismatch, reloads to
- * the URL the user originally landed on so the Gate mounts the correct
- * App with the original deep-link intact (bounded by MAX_RELOADS).
- *
- * We deliberately do NOT gate rendering on `isLoading`. Doing so used to
- * hide the whole tree behind a Loader for 600-2000ms on every load, which
- * sat on the LCP critical path. See OPIK-6150.
- *
- * Why `window.location.replace(originalUrl)` and not `reload()`:
- * the wrong-version App mounted under us can contain redirect components
- * (e.g. V1CompatRedirect) whose useEffects `navigate({ replace: true })`
- * to a version-specific path before `/versions` returns. A plain
- * `reload()` would rehydrate that mutated URL; replacing with the URL we
- * captured on first render restores the user's original deep-link.
- *
- * Capture is in render (not useEffect) because child-component effects
- * fire after the parent renders — so at capture time no redirect has run.
- * The captured URL is keyed by workspace (so switching workspaces doesn't
- * leak stale URLs) and cleared once verification succeeds (so a later
- * mismatch re-captures fresh rather than reloading to an outdated URL).
+ * Opik V2 is the only supported experience, so the workspace version is pinned
+ * to v2 (see resolveSyncWorkspaceVersion) instead of being determined from the
+ * backend — the `/workspaces/versions` endpoint has been removed. This component
+ * is retained until the V1 UI is deleted (tracked separately); it still writes
+ * v2 to the store and the localStorage cache, but the mismatch-driven reload path
+ * below is now unreachable because the version is constant.
  */
 const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
   children,
 }) => {
-  const override = getVersionOverride();
-  const optIn = getNewExperienceOptIn();
   const gateVersion = useWorkspaceVersion();
   const workspaceName = useActiveWorkspaceName();
 
@@ -58,7 +37,7 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
   }
 
   const { data: apiVersion } = useWorkspaceVersionQuery();
-  const resolvedVersion = override ?? (optIn ? "v2" : apiVersion);
+  const resolvedVersion: WorkspaceVersion = "v2";
 
   useEffect(() => {
     if (!resolvedVersion || !workspaceName) return;
