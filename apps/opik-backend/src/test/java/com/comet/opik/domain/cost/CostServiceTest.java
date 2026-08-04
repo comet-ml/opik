@@ -785,20 +785,14 @@ class CostServiceTest {
      * publishes cache rates today, so all SambaNova requests route through
      * {@link SpanCostCalculator#textGenerationCost}.
      */
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("provideSambanovaProviderCases")
-    void calculateCostHandlesSambanovaModels(String model, Map<String, Integer> usage, String expectedCost) {
-        BigDecimal cost = CostService.calculateCost(model, "sambanova", usage, null);
-
-        assertThat(cost).isEqualByComparingTo(expectedCost);
-    }
-
-    private static Stream<Arguments> provideSambanovaProviderCases() {
+    @Test
+    void calculateCostHandlesSambanovaModels() {
         // sambanova/MiniMax-M2.7: input 6e-7, output 2.4e-6
         // 1000 * 6e-7 + 200 * 2.4e-6 = 0.0006 + 0.00048 = 0.00108
-        return Stream.of(
-                Arguments.of("sambanova/MiniMax-M2.7",
-                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00108"));
+        BigDecimal cost = CostService.calculateCost("sambanova/MiniMax-M2.7", "sambanova",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00108");
     }
 
     /**
