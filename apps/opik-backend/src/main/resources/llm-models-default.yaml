@@ -1407,6 +1407,8 @@ openrouter:
     label: "qwen/qwen3.7-max"
   - id: "qwen/qwen3.7-plus"
     label: "qwen/qwen3.7-plus"
+  - id: "qwen/qwen3.8-max"
+    label: "qwen/qwen3.8-max"
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true
