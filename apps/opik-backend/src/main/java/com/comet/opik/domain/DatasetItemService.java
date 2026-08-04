@@ -1745,36 +1745,25 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     /**
      * Updates version counts after inserting items into an existing version.
-     * Extracted to reduce complexity and improve testability.
+     * Only the new items move the total; re-sent items count as modifications.
      *
      * @param versionId The version ID to update
      * @param workspaceId The workspace ID
      * @param newItemsCount Number of new items inserted
      * @param updatedItemsCount Number of items updated
      * @param userName The user performing the update
+     * @throws NotFoundException if the version no longer exists or does not belong to the workspace
      */
     private void updateVersionCountsForInsert(UUID versionId, String workspaceId, int newItemsCount,
             int updatedItemsCount, String userName) {
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(DatasetVersionDAO.class);
-
-            // Only increment total by new items (not updates)
-            int updated = dao.incrementCounts(versionId, newItemsCount, newItemsCount, updatedItemsCount, 0,
-                    workspaceId, userName);
-
-            if (updated == 0) {
-                throw new NotFoundException("Version not found: '%s'".formatted(versionId));
-            }
-            return null;
-        });
+        updateVersionCounts(versionId, workspaceId, newItemsCount, newItemsCount, updatedItemsCount, 0, userName);
     }
 
     /**
      * Updates version counts after deleting items from an existing version.
      * <p>
-     * Applies the deltas atomically rather than writing back totals computed from a caller-supplied snapshot, so the
-     * result no longer depends on that snapshot still being current. Unlike the insert path this saves no round-trip:
-     * both callers fetch the version for their own purposes regardless.
+     * Unlike the insert path this saves no round-trip: both callers fetch the version for their own purposes
+     * regardless. What it buys is that the arithmetic no longer depends on that snapshot still being current.
      *
      * @param versionId The version ID to update
      * @param workspaceId The workspace ID
@@ -1783,10 +1772,23 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @throws NotFoundException if the version no longer exists or does not belong to the workspace
      */
     private void updateVersionCountsForDelete(UUID versionId, String workspaceId, int deletedCount, String userName) {
+        updateVersionCounts(versionId, workspaceId, -deletedCount, 0, 0, deletedCount, userName);
+    }
+
+    /**
+     * Applies signed counter deltas to a version in a single atomic statement, so the arithmetic does not depend on
+     * {@code withDatasetVersionLock} for mutual exclusion. A zero affected-row count means the version was removed or
+     * belongs to another workspace.
+     *
+     * @throws NotFoundException if the version no longer exists or does not belong to the workspace
+     */
+    private void updateVersionCounts(UUID versionId, String workspaceId, int totalDelta, int addedDelta,
+            int modifiedDelta, int deletedDelta, String userName) {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
 
-            int updated = dao.incrementCounts(versionId, -deletedCount, 0, 0, deletedCount, workspaceId, userName);
+            int updated = dao.incrementCounts(versionId, totalDelta, addedDelta, modifiedDelta, deletedDelta,
+                    workspaceId, userName);
 
             if (updated == 0) {
                 throw new NotFoundException("Version not found: '%s'".formatted(versionId));
