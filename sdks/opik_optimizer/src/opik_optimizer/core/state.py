@@ -26,6 +26,7 @@ FinishReason = Literal[
     "perfect_score",  # Target score threshold reached
     "max_trials",  # Maximum number of trials reached
     "no_improvement",  # No improvement for configured number of generations
+    "reflection_budget",  # Reflection-LLM call budget exhausted (GEPA)
     "error",  # Optimization failed
     "cancelled",  # Optimization cancelled/interrupted
 ]
