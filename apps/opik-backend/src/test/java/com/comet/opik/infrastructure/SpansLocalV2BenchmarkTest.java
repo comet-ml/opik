@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Per-column compression benchmark and DateTime64 precision check for the {@code spans_local_v2} table (OPIK-7400).
  *
- * <p>The spans counterpart of {@code TracesLocalV2BenchmarkTest} (OPIK-6899). Because migration {@code 000114} already
+ * <p>The spans counterpart of {@code TracesLocalV2BenchmarkTest} (OPIK-6899). Because migration {@code 000115} already
  * ships the codec set that benchmark settled on for traces, this is confirm-and-settle rather than discover: the shared
  * columns are re-confirmed to inherit correctly, and the work concentrates on the columns that have no traces evidence —
  * {@code usage} (Map), {@code total_estimated_cost} (+{@code _version}), {@code model}, {@code provider}, {@code type},
@@ -49,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *       runs — the trace-level run structure is what separates spans from traces here;</li>
  *   <li>{@code parent_span_id} is out of the sort key on this table: the first span of each trace carries the empty
  *       sentinel (stored as 36 NUL bytes) and the rest point at one of two ancestors, matching the ~1.7 distinct
- *       parents per trace measured for the 000114 DDL;</li>
+ *       parents per trace measured for the 000115 DDL;</li>
  *   <li>{@code type} drives most of the spans-only columns: prod is 62% {@code general} / 28% {@code llm} / 9%
  *       {@code tool}, and {@code usage}, {@code model}, {@code provider} and {@code total_estimated_cost} are populated
  *       only on {@code llm} spans — hence their ~75% empty / ~79% zero prod fractions, reproduced here through that
@@ -76,8 +76,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>Two invariance results are not re-derived here: compression is independent of {@code index_granularity_bytes} and
  * of weekly partitioning. Both were measured generically (on a plain wide-row table, not on anything traces-specific)
  * by {@code TracesLocalV2BenchmarkTest#compressionIsInvariantToIndexGranularityBytes} and
- * {@code #compressionIsInvariantToWeeklyPartitioning}, and {@code spans_local_v2} uses the same 40 MiB byte-cap and the
- * same {@code toMonday(id_at)} partitioning, so the sizes below transfer unchanged.
+ * {@code #compressionIsInvariantToWeeklyPartitioning}, and {@code spans_local_v2} uses the same 40 MiB byte-cap and is
+ * also partitioned one week at a time — by
+ * {@code toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} since OPIK-7456, rather than the
+ * {@code toMonday(id_at)} that invariance check happened to use. What transfers is that partitioning splits the data
+ * into independently-compressed weekly parts; which expression names the week does not enter into it.
+ *
+ * <p>Note that {@code id_at} is part of that partition expression, so the {@code Delta} removal migration
+ * {@code 000116} applies to it is a codec change on a partition-key column. {@link
+ * #everySpansLocalV2ColumnUsesItsIntendedCodec()} is what proves ClickHouse accepts it: the pin only reads back a codec
+ * the migration already had to apply successfully.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -154,7 +162,7 @@ class SpansLocalV2BenchmarkTest {
      * The intended codec for every {@code spans_local_v2} column, keyed by column name. This is the canonical record of
      * the per-field decisions the benchmarks below justify; {@link #everySpansLocalV2ColumnUsesItsIntendedCodec()}
      * asserts the live DDL matches it, column for column. It reflects the codecs the live table ships after migrations
-     * {@code 000114} (create) and {@code 000115} (which applies the refinements the real-data pass identified), so it
+     * {@code 000115} (create) and {@code 000116} (which applies the refinements the real-data pass identified), so it
      * moves in lockstep with those migrations — the pin test fails loudly if the DDL and this map ever drift apart.
      */
     private static final Map<String, ExpectedCodec> SPANS_LOCAL_V2_CODECS = Map.ofEntries(
@@ -422,7 +430,7 @@ class SpansLocalV2BenchmarkTest {
                         toFixedString({id_uuid}, 36) AS uid,
                         -- parent_span_id: out of the sort key on spans_local_v2. The first span of a trace is the root
                         -- and carries the empty sentinel (FixedString(36) stores it as 36 NUL bytes); the rest point at
-                        -- the root or at the trace's second span, giving the ~1.7 distinct parents per trace the 000114
+                        -- the root or at the trace's second span, giving the ~1.7 distinct parents per trace the 000115
                         -- DDL measured. The ancestor ids are minted with the same UUIDv7 expression at that span's
                         -- row number, so they are the ids those rows actually carry.
                         number % {spans_per_trace} AS span_in_trace,
@@ -786,7 +794,7 @@ class SpansLocalV2BenchmarkTest {
         long fixedZstd1 = compressed("psid_zstd1");
         long stringZstd1 = compressed("psid_str_zstd1");
 
-        // 000114 narrows parent_span_id from the live table's String to FixedString(36), on the reasoning that a column
+        // 000115 narrows parent_span_id from the live table's String to FixedString(36), on the reasoning that a column
         // holding a UUID or nothing does not need a per-value length prefix. This measures that claim on the storage
         // axis: the fixed form pads the empty sentinel out to 36 NUL bytes, so it can hold MORE raw bytes than the
         // String form, yet the padding is perfectly compressible while the String form's offsets are not, so the fixed
@@ -808,9 +816,9 @@ class SpansLocalV2BenchmarkTest {
         // an Array(Int64) values subcolumn, both under the one column codec. The keys are long, dotted and extremely
         // repetitive ('original_usage.completion_tokens_details.reasoning_tokens'), drawn from a handful of key sets —
         // exactly the small, repetitive, variable-length String shape ClickHouse 26.3 regressed ZSTD(1) on, which made
-        // the ZSTD(1) that 000114 assigned as a best guess the level at risk. ZSTD(3) wins here by ~5%, and on real
+        // the ZSTD(1) that 000115 assigned as a best guess the level at risk. ZSTD(3) wins here by ~5%, and on real
         // production spans by 19.3% (580,731 -> 468,620 bytes) — real keys are longer and repeat more than this slice's.
-        // Migration 000115 adopts ZSTD(3), and it is no more expensive to read: ZSTD decode is level-independent, so
+        // Migration 000116 adopts ZSTD(3), and it is no more expensive to read: ZSTD decode is level-independent, so
         // less stored data is strictly less work (see longTextDecompressionCostIsRecorded).
         assertThat(zstd3).isLessThan(uncompressed);
         assertThat(zstd3).isLessThan(lz4);
@@ -826,7 +834,7 @@ class SpansLocalV2BenchmarkTest {
         long int64Zstd3 = compressed("usage_zstd3");
         long int32Zstd3 = compressed("usage_i32_zstd3");
 
-        // 000114 widens usage from the live Map(String, Int32) to Map(String, Int64), a lossless widening that removes
+        // 000115 widens usage from the live Map(String, Int32) to Map(String, Int64), a lossless widening that removes
         // the narrowing the live column forces on every write. It doubles the raw width of the values subcolumn, so the
         // cutover expectation needs the compressed cost of that, not the raw cost: token counts are small, so the extra
         // four bytes per value are leading zeros and compress away almost entirely.
@@ -879,7 +887,7 @@ class SpansLocalV2BenchmarkTest {
         long providerPlain = compressed("prov_str_zstd1");
         long providerLowCardinality = compressed("prov_lc_default");
 
-        // 000114 makes model / provider / total_estimated_cost_version LowCardinality(String), which the live table
+        // 000115 makes model / provider / total_estimated_cost_version LowCardinality(String), which the live table
         // stores as plain String. The win is the dictionary type itself: even under the default LZ4 codec it beats a
         // plain ZSTD(1) String holding the same values, as it does for environment on traces.
         assertThat(modelLowCardinality).isLessThan(modelPlain);
@@ -902,7 +910,7 @@ class SpansLocalV2BenchmarkTest {
 
         // On a LowCardinality column the codec applies to the dictionary and the index stream, not to repeated values,
         // so the 26.3 ZSTD(1) regression on repetitive Strings does not reach it — ZSTD(1) is smallest and is what
-        // 000114 ships for all three. ZSTD(3) is logged for the record; the margin between the two is immaterial.
+        // 000115 ships for all three. ZSTD(3) is logged for the record; the margin between the two is immaterial.
         assertThat(modelZstd1).isLessThan(modelDefault);
         assertThat(providerZstd1).isLessThan(providerDefault);
         assertThat(versionZstd1).isLessThan(versionDefault);
@@ -921,7 +929,7 @@ class SpansLocalV2BenchmarkTest {
 
         // type is the spans-only Enum8 (five values, 62% 'general'). Like traces' source / visibility_mode it is tiny
         // whatever the codec, but ZSTD(1) compresses it materially better than the LZ4 default at equal decode cost,
-        // which is why 000114 sets it rather than leaving the default. The decode measurement is logged alongside.
+        // which is why 000115 sets it rather than leaving the default. The decode measurement is logged alongside.
         assertThat(zstd1).isLessThan(defaultCodec);
         assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_5_PCT));
         log.info("[OPIK-7400] type (Enum8) compressed bytes default vs ZSTD(1) vs ZSTD(3): {} / {} / {}",
@@ -1021,7 +1029,7 @@ class SpansLocalV2BenchmarkTest {
         // synthetic tracebacks are uniform enough that ZSTD(1) already captures the repetition, leaving the two levels
         // within ~1% of each other (ZSTD(1) marginally ahead). On real production stack traces, which are far more
         // varied, ZSTD(3) is 8.0% smaller (121,346 -> 111,596 bytes) — structured text behaving like input/output rather
-        // than like the low-cardinality columns. Migration 000115 adopts ZSTD(3); it is pinned by
+        // than like the low-cardinality columns. Migration 000116 adopts ZSTD(3); it is pinned by
         // everySpansLocalV2ColumnUsesItsIntendedCodec.
         assertThat(zstd1).isLessThan(lz4);
         assertThat(zstd3).isLessThan(lz4);
@@ -1047,7 +1055,7 @@ class SpansLocalV2BenchmarkTest {
         // within one weekly partition share their high-order bytes, which ZSTD's literal matching exploits directly
         // while Delta discards it; and created_at is flat across 46.7% of adjacent row pairs, because batch ingest
         // stamps many spans with the identical microsecond. Delta additionally emits a large high-entropy 8-byte jump at
-        // every workspace/project boundary, and a real weekly partition interleaves ~155k workspaces. Migration 000115
+        // every workspace/project boundary, and a real weekly partition interleaves ~155k workspaces. Migration 000116
         // therefore drops Delta from start_time, created_at and id_at, and the pin map moves with it. Only the robust
         // orderings are asserted here.
         assertThat(deltaZstd1).isLessThan(lz4);
@@ -1079,7 +1087,7 @@ class SpansLocalV2BenchmarkTest {
         // slice — where the ids advance by a regular step — Delta exploits that and wins. On real production spans,
         // measured per ISO week (what one partition holds), plain ZSTD(1) is smaller in 8 of the 10 densest weeks, by a
         // median of 13%: whole-second values inside a single week are highly repetitive, so raw ZSTD matching beats
-        // differencing. Migration 000115 ships ZSTD(1). Only the robust orderings are asserted.
+        // differencing. Migration 000116 ships ZSTD(1). Only the robust orderings are asserted.
         assertThat(deltaZstd1).isLessThan(lz4);
         assertThat(zstd1).isLessThan(lz4);
         log.info("[OPIK-7400] id_at (DateTime64(0)) compressed bytes | LZ4: {} | ZSTD(1): {} | Delta+ZSTD(1): {} | "
@@ -1141,7 +1149,7 @@ class SpansLocalV2BenchmarkTest {
         // A deliberate negative result, kept as a guard rail. This column holds the synthetic text lengths, and because
         // the slice draws payload sizes from three discrete tiers, those lengths are far more repetitive than real ones:
         // plain ZSTD matches the repeats directly and comes out ~5% AHEAD of T64, which would suggest dropping the
-        // T64 + ZSTD(1) that 000114 ships on input_length / output_length / metadata_length.
+        // T64 + ZSTD(1) that 000115 ships on input_length / output_length / metadata_length.
         //
         // That suggestion is wrong, and the real-data pass settled it: on 115,925 real production spans T64 is 14.5% /
         // 13.9% / 26.0% SMALLER than plain ZSTD(1) on the three columns. Real lengths are continuously distributed over
@@ -1462,7 +1470,7 @@ class SpansLocalV2BenchmarkTest {
                     duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
                     id_at DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(ZSTD(1))
                 """;
-        // NEW spans_local_v2 format = the live table's codecs after migrations 000114 (create) and 000115 (the
+        // NEW spans_local_v2 format = the live table's codecs after migrations 000115 (create) and 000116 (the
         // real-data refinements: usage and error_info on ZSTD(3), start_time / created_at / id_at off Delta), matching
         // the pin map above.
         execute(("""
