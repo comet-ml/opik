@@ -33,7 +33,7 @@ rules:
     #   3. A `%s` that is NOT inside a single-quoted SQL string. A slot spliced into a
     #      quoted literal (`WHERE cluster = '%s'`) is a value position, which the
     #      health checks fill from a compile-time constant; those are a readability
-    #      concern, not injection, and are out of scope here (OPIK-7726). This gate
+    #      concern, not injection, and are out of scope here (OPIK 7727). This gate
     #      targets the clause-position splice the review actually flagged.
     #
     # Deliberately `%s` only, not `%d`: MetadataDAO contains the real SQL literal
