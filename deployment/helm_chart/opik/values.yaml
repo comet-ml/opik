@@ -730,11 +730,24 @@ partitionMetrics:
 clickhouse:
   enabled: true
   shardsCount: 1
-  # Switches the deployment to the sharded (Hyperscale) topology. A no-op while shardsCount is 1: it
-  # only drives the backend's `clickhouse-cluster` readiness probe, which verifies the Distributed
-  # cluster definition is visible from the node (ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED — set that
-  # key explicitly under component.backend.env to decouple the two). Turn on together with
-  # shardsCount > 1 once the Distributed tables are in place.
+  # Declares that this deployment fronts its tables with Distributed tables (the Hyperscale
+  # topology). While off, nothing here is rendered, so upgrading the chart never reshapes an
+  # existing cluster on its own. Turning it on does two things:
+  #   - enables the backend's `clickhouse-cluster` readiness probe, which verifies the Distributed
+  #     cluster definition is visible from the node (ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED — set
+  #     that key explicitly under component.backend.env to decouple the two)
+  #   - pins internal_replication on each shard of the ClickHouseInstallation, whenever
+  #     replicasCount > 1. With the flag off the operator infers it from replicasCount > 1 instead,
+  #     which is the behaviour every deployment already has.
+  #
+  # Note this is deliberately NOT tied to shardsCount > 1. internal_replication governs replica
+  # fan-out *within* a shard, not the number of shards: on a single shard with 2 replicas it decides
+  # whether an INSERT into the Distributed table writes one replica and lets ReplicatedMergeTree
+  # replicate the parts, or writes both directly. That single-shard case is the near-term target —
+  # the traces cutover fronts the table with a Distributed table that is "transparent on a single
+  # shard", with real sharding turned on later — so gating on shardsCount > 1 would exclude the very
+  # deployment this is meant to cover. Turn the flag on when the Distributed tables land, whatever
+  # shardsCount is.
   sharding:
     enabled: false
   # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let

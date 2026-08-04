@@ -155,10 +155,12 @@ class SpansLocalV2TableTest {
         assertThat(getColumn(storedSpan, "type", String.class)).isEqualTo(UNKNOWN_ENUM_VALUE);
         assertThat(getColumn(storedSpan, "source", String.class)).isEqualTo(UNKNOWN_ENUM_VALUE);
         assertThat(getColumn(storedSpan, "is_deleted", Byte.class)).isZero();
-        // end_time / ttft / duration fall back to their sentinels, which read as absent.
-        assertThat(SentinelTranslation.epochToNull(getColumn(storedSpan, "end_time", Instant.class))).isNull();
-        assertThat(SentinelTranslation.nanToNull(getColumn(storedSpan, "ttft", Double.class))).isNull();
-        assertThat(SentinelTranslation.nanToNull(getColumn(storedSpan, "duration", Double.class))).isNull();
+        // end_time / ttft / duration fall back to their sentinels. Asserted as the stored values, not through
+        // SentinelTranslation: this is the raw-column view, and allAbsentColumnsRoundTripAsNull already pins the
+        // outside view where those sentinels read back as absent.
+        assertThat(getColumn(storedSpan, "end_time", Instant.class)).isEqualTo(SentinelTranslation.EPOCH_SENTINEL);
+        assertThat(getColumn(storedSpan, "ttft", Double.class)).isNaN();
+        assertThat(getColumn(storedSpan, "duration", Double.class)).isNaN();
         assertThat(getColumn(storedSpan, "truncation_threshold", Long.class))
                 .isEqualTo(DEFAULT_TRUNCATION_THRESHOLD);
     }
@@ -278,11 +280,51 @@ class SpansLocalV2TableTest {
 
         var partitionId = getColumn(storedSpan, "_partition_id", String.class);
 
-        // PARTITION BY toMonday(id_at): the row must land in the partition for the Monday of the week its UUIDv7 id
-        // encodes — not the current week. Backdated ids prove the partition follows id_at, not wall-clock (the reason
-        // the design chose an id-derived key over created_at). ClickHouse names a Date partition YYYYMMDD.
+        // PARTITION BY the honest Date32 weekly Monday of id_at: the row must land in the partition for the Monday of
+        // the week its UUIDv7 id encodes — not the current week. Backdated ids prove the partition follows id_at, not
+        // wall-clock (the reason the design chose an id-derived key over created_at). The partition id is that Monday's
+        // YYYYMMDD.
         var expectedMonday = idAt.atZone(ZoneOffset.UTC).toLocalDate()
                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(partitionId).isEqualTo(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE));
+    }
+
+    /**
+     * The far-future id guard (OPIK_7456), the spans counterpart of {@code TracesLocalV2TableTest}. A litellm bug
+     * (BerriAI/litellm#31294) mints UUIDv7 ids whose embedded timestamp is ~2201, and prod already holds ids dated 2199
+     * — the rows are legitimate customer data, just carrying a future timestamp. {@code id_at} as {@code DateTime64(0)}
+     * makes it read back as the honest 2201 (so the {@code id_at > now()} audit surfaces it, where a 32-bit
+     * {@code DateTime} would wrap it into a plausible past year), and the honest {@code Date32} weekly partition places
+     * the row in its own honest ~2201 week — not the recent week a 16-bit {@code toMonday} would fold it into, where a
+     * per-week DROP PARTITION / retention / tiering operation would then touch it alongside real rows.
+     * <p>
+     * The partition is what this adds over {@link #farFutureIdBeyondDateTimeCeilingKeepsItsInstant}, which covers the
+     * {@code id_at} column itself. The {@code id_at} assertions here are still not redundant with it: the expected
+     * Monday is derived from the value read back, so without anchoring that value to 2201 the partition assertion would
+     * pass just as happily if {@code id_at} and the partition wrapped together.
+     */
+    @Test
+    void farFutureIdLandsInHonestPartitionNotAWrappedYear() {
+        var farFutureId = ID_GENERATOR.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+        var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var storedSpan = newStoredSpan(startTime, randomFutureInstantFrom(startTime), DEFAULT_TRUNCATION_THRESHOLD)
+                .toBuilder()
+                .id(farFutureId)
+                .idAt(idAtOf(farFutureId))
+                .build();
+        insert(storedSpan);
+
+        var idAt = getById(storedSpan).idAt();
+        var partitionId = getColumn(storedSpan, "_partition_id", String.class);
+
+        // id_at is the honest 2201, not a wrapped year — and it is in the future, so the audit catches it.
+        assertThat(idAt.atZone(ZoneOffset.UTC).getYear()).isEqualTo(2201);
+        assertThat(idAt).isEqualTo(idAtOf(farFutureId)).isAfter(Instant.now());
+        // The partition is the honest 2201 Monday (YYYYMMDD ~22010601), not the recent week a 16-bit toMonday would
+        // wrap it into — the Date32 weekly expression never wraps.
+        var expectedMonday = idAt.atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(expectedMonday.getYear()).isEqualTo(2201);
         assertThat(partitionId).isEqualTo(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
@@ -483,6 +525,7 @@ class SpansLocalV2TableTest {
                     FROM spans_local_v2
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    AND trace_id = :trace_id
                     AND id = :id
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -490,6 +533,7 @@ class SpansLocalV2TableTest {
                     """)
                     .bind("workspace_id", span.workspaceId())
                     .bind("project_id", span.projectId())
+                    .bind("trace_id", span.traceId())
                     .bind("id", span.id());
             return Mono.from(statement.execute())
                     .flatMap(result -> Mono.from(result.map((row, ignored) -> mapToStoredSpan(row))));
@@ -506,12 +550,14 @@ class SpansLocalV2TableTest {
                     FROM spans_local_v2
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    AND trace_id = :trace_id
                     AND id = :id
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                     """.formatted(column))
                     .bind("workspace_id", span.workspaceId())
                     .bind("project_id", span.projectId())
+                    .bind("trace_id", span.traceId())
                     .bind("id", span.id());
             return Mono.from(statement.execute())
                     .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("value", type))));

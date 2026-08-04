@@ -55,8 +55,8 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 ## Prerequisites (do not start without these)
 
 1. **24h UUIDv7 ingestion validation** live long enough that no un-validated future-dated ids land in newly ingested
-   weeks. This is not tied to a retention cycle (retention never runs — prereq 8). Pre-validation bad-id rows already in
-   the table are *not* blocked by this: they are copied by the `created_at` slice and surfaced by the far-future audit
+   weeks. This is not tied to a retention cycle (retention never runs — prereq 8). Pre-validation far-future-timestamp
+   rows already in the table are *not* blocked by this: they are copied by the `created_at` slice and surfaced by the far-future audit
    query below — this prereq only ensures no *new* out-of-range partitions are created mid-cutover.
 2. **`traces_local_v2` exists and is empty** (migration 000101).
 3. **Successor storage/TTL parity.** `traces_local_v2` must resolve the **same `storage_policy` and TTL-to-cold rules**
@@ -270,8 +270,8 @@ mutation; `000002` / `000004` note how to bound it by partition if it is ever la
 ## Why slice by `created_at` (and not `id` or workspace)
 
 The backfill reads 100% of the table regardless of the slice column — the slice only decides how the work is *batched*,
-and it does **not** decide where a row lands on the destination: that is always `toMonday(id_at)`, derived from the row's
-`id`, independent of the slice. Three forces pick the slice column, and `created_at` is the only one that satisfies all:
+and it does **not** decide where a row lands on the destination: that is always the honest weekly Monday of `id_at`,
+derived from the row's `id`, independent of the slice. Three forces pick the slice column, and `created_at` is the only one that satisfies all:
 
 - **Source read efficiency.** The source `traces` has a **minmax skip index on `created_at`** (migration 000088), so each
   week prunes granules cheaply. It has **no `id` skip index**, and `id` is the *trailing* primary-key column
@@ -296,34 +296,45 @@ only `created_at`/`last_updated_at`; the `id` minmax/bloom indexes exist only on
 `id IN (deleted-ids since anchor)` set is tiny (retention off → user-scale deletes), so it is a bounded id-filtered read,
 not a full-table scan. An index still would not rescue `id`-slicing (the ~2201 span is a *data* problem, not an index one). Destination write locality
 is naturally good with `created_at` slicing (`id_at ≈ created_at` once validation holds); slicing by *workspace* would
-instead scatter each insert across every weekly partition that workspace spans → a small-part explosion on a 4 TB table.
+instead scatter each insert across every weekly partition that workspace spans → a small-part explosion on a large table.
 
-**Known issue — far-future partitions from bad ids.** Because the destination partitions by `toMonday(id_at)`, the
-bad-`id` rows create far-future weekly partitions on `traces_local_v2` (inherent to the DDL + the bad data, not to the
-slice choice). Note the year: the ids' embedded UUIDv7 timestamp is ~2201, but `id_at` is a **32-bit `DateTime`** (max
-year 2106), so `UUIDv7ToDateTime` overflows and **wraps ~2201 to ~2065** — that is where the partitions actually land.
-Either way it is bounded (few distinct bad timestamps → few extra partitions) and mostly harmless (those partitions
-never tier to cold and are skipped by
-time-bounded reads); the audit query below finds them regardless of the exact year (it keys on `id_at` being in the
-future, not on a specific year). Quantify it before
-the cutover and decide whether to remediate:
+**Far-future partitions from far-future-timestamp ids.** Some `id`s carry an embedded UUIDv7 timestamp in the far future
+(litellm [BerriAI/litellm#31294](https://github.com/BerriAI/litellm/issues/31294) mints ~2201). The rows are legitimate
+customer data — a valid UUIDv7 that merely carries a future timestamp — so they are copied and kept like any other.
+`traces_local_v2` partitions by the honest `Date32` weekly Monday of `id_at`
+([OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456): `toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))`),
+and its `id_at` is a `DateTime64` (honest to 2299), so each such row lands in its **own honest ~2201 (`22010601`-shaped)
+weekly partition**, isolated from real recent weeks — a per-week `DROP PARTITION` / retention / tiering operation never
+touches them by accident, and vice versa. The extra partitions are bounded (few distinct
+far-future timestamps → few extra weeks) and harmless (they never tier to cold and are skipped by time-bounded reads).
+
+Quantify them in the **source** before the cutover so their scale is known. The source `traces.id_at` is a 32-bit
+`DateTime` (migration 000091) that overflows for far-future values, so derive the timestamp from `id` via
+`UUIDv7ToDateTime` (honest) rather than reading the stored `id_at`, and count distinct weeks with the same honest
+expression the destination partitions by — a wrapped `toMonday(id_at)` would collapse several weeks into one and
+undercount:
 
 ```sql
--- rows / distinct far-future partitions the bad ids would create
-SELECT count() AS bad_rows, uniqExact(toMonday(id_at)) AS bad_partitions, min(id_at) AS earliest, max(id_at) AS latest
+-- rows / distinct far-future weeks the far-future-timestamp ids occupy
+-- (timestamp derived from id; the stored 32-bit traces.id_at wraps far-future values)
+WITH UUIDv7ToDateTime(toUUID(id)) AS ts
+SELECT count()                                                                 AS far_future_rows,
+       uniqExact(toYYYYMMDD(toDate32(ts) - toIntervalDay(toDayOfWeek(ts, 1)))) AS far_future_weeks,
+       min(ts) AS earliest, max(ts) AS latest
 FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
-WHERE id_at > now() + INTERVAL 1 DAY;   -- outside the 24h validation window
+WHERE ts > now() + INTERVAL 1 DAY;   -- outside the 24h validation window
 ```
 
-If the count is material, remediate the source ids (or exclude/quarantine those rows) first; otherwise accept the few
-far-future partitions.
+`far_future_weeks` uses the destination's honest partition expression, so it equals the number of extra weekly partitions
+`traces_local_v2` will hold. If the count is material, remediate the source `id`s at their origin; otherwise no action is
+needed — they partition honestly on their own.
 
 **No explicit `ORDER BY` on the `INSERT ... SELECT`.** Not needed for correctness or reproducibility: the final table
 state is a `ReplacingMergeTree` reduction keyed on `(workspace_id, project_id, id)` with `last_updated_at` as the version
 — **independent of insert order** — so any run converges to the same live rows; ClickHouse already sorts each insert
 block by the destination `ORDER BY`, and since the source shares that key the rows arrive in order anyway; and
 reconciliation uses order-independent `uniqExact` of the dedup key. An explicit `ORDER BY` would only add sort cost/memory
-on a 4 TB backfill for no gain.
+on a large backfill for no gain.
 
 ## Delta and replay correctness
 

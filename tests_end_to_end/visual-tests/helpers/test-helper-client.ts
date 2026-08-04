@@ -591,6 +591,22 @@ export class TestHelperClient {
     }
   }
 
+  async createTraceWithAgentGraphSpan(
+    projectName: string,
+    traceName: string
+  ): Promise<{ spanName: string }> {
+    try {
+      const response = await this.client.post('/api/traces/create-trace-with-agent-graph-span', {
+        project_name: projectName,
+        trace_name: traceName,
+      });
+
+      return { spanName: response.data.span_name };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create trace with agent graph span');
+    }
+  }
+
   async searchTraces(
     projectName: string,
     options?: {

@@ -108,6 +108,29 @@ public class ResourcesResource {
 - **JDBI3 interfaces** for DAO implementations
 - **IdGenerator** for UUID v7 generation
 
+### Query Construction
+- **Never assemble SQL from strings** in Java sources: no `+`, `String.format`/`.formatted(...)`, `StringBuilder`, `MessageFormat`, or `String.join` when the joined parts are clauses, and no `%s` slot in a query text block for a caller to fill in
+- **Values** go through `:placeholder` + `.bind("placeholder", value)` — never interpolated
+- **Varying fragments** (predicates, sort clauses, projected columns) go through StringTemplate conditionals in the query itself: `<if(project_ids)> AND project_id IN :project_ids <endif>`
+- **Unbounded fragments** (user-chosen sort/filter) come from `SortingQueryBuilder` / `FilterQueryBuilder`, never from raw request strings
+- Flag as **Critical** when the diff adds or modifies such a query — an injection risk plus a readability one, since the query a DAO runs stops being visible at its declaration site. Pre-existing occurrences the change doesn't touch are known debt, not a finding, and `❌ BAD` snippets in docs or skill files are illustrations, not code. `.formatted(...)` remains fine for log and exception messages
+
+**Example:**
+```java
+// ❌ BAD - caller splices the predicate in
+static String tokenUsageNames(String projectPredicate) {
+    return TOKEN_USAGE_NAMES_TEMPLATE.formatted(projectPredicate);
+}
+
+// ✅ GOOD - both shapes in the template, caller enables one and binds the value
+private static final String TOKEN_USAGE_NAMES = """
+        SELECT DISTINCT name FROM spans FINAL
+        WHERE workspace_id = :workspace_id
+        <if(project_ids)> AND project_id IN :project_ids <endif>
+        <if(project_id)> AND project_id = :project_id <endif>
+        """;
+```
+
 **Example Service Pattern:**
 ```java
 @Singleton
