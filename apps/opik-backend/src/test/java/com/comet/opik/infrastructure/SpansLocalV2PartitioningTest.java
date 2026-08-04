@@ -84,6 +84,13 @@ class SpansLocalV2PartitioningTest {
      */
     private static final LocalDate ANCHOR_MONDAY = LocalDate.of(2025, 3, 3);
 
+    /**
+     * A timestamp in the band where a 16-bit {@code toMonday} {@code Date} wraps — the ~2201 the litellm bug
+     * (BerriAI/litellm#31294) mints, and the neighbourhood of the 2199 ids prod already holds. Shared by the
+     * far-future guard and its expected-Monday oracle so the two can never drift apart.
+     */
+    private static final Instant FAR_FUTURE_INSTANT = Instant.parse("2201-06-01T00:00:00Z");
+
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -254,8 +261,13 @@ class SpansLocalV2PartitioningTest {
      * and the 2199 ids prod already holds): they must occupy their own honest weekly partition, never mixed into a real
      * recent week — otherwise a per-week {@code DROP PARTITION} / retention / tiering operation on that real week would
      * also touch these rows, and vice versa. Seeds a present-day span and a ~2201 span under one (workspace, project)
-     * and asserts they land in different partitions, the far-future one in its honest ~2201 week rather than the ~2021 a
-     * 16-bit {@code toMonday} would wrap it into.
+     * and asserts they land in different partitions, the far-future one in its honest ~2201 week rather than the ~2021
+     * week into which a 16-bit {@code toMonday} would wrap it.
+     * <p>
+     * The far-future partition is asserted as the <em>exact</em> Monday from a Java oracle, not merely as falling in
+     * 2201: a year-only check would pass a row that landed in the wrong week of the right year. That closes the gap
+     * between {@link #honestWeekExpressionStaysHonestWhereToMondayWraps}, which pins the expression standalone, and
+     * what ClickHouse actually assigns to a stored row through the materialized {@code id_at}.
      */
     @Test
     void farFutureRowIsolatesIntoItsOwnHonestWeeklyPartition() {
@@ -263,13 +275,17 @@ class SpansLocalV2PartitioningTest {
         var projectId = ID_GENERATOR.generateId();
         var traceId = ID_GENERATOR.generateId();
         var presentId = ID_GENERATOR.generateId(weekInstant(0));
-        var farFutureId = ID_GENERATOR.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+        var farFutureId = ID_GENERATOR.generateId(FAR_FUTURE_INSTANT);
         insert(List.of(presentId, farFutureId), workspaceId, projectId, traceId, weekInstant(0));
 
         var presentPartition = partitionIdFor(workspaceId, projectId, presentId);
         var farFuturePartition = partitionIdFor(workspaceId, projectId, farFutureId);
 
-        assertThat(farFuturePartition).isNotEqualTo(presentPartition).startsWith("2201");
+        var expectedMonday = FAR_FUTURE_INSTANT.atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(farFuturePartition)
+                .isNotEqualTo(presentPartition)
+                .isEqualTo(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
     /**
