@@ -23,15 +23,14 @@ from opik_optimizer.core import llm_calls
 
 pytestmark = pytest.mark.e2e
 
+# No credentials guard here on purpose. This suite runs against the Opik stack the
+# e2e workflow stands up, which is self-hosted and needs no api_key - so guarding on
+# one skipped this test on every CI run since it was added, on every Python version,
+# while the other 21 tests in tests/e2e ran unguarded against that same stack.
+# Guarding on url_override instead would be decorative: unset, it defaults to the
+# public cloud URL and is always truthy.
 
-def _configured() -> bool:
-    try:
-        return bool(opik.config.OpikConfig().api_key)
-    except Exception:
-        return False
 
-
-@pytest.mark.skipif(not _configured(), reason="requires Opik credentials")
 def test_optimizer_llm_call__lands_in_one_trace_tagged_with_the_optimization_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
