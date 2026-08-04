@@ -39,6 +39,14 @@ rules:
     # Deliberately `%s` only, not `%d`: MetadataDAO contains the real SQL literal
     # `STR_TO_DATE(value, '%Y-%m-%d')`, which pattern matching cannot distinguish from
     # an integer format slot. No real violation uses `%d`.
+    #
+    # Known limitation: a query written entirely on ONE line
+    # (`"SELECT id FROM spans WHERE w = :w AND %s"`) is not caught, because requirements
+    # 1 and 2 are line-anchored. Dropping those anchors was measured and reintroduces
+    # the prompt-template false positive, which is the worse failure — it would block an
+    # unrelated commit and push a suppression comment into a file with no SQL in it.
+    # Every real query in this codebase is a multi-line text block, so the gap is
+    # theoretical; revisit if that stops being true.
     patterns:
       - pattern: $X
       - metavariable-regex:
