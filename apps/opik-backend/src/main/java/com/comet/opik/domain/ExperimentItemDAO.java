@@ -49,16 +49,25 @@ class ExperimentItemDAO {
     }
 
     /**
-     * The query validates if already exists with this id. Failing if so.
-     * That way only insert is allowed, but not update.
+     * Plain multi-row insert. Duplicate ids are tolerated rather than rejected: {@code experiment_items} is
+     * a {@code ReplicatedReplacingMergeTree(last_updated_at)} (migration 000017), so re-posting an existing
+     * id appends a new version that wins dedup — which is why {@link #SELECT} carries
+     * {@code ORDER BY last_updated_at DESC LIMIT 1} and {@link #STREAM} carries {@code LIMIT 1 BY id}.
+     * {@code ExperimentItemService} only validates the UUID version of client-supplied ids, not their
+     * existence.
      *
      * <p>{@code created_at} is deliberately absent from the column list, so the column DEFAULT
-     * ({@code now64}) stamps it server-side. Keep it that way: this is the only write path to
-     * {@code experiment_items}, which makes {@code created_at} a monotonic, never-rewritten clock — and the
-     * stalled-run reaper reads it as its item-level liveness signal
-     * ({@code OptimizationDAO#FIND_STALLED_STUDIO_OPTIMIZATIONS}, OPIK-7459). Binding it from the client,
-     * or adding an update path that re-stamps it, would let a dead run look alive (or a live one look dead)
-     * and silently break the reaper.
+     * ({@code now64}) stamps it server-side. Keep it that way: the stalled-run reaper reads it as its
+     * item-level liveness signal ({@code OptimizationDAO#FIND_STALLED_STUDIO_OPTIMIZATIONS}, OPIK-7459),
+     * and binding it from the client, or adding a path that rewrites an existing row's value, would let a
+     * dead run look alive or a live one look dead.
+     *
+     * <p>The invariant is per physical row — nothing rewrites a row's {@code created_at} — not per item id.
+     * A client re-posting an old trial's item id publishes a NEW version dated now, which the reaper reads
+     * as fresh progress. The other paths in this class that affect the signal are the two lightweight
+     * deletes ({@link #DELETE}, {@link #DELETE_BY_EXPERIMENT_IDS}): the reaper's probes read raw rows with
+     * no {@code FINAL}, so deleting a running trial's items removes the liveness rows and makes a live run
+     * read as silent (review: thiagohora).
      */
     private static final String INSERT = """
             INSERT INTO experiment_items (

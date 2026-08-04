@@ -635,6 +635,59 @@ class OptimizationsResourceTest {
         }
 
         @Test
+        @DisplayName("returns the run when a candidate's objective scores overflow to infinity")
+        void getByIdWhenCandidateObjectiveScoresOverflow() {
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .objectiveName(objectiveName)
+                    .build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Reaches the OTHER branch of the mapper's getFiniteBigDecimal guard. FIND's isFinite filters
+            // stop non-finite values ENTERING, so every other regression test here only exercises the
+            // null branch and the !isFinite return is dead code as far as the suite is concerned. But the
+            // columns the mapper reads are DERIVED: candidate_metrics sums objective_score * trace_count
+            // before dividing, so two trials in one candidate each carrying a finite 1e308 — which the
+            // isFinite filter accepts — sum to +Inf. Without the mapper guard the driver's BigDecimal
+            // conversion throws, ClickHouseResult.map swallows it, and the row silently disappears: the
+            // exact 404 this PR exists to fix, reopened by arithmetic rather than by input
+            // (review: thiagohora).
+            var candidateId = UUID.randomUUID().toString();
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));
+            var hugeButFinite = new BigDecimal("1e308");
+
+            var trialIds = Stream.of(1, 2)
+                    .map(ignored -> experimentResourceClient.create(experimentResourceClient
+                            .createPartialExperiment()
+                            .optimizationId(id)
+                            .type(ExperimentType.TRIAL)
+                            .metadata(metadata)
+                            .experimentScores(List.of(ExperimentScore.builder()
+                                    .name(objectiveName)
+                                    .value(hugeButFinite)
+                                    .build()))
+                            .build(), API_KEY, TEST_WORKSPACE_NAME))
+                    .toList();
+
+            var traceStart = Instant.now().minusSeconds(30);
+            trialIds.forEach(trialId -> linkItemWithTrace(trialId, traceStart, traceStart.plusMillis(1_000)));
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        // The run must still be reachable — that is the whole point of the guard.
+                        var actual = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+                        assertThat(actual.id()).isEqualTo(id);
+                        // An overflowed aggregate is reported as absent rather than as a bogus number.
+                        assertThat(actual.bestObjectiveScore()).isNull();
+                        assertThat(actual.baselineObjectiveScore()).isNull();
+                        // The durations are unaffected by the overflow and must still be computed.
+                        assertThat(actual.bestDuration()).isNotNull();
+                    });
+        }
+
+        @Test
         @DisplayName("Get optimizer by id with feedback scores")
         void getByIdWithFeedbackScores() {
             // Create dataset

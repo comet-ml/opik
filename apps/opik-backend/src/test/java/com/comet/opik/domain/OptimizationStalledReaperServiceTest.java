@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
@@ -508,6 +509,24 @@ class OptimizationStalledReaperServiceTest {
         createTrialExperiment(id);
 
         assertThat(hasRecentActivity(id, Duration.ofMinutes(5))).isTrue();
+    }
+
+    @Test
+    @DisplayName("updating a trial experiment does not re-stamp its created_at into the liveness window")
+    void updatingTrialExperimentDoesNotRefreshLiveness() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        var experimentId = createBackdatedTrialExperiment(id, Duration.ofHours(1));
+        assertThat(hasRecentActivity(id, Duration.ofMinutes(5))).isFalse();
+
+        // ExperimentDAO.UPDATE_BY_ID must carry created_at forward rather than let the column DEFAULT
+        // re-stamp it. That property is what makes the trial timestamp a liveness clock, and it was only
+        // recorded in prose — a regression re-stamping it here would ship green and pin every dead studio
+        // run alive until the hard ceiling (review: thiagohora).
+        experimentResourceClient.updateExperiment(experimentId,
+                ExperimentUpdate.builder().name("renamed-after-the-window").build(),
+                API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        assertThat(hasRecentActivity(id, Duration.ofMinutes(5))).isFalse();
     }
 
     @Test

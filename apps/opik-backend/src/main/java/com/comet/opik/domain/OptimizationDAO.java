@@ -302,129 +302,56 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     /**
      * Studio runs whose latest row version is stuck in a non-terminal status past the reaper threshold
-     * (OPIK-7159). Deduplicates {@code ReplacingMergeTree} versions with {@code GROUP BY id} +
-     * {@code argMax(status, last_updated_at)} / {@code max(last_updated_at)} — a single aggregation pass,
-     * not the old {@code ORDER BY ... LIMIT 1 BY id} full sort. The status + timeout predicates run in
-     * {@code HAVING} (post-aggregation, i.e. above the dedup), so a run that has since reached a terminal
-     * status is never selected off a stale version — and keeping them out of the WHERE avoids ClickHouse
-     * pushing an aggregate-referencing predicate down into the scan (ILLEGAL_AGGREGATION). Only the two
-     * pushdown-safe predicates run in the {@code WHERE} / INNER scan, where
-     * a {@code minmax} skip index on {@code last_updated_at} (migration 000106) can prune granules:
-     * {@code studio_config != ''} (immutable per id) and a {@code last_updated_at >= now - lookback}
-     * FLOOR. The floor is safe because the newest version carries the maximum {@code last_updated_at}, so
-     * a {@code >=} lower bound can never drop it — it just bounds the scan to recent data instead of the
-     * whole (unbounded-growth) table, which the old query re-read + re-sorted every cycle. {@code
-     * INITIALIZED} (worker never started) and {@code RUNNING} (worker died mid-run) use separate
-     * upper-bound thresholds. The caller-supplied {@code lookbackMargin} sets the floor width and its
-     * reaper-downtime tradeoff.
+     * (OPIK-7159 / OPIK-7459). Selects on either "no liveness" or "past the hard ceiling"; see
+     * {@code OptimizationStalledReaperJob} for what those two mean and why both exist.
      *
-     * <p>Liveness is measured against run <em>progress</em>, not only the row
-     * timestamp (OPIK-7459): {@code last_updated_at} advances only on a status change, but a healthy run
-     * keeps writing trial experiments ({@code experiments.optimization_id}) and, within a trial, one
-     * experiment item per evaluated dataset item. Liveness is the newest of the row timestamp, the latest
-     * trial experiment's {@code created_at}, and the latest experiment item's {@code created_at}; since
-     * the {@code HAVING} branch already requires {@code latest_updated_at} to be past the threshold, that
-     * reduces to the {@code active_optimizations} anti-join in the outer {@code WHERE} — "and no trial
-     * experiment or experiment item was created within the running timeout either". The item-level signal
-     * matters: a single trial evaluates up to {@code OPTSTUDIO_DATASET_SAMPLES} (1000) items and can
-     * legitimately run for a large fraction of the worker's whole execution timeout
-     * ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, 6h), so trial-creation alone would false-positive mid-trial;
-     * items narrow the legitimate silent gap to ~one dataset-item evaluation, which is what lets the
-     * running timeout be minutes.
+     * <p>Liveness is the newest of the row's {@code last_updated_at}, the latest trial experiment's
+     * {@code created_at} and the latest experiment item's {@code created_at}. {@code last_updated_at}
+     * advances only on a status change, so the other two are what keep a healthy long run alive: one trial
+     * evaluates up to {@code OPTSTUDIO_DATASET_SAMPLES} items and can run for hours, so trial-creation
+     * alone would false-positive mid-trial. Because the {@code HAVING} already requires the row timestamp
+     * to be past the threshold, liveness reduces to the {@code active_optimizations} anti-join.
      *
-     * <p>The veto applies to {@code INITIALIZED} as well, not only to {@code RUNNING}: a run writing trial
-     * experiments is by definition not "failed to start", even if its {@code mark_running} callback never
-     * landed (a transient network failure on that one call used to get a healthy, actively-evaluating run
-     * ERRORed after {@code initializedTimeout} and its trials orphaned). Both statuses share the single
-     * {@code :running_timeout_seconds} activity window rather than each using its own: the question the
-     * probe answers ("is the worker still writing rows for this run") does not depend on which status the
-     * row got stuck on, and the wider window is the safe direction — a genuinely never-started run has no
-     * trials at all, so it is still reaped on {@code initializedTimeout} by the {@code latest_updated_at}
-     * branch of the {@code HAVING}. The hard ceiling below therefore had to grow an
-     * {@code INITIALIZED} branch too, or a zombie worker writing rows without ever reporting a status
-     * could keep such a run alive forever — the exact guarantee this job exists to hold.
-     *
-     * <p>The activity veto cannot sit in the {@code HAVING} above, because it is scoped by the very
-     * candidate set that aggregation produces — hence {@code candidates} is a CTE and the veto moved to
-     * the outer {@code WHERE}. Both probes are bounded by <em>id sets</em> rather than by a time floor
-     * (review: thiagohora): {@code experiments} by {@code (workspace_id, optimization_id) IN candidates},
-     * which the planner resolves through {@code idx_experiments_optimization_id} (minmax, migration
-     * 000069) as a set condition, and {@code experiment_items} by
-     * {@code (workspace_id, experiment_id) IN candidate_trials}, which is the primary-key prefix and so
-     * needs no index at all. Measured on production that is ~3 marks on {@code experiments} and a ~97%
-     * row reduction on {@code experiment_items}, which is why neither table needs a {@code created_at}
-     * index. The {@code created_at} comparisons stay as residual predicates — they are the liveness
-     * semantics, and they cost nothing once the read is bounded by the key. Scoping by the
-     * lookback-bounded candidate set rather than by "all studio runs" is load-bearing: a set spread over
-     * many workspaces degenerates into wide generic-exclusion ranges and recovers only ~3x.
-     *
-     * <p>Note when reading the shape: ClickHouse <em>inlines</em> {@code WITH} subqueries instead of
-     * materialising them, so a CTE referenced N times is evaluated N times (the same property
-     * {@link #FIND}'s consolidation work in OPIK-7611 was built around). Here {@code candidate_trials} is
-     * expanded twice inside {@code active_optimizations} — once as its {@code FROM}, once in the nested
-     * item {@code IN} — and {@code candidates} once per expansion plus once in the outer {@code FROM}. So
-     * one reaper tick aggregates {@code optimizations} 3x, scans {@code experiments} 2x and
-     * {@code experiment_items} 1x. That is deliberate rather than overlooked: at the measured 3 / 77 marks
-     * the duplicated work is a rounding error against a 5-minute cadence, and every alternative (a
-     * temporary table, two round trips, or hoisting the trial ids into Java) trades that for either
-     * statement-level state or a second non-atomic read of the same fleet. Do not "simplify" the nested
-     * {@code (workspace_id, experiment_id) IN (SELECT ... FROM candidate_trials)} away, though: the outer
-     * {@code IN} already makes it redundant for <em>correctness</em>, and it is the only thing keeping the
-     * item probe from scanning every recent {@code experiment_items} row in the deployment.
-     *
-     * <p>The tuple form keeps both probes workspace-precise — an experiment or item written in another
-     * workspace can never register as this run's progress, the same scoping
-     * {@link #HAS_RECENT_STUDIO_ACTIVITY} applies via its {@code WHERE}. Dropping the old
-     * {@code :lookback_seconds} floor on {@code experiments} also removes an inconsistency with that
-     * pre-update guard: a trial older than the lookback window but still writing items now counts as
-     * alive here too, not only in the guard.
-     *
-     * <p>Deliberately no {@code experiments.type} filter, unlike the {@code experiment_candidates}
-     * population of {@link #FIND}, which excludes {@code 'mini-batch'} / {@code 'mutation'} (review:
-     * baz-reviewer). That exclusion keeps intermediate evaluations out of displayed trial counts and best
-     * scores; here the only question is "is the worker still writing anything for this run", and every
-     * experiment type carrying this {@code optimization_id} was written by the worker. GEPA records
-     * candidate screening and parent reflection evaluations as {@code 'mini-batch'} and can spend most of
-     * a run in that phase, so filtering those out would make a healthy run look silent — and since the
-     * item probe reaches items through the ids of this same scan, it would drop the item-level signal
-     * along with them.
-     *
-     * <p>{@code :running_hard_timeout_seconds} is the absolute ceiling that survives the progress signal:
-     * a non-terminal row older than it is reaped even with recent trial/item writes, so a zombie worker
-     * that keeps producing rows without ever reporting a terminal status cannot keep the spinner alive
-     * forever (this preserves the pre-OPIK-7459 "can never stay stuck indefinitely" guarantee). It is
-     * guarded by {@code latest_status IN ('initialized', 'running')} — the same set as
-     * {@code OptimizationService#CANCELLABLE_STATUSES} — and NOT hoisted to a bare top-level {@code OR}:
-     * without the status guard every studio run that merely <em>finished</em> longer ago than the ceiling
-     * would become a candidate, and since the result is {@code LIMIT :limit}-ed those would crowd genuine
-     * stalls out of the batch while the service's own status re-read silently discarded each one.
-     *
-     * <p>The ceiling runs from {@code created_at} — the run's start — and deliberately not from
-     * {@code last_updated_at}: every write to the row refreshes that column, so a metadata PATCH or an SDK
-     * re-upsert would postpone the backstop indefinitely (review: baz-reviewer). What keeps that true is
-     * the upsert path carrying {@code created_at} forward, not the aggregate: an ordinary re-upsert writes
-     * back the same instant, so the ceiling does not move.
-     *
-     * <p>{@code argMax(created_at, last_updated_at)} rather than {@code min(created_at)} (review:
-     * thiagohora). {@code min} looked safer — it ignores a legacy version whose {@code created_at} a
-     * pre-OPIK-7459 re-upsert re-stamped forward — but it makes restarting a run under an existing id
-     * impossible to honour: old versions live on in a {@code ReplacingMergeTree}, so {@code min} keeps
-     * returning the FIRST attempt's start forever and the restarted run is born past the ceiling,
-     * short-circuiting the activity veto and getting reaped seconds after it started. Reading the winning
-     * version is what lets the upsert path's restart reset (see {@code OptimizationService}) actually take
-     * effect. The legacy-re-stamp case {@code min} was guarding against only postpones the ceiling, which
-     * is the safe direction, and it cannot recur now that ordinary re-upserts preserve the column.
-     * This is also the frame the worker's own execution timeout
-     * (OPTSTUDIO_EXECUTION_TIMEOUT) is measured in, which is what makes the "hard cap must exceed it"
-     * invariant meaningful.
-     *
-     * <p>{@code GROUP BY workspace_id, id} (not {@code id} alone with {@code any(workspace_id)}) makes the
-     * grouping workspace-correct by construction and drops the {@code any()} wrapper (review: thiagohora).
-     * {@code dataset_id} is deliberately left out even though the table's sorting key is
-     * {@code (workspace_id, dataset_id, id)}: {@code getOrCreateDataset} resolves by dataset <em>name</em>,
-     * so an SDK re-upsert naming a different dataset writes a row under a different sorting key that
-     * {@code ReplacingMergeTree} never dedupes. Grouping by the full key would emit that run twice with
-     * independent statuses, letting the reaper ERROR a live run off a stale half.
+     * <p>Things the SQL will not tell you, and that break the query if changed:
+     * <ul>
+     * <li>The status/timeout predicates must stay in {@code HAVING} — above the dedup, out of the
+     * {@code WHERE}. In the {@code WHERE} they reference an aggregate and ClickHouse raises
+     * {@code ILLEGAL_AGGREGATION}; above the dedup is also what stops a run being selected off a stale
+     * version after it reached a terminal status.</li>
+     * <li>The nested {@code (workspace_id, experiment_id) IN (SELECT ... FROM candidate_trials)} is
+     * load-bearing. The outer {@code IN} already makes it redundant for correctness, but it is the only
+     * thing keeping the item probe from scanning every recent {@code experiment_items} row in the
+     * deployment. Do not simplify it away.</li>
+     * <li>ClickHouse inlines {@code WITH} subqueries rather than materialising them, so a CTE referenced
+     * N times is evaluated N times. One tick aggregates {@code optimizations} 3x, scans
+     * {@code experiments} 2x and {@code experiment_items} 1x. Kept deliberately: bounded by the id sets
+     * below, the duplicated work is a rounding error against a 5-minute cadence.</li>
+     * <li>Both probes are scoped by <em>id sets</em>, not by a time floor: {@code experiments} by
+     * {@code (workspace_id, optimization_id) IN candidates} (resolved through
+     * {@code idx_experiments_optimization_id}, migration 000069) and {@code experiment_items} by
+     * {@code (workspace_id, experiment_id) IN candidate_trials}, which is the primary-key prefix. The
+     * {@code created_at} comparisons are residual predicates — they are the liveness semantics, and cost
+     * nothing once the read is bounded by the key. The tuple form is also what keeps both probes
+     * workspace-precise.</li>
+     * <li>No {@code experiments.type} filter, unlike {@link #FIND}'s {@code experiment_candidates}, which
+     * excludes {@code 'mini-batch'} / {@code 'mutation'}. That exclusion is presentational; here the only
+     * question is whether the worker is still writing anything. GEPA spends much of a run recording
+     * {@code 'mini-batch'} evaluations, so filtering them would make a healthy run look silent — and drop
+     * the item-level signal with them, since items are reached through this scan's ids.</li>
+     * <li>The ceiling reads {@code created_at}, not {@code last_updated_at}: every write to the row
+     * refreshes the latter, so a metadata PATCH or an SDK re-upsert would postpone the backstop forever.
+     * It is {@code argMax(created_at, last_updated_at)} rather than {@code min(created_at)} because old
+     * versions live on in a {@code ReplacingMergeTree} — {@code min} would keep returning the first
+     * attempt's start forever, so a run restarted under an existing id would be born past the ceiling.
+     * See the upsert path in {@code OptimizationService} for the restart reset this enables.</li>
+     * <li>{@code dataset_id} is out of the {@code GROUP BY} even though it is in the sorting key:
+     * {@code getOrCreateDataset} resolves by dataset <em>name</em>, so a re-upsert naming a different
+     * dataset writes a row the dedup never merges, and grouping by the full key would emit the run twice
+     * with independent statuses — letting the reaper ERROR a live run off a stale half.</li>
+     * <li>The hard-ceiling branch is guarded by {@code latest_status IN ('initialized', 'running')} and
+     * not hoisted to a bare top-level {@code OR}: without the guard every run that merely finished longer
+     * ago than the ceiling becomes a candidate and crowds genuine stalls out of the {@code LIMIT}.</li>
+     * </ul>
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
             WITH candidates AS (

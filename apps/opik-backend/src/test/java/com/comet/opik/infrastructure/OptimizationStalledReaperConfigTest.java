@@ -56,11 +56,32 @@ class OptimizationStalledReaperConfigTest {
     }
 
     @Test
-    @DisplayName("an hours-scale runningTimeout override remains valid")
+    @DisplayName("an hours-scale runningTimeout override below the ceiling remains valid")
     void hoursScaleRunningTimeoutIsAccepted() {
         // Progress-based liveness (OPIK-7459) made the minutes-scale default possible, but operators may
-        // still run with the previous hours-scale values — those must keep validating.
+        // still run with the previous hours-scale values — those must keep validating, as long as they
+        // stay under the new ceiling. See the test below for the range that deliberately does not.
         assertThat(validator.validate(validConfig().runningTimeout(Duration.hours(8)).build())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a previously-legal runningTimeout above the default ceiling now fails validation")
+    void legacyRunningTimeoutAboveDefaultCeilingIsRejected() {
+        // BREAKING CONFIG CHANGE, pinned deliberately rather than left to be discovered on upgrade.
+        // runningTimeout was valid anywhere in [6h, 7d] before this change, so a deployment that raised
+        // only OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT (26h, 48h, 3d were all legal) now fails
+        // Dropwizard validation and will not boot against the 24h runningHardTimeout default. Failing
+        // loudly is the intent — above the ceiling the activity window is unreachable, since the ceiling
+        // always fires first — but the break must be explicit here and in config.yml's upgrade note
+        // rather than trivially "passing" on the one hours-scale value that stays under it
+        // (review: thiagohora).
+        var config = validConfig()
+                .runningTimeout(Duration.hours(48))
+                .runningHardTimeout(Duration.hours(24))
+                .build();
+
+        assertThat(validator.validate(config))
+                .anyMatch(v -> v.getMessage().contains("runningHardTimeout must not be less than runningTimeout"));
     }
 
     @Test

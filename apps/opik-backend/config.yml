@@ -1098,6 +1098,11 @@ optimizationStalledReaper:
   #   backstop forever. created_at is preserved across re-upserts, so no client write can move it.
   #   MUST exceed the worker's execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, 6h) plus a buffer — both are
   #   measured from the same origin — and must not be below runningTimeout.
+  #   UPGRADE NOTE (breaking): runningTimeout used to be valid anywhere in [6h, 7d], so a deployment that
+  #   raised OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT above 24h will now FAIL TO BOOT against this
+  #   default. That is intentional — above the ceiling the activity window is unreachable, because the
+  #   ceiling always fires first — but such deployments must either lower runningTimeout (progress-based
+  #   liveness means it no longer has to cover a whole run) or raise this ceiling to match.
   runningHardTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_HARD_TIMEOUT:-24h}
   # Default: 7d
   # Description: Added to max(initializedTimeout, runningTimeout, runningHardTimeout) to size the
