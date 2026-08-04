@@ -170,7 +170,8 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > still work — which is why the wrap is **opt-in** (`--with-wrap`) and the default stops after the EXCHANGE. Defer the
 > wrap until the retarget flag is wired into the deploy. The wrap is the sharding-readiness layer, not the cutover.
 >
-> **Applying the deferred wrap later:** once the sharding-aware DAO has shipped, run
+> **Applying the deferred wrap later:** once the retarget flag (`tracesDistributedWrapEnabled=true`) is live across the
+> backend fleet, run
 > `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance --confirm-daos-retargeted` — it runs the settle
 > gate and applies **only** the wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`).
 > `--confirm-daos-retargeted` is required for **any** wrap (same-run or deferred), since the wrap makes `traces`
@@ -353,11 +354,13 @@ on a large backfill for no gain.
 - The anchor is captured **before** the backfill, not at its end — a cutoff taken at the end would miss writes that
   landed during the backfill itself. The same `backfill_start` bounds the replay window.
 
-**Replay matches on two branches — full key, or `(workspace_id, id)` — mirroring the product's two delete paths.**
-`TraceService.delete(ids, projectId)` resolves each id's owning project and deletes per project (full key); ids it can't
-resolve fall back to a **workspace-scoped** delete — `TraceDAO.DELETE_BY_ID` with the project filter omitted, i.e.
-`DELETE … WHERE id IN … AND workspace_id = …` across every project. The bridge records the first with the project and the
-second with an **empty `project_id`** (`DeletionEventDAO`: "project_id is empty for workspace-scoped source tables"). The
+**Replay matches on two branches — full key, or `(workspace_id, id)` — mirroring the two delete shapes recorded in the bridge.**
+`TraceService.delete(ids, projectId)` resolves each id's owning project and deletes per project (full key). **Pre-OPIK-7483**,
+ids it could not resolve fell back to a **workspace-scoped** delete (`DELETE … WHERE id IN … AND workspace_id = …` across
+every project), recorded in the bridge with an **empty `project_id`** (`DeletionEventDAO`: "project_id is empty for
+workspace-scoped source tables"). OPIK-7483 removed that fallback, so current `TraceService.delete` always carries
+`project_id` and the empty-project branch now replays **only** legacy bridge rows written before OPIK-7483 (still resident
+under the 2-year TTL). The
 replay mirrors both: full-key events delete by `(workspace_id, project_id, id)` (exact; prunes on the destination primary
 key — correct even though trace ids are not globally unique), and empty-project events delete by `(workspace_id, id)`.
 The second branch is a **mirror, not an over-delete**: the workspace-scoped fallback fires only for ids the resolver
@@ -538,7 +541,8 @@ backup with `finalize.sh` is the one irreversible step, so gate it on an explici
   `traces_post_rollback_backup` after a rollback) for a defined window (recommend ~2 weeks; it fits well inside the
   bridge's 2-year TTL) so any latent read/query regression surfaces while rollback is still an option.
 - **Finalize exit criteria** — before retiring the backup: `verify.sh` clean, query p99 within budget over the soak, no
-  cutover-related incidents open, and (if the wrap was applied) the sharding-aware DAO healthy in production.
+  cutover-related incidents open, and (if the wrap was applied) the retarget flag (`tracesDistributedWrapEnabled`) live
+  and healthy across the backend fleet.
 
 Once those hold, run [`scripts/finalize.sh`](scripts/finalize.sh) — it auto-detects whichever parked table is present
 (`traces_pre_cutover_backup` or `traces_post_rollback_backup`), never the live `traces`/`traces_local` or the working
