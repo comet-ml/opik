@@ -60,8 +60,7 @@ public class CipxSpendDAO {
             @NonNull String thinkingType,
             long maxTokens,
             @NonNull String contextManagement,
-            @NonNull String speed,
-            @NonNull String inferenceGeo) {
+            @NonNull String speed) {
 
         public static SpanRow from(UUID spanId, UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
@@ -85,7 +84,6 @@ public class CipxSpendDAO {
                     .maxTokens(config.path("max_tokens").asLong(0))
                     .contextManagement(config.path("context_management").asText(""))
                     .speed(config.path("speed").asText(""))
-                    .inferenceGeo(config.path("inference_geo").asText(""))
                     .build();
         }
     }
@@ -96,7 +94,7 @@ public class CipxSpendDAO {
             INSERT INTO cipx_spends
                 (workspace_id, project_id, trace_id, span_id, start_time, model,
                  u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                 effort, thinking_type, max_tokens, context_management, speed, inference_geo)
+                 effort, thinking_type, max_tokens, context_management, speed)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -117,8 +115,7 @@ public class CipxSpendDAO {
                         :thinking_type<item.index>,
                         :max_tokens<item.index>,
                         :context_management<item.index>,
-                        :speed<item.index>,
-                        :inference_geo<item.index>
+                        :speed<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -147,7 +144,7 @@ public class CipxSpendDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 17 parameters per row tuple in template order.
+        // (repeats dedup), then 16 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (SpanRow row : rows) {
@@ -166,8 +163,7 @@ public class CipxSpendDAO {
                     .bind(index++, row.thinkingType())
                     .bind(index++, row.maxTokens())
                     .bind(index++, row.contextManagement())
-                    .bind(index++, row.speed())
-                    .bind(index++, row.inferenceGeo());
+                    .bind(index++, row.speed());
         }
 
         return statement.execute();

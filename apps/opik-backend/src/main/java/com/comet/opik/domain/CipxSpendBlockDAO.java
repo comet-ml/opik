@@ -64,12 +64,11 @@ public class CipxSpendBlockDAO {
             @NonNull String projectId,
             @NonNull Instant startTime,
             @NonNull String model,
-            /** Per-call rate modifiers, read from cipx.call.config and denormalized onto every block
+            /** Fast-mode rate modifier, read from cipx.call.config and denormalized onto every block
              * next to `model` (which comes from cipx.call itself): a block's cost is only computable
-             * with the rate that produced it. '' = standard speed / global routing, which is also
-             * what every row written before these columns reads as. */
+             * with the rate that produced it. '' = standard speed, which is also what every row
+             * written before this column reads as. */
             @NonNull String speed,
-            @NonNull String inferenceGeo,
             int blockIdx,
             @NonNull String src,
             @NonNull String category,
@@ -146,8 +145,7 @@ public class CipxSpendBlockDAO {
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
                     .model(model)
-                    .speed(config.path("speed").asText(""))
-                    .inferenceGeo(config.path("inference_geo").asText(""));
+                    .speed(config.path("speed").asText(""));
             if (blocks.isArray()) {
                 for (int idx = 0; idx < blocks.size(); idx++) {
                     JsonNode block = blocks.get(idx);
@@ -386,7 +384,6 @@ public class CipxSpendBlockDAO {
         node.put("block_idx", row.blockIdx());
         node.put("model", row.model());
         node.put("speed", row.speed());
-        node.put("inference_geo", row.inferenceGeo());
         node.put("src", row.src());
         node.put("category", row.category());
         node.put("side", row.side());
