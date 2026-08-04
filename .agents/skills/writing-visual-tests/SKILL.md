@@ -180,7 +180,7 @@ rm -rf test-results screenshots/comparison visual-report allure-results
 - On a fresh clone, or after `git clean`, **no baselines exist at all** — every screenshot name in every spec needs generating before you can run a compare pass.
 - Adding a *new* screenshot name always needs a fresh baseline, regardless of whether other baselines in the same directory already exist from a previous session.
 
-**Always (re)generate baselines for whatever you touched** before judging a compare run — via `--update-snapshots` (see the loop below). Don't assume "the baseline is already there"; check, or just regenerate, it's cheap:
+**Always (re)generate baselines for the whole suite**, not just the spec you touched, before judging a compare run — via `--update-snapshots` (see the loop below). Don't assume "the baseline is already there"; check, or just regenerate, it's cheap:
 
 ```bash
 ls tests_end_to_end/visual-tests/screenshots/baseline/ | grep <your-prefix>
@@ -194,23 +194,23 @@ Regenerate whenever any of these change, not just on first add: the screenshot n
 2. **Seed data.** Add a `test-helper-service` route if no existing one produces the shape you need (see "Adding a seed endpoint" below), plus a `TestHelperClient` method.
 3. **Page object(s).** Follow the pattern above exactly; reuse an existing page object if the page already has one.
 4. **Spec.** One `test()` per screenshot, unique names (see "Unique screenshot names").
-5. **Generate/refresh the baseline** — every time, whether or not one already exists (see "Baselines are local and gitignored" above):
+5. **Generate/refresh baselines for the whole suite** — every time, whether or not baselines already exist (see "Baselines are local and gitignored" above). Run **all** spec files, not just the one you touched: adding or changing a test can shift shared page chrome, and stale baselines in untouched files are otherwise only caught by accident.
    ```bash
    cd tests_end_to_end/visual-tests
-   SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test tests/<name>.spec.ts --update-snapshots --reporter=list
+   SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test --update-snapshots --reporter=list
    ```
-   `SKIP_TEARDOWN=1` keeps the seeded project alive for a fast next run; the plain `npx playwright test` invocation still always cleans and recreates it at the *start* (global-setup), so each run starts from a known state.
-6. **Stress-test for stability — do not skip this.** Run the compare pass (no `--update-snapshots`) several times in a row:
+   `SKIP_TEARDOWN=1` keeps the seeded projects alive for a fast next run; the plain `npx playwright test` invocation still always cleans and recreates them at the *start* (global-setup), so each run starts from a known state. If the full-suite run surfaces failures in files you didn't touch, don't reflexively blame your change — check whether those baselines simply predate a recent, unrelated app change (compare `ls -la screenshots/baseline/` timestamps against recent frontend commits) before deciding whether to regenerate them or investigate further; confirm with the user before regenerating baselines outside the scope of your own change.
+6. **Stress-test for stability — do not skip this.** Run the full-suite compare pass (no `--update-snapshots`) 3 times in a row:
    ```bash
-   for i in 1 2 3 4 5; do
+   for i in 1 2 3; do
      echo "=== Run $i ==="
-     SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test tests/<name>.spec.ts --reporter=list
+     SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test --reporter=list
    done
    ```
    A single green run proves nothing — real timestamps, real durations, and font/layout jitter only show up over several runs. If anything fails, open the `*-diff.png` attachment under `test-results/` before touching anything — it tells you exactly which pixels moved. Don't guess. If you change the spec, masks, or seed data in response, go back to step 5 and regenerate the baseline before stress-testing again — a stale baseline will just fail for a different, misleading reason.
    > macOS gotcha: `timeout` is not a built-in command (no coreutils by default) — a loop like `timeout 60 npx playwright test ...` silently no-ops. Don't wrap runs in `timeout`.
-   > Shell-tool gotcha: 5 sequential runs of a multi-test spec easily exceed a shell tool's default ~2-minute timeout, cutting the loop off mid-run. That's a harness timeout, not a test failure — don't read it as one. Pass an explicit longer timeout for the whole loop (e.g. 5+ minutes), or split into separate invocations and resume numbering (`for i in 3 4 5; do ...`) if one gets cut off.
-7. **Final full run, then work through the "Cleanup checklist" above** — one run *without* `SKIP_TEARDOWN` first (so `global-teardown.ts` actually deletes the seeded project server-side), then every item in the checklist. Config restore and stopping `test-helper-service` are only two of several things left behind.
+   > Shell-tool gotcha: 3 sequential runs of the full suite easily exceed a shell tool's default ~2-minute timeout, cutting the loop off mid-run. That's a harness timeout, not a test failure — don't read it as one. Pass an explicit longer timeout for the whole loop (e.g. 5+ minutes), or split into separate invocations and resume numbering (`for i in 2 3; do ...`) if one gets cut off.
+7. **Final full run, then work through the "Cleanup checklist" above** — one run *without* `SKIP_TEARDOWN` first (so `global-teardown.ts` actually deletes the seeded projects server-side), then every item in the checklist. Config restore and stopping `test-helper-service` are only two of several things left behind.
 
 ## Unique screenshot names
 
