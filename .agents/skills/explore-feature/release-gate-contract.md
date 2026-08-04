@@ -14,14 +14,31 @@ test must be **staging-ready** and stamped. This contract overrides those defaul
 ## Tags (on the `test.describe`)
 
 ```ts
-{ tag: ['@release-gate', '@release-gate:<version>', '@<feature>'] }
+test.describe('<feature>', { tag: ['@release-gate', '@release-gate:<version>', '@area:<area>'] }, () => {
+  test('<flow>', { tag: ['@cap:<area>.<capability>'] }, async ({ ... }) => {
 ```
 
 - `@release-gate` — always.
 - `@release-gate:<version>` — the stamp. `<version>` = `git show origin/main:version.txt` read at
   authoring time (see the stamp rules in SKILL.md). Never `@t1-smoke`/`@t2-cuj`/`@t3-nightly` —
   gate tests are not part of the curated tiers.
-- `@<feature>` — the page-family tag matching the change (`@datasets`, `@trace-explore`, …).
+- `@area:<area>` — the area this change belongs to.
+- `@cap:<area>.<capability>` — at least one per test, matching the spec's own area.
+
+**`@area:` and `@cap:` must exist in `tests_end_to_end/coverage/taxonomy.yaml`.** They are a fixed
+vocabulary, not free text, and CI's `tag-lint` job fails the build on an unregistered value. Grep
+the taxonomy for the feature before writing the tag — the capability is often already reserved
+there as `covered: false`. If nothing fits, add a new entry under the right area in this same
+change. Being tier-less does **not** exempt a gate spec from this: the linter allows a
+suite-selector spec to skip the tier tag, but still requires a valid area and capability.
+
+Update the taxonomy alongside the spec: add the spec path to the area's `specs:` list, and set
+each capability you now cover to `covered: true`. Then run the linter — it's instant and it is
+exactly what CI runs:
+
+```bash
+python3 tests_end_to_end/coverage/tag_lint.py --taxonomy tests_end_to_end/coverage/taxonomy.yaml --estate tests_end_to_end
+```
 
 **Append reconciliation:** if appending, the describe block keeps the **earliest un-shipped**
 `@release-gate:<v>` across its tests, so the assembled feature gates the earliest-targeted release.
@@ -78,3 +95,6 @@ minimal — ticket key + one-line scope only; no restated plan (it lives in Jira
 
 Explore the live UI and run the spec **green against the dev's local stack** (see the local-run
 gate in SKILL.md). Local-green is the PR gate; staging-green (CI, later) is the release gate.
+
+Also run `tag_lint.py` (above) and, if you touched a shared POM, the whole feature directory — a
+passing spec hides both tag errors and sibling breakage.

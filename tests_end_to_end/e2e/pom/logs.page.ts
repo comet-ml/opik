@@ -131,6 +131,52 @@ export class LogsPage {
     return this.page.locator('tr[data-row-id]');
   }
 
+  /**
+   * A trace row, keyed by trace id. `data-row-id` is set from the row model by
+   * the shared DataTable, so it is a first-class hook rather than a structural
+   * fallback — the same one datasets/dataset-items/compare-experiments key on.
+   * There is no text-based alternative: the id is a filter field, not a rendered
+   * column, so it appears nowhere in the row's visible cells.
+   */
+  traceRow(traceId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${traceId}"]`);
+  }
+
+  /** Tick the selection checkbox on a trace's row. */
+  async selectTrace(traceId: string): Promise<void> {
+    return test.step(`Select trace ${traceId}`, async () => {
+      await this.traceRow(traceId).getByRole('checkbox', { name: 'Select row' }).click();
+    });
+  }
+
+  /**
+   * The bulk-delete (trash) button in the traces actions panel. It renders as an
+   * icon-only button with no accessible name — the "Delete" label lives in a
+   * hover tooltip portal — so the testid is the only stable handle.
+   */
+  get bulkDeleteButton(): Locator {
+    return this.page.getByTestId('traces-bulk-delete-button');
+  }
+
+  /** The "Delete traces" confirmation dialog. */
+  get deleteTracesDialog(): Locator {
+    return this.page.getByRole('dialog').filter({ hasText: 'Delete traces' });
+  }
+
+  /**
+   * Bulk-delete the currently selected traces: open the confirm dialog and
+   * accept it. Callers select rows first via selectTrace().
+   */
+  async bulkDeleteSelected(): Promise<void> {
+    return test.step('Bulk-delete selected traces', async () => {
+      await this.bulkDeleteButton.click();
+      const dialog = this.deleteTracesDialog;
+      await dialog.waitFor({ state: 'visible' });
+      await dialog.getByRole('button', { name: 'Delete traces' }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
   /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */
   explainCell(traceId: string, kind: ExplainKind): Locator {
     return this.page.locator(`[data-cell-id="${traceId}_${EXPLAIN_COLUMN[kind]}"]`);
