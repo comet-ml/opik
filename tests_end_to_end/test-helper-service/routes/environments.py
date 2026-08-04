@@ -1,6 +1,7 @@
 """Environment-related endpoints for test helper service"""
 
-from flask import Blueprint, request, abort
+from flask import Blueprint, request
+from opik.id_helpers import generate_id
 from werkzeug.exceptions import HTTPException
 from .utils import (
     get_opik_api_client,
@@ -35,21 +36,16 @@ def create_environment():
     name = data["name"]
     client = get_opik_api_client()
 
+    environment_id = generate_id()
     kwargs = {}
     if data.get("description"):
         kwargs["description"] = data["description"]
     if data.get("color"):
         kwargs["color"] = data["color"]
 
-    client.environments.create_environment(name=name, **kwargs)
+    client.environments.create_environment(id=environment_id, name=name, **kwargs)
 
-    environments = client.environments.find_environments()
-    matches = [env for env in (environments.content or []) if env.name == name]
-    if matches:
-        created = matches[0]
-        return success_response({"id": created.id, "name": created.name})
-
-    abort(500, "Failed to retrieve created environment")
+    return success_response({"id": environment_id, "name": name})
 
 
 @environments_bp.route("/find-environments", methods=["GET"])
