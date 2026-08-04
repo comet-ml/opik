@@ -3311,8 +3311,11 @@ class TraceDAOImpl implements TraceDAO {
      * {@code OPTIMIZE}) must target the {@code traces_local} shard instead; while it is off {@code traces} is still a
      * {@code MergeTree} where deletes work directly. Reads and inserts always route through {@code traces}. Each
      * mutation query carries both table names in an {@code <if(distributed_wrap)>traces_local<else>traces<endif>}
-     * branch and passes this flag; any new mutation path — or Liquibase migration — that touches {@code traces} must
-     * do the same rather than hardcoding a single table.
+     * branch and passes this flag; a new mutation path must do the same. Liquibase migrations split by kind:
+     * {@code DELETE} / {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code traces_local}
+     * only (the Distributed {@code traces} rejects them), but {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must target
+     * <b>both</b> {@code traces_local} and {@code traces} — the wrapper takes them as metadata-only, and skipping it
+     * leaves reads unable to see the column (code 47).
      * <p>
      * The cluster is single-shard today and {@code traces_local} is a {@code ReplicatedMergeTree}, so a lightweight
      * delete fans out to every replica via the replication log and reaches every matching row — no {@code ON CLUSTER}

@@ -44,8 +44,12 @@ import lombok.Builder;
  * directly); set {@code true} in lockstep with applying the {@code Distributed} wrap
  * ({@code exchange_and_wrap.sh --with-wrap} / {@code --wrap-only}). While {@code true}, {@code TraceDAO} routes its
  * delete/retention mutations to {@code traces_local} while reads and inserts continue through the Distributed
- * {@code traces}. <b>General rule:</b> any future mutation / {@code ALTER} / {@code OPTIMIZE} path — or Liquibase
- * migration — that targets {@code traces} must likewise target {@code traces_local} once this flag is on.</p>
+ * {@code traces}. <b>General rule, by kind of change:</b> row mutations ({@code DELETE}) and
+ * {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code traces_local} only — the
+ * {@code Distributed} {@code traces} rejects them (code 36/48), so a slip fails loudly; {@code ADD}/{@code DROP}/
+ * {@code MODIFY COLUMN} must be applied to <b>both</b> {@code traces_local} and the {@code Distributed} {@code traces}
+ * (the wrapper accepts them as metadata-only, and targeting only {@code traces_local} leaves the wrapper without the
+ * column, so reads fail with code 47).</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(

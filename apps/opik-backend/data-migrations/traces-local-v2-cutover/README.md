@@ -164,11 +164,21 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > that shipped **before** the wrap (OPIK-7455): `TraceDAO` renders its mutation table through a single toggle,
 > `databaseAnalyticsDataModel.tracesDistributedWrapEnabled`. Set it **`true` in lockstep with applying the wrap** so those
 > deletes run against `traces_local`; reads and inserts stay on the Distributed `traces`. While it is `false` (the deploy
-> default, and correct while `traces` is still a `MergeTree`) the deletes target `traces` directly. **General rule:** any
-> future mutation / `ALTER` / `OPTIMIZE` path — or Liquibase migration — that touches `traces` must likewise switch to
-> `traces_local` under this flag. The `EXCHANGE` alone is the data cutover and leaves `traces` a `MergeTree` where deletes
-> still work — which is why the wrap is **opt-in** (`--with-wrap`) and the default stops after the EXCHANGE. Defer the
+> default, and correct while `traces` is still a `MergeTree`) the deletes target `traces` directly. **General rule (splits
+> by kind of change):** row mutations (`DELETE`, `ALTER … DELETE`) and `MATERIALIZE COLUMN` / `ADD INDEX` / `MODIFY TTL`
+> target **`traces_local` only** — the `Distributed` `traces` rejects them (code 36/48), so a slip fails loudly; but
+> `ADD` / `DROP` / `MODIFY COLUMN` (the shape of every trace schema migration) must be applied to **both** `traces_local`
+> **and** the `Distributed` `traces` — the wrapper accepts them as metadata-only, and targeting only `traces_local` leaves
+> the wrapper without the column so reads fail with code 47. The `EXCHANGE` alone is the data cutover and leaves `traces` a
+> `MergeTree` where deletes still work — which is why the wrap is **opt-in** (`--with-wrap`) and the default stops after
+> the EXCHANGE. Defer the
 > wrap until the retarget flag is wired into the deploy. The wrap is the sharding-readiness layer, not the cutover.
+>
+> **Monitoring consequence of the flip:** `system.parts` only knows `traces_local` post-wrap, so the
+> `opik.clickhouse.partition.*` parts gauges relabel from `table="traces"` to `table="traces_local"`, while the
+> lightweight-delete-mask gauge (read through the wrapper) stays labelled `traces`. Any dashboard/alert keyed on
+> `table="traces"` goes blank when the wrap lands — update them in the same window, or point
+> `PARTITION_METRICS_LWD_TABLES` (default `traces,spans`) at `traces_local` for label consistency.
 >
 > **Applying the deferred wrap later:** once the retarget flag (`tracesDistributedWrapEnabled=true`) is live across the
 > backend fleet, run
@@ -502,7 +512,8 @@ Pick the stage by how far the cutover got (`cutover_start` is the value `exchang
   makes `traces` a `MergeTree` again and parks `traces_local`, so a still-`true` flag would send `TraceDAO` deletes at
   the missing `traces_local`. This is the inverse of the flip that enabled the wrap (see "HARD PREREQUISITE for the
   wrap"); it applies to every deferred `--wrap-only` topology, not the EXCHANGE-only default (where the flag was never
-  set).
+  set). The partition-metrics relabel reverses too: the `opik.clickhouse.partition.*` parts gauges move back from
+  `table="traces_local"` to `table="traces"`, so restore any dashboards/alerts adjusted at wrap time.
 
 > **Multi-replica note (production is multi-replica).** Stages B and C promote via a single `ON CLUSTER` RENAME of the
 > **live** `traces`. It runs synchronously across the shard's replicas — the client blocks until each applies it, or fails
