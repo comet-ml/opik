@@ -181,7 +181,9 @@ def _small_batches(monkeypatch, size: int = 2) -> None:
     monkeypatch.setattr(constants, "DATASET_ITEMS_MAX_BATCH_SIZE", size)
 
 
-def _mock_rest_client(backend_version: str = "2.2.8") -> Mock:
+def _mock_rest_client(
+    backend_version: str = constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+) -> Mock:
     """A rest client whose reported backend version supports parallel insert.
 
     A bare Mock() would return a Mock from version(), which the parallel gate

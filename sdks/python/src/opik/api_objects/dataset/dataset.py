@@ -42,11 +42,6 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
-# Parallel insert relies on the backend serializing concurrent dataset version
-# writes; before this release, concurrent batches sharing one batch_group_id
-# raced and could 500 or silently drop rows (OPIK-7264, backend PR #7518).
-MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT = "2.2.8"
-
 
 class DatasetExportOperations(abc.ABC):
     """
@@ -621,22 +616,22 @@ class Dataset(DatasetExportOperations):
 
         Older backends race on concurrent batches that share a batch_group_id,
         so parallelism is only safe from
-        ``MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` onwards. When the version
-        cannot be determined at all — unreachable endpoint, non-semver build
-        string — we fall back to sequential rather than risk the race.
+        ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` onwards. When the
+        version cannot be determined at all — unreachable endpoint, non-semver
+        build string — we fall back to sequential rather than risk the race.
         """
         try:
             backend_version = self._rest_client.version()["version"]
             supported = (
                 semantic_version.SemanticVersion.parse(backend_version)
-                >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
+                >= constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
             )
         except Exception:
             LOGGER.warning(
                 "Could not determine the Opik backend version, falling back to a "
                 "sequential dataset upload. Parallel upload requires backend %s "
                 "or newer.",
-                MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
                 exc_info=True,
             )
             return 1
@@ -647,7 +642,7 @@ class Dataset(DatasetExportOperations):
                 "back to a sequential upload. Upgrade to backend %s or newer to use "
                 "num_threads.",
                 backend_version,
-                MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
             )
             return 1
 
@@ -746,7 +741,7 @@ class Dataset(DatasetExportOperations):
                 parallel and sequential inserts of the same items produce
                 identical dataset content; the input order is not a read-back
                 guarantee. Requires an Opik backend of at least
-                ``MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` (2.2.8); against
+                ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT``; against
                 older backends, or when the backend version cannot be
                 determined, the upload falls back to sequential and logs a
                 warning.
