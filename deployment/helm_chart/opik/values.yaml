@@ -598,6 +598,13 @@ component:
     # (exact match only, so none of cost-api's other routes become reachable),
     # mirroring opik's own <rootPath>/api/is-alive/ver so release tooling can read
     # the deployed cost-api version.
+    #
+    # Scope of that guarantee: this chart owns the proxy hop only — it forwards
+    # <rootPath>/cost-api/ver to the ai-cost-backend service with the rootPath
+    # stripped. The response is cost-api's own contract, not this chart's: it
+    # serves that path unauthenticated and answers {"version": "<build version>"}.
+    # Nothing here pins that, so if cost-api changes the shape or starts requiring
+    # auth, this location keeps proxying and the consumer sees the new behaviour.
     aiSpendBackend:
       enabled: false
       host: ai-cost-backend
