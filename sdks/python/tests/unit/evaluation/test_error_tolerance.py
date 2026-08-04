@@ -5,11 +5,13 @@ from unittest import mock
 
 import pytest
 
+import opik
 from opik import exceptions, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik import evaluation
 from opik.evaluation.metrics import base_metric, score_result
+from opik.evaluation.suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
 from opik.evaluation.types import ErrorTolerance
 
 
@@ -273,3 +275,24 @@ def test_evaluate__argument_span__is_created_for_successful_scores_too(fake_back
     spans = _spans_named(fake_backend, "always_passes.score_arguments")
     assert len(spans) == 2
     assert all(span.error_info is None for span in spans)
+
+
+def test_evaluate__tracing_disabled__no_argument_span_is_emitted(fake_backend):
+    # `start_as_current_span` does not honour `set_tracing_active` on its own, so the
+    # engine has to gate it: a run with tracing off must stay silent.
+    opik.set_tracing_active(False)
+    try:
+        _run_evaluation([AlwaysPasses()])
+    finally:
+        opik.set_tracing_active(True)
+
+    assert _spans_named(fake_backend, "always_passes.score_arguments") == []
+
+
+def test_evaluate__argument_span__is_tagged_as_internal(fake_backend):
+    # Same marker the rest of the engine uses; the agentic judge prunes the trace by it.
+    _run_evaluation([AlwaysPasses()])
+
+    spans = _spans_named(fake_backend, "always_passes.score_arguments")
+    assert spans
+    assert all(span.tags == [INTERNAL_SPAN_TAG] for span in spans)

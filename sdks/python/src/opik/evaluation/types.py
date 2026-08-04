@@ -15,16 +15,20 @@ ExperimentScoreFunction = Callable[
 
 
 class ErrorTolerance(enum.IntEnum):
-    """How many failures an evaluation absorbs before it gives up.
+    """Which classes of failure an evaluation tolerates before it aborts.
 
-    Higher values tolerate more. Plain ints work too, since this is an ``IntEnum``.
-    Values are spaced by ten so levels can be inserted above, below or between the
-    existing ones without renumbering.
+    Higher values tolerate more. Only the members defined here — or their exact int
+    values, since this is an ``IntEnum`` — are accepted; anything else raises
+    ``ValueError``. Values are spaced by ten so levels can be inserted above, below
+    or between the existing ones without renumbering.
     """
 
     METRIC_ERRORS = 10
-    """Default. Errors raised *inside* ``score`` are recorded as failed score
-    results and the run continues; anything else aborts."""
+    """Default. Errors raised while a metric computes its score are recorded as
+    failed score results and the run continues. Of the failures that happen before
+    ``score`` is entered, a missing required score argument and an item-level
+    evaluator that cannot be built abort the run; an evaluator whose type this SDK
+    does not support is always reported as a failed score instead."""
 
     ALL_SCORING_ERRORS = 20
     """Also tolerate errors that prevent a metric from being scored at all — a

@@ -152,3 +152,77 @@ def test_evaluate__positional_only_parameter_is_missing__reported_as_missing_arg
 
     with pytest.raises(exceptions.ScoreMethodMissingArguments, match="gold_label"):
         _run_evaluation([NeedsPositionalOnly()])
+
+
+class TwoPositionalOnlyWithDefaults(base_metric.BaseMetric):
+    """Both parameters are positional-only and both have defaults."""
+
+    def __init__(self) -> None:
+        super().__init__(name="two_positional_only", track=False)
+
+    def score(
+        self, reference: str = "MISSING_REF", output: str = "MISSING_OUT", /
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name=self.name,
+            value=1.0,
+            reason=f"reference={reference!r} output={output!r}",
+        )
+
+
+def test_evaluate__positional_only_gap__is_reported_instead_of_shifting_values(
+    fake_backend,
+):
+    # `reference` is absent from the item but `output` is present. Skipping the gap
+    # would bind the output value to `reference` and score the metric against the
+    # wrong input, silently: both parameters have defaults, so the missing-argument
+    # check does not require them.
+    with pytest.raises(exceptions.ScoreMethodMissingArguments, match="reference"):
+        _run_evaluation([TwoPositionalOnlyWithDefaults()])
+
+
+class TrailingPositionalOnlyWithDefault(base_metric.BaseMetric):
+    def __init__(self) -> None:
+        super().__init__(name="trailing_positional_only", track=False)
+
+    def score(
+        self, output: str, missing_tail: str = "DEFAULTED", /
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            name=self.name, value=1.0, reason=f"tail={missing_tail!r}"
+        )
+
+
+def test_evaluate__positional_only_trailing_gap__falls_back_to_the_default(
+    fake_backend,
+):
+    # Nothing is supplied after the gap, so the contiguous prefix is passed and the
+    # parameter keeps its default — no shifting is possible.
+    result = _run_evaluation([TrailingPositionalOnlyWithDefault()])
+
+    score = result.test_results[0].score_results[0]
+    assert score.scoring_failed is False
+    assert score.reason == "tail='DEFAULTED'"
+
+
+def test_evaluate__aggregated_metric__narrows_arguments_for_each_wrapped_metric(
+    fake_backend,
+):
+    # AggregatedMetric declares **kwargs, so it receives every dataset key and then
+    # re-dispatches to the wrapped metrics — which must be narrowed in turn.
+    from opik.evaluation.metrics import AggregatedMetric
+
+    aggregated = AggregatedMetric(
+        name="aggregated",
+        metrics=[NarrowSignature()],
+        aggregator=lambda results: score_result.ScoreResult(
+            name="aggregated", value=results[0].value
+        ),
+        track=False,
+    )
+
+    result = _run_evaluation([aggregated])
+
+    score = result.test_results[0].score_results[0]
+    assert score.scoring_failed is False
+    assert score.value == 1.0

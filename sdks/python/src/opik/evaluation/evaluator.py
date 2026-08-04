@@ -156,7 +156,7 @@ def evaluate(
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
     blueprint_id: Optional[str] = None,
-    error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
+    error_tolerance: Union[ErrorTolerance, int] = ErrorTolerance.METRIC_ERRORS,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -256,8 +256,11 @@ def evaluate(
             - ``ErrorTolerance.ALL_SCORING_ERRORS`` (20): additionally tolerate errors
               that stop a metric from being scored at all — a required score argument
               the dataset does not provide, or an item-level evaluator that cannot be
-              built. Note that a misconfiguration affecting every item will then
-              consume the whole dataset instead of stopping on the first one.
+              built. Note that neither level stops early — the evaluation task runs
+              for every dataset item before the first failure is re-raised, so a
+              misconfiguration affecting every item costs a full pass either way.
+              What the higher level changes is that you get an ``EvaluationResult``
+              back instead of an exception.
 
             Two failures always abort, at every level: a failure of the evaluation
             task itself, and a ``scoring_key_mapping`` callable that raises — neither
@@ -620,7 +623,7 @@ def _evaluate_task(
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
     source: TraceSource,
-    error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
+    error_tolerance: ErrorTolerance,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -1481,6 +1484,9 @@ def evaluate_optimization_trial(
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
         source="optimization",
+        # Resuming or replaying a trial does not carry the original
+        # caller's tolerance, so it runs at the default.
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
 
 
@@ -1598,6 +1604,9 @@ def evaluate_resume(
         trial_count=context.default_runs_per_item,
         experiment_scoring_functions=experiment_scoring_functions,
         source="experiment",
+        # Resuming or replaying a trial does not carry the original
+        # caller's tolerance, so it runs at the default.
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
 
     merged = evaluation_result.merge_resume_results(

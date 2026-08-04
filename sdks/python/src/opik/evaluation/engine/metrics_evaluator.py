@@ -1,3 +1,4 @@
+import contextlib
 import inspect
 import logging
 from typing import List, Dict, Any, Optional, Callable, Tuple
@@ -7,6 +8,7 @@ import opik.logging_messages as logging_messages
 from opik.api_objects.dataset import dataset_item
 from opik.decorator import error_info_collector
 from opik.decorator.context_manager import span_context_manager
+from opik import tracing_runtime_config
 from opik.evaluation.metrics import (
     arguments_helpers,
     base_metric,
@@ -15,6 +17,7 @@ from opik.evaluation.metrics import (
 )
 from opik.evaluation.scorers import scorer_wrapper_metric
 from opik.evaluation.suite_evaluators import llm_judge
+from opik.evaluation.suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 from opik.evaluation.types import ErrorTolerance, ScoringKeyMappingType
 from opik.message_processing.emulation import models
@@ -53,55 +56,6 @@ def _accepts_trace_tool_context(func: Callable) -> bool:
     if TRACE_TOOL_CONTEXT_PARAMETER_NAME in params:
         return True
     return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
-
-
-def _select_score_arguments(
-    score_function: Callable, kwargs: Dict[str, Any]
-) -> Tuple[List[Any], Dict[str, Any]]:
-    """Split the scoring inputs into what the score signature can accept.
-
-    Every dataset item key and task output key is offered to every metric, which
-    breaks two kinds of signature:
-
-    - A metric that does not declare ``**kwargs`` used to fail on every single
-      item with an ``unexpected keyword argument`` TypeError — a message that
-      reads like an SDK bug rather than a signature mismatch. Those keys are
-      dropped now.
-    - A positional-only parameter cannot be passed by keyword at all, so such a
-      metric could never be scored. Those are returned separately, in signature
-      order, to be passed positionally.
-
-    Missing arguments are still reported: ``validate_score_arguments`` runs
-    before this and only checks the parameters the metric declares, so filtering
-    here cannot hide a key the metric actually asked for.
-    """
-    try:
-        parameters = inspect.signature(score_function).parameters
-    except (ValueError, TypeError):
-        # Signature is not introspectable — pass everything, as before.
-        return [], kwargs
-
-    positional_arguments = [
-        kwargs[name]
-        for name, parameter in parameters.items()
-        if parameter.kind == inspect.Parameter.POSITIONAL_ONLY and name in kwargs
-    ]
-
-    accepts_any_keyword = any(
-        parameter.kind == inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
-    )
-
-    keyword_arguments: Dict[str, Any] = {}
-    for name, value in kwargs.items():
-        parameter = parameters.get(name)
-        if parameter is None:
-            if accepts_any_keyword:
-                keyword_arguments[name] = value
-        elif parameter.kind != inspect.Parameter.POSITIONAL_ONLY:
-            keyword_arguments[name] = value
-
-    return positional_arguments, keyword_arguments
 
 
 def split_into_regular_and_task_span_metrics(
@@ -286,9 +240,21 @@ def _compute_metric_scores(
                 # is: `score` is `@track`-wrapped and gets its own span, while a
                 # metric that never gets that far would otherwise leave no trace
                 # of why — no feedback score is persisted for a failed score.
-                with span_context_manager.start_as_current_span(
-                    name=f"{metric.name}.{SCORE_ARGUMENTS_SPAN_SUFFIX}",
-                ):
+                with contextlib.ExitStack() as span_stack:
+                    # Unlike `@track`, `start_as_current_span` emits its span
+                    # regardless of `set_tracing_active` — it passes
+                    # `tracing_active=True` and its `finally` writes the span
+                    # unconditionally. Entering it only while tracing is on keeps
+                    # a disabled run silent.
+                    if tracing_runtime_config.is_tracing_active():
+                        span_stack.enter_context(
+                            span_context_manager.start_as_current_span(
+                                name=f"{metric.name}.{SCORE_ARGUMENTS_SPAN_SUFFIX}",
+                                # Engine plumbing, like `metrics_calculation`:
+                                # the agentic judge prunes the trace by this tag.
+                                tags=[INTERNAL_SPAN_TAG],
+                            )
+                        )
                     arguments_validator.validate_score_arguments(
                         metric=metric,
                         kwargs=mapped_scoring_inputs,
@@ -306,8 +272,13 @@ def _compute_metric_scores(
                         }
                     else:
                         score_kwargs = mapped_scoring_inputs
-                    positional_arguments, keyword_arguments = _select_score_arguments(
-                        metric.score, score_kwargs
+                    (
+                        positional_arguments,
+                        keyword_arguments,
+                    ) = arguments_helpers.select_score_arguments(
+                        score_function=metric.score,
+                        kwargs=score_kwargs,
+                        score_name=metric.name,
                     )
 
                 result = metric.score(*positional_arguments, **keyword_arguments)
