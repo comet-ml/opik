@@ -3,6 +3,14 @@ DATASET_SOURCE_SDK = "sdk"
 
 FEEDBACK_SCORES_MAX_BATCH_SIZE = 1000
 EXPERIMENT_ITEMS_MAX_BATCH_SIZE = 1000
+EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE = 1000
+
+# The bulk endpoint rejects any request whose *serialized* body exceeds 4MB
+# (MaxRequestSize.java). The backend measures the whole request, envelope
+# fields included, so we batch against a lower ceiling to leave headroom for
+# experiment_name/dataset_name/experiment_id/project_name and for the gap
+# between our size estimate and real JSON encoding.
+EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB = 3.5
 DATASET_ITEMS_MAX_BATCH_SIZE = 1000
 ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000
 DELETE_TRACE_BATCH_SIZE = 1000
