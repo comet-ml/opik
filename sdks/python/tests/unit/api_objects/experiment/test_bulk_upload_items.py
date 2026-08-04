@@ -14,10 +14,7 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 
 START_TIME = datetime.datetime(2026, 8, 4, 12, 0, 0)
-
-
-class _StopAfterCapture(Exception):
-    """Aborts the request once the encoded body has been captured."""
+_BASE_URL = "http://opik-bulk-upload-tests.local"
 
 
 def _create_experiment(
@@ -38,6 +35,10 @@ def _create_experiment(
 
 def _record(**kwargs: Any) -> bulk_item.ExperimentItemBulkRecord:
     kwargs.setdefault("dataset_item_id", "dataset-item-id")
+    # Every record needs exactly one of evaluate_task_result/trace to pass
+    # validation, so default the tests that do not care to the simpler one.
+    if "evaluate_task_result" not in kwargs and "trace" not in kwargs:
+        kwargs["evaluate_task_result"] = {"output": "output"}
     return bulk_item.ExperimentItemBulkRecord(**kwargs)
 
 
@@ -155,16 +156,14 @@ class TestBulkUploadItemsSerialization:
     """
 
     @staticmethod
-    def _sent_item(records: List[bulk_item.ExperimentItemBulkRecord]) -> Any:
-        rest_client = rest_api_client.OpikApi(base_url="http://testserver", api_key="k")
-        captured: dict = {}
+    def _sent_items(
+        respx_mock: Any, records: List[bulk_item.ExperimentItemBulkRecord]
+    ) -> Any:
+        route = respx_mock.put(url__regex=r".*/experiments/items/bulk").respond(204)
 
-        def capture(request: Any, **kwargs: Any) -> Any:
-            captured["body"] = request.read()
-            raise _StopAfterCapture()
-
-        rest_client._client_wrapper.httpx_client.httpx_client._transport.handle_request = capture
-
+        rest_client = rest_api_client.OpikApi(
+            base_url=_BASE_URL, api_key="api-key", workspace_name="workspace"
+        )
         experiment = experiment_module.Experiment(
             id="experiment-id",
             name="experiment-name",
@@ -174,40 +173,94 @@ class TestBulkUploadItemsSerialization:
             experiments_client=Mock(),
         )
 
-        with pytest.raises(_StopAfterCapture):
-            experiment.bulk_upload_items(records)
+        experiment.bulk_upload_items(records)
 
-        return json.loads(captured["body"])["items"][0]
+        assert len(route.calls) == 1
+        return json.loads(route.calls[0].request.read())["items"]
 
     def test_bulk_upload_items__trace_only__evaluate_task_result_is_omitted(
-        self,
+        self, respx_mock: Any
     ) -> None:
-        sent_item = self._sent_item(
+        sent_item = self._sent_items(
+            respx_mock,
             [
                 _record(
                     trace=bulk_item.ExperimentItemBulkTrace(
                         start_time=START_TIME, output={"answer": "a"}
                     )
                 )
-            ]
-        )
+            ],
+        )[0]
 
         assert "evaluate_task_result" not in sent_item
         assert "trace" in sent_item
 
     def test_bulk_upload_items__evaluate_task_result_only__trace_is_omitted(
-        self,
+        self, respx_mock: Any
     ) -> None:
-        sent_item = self._sent_item([_record(evaluate_task_result={"answer": "a"})])
+        sent_item = self._sent_items(
+            respx_mock, [_record(evaluate_task_result={"answer": "a"})]
+        )[0]
 
         assert "trace" not in sent_item
         assert sent_item["evaluate_task_result"] == {"answer": "a"}
 
-    def test_bulk_upload_items__no_spans_or_scores__keys_are_omitted(self) -> None:
-        sent_item = self._sent_item([_record(evaluate_task_result={"answer": "a"})])
+    def test_bulk_upload_items__no_spans_or_scores__keys_are_omitted(
+        self, respx_mock: Any
+    ) -> None:
+        sent_item = self._sent_items(
+            respx_mock, [_record(evaluate_task_result={"answer": "a"})]
+        )[0]
 
         assert "spans" not in sent_item
         assert "feedback_scores" not in sent_item
+
+    def test_bulk_upload_items__trace_and_span_without_ids__ids_are_generated(
+        self, respx_mock: Any
+    ) -> None:
+        """Ids must be set client-side so a retry re-sends the same ones.
+
+        The backend only preserves ids the client supplies -- see
+        ``ExperimentItemBulkMapper.addIdsIfRequired``, which mints a fresh id
+        whenever one is absent. Letting it do so would make every retry create
+        duplicate traces and spans.
+        """
+        sent_item = self._sent_items(
+            respx_mock,
+            [
+                _record(
+                    trace=bulk_item.ExperimentItemBulkTrace(start_time=START_TIME),
+                    spans=[
+                        bulk_item.ExperimentItemBulkSpan(start_time=START_TIME),
+                    ],
+                )
+            ],
+        )[0]
+
+        assert sent_item["trace"]["id"] is not None
+        assert sent_item["spans"][0]["id"] is not None
+
+    def test_bulk_upload_items__caller_supplied_ids__are_preserved(
+        self, respx_mock: Any
+    ) -> None:
+        sent_item = self._sent_items(
+            respx_mock,
+            [
+                _record(
+                    trace=bulk_item.ExperimentItemBulkTrace(
+                        id="trace-id", start_time=START_TIME
+                    ),
+                    spans=[
+                        bulk_item.ExperimentItemBulkSpan(
+                            id="span-id", start_time=START_TIME
+                        )
+                    ],
+                )
+            ],
+        )[0]
+
+        assert sent_item["trace"]["id"] == "trace-id"
+        assert sent_item["spans"][0]["id"] == "span-id"
 
 
 class TestBulkUploadItemsConcurrency:
@@ -304,6 +357,22 @@ class TestBulkUploadItemsValidation:
             )
 
         assert "but not both" in str(exc_info.value)
+
+    def test_bulk_upload_items__neither_trace_nor_evaluate_task_result__raises_validation_error(
+        self,
+    ) -> None:
+        """Without either field the backend stores a hidden trace with null output."""
+        experiment, mock_rest_client = _create_experiment()
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.bulk_upload_items(
+                [bulk_item.ExperimentItemBulkRecord(dataset_item_id="dataset-item-id")]
+            )
+
+        assert "items[0] must provide either evaluate_task_result or trace" in str(
+            exc_info.value
+        )
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
     def test_bulk_upload_items__evaluate_task_result_is_a_string__raises_validation_error(
         self,

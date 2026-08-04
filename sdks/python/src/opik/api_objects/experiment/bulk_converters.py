@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from opik import exceptions
+from opik import exceptions, id_helpers
 from opik.rest_api import types as rest_api_types
 from . import bulk_item
 from .. import constants
@@ -42,6 +42,13 @@ def _validate_record(
     if record.evaluate_task_result is not None and record.trace is not None:
         failure_reasons.append(
             f"{location} must provide either evaluate_task_result or trace, but not both"
+        )
+
+    # Without either field the backend silently creates a hidden trace whose
+    # output is null, so the item is stored but invisible to the user.
+    if record.evaluate_task_result is None and record.trace is None:
+        failure_reasons.append(
+            f"{location} must provide either evaluate_task_result or trace"
         )
 
     if record.evaluate_task_result is not None and not isinstance(
@@ -111,7 +118,7 @@ def _to_rest_trace(
     trace: bulk_item.ExperimentItemBulkTrace,
 ) -> rest_api_types.TraceExperimentItemBulkWriteView:
     return rest_api_types.TraceExperimentItemBulkWriteView(
-        id=trace.id,
+        id=trace.id if trace.id is not None else id_helpers.generate_id(),
         project_name=trace.project_name,
         name=trace.name,
         start_time=trace.start_time,
@@ -133,7 +140,7 @@ def _to_rest_span(
     span: bulk_item.ExperimentItemBulkSpan,
 ) -> rest_api_types.SpanExperimentItemBulkWriteView:
     return rest_api_types.SpanExperimentItemBulkWriteView(
-        id=span.id,
+        id=span.id if span.id is not None else id_helpers.generate_id(),
         parent_span_id=span.parent_span_id,
         name=span.name,
         type=span.type,

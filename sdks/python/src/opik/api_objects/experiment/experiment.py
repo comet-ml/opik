@@ -159,12 +159,16 @@ class Experiment:
         limiting (HTTP 429).
 
         If a batch fails, the exception propagates and the remaining batches are
-        not sent, leaving the experiment partially populated. The backend upserts
-        on ``dataset_item_id``, so retrying the same call is safe.
+        not sent, leaving the experiment partially populated. Rate-limit retries
+        re-send the identical payload, so they never duplicate anything. Calling
+        this method again, however, mints new ids for any trace or span left
+        without one, which would duplicate whatever the first call did manage to
+        write — set ``id`` on the traces and spans you pass in if you intend to
+        retry a failed upload.
 
         Args:
-            items: The experiment items to upload. Each item must provide either
-                ``evaluate_task_result`` or ``trace``, but never both.
+            items: The experiment items to upload. Each item must provide exactly
+                one of ``evaluate_task_result`` or ``trace``.
             project_name: Project for traces auto-created from items that provide
                 ``evaluate_task_result``. Defaults to the experiment's project.
                 When set, every item-level ``trace.project_name`` must match it.
@@ -234,10 +238,11 @@ class Experiment:
                 for future in futures.as_completed(submitted):
                     future.result()
             except BaseException:
-                # Fail fast: drop batches that have not started yet. Those
-                # already in flight still finish while the pool shuts down.
-                for pending in submitted:
-                    pending.cancel()
+                # Fail fast without blocking. cancel_futures drops batches that
+                # have not started; wait=False means we do not join batches that
+                # are already in flight, which could otherwise be parked in the
+                # rate-limit retry loop and hang the caller indefinitely.
+                pool.shutdown(wait=False, cancel_futures=True)
                 raise
 
     @staticmethod
