@@ -67,7 +67,7 @@ class ExperimentItemDAO {
      * as fresh progress. The other paths in this class that affect the signal are the two lightweight
      * deletes ({@link #DELETE}, {@link #DELETE_BY_EXPERIMENT_IDS}): the reaper's probes read raw rows with
      * no {@code FINAL}, so deleting a running trial's items removes the liveness rows and makes a live run
-     * read as silent (review: thiagohora).
+     * read as silent.
      */
     private static final String INSERT = """
             INSERT INTO experiment_items (

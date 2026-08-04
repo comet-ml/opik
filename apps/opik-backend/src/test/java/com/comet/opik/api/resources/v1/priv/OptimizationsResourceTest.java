@@ -541,8 +541,15 @@ class OptimizationsResourceTest {
             // The run must not vanish (OPIK-7459): duration aggregates are simply absent.
             var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
-            assertThat(actualOptimization.id()).isEqualTo(id);
-            assertThat(actualOptimization.numTrials()).isEqualTo(1L);
+            // Whole-payload comparison for the same reason as the sibling find test: a row that comes back
+            // corrupted rather than missing must fail here too.
+            assertThat(actualOptimization)
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringCollectionOrderInFields("feedbackScores")
+                    .isEqualTo(optimization.toBuilder().id(id).numTrials(1L).build());
+            // Ignored by the comparison above, and the point of this test.
             assertThat(actualOptimization.bestDuration()).isNull();
             assertThat(actualOptimization.baselineDuration()).isNull();
         }
@@ -589,7 +596,7 @@ class OptimizationsResourceTest {
             // the row for, but silently returned a WRONG NUMBER for: isNotNull(NaN) is true, so the
             // unfinished trial's trace_count entered the weighted-duration denominator while NaN poisoned
             // the numerator. The NULL this PR introduces is skipped by both sum() and isNotNull(), so the
-            // arithmetic must reflect the finished trial alone (review: thiagohora).
+            // arithmetic must reflect the finished trial alone.
             var candidateId = UUID.randomUUID().toString();
             var metadata = JsonUtils.getJsonNodeFromString(
                     JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));
@@ -651,7 +658,7 @@ class OptimizationsResourceTest {
             // isFinite filter accepts — sum to +Inf. Without the mapper guard the driver's BigDecimal
             // conversion throws, ClickHouseResult.map swallows it, and the row silently disappears: the
             // exact 404 this PR exists to fix, reopened by arithmetic rather than by input
-            // (review: thiagohora).
+            //.
             var candidateId = UUID.randomUUID().toString();
             var metadata = JsonUtils.getJsonNodeFromString(
                     JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));
@@ -1334,10 +1341,15 @@ class OptimizationsResourceTest {
             var optimizationPage = optimizationResourceClient.find(
                     apiKey, workspaceName, 1, 10, null, null, null, 200);
 
-            assertThat(optimizationPage.content())
-                    .extracting(Optimization::id)
-                    .containsExactly(id);
-            assertThat(optimizationPage.content().getFirst().numTrials()).isEqualTo(1L);
+            // Compare the whole payload, not just the id: the bug this guards against is a row silently
+            // mutating or disappearing on the mapping path, so "one row came back" is too weak an
+            // assertion — name, status, objectiveName or datasetName could all be wrong and still pass.
+            assertOptimizationPage(optimizationPage, 1, 1, 1,
+                    List.of(optimization.toBuilder().id(id).numTrials(1L).build()));
+            // Both duration fields are in OPTIMIZATION_IGNORED_FIELDS, so the recursive comparison above
+            // does not cover them — they are the point of this test and are asserted explicitly.
+            assertThat(optimizationPage.content().getFirst().bestDuration()).isNull();
+            assertThat(optimizationPage.content().getFirst().baselineDuration()).isNull();
         }
 
         @Test

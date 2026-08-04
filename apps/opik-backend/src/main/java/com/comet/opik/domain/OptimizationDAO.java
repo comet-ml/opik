@@ -119,29 +119,7 @@ public interface OptimizationDAO {
             @NonNull Instant startedAt) {
     }
 
-    /**
-     * @param lookbackMargin must be the same value passed to {@link #findStalledStudioOptimizations}, and the
-     *                       remaining timeouts likewise: {@code started_at} is aggregated over the row versions
-     *                       inside the lookback window, so a snapshot taken over a different window than the
-     *                       fleet query used can report a different start for the same run and make
-     *                       {@code isPastHardCap} fire on a run the fleet query selected on a soft timeout —
-     *                       skipping the activity veto and mislabelling the failure. Callers should derive both
-     *                       from {@link #stalledScanLookbackSeconds} (review: thiagohora).
-     */
-    Mono<OptimizationStatusSnapshot> getStatusSnapshotById(UUID id, Duration initializedTimeout,
-            Duration runningTimeout, Duration runningHardTimeout, Duration lookbackMargin);
-
-    /**
-     * The {@code last_updated_at} floor shared by the reaper's fleet query and its per-run re-read. Single
-     * definition on purpose — the two queries aggregate {@code started_at} over whatever version set
-     * this floor admits, so if they ever computed it differently the same run would have two different
-     * start instants (review: thiagohora).
-     */
-    static long stalledScanLookbackSeconds(Duration initializedTimeout, Duration runningTimeout,
-            Duration runningHardTimeout, Duration lookbackMargin) {
-        return Math.max(Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds()),
-                runningHardTimeout.toSeconds()) + lookbackMargin.toSeconds();
-    }
+    Mono<OptimizationStatusSnapshot> getStatusSnapshotById(UUID id);
 
     /**
      * The optimization row alone — no experiment/trace/score joins, so the aggregate fields
@@ -343,7 +321,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * It is {@code argMax(created_at, last_updated_at)} rather than {@code min(created_at)} because old
      * versions live on in a {@code ReplacingMergeTree} — {@code min} would keep returning the first
      * attempt's start forever, so a run restarted under an existing id would be born past the ceiling.
-     * See the upsert path in {@code OptimizationService} for the restart reset this enables.</li>
+     * See the upsert path in {@code OptimizationService} for the restart reset this enables. Residual
+     * exposure, accepted: for a run created before this branch shipped, the winning version carries a
+     * {@code created_at} that an earlier re-upsert re-stamped forward, so its ceiling starts later than
+     * the real start. That only ever postpones a reap, and it cannot recur once re-upserts preserve the
+     * column.</li>
      * <li>{@code dataset_id} is out of the {@code GROUP BY} even though it is in the sorting key:
      * {@code getOrCreateDataset} resolves by dataset <em>name</em>, so a re-upsert naming a different
      * dataset writes a row the dedup never merges, and grouping by the full key would emit the run twice
@@ -442,14 +424,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * aggregate inside an aggregate, ILLEGAL_AGGREGATION) — same analyzer quirk as
      * {@link #BATCH_SET_PROJECT_ID}'s subquery guard.
      *
-     * <p>The {@code :lookback_seconds} floor is not a scan bound here (this reads one id) — it is here so
-     * {@code started_at} aggregates over exactly the version set {@code FIND_STALLED_STUDIO_OPTIMIZATIONS}
-     * used. Without it this query saw versions the fleet query had filtered out and could return an earlier
-     * start for the same run, which matters because {@code created_at} was re-stamped on every re-upsert
-     * before this branch: for any legacy run the oldest version carries a start the fleet query never
-     * considered, and reading it here flipped {@code isPastHardCap} on a run selected by a soft timeout —
-     * short-circuiting the activity veto and reporting "exceeded the maximum running time" for a run that
-     * had not (review: thiagohora).
+     * <p>{@code started_at} must resolve to the same instant here as in
+     * {@link #FIND_STALLED_STUDIO_OPTIMIZATIONS}, or {@code isPastHardCap} could fire on a run the fleet
+     * query selected on a soft timeout — short-circuiting the activity veto and reporting "exceeded the
+     * maximum running time" for a run that had not. Reading it off the winning version is what guarantees
+     * that: the fleet query aggregates over versions inside its lookback floor and this one over all of
+     * them, but the newest version is in both sets, so both {@code argMax} calls pick it. Deliberately no
+     * floor here — it would buy nothing and could return an empty result for a run whose row aged past the
+     * window, which the caller cannot distinguish from "no longer stalled".
      */
     private static final String GET_STATUS_SNAPSHOT = """
             SELECT
@@ -459,7 +441,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM optimizations
             WHERE workspace_id = :workspace_id
               AND id = :id
-              AND greaterOrEquals(last_updated_at, subtractSeconds(now64(6), :lookback_seconds))
             GROUP BY id
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -560,7 +541,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * <p>The score value is parsed with {@code toFloat64OrNull} rather than {@code CAST(... AS Float64)}:
      * the column holds raw JSON that older or foreign writers may have shaped differently, and a
      * non-numeric value in a <em>named</em> entry made {@code CAST} throw {@code CANNOT_PARSE_TEXT},
-     * 500-ing the whole endpoint (review: thiagohora). {@code toFloat64OrNull} never throws, and
+     * 500-ing the whole endpoint. {@code toFloat64OrNull} never throws, and
      * {@code isFinite(NULL)} is NULL — falsy in the {@code WHERE} — so unparseable and non-finite entries
      * are dropped alike. The result is re-wrapped in {@code assumeNotNull} so the aggregated map stays
      * {@code Map(String, Float64)}: {@code getScoresAggregation} calls {@code doubleValue()} on each
@@ -1643,8 +1624,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
         // the floor is purely a scan bound and never a coverage gap — a run's last status change is only
         // older than this if the reaper was down longer than the margin, in which case that run is not
         // reaped (documented tradeoff, review: thiagohora).
-        long lookbackSeconds = OptimizationDAO.stalledScanLookbackSeconds(initializedTimeout, runningTimeout,
-                runningHardTimeout, lookbackMargin);
+        long lookbackSeconds = Math.max(Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds()),
+                runningHardTimeout.toSeconds()) + lookbackMargin.toSeconds();
         // Bound on the CTE the two liveness probes fan out from. Without it `candidates` is "every
         // non-terminal studio run whose row has not changed in runningTimeout" — and because
         // last_updated_at only advances on a status change, that includes every HEALTHY in-flight run
@@ -1654,7 +1635,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
         // is the premise of this whole feature), so a bound of exactly `limit` could let live runs
         // crowd dead ones out of every pass. With the multiplier, starving a dead run needs that many
         // simultaneously-alive stale runs ahead of it, and alive runs eventually turn terminal and drop
-        // out of the CTE entirely (review: thiagohora).
+        // out of the CTE entirely.
         int candidateLimit = limit * CANDIDATE_SCAN_FACTOR;
         var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, runningHardTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d, candidateLimit=%d"
                 .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(),
@@ -1680,19 +1661,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     @Override
-    public Mono<OptimizationStatusSnapshot> getStatusSnapshotById(@NonNull UUID id,
-            @NonNull Duration initializedTimeout, @NonNull Duration runningTimeout,
-            @NonNull Duration runningHardTimeout, @NonNull Duration lookbackMargin) {
-        long lookbackSeconds = OptimizationDAO.stalledScanLookbackSeconds(initializedTimeout, runningTimeout,
-                runningHardTimeout, lookbackMargin);
+    public Mono<OptimizationStatusSnapshot> getStatusSnapshotById(@NonNull UUID id) {
         var template = FilterUtils.getSTWithLogComment(GET_STATUS_SNAPSHOT,
-                "get_optimization_status_snapshot", "", "",
-                "id=%s, lookbackSeconds=%d".formatted(id, lookbackSeconds));
+                "get_optimization_status_snapshot", "", "", "id=%s".formatted(id));
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     var statement = connection.createStatement(template.render())
-                            .bind("id", id)
-                            .bind("lookback_seconds", lookbackSeconds);
+                            .bind("id", id);
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
                 .flatMap(result -> result.map((row, metadata) -> OptimizationStatusSnapshot.builder()

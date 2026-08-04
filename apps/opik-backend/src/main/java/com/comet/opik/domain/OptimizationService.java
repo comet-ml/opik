@@ -207,7 +207,7 @@ class OptimizationServiceImpl implements OptimizationService {
                     // here is not a skipped update but a run treated as brand new — forced INITIALIZED,
                     // a regenerated name, and no preservation of studioConfig, errorInfo or createdAt.
                     // A FIND mapping regression would therefore resurrect a live run as a fresh one and
-                    // reset the reaper's hard ceiling along with it (review: thiagohora).
+                    // reset the reaper's hard ceiling along with it.
                     return optimizationDAO.getById(id)
                             .switchIfEmpty(Mono.defer(() -> optimizationDAO.getRowById(id)))
                             .map(Optional::of)
@@ -237,7 +237,7 @@ class OptimizationServiceImpl implements OptimizationService {
                                     // ceiling — isPastHardCap short-circuits the veto and the reaper ERRORs
                                     // it on the next tick, seconds after it started. Carrying errorInfo over
                                     // would likewise pin the previous attempt's failure on it forever, since
-                                    // nothing ever clears that field (review: thiagohora).
+                                    // nothing ever clears that field.
                                     boolean isRestart = existing.status() != null
                                             && existing.status().isTerminal()
                                             && optimization.status() != null
@@ -392,7 +392,7 @@ class OptimizationServiceImpl implements OptimizationService {
         // side — and a dropped terminal status strands a finished run non-terminal. The lock is lightweight
         // and guards every write against that lost update. A Redis outage failing the write is acceptable:
         // the stalled-run reaper is the backstop for a run left non-terminal, so protecting against data loss
-        // is preferred over a lock-free fallback here (review: thiagohora). NOTE: prod ClickHouse has no
+        // is preferred over a lock-free fallback here. NOTE: prod ClickHouse has no
         // read-your-own-writes (async insert, 2 replicas), so studio metadata must still stay effectively
         // single-writer — the lock hardens the in-process race, not the cross-replica one.
         var lock = new LockService.Lock(id, "optimization-update");
@@ -728,7 +728,7 @@ class OptimizationServiceImpl implements OptimizationService {
                 lookbackMargin, batchSize)
                 // Sequential: stalled runs are rare and this keeps the reaper's DB/Redis footprint small.
                 .concatMap(stalled -> markStalledOptimizationAsError(stalled, initializedTimeout, runningTimeout,
-                        runningHardTimeout, lookbackMargin))
+                        runningHardTimeout))
                 .reduce(0L, Long::sum);
     }
 
@@ -739,8 +739,7 @@ class OptimizationServiceImpl implements OptimizationService {
      * the overall pass: a single row's failure is logged and counted as 0.
      */
     private Mono<Long> markStalledOptimizationAsError(OptimizationDAO.StalledOptimization stalled,
-            Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout,
-            Duration lookbackMargin) {
+            Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout) {
         UUID id = stalled.id();
         String workspaceId = stalled.workspaceId();
 
@@ -751,15 +750,14 @@ class OptimizationServiceImpl implements OptimizationService {
         // completion or a slow-but-alive trial straddling the window boundary gets overwritten with ERROR.
         // The re-read is a bare status snapshot, NOT getById: see OptimizationDAO#getStatusSnapshotById
         // for why the full FIND must not gate reaping.
-        return optimizationDAO
-                .getStatusSnapshotById(id, initializedTimeout, runningTimeout, runningHardTimeout, lookbackMargin)
+        return optimizationDAO.getStatusSnapshotById(id)
                 .filter(current -> CANCELLABLE_STATUSES.contains(current.status()))
                 .filterWhen(current -> isStillDead(current, id, initializedTimeout, runningTimeout,
                         runningHardTimeout))
                 .flatMap(current -> {
                     // Build the reason from the RE-READ current status, not the reaper's stale query
                     // status: a run that moved INITIALIZED -> RUNNING between the query and here must get
-                    // the "no activity" message, not the "failed to start" one (review: thiagohora).
+                    // the "no activity" message, not the "failed to start" one.
                     String reason = buildStalledReason(current, initializedTimeout, runningTimeout,
                             runningHardTimeout);
                     log.warn(
@@ -768,7 +766,7 @@ class OptimizationServiceImpl implements OptimizationService {
                     // Count this row only if update() actually transitioned it. update() returns
                     // Mono.just(0L) when its own terminal-overwrite guard fires (the worker reported a
                     // terminal status in the sliver between the re-read above and update()'s own re-read),
-                    // so a bare thenReturn(1L) would over-count that no-op (review: thiagohora). An empty
+                    // so a bare thenReturn(1L) would over-count that no-op. An empty
                     // completion means the row was written but ClickHouse reported no count -> still 1.
                     return appendSystemReasonAndMarkError(workspaceId, id, reason)
                             .map(rowsUpdated -> rowsUpdated > 0 ? 1L : 0L)
@@ -807,7 +805,7 @@ class OptimizationServiceImpl implements OptimizationService {
      * the scan and a given row's update. A run selected as a stale {@code INITIALIZED} candidate whose
      * worker calls {@code mark_running} in that gap comes back {@code RUNNING} with a fresh row timestamp
      * and no trials yet — the fleet query would not select it under the {@code RUNNING} branch, so neither
-     * may this guard (review: thiagohora). The threshold therefore follows the RE-READ status, exactly like
+     * may this guard. The threshold therefore follows the RE-READ status, exactly like
      * the query's {@code HAVING} branches.
      */
     private Mono<Boolean> isStillDead(OptimizationDAO.OptimizationStatusSnapshot current, UUID id,

@@ -16,6 +16,7 @@ import reactor.core.publisher.Mono;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -29,6 +30,8 @@ class OptimizationStalledReaperJobTest {
     private static final Duration RUNNING_TIMEOUT = Duration.minutes(30);
     private static final Duration RUNNING_HARD_TIMEOUT = Duration.hours(24);
     private static final Duration LOOKBACK_MARGIN = Duration.days(7);
+    // Distinct from every other Duration above, so an argument-order slip into bestEffortLock is visible.
+    private static final Duration LOCK_DURATION = Duration.minutes(4);
     private static final int BATCH_SIZE = 42;
 
     @Mock
@@ -49,7 +52,7 @@ class OptimizationStalledReaperJobTest {
                 .runningTimeout(RUNNING_TIMEOUT)
                 .runningHardTimeout(RUNNING_HARD_TIMEOUT)
                 .lookbackMargin(LOOKBACK_MARGIN)
-                .lockDuration(Duration.minutes(4))
+                .lockDuration(LOCK_DURATION)
                 .batchSize(BATCH_SIZE)
                 .build();
         job = new OptimizationStalledReaperJob(optimizationService, lockService, config);
@@ -73,6 +76,21 @@ class OptimizationStalledReaperJobTest {
                 .untilAsserted(() -> verify(optimizationService).reconcileStalledStudioOptimizations(
                         INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(),
                         RUNNING_HARD_TIMEOUT.toJavaDuration(), LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE));
+
+        // Pin the lock arguments too, not just the reconcile ones. lockDuration is the odd knob out — it
+        // goes to a different collaborator, and this config now carries four Durations, so handing
+        // bestEffortLock runningHardTimeout (24h) instead of lockDuration (4m) would make the reaper
+        // effectively run once a day, since the lock is held until expiry. With all-any() matchers and no
+        // verification that mistake left the suite green while the @DisplayName still claimed the pass
+        // runs "under the lock". The config's own lockDuration < jobInterval invariant is meaningless if
+        // the value never reaches the lock.
+        verify(lockService).bestEffortLock(
+                eq(new LockService.Lock("optimization_stalled_reaper:lock")),
+                any(Mono.class),
+                any(Mono.class),
+                eq(LOCK_DURATION.toJavaDuration()),
+                eq(java.time.Duration.ZERO),
+                eq(true));
     }
 
     @Test

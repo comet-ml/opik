@@ -30,7 +30,7 @@ DEFAULT_CASE_SENSITIVE = False
 # reaper will read a healthy run as dead, so raise runningTimeout with it.
 #
 # This timeout is also coupled to the reaper's initializedTimeout (default 5m), via QUEUE DEPTH, and
-# that is the coupling with a real failure mode (review: thiagohora). Only MAX_CONCURRENT_JOBS slots
+# that is the coupling with a real failure mode. Only MAX_CONCURRENT_JOBS slots
 # run at once and each may hold one for the full timeout below, so a submission beyond that can sit
 # queued for hours. A queued run's row is untouched — the backend writes INITIALIZED at create and
 # then only enqueues — and it has no trial experiments, so it is indistinguishable from a run whose

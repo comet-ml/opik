@@ -485,7 +485,7 @@ class OptimizationStalledReaperServiceTest {
         var restarted = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
         // Inheriting the first attempt's clock would put the new attempt past the ceiling the moment it
         // starts: isPastHardCap short-circuits the activity veto, so it would be reaped on the next tick
-        // no matter how much progress it writes (review: thiagohora).
+        // no matter how much progress it writes.
         assertThat(restarted.createdAt()).isAfter(Instant.now().minus(Duration.ofHours(1)));
         // And the previous attempt's failure must not be pinned on it — nothing else ever clears the field.
         assertThat(restarted.errorInfo()).isNull();
@@ -500,7 +500,7 @@ class OptimizationStalledReaperServiceTest {
      * "still alive" case is filtered out by the fleet query's anti-join before the Java-side veto in
      * OptimizationService#isStillDead can fire, so the guard never executes in those tests. It is the
      * thing standing between a slow-but-alive trial straddling the window boundary and a wrongful ERROR,
-     * so it is asserted directly against the DAO here (review: thiagohora).
+     * so it is asserted directly against the DAO here.
      */
     @Test
     @DisplayName("liveness probe sees a trial experiment created inside the window")
@@ -521,12 +521,18 @@ class OptimizationStalledReaperServiceTest {
         // ExperimentDAO.UPDATE_BY_ID must carry created_at forward rather than let the column DEFAULT
         // re-stamp it. That property is what makes the trial timestamp a liveness clock, and it was only
         // recorded in prose — a regression re-stamping it here would ship green and pin every dead studio
-        // run alive until the hard ceiling (review: thiagohora).
+        // run alive until the hard ceiling.
         experimentResourceClient.updateExperiment(experimentId,
                 ExperimentUpdate.builder().name("renamed-after-the-window").build(),
                 API_KEY, TEST_WORKSPACE_NAME, 204);
 
         assertThat(hasRecentActivity(id, Duration.ofMinutes(5))).isFalse();
+
+        // And the end-to-end consequence, not only the probe: the run must still be reaped. A re-stamped
+        // trial created_at would veto this and keep every dead run alive until the hard ceiling.
+        reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
     }
 
     @Test
@@ -642,7 +648,7 @@ class OptimizationStalledReaperServiceTest {
                 // createPartialOptimization only nulls scores/costs/studioConfig, so Podam otherwise
                 // seeds a random non-blank ErrorInfo that the upsert persists. Every "the reaper wrote
                 // an ErrorInfo" assertion would then pass on the fixture value instead of on anything
-                // the reaper did (review: thiagohora).
+                // the reaper did.
                 .errorInfo(null)
                 .build();
         return optimizationResourceClient.upsert(optimization, API_KEY, TEST_WORKSPACE_NAME);
@@ -798,7 +804,7 @@ class OptimizationStalledReaperServiceTest {
      */
     private OptimizationStatus statusSnapshotOf(UUID id) {
         var snapshot = injector.getInstance(OptimizationDAO.class)
-                .getStatusSnapshotById(id, NEVER, NEVER, NEVER, LOOKBACK_MARGIN)
+                .getStatusSnapshotById(id)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER))

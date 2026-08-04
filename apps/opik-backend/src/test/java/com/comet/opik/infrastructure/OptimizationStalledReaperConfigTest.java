@@ -74,7 +74,7 @@ class OptimizationStalledReaperConfigTest {
         // loudly is the intent — above the ceiling the activity window is unreachable, since the ceiling
         // always fires first — but the break must be explicit here and in config.yml's upgrade note
         // rather than trivially "passing" on the one hours-scale value that stays under it
-        // (review: thiagohora).
+        //.
         var config = validConfig()
                 .runningTimeout(Duration.hours(48))
                 .runningHardTimeout(Duration.hours(24))
