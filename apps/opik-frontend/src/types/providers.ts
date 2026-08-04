@@ -621,6 +621,7 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN3_7_FLASH = "qwen/qwen3.7-flash",
   QWEN_QWEN3_7_MAX = "qwen/qwen3.7-max",
   QWEN_QWEN3_7_PLUS = "qwen/qwen3.7-plus",
+  QWEN_QWEN3_8_MAX = "qwen/qwen3.8-max",
   QWEN_QWQ_32B = "qwen/qwq-32b",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
   REKA_REKA_EDGE = "reka/reka-edge",
