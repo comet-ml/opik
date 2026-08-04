@@ -3329,11 +3329,12 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
-     * Selects the {@code <if(distributed_wrap)>traces_local<else>traces<endif>} branch on a mutation template. The
-     * flag decision lives only here and in {@link #tracesDistributedWrapEnabled()}; every ST-based trace mutation adds
-     * its table through this method so the branches cannot drift apart.
+     * Selects the {@code <if(distributed_wrap)>traces_local<else>traces<endif>} branch on a mutation template by adding
+     * the {@code distributed_wrap} attribute when the wrap is live. The flag decision lives only here and in
+     * {@link #tracesDistributedWrapEnabled()}; every ST-based trace mutation routes its table through this method so the
+     * branches cannot drift apart.
      */
-    private void addTracesMutationTable(ST template) {
+    private void selectTracesMutationTable(ST template) {
         if (tracesDistributedWrapEnabled()) {
             template.add("distributed_wrap", true);
         }
@@ -3507,7 +3508,7 @@ class TraceDAOImpl implements TraceDAO {
                     var template = getSTWithLogComment(DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS, "delete_traces",
                             workspaceId,
                             userName, "pairs_size=%s".formatted(batch.size()));
-                    addTracesMutationTable(template);
+                    selectTracesMutationTable(template);
 
                     var projectIds = batch.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
                     var traceIds = batch.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
@@ -5028,7 +5029,7 @@ class TraceDAOImpl implements TraceDAO {
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null, "",
                 workspaceIds.size());
-        addTracesMutationTable(template);
+        selectTracesMutationTable(template);
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
