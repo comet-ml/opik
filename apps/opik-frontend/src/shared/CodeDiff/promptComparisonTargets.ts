@@ -35,8 +35,9 @@ export type ComparisonCandidate = {
   stepIndex: number;
   /** Ids of the candidates this one was derived from. */
   parentCandidateIds: string[];
-  /** 1-indexed trial number, used to label parent targets. */
-  trialNumber: number;
+  /** 1-indexed trial number, used to label parent targets. `null` for the
+   *  baseline, which is not a trial and carries no number (OPIK-7589). */
+  trialNumber: number | null;
 };
 
 export const BASELINE_TARGET_LABEL = "Baseline";
@@ -98,10 +99,13 @@ export const buildPromptComparisonTargets = <T extends ComparisonCandidate>({
   candidate.parentCandidateIds.forEach((parentId) => {
     const parent = byId.get(parentId);
     if (parent) {
+      // An unnumbered parent is the baseline; it gets no "Trial #N" caption.
       pushTarget(
         parent,
         PARENT_TARGET_LABEL,
-        buildTrialTag(parent.trialNumber),
+        parent.trialNumber == null
+          ? undefined
+          : buildTrialTag(parent.trialNumber),
       );
     }
   });
