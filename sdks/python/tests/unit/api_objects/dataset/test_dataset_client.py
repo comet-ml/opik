@@ -1,3 +1,5 @@
+import threading
+import time
 from unittest.mock import Mock
 
 import pytest
@@ -292,98 +294,108 @@ def test_insert__invalid_num_threads__raises_before_upload(bad_value):
     mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
 
 
-def _insert_and_capture_num_threads(
-    monkeypatch, mock_rest_client: Mock, requested_num_threads: int
-) -> int:
-    """Run an insert and report the num_threads that reached the send stage."""
-    _small_batches(monkeypatch, size=2)
+_GATE_BATCH_SIZE = 2
+_GATE_ITEM_COUNT = 10
+_GATE_BATCH_COUNT = _GATE_ITEM_COUNT // _GATE_BATCH_SIZE
+
+
+def _batches_overlapped(monkeypatch, mock_rest_client: Mock, num_threads: int) -> bool:
+    """Insert through the public API and report whether batches ran concurrently.
+
+    Each upload records how many uploads are in flight alongside it and holds
+    briefly so overlap is observable; seeing more than one at once proves the
+    thread pool ran. This observes the REST boundary rather than the gate's
+    internal decision, so it still fails if insert() stops honouring the worker
+    count downstream. A sequential upload never exceeds one in flight and
+    needs no timeout to prove it.
+    """
+    _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
+
+    lock = threading.Lock()
+    in_flight = 0
+    peak_in_flight = 0
+
+    def tracked_upload(*args, **kwargs):
+        nonlocal in_flight, peak_in_flight
+        with lock:
+            in_flight += 1
+            peak_in_flight = max(peak_in_flight, in_flight)
+        # Hold long enough for sibling workers to enter, without a hard
+        # synchronisation point that a sequential run would have to wait out.
+        time.sleep(0.05)
+        with lock:
+            in_flight -= 1
+
+    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
+        tracked_upload
+    )
+
     dataset = Dataset(
         name="test_dataset",
         description="Test description",
         project_name="Test project",
         rest_client=mock_rest_client,
     )
+    dataset.insert(_make_items(_GATE_ITEM_COUNT), num_threads=num_threads)
 
-    captured = {}
-    original_send_batches = dataset._send_batches
+    assert (
+        mock_rest_client.datasets.create_or_update_dataset_items.call_count
+        == _GATE_BATCH_COUNT
+    ), "Every batch must be uploaded regardless of the thread count"
 
-    def spy(batches, batch_group_id, num_threads):
-        captured["num_threads"] = num_threads
-        return original_send_batches(batches, batch_group_id, num_threads)
-
-    monkeypatch.setattr(dataset, "_send_batches", spy)
-    dataset.insert(_make_items(10), num_threads=requested_num_threads)
-    return captured["num_threads"]
+    return peak_in_flight > 1
 
 
 @pytest.mark.parametrize("backend_version", ["2.2.8", "2.2.9", "2.3.0", "3.0.0"])
-def test_insert__backend_supports_parallel__requested_threads_used(
+def test_insert__backend_supports_parallel__batches_uploaded_concurrently(
     monkeypatch, backend_version
 ):
-    used = _insert_and_capture_num_threads(
-        monkeypatch, _mock_rest_client(backend_version), requested_num_threads=4
-    )
-
-    assert used == 4, (
-        f"Backend {backend_version} supports parallel insert, threads must not be capped"
-    )
+    assert _batches_overlapped(
+        monkeypatch, _mock_rest_client(backend_version), num_threads=_GATE_BATCH_COUNT
+    ), f"Backend {backend_version} supports parallel insert, uploads must overlap"
 
 
 @pytest.mark.parametrize("backend_version", ["2.2.7", "2.1.0", "1.9.9"])
-def test_insert__backend_older_than_minimum__downgrades_to_sequential(
+def test_insert__backend_older_than_minimum__uploads_sequentially(
     monkeypatch, backend_version
 ):
-    used = _insert_and_capture_num_threads(
-        monkeypatch, _mock_rest_client(backend_version), requested_num_threads=4
+    assert not _batches_overlapped(
+        monkeypatch, _mock_rest_client(backend_version), num_threads=_GATE_BATCH_COUNT
+    ), (
+        f"Backend {backend_version} predates parallel insert support, uploads must "
+        "not overlap"
     )
 
-    assert used == 1, (
-        f"Backend {backend_version} predates parallel insert support, must fall back "
-        "to a sequential upload"
-    )
 
-
-def test_insert__self_hosted_build_version__parsed_and_supported(monkeypatch):
+def test_insert__self_hosted_build_version__uploads_concurrently(monkeypatch):
     # Self-hosted / PR-environment builds report a suffixed version; only
     # major.minor.patch is compared, so this must still count as supported.
-    used = _insert_and_capture_num_threads(
+    assert _batches_overlapped(
         monkeypatch,
         _mock_rest_client("2.2.12-7671-merge-2777"),
-        requested_num_threads=4,
-    )
-
-    assert used == 4
-
-
-def test_insert__unparseable_backend_version__downgrades_to_sequential(monkeypatch):
-    used = _insert_and_capture_num_threads(
-        monkeypatch, _mock_rest_client("dev-local"), requested_num_threads=4
-    )
-
-    assert used == 1, (
-        "An undeterminable backend version must fall back to a sequential upload"
+        num_threads=_GATE_BATCH_COUNT,
     )
 
 
-def test_insert__version_endpoint_unreachable__downgrades_to_sequential(monkeypatch):
+def test_insert__unparseable_backend_version__uploads_sequentially(monkeypatch):
+    assert not _batches_overlapped(
+        monkeypatch, _mock_rest_client("dev-local"), num_threads=_GATE_BATCH_COUNT
+    ), "An undeterminable backend version must fall back to a sequential upload"
+
+
+def test_insert__version_endpoint_unreachable__uploads_sequentially(monkeypatch):
     mock_rest_client = Mock()
     mock_rest_client.version.side_effect = ConnectionError("backend unreachable")
 
-    used = _insert_and_capture_num_threads(
-        monkeypatch, mock_rest_client, requested_num_threads=4
-    )
-
-    assert used == 1, (
-        "A failing version probe must not break insert; it falls back to sequential"
-    )
+    assert not _batches_overlapped(
+        monkeypatch, mock_rest_client, num_threads=_GATE_BATCH_COUNT
+    ), "A failing version probe must not break insert; it falls back to sequential"
 
 
 def test_insert__sequential__version_endpoint_not_probed(monkeypatch):
     # The default path must not pay an extra request.
     mock_rest_client = _mock_rest_client()
 
-    _insert_and_capture_num_threads(
-        monkeypatch, mock_rest_client, requested_num_threads=1
-    )
+    _batches_overlapped(monkeypatch, mock_rest_client, num_threads=1)
 
     mock_rest_client.version.assert_not_called()
