@@ -122,6 +122,8 @@ docker ps --format '{{.Names}}\t{{.Status}}'   # look for opik-opik-frontend-1, 
 
 If containers are already up (healthy, running), leave them alone — don't `--stop`/`--clean`/restart something a teammate or another task left running. Only run `./opik.sh` (no flags) to start what's missing.
 
+**A rebuilt stack is not a fresh one.** `./opik.sh --build` rebuilds images but reuses existing Docker volumes (MySQL, ClickHouse, …) unless you explicitly wipe them — so a container that just restarted can still be serving months of accumulated local data: projects, feedback definitions, environments, AI provider keys, whatever previous sessions (yours or a teammate's) left behind. If your test's scope includes a **default** or **empty** state — anything you'd normally get "for free" on a brand-new workspace — don't trust what a long-lived instance currently shows. See "Know your defaults before you seed or delete" below before writing any seed/cleanup code against it. If a genuinely fresh stack (fresh volumes) is feasible and not disruptive to concurrent work, prefer it for this kind of test; if not, fall back to reasoning from the Liquibase migrations directly rather than from the current DB contents.
+
 Start the test helper service (check port 5555 is free first):
 
 ```bash
@@ -280,6 +282,23 @@ Follow the existing pattern in `test-helper-service/routes/*.py`: a Flask bluepr
   ```
 - Attachments: resolve paths via the existing `resolve_attachment_path()` helper (relative to `tests_end_to_end/`), and check in a small fixture file under `visual-tests/fixtures/` if one doesn't already exist for your case.
 
+## Know your defaults before you seed or delete
+
+Before you write a test that asserts an "empty" or "default" state, find out what a **genuinely fresh** workspace actually contains for that entity — don't infer it from what a long-lived local instance currently shows, and don't assume "I deleted it and now it's empty" proves the state is reachable elsewhere.
+
+Backend migrations can seed real per-workspace defaults that are visually indistinguishable from leftover test/dev artifacts:
+
+```bash
+grep -rl "INSERT" apps/opik-backend/src/main/resources/liquibase/**/*.sql | xargs grep -l "<table_name>"
+```
+
+What you find splits into two cases, and they need different handling:
+
+- **Hard-protected default (backend blocks deletion).** Some seeded rows are permanently undeletable by design — e.g. the "User feedback" feedback definition, guarded in `FeedbackDefinitionService.java` (`containsNameByIds(... USER_FEEDBACK)` → 409 on delete). If you hit a 409 trying to clear one, that "empty" screenshot is **not reachable** on any real Opik instance. Don't chase it by deleting whatever it's referencing (e.g. cascading into trace feedback scores to free it up) — drop that screenshot, tell the user why, and note the gap in the PR description. Confirm this with the user before dropping it; don't decide unilaterally.
+- **Deletable-but-still-a-default.** Other rows are seeded the same way (a migration backfills them for every workspace) but have no delete guard — e.g. `environments` gets `development`/`staging`/`production` from a real migration (`...seed_default_environments.sql`), not from anyone clicking around. Deleting these locally only fixes *your* machine. If your test's cleanup routine (`global-setup.ts`/`global-teardown.ts`) doesn't also delete these **known default names** on every run, the test only passes on the instance you personally vandalized — it fails on a teammate's clone, a fresh volume, or CI, either by rendering extra rows in a populated screenshot or by never reaching the empty state at all.
+
+Before deleting anything on a shared/long-lived local instance to "get to empty," ask whether it's a real default (migration-seeded, potentially relied on elsewhere) or actual scratch data (e.g. an old e2e run's leftover config) — check for the entity's name in `tests_end_to_end/e2e/**` seeding helpers too, since some things that *look* like defaults (e.g. a lone "openai" AI provider key on an otherwise-default instance) are really just residue from a different test suite (`ensureProviderConfigured`) rather than anything the backend seeds. If deleting something that turns out to matter beyond your own session (shared instance, other suites depending on it), stop and confirm with the user first rather than deleting and hoping it doesn't matter.
+
 ## Waiting: for content, not just structure
 
 `waitForReady()` methods should wait for the *specific value* you seeded to be visible (e.g. a known input string), not just a generic loading state. Many Opik tables don't render a "Name" column by default, so `waitFor({ hasText: entityName })` can time out even though the row is there — match on whatever text is actually visible in the default column set (e.g. the input/output preview), not the entity's name.
@@ -326,3 +345,5 @@ If a test in a `describe` block fails, Playwright restarts the worker process be
 | "I'll add my new span/row to the trace an earlier test in this file already screenshots" | Isolating new entities within a reused project — extending a shared entity shifts what an already-baselined screenshot in the same file renders (extra tree row, changed count), breaking it. Seed a new, separate entity instead. |
 | "I'll wrap this panel in `BasePage`" | The panel exception — a non-route panel takes just `Page` + a `root` testid locator, not the full `BasePage` constructor. |
 | "I stopped the test-helper-service, I'm done" | The rest of the cleanup checklist — config restore, a non-`SKIP_TEARDOWN` final run (server-side project deletion), and the local report/log directories (`test-results/`, `visual-report/`, `allure-results/`, `screenshots/comparison/`). |
+| "I deleted the leftover rows, now the tab is empty, ship it" | Checking whether what you deleted was a real per-workspace default (migration-seeded, e.g. `environments`' `development`/`staging`/`production`) rather than test residue — if it's a real default, your cleanup routine must delete it by name on *every* run, or the empty state only exists on the one instance you manually cleared. |
+| "The rebuild finished, the stack is fresh" | `--build` rebuilds images, not volumes — a "fresh" container can still be serving months of accumulated local data. Don't infer default/empty state from a long-lived instance's current contents; check the Liquibase migrations. |
