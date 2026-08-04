@@ -78,11 +78,6 @@ class TestPrepareModelParams:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Call-time params should override model parameters."""
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
-            lambda x: x,
-        )
-
         model_params = {"temperature": 0.5, "max_tokens": 100}
         call_time = {"temperature": 0.8}  # Override
 
@@ -95,11 +90,6 @@ class TestPrepareModelParams:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When is_reasoning=True, should add opik_call_type metadata."""
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
-            lambda x: {**x, "metadata": x.get("metadata", {})},
-        )
-
         result = _prepare_model_params(
             model_parameters={},
             call_time_params={},
@@ -112,11 +102,6 @@ class TestPrepareModelParams:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When is_reasoning=False, should not add opik_call_type metadata."""
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
-            lambda x: x,
-        )
-
         result = _prepare_model_params(
             model_parameters={},
             call_time_params={},
@@ -129,11 +114,6 @@ class TestPrepareModelParams:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Project name should be added to metadata.opik."""
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
-            lambda x: x,
-        )
-
         result = _prepare_model_params(
             model_parameters={},
             call_time_params={},
@@ -144,11 +124,6 @@ class TestPrepareModelParams:
 
     def test_adds_optimization_id_tags(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Optimization ID should add tags to metadata.opik."""
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
-            lambda x: x,
-        )
-
         result = _prepare_model_params(
             model_parameters={},
             call_time_params={},
@@ -162,10 +137,6 @@ class TestPrepareModelParams:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When response_model is provided, should add response_format."""
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
-            lambda x: x,
-        )
 
         class MyModel(BaseModel):
             field: str
@@ -180,11 +151,6 @@ class TestPrepareModelParams:
 
     def test_preserves_existing_metadata(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Existing metadata should be preserved and extended, not replaced."""
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
-            lambda x: x,
-        )
-
         result = _prepare_model_params(
             model_parameters={"metadata": {"existing_key": "value"}},
             call_time_params={},
@@ -200,11 +166,6 @@ class TestPrepareModelParamsEdgeCases:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When project_name is None, existing opik.project_name should be preserved."""
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.opik_litellm_monitor.try_add_opik_monitoring_to_params",
-            lambda x: x,
-        )
-
         model_params = {"metadata": {"opik": {"project_name": "existing-project"}}}
 
         result = _prepare_model_params(

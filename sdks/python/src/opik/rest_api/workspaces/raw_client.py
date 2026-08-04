@@ -16,6 +16,7 @@ from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.breakdown_config import BreakdownConfig
 from ..types.result import Result
 from ..types.span_filter import SpanFilter
+from ..types.token_usage_names import TokenUsageNames
 from ..types.workspace_configuration import WorkspaceConfiguration
 from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
@@ -482,6 +483,65 @@ class RawWorkspacesClient:
                     WorkspaceMetricResponse,
                     parse_obj_as(
                         type_=WorkspaceMetricResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_workspace_token_usage_names(
+        self,
+        *,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[TokenUsageNames]:
+        """
+        Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
+
+        Parameters
+        ----------
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[TokenUsageNames]
+            Token Usage names resource
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/workspaces/token-usage/names",
+            method="POST",
+            json={
+                "project_ids": project_ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    TokenUsageNames,
+                    parse_obj_as(
+                        type_=TokenUsageNames,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1077,6 +1137,65 @@ class AsyncRawWorkspacesClient:
                     WorkspaceMetricResponse,
                     parse_obj_as(
                         type_=WorkspaceMetricResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_workspace_token_usage_names(
+        self,
+        *,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[TokenUsageNames]:
+        """
+        Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
+
+        Parameters
+        ----------
+        project_ids : typing.Optional[typing.Sequence[str]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[TokenUsageNames]
+            Token Usage names resource
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/workspaces/token-usage/names",
+            method="POST",
+            json={
+                "project_ids": project_ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    TokenUsageNames,
+                    parse_obj_as(
+                        type_=TokenUsageNames,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

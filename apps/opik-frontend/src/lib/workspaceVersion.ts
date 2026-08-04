@@ -43,13 +43,6 @@ function readVersionMap(): Record<string, WorkspaceVersion> {
   }
 }
 
-export function getCachedWorkspaceVersion(
-  workspaceName: string,
-): WorkspaceVersion | null {
-  const v = readVersionMap()[workspaceName];
-  return v === "v1" || v === "v2" ? v : null;
-}
-
 export function setCachedWorkspaceVersion(
   workspaceName: string,
   version: WorkspaceVersion,
@@ -92,14 +85,9 @@ export function navigateToWorkspaceRoot(workspaceName: string): void {
   window.location.href = normalizedBase + workspaceName;
 }
 
-// Always returns a version synchronously: override > per-workspace cache >
-// default. WorkspaceVersionResolver verifies via API after mount and swaps
-// the App in place if the guess was wrong.
+// Opik V2 is the only supported experience: every workspace resolves to V2
+// regardless of any legacy override / opt-in / cached value. This is the
+// client-side replacement for the removed backend forceWorkspaceVersion default.
 export function resolveSyncWorkspaceVersion(): WorkspaceVersion {
-  const override = getVersionOverride();
-  if (override) return override;
-  if (getNewExperienceOptIn()) return "v2";
-  const workspaceName = getWorkspaceNameFromUrl();
-  if (!workspaceName) return DEFAULT_WORKSPACE_VERSION;
-  return getCachedWorkspaceVersion(workspaceName) ?? DEFAULT_WORKSPACE_VERSION;
+  return DEFAULT_WORKSPACE_VERSION;
 }

@@ -1897,7 +1897,7 @@ class TraceDAOImpl implements TraceDAO {
      * com.comet.opik.infrastructure.FilterUtils#ANALYTICS_DELETE_BATCH_SIZE}).
      */
     private static final String DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS = """
-            DELETE FROM traces
+            DELETE FROM <if(distributed_wrap)>traces_local<else>traces<endif>
             WHERE workspace_id = :workspace_id
             AND (project_id, id) IN arrayZip(:project_ids, :trace_ids)
             SETTINGS log_comment = '<log_comment>'
@@ -1914,7 +1914,7 @@ class TraceDAOImpl implements TraceDAO {
      * upper bound advances one week so rows sharing the cutoff's week stay in scope.
      */
     private static final String DELETE_FOR_RETENTION = """
-            DELETE FROM traces
+            DELETE FROM <if(distributed_wrap)>traces_local<else>traces<endif>
             WHERE workspace_id IN :workspace_ids
             AND id >= :lower_bound
             AND id \\< :cutoff_id
@@ -3306,6 +3306,41 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
+     * Whether the sharding-readiness wrap is live. When it is, {@code traces} is a {@code Distributed} table that
+     * rejects mutations (code 36 / 48), so every trace <b>mutation</b> ({@code DELETE} / {@code ALTER} /
+     * {@code OPTIMIZE}) must target the {@code traces_local} shard instead; while it is off {@code traces} is still a
+     * {@code MergeTree} where deletes work directly. Reads and inserts always route through {@code traces}. Each
+     * mutation query carries both table names in an {@code <if(distributed_wrap)>traces_local<else>traces<endif>}
+     * branch and passes this flag; a new mutation path must do the same. Liquibase migrations split by kind:
+     * {@code DELETE} / {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code traces_local}
+     * only (the Distributed {@code traces} rejects them), but {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must target
+     * <b>both</b> {@code traces_local} and {@code traces} — the wrapper takes them as metadata-only, and skipping it
+     * leaves reads unable to see the column (code 47).
+     * <p>
+     * The cluster is single-shard today and {@code traces_local} is a {@code ReplicatedMergeTree}, so a lightweight
+     * delete fans out to every replica via the replication log and reaches every matching row — no {@code ON CLUSTER}
+     * needed (no DAO uses it). Activating sharding is a separate, deferred effort with its own rebalance cutover; only
+     * then does a delete issued on one shard miss rows on the others and trace mutations need fanning across shards.
+     * That belongs to the activation work: adding {@code ON CLUSTER} now would not be a no-op (it would run the
+     * mutation on every replica node and stall on a down one), for no single-shard benefit.
+     */
+    private boolean tracesDistributedWrapEnabled() {
+        return configuration.getDatabaseAnalyticsDataModel().tracesDistributedWrapEnabled();
+    }
+
+    /**
+     * Selects the {@code <if(distributed_wrap)>traces_local<else>traces<endif>} branch on a mutation template by adding
+     * the {@code distributed_wrap} attribute when the wrap is live. The flag decision lives only here and in
+     * {@link #tracesDistributedWrapEnabled()}; every ST-based trace mutation routes its table through this method so the
+     * branches cannot drift apart.
+     */
+    private void selectTracesMutationTable(ST template) {
+        if (tracesDistributedWrapEnabled()) {
+            template.add("distributed_wrap", true);
+        }
+    }
+
+    /**
      * Binds input, output, metadata, and their slim versions (input_slim, output_slim) to a statement.
      * Centralizes the JSON conversion and binding logic for consistency across single and batch inserts.
      *
@@ -3473,6 +3508,7 @@ class TraceDAOImpl implements TraceDAO {
                     var template = getSTWithLogComment(DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS, "delete_traces",
                             workspaceId,
                             userName, "pairs_size=%s".formatted(batch.size()));
+                    selectTracesMutationTable(template);
 
                     var projectIds = batch.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
                     var traceIds = batch.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
@@ -4993,6 +5029,7 @@ class TraceDAOImpl implements TraceDAO {
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null, "",
                 workspaceIds.size());
+        selectTracesMutationTable(template);
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
@@ -5038,7 +5075,8 @@ class TraceDAOImpl implements TraceDAO {
         var logComment = getLogComment("retention_delete_traces_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
-        var sb = new StringBuilder("DELETE FROM traces WHERE (");
+        var sb = new StringBuilder(
+                tracesDistributedWrapEnabled() ? "DELETE FROM traces_local WHERE (" : "DELETE FROM traces WHERE (");
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) sb.append(" OR ");
             sb.append("(workspace_id = :ws_").append(i)

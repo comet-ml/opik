@@ -51,8 +51,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /**
  * Service-level coverage for the stalled Optimization Studio run reaper (OPIK-7159). Drives
  * {@code optimizationService.reconcileStalledStudioOptimizations(...).block()} directly so each
- * threshold / filtering case can be exercised in isolation, mirroring
- * {@link OptimizationProjectMigrationServiceTest}.
+ * threshold / filtering case can be exercised in isolation.
  * <p>
  * Whether a seeded run counts as "stalled" is controlled purely by the timeout arguments rather than
  * by wall-clock waiting: a {@link #IMMEDIATE zero timeout} makes any run of that status stalled, and a

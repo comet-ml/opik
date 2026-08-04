@@ -79,7 +79,8 @@ When discovery is done, report a short summary — the selectors you'll use per 
 ### Step 4 — Write the POM + spec
 
 - Write or extend the POM in `pom/<name>.page.ts` using the selectors from discovery. Each method wraps its body in `test.step()` and returns through the callback (see [conventions.md](conventions.md)).
-- Write the spec in `tests/<feature>/<name>.spec.ts`: tier + feature tag on the describe block, coarse `test.step()` phases, UI-first assertions.
+- Write the spec in `tests/<feature>/<name>.spec.ts`: tier + `@area:` on the describe block, a `@cap:` per test, coarse `test.step()` phases, UI-first assertions.
+- **Take the `@area:`/`@cap:` values from `tests_end_to_end/coverage/taxonomy.yaml` — never invent them.** Grep it for the feature first; the capability you're covering is usually already reserved as `covered: false`. Update the taxonomy in the same change: add the spec to the area's `specs:` list and flip each covered capability to `covered: true` with its tier. See the Tags section of [conventions.md](conventions.md).
 - If discovery flagged a missing/brittle selector, add a descriptive `data-testid` to the FE component in the **same change**.
 
 #### Rebuilding the FE after adding a `data-testid`
@@ -121,6 +122,22 @@ npx playwright test tests/<feature>/<name>.spec.ts --reporter=list
 
 The bridge auto-spawns (you'll see its startup line in the output). If a test fails, **read the failure trace** (`npx playwright show-trace`) rather than adjusting selectors blindly — see "verify the test render before blaming the backend" in [conventions.md](conventions.md). Fix and re-run until green. Report the actual run output.
 
+Three checks before you call it done — each catches something the single-spec run can't:
+
+```bash
+# 1. Tags resolve in the taxonomy (this is the CI `tag-lint` job — run it locally, it's instant)
+python3 tests_end_to_end/coverage/tag_lint.py --taxonomy tests_end_to_end/coverage/taxonomy.yaml --estate tests_end_to_end
+
+# 2. If you touched a shared POM, the whole feature directory still passes
+npx playwright test tests/<feature>/ --reporter=list
+
+# 3. Types
+npx tsc --noEmit
+```
+
+"My spec passes" is not "I didn't break anything": a shared POM is used by sibling specs, and
+tag-lint failures never surface in a Playwright run at all.
+
 ## Safety: verify local config before seeding
 
 The Python SDK behind the bridge reads `~/.opik.config`. If it points at a cloud environment, seeding would create real data there. Before any seed against a local target:
@@ -151,3 +168,5 @@ When the work is done, remind the dev to restore: `cp ~/.opik.config.bak ~/.opik
 | "I'll write the POM and find out if it works when the whole suite runs" | Run-until-green in isolation — iterate on the one spec, don't debug it inside a full suite run. |
 | "`page.locator('tbody tr:nth-child(3)')` is fine" | Flagging the missing testid — brittle structural selectors are the top source of flake; add a `data-testid`. |
 | "I'll create the dataset through the UI so the page has data" | SDK/bridge seeding — UI-create is what the test exercises, not how you set up. |
+| "`@cap:traces.bulk-delete-traces` describes what my test does" | Checking the taxonomy — `@area:`/`@cap:` values are a fixed vocabulary in `taxonomy.yaml`, not free text. CI's `tag-lint` rejects invented names, and the capability you want is usually already reserved there. |
+| "The spec passes, so I'm done" | `tag_lint.py`, the feature-directory run, and `tsc` — a green single spec hides tag errors and sibling breakage from a shared POM. |

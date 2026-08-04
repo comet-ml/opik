@@ -422,9 +422,21 @@ export const getOptimizationMetadata = (
   };
 };
 
+export type AggregateCandidatesOptions = {
+  /**
+   * v2 numbering: the baseline (step 0) is not a trial, so it gets
+   * `trialNumber: null` and the candidates count 1..N — the last trial number
+   * then matches the run's configured max_trials instead of overshooting it by
+   * one (OPIK-7589). Off by default because v1 is frozen on the old numbering
+   * where the baseline is Trial #1 (see 4c5ec9a4ca).
+   */
+  unnumberedBaseline?: boolean;
+};
+
 export const aggregateCandidates = (
   experiments: Experiment[],
   objectiveName: string | undefined,
+  options?: AggregateCandidatesOptions,
 ): AggregatedCandidate[] => {
   const groups = new Map<
     string,
@@ -483,16 +495,21 @@ export const aggregateCandidates = (
 
   candidates.sort((a, b) => a.created_at.localeCompare(b.created_at));
 
+  let nextTrialNumber = 0;
   return candidates.map((c, i) => {
     const isOldStyle = c.stepIndex === -1;
+    const stepIndex = isOldStyle ? i : c.stepIndex;
     return {
       ...c,
-      stepIndex: isOldStyle ? i : c.stepIndex,
+      stepIndex,
       parentCandidateIds:
         isOldStyle && i > 0
           ? [candidates[i - 1].candidateId]
           : c.parentCandidateIds,
-      trialNumber: i + 1,
+      trialNumber:
+        options?.unnumberedBaseline && stepIndex === 0
+          ? null
+          : ++nextTrialNumber,
     };
   });
 };
@@ -510,7 +527,10 @@ export const CANDIDATE_SORT_FIELD_MAP: Record<
   string,
   keyof AggregatedCandidate | undefined
 > = {
-  name: "trialNumber",
+  // Trial numbers follow creation order, so sorting the Trial column by
+  // created_at yields the same order while keeping the (unnumbered) baseline
+  // first — sorting by the nullable trialNumber would drop it to the end.
+  name: "created_at",
   step: "stepIndex",
   id: "id",
   objective_name: "score",

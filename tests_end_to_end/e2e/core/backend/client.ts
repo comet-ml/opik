@@ -314,6 +314,10 @@ export function makeBackendClient(apiKey: string | null = null) {
 
     getTrace: localGetTrace,
 
+    async deleteTraces(ids: string[]): Promise<void> {
+      await opik.api.traces.deleteTraces({ ids });
+    },
+
     async pollTraceForFeedbackScore(
       traceId: string,
       scoreName: string,
