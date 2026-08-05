@@ -244,11 +244,19 @@ class OptimizationServiceImpl implements OptimizationService {
                                             && optimization.status() != null
                                             && !optimization.status().isTerminal();
 
+                                    // Clearing the reason is scoped more tightly than the restart itself,
+                                    // to stay consistent with the supersede rule on the update path: only
+                                    // a failure the PLATFORM guessed is discarded. A user CANCELLED or a
+                                    // worker-reported ERROR is a real outcome, and re-upserting over it
+                                    // must still preserve it — that is the pre-existing contract this
+                                    // path was built for (SDK re-upserts carry a null errorInfo).
+                                    boolean discardsGuessedFailure = isRestart && isSystemDetectedFailure(existing);
+
                                     // Preserve the persisted failure reason if not provided in update
                                     // (upsert does a full-row replace; the SDK re-upserts with a null
                                     // errorInfo and would otherwise clobber a previously recorded failure).
                                     // errorInfo is normally set through the PATCH/update path.
-                                    if (!isRestart && optimization.errorInfo() == null
+                                    if (!discardsGuessedFailure && optimization.errorInfo() == null
                                             && existing.errorInfo() != null) {
                                         builder.errorInfo(existing.errorInfo());
                                     }
@@ -264,9 +272,17 @@ class OptimizationServiceImpl implements OptimizationService {
                                     }
 
                                     if (isRestart) {
+                                        // Force a server-stamped last_updated_at. Unlike createdAt, that
+                                        // column IS in View.Write, so a client can send a stale value —
+                                        // and the UPSERT binds whatever arrives. A restart carrying a
+                                        // timestamp older than the terminal version it replaces loses
+                                        // ReplacingMergeTree dedup outright: argMax keeps returning the
+                                        // old terminal row, so the run reads as still finished and the
+                                        // reaper never sees the new attempt.
+                                        builder.lastUpdatedAt(null);
                                         log.info(
-                                                "Optimization '{}' restarted from terminal status '{}': resetting createdAt and errorInfo",
-                                                id, existing.status());
+                                                "Optimization '{}' restarted from terminal status '{}': resetting createdAt and lastUpdatedAt, discardingGuessedFailure '{}'",
+                                                id, existing.status(), discardsGuessedFailure);
                                     }
 
                                     // Preserve original name only if incoming name is blank

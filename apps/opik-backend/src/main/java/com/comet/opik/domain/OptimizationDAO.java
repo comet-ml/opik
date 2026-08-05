@@ -193,6 +193,15 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * <li>The hard-ceiling branch is guarded by {@code latest_status IN ('initialized', 'running')} and
      * not hoisted to a bare top-level {@code OR}: without the guard every run that merely finished longer
      * ago than the ceiling becomes a candidate and crowds genuine stalls out of the {@code LIMIT}.</li>
+     * <li>{@code latest_status} and {@code started_at} come out of ONE {@code argMax} over a tuple, not two
+     * over separate columns. {@code last_updated_at} is {@code DateTime64(6)}, so two versions can tie on
+     * it, and two independent {@code argMax} calls are then each free to pick a different physical row —
+     * combining a status from one version with a start instant from another. One aggregate cannot
+     * disagree with itself.</li>
+     * <li>Both {@code ORDER BY}s end in {@code id ASC}. Without a unique final key the sort is
+     * unstable across ties, so the bounded prefix can differ between passes — and a set of tied healthy
+     * rows can keep filling it, get dropped by the activity veto, and starve the stalled runs behind
+     * them indefinitely.</li>
      * <li>Both {@code ORDER BY}s put hard-capped runs first and only then sort by {@code latest_updated_at}.
      * Ordering by the timestamp alone looks natural but inverts the priority for exactly the branch that
      * carries the never-stuck-indefinitely guarantee: a metadata PATCH or an SDK re-upsert refreshes
@@ -206,9 +215,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 SELECT
                     workspace_id,
                     id,
-                    argMax(status, last_updated_at) AS latest_status,
-                    max(last_updated_at) AS latest_updated_at,
-                    argMax(created_at, last_updated_at) AS started_at
+                    argMax(tuple(status, created_at), last_updated_at).1 AS latest_status,
+                    argMax(tuple(status, created_at), last_updated_at).2 AS started_at,
+                    max(last_updated_at) AS latest_updated_at
                 FROM optimizations
                 WHERE studio_config != ''
                   AND greaterOrEquals(last_updated_at, subtractSeconds(now64(6), :lookback_seconds))
@@ -220,7 +229,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     OR (latest_status = 'running'
                         AND less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds)))
                 ORDER BY less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds)) DESC,
-                         latest_updated_at ASC
+                         latest_updated_at ASC,
+                         id ASC
                 LIMIT :candidate_limit
             ), candidate_trials AS (
                 SELECT
@@ -253,7 +263,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                    SELECT workspace_id, optimization_id FROM active_optimizations
                )
             ORDER BY less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds)) DESC,
-                     latest_updated_at ASC
+                     latest_updated_at ASC,
+                     id ASC
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -310,9 +321,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
      */
     private static final String GET_STATUS_SNAPSHOT = """
             SELECT
-                argMax(status, last_updated_at) AS latest_status,
-                max(last_updated_at) AS latest_updated_at,
-                argMax(created_at, last_updated_at) AS started_at
+                argMax(tuple(status, created_at), last_updated_at).1 AS latest_status,
+                argMax(tuple(status, created_at), last_updated_at).2 AS started_at,
+                max(last_updated_at) AS latest_updated_at
             FROM optimizations
             WHERE workspace_id = :workspace_id
               AND id = :id

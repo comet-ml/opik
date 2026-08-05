@@ -483,6 +483,31 @@ class OptimizationStalledReaperServiceTest {
     }
 
     @Test
+    @DisplayName("a restart carrying a stale lastUpdatedAt still becomes the winning version")
+    void restartWithStaleLastUpdatedAtStillWins() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+        var reaped = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+        // lastUpdatedAt is in View.Write (unlike createdAt), so a client can send one — and the UPSERT
+        // binds whatever arrives. A restart stamped an hour in the past would lose ReplacingMergeTree
+        // dedup to the terminal version it replaces, leaving the run reading as finished forever.
+        optimizationResourceClient.upsert(optimizationResourceClient.createPartialOptimization()
+                .id(id)
+                .datasetName(reaped.datasetName())
+                .name(reaped.name())
+                .status(OptimizationStatus.RUNNING)
+                .studioConfig(studioConfig())
+                .errorInfo(null)
+                .createdAt(null)
+                .lastUpdatedAt(Instant.now().minus(Duration.ofHours(1)))
+                .build(), API_KEY, TEST_WORKSPACE_NAME);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.RUNNING);
+    }
+
+    @Test
     @DisplayName("a wrongly reaped run can still be cancelled")
     void systemDetectedFailureRemainsCancellable() {
         var id = seedStudioRun(OptimizationStatus.RUNNING);
