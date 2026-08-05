@@ -171,7 +171,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}
           tags: |
@@ -256,7 +256,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}
           tags: |
