@@ -258,11 +258,7 @@ def test_evaluate__tolerated_failure__is_reported_on_the_argument_span(fake_back
         error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
     )
 
-    spans = [
-        span
-        for span in _spans_named(fake_backend, "score_arguments")
-        if span.input == {"metric_name": "tracked_needs_missing_arg"}
-    ]
+    spans = _spans_named(fake_backend, "tracked_needs_missing_arg_arg_validation")
     assert len(spans) == 2  # one per dataset item
     assert spans[0].error_info["exception_type"] == "ScoreMethodMissingArguments"
     assert "expected_label" in spans[0].error_info["message"]
@@ -276,7 +272,7 @@ def test_evaluate__argument_span__is_created_for_successful_scores_too(fake_back
     # regardless of the outcome and regardless of the metric's `track` setting.
     _run_evaluation([AlwaysPasses()])
 
-    spans = _spans_named(fake_backend, "score_arguments")
+    spans = _spans_named(fake_backend, "always_passes_arg_validation")
     assert len(spans) == 2
     assert all(span.error_info is None for span in spans)
 
@@ -290,14 +286,14 @@ def test_evaluate__tracing_disabled__no_argument_span_is_emitted(fake_backend):
     finally:
         opik.set_tracing_active(True)
 
-    assert _spans_named(fake_backend, "score_arguments") == []
+    assert _spans_named(fake_backend, "always_passes_arg_validation") == []
 
 
 def test_evaluate__argument_span__is_tagged_as_internal(fake_backend):
     # Same marker the rest of the engine uses; the agentic judge prunes the trace by it.
     _run_evaluation([AlwaysPasses()])
 
-    spans = _spans_named(fake_backend, "score_arguments")
+    spans = _spans_named(fake_backend, "always_passes_arg_validation")
     assert spans
     assert all(span.tags == [INTERNAL_SPAN_TAG] for span in spans)
 

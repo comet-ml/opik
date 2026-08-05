@@ -261,7 +261,7 @@ def test_evaluate__happyflow(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
-                            name="score_arguments",
+                            name="equals_metric_arg_validation",
                             tags=["__opik_eval_internal__"],
                             input={"metric_name": "equals_metric"},
                             output=ANY_BUT_NONE,
@@ -351,7 +351,7 @@ def test_evaluate__happyflow(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
-                            name="score_arguments",
+                            name="equals_metric_arg_validation",
                             tags=["__opik_eval_internal__"],
                             input={"metric_name": "equals_metric"},
                             output=ANY_BUT_NONE,
@@ -683,7 +683,7 @@ def test_evaluate_with_scoring_key_mapping(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
-                            name="score_arguments",
+                            name="equals_metric_arg_validation",
                             tags=["__opik_eval_internal__"],
                             input={"metric_name": "equals_metric"},
                             output=ANY_BUT_NONE,
@@ -779,7 +779,7 @@ def test_evaluate_with_scoring_key_mapping(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
-                            name="score_arguments",
+                            name="equals_metric_arg_validation",
                             tags=["__opik_eval_internal__"],
                             input={"metric_name": "equals_metric"},
                             output=ANY_BUT_NONE,
@@ -1863,7 +1863,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
-                            name="score_arguments",
+                            name="aggregated_metric_arg_validation",
                             tags=["__opik_eval_internal__"],
                             input={"metric_name": "aggregated_metric"},
                             output=ANY_BUT_NONE,
@@ -1999,7 +1999,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
-                            name="score_arguments",
+                            name="aggregated_metric_arg_validation",
                             tags=["__opik_eval_internal__"],
                             input={"metric_name": "aggregated_metric"},
                             output=ANY_BUT_NONE,

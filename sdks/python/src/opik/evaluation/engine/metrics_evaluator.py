@@ -2,6 +2,7 @@ import inspect
 import logging
 
 import opik
+import opik.opik_context as opik_context
 from typing import List, Dict, Any, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
@@ -28,7 +29,7 @@ LOGGER = logging.getLogger(__name__)
 
 EVALUATION_SPAN_PARAMETER_NAME = "task_span"
 TRACE_TOOL_CONTEXT_PARAMETER_NAME = "trace_tool_context"
-SCORE_ARGUMENTS_SPAN_NAME = "score_arguments"
+ARGUMENT_VALIDATION_SPAN_SUFFIX = "_arg_validation"
 
 
 def _has_evaluation_span_parameter(func: Callable) -> bool:
@@ -189,7 +190,9 @@ def build_metrics_evaluator(
 
 
 @opik.track(  # type: ignore[attr-defined,has-type]
-    name=SCORE_ARGUMENTS_SPAN_NAME,
+    # Replaced per call with the metric's own name — `@track` fixes the name at
+    # decoration time, so the real one is set from inside the body.
+    name=f"score{ARGUMENT_VALIDATION_SPAN_SUFFIX}",
     tags=[INTERNAL_SPAN_TAG],
     # `metric_name` is the only argument worth recording: the rest is either the
     # dataset item, already on the parent span, or objects whose serialization
@@ -216,6 +219,10 @@ def _prepare_score_arguments(
     Using the decorator rather than a hand-rolled span also means the global
     ``set_tracing_active`` switch is honoured here as everywhere else.
     """
+    opik_context.update_current_span(
+        name=f"{metric_name}{ARGUMENT_VALIDATION_SPAN_SUFFIX}"
+    )
+
     arguments_validator.validate_score_arguments(
         metric=metric,
         kwargs=mapped_scoring_inputs,
