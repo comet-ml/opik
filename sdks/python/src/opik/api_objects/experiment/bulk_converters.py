@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from opik import exceptions, id_helpers
 from opik.rest_api import types as rest_api_types
+from opik.types import FeedbackScoreDict
 from . import bulk_item
 from .. import constants
 
@@ -211,7 +212,7 @@ def _to_rest_span(
 
 
 def _to_rest_feedback_score(
-    score: Any,
+    score: FeedbackScoreDict,
 ) -> rest_api_types.FeedbackScoreExperimentItemBulkWriteView:
     return rest_api_types.FeedbackScoreExperimentItemBulkWriteView(
         name=score["name"],

@@ -18,6 +18,33 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
+def _raise_on_oversized_items(
+    rest_items: List[
+        rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView
+    ],
+) -> None:
+    """Reject items that cannot fit in a request on their own.
+
+    ``split_into_batches`` puts an oversized item in a batch by itself rather
+    than dropping it, which would send a request the backend is guaranteed to
+    reject with a 422. Failing here names the offending item instead.
+    """
+    failure_reasons = [
+        f"items[{index}] is {size_MB:.1f}MB, which exceeds the "
+        f"{constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB}MB per-request limit"
+        for index, size_MB in (
+            (index, sequence_splitter.get_payload_size_MB(item))
+            for index, item in enumerate(rest_items)
+        )
+        if size_MB >= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
+    ]
+
+    if failure_reasons:
+        raise exceptions.ValidationError(
+            prefix="batch_upload_items", failure_reasons=failure_reasons
+        )
+
+
 class Experiment:
     def __init__(
         self,
@@ -209,7 +236,7 @@ class Experiment:
 
         rest_items = [bulk_converters.to_rest_record(item) for item in items]
 
-        self._raise_on_oversized_items(rest_items)
+        _raise_on_oversized_items(rest_items)
 
         batches = sequence_splitter.split_into_batches(
             rest_items,
@@ -261,33 +288,6 @@ class Experiment:
             raise
         else:
             pool.shutdown(wait=True)
-
-    @staticmethod
-    def _raise_on_oversized_items(
-        rest_items: List[
-            rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView
-        ],
-    ) -> None:
-        """Reject items that cannot fit in a request on their own.
-
-        ``split_into_batches`` puts an oversized item in a batch by itself rather
-        than dropping it, which would send a request the backend is guaranteed to
-        reject with a 422. Failing here names the offending item instead.
-        """
-        failure_reasons = [
-            f"items[{index}] is {size_MB:.1f}MB, which exceeds the "
-            f"{constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB}MB per-request limit"
-            for index, size_MB in (
-                (index, sequence_splitter.get_payload_size_MB(item))
-                for index, item in enumerate(rest_items)
-            )
-            if size_MB >= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
-        ]
-
-        if failure_reasons:
-            raise exceptions.ValidationError(
-                prefix="batch_upload_items", failure_reasons=failure_reasons
-            )
 
     def get_items(
         self,
