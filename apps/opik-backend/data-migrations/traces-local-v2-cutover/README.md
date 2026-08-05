@@ -30,8 +30,9 @@ The **deletion-events bridge** closes it: with `traceDeletionEventsCaptureEnable
 new table before the EXCHANGE. The replay matches the **full key**, not `id` alone — see "Delta and replay correctness".
 
 > **All user-facing trace deletes route through one captured path.** Single delete, batch delete-by-project, and thread
-> deletion all funnel through `TraceService.delete(...)`, which calls `captureDeletions` on both the resolved-project
-> and the unresolved (empty-project) branch — so enabling the flag covers every one. The **only** uncaptured
+> deletion all funnel through `TraceService.delete(...)`, which calls `captureDeletions` for every resolved-project
+> delete — since OPIK-7483 there is no project-less branch (ids that resolve to no project are absent and skipped) — so
+> enabling the flag covers every one. The **only** uncaptured
 > `DELETE FROM traces` is the retention sweep, which is disabled (see the retention note). Any **new** trace-delete path
 > introduced during the migration window must likewise capture, or its deletes would leak across the swap.
 
@@ -99,11 +100,23 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     column added to one table but not the other fails the build). Re-confirm both are green on the release being
     deployed.
 11. **Fresh backup / snapshot** of the ClickHouse data node.
-12. **Freeze concurrent DDL on `traces` for the window.** Hold any deploy or Liquibase changeset that would `ALTER`,
-    `RENAME`, or otherwise touch `traces` / `traces_local_v2` for the whole backfill→EXCHANGE window — a schema change
-    landing mid-cutover races the swap and can corrupt it. The revamp's own migrations (000096/000101) are already
-    applied; this is about *unrelated* migrations or ad-hoc DDL during the window.
-13. Schedule during off-peak hours.
+12. **Freeze concurrent DDL on `traces` for the window — and through the rollback-eligible soak.** Hold any deploy or
+    Liquibase changeset that would `ALTER`, `RENAME`, or otherwise touch `traces` / `traces_local_v2` for the whole
+    backfill→EXCHANGE window — a schema change landing mid-cutover races the swap and can corrupt it — and keep it frozen
+    until `finalize.sh` commits (see "Point of no return"): a `traces` schema change made *after* the EXCHANGE is lost
+    from the live table on a rollback + finalize. The revamp's own migrations (000096/000101) are already applied; this
+    is about *unrelated* migrations or ad-hoc DDL during the window.
+13. **Deletion bridge holds no empty-`project_id` trace events, and OPIK-7483 is live fleet-wide.** Since OPIK-7483 every
+    trace delete carries its `project_id`, so the cutover replay is full-key only (no workspace-scoped branch). Confirm
+    OPIK-7483 is deployed across the **whole** backend fleet before the window (a straggler pre-7483 backend could emit an
+    empty-`project_id` event the replay would miss), then assert the bridge holds none. `deletion_events_local` is a
+    per-shard local table, so query it cluster-wide:
+    ```sql
+    SELECT count() FROM clusterAllReplicas('{cluster}', <database>.deletion_events_local)
+    WHERE source_table = 'traces' AND project_id = '';
+    ```
+    If non-zero, do NOT proceed: an unexpected row means the replay would miss those deletes — investigate/drain them first.
+14. Schedule during off-peak hours.
 
 ## The sequence
 
@@ -151,10 +164,11 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    ```
    Every EXCHANGE path requires: `--backfill-start` (for the final deletion replay), `--confirm-buffer-raised` (writes in
    the final window survive the swap), and `--confirm-retention-paused` (retention deletes bypass the bridge, so a
-   retention sweep in the window would leak across the swap). Add `--with-wrap --confirm-daos-retargeted` only once the
-   DAOs target `traces_local`.
+   retention sweep in the window would leak across the swap). Add `--with-wrap --confirm-daos-retargeted` only once
+   `databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true` is live across the backend fleet (OPIK-7455), so trace
+   mutations target `traces_local`.
 
-> **HARD PREREQUISITE for the wrap (step 4, part 2): the delete/mutation DAO must target `traces_local` first.** A
+> **HARD PREREQUISITE for the wrap (step 4, part 2): enable `tracesDistributedWrapEnabled` so trace mutations target `traces_local` first (OPIK-7455).** A
 > `Distributed` table supports `SELECT` and `INSERT` but **not** mutations. Verified on ClickHouse 26.3:
 > - `DELETE FROM <distributed>` → `Code 36 BAD_ARGUMENTS: DELETE query is not supported`
 > - `ALTER TABLE <distributed> DELETE` → `Code 48 NOT_IMPLEMENTED: Distributed doesn't support mutations`
@@ -185,7 +199,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > `exchange_and_wrap.sh --database opik --wrap-only --confirm-maintenance --confirm-daos-retargeted` — it runs the settle
 > gate and applies **only** the wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`).
 > `--confirm-daos-retargeted` is required for **any** wrap (same-run or deferred), since the wrap makes `traces`
-> `Distributed` and breaks the delete/mutation DAOs until they target `traces_local`. To roll the wrap back, use
+> `Distributed` and breaks the delete/mutation DAOs until `tracesDistributedWrapEnabled=true` routes them at `traces_local`. To roll the wrap back, use
 > `rollback.sh --stage C`.
 >
 > The wrap is **gapless per node**: it pre-builds the `Distributed` wrapper under a temp name, then one atomic
@@ -364,28 +378,19 @@ on a large backfill for no gain.
 - The anchor is captured **before** the backfill, not at its end — a cutoff taken at the end would miss writes that
   landed during the backfill itself. The same `backfill_start` bounds the replay window.
 
-**Replay matches on two branches — full key, or `(workspace_id, id)` — mirroring the two delete shapes recorded in the bridge.**
-`TraceService.delete(ids, projectId)` resolves each id's owning project and deletes per project (full key). **Pre-OPIK-7483**,
-ids it could not resolve fell back to a **workspace-scoped** delete (`DELETE … WHERE id IN … AND workspace_id = …` across
-every project), recorded in the bridge with an **empty `project_id`** (`DeletionEventDAO`: "project_id is empty for
-workspace-scoped source tables"). OPIK-7483 removed that fallback, so current `TraceService.delete` always carries
-`project_id` and the empty-project branch now replays **only** legacy bridge rows written before OPIK-7483 (still resident
-under the 2-year TTL). The
-replay mirrors both: full-key events delete by `(workspace_id, project_id, id)` (exact; prunes on the destination primary
-key — correct even though trace ids are not globally unique), and empty-project events delete by `(workspace_id, id)`.
-The second branch is a **mirror, not an over-delete**: the workspace-scoped fallback fires only for ids the resolver
-found no live row for in any project, and the source deletion that it replays already removed every `(workspace_id, id)`
-row.
-Without it, those deletions would **silently leak** across the swap. It is faithful in the common case, with **one known
-residual** (see 000002): because its resurrection guard keys on `(workspace_id, id)` (no project), an id that is live in
-one project shields the delete of the *same reused id* in another — leaving an extra destination row. It needs id reuse
-across projects **plus** a workspace-scoped delete **plus** a resurrection in the window, so it is rare; the `000005`
-`FINAL` fingerprint flags it (`ok=0`) rather than passing silently, and OPIK-7483 retires the arm entirely by making
-deletes always carry `project_id`.
+**Replay matches on the full key `(workspace_id, project_id, id)`.**
+`TraceService.delete(ids, projectId)` resolves each id's owning project(s) and deletes per project under the full key.
+Since **OPIK-7483** there is no project-less path: an id that resolves to no owning project is absent (a delete of a
+non-existent row) and is skipped, so **no deletion event is ever bridged with an empty `project_id`** for
+`source_table='traces'` (a pre-cutover check asserts the bridge holds none — Prerequisites #13). The replay therefore
+carries a single branch: full-key events delete by `(workspace_id, project_id, id)` — exact, prunes on the destination
+primary key, and correct even though trace ids are not globally unique (a reused id deleted in one project leaves its
+copies in other projects untouched). Without this replay, those during-window deletions would **silently leak** across
+the swap.
 
 **Resurrection guard.** A trace can be deleted and then re-created/updated under the **same id** during the window
 (ids are client-supplied; the delete is a mask, and a newer insert wins under `FINAL`). Such an id is bridged as deleted
-but is **live again** on the source, and the backfill/delta already copied its live version. So each replay branch also
+but is **live again** on the source, and the backfill/delta already copied its live version. So the replay also
 requires the id is **not currently live on the source** (`AND (…) NOT IN (SELECT … FROM traces WHERE id IN <deleted ids
 since anchor>)`, mask-honored) before deleting it — otherwise the replay would drop a row that is live on the source,
 silent data loss. This also makes the replay idempotent (it never masks a live-on-source id), so re-running to
@@ -405,6 +410,11 @@ They are **complementary, not alternatives**, and there is **no copy-paste drift
   placeholders for the database, window bounds and block size. It is read by the driver, not run by hand.
 - **`backfill.sh` is the driver (the "how"):** it derives the week range, and for each week reads `000001_...sql`,
   substitutes the placeholders, runs it, reconciles, throttles, and is resumable. It embeds no copy of the INSERT.
+- **Keep the explicit column list in sync.** `000001`'s `INSERT` names each copied column explicitly (parallel `SELECT`,
+  no `SELECT *`), so a column added to `traces` before a cutover is carried across **only if it is also added to this
+  list and to the `traces_local_v2` shadow** (migration 000101, recreated by 000114). This is an incidental per-column
+  edit that rides with the feature DDL; omissions are caught in CI by the schema-parity guard — `cutoverCopiesEveryBaseColumn`
+  pins this list to the live `traces` base columns (OPIK-7772 extends it to a topology-aware CI check).
 
 **Every SQL operation — happy path and every rollback stage — is run by a driver script; no SQL or `.sql` file is ever
 run by hand.** Each `.sql` file is the single source a driver reads:
@@ -551,6 +561,13 @@ backup with `finalize.sh` is the one irreversible step, so gate it on an explici
 - **Soak duration** — keep the parked backup (`traces_pre_cutover_backup` after a successful cutover;
   `traces_post_rollback_backup` after a rollback) for a defined window (recommend ~2 weeks; it fits well inside the
   bridge's 2-year TTL) so any latent read/query regression surfaces while rollback is still an option.
+- **Freeze `traces` schema DDL through the soak** (extends prereq #12 past the EXCHANGE). Rollback restores the **frozen
+  original** `traces`, which carries no post-cutover DDL, so a column/index added to the successor in-window is **lost
+  from the live table** on rollback; finalize's recycle then truncates the parked successor to an empty shadow (its data
+  gone — the empty shadow keeps the added column, drift the next cutover's `cutoverCopiesEveryBaseColumn` guard flags).
+  Do not deploy `traces` schema migrations until the soak ends (finalize committed). Post-finalize the general rule
+  resumes: apply `ADD`/`DROP`/`MODIFY COLUMN` to **both** `traces_local` and the `Distributed` `traces` (see the wrap
+  prerequisite).
 - **Finalize exit criteria** — before retiring the backup: `verify.sh` clean, query p99 within budget over the soak, no
   cutover-related incidents open, and (if the wrap was applied) the retarget flag (`tracesDistributedWrapEnabled`) live
   and healthy across the backend fleet.
@@ -735,13 +752,16 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       on the release, so the cutover copies every base column of `traces` and the two tables' base and materialized
       columns match.
 - [ ] **Fidelity verified** — `verify.sh` passes between source and destination before the EXCHANGE. This gate MUST be a
-      **full compare** (`--sample-mod 1 --weeks-stride 1`, no `--from-week`/`--to-week` narrowing): a cross-project
-      workspace-scoped residual row is a single key, so any sampling (`--sample-mod > 1`), week stride, or week narrowing
-      can hash it out or skip its week and still report `ok=1`. Reserve sampling/ranged runs for follow-up confidence
-      *after* the full gate passes. Re-run `delta_replay.sh` then `verify.sh` until it PASSES: while the buffer holds
-      writes (or, on a rehearsal without it, once traffic is quiescent) the last delta must catch every in-flight write.
-- [ ] **`Distributed` wrap gated on app-readiness** — apply the wrap (step 4, part 2) only when the delete/read DAOs are
-      sharding-aware; otherwise stop after the `EXCHANGE`, since a lightweight `DELETE` against a `Distributed` `traces`
+      **full compare** (`--sample-mod 1 --weeks-stride 1`, no `--from-week`/`--to-week` narrowing): it is the last backstop
+      for a single-row deletion leak — an unexpected empty-`project_id` bridge event the single-branch replay would miss,
+      or any other single-key divergence — and any sampling (`--sample-mod > 1`), week stride, or week narrowing can hash
+      that one row out and still report `ok=1`. Reserve sampling/ranged runs for follow-up confidence *after* the full gate
+      passes. Re-run `delta_replay.sh` then `verify.sh` until it PASSES: while the buffer holds writes (or, on a rehearsal
+      without it, once traffic is quiescent) the last delta must catch every in-flight write.
+- [ ] **`Distributed` wrap gated on the DAO toggle** — apply the wrap (step 4, part 2) only once
+      `databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true` is live across the backend fleet (OPIK-7455), set in
+      lockstep with the wrap so trace mutations target `traces_local`; otherwise stop after the `EXCHANGE`, since a
+      lightweight `DELETE` against a `Distributed` `traces`
       is unsupported and breaks the trace-delete path.
 - [ ] **No query-semantics regression** — FINAL / `LIMIT 1 BY` dedup verified; p99 on the project traces listing page within
       ±10% of the pre-migration baseline.

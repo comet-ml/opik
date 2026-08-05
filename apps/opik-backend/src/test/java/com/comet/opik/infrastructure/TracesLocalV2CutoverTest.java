@@ -14,8 +14,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -307,9 +305,6 @@ class TracesLocalV2CutoverTest {
         var preExistingDeleted = mintIds(PRE_EXISTING_DELETED_PER_WEEK);
         var retentionDeleted = mintIds(RETENTION_DELETED_PER_WEEK);
         var userDeleted = mintIds(USER_DELETED_PER_WEEK);
-        // Deletes the delete-by-ids path could not resolve to a project — captured in the bridge with an empty
-        // project_id. The replay must still remove them (matched by (workspace_id, id)) or they leak across the swap.
-        var unresolvedDeleted = mintIds(USER_DELETED_PER_WEEK);
         // One id reused across two projects: deleted in projectId, must survive in otherProjectId (full-key replay).
         var reusedInstant = weekInstant(0, 1);
         var reusedId = ID_GENERATOR.generateId(reusedInstant);
@@ -322,7 +317,6 @@ class TracesLocalV2CutoverTest {
         allSeeded.addAll(preExistingDeleted);
         allSeeded.addAll(retentionDeleted);
         allSeeded.addAll(userDeleted);
-        allSeeded.addAll(unresolvedDeleted);
         seedTraces(allSeeded, workspaceId, projectId);
         seedTraces(reused, workspaceId, projectId);
         seedTraces(reused, workspaceId, otherProjectId);
@@ -358,9 +352,6 @@ class TracesLocalV2CutoverTest {
         // User-shape: single-id deletes.
         recordDeletionEvents(idStrings(userDeleted), workspaceId, projectId.toString(), "user_request");
         lightweightDelete(idStrings(userDeleted), workspaceId);
-        // Unresolved-project deletes: captured with an empty project_id (delete-by-ids couldn't resolve the project).
-        recordDeletionEvents(idStrings(unresolvedDeleted), workspaceId, "", "user_request");
-        lightweightDelete(idStrings(unresolvedDeleted), workspaceId);
         // Reused-id delete scoped to projectId only — the copy under otherProjectId must survive.
         recordDeletionEvents(Set.of(reusedId.toString()), workspaceId, projectId.toString(), "user_request");
         lightweightDeleteScoped(Set.of(reusedId.toString()), workspaceId, projectId);
@@ -379,8 +370,7 @@ class TracesLocalV2CutoverTest {
 
         // Negative control — before replay, the during-backfill deletes have leaked onto the destination: still fully
         // alive there, because the delta-insert cannot see a lightweight delete. This is what the bridge exists to fix.
-        // Includes the unresolved (empty-project) deletes, which only the replay's (workspace_id, id) branch catches.
-        var leakedIds = union(union(idStrings(retentionDeleted), idStrings(userDeleted)), idStrings(unresolvedDeleted));
+        var leakedIds = union(idStrings(retentionDeleted), idStrings(userDeleted));
         assertThat(liveCount("traces_local_v2", leakedIds, workspaceId))
                 .as("negative control: without replay, during-backfill deletes leak across the copy")
                 .isEqualTo(leakedIds.size());
@@ -448,9 +438,6 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces", idStrings(userDeleted), workspaceId))
                 .as("user-shape deletions do not leak across the EXCHANGE")
                 .isZero();
-        assertThat(liveCount("traces", idStrings(unresolvedDeleted), workspaceId))
-                .as("unresolved (empty-project) deletions do not leak across the EXCHANGE")
-                .isZero();
 
         // Full-key replay: the reused id is gone under the deleted project but alive under the other project.
         assertThat(liveCountScoped("traces", Set.of(reusedId.toString()), workspaceId, projectId))
@@ -477,14 +464,15 @@ class TracesLocalV2CutoverTest {
                 .as("reused id still readable under the other project through the Distributed wrapper")
                 .isEqualTo(1L);
 
-        // Rollback (Stage C) — the wrap is reversible without resurrecting post-cutover deletes. A sharding-aware app
-        // deletes on the local table, so simulate a post-wrap delete on `traces_local` and record it in the bridge with
-        // an empty project (the unresolved case), then roll back: drop the Distributed wrapper, promote the parked old
-        // data back to `traces`, and reverse-replay from cutover_start.
+        // Rollback (Stage C) — the wrap is reversible without resurrecting post-cutover deletes. Post-wrap the app's
+        // delete DAO targets `traces_local` (OPIK-7455) and carries the full key (OPIK-7483), so simulate a post-wrap
+        // delete on `traces_local` recorded in the bridge with its project, then roll back: drop the Distributed
+        // wrapper, promote the parked old data back to `traces`, and reverse-replay from cutover_start.
         var postWrapDeleted = Set.of(survivors.getFirst().id().toString());
-        recordDeletionEvents(postWrapDeleted, workspaceId, "", "user_request");
-        execute("DELETE FROM traces_local WHERE workspace_id = :workspace_id AND id IN :ids",
-                statement -> statement.bind("workspace_id", workspaceId).bind("ids", postWrapDeleted));
+        recordDeletionEvents(postWrapDeleted, workspaceId, projectId.toString(), "user_request");
+        execute("DELETE FROM traces_local WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN :ids",
+                statement -> statement.bind("workspace_id", workspaceId).bind("project_id", projectId.toString())
+                        .bind("ids", postWrapDeleted));
         rollbackAfterWrap(cutoverStart);
 
         assertThat(isDistributed("traces"))
@@ -592,8 +580,8 @@ class TracesLocalV2CutoverTest {
     /**
      * Rollback stage B (000004_rollback_stage_b + reverse_replay): aborting after the EXCHANGE but before the wrap swaps
      * the tables back and reverse-replays, so a delete that landed on the successor after cutover_start does not
-     * resurrect on the restored original. Exercises the reverse-replay's FULL-KEY branch (the comprehensive test covers
-     * the empty-project branch in stage C), and pins reverse-replay idempotence — the contract {@code --reverse-replay-only}
+     * resurrect on the restored original. Exercises the reverse-replay's full-key branch (the only branch since
+     * OPIK-7483), and pins reverse-replay idempotence — the contract {@code --reverse-replay-only}
      * relies on for re-applying an interrupted rollback replay.
      */
     @Test
@@ -740,17 +728,13 @@ class TracesLocalV2CutoverTest {
      * convergence, so a second replay must not change the result — in particular it must not eventually drop the
      * resurrected (live-on-source) rows.
      *
-     * <p>Parameterized over the bridge capture shape so <b>both</b> replay branches carry the guard: a delete captured
-     * WITH its project exercises the full-key branch, one captured with an empty project (the workspace-scoped delete
-     * fallback) exercises the {@code (workspace_id, id)} branch. Both branches must spare a resurrected id.
+     * <p>The full-key replay branch carries the guard: a delete captured WITH its project (the only shape since
+     * OPIK-7483) must spare a resurrected id.
      */
-    @ParameterizedTest(name = "resurrection guard holds on the {0}-project replay branch")
-    @ValueSource(booleans = {true, false})
-    void deleteThenResurrectSurvivesTheReplay(boolean resolvedProject) {
+    @Test
+    void deleteThenResurrectSurvivesTheReplay() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
-        // Capture shape selects the replay branch: the resolved project (full key) or an empty project (workspace-scoped).
-        var captureProject = resolvedProject ? projectId.toString() : "";
         var survivors = mintIds(SURVIVORS_PER_WEEK);
         var resurrected = mintIds(3); // deleted then re-created under the same id
         var stayDeleted = mintIds(3); // deleted and NOT re-created
@@ -766,9 +750,9 @@ class TracesLocalV2CutoverTest {
         // During the window: delete both cohorts (bridged), then re-create the resurrected cohort under the same ids
         // with a fresh last_updated_at — the newer version wins under FINAL, so they are live again on the source (caught
         // by the delta's last_updated_at arm since their created_at stays historical).
-        recordDeletionEvents(idStrings(resurrected), workspaceId, captureProject, "user_request");
+        recordDeletionEvents(idStrings(resurrected), workspaceId, projectId.toString(), "user_request");
         lightweightDelete(idStrings(resurrected), workspaceId);
-        recordDeletionEvents(idStrings(stayDeleted), workspaceId, captureProject, "user_request");
+        recordDeletionEvents(idStrings(stayDeleted), workspaceId, projectId.toString(), "user_request");
         lightweightDelete(idStrings(stayDeleted), workspaceId);
         // Recreate with a server-clock last_updated_at (a later now64(6), so >= backfillStart) — NOT the JVM clock,
         // whose skew vs the container could put it below backfillStart and make the delta miss the resurrection path.
@@ -790,55 +774,6 @@ class TracesLocalV2CutoverTest {
         assertThat(liveCount("traces_local_v2", idStrings(survivors), workspaceId))
                 .as("untouched survivors are intact")
                 .isEqualTo(survivors.size());
-    }
-
-    /**
-     * The workspace-scoped ({@code project_id = ''}) replay branch must SPARE a live row that shares an {@code id} with
-     * another project. A delete-by-ids fallback that cannot resolve a project is bridged with an empty project and
-     * replayed on the {@code (workspace_id, id)} key; its resurrection guard keys only on {@code (workspace_id, id)}, so
-     * this proves it does not over-delete a cross-project live copy. Complements the single-project
-     * {@link #deleteThenResurrectSurvivesTheReplay} and the full-key reused-id case in
-     * {@link #bufferedCutoverPreservesEveryDeletionAcrossExchange}.
-     */
-    @Test
-    void workspaceScopedReplaySparesLiveCrossProjectRow() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectA = ID_GENERATOR.generateId();
-        var projectB = ID_GENERATOR.generateId();
-        var reusedInstant = weekInstant(0, 1);
-        var reusedId = ID_GENERATOR.generateId(reusedInstant);
-        var reused = List.of(CategorizedId.builder().id(reusedId).createdAt(reusedInstant).build());
-        // Same id in two projects — ids are not globally unique.
-        seedTraces(reused, workspaceId, projectA);
-        seedTraces(reused, workspaceId, projectB);
-
-        var backfillStart = nowMicros();
-        for (int week = 0; week < SEED_WEEKS; week++) {
-            backfillWeek(week);
-        }
-
-        // Workspace-scoped delete: bridged with an empty project_id (the delete-by-ids fallback). The source LWD is
-        // workspace-scoped, so it removes the id from BOTH projects; then resurrect it in projectB only (a newer version
-        // wins under FINAL), so it is live again on the source in B and caught by the delta's last_updated_at arm.
-        recordDeletionEvents(Set.of(reusedId.toString()), workspaceId, "", "user_request");
-        lightweightDelete(Set.of(reusedId.toString()), workspaceId);
-        // Server-clock last_updated_at (a later now64(6), so >= backfillStart) — NOT the JVM clock, whose skew vs the
-        // container could put it below backfillStart and make the delta's last_updated_at arm miss the resurrection.
-        var resurrectedAt = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
-        insertRows(reused, workspaceId, projectB, "resurrected", _ -> resurrectedAt);
-
-        deltaInsert(backfillStart);
-        replayDeletions(backfillStart);
-        replayDeletions(backfillStart); // idempotent
-
-        assertThat(liveCountScoped("traces_local_v2", Set.of(reusedId.toString()), workspaceId, projectB))
-                .as("workspace-scoped replay spares the live projectB copy that shares an id with projectA")
-                .isEqualTo(1L);
-        // Known residual (OPIK-7483; the 000005 fingerprint flags it as an extra destination row, ok=0): because the id
-        // is live in B, the (workspace_id, id) guard skips the whole id, so the stale projectA copy is not removed here.
-        assertThat(liveCountScoped("traces_local_v2", Set.of(reusedId.toString()), workspaceId, projectA))
-                .as("documented residual: the stale other-project copy remains until OPIK-7483")
-                .isEqualTo(1L);
     }
 
     /**
@@ -994,12 +929,11 @@ class TracesLocalV2CutoverTest {
 
     /**
      * Reads the bridge for the cutover window and removes the captured deletes from the destination in a single
-     * mutation (mirrors 000002). Two branches, because the delete-by-ids path does not always resolve a trace's project:
-     * events WITH a project match the full key {@code (workspace_id, project_id, id)} (exact; a reused id in another
-     * project is untouched); events captured WITHOUT a project match {@code (workspace_id, id)} — otherwise those
-     * deletions silently leak across the swap. Each branch also requires the id is NOT currently live on the source
-     * (the resurrection guard), so a deleted-then-recreated id is not dropped. Returns the wall time so the runbook can
-     * size it against the buffer window.
+     * mutation (mirrors 000002). Single full-key branch: since OPIK-7483 every trace delete carries its project_id, so
+     * events match the full key {@code (workspace_id, project_id, id)} (exact; a reused id in another project is
+     * untouched) — without this replay those deletions silently leak across the swap. The branch also requires the id is
+     * NOT currently live on the source (the resurrection guard), so a deleted-then-recreated id is not dropped. Returns
+     * the wall time so the runbook can size it against the buffer window.
      */
     private long replayDeletions(String backfillStart) {
         var start = System.nanoTime();
@@ -1026,31 +960,6 @@ class TracesLocalV2CutoverTest {
                         SELECT
                             workspace_id,
                             project_id,
-                            id
-                        FROM traces
-                        WHERE id IN (
-                            SELECT toFixedString(deleted_id, 36)
-                            FROM deletion_events_local
-                            WHERE source_table = 'traces'
-                              AND event_time >= toDateTime64(:backfill_start, 6)
-                              AND length(deleted_id) = 36
-                        )
-                    )
-                )
-                OR (
-                    (workspace_id, id) IN (
-                        SELECT
-                            workspace_id,
-                            toFixedString(deleted_id, 36)
-                        FROM deletion_events_local
-                        WHERE source_table = 'traces'
-                          AND event_time >= toDateTime64(:backfill_start, 6)
-                          AND project_id = ''
-                          AND length(deleted_id) = 36
-                    )
-                    AND (workspace_id, id) NOT IN (
-                        SELECT
-                            workspace_id,
                             id
                         FROM traces
                         WHERE id IN (
@@ -1148,10 +1057,10 @@ class TracesLocalV2CutoverTest {
 
     /**
      * The shared reverse-replay (000004_rollback_reverse_replay): re-apply the deletes captured since
-     * {@code cutoverStart} onto the restored original, so they do not resurrect. Two branches — full key for events with
-     * a project, {@code (workspace_id, id)} for the workspace-scoped (empty-project) fallback. Unlike the forward replay
-     * it carries NO resurrection guard by design: rollback abandons post-cutover writes while honoring post-cutover
-     * deletes, so a bridged id is masked unconditionally (a guard would undo the user's delete). See the .sql header.
+     * {@code cutoverStart} onto the restored original, so they do not resurrect. Single full-key branch — since OPIK-7483
+     * every delete carries its project_id, so the replay matches {@code (workspace_id, project_id, id)}. Unlike the
+     * forward replay it carries NO resurrection guard by design: rollback abandons post-cutover writes while honoring
+     * post-cutover deletes, so a bridged id is masked unconditionally (a guard would undo the user's delete). See the .sql header.
      */
     private void reverseReplay(String cutoverStart) {
         execute("""
@@ -1166,16 +1075,6 @@ class TracesLocalV2CutoverTest {
                       AND event_time >= toDateTime64(:cutover_start, 6)
                       AND project_id != ''
                       AND length(project_id) = 36
-                      AND length(deleted_id) = 36
-                )
-                OR (workspace_id, id) IN (
-                    SELECT
-                        workspace_id,
-                        toFixedString(deleted_id, 36)
-                    FROM deletion_events_local
-                    WHERE source_table = 'traces'
-                      AND event_time >= toDateTime64(:cutover_start, 6)
-                      AND project_id = ''
                       AND length(deleted_id) = 36
                 )
                 SETTINGS allow_nondeterministic_mutations = 1,
@@ -1339,9 +1238,8 @@ class TracesLocalV2CutoverTest {
     }
 
     /**
-     * Batch INSERT into the bridge, mirroring {@code DeletionEventDAO}'s write shape. {@code projectId} is a string so a
-     * caller can pass {@code ""} to reproduce an unresolved delete (the delete-by-ids path records an empty project when
-     * it cannot resolve a trace's project).
+     * Batch INSERT into the bridge, mirroring {@code DeletionEventDAO}'s write shape. {@code projectId} is the real
+     * owning project of each deleted trace — since OPIK-7483 every trace delete carries it (no project-less events).
      */
     private void recordDeletionEvents(Set<String> ids, String workspaceId, String projectId, String reason) {
         var idList = List.copyOf(ids);

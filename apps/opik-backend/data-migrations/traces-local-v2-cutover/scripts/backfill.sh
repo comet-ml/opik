@@ -36,7 +36,7 @@
 #                             ClickHouse default); lower it on a memory-constrained data node. Applied to the INSERT.
 #   --divergence P            max tolerated |src-dst|/src per window before aborting. Default 0.0001 (0.01%).
 #   --pause-seconds S         sleep S seconds after each inserted window, to let destination merges catch up and bound
-#                             the part count / IO pressure. Default 0. Recommended 30-60 on the ~4 TB table at peak.
+#                             the part count / IO pressure. Default 0. Recommended 30-60 on a large table at peak.
 #   --min-free-factor F       abort at startup unless node free disk >= F x the current `traces` on-disk size (the
 #                             backfill writes a full second copy). Default 2.0. Pass 0 to skip the check. This is a
 #                             whole-node floor; on tiered storage validate per-volume (hot) headroom separately.
@@ -68,7 +68,7 @@ MAX_INSERT_BLOCK_SIZE=1048576  # rows: SETTINGS max_insert_block_size for the IN
                           # the smaller of this and min_insert_block_size_bytes (256 MB default), which dominates for wide
                           # trace rows; lower it on a memory-constrained node. 1048576 is the ClickHouse default.
 DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled window before aborting (0.01%).
-PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 at ~4 TB peak.
+PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 for a large table at peak.
 MIN_FREE_FACTOR="2.0"     # multiple of the current traces on-disk size that node free space must clear before starting.
 STATE_FILE="./traces_cutover_backfill_start"  # backfill_start is persisted here and reused on resume (keeps one anchor).
 CONFIRM_TIERED_HEADROOM=0 # required when the destination storage_policy is tiered/mismatched (see preflight_capacity).

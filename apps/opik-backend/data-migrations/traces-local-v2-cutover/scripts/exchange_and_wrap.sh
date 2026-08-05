@@ -8,8 +8,9 @@
 # still holding writes.
 #
 # The wrap is OPT-IN on purpose: a lightweight DELETE against a Distributed table is unsupported, so wrapping `traces`
-# breaks the product's trace-delete / retention paths until those DAOs target `traces_local`. The safe default is to
-# leave `traces` a MergeTree (deletes keep working) and apply the wrap later, once the DAOs are sharding-aware.
+# breaks the product's trace-delete / retention paths unless tracesDistributedWrapEnabled=true (OPIK-7455) routes those
+# mutations at `traces_local`. The safe default is to leave `traces` a MergeTree (deletes keep working) and apply the
+# wrap later, flipping that toggle in lockstep.
 #
 # Guarded like rollback.sh: it asserts the live `traces` topology matches the requested action before touching anything,
 # so a re-run cannot silently swap the tables back, and a partial EXCHANGE (swap done, post-swap RENAME not) is detected
@@ -25,8 +26,9 @@
 #                     replay nor the rollback reverse-replay otherwise).
 #   (default)         run ONLY the EXCHANGE (the data cutover), then stop — leaves `traces` a MergeTree where deletes
 #                     still work. The Distributed wrap is deferred (see above).
-#   --with-wrap       also apply the Distributed wrap in the same run (EXCHANGE + wrap). Use only once the delete/read
-#                     DAOs are sharding-aware. Mutually exclusive with --skip-wrap / --wrap-only.
+#   --with-wrap       also apply the Distributed wrap in the same run (EXCHANGE + wrap). Use only once
+#                     tracesDistributedWrapEnabled=true (OPIK-7455) is live so trace mutations target `traces_local`.
+#                     Mutually exclusive with --skip-wrap / --wrap-only.
 #   --skip-wrap       explicit alias for the default (EXCHANGE only); accepted for clarity and back-compat.
 #   --wrap-only       run ONLY the Distributed wrap on the already-swapped `traces` (no EXCHANGE, no new cutover_start)
 #                     — the deferred second half of a prior EXCHANGE-only run. Mutually exclusive with the above.
@@ -312,7 +314,7 @@ if [[ "$WITH_WRAP" == "1" ]]; then
     echo "Distributed wrap done: 'traces' fronts 'traces_local' via sipHash64(project_id)."
 else
     echo "Distributed wrap deferred (default). Deletes still work on the MergeTree 'traces'. Apply the wrap later with"
-    echo "'--wrap-only --confirm-maintenance --confirm-daos-retargeted' once the delete/read DAOs target traces_local."
+    echo "'--wrap-only --confirm-maintenance --confirm-daos-retargeted' once tracesDistributedWrapEnabled=true is live."
 fi
 
 echo "Restore databaseAnalytics.asyncInsertBusyTimeoutMaxMs to default, verify, and keep traces_pre_cutover_backup for the soak."
