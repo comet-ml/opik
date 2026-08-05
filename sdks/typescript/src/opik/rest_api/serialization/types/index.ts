@@ -623,5 +623,3 @@ export * from "./WorkspaceProjectUserCount.js";
 export * from "./WorkspaceSpansCount.js";
 export * from "./WorkspaceTraceCount.js";
 export * from "./WorkspaceUserPermissions.js";
-export * from "./WorkspaceVersion.js";
-export * from "./WorkspaceVersionOpikVersion.js";
