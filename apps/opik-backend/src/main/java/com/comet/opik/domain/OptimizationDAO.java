@@ -193,6 +193,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * <li>The hard-ceiling branch is guarded by {@code latest_status IN ('initialized', 'running')} and
      * not hoisted to a bare top-level {@code OR}: without the guard every run that merely finished longer
      * ago than the ceiling becomes a candidate and crowds genuine stalls out of the {@code LIMIT}.</li>
+     * <li>Both {@code ORDER BY}s put hard-capped runs first and only then sort by {@code latest_updated_at}.
+     * Ordering by the timestamp alone looks natural but inverts the priority for exactly the branch that
+     * carries the never-stuck-indefinitely guarantee: a metadata PATCH or an SDK re-upsert refreshes
+     * {@code last_updated_at}, so a zombie run still receiving writes sorts LAST and — unlike a
+     * soft-timeout candidate, which ages into position — never advances. It could then be truncated out
+     * of every pass by the bounds below.</li>
      * </ul>
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
@@ -213,7 +219,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         AND less(latest_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
                     OR (latest_status = 'running'
                         AND less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds)))
-                ORDER BY latest_updated_at ASC
+                ORDER BY less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds)) DESC,
+                         latest_updated_at ASC
                 LIMIT :candidate_limit
             ), candidate_trials AS (
                 SELECT
@@ -245,7 +252,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                OR (workspace_id, toString(id)) NOT IN (
                    SELECT workspace_id, optimization_id FROM active_optimizations
                )
-            ORDER BY latest_updated_at ASC
+            ORDER BY less(started_at, subtractSeconds(now64(6), :running_hard_timeout_seconds)) DESC,
+                     latest_updated_at ASC
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -283,14 +291,22 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * would make the CH 26.3 analyzer resolve the {@code argMax} ordering argument to the alias (an
      * aggregate inside an aggregate, ILLEGAL_AGGREGATION).
      *
-     * <p>{@code started_at} must resolve to the same instant here as in
+     * <p>{@code latest_status} and {@code started_at} must resolve to the same values here as in
      * {@link #FIND_STALLED_STUDIO_OPTIMIZATIONS}, or {@code isPastHardCap} could fire on a run the fleet
      * query selected on a soft timeout — short-circuiting the activity veto and reporting "exceeded the
-     * maximum running time" for a run that had not. Reading it off the winning version is what guarantees
-     * that: the fleet query aggregates over versions inside its lookback floor and this one over all of
-     * them, but the newest version is in both sets, so both {@code argMax} calls pick it. Deliberately no
-     * floor here — it would buy nothing and could return an empty result for a run whose row aged past the
-     * window, which the caller cannot distinguish from "no longer stalled".
+     * maximum running time" for a run that had not. Two things make that hold, and both are load-bearing:
+     * <ul>
+     * <li>Reading off the winning version. The fleet query aggregates over versions inside its lookback
+     * floor and this one over all of them, but a {@code >=} floor cannot drop the version carrying the
+     * maximum {@code last_updated_at}, so both {@code argMax} calls pick the same one. No floor here
+     * deliberately — it would buy nothing and could return an empty result for a run whose row aged past
+     * the window, which the caller cannot distinguish from "no longer stalled".</li>
+     * <li>The same {@code studio_config != ''} predicate. Without it the two aggregate over different
+     * version SETS, not just different windows: prod ClickHouse has no read-your-own-writes, so an SDK
+     * re-upsert that saw an empty {@code existing} writes a newest version with an empty
+     * {@code studio_config}. The fleet query excludes that version and picks an older one; an unfiltered
+     * snapshot would pick it, disagreeing on both fields.</li>
+     * </ul>
      */
     private static final String GET_STATUS_SNAPSHOT = """
             SELECT
@@ -300,6 +316,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM optimizations
             WHERE workspace_id = :workspace_id
               AND id = :id
+              AND studio_config != ''
             GROUP BY id
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -1169,10 +1186,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
             statement.bindNull("studio_config", String.class);
         }
 
-        // Both timestamps are bound as canonical ClickHouse DateTime64(9) literals, and the column
-        // DEFAULT that now64() used to supply is substituted here — see the UPSERT javadoc (OPIK-5694).
+        // Both timestamps are bound as canonical ClickHouse literals, with the column DEFAULT that
+        // now64() used to supply substituted here — see the UPSERT javadoc (OPIK-5694). The two columns
+        // have DIFFERENT precision and must be formatted accordingly: migration 000026 narrowed
+        // last_updated_at to DateTime64(6) while created_at stayed at (9). Writing a 9-digit literal into
+        // the (6) column re-trips the FORMAT Values parse path that javadoc exists to avoid; SpanDAO's
+        // last_updated_at binding is the precedent for the micros form.
         statement.bind("last_updated_at",
-                ClickHouseDateTimeFormat.formatNanos(
+                ClickHouseDateTimeFormat.formatMicros(
                         optimization.lastUpdatedAt() != null ? optimization.lastUpdatedAt() : Instant.now()));
 
         // created_at used to be absent from the INSERT, so the column DEFAULT re-stamped it on every

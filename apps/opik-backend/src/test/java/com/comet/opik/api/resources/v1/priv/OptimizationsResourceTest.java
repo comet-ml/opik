@@ -657,8 +657,7 @@ class OptimizationsResourceTest {
             // before dividing, so two trials in one candidate each carrying a finite 1e308 — which the
             // isFinite filter accepts — sum to +Inf. Without the mapper guard the driver's BigDecimal
             // conversion throws, ClickHouseResult.map swallows it, and the row silently disappears: the
-            // exact 404 this PR exists to fix, reopened by arithmetic rather than by input
-            //.
+            // exact 404 this PR exists to fix, reopened by arithmetic rather than by input.
             var candidateId = UUID.randomUUID().toString();
             var metadata = JsonUtils.getJsonNodeFromString(
                     JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));

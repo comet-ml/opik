@@ -73,11 +73,13 @@ class OptimizationStalledReaperConfigTest {
         // Dropwizard validation and will not boot against the 24h runningHardTimeout default. Failing
         // loudly is the intent — above the ceiling the activity window is unreachable, since the ceiling
         // always fires first — but the break must be explicit here and in config.yml's upgrade note
-        // rather than trivially "passing" on the one hours-scale value that stays under it
-        //.
+        // rather than trivially "passing" on the one hours-scale value that stays under it.
+        //
+        // runningHardTimeout is deliberately NOT set here: the whole point is the interaction with the
+        // config.yml DEFAULT that an upgrading deployment inherits, which validConfig() already mirrors.
+        // Overriding it would make this a copy of runningHardTimeoutBelowRunningTimeoutIsRejected.
         var config = validConfig()
                 .runningTimeout(Duration.hours(48))
-                .runningHardTimeout(Duration.hours(24))
                 .build();
 
         assertThat(validator.validate(config))

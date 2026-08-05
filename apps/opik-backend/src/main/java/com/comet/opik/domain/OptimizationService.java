@@ -416,10 +416,15 @@ class OptimizationServiceImpl implements OptimizationService {
                     // with SYSTEM_USER; getOrDefault keeps the analytics identity resolution tolerant.
                     String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
 
-                    // Validate cancellation request for Studio optimizations
+                    // Validate cancellation request for Studio optimizations. A run sitting on a
+                    // platform-detected failure counts as cancellable even though ERROR is terminal: the
+                    // reap may have been wrong and its worker may still be running, so refusing to cancel
+                    // would deny the user the one action that stops the work — the same reason a worker
+                    // report supersedes that ERROR below. A worker-reported failure stays uncancellable.
                     boolean isStudioCancellation = update.status() == OptimizationStatus.CANCELLED
                             && optimization.studioConfig() != null;
-                    boolean isNotCancellable = !CANCELLABLE_STATUSES.contains(optimization.status());
+                    boolean isNotCancellable = !CANCELLABLE_STATUSES.contains(optimization.status())
+                            && !isSystemDetectedFailure(optimization);
 
                     if (isStudioCancellation && isNotCancellable) {
                         return Mono.error(new ClientErrorException(
@@ -441,6 +446,8 @@ class OptimizationServiceImpl implements OptimizationService {
                     // (SYSTEM_ERROR_TYPE) — a worker-reported failure and a user CANCELLED are real
                     // outcomes and still win. A genuinely dead run reports nothing, so nothing supersedes
                     // it, and the hard ceiling still bounds a zombie that reports without ever finishing.
+                    // CANCELLED is admitted along with the non-terminal statuses: it is the user acting on
+                    // the same doubt, and the cancellation signal above needs the write to land.
                     boolean supersedesSystemFailure = isSystemDetectedFailure(optimization)
                             && update.status() != null
                             && update.status() != OptimizationStatus.ERROR;

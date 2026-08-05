@@ -483,6 +483,42 @@ class OptimizationStalledReaperServiceTest {
     }
 
     @Test
+    @DisplayName("a wrongly reaped run can still be cancelled")
+    void systemDetectedFailureRemainsCancellable() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        reconcile(NEVER, IMMEDIATE, BATCH_SIZE);
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+
+        // The reap may have been wrong and the worker may still be burning budget, so Cancel is the one
+        // action that stops the work. Refusing it with the usual 409 for a terminal status would deny the
+        // user exactly that — same doubt the supersede rule acts on.
+        transition(id, OptimizationStatus.CANCELLED);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("a worker-reported failure stays uncancellable")
+    void workerReportedFailureIsNotCancellable() {
+        var id = seedStudioRun(OptimizationStatus.RUNNING);
+        optimizationResourceClient.update(id, OptimizationUpdate.builder()
+                .status(OptimizationStatus.ERROR)
+                .errorInfo(ErrorInfo.builder()
+                        .exceptionType("ValueError")
+                        .message("the optimizer raised")
+                        .traceback("Traceback (most recent call last): ...")
+                        .build())
+                .build(), API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        // A failure the worker reported is a real outcome — there is nothing left to stop, so the
+        // pre-existing 409 must still apply.
+        optimizationResourceClient.update(id, OptimizationUpdate.builder()
+                .status(OptimizationStatus.CANCELLED).build(), API_KEY, TEST_WORKSPACE_NAME, 409);
+
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+    }
+
+    @Test
     @DisplayName("a worker-reported failure is not superseded by a later worker report")
     void workerReportedFailureIsNotSuperseded() {
         var id = seedStudioRun(OptimizationStatus.RUNNING);
