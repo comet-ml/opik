@@ -47,7 +47,7 @@ jobs:
     outputs:
       python_versions: ${{ steps.pick.outputs.versions }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/actions/select-e2e-matrix
           sparse-checkout-cone-mode: false
@@ -76,7 +76,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python ${{matrix.python_version}}
         uses: actions/setup-python@v7
@@ -158,7 +158,7 @@ jobs:
     if: always() && needs.e2e-tests.result == 'failure' && github.event_name != 'pull_request'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false

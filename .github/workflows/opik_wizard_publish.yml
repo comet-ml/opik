@@ -40,7 +40,7 @@ jobs:
         working-directory: sdks/typescript/src/opik/configure
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0

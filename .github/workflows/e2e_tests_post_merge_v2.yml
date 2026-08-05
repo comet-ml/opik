@@ -67,7 +67,7 @@ jobs:
       # PHASE 1: Checkout & Environment Setup
       # ========================================
       - name: "📥 Checkout repository"
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: "🔍 Get PR/commit information"
         id: get-pr-info
@@ -382,7 +382,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false

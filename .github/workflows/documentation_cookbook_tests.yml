@@ -36,7 +36,7 @@ jobs:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
       OPIK_SENTRY_ENABLE: False
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
