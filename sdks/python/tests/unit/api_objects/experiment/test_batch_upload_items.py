@@ -1,10 +1,14 @@
-"""Tests for ``Experiment.bulk_upload_items`` — validation, batching and retry."""
+"""Tests for ``Experiment.batch_upload_items`` — validation, batching and retry."""
 
 import datetime
+import itertools
 import json
+import threading
+import time
 from typing import Any, List, Optional, Tuple
 from unittest.mock import Mock, patch
 
+import httpx
 import pytest
 
 from opik import exceptions
@@ -50,12 +54,12 @@ def _sent_batch_sizes(mock_rest_client: Mock) -> List[int]:
 
 
 class TestBulkUploadItemsRequest:
-    def test_bulk_upload_items__single_item__sends_one_request_with_experiment_identity(
+    def test_batch_upload_items__single_item__sends_one_request_with_experiment_identity(
         self,
     ) -> None:
         experiment, mock_rest_client = _create_experiment(project_name="my-project")
 
-        experiment.bulk_upload_items(
+        experiment.batch_upload_items(
             [
                 _record(
                     trace=bulk_item.ExperimentItemBulkTrace(
@@ -83,32 +87,32 @@ class TestBulkUploadItemsRequest:
             sent_item.feedback_scores[0].source == constants.FEEDBACK_SCORE_SOURCE_SDK
         )
 
-    def test_bulk_upload_items__empty_list__no_request_is_sent(self) -> None:
+    def test_batch_upload_items__empty_list__no_request_is_sent(self) -> None:
         experiment, mock_rest_client = _create_experiment()
 
-        experiment.bulk_upload_items([])
+        experiment.batch_upload_items([])
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
-    def test_bulk_upload_items__explicit_project_name__overrides_experiment_project(
+    def test_batch_upload_items__explicit_project_name__overrides_experiment_project(
         self,
     ) -> None:
         experiment, mock_rest_client = _create_experiment(project_name="experiment-one")
 
-        experiment.bulk_upload_items([_record()], project_name="explicit-one")
+        experiment.batch_upload_items([_record()], project_name="explicit-one")
 
         kwargs = mock_rest_client.experiments.experiment_items_bulk.call_args.kwargs
         assert kwargs["project_name"] == "explicit-one"
 
 
 class TestBulkUploadItemsBatching:
-    def test_bulk_upload_items__more_items_than_max_batch_size__splits_by_count(
+    def test_batch_upload_items__more_items_than_max_batch_size__splits_by_count(
         self,
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
         items_count = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * 2 + 500
 
-        experiment.bulk_upload_items(
+        experiment.batch_upload_items(
             [_record(dataset_item_id=f"item-{i}") for i in range(items_count)]
         )
 
@@ -120,13 +124,13 @@ class TestBulkUploadItemsBatching:
         ]
         assert sum(batch_sizes) == items_count
 
-    def test_bulk_upload_items__items_exceeding_payload_limit__splits_by_size(
+    def test_batch_upload_items__items_exceeding_payload_limit__splits_by_size(
         self,
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
         one_megabyte_payload = {"padding": "x" * 1_000_000}
 
-        experiment.bulk_upload_items(
+        experiment.batch_upload_items(
             [
                 _record(
                     dataset_item_id=f"item-{i}",
@@ -173,12 +177,12 @@ class TestBulkUploadItemsSerialization:
             experiments_client=Mock(),
         )
 
-        experiment.bulk_upload_items(records)
+        experiment.batch_upload_items(records)
 
         assert len(route.calls) == 1
         return json.loads(route.calls[0].request.read())["items"]
 
-    def test_bulk_upload_items__trace_only__evaluate_task_result_is_omitted(
+    def test_batch_upload_items__trace_only__evaluate_task_result_is_omitted(
         self, respx_mock: Any
     ) -> None:
         sent_item = self._sent_items(
@@ -195,7 +199,7 @@ class TestBulkUploadItemsSerialization:
         assert "evaluate_task_result" not in sent_item
         assert "trace" in sent_item
 
-    def test_bulk_upload_items__evaluate_task_result_only__trace_is_omitted(
+    def test_batch_upload_items__evaluate_task_result_only__trace_is_omitted(
         self, respx_mock: Any
     ) -> None:
         sent_item = self._sent_items(
@@ -205,7 +209,7 @@ class TestBulkUploadItemsSerialization:
         assert "trace" not in sent_item
         assert sent_item["evaluate_task_result"] == {"answer": "a"}
 
-    def test_bulk_upload_items__no_spans_or_scores__keys_are_omitted(
+    def test_batch_upload_items__no_spans_or_scores__keys_are_omitted(
         self, respx_mock: Any
     ) -> None:
         sent_item = self._sent_items(
@@ -215,7 +219,7 @@ class TestBulkUploadItemsSerialization:
         assert "spans" not in sent_item
         assert "feedback_scores" not in sent_item
 
-    def test_bulk_upload_items__trace_and_span_without_ids__ids_are_generated(
+    def test_batch_upload_items__trace_and_span_without_ids__ids_are_generated(
         self, respx_mock: Any
     ) -> None:
         """Ids must be set client-side so a retry re-sends the same ones.
@@ -240,7 +244,76 @@ class TestBulkUploadItemsSerialization:
         assert sent_item["trace"]["id"] is not None
         assert sent_item["spans"][0]["id"] is not None
 
-    def test_bulk_upload_items__caller_supplied_ids__are_preserved(
+    def test_batch_upload_items__same_records_uploaded_twice__ids_differ(
+        self, respx_mock: Any
+    ) -> None:
+        """Pins the documented limitation: a second call re-mints ids.
+
+        Ids are generated during conversion, which happens once per call, so a
+        rate-limit retry re-sends identical ids but an explicit second call does
+        not. Callers who need to retry must set ``id`` themselves — asserting the
+        difference here keeps the docstring honest if that ever changes silently.
+        """
+        records = [
+            _record(
+                trace=bulk_item.ExperimentItemBulkTrace(start_time=START_TIME),
+                spans=[bulk_item.ExperimentItemBulkSpan(start_time=START_TIME)],
+            )
+        ]
+
+        first = self._sent_items(respx_mock, records)[0]
+        respx_mock.reset()
+        second = self._sent_items(respx_mock, records)[0]
+
+        assert first["trace"]["id"] != second["trace"]["id"]
+        assert first["spans"][0]["id"] != second["spans"][0]["id"]
+
+    def test_batch_upload_items__retry_after_rate_limit__resends_identical_ids(
+        self, respx_mock: Any
+    ) -> None:
+        """A 429 retry must not duplicate data.
+
+        Conversion runs once, before the batching loop, so the retried request
+        has to carry byte-identical ids. This is the guarantee the docstring
+        makes, and the one that actually protects users from duplicates.
+        """
+        route = respx_mock.put(url__regex=r".*/experiments/items/bulk").mock(
+            side_effect=[
+                httpx.Response(429, headers={"RateLimit-Reset": "0"}),
+                httpx.Response(204),
+            ]
+        )
+
+        rest_client = rest_api_client.OpikApi(
+            base_url=_BASE_URL, api_key="api-key", workspace_name="workspace"
+        )
+        experiment = experiment_module.Experiment(
+            id="experiment-id",
+            name="experiment-name",
+            dataset_name="dataset-name",
+            rest_client=rest_client,
+            streamer=Mock(),
+            experiments_client=Mock(),
+        )
+
+        with patch("opik.api_objects.rest_helpers._sleep"):
+            experiment.batch_upload_items(
+                [
+                    _record(
+                        trace=bulk_item.ExperimentItemBulkTrace(start_time=START_TIME),
+                        spans=[bulk_item.ExperimentItemBulkSpan(start_time=START_TIME)],
+                    )
+                ]
+            )
+
+        assert len(route.calls) == 2
+        first, second = (
+            json.loads(call.request.read())["items"][0] for call in route.calls
+        )
+        assert first["trace"]["id"] == second["trace"]["id"]
+        assert first["spans"][0]["id"] == second["spans"][0]["id"]
+
+    def test_batch_upload_items__caller_supplied_ids__are_preserved(
         self, respx_mock: Any
     ) -> None:
         sent_item = self._sent_items(
@@ -265,13 +338,13 @@ class TestBulkUploadItemsSerialization:
 
 class TestBulkUploadItemsConcurrency:
     @pytest.mark.parametrize("num_threads", [1, 2, 4, 8, 16])
-    def test_bulk_upload_items__any_thread_count__every_batch_is_sent_exactly_once(
+    def test_batch_upload_items__any_thread_count__every_batch_is_sent_exactly_once(
         self, num_threads: int
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
         items_count = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * 4 + 7
 
-        experiment.bulk_upload_items(
+        experiment.batch_upload_items(
             [_record(dataset_item_id=f"item-{i}") for i in range(items_count)],
             num_threads=num_threads,
         )
@@ -285,18 +358,61 @@ class TestBulkUploadItemsConcurrency:
             f"item-{i}" for i in range(items_count)
         )
 
-    def test_bulk_upload_items__num_threads_below_one__raises_validation_error(
+    def test_batch_upload_items__num_threads_below_one__raises_validation_error(
         self,
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items([_record()], num_threads=0)
+            experiment.batch_upload_items([_record()], num_threads=0)
 
         assert "num_threads must be at least 1" in str(exc_info.value)
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
-    def test_bulk_upload_items__multiple_threads__batch_failure_propagates(
+    def test_batch_upload_items__batch_stuck_when_another_fails__returns_without_waiting(
+        self,
+    ) -> None:
+        """The failure path must not join batches that are still running.
+
+        An earlier fix used ``shutdown(wait=False, cancel_futures=True)`` inside
+        a ``with`` block, but ``ThreadPoolExecutor.__exit__`` calls
+        ``shutdown(wait=True)`` regardless, so the caller was still parked behind
+        a batch stuck in the unbounded rate-limit retry loop.
+        """
+        experiment, mock_rest_client = _create_experiment()
+        release_stuck_batch = threading.Event()
+        stuck_batch_entered = threading.Event()
+        call_count = itertools.count()
+
+        def upload(**kwargs: Any) -> None:
+            if next(call_count) == 0:
+                stuck_batch_entered.set()
+                # Stands in for a batch parked on repeated 429s.
+                release_stuck_batch.wait(timeout=30)
+                return None
+            raise ApiError(status_code=400, headers={}, body="bad request")
+
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = upload
+
+        records = [
+            _record(dataset_item_id=f"item-{i}")
+            for i in range(constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * 3)
+        ]
+
+        try:
+            started_at = time.monotonic()
+            with pytest.raises(ApiError):
+                experiment.batch_upload_items(records, num_threads=3)
+            elapsed = time.monotonic() - started_at
+
+            assert stuck_batch_entered.is_set()
+            # Generous bound: the point is that it returns rather than joining
+            # the 30s wait above.
+            assert elapsed < 10
+        finally:
+            release_stuck_batch.set()
+
+    def test_batch_upload_items__multiple_threads__batch_failure_propagates(
         self,
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
@@ -305,7 +421,7 @@ class TestBulkUploadItemsConcurrency:
         )
 
         with pytest.raises(ApiError):
-            experiment.bulk_upload_items(
+            experiment.batch_upload_items(
                 [
                     _record(dataset_item_id=f"item-{i}")
                     for i in range(constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * 3)
@@ -316,7 +432,7 @@ class TestBulkUploadItemsConcurrency:
 
 class TestBulkUploadItemsValidation:
     @pytest.mark.parametrize("field_name", ["input", "output", "metadata"])
-    def test_bulk_upload_items__trace_json_field_is_a_string__raises_validation_error(
+    def test_batch_upload_items__trace_json_field_is_a_string__raises_validation_error(
         self, field_name: str
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
@@ -325,29 +441,29 @@ class TestBulkUploadItemsValidation:
         )
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items([_record(trace=trace)])
+            experiment.batch_upload_items([_record(trace=trace)])
 
         assert f"items[0].trace.{field_name} must be a dict" in str(exc_info.value)
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
-    def test_bulk_upload_items__span_output_is_a_string__raises_validation_error(
+    def test_batch_upload_items__span_output_is_a_string__raises_validation_error(
         self,
     ) -> None:
         experiment, _ = _create_experiment()
         span = bulk_item.ExperimentItemBulkSpan(start_time=START_TIME, output="plain")
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items([_record(spans=[span])])
+            experiment.batch_upload_items([_record(spans=[span])])
 
         assert "items[0].spans[0].output must be a dict" in str(exc_info.value)
 
-    def test_bulk_upload_items__both_trace_and_evaluate_task_result__raises_validation_error(
+    def test_batch_upload_items__both_trace_and_evaluate_task_result__raises_validation_error(
         self,
     ) -> None:
         experiment, _ = _create_experiment()
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items(
+            experiment.batch_upload_items(
                 [
                     _record(
                         evaluate_task_result={"answer": "a"},
@@ -358,14 +474,14 @@ class TestBulkUploadItemsValidation:
 
         assert "but not both" in str(exc_info.value)
 
-    def test_bulk_upload_items__neither_trace_nor_evaluate_task_result__raises_validation_error(
+    def test_batch_upload_items__neither_trace_nor_evaluate_task_result__raises_validation_error(
         self,
     ) -> None:
         """Without either field the backend stores a hidden trace with null output."""
         experiment, mock_rest_client = _create_experiment()
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items(
+            experiment.batch_upload_items(
                 [bulk_item.ExperimentItemBulkRecord(dataset_item_id="dataset-item-id")]
             )
 
@@ -374,17 +490,17 @@ class TestBulkUploadItemsValidation:
         )
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
-    def test_bulk_upload_items__evaluate_task_result_is_a_string__raises_validation_error(
+    def test_batch_upload_items__evaluate_task_result_is_a_string__raises_validation_error(
         self,
     ) -> None:
         experiment, _ = _create_experiment()
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items([_record(evaluate_task_result="plain")])
+            experiment.batch_upload_items([_record(evaluate_task_result="plain")])
 
         assert "items[0].evaluate_task_result must be a dict" in str(exc_info.value)
 
-    def test_bulk_upload_items__trace_project_name_differs_from_upload__raises_validation_error(
+    def test_batch_upload_items__trace_project_name_differs_from_upload__raises_validation_error(
         self,
     ) -> None:
         experiment, _ = _create_experiment()
@@ -393,13 +509,13 @@ class TestBulkUploadItemsValidation:
         )
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items(
+            experiment.batch_upload_items(
                 [_record(trace=trace)], project_name="upload-project"
             )
 
         assert "does not match the upload project_name" in str(exc_info.value)
 
-    def test_bulk_upload_items__trace_project_name_differs_only_by_case__is_accepted(
+    def test_batch_upload_items__trace_project_name_differs_only_by_case__is_accepted(
         self,
     ) -> None:
         """The backend compares project names case-insensitively, so we must too."""
@@ -408,15 +524,56 @@ class TestBulkUploadItemsValidation:
             start_time=START_TIME, project_name="My-Project"
         )
 
-        experiment.bulk_upload_items([_record(trace=trace)], project_name="my-project")
+        experiment.batch_upload_items([_record(trace=trace)], project_name="my-project")
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
 
-    def test_bulk_upload_items__all_failures_reported_together(self) -> None:
+    @pytest.mark.parametrize(
+        "score,expected",
+        [
+            ({"value": 1.0}, "feedback_scores[0].name is required"),
+            ({"name": "acc"}, "feedback_scores[0].value is required"),
+            (
+                {"name": "acc", "value": "high"},
+                "feedback_scores[0].value is required and must be a number",
+            ),
+        ],
+    )
+    def test_batch_upload_items__malformed_feedback_score__raises_validation_error(
+        self, score: Any, expected: str
+    ) -> None:
+        """Previously surfaced as a raw KeyError from the conversion step."""
+        experiment, mock_rest_client = _create_experiment()
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items([_record(feedback_scores=[score])])
+
+        assert expected in str(exc_info.value)
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
+    def test_batch_upload_items__malformed_error_info__raises_validation_error(
+        self,
+    ) -> None:
+        """Previously surfaced as a raw pydantic ValidationError."""
+        experiment, mock_rest_client = _create_experiment()
+        trace = bulk_item.ExperimentItemBulkTrace(
+            start_time=START_TIME,
+            error_info={"message": "boom"},
+        )
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items([_record(trace=trace)])
+
+        message = str(exc_info.value)
+        assert "trace.error_info.exception_type is required" in message
+        assert "trace.error_info.traceback is required" in message
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
+    def test_batch_upload_items__all_failures_reported_together(self) -> None:
         experiment, _ = _create_experiment()
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items(
+            experiment.batch_upload_items(
                 [
                     _record(evaluate_task_result="plain"),
                     _record(dataset_item_id=""),
@@ -427,7 +584,7 @@ class TestBulkUploadItemsValidation:
         assert "items[0].evaluate_task_result must be a dict" in message
         assert "items[1].dataset_item_id must be a non-empty string" in message
 
-    def test_bulk_upload_items__single_item_larger_than_request_limit__raises_validation_error(
+    def test_batch_upload_items__single_item_larger_than_request_limit__raises_validation_error(
         self,
     ) -> None:
         """An oversized item would otherwise be sent alone and rejected with a 422."""
@@ -437,7 +594,7 @@ class TestBulkUploadItemsValidation:
         )
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
-            experiment.bulk_upload_items([_record(trace=oversized_trace)])
+            experiment.batch_upload_items([_record(trace=oversized_trace)])
 
         assert "exceeds the" in str(exc_info.value)
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
@@ -445,7 +602,7 @@ class TestBulkUploadItemsValidation:
 
 class TestBulkUploadItemsRateLimitRetry:
     @patch("opik.api_objects.rest_helpers._sleep")
-    def test_bulk_upload_items__429_with_retry_after_header__retries_with_correct_delay(
+    def test_batch_upload_items__429_with_retry_after_header__retries_with_correct_delay(
         self, mock_sleep: Mock
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
@@ -454,13 +611,13 @@ class TestBulkUploadItemsRateLimitRetry:
             None,
         ]
 
-        experiment.bulk_upload_items([_record()])
+        experiment.batch_upload_items([_record()])
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 2
         mock_sleep.assert_called_once_with(5.0)
 
     @patch("opik.api_objects.rest_helpers._sleep")
-    def test_bulk_upload_items__429_without_header__uses_fallback_delay(
+    def test_batch_upload_items__429_without_header__uses_fallback_delay(
         self, mock_sleep: Mock
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
@@ -469,13 +626,13 @@ class TestBulkUploadItemsRateLimitRetry:
             None,
         ]
 
-        experiment.bulk_upload_items([_record()])
+        experiment.batch_upload_items([_record()])
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 2
         mock_sleep.assert_called_once_with(1)
 
     @patch("opik.api_objects.rest_helpers._sleep")
-    def test_bulk_upload_items__non_429_error__raises_without_retrying(
+    def test_batch_upload_items__non_429_error__raises_without_retrying(
         self, mock_sleep: Mock
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
@@ -484,13 +641,13 @@ class TestBulkUploadItemsRateLimitRetry:
         )
 
         with pytest.raises(ApiError):
-            experiment.bulk_upload_items([_record()])
+            experiment.batch_upload_items([_record()])
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
         mock_sleep.assert_not_called()
 
     @patch("opik.api_objects.rest_helpers._sleep")
-    def test_bulk_upload_items__batch_fails__remaining_batches_are_not_sent(
+    def test_batch_upload_items__batch_fails__remaining_batches_are_not_sent(
         self, mock_sleep: Mock
     ) -> None:
         """Fail-fast, matching Dataset.insert: the caller retries the whole call."""
@@ -503,7 +660,7 @@ class TestBulkUploadItemsRateLimitRetry:
         items_count = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * 2 + 1
 
         with pytest.raises(ApiError):
-            experiment.bulk_upload_items(
+            experiment.batch_upload_items(
                 [_record(dataset_item_id=f"item-{i}") for i in range(items_count)]
             )
 

@@ -29,6 +29,46 @@ def _validate_json_like_fields(
         )
 
 
+def _validate_feedback_score(
+    score: Any,
+    failure_reasons: List[str],
+    location: str,
+) -> None:
+    """Check the keys the conversion reads, which would otherwise raise KeyError."""
+    if not isinstance(score, dict):
+        failure_reasons.append(f"{location} must be a dict, got {type(score).__name__}")
+        return
+
+    if not score.get("name"):
+        failure_reasons.append(f"{location}.name is required and must be non-empty")
+
+    value = score.get("value")
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        failure_reasons.append(f"{location}.value is required and must be a number")
+
+
+def _validate_error_info(
+    error_info: Any,
+    failure_reasons: List[str],
+    location: str,
+) -> None:
+    """Check the fields the wire model requires, avoiding a raw pydantic error."""
+    if error_info is None:
+        return
+
+    if not isinstance(error_info, dict):
+        failure_reasons.append(
+            f"{location}.error_info must be a dict, got {type(error_info).__name__}"
+        )
+        return
+
+    for required_key in ("exception_type", "traceback"):
+        if not error_info.get(required_key):
+            failure_reasons.append(
+                f"{location}.error_info.{required_key} is required and must be non-empty"
+            )
+
+
 def _validate_record(
     record: bulk_item.ExperimentItemBulkRecord,
     index: int,
@@ -61,10 +101,18 @@ def _validate_record(
 
     if record.trace is not None:
         _validate_json_like_fields(record.trace, failure_reasons, f"{location}.trace")
+        _validate_error_info(
+            record.trace.error_info, failure_reasons, f"{location}.trace"
+        )
 
     for span_index, span in enumerate(record.spans or []):
-        _validate_json_like_fields(
-            span, failure_reasons, f"{location}.spans[{span_index}]"
+        span_location = f"{location}.spans[{span_index}]"
+        _validate_json_like_fields(span, failure_reasons, span_location)
+        _validate_error_info(span.error_info, failure_reasons, span_location)
+
+    for score_index, score in enumerate(record.feedback_scores or []):
+        _validate_feedback_score(
+            score, failure_reasons, f"{location}.feedback_scores[{score_index}]"
         )
 
 
@@ -110,7 +158,7 @@ def validate_records(
 
     if failure_reasons:
         raise exceptions.ValidationError(
-            prefix="bulk_upload_items", failure_reasons=failure_reasons
+            prefix="batch_upload_items", failure_reasons=failure_reasons
         )
 
 

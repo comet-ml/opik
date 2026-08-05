@@ -48,7 +48,7 @@ class ExperimentItemBulkSpan:
 @dataclasses.dataclass
 class ExperimentItemBulkRecord:
     """
-    A single experiment item to upload via :meth:`Experiment.bulk_upload_items`.
+    A single experiment item to upload via :meth:`Experiment.batch_upload_items`.
 
     Provide either ``evaluate_task_result`` (the backend creates the trace) or
     ``trace`` (you supply it), but never both.

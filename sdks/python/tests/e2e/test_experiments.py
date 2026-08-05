@@ -383,7 +383,7 @@ def test__experiment_scores__happy_path(
     )
 
 
-def test__bulk_upload_items__happy_path(
+def test__batch_upload_items__happy_path(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """Upload experiment items with their traces, spans and scores in one call."""
@@ -416,7 +416,7 @@ def test__bulk_upload_items__happy_path(
         "What is the capital of Poland?": "Warsaw",
     }
 
-    experiment.bulk_upload_items(
+    experiment.batch_upload_items(
         [
             opik.ExperimentItemBulkRecord(
                 dataset_item_id=dataset_item["id"],
@@ -465,7 +465,7 @@ def test__bulk_upload_items__happy_path(
         ]
 
 
-def test__bulk_upload_items__output_passed_as_string__raises_validation_error(
+def test__batch_upload_items__output_passed_as_string__raises_validation_error(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """The SDK rejects a stringified output before it reaches the backend."""
@@ -480,7 +480,7 @@ def test__bulk_upload_items__output_passed_as_string__raises_validation_error(
     )
 
     with pytest.raises(opik.exceptions.ValidationError):
-        experiment.bulk_upload_items(
+        experiment.batch_upload_items(
             [
                 opik.ExperimentItemBulkRecord(
                     dataset_item_id=dataset_items[0]["id"],

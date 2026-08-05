@@ -142,7 +142,7 @@ class Experiment:
             "Successfully sent experiment items bulk batch of size %d", len(batch)
         )
 
-    def bulk_upload_items(
+    def batch_upload_items(
         self,
         items: List[bulk_item.ExperimentItemBulkRecord],
         project_name: Optional[str] = None,
@@ -186,7 +186,7 @@ class Experiment:
         """
         if num_threads < 1:
             raise exceptions.ValidationError(
-                prefix="bulk_upload_items",
+                prefix="batch_upload_items",
                 failure_reasons=[f"num_threads must be at least 1, got {num_threads}"],
             )
 
@@ -223,27 +223,31 @@ class Experiment:
                 )
             return
 
-        with futures.ThreadPoolExecutor(
+        # Deliberately not a `with` block: ThreadPoolExecutor.__exit__ always
+        # calls shutdown(wait=True), which would re-join batches we just chose
+        # not to wait for and park the caller behind a batch stuck in the
+        # rate-limit retry loop.
+        pool = futures.ThreadPoolExecutor(
             max_workers=num_threads, thread_name_prefix="opik_experiment_items_bulk"
-        ) as pool:
-            submitted = [
-                pool.submit(
-                    self._bulk_upload_batch_with_retry,
-                    batch,
-                    project_name=resolved_project_name,
-                )
-                for batch in batches
-            ]
-            try:
-                for future in futures.as_completed(submitted):
-                    future.result()
-            except BaseException:
-                # Fail fast without blocking. cancel_futures drops batches that
-                # have not started; wait=False means we do not join batches that
-                # are already in flight, which could otherwise be parked in the
-                # rate-limit retry loop and hang the caller indefinitely.
-                pool.shutdown(wait=False, cancel_futures=True)
-                raise
+        )
+        submitted = [
+            pool.submit(
+                self._bulk_upload_batch_with_retry,
+                batch,
+                project_name=resolved_project_name,
+            )
+            for batch in batches
+        ]
+        try:
+            for future in futures.as_completed(submitted):
+                future.result()
+        except BaseException:
+            # Fail fast: drop batches that have not started and return without
+            # joining the ones already in flight.
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+        else:
+            pool.shutdown(wait=True)
 
     @staticmethod
     def _raise_on_oversized_items(
@@ -269,7 +273,7 @@ class Experiment:
 
         if failure_reasons:
             raise exceptions.ValidationError(
-                prefix="bulk_upload_items", failure_reasons=failure_reasons
+                prefix="batch_upload_items", failure_reasons=failure_reasons
             )
 
     def get_items(
