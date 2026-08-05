@@ -323,13 +323,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 LEFT JOIN (
                     SELECT trace_id, sum(total_estimated_cost) AS total_estimated_cost
                     FROM (
-                        SELECT workspace_id, project_id, trace_id, parent_span_id, id, total_estimated_cost, last_updated_at
+                        SELECT workspace_id, project_id, trace_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                         AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT trace_id FROM experiment_items_final))
-                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
                     )
                     GROUP BY trace_id
                 ) AS s ON t.id = s.trace_id
