@@ -4,7 +4,7 @@ import jakarta.ws.rs.ProcessingException;
 import lombok.Getter;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.http.NoHttpResponseException;
+import org.apache.hc.core5.http.NoHttpResponseException;
 import reactor.util.retry.Retry;
 import reactor.util.retry.RetryBackoffSpec;
 

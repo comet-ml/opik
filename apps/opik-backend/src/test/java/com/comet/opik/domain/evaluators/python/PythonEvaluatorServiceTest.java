@@ -274,7 +274,7 @@ class PythonEvaluatorServiceTest {
             doAnswer(invocation -> {
                 InvocationCallback<Response> callback = invocation.getArgument(1);
                 callback.failed(new ProcessingException("The target server failed to respond",
-                        new org.apache.http.NoHttpResponseException("The target server failed to respond")));
+                        new org.apache.hc.core5.http.NoHttpResponseException("The target server failed to respond")));
                 return null;
             }).doAnswer(invocation -> {
                 InvocationCallback<Response> callback = invocation.getArgument(1);
