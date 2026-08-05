@@ -162,13 +162,12 @@ anthropic:
   - id: "claude-haiku-4-5-20251001"
     label: "Claude Haiku 4.5"
     structuredOutput: true
-  - id: "claude-opus-4-1-20250805"
-    label: "Claude Opus 4.1"
-    structuredOutput: true
   - id: "claude-fable-5"
     label: "Claude Fable 5"
     structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
+  - id: "claude-opus-4-1-20250805"
+    structuredOutput: true
   - id: "claude-opus-4-20250514"
   - id: "claude-sonnet-4-20250514"
   - id: "claude-sonnet-4-5-20250929"

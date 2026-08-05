@@ -155,10 +155,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Haiku 4.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
-      label: "Claude Opus 4.1",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
       label: "Claude Fable 5",
     },
