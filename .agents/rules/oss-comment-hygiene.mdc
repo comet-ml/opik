@@ -26,8 +26,6 @@ No match on text **and** enclosing identity → **do nothing**. Do not ask to tr
 
 Flag (attention only) if the comment goes beyond what the public Opik code needs — e.g. private pricing tables, prod traffic stats, agent/client/proxy wire-path narratives (any coding agent or IDE client), private-repo cross-links, or how sister services bill. Prefer a short public fact (`speed` from `cipx.call.config`; `''` = default) over a private-product essay.
 
-Canonical bad pattern: long migration/DAO comments like those reviewed on `comet-ml/opik#7725` (fast-mode / `cipx_*` persistence).
-
 ## Attention only
 
 Warn the author before merge. Do not block. Do not rewrite unless asked.

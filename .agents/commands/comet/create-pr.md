@@ -175,7 +175,7 @@ Follow `.agents/rules/oss-comment-hygiene.mdc`.
 
 No match on text **and** enclosing identity → **continue silently**. Do not judge, trim, or mention ordinary Opik comments.
 
-**When the gate matches:** flag comments that are more than minimal for public Opik — private pricing, prod stats, agent/client/proxy wire-path essays (any coding agent or IDE client), private-repo links, sister-service billing narratives. Reference pattern: verbose `cipx_*` comments on `comet-ml/opik#7725`. Show file paths / hunks; continue. Do not block. Do not rewrite unless asked.
+**When the gate matches:** flag comments that are more than minimal for public Opik — private pricing, prod stats, agent/client/proxy wire-path essays (any coding agent or IDE client), private-repo links, sister-service billing narratives. Show file paths / hunks; continue. Do not block. Do not rewrite unless asked.
 
 ---
 
