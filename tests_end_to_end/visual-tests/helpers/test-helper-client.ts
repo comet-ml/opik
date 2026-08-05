@@ -67,6 +67,16 @@ export interface Experiment {
   dataset_name?: string;
 }
 
+export interface Environment {
+  id: string;
+  name: string;
+}
+
+export interface ProviderApiKey {
+  id: string;
+  provider: string;
+}
+
 export interface Prompt {
   name: string;
   prompt: string;
@@ -800,6 +810,80 @@ export class TestHelperClient {
       });
     } catch (error) {
       throw this.handleError(error, 'Failed to delete feedback definition');
+    }
+  }
+
+  // Environment methods
+  async createEnvironment(
+    name: string,
+    options?: { description?: string; color?: string }
+  ): Promise<Environment> {
+    try {
+      const response = await this.client.post('/api/environments/create-environment', {
+        name,
+        ...options,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create environment');
+    }
+  }
+
+  async findEnvironments(): Promise<Environment[]> {
+    try {
+      const response = await this.client.get('/api/environments/find-environments');
+      return response.data.environments;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to find environments');
+    }
+  }
+
+  async deleteEnvironment(id: string): Promise<void> {
+    try {
+      await this.client.delete('/api/environments/delete-environment', {
+        data: { id },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete environment');
+    }
+  }
+
+  // AI provider methods
+  async createProviderApiKey(
+    provider: string,
+    apiKey: string,
+    options?: { name?: string; provider_name?: string }
+  ): Promise<ProviderApiKey> {
+    try {
+      const response = await this.client.post('/api/ai-providers/create-provider-api-key', {
+        provider,
+        api_key: apiKey,
+        ...options,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create provider API key');
+    }
+  }
+
+  async findProviderApiKeys(): Promise<ProviderApiKey[]> {
+    try {
+      const response = await this.client.get('/api/ai-providers/find-provider-api-keys');
+      return response.data.providers;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to find provider API keys');
+    }
+  }
+
+  async deleteProviderApiKey(id: string): Promise<void> {
+    try {
+      await this.client.delete('/api/ai-providers/delete-provider-api-key', {
+        data: { id },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete provider API key');
     }
   }
 
