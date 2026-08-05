@@ -131,7 +131,7 @@ jobs:
 
       - name: Set up JDK 25
         if: matrix.leg.toolchain == 'java'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "25"
           distribution: "corretto"
@@ -318,7 +318,7 @@ jobs:
 
       - name: Post or update timing comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@v5
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-id: ${{ steps.find_comment.outputs.comment-id }}
