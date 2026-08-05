@@ -147,7 +147,14 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().thinkingType()).isEqualTo("adaptive");
                 assertThat(row.get().maxTokens()).isEqualTo(64000L);
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
+                // speed: selects the rate table, so it must survive ingestion
+                assertThat(row.get().speed()).isEqualTo("fast");
             });
+
+            // Carried on every block row too.
+            var blocks = getCipxBlocks(cipxSpan.id(), ws.workspaceId());
+            assertThat(blocks).isNotEmpty();
+            assertThat(blocks).allSatisfy(block -> assertThat(block.speed()).isEqualTo("fast"));
 
             // The non-cipx span shared the same create event, so once the cipx row is present the
             // listener has already decided this one: it must not have produced a row.
@@ -533,7 +540,8 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast"
                               }
                             },
                             "blocks": [
@@ -597,7 +605,8 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast"
                               }
                             },
                             "blocks": [
@@ -657,7 +666,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management
+                    effort, thinking_type, max_tokens, context_management, speed
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -679,7 +688,8 @@ class CostIntelligenceIngestionTest {
                             row.get("effort", String.class),
                             row.get("thinking_type", String.class),
                             row.get("max_tokens", Long.class),
-                            row.get("context_management", String.class)))));
+                            row.get("context_management", String.class),
+                            row.get("speed", String.class)))));
         }).blockOptional();
     }
 
@@ -691,6 +701,7 @@ class CostIntelligenceIngestionTest {
                     toInt32(is_definition) AS is_definition,
                     alloc,
                     model,
+                    speed,
                     side, cache_status, parent_category, chars,
                     tool_name, tool_server, tool_use_id, resource, kind, subcategory,
                     content_sha256,
@@ -715,6 +726,7 @@ class CostIntelligenceIngestionTest {
                             row.get("is_definition", Integer.class),
                             row.get("alloc", Double.class),
                             row.get("model", String.class),
+                            row.get("speed", String.class),
                             row.get("side", String.class),
                             row.get("cache_status", String.class),
                             row.get("parent_category", String.class),
@@ -802,11 +814,12 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement) {
+            String thinkingType, Long maxTokens, String contextManagement, String speed) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
-            String bdLane, String label, Integer isDefinition, Double alloc, String model, String side,
+            String bdLane, String label, Integer isDefinition, Double alloc, String model, String speed,
+            String side,
             String cacheStatus, String parentCategory, Long chars, String toolName, String toolServer,
             String toolUseId, String resource, String kind, String subcategory, String contentSha256, Long startMs) {
     }
