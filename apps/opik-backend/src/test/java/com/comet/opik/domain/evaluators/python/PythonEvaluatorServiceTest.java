@@ -254,6 +254,43 @@ class PythonEvaluatorServiceTest {
         }
 
         @Test
+        void evaluate__whenNoHttpResponseException__shouldRetryAndEventuallySucceed() {
+            // Given
+            var code = "def evaluate(input, output): return 1.0";
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
+            var expectedScores = List.of(podamFactory.manufacturePojo(PythonScoreResult.class));
+            var pythonResponse = PythonEvaluatorResponse.builder()
+                    .scores(expectedScores)
+                    .build();
+
+            // Setup HTTP call chain
+            setupHttpCallChain();
+
+            // Create immutable response for success case
+            Response successResponse = createMockResponse(Status.OK, pythonResponse);
+
+            // First call throws NoHttpResponseException (server closes connection before responding),
+            // 2nd call succeeds
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.failed(new ProcessingException("The target server failed to respond",
+                        new org.apache.http.NoHttpResponseException("The target server failed to respond")));
+                return null;
+            }).doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(successResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
+
+            // When
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
+
+            // Then
+            assertThat(actualScores).isEqualTo(expectedScores);
+            verify(asyncInvoker, times(2)).post(any(Entity.class), any(InvocationCallback.class));
+        }
+
+        @Test
         void evaluate__whenMaxRetriesExceeded__shouldThrowException() {
             // Given
             var code = "def evaluate(input, output): return 1.0";
