@@ -79,8 +79,8 @@ class EvaluationEngine:
         workers: int,
         verbose: int,
         source: TraceSource,
+        error_tolerance: ErrorTolerance,
         flush_timeout: Optional[float] = None,
-        error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
     ) -> None:
         self._client = client
         self._project_name = project_name
@@ -574,6 +574,9 @@ class EvaluationEngine:
         task_span_evaluator = metrics_evaluator.MetricsEvaluator(
             scoring_metrics=task_span_metrics,
             scoring_key_mapping=scoring_key_mapping,
+            # Item-level evaluators are a regular-metric concern; nothing can be
+            # skipped before this evaluator is built.
+            skipped_evaluator_scores=[],
             error_tolerance=self._error_tolerance,
         )
 

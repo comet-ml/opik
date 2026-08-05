@@ -1,14 +1,13 @@
-import contextlib
 import inspect
 import logging
+
+import opik
 from typing import List, Dict, Any, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
 from opik.api_objects.dataset import dataset_item
 from opik.decorator import error_info_collector
-from opik.decorator.context_manager import span_context_manager
-from opik import tracing_runtime_config
 from opik.evaluation.metrics import (
     arguments_helpers,
     base_metric,
@@ -29,7 +28,7 @@ LOGGER = logging.getLogger(__name__)
 
 EVALUATION_SPAN_PARAMETER_NAME = "task_span"
 TRACE_TOOL_CONTEXT_PARAMETER_NAME = "trace_tool_context"
-SCORE_ARGUMENTS_SPAN_SUFFIX = "score_arguments"
+SCORE_ARGUMENTS_SPAN_NAME = "score_arguments"
 
 
 def _has_evaluation_span_parameter(func: Callable) -> bool:
@@ -164,7 +163,7 @@ def build_metrics_evaluator(
     regular_metrics: List[base_metric.BaseMetric],
     scoring_key_mapping: ScoringKeyMappingType,
     evaluator_model: Optional[str],
-    error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
+    error_tolerance: ErrorTolerance,
 ) -> "MetricsEvaluator":
     """Build a MetricsEvaluator with suite-level + item-level metrics."""
     all_metrics: List[base_metric.BaseMetric] = list(regular_metrics)
@@ -186,6 +185,58 @@ def build_metrics_evaluator(
         scoring_key_mapping=scoring_key_mapping,
         skipped_evaluator_scores=skipped_evaluator_scores,
         error_tolerance=error_tolerance,
+    )
+
+
+@opik.track(  # type: ignore[attr-defined,has-type]
+    name=SCORE_ARGUMENTS_SPAN_NAME,
+    tags=[INTERNAL_SPAN_TAG],
+    # `metric_name` is the only argument worth recording: the rest is either the
+    # dataset item, already on the parent span, or objects whose serialization
+    # would drag a whole LLM client into the span input.
+    ignore_arguments=[
+        "metric",
+        "mapped_scoring_inputs",
+        "scoring_key_mapping",
+        "trace_tool_context",
+    ],
+)
+def _prepare_score_arguments(
+    metric: base_metric.BaseMetric,
+    metric_name: str,
+    mapped_scoring_inputs: Dict[str, Any],
+    scoring_key_mapping: ScoringKeyMappingType,
+    trace_tool_context: Any,
+) -> Tuple[List[Any], Dict[str, Any]]:
+    """Everything that has to happen before ``score`` can be called.
+
+    Tracked, so this step gets a span of its own: ``score`` is ``@track``-wrapped
+    and reports its own failures, but a metric that never gets that far would
+    otherwise leave no trace of why — a failed score is not persisted either.
+    Using the decorator rather than a hand-rolled span also means the global
+    ``set_tracing_active`` switch is honoured here as everywhere else.
+    """
+    arguments_validator.validate_score_arguments(
+        metric=metric,
+        kwargs=mapped_scoring_inputs,
+        scoring_key_mapping=scoring_key_mapping,
+    )
+
+    # Only inject trace_tool_context into metrics whose signature can absorb it;
+    # otherwise the call would fail with "unexpected keyword argument" for narrow
+    # metrics.
+    if trace_tool_context is not None and _accepts_trace_tool_context(metric.score):
+        score_kwargs = {
+            **mapped_scoring_inputs,
+            TRACE_TOOL_CONTEXT_PARAMETER_NAME: trace_tool_context,
+        }
+    else:
+        score_kwargs = mapped_scoring_inputs
+
+    return arguments_helpers.select_score_arguments(
+        score_function=metric.score,
+        kwargs=score_kwargs,
+        score_name=metric_name,
     )
 
 
@@ -235,52 +286,13 @@ def _compute_metric_scores(
                         task_outputs=task_output,
                     )
             else:
-                # Everything that prepares the call runs inside its own span, so a
-                # failure here is reported the same way a failure inside `score`
-                # is: `score` is `@track`-wrapped and gets its own span, while a
-                # metric that never gets that far would otherwise leave no trace
-                # of why — no feedback score is persisted for a failed score.
-                with contextlib.ExitStack() as span_stack:
-                    # Unlike `@track`, `start_as_current_span` emits its span
-                    # regardless of `set_tracing_active` — it passes
-                    # `tracing_active=True` and its `finally` writes the span
-                    # unconditionally. Entering it only while tracing is on keeps
-                    # a disabled run silent.
-                    if tracing_runtime_config.is_tracing_active():
-                        span_stack.enter_context(
-                            span_context_manager.start_as_current_span(
-                                name=f"{metric.name}.{SCORE_ARGUMENTS_SPAN_SUFFIX}",
-                                # Engine plumbing, like `metrics_calculation`:
-                                # the agentic judge prunes the trace by this tag.
-                                tags=[INTERNAL_SPAN_TAG],
-                            )
-                        )
-                    arguments_validator.validate_score_arguments(
-                        metric=metric,
-                        kwargs=mapped_scoring_inputs,
-                        scoring_key_mapping=scoring_key_mapping,
-                    )
-                    # Only inject trace_tool_context into metrics whose
-                    # signature can absorb it; otherwise the call would fail
-                    # with "unexpected keyword argument" for narrow metrics.
-                    if trace_tool_context is not None and _accepts_trace_tool_context(
-                        metric.score
-                    ):
-                        score_kwargs = {
-                            **mapped_scoring_inputs,
-                            TRACE_TOOL_CONTEXT_PARAMETER_NAME: trace_tool_context,
-                        }
-                    else:
-                        score_kwargs = mapped_scoring_inputs
-                    (
-                        positional_arguments,
-                        keyword_arguments,
-                    ) = arguments_helpers.select_score_arguments(
-                        score_function=metric.score,
-                        kwargs=score_kwargs,
-                        score_name=metric.name,
-                    )
-
+                positional_arguments, keyword_arguments = _prepare_score_arguments(
+                    metric=metric,
+                    metric_name=metric.name,
+                    mapped_scoring_inputs=mapped_scoring_inputs,
+                    scoring_key_mapping=scoring_key_mapping,
+                    trace_tool_context=trace_tool_context,
+                )
                 result = metric.score(*positional_arguments, **keyword_arguments)
 
             LOGGER.debug("Metric %s score ended", metric.name)
@@ -329,13 +341,13 @@ class MetricsEvaluator:
         self,
         scoring_metrics: List[base_metric.BaseMetric],
         scoring_key_mapping: ScoringKeyMappingType,
-        skipped_evaluator_scores: Optional[List[score_result.ScoreResult]] = None,
-        error_tolerance: ErrorTolerance = ErrorTolerance.METRIC_ERRORS,
+        skipped_evaluator_scores: List[score_result.ScoreResult],
+        error_tolerance: ErrorTolerance,
     ):
         self._scoring_key_mapping = scoring_key_mapping
         self._regular_metrics: List[base_metric.BaseMetric] = []
         self._task_span_metrics: List[base_metric.BaseMetric] = []
-        self._skipped_evaluator_scores = skipped_evaluator_scores or []
+        self._skipped_evaluator_scores = skipped_evaluator_scores
         self._error_tolerance = error_tolerance
 
         self._analyze_metrics(scoring_metrics)

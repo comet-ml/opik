@@ -777,6 +777,8 @@ def _evaluate_test_suite_task(
                 workers=task_threads,
                 verbose=verbose,
                 source=source,
+                # This entrypoint does not expose the setting; it runs strict.
+                error_tolerance=ErrorTolerance.METRIC_ERRORS,
             )
             test_results = evaluation_engine.run_and_score(
                 dataset_items=items_iter,
@@ -916,6 +918,8 @@ def evaluate_experiment(
             workers=scoring_threads,
             verbose=verbose,
             source="experiment",
+            # This entrypoint does not expose the setting; it runs strict.
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
         test_results = evaluation_engine.score_test_cases(
             test_cases=test_cases,
@@ -1220,6 +1224,8 @@ def evaluate_prompt(
             workers=task_threads,
             verbose=verbose,
             source="experiment",
+            # This entrypoint does not expose the setting; it runs strict.
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=items_iter,
@@ -1773,6 +1779,8 @@ def evaluate_on_dict_items(
             workers=scoring_threads,
             verbose=verbose,
             source="experiment",
+            # This entrypoint does not expose the setting; it runs strict.
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=iter(dataset_items),
