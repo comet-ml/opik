@@ -28,9 +28,13 @@ def _raise_on_oversized_items(
     ``split_into_batches`` puts an oversized item in a batch by itself rather
     than dropping it, which would send a request the backend is guaranteed to
     reject with a 422. Failing here names the offending item instead.
+
+    The bound is inclusive, matching ``split_into_batches``: an item measuring
+    exactly the limit already fills a batch on its own, leaving no room for the
+    request envelope.
     """
     failure_reasons = [
-        f"items[{index}] is {size_MB:.1f}MB, which exceeds the "
+        f"items[{index}] is {size_MB:.1f}MB, which is at or above the "
         f"{constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB}MB per-request limit"
         for index, size_MB in (
             (index, sequence_splitter.get_payload_size_MB(item))

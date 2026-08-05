@@ -13,7 +13,11 @@ import pytest
 
 from opik import exceptions
 from opik.api_objects import constants
-from opik.api_objects.experiment import bulk_item, experiment as experiment_module
+from opik.api_objects.experiment import (
+    bulk_converters,
+    bulk_item,
+    experiment as experiment_module,
+)
 from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
@@ -657,7 +661,35 @@ class TestBulkUploadItemsValidation:
         with pytest.raises(exceptions.ValidationError) as exc_info:
             experiment.batch_upload_items([_record(trace=oversized_trace)])
 
-        assert "exceeds the" in str(exc_info.value)
+        assert "at or above the" in str(exc_info.value)
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
+    def test_batch_upload_items__item_exactly_at_the_limit__is_rejected(self) -> None:
+        """The bound is inclusive, matching ``split_into_batches``.
+
+        An item measuring exactly the limit already fills a batch on its own,
+        leaving no room for the request envelope — so the message has to say
+        "at or above" rather than "exceeds".
+        """
+        experiment, mock_rest_client = _create_experiment()
+        record = _record(
+            trace=bulk_item.ExperimentItemBulkTrace(
+                start_time=START_TIME, output={"padding": "x" * 5_000_000}
+            )
+        )
+        measured_MB = sequence_splitter.get_payload_size_MB(
+            bulk_converters.to_rest_record(record)
+        )
+
+        with patch.object(
+            constants,
+            "EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB",
+            measured_MB,
+        ):
+            with pytest.raises(exceptions.ValidationError) as exc_info:
+                experiment.batch_upload_items([record])
+
+        assert "at or above the" in str(exc_info.value)
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
 
