@@ -58,9 +58,8 @@ def delete_spans_by_project():
         spans = client.search_spans(project_name=project_name, max_results=max_results, truncate=True)
         if not spans:
             break
-        trace_ids = {span.trace_id for span in spans if span.trace_id}
-        if trace_ids:
-            api_client.traces.delete_traces(ids=list(trace_ids))
+        trace_ids = {span.trace_id for span in spans}
+        api_client.traces.delete_traces(ids=list(trace_ids))
         deleted_count += len(spans)
 
     return success_response({"deleted_count": deleted_count})
