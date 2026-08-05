@@ -19,7 +19,7 @@ export class ConfigurationPage extends BasePage {
   async goto(tab: ConfigurationTab, projectId: string, projectName: string): Promise<void> {
     await this.page.goto(this.url(`projects/${projectId}/home`));
     await this.page.waitForLoadState('load');
-    await this.page.getByRole('button', { name: projectName, exact: true }).waitFor({ state: 'visible', timeout: 15000 });
+    await this.page.getByRole('button', { name: `Back to ${projectName}`, exact: true }).waitFor({ state: 'visible', timeout: 15000 });
     await this.page.goto(this.url(`configuration?tab=${tab}`));
     await this.page.waitForLoadState('load');
     await this.dismissWelcomeDialogIfPresent();
