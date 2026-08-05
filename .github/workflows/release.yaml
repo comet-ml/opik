@@ -171,7 +171,7 @@ jobs:
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
       - name: Setup Node.js for TypeScript version update
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
