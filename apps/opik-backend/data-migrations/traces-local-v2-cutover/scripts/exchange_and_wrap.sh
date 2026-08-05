@@ -39,9 +39,11 @@
 #                     EXCHANGE), --wrap-only runs later against live, unbuffered ingestion. This flag asserts the
 #                     async-insert buffer is re-raised (or ingestion quiesced / a maintenance window is in effect).
 #   --confirm-daos-retargeted  REQUIRED whenever the wrap is applied (--with-wrap or --wrap-only). Asserts the trace
-#                     delete/mutation DAOs already target `traces_local` (OPIK-7455) — a Distributed `traces` rejects
-#                     mutations, so without the retarget delete-by-id and retention deletes return 500 the moment the
-#                     wrap lands. The script cannot inspect backend code, so the operator must assert it.
+#                     delete/mutation DAOs already target `traces_local`: set backend config
+#                     databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true (OPIK-7455) in lockstep with the wrap.
+#                     A Distributed `traces` rejects mutations, so without the flag delete-by-id and retention deletes
+#                     return 500 the moment the wrap lands. The script cannot inspect backend config, so the operator
+#                     must assert it.
 #   --confirm-buffer-raised  REQUIRED for every EXCHANGE path (the default and --with-wrap; not --wrap-only). Asserts the
 #                     async-insert buffer (asyncInsertBusyTimeoutMaxMs) is raised on every backend instance — it holds
 #                     writes across the swap so they land on the new table; at the default, a write in the final window
@@ -106,11 +108,12 @@ if [[ "$WRAP_ONLY" == "1" && "$CONFIRM_MAINTENANCE" != "1" ]]; then
     exit 2
 fi
 # HARD PREREQUISITE (OPIK-7455): a Distributed table rejects mutations, so once the wrap is applied the product's
-# DELETE_BY_ID and retention deletes return 500 against `traces` unless those DAO paths already target `traces_local`.
-# The script can't inspect backend code, so any wrap-applying mode must assert it. Fail fast, before touching ClickHouse.
+# delete-by-id and retention deletes return 500 against `traces` unless those DAO paths already target `traces_local`.
+# The script can't inspect backend config, so any wrap-applying mode must assert it. Fail fast, before touching ClickHouse.
 if [[ ( "$WITH_WRAP" == "1" || "$WRAP_ONLY" == "1" ) && "$CONFIRM_DAOS_RETARGETED" != "1" ]]; then
-    echo "ERROR: applying the wrap requires --confirm-daos-retargeted. The trace delete/mutation DAOs must target" >&2
-    echo "       'traces_local' (OPIK-7455) before 'traces' becomes Distributed, or deletes/retention break at runtime." >&2
+    echo "ERROR: applying the wrap requires --confirm-daos-retargeted. Set backend config" >&2
+    echo "       databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true (OPIK-7455) so the trace delete/mutation" >&2
+    echo "       DAOs target 'traces_local' before 'traces' becomes Distributed, or deletes/retention break at runtime." >&2
     exit 2
 fi
 # The EXCHANGE is the zero-loss step: writes in the final-delta -> EXCHANGE gap must be held by the raised async-insert

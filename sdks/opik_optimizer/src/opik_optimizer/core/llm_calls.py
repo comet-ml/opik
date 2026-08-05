@@ -7,13 +7,16 @@ from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 
+import opik
 import litellm
 from litellm.exceptions import BadRequestError
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+from opik import exceptions as opik_exceptions, opik_context
 from opik.integrations.litellm import track_completion
 
 from ..utils import throttle as _throttle
 from ..utils.helpers import json_to_dict
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover
     pass
@@ -60,6 +63,146 @@ def _strip_project_name(params: dict[str, Any]) -> dict[str, Any]:
     return updated_params
 
 
+def _current_span_or_none() -> Any | None:
+    """The caller's open Opik span, or None when there is no trace context.
+
+    Only Opik's own failures count as "cannot tell" — anything else out of
+    ``get_current_span_data()`` is a bug here or in the SDK and propagates.
+    """
+    try:
+        return opik_context.get_current_span_data()
+    except opik_exceptions.OpikException:
+        logger.debug("Could not determine Opik span context", exc_info=True)
+        return None
+
+
+def _nest_under_current_span(params: dict[str, Any], span: Any) -> dict[str, Any]:
+    """Point the LiteLLM call at the caller's span so its span nests under it.
+
+    ``opik_monitor.try_add_opik_monitoring_to_params`` used to do this on the way
+    to injecting an ``OpikLogger``; we no longer call it (OPIK-7521), so the
+    nesting hint has to be set here or the call forks a second, detached trace.
+    ``LiteLLMAgent._llm_complete`` already passes the same hint by hand.
+    """
+    metadata = params.get("metadata")
+    opik_metadata = metadata.get("opik") if isinstance(metadata, dict) else None
+    if isinstance(opik_metadata, dict) and "current_span_data" in opik_metadata:
+        return params  # an explicit caller hint wins
+
+    # Only the span hint: both callers pipe the result through
+    # _strip_project_name, so a project_name copied off the span here would be
+    # deleted on the next line.
+    updated_opik = {**(opik_metadata or {}), "current_span_data": span}
+    return {
+        **params,
+        "metadata": {
+            **(metadata if isinstance(metadata, dict) else {}),
+            "opik": updated_opik,
+        },
+    }
+
+
+def _optimization_trace_tags(params: dict[str, Any]) -> list[str]:
+    """The optimization tags _prepare_model_params stashed in metadata.
+
+    They exist only when the caller passed an ``optimization_id``. The backend
+    attributes optimizer-internal spend to a run by exactly these tags, so a
+    call that loses them is spend the run's cost never counts.
+    """
+    metadata = params.get("metadata")
+    opik_metadata = metadata.get("opik") if isinstance(metadata, dict) else None
+    tags = opik_metadata.get("tags") if isinstance(opik_metadata, dict) else None
+    return [str(tag) for tag in tags] if isinstance(tags, list) else []
+
+
+def _trace_name(params: dict[str, Any]) -> str:
+    """Name the trace after the call it wraps, e.g. ``candidate_generation``."""
+    metadata = params.get("metadata")
+    call_type = metadata.get("opik_call_type") if isinstance(metadata, dict) else None
+    return str(call_type) if call_type else "optimizer_llm_call"
+
+
+def _invoke_traced(
+    tracked_completion: Any,
+    params: dict[str, Any],
+    *,
+    project_name: str | None,
+    **call_kwargs: Any,
+) -> Any:
+    """Run the LiteLLM call so its span always lands in an attributable trace.
+
+    Replaces ``opik_monitor.try_add_opik_monitoring_to_params`` (OPIK-7521). That
+    helper injected an ``OpikLogger`` alongside our own ``track_completion``,
+    which logged the same call twice whenever a span was open; and it was the
+    only thing carrying ``metadata["opik"]["tags"]`` onto a trace, because
+    ``track_completion`` hardcodes ``tags=["litellm"]``.
+
+    Two paths, because a call has a trace either way:
+
+    * A span is open — the caller already owns a trace. Point the call at that
+      span so its LiteLLM span nests there instead of forking a detached trace.
+    * No span is open — open one here and stamp the optimization tags on it, so
+      optimizer-internal spend is attributable to the run that caused it. This is
+      what makes cost visible for calls that are not part of any trial.
+    """
+    span = _current_span_or_none()
+    if span is not None:
+        return tracked_completion(
+            **call_kwargs, **_strip_project_name(_nest_under_current_span(params, span))
+        )
+
+    tags = _optimization_trace_tags(params)
+    prepared = _strip_project_name(params)
+
+    @opik.track(name=_trace_name(params), project_name=project_name)
+    def _call() -> Any:
+        if tags:
+            try:
+                opik_context.update_current_trace(tags=tags)
+            except Exception:
+                # Attribution is best-effort: losing a tag must not fail the call
+                # it is describing. It is logged because the symptom downstream is
+                # silent — spend that no run claims.
+                logger.debug("Could not tag the optimizer LLM trace", exc_info=True)
+        return tracked_completion(**call_kwargs, **prepared)
+
+    return _call()
+
+
+async def _invoke_traced_async(
+    tracked_completion: Any,
+    params: dict[str, Any],
+    *,
+    project_name: str | None,
+    **call_kwargs: Any,
+) -> Any:
+    """Async twin of _invoke_traced.
+
+    Kept separate rather than sharing the sync body: a sync ``@opik.track``
+    wrapper would close the trace the moment it returned the coroutine, i.e.
+    before the call it is supposed to be timing has even run.
+    """
+    span = _current_span_or_none()
+    if span is not None:
+        return await tracked_completion(
+            **call_kwargs, **_strip_project_name(_nest_under_current_span(params, span))
+        )
+
+    tags = _optimization_trace_tags(params)
+    prepared = _strip_project_name(params)
+
+    @opik.track(name=_trace_name(params), project_name=project_name)
+    async def _call() -> Any:
+        if tags:
+            try:
+                opik_context.update_current_trace(tags=tags)
+            except Exception:
+                logger.debug("Could not tag the optimizer LLM trace", exc_info=True)
+        return await tracked_completion(**call_kwargs, **prepared)
+
+    return await _call()
+
+
 def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
     """
     Build standardized metadata for LLM calls across optimizers.
@@ -78,9 +221,6 @@ def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
         "opik_call_type": call_type,
     }
     return metadata
-
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_schema_for_openai_strict(schema: Any) -> Any:
@@ -160,67 +300,49 @@ _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 _T = TypeVar("_T", bound=BaseModel)
 
 
-def _increment_llm_counter_if_in_optimizer() -> None:
-    """
-    Walk up the call stack and increment the first optimizer's counter if found.
-    """
+def _find_optimizer_in_stack() -> Any | None:
+    """Return the nearest BaseOptimizer bound as `self` on the call stack."""
     try:
         from ..base_optimizer import BaseOptimizer
     except Exception:
-        return
+        return None
 
     try:
         frame: FrameType | None = sys._getframe()
     except ValueError:
-        return
+        return None
 
     while frame is not None:
         optimizer_candidate = frame.f_locals.get("self")
         if isinstance(optimizer_candidate, BaseOptimizer):
-            optimizer_candidate._increment_llm_counter()
-            break
+            return optimizer_candidate
         frame = frame.f_back
+    return None
+
+
+def _increment_llm_counter_if_in_optimizer() -> None:
+    """
+    Walk up the call stack and increment the first optimizer's counter if found.
+    """
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        optimizer._increment_llm_counter()
 
 
 def _increment_llm_call_tools_counter_if_in_optimizer() -> None:
     """
     Walk up the call stack and increment the first optimizer's counter if found.
     """
-    try:
-        from ..base_optimizer import BaseOptimizer
-    except Exception:
-        return
-
-    try:
-        frame: FrameType | None = sys._getframe()
-    except ValueError:
-        return
-
-    while frame is not None:
-        optimizer_candidate = frame.f_locals.get("self")
-        if isinstance(optimizer_candidate, BaseOptimizer):
-            optimizer_candidate._increment_llm_call_tools_counter()
-            break
-        frame = frame.f_back
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        optimizer._increment_llm_call_tools_counter()
 
 
 def _get_project_name_from_optimizer() -> str | None:
     """Return project_name from the nearest optimizer on the call stack."""
-    try:
-        from ..base_optimizer import BaseOptimizer
-    except Exception:
-        return None
-
-    try:
-        frame: FrameType | None = sys._getframe()
-    except ValueError:
-        return None
-
-    while frame is not None:
-        optimizer_candidate = frame.f_locals.get("self")
-        if isinstance(optimizer_candidate, BaseOptimizer):
-            return getattr(optimizer_candidate, "project_name", None)
-        frame = frame.f_back
+    optimizer = _find_optimizer_in_stack()
+    if optimizer is not None:
+        return getattr(optimizer, "project_name", None)
     return None
 
 
@@ -289,17 +411,20 @@ def _prepare_model_params(
     # Merge optimizer's model_parameters with call-time overrides
     merged_params = {**model_parameters, **call_time_params}
 
-    # Add Opik monitoring wrapper
-    final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(merged_params)
+    # No opik_monitor here: it injects an OpikLogger that double-logs alongside
+    # track_completion. _invoke_traced owns tracing and attribution (OPIK-7521).
+    final_params = merged_params
 
-    # Add reasoning metadata if applicable
-    if is_reasoning and "metadata" in final_params:
-        if "opik_call_type" not in final_params["metadata"]:
-            final_params["metadata"]["opik_call_type"] = "reasoning"
-
-    # Configure project_name and tags for Opik tracing
+    # Ensure the metadata dict exists BEFORE anything writes into it. It used to
+    # be created as a side effect of opik_monitor (and only when a span happened
+    # to be open), so a caller that passed no metadata silently lost the
+    # reasoning call type below — on the no-span path that was every such call.
     metadata = final_params.setdefault("metadata", {})
     opik_metadata = metadata.setdefault("opik", {})
+
+    # Add reasoning metadata if applicable
+    if is_reasoning and "opik_call_type" not in metadata:
+        metadata["opik_call_type"] = "reasoning"
 
     # Only set project name when provided so caller overrides survive
     if project_name is not None:
@@ -457,6 +582,28 @@ Here is the output schema (shown in a code block for readability only — do not
             )
             break
     return modified_messages
+
+
+def _resolve_optimization_id(optimization_id: str | None) -> str | None:
+    """Fall back to the running optimizer's id when the caller passed none.
+
+    Most optimizer-internal call sites never pass one — 13 of 20 on main, which
+    is every LLM call Evolutionary and HierarchicalReflective make — so their
+    traces carried no optimization tag and the run's cost aggregation, which
+    attributes optimizer-internal spend by exactly that tag, never counted them
+    (OPIK-7521).
+
+    Resolved from the optimizer on the call stack rather than threaded through
+    every ops signature. These calls run on the optimizer's own thread (the
+    worker pool is used for agent evaluation, not for these), and the failure
+    mode is losing a tag exactly as today — never attributing spend to the wrong
+    run, since an explicit argument always wins.
+    """
+    if optimization_id is not None:
+        return optimization_id
+    optimizer = _find_optimizer_in_stack()
+    resolved = getattr(optimizer, "current_optimization_id", None)
+    return str(resolved) if resolved else None
 
 
 def _coerce_parsed(
@@ -632,6 +779,7 @@ def call_model(
 
     effective_project_name = project_name or _get_project_name_from_optimizer()
 
+    optimization_id = _resolve_optimization_id(optimization_id)
     final_params_for_litellm = _prepare_model_params(
         model_parameters,
         call_time_params,
@@ -666,12 +814,14 @@ def call_model(
                 effective_project_name,
             )
 
-        response = tracked_completion(
+        response = _invoke_traced(
+            tracked_completion,
+            attempt_params,
+            project_name=effective_project_name,
             model=model,
             messages=attempt_messages,
             seed=seed,
             num_retries=6,
-            **_strip_project_name(attempt_params),
         )
 
         choices = getattr(response, "choices", None)
@@ -817,7 +967,7 @@ async def call_model_async(
         call_time_params=call_time_params,
         response_model=response_model,
         is_reasoning=is_reasoning,
-        optimization_id=optimization_id,
+        optimization_id=_resolve_optimization_id(optimization_id),
         project_name=effective_project_name,
     )
 
@@ -849,12 +999,14 @@ async def call_model_async(
                 optimization_id=optimization_id,
                 project_name=effective_project_name,
             )
-        response = await tracked_completion(
+        response = await _invoke_traced_async(
+            tracked_completion,
+            attempt_params,
+            project_name=effective_project_name,
             model=model,
             messages=attempt_messages,
             seed=seed,
             num_retries=6,
-            **_strip_project_name(attempt_params),
         )
 
         choices = getattr(response, "choices", None)

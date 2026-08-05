@@ -3,6 +3,7 @@ import datetime
 import logging
 import functools
 import sys
+from concurrent import futures
 from typing import (
     Optional,
     Any,
@@ -25,7 +26,7 @@ from opik.rest_api.types import (
     execution_policy_write as rest_execution_policy,
 )
 from opik.message_processing.batching import sequence_splitter
-from opik import id_helpers
+from opik import id_helpers, semantic_version
 import opik.exceptions as exceptions
 import opik.config as config
 from .. import constants
@@ -610,8 +611,80 @@ class Dataset(DatasetExportOperations):
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
 
+    def _resolve_num_threads(self, num_threads: int) -> int:
+        """Downgrade to a sequential upload when the backend predates parallel support.
+
+        Older backends race on concurrent batches that share a batch_group_id,
+        so parallelism is only safe from
+        ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` onwards. When the
+        version cannot be determined at all — unreachable endpoint, non-semver
+        build string — we fall back to sequential rather than risk the race.
+        """
+        try:
+            backend_version = self._rest_client.version()["version"]
+            supported = (
+                semantic_version.SemanticVersion.parse(backend_version)
+                >= constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
+            )
+        except Exception:
+            LOGGER.warning(
+                "Could not determine the Opik backend version, falling back to a "
+                "sequential dataset upload. Parallel upload requires backend %s "
+                "or newer.",
+                constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                exc_info=True,
+            )
+            return 1
+
+        if not supported:
+            LOGGER.warning(
+                "Opik backend %s does not support parallel dataset upload, falling "
+                "back to a sequential upload. Upgrade to backend %s or newer to use "
+                "num_threads.",
+                backend_version,
+                constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+            )
+            return 1
+
+        return num_threads
+
+    def _send_batches(
+        self,
+        batches: List[List[rest_dataset_item.DatasetItemWrite]],
+        batch_group_id: str,
+        num_threads: int,
+    ) -> None:
+        """Send batches to the backend, optionally in parallel.
+
+        All batches share ``batch_group_id`` so they fold into a single
+        dataset version regardless of how many workers send them. With
+        ``num_threads <= 1`` batches are sent sequentially in the caller
+        thread. With ``num_threads > 1`` they are fanned out across a thread
+        pool; the first batch that fails re-raises to the caller. There is no
+        rollback, so batches that already succeeded before the failure remain
+        persisted.
+        """
+        if num_threads <= 1:
+            for batch in batches:
+                self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
+            return
+
+        with futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
+            submitted = [
+                pool.submit(
+                    self._insert_batch_with_retry,
+                    batch,
+                    batch_group_id=batch_group_id,
+                )
+                for batch in batches
+            ]
+            for future in futures.as_completed(submitted):
+                future.result()
+
     def __internal_api__insert_items_as_dataclasses__(
-        self, items: List[dataset_item.DatasetItem]
+        self,
+        items: List[dataset_item.DatasetItem],
+        num_threads: int = 1,
     ) -> None:
         # Lazy-sync against the backend the first time we insert into a
         # dataset that was fetched from the backend (list or get-by-name
@@ -646,26 +719,48 @@ class Dataset(DatasetExportOperations):
 
         batch_group_id = id_helpers.generate_id()
 
-        for batch in batches:
-            LOGGER.debug("Sending dataset items batch of size %d", len(batch))
-            self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
+        self._send_batches(batches, batch_group_id, num_threads)
 
         # Invalidate the cached count so it will be fetched from backend on next access
         self._dataset_items_count = None
 
-    def insert(self, items: Sequence[Dict[str, Any]]) -> None:
+    def insert(self, items: Sequence[Dict[str, Any]], num_threads: int = 1) -> None:
         """
         Insert new items into the dataset. A new dataset version will be created.
 
         Args:
             items: List of dicts (which will be converted to dataset items)
                 to add to the dataset.
+            num_threads: Number of worker threads used to upload the item
+                batches. Must be a positive integer. With ``1`` (the default)
+                batches are uploaded sequentially. With more than ``1`` the
+                batches of this single ``insert`` are uploaded in parallel;
+                they all land in one dataset version. If any batch fails the
+                call re-raises; there is no rollback, so batches that already
+                succeeded remain persisted. Items are keyed by their ``id``, so
+                parallel and sequential inserts of the same items produce
+                identical dataset content; the input order is not a read-back
+                guarantee. Requires an Opik backend of at least
+                ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT``; against
+                older backends, or when the backend version cannot be
+                determined, the upload falls back to sequential and logs a
+                warning.
         """
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+
+        if num_threads > 1:
+            num_threads = self._resolve_num_threads(num_threads)
+
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
         ]
-        self.__internal_api__insert_items_as_dataclasses__(dataset_items)
+        self.__internal_api__insert_items_as_dataclasses__(
+            dataset_items, num_threads=num_threads
+        )
 
     @property
     def __internal_api__hashes_synced__(self) -> bool:

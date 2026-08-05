@@ -43,6 +43,7 @@ import reactor.util.context.Context;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.AbstractMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -746,11 +747,19 @@ class OptimizationServiceImpl implements OptimizationService {
     public Mono<Long> reconcileStalledStudioOptimizations(@NonNull Duration initializedTimeout,
             @NonNull Duration runningTimeout, @NonNull Duration runningHardTimeout, @NonNull Duration lookbackMargin,
             int batchSize) {
-        return optimizationDAO.findStalledStudioOptimizations(initializedTimeout, runningTimeout, runningHardTimeout,
-                lookbackMargin, batchSize)
+        // Truncate to whole seconds up front, because that is the resolution the SQL side has: the DAO
+        // binds these as :..._seconds. Leaving the sub-second remainder on the Java copies would make the
+        // query and the guards below disagree by up to a second — the query would select a run the guard
+        // then vetoes, and buildStalledReason could quote a bound the query did not use. Truncating in one
+        // place keeps every consumer on the same numbers (review: baz-reviewer).
+        var initialized = initializedTimeout.truncatedTo(ChronoUnit.SECONDS);
+        var running = runningTimeout.truncatedTo(ChronoUnit.SECONDS);
+        var hardCap = runningHardTimeout.truncatedTo(ChronoUnit.SECONDS);
+        var lookback = lookbackMargin.truncatedTo(ChronoUnit.SECONDS);
+
+        return optimizationDAO.findStalledStudioOptimizations(initialized, running, hardCap, lookback, batchSize)
                 // Sequential: stalled runs are rare and this keeps the reaper's DB/Redis footprint small.
-                .concatMap(stalled -> markStalledOptimizationAsError(stalled, initializedTimeout, runningTimeout,
-                        runningHardTimeout))
+                .concatMap(stalled -> markStalledOptimizationAsError(stalled, initialized, running, hardCap))
                 .reduce(0L, Long::sum);
     }
 

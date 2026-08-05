@@ -29,21 +29,14 @@ DEFAULT_CASE_SENSITIVE = False
 # all before the first trial experiment exists. Slow that stretch down past an hour and the
 # reaper will read a healthy run as dead, so raise runningTimeout with it.
 #
-# This timeout also interacts with the reaper's initializedTimeout (default 5m) via QUEUE DEPTH. Only
+# It also interacts with the reaper's initializedTimeout (default 5m) via QUEUE DEPTH: only
 # MAX_CONCURRENT_JOBS slots run at once and each may hold one for the full timeout below, so a
-# submission beyond that can sit queued for hours. A queued run's row is untouched — the backend
-# writes INITIALIZED at create and then only enqueues — and it has no trial experiments, so while it
-# waits it is indistinguishable from a run whose worker never started, and the reaper marks it ERROR.
-#
-# That is no longer terminal for the run: a reaper-written ERROR carries exceptionType
-# "SystemDetectedFailure", and the backend lets a later worker report supersede exactly that (see
-# OptimizationService#isSystemDetectedFailure). So when the worker finally dequeues the job,
-# mark_running restores the run and clears the stale reason instead of being silently dropped — the
-# subprocess no longer spends its whole LLM budget on a run permanently displayed as failed.
-#
-# What remains is cosmetic and self-healing: a deeply queued run can show ERROR until its worker
-# starts. Raising initializedTimeout above the worst-case queue wait, roughly
-# ceil(queued_jobs / MAX_CONCURRENT_JOBS) * OPTIMIZATION_TIMEOUT_SECS, avoids even that.
+# submission behind a full queue waits with nothing touching its row and is temporarily marked ERROR.
+# That is self-healing — a later worker report supersedes a platform-detected failure, so mark_running
+# restores the run; see OptimizationService#isSystemDetectedFailure for the backend side rather than a
+# copy of it here. To avoid the transient ERROR entirely, initializedTimeout has to exceed the
+# worst-case wait: ceil(jobs_ahead_in_queue / MAX_CONCURRENT_JOBS) * OPTIMIZATION_TIMEOUT_SECS, where
+# jobs_ahead counts only the submissions queued before this one, not the ones already running.
 OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "21600"))
 
 # Dataset sampling (limits items used during optimization to prevent OOM)
