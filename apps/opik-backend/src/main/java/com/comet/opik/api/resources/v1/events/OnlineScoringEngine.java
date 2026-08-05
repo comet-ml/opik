@@ -78,6 +78,7 @@ public class OnlineScoringEngine {
     static final String REASON_FIELD_NAME = "reason";
 
     private static final int MAX_REPORTED_RESPONSE_CHARS = 500;
+    private static final int MAX_REPORTED_FIELD_NAMES = 10;
 
     private static final String SPANS_VARIABLE_NAME = "spans";
     private static final String TRACE_VARIABLE_NAME = "trace";
@@ -1088,13 +1089,17 @@ public class OnlineScoringEngine {
 
     private static String describe(ResponseProblem problem) {
         return switch (problem.kind()) {
-            case NOT_JSON -> "the judge's answer was not valid JSON: '%s'".formatted(problem.evidence());
-            case NOT_A_JSON_OBJECT -> "the judge's answer was not a JSON object: '%s'"
+            case NOT_JSON -> "the judge's answer was not valid JSON (%s)".formatted(problem.evidence());
+            case NOT_A_JSON_OBJECT -> "the judge's answer was not a JSON object (%s)"
                     .formatted(problem.evidence());
             case NO_SCORE_FIELDS -> ("the judge's answer had none of the expected score fields. Its fields were "
                     + "%s; expected { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }")
                     .formatted(problem.evidence());
         };
+    }
+
+    private static String sizeOf(String content) {
+        return "%,d chars".formatted(content.length());
     }
 
     public static ParsedFeedbackScores toFeedbackScores(@NonNull ChatResponse chatResponse,
@@ -1104,14 +1109,14 @@ public class OnlineScoringEngine {
         try {
             structuredResponse = OBJECT_MAPPER.readTree(content);
             if (!structuredResponse.isObject()) {
-                log.info("ChatResponse content returned into an empty JSON result");
-                return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_A_JSON_OBJECT,
+                log.info("Judge answer was not a JSON object: size='{}' response='{}'", sizeOf(content),
                         StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
+                return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_A_JSON_OBJECT, sizeOf(content));
             }
         } catch (JsonProcessingException e) {
-            log.error("parsing LLM response into a JSON: {}", content, e);
-            return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON,
-                    StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
+            log.error("Judge answer was not valid JSON: size='{}' response='{}'", sizeOf(content),
+                    StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null), e);
+            return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content));
         }
         var collected = new CollectedScores();
         structuredResponse.properties().forEach(scoreMetric -> {
@@ -1134,11 +1139,12 @@ public class OnlineScoringEngine {
                                 Spliterator.ORDERED | Spliterator.NONNULL),
                         false)
                         .toList();
-                log.warn(
-                        "Invalid LLM output format for feedback scores. Expected structure: { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }, or { 'score': <number|boolean>, 'reason': <string> } for a single-score schema. Top-level keys: '{}'. Raw response (truncated): '{}'",
-                        topLevelKeys, StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
-                return ParsedFeedbackScores.problem(ResponseProblem.Kind.NO_SCORE_FIELDS,
-                        topLevelKeys.isEmpty() ? "(none)" : quoteAll(topLevelKeys));
+                // Not wrapped in quotes: quoteAll already quotes each name.
+                var fields = topLevelKeys.isEmpty() ? "(none)" : quoteAll(topLevelKeys);
+                log.warn("Judge answer had no recognisable score fields: fields={} size='{}' response='{}'",
+                        fields, sizeOf(content),
+                        StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
+                return ParsedFeedbackScores.problem(ResponseProblem.Kind.NO_SCORE_FIELDS, fields);
             }
         }
         return collected.toParsed();
@@ -1171,13 +1177,20 @@ public class OnlineScoringEngine {
             return scores.isEmpty() && nullScoreNames.isEmpty() && unreadableScoreNames.isEmpty();
         }
 
+        /** Copies so a caller cannot mutate a parsed result through the lists this accumulator still holds. */
         ParsedFeedbackScores toParsed() {
-            return new ParsedFeedbackScores(scores, nullScoreNames, unreadableScoreNames, null);
+            return new ParsedFeedbackScores(List.copyOf(scores), List.copyOf(nullScoreNames),
+                    List.copyOf(unreadableScoreNames), null);
         }
     }
 
+    /** The names come from the judge's answer, so the count is capped to keep one reply off a huge log row. */
     private static String quoteAll(List<String> names) {
-        return names.stream().map("'%s'"::formatted).collect(Collectors.joining(", "));
+        var shown = names.stream().limit(MAX_REPORTED_FIELD_NAMES).map("'%s'"::formatted)
+                .collect(Collectors.joining(", "));
+        return names.size() <= MAX_REPORTED_FIELD_NAMES
+                ? shown
+                : "%s and %,d more".formatted(shown, names.size() - MAX_REPORTED_FIELD_NAMES);
     }
 
     /**
