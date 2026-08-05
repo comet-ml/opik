@@ -235,8 +235,11 @@ class Guardrail:
             )
             batch.append(guardrail_batch_item_message)
 
-        message = GuardrailBatchMessage(batch=batch)
-        self._client._streamer.put(message)
+        # A guardrail with no guards produces no results, and the backend rejects an empty
+        # guardrail batch (422). Sending it anyway would log an error and report data loss
+        # for something that was never lost.
+        if batch:
+            self._client._streamer.put(GuardrailBatchMessage(batch=batch))
 
         return result
 
