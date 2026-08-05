@@ -177,7 +177,13 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > sweep (`DELETE_FOR_RETENTION` / `deleteForRetentionBounded`) start returning 500 against `traces`. This is prep work
 > that shipped **before** the wrap (OPIK-7455): `TraceDAO` renders its mutation table through a single toggle,
 > `databaseAnalyticsDataModel.tracesDistributedWrapEnabled`. Set it **`true` in lockstep with applying the wrap** so those
-> deletes run against `traces_local`; reads and inserts stay on the Distributed `traces`. While it is `false` (the deploy
+> deletes run against `traces_local`; reads and inserts stay on the Distributed `traces`. The flag is **startup-bound**
+> (read once at boot; no hot-reload), so making it "live across the fleet" means a **completed rolling restart of every
+> backend instance** — there is no readiness endpoint exposing its value, so confirm via the deploy's restart completion
+> or by observing that trace deletes hit the intended table (queries are `log_comment`-tagged). A mismatch is
+> **fail-loud**, not silent: a stale-`false` instance issues `DELETE` against the `Distributed` `traces` (code 36/48), a
+> stale-`true` instance against an absent `traces_local` — both 500 the delete path, so a partial rollout surfaces at
+> once and is recoverable. While it is `false` (the deploy
 > default, and correct while `traces` is still a `MergeTree`) the deletes target `traces` directly. **General rule (splits
 > by kind of change):** row mutations (`DELETE`, `ALTER … DELETE`) and `MATERIALIZE COLUMN` / `ADD INDEX` / `MODIFY TTL`
 > target **`traces_local` only** — the `Distributed` `traces` rejects them (code 36/48), so a slip fails loudly; but
@@ -200,7 +206,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > gate and applies **only** the wrap on the already-swapped `traces` (no second EXCHANGE, no new `cutover_start`).
 > `--confirm-daos-retargeted` is required for **any** wrap (same-run or deferred), since the wrap makes `traces`
 > `Distributed` and breaks the delete/mutation DAOs until `tracesDistributedWrapEnabled=true` routes them at `traces_local`. To roll the wrap back, use
-> `rollback.sh --stage C`.
+> `rollback.sh --stage C`, then set `tracesDistributedWrapEnabled` back to `false` with the same rolling restart so
+> post-rollback deletes target the `MergeTree` `traces` again — a stale-`true` instance would `DELETE` against the
+> now-absent `traces_local` and 500.
 >
 > The wrap is **gapless per node**: it pre-builds the `Distributed` wrapper under a temp name, then one atomic
 > multi-target `RENAME` rotates the data to `traces_local` and the wrapper into `traces`, so `traces` is never absent on
@@ -713,10 +721,13 @@ Watch these for the whole backfill→EXCHANGE window; wire alerts before startin
   alert on client-side timeouts or ingestion errors, which mean the client timeout is below the buffer.
 - **Query p99** on the project traces listing — the backfill competes for I/O; a sustained regression is an abort signal.
 - **Deletion-capture health** — capture is best-effort and **swallows** errors (so a bridge hiccup never blocks a user's
-  delete), so watch the backend logs for `captureDeletions` failures. A silently-dropped capture would leak a delete;
-  `verify.sh` catches that as a pre-EXCHANGE week mismatch (the row is live on the destination but gone on the source),
-  so it is an early-warning signal, not a silent hole — but treat repeated failures as an abort signal until capture is
-  healthy.
+  delete), so watch the backend logs for `captureDeletions` failures. A silently-dropped capture would leak a delete.
+  `verify.sh` catches that as a pre-EXCHANGE week mismatch (the row is live on the destination but gone on the source)
+  **for any capture failure up to the last pre-EXCHANGE verify** — but a capture that fails in the final
+  `exchange_and_wrap.sh` window (after the last verify, through the swap) is caught by neither `verify.sh` nor the final
+  deletion replay, only by this log-watch. So it is an early-warning signal, not a silent hole: treat repeated failures as
+  an abort signal until capture is healthy, and treat **any** `captureDeletions` failure observed from the last verify
+  through the EXCHANGE as a swap-gating signal.
 
 **Roles.** Name an operator (runs the scripts), an independent observer (watches the dashboards), and the person with
 authority to call a rollback. **Abort thresholds** (decide the numbers up front): free disk below the per-volume alarm,
