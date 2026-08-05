@@ -172,8 +172,15 @@ def delete_experiments_by_name():
     name = data["name"]
     client = get_opik_api_client()
 
-    matches = client.experiments.find_experiments(name=name, size=100).content or []
-    ids = [experiment.id for experiment in matches if experiment.name == name]
+    ids = []
+    page = 1
+    page_size = 100
+    while True:
+        matches = client.experiments.find_experiments(name=name, page=page, size=page_size).content or []
+        ids.extend(experiment.id for experiment in matches if experiment.name == name)
+        if len(matches) < page_size:
+            break
+        page += 1
 
     if ids:
         client.experiments.delete_experiments_by_id(ids=ids)

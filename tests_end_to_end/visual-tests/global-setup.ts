@@ -112,14 +112,10 @@ async function globalSetup(_config: FullConfig) {
   console.log('Cleaning up any existing test data...');
   try { await client.deleteExperimentsByName(TEST_SUITE_EXP_NAME); } catch { /* ignore */ }
   try { await client.deleteExperimentsByName(EXPERIMENT_NAME); } catch { /* ignore */ }
-  try {
-    await client.deleteDataset(TEST_SUITE_NAME);
-    await client.waitForDatasetDeleted(TEST_SUITE_NAME, 30);
-  } catch { /* ignore */ }
-  try {
-    await client.deleteDataset(DATASET_NAME);
-    await client.waitForDatasetDeleted(DATASET_NAME, 30);
-  } catch { /* ignore */ }
+  try { await client.deleteDataset(TEST_SUITE_NAME); } catch { /* ignore - not found */ }
+  await client.waitForDatasetDeleted(TEST_SUITE_NAME, 30);
+  try { await client.deleteDataset(DATASET_NAME); } catch { /* ignore - not found */ }
+  await client.waitForDatasetDeleted(DATASET_NAME, 30);
   try {
     await client.deleteProject(PROJECT_NAME);
     await client.waitForProjectDeleted(PROJECT_NAME, 30);

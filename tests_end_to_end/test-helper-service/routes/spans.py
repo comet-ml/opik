@@ -49,8 +49,13 @@ def delete_spans_by_project():
     client = get_opik_client()
     api_client = get_opik_api_client()
 
-    spans = client.search_spans(project_name=project_name, max_results=max_results, truncate=True)
-    for span in spans:
-        api_client.spans.delete_span_by_id(id=span.id)
+    deleted_count = 0
+    while True:
+        spans = client.search_spans(project_name=project_name, max_results=max_results, truncate=True)
+        if not spans:
+            break
+        for span in spans:
+            api_client.spans.delete_span_by_id(id=span.id)
+        deleted_count += len(spans)
 
-    return success_response({"deleted_count": len(spans)})
+    return success_response({"deleted_count": deleted_count})
