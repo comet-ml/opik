@@ -148,6 +148,40 @@ rules:
   cloud_only_separate_view: true
   # Report one % per dimension per area. Never a blended figure.
   report_per_dimension: true
+  # What counts as PRODUCT SURFACE when attributing a release's changed files to
+  # areas (consumed by the release-coverage skill in comet-ml/qa-plugin).
+  # Declared here rather than in tooling because both lists are scope decisions
+  # this file already owns. Note the path->area mapping ITSELF is not here: it is
+  # derived from router.tsx joined with the `routes:` on each area below, so it
+  # follows a page rename automatically and is never hand-maintained.
+  release_surface:
+    # Never product surface. A change confined to these is not a coverage gap;
+    # counting them manufactures gaps and buries the real ones.
+    not_surface:
+      - .github/
+      - tests_end_to_end/
+      - .agents/
+      - apps/opik-documentation/
+      - sdks/code_generation/
+      - scripts/
+      - version.txt
+      - .pre-commit-config.yaml
+      - CONTRIBUTING.md
+      - README.md
+      - .gitignore
+      - Makefile
+    # Real product surface this taxonomy deliberately does NOT enumerate — it
+    # covers 18 UI areas. Changes here are reported by name with coverage stated
+    # as *unknown*, never as zero, and never mapped to a UI area.
+    untracked:
+      - prefix: sdks/python
+        label: Python SDK
+      - prefix: sdks/typescript
+        label: TypeScript SDK
+      - prefix: apps/opik-backend/
+        label: Backend (API / internal)
+      - prefix: deployment/
+        label: Deployment / Helm
   # Tag-lint enforcement. All three are hard CI failures, not warnings.
   enforce:
     # every non-exempt e2e spec declares exactly one tier and one @area:
