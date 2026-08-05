@@ -1,7 +1,7 @@
 """Tests for ``Experiment.batch_upload_items`` — validation, batching and retry."""
 
+import concurrent.futures as concurrent_futures
 import datetime
-import itertools
 import json
 import threading
 import time
@@ -14,6 +14,7 @@ import pytest
 from opik import exceptions
 from opik.api_objects import constants
 from opik.api_objects.experiment import bulk_item, experiment as experiment_module
+from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 
@@ -50,6 +51,15 @@ def _sent_batch_sizes(mock_rest_client: Mock) -> List[int]:
     return [
         len(call.kwargs["items"])
         for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list
+    ]
+
+
+def _sent_dataset_item_ids(mock_rest_client: Mock) -> List[str]:
+    """Every id actually submitted, so drops and duplicates both show up."""
+    return [
+        item.dataset_item_id
+        for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list
+        for item in call.kwargs["items"]
     ]
 
 
@@ -104,6 +114,18 @@ class TestBulkUploadItemsRequest:
         kwargs = mock_rest_client.experiments.experiment_items_bulk.call_args.kwargs
         assert kwargs["project_name"] == "explicit-one"
 
+    @pytest.mark.parametrize("blank_project_name", ["", "   "])
+    def test_batch_upload_items__blank_project_name__is_sent_as_none(
+        self, blank_project_name: str
+    ) -> None:
+        """The backend's @Pattern(NULL_OR_NOT_BLANK) rejects a blank string."""
+        experiment, mock_rest_client = _create_experiment()
+
+        experiment.batch_upload_items([_record()], project_name=blank_project_name)
+
+        kwargs = mock_rest_client.experiments.experiment_items_bulk.call_args.kwargs
+        assert kwargs["project_name"] is None
+
 
 class TestBulkUploadItemsBatching:
     def test_batch_upload_items__more_items_than_max_batch_size__splits_by_count(
@@ -122,7 +144,11 @@ class TestBulkUploadItemsBatching:
             constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE,
             500,
         ]
-        assert sum(batch_sizes) == items_count
+        # Sizes alone would still pass if one item were dropped and another
+        # duplicated, so compare the submitted ids against the input set.
+        assert _sent_dataset_item_ids(mock_rest_client) == [
+            f"item-{i}" for i in range(items_count)
+        ]
 
     def test_batch_upload_items__items_exceeding_payload_limit__splits_by_size(
         self,
@@ -143,10 +169,17 @@ class TestBulkUploadItemsBatching:
         )
 
         batch_sizes = _sent_batch_sizes(mock_rest_client)
-        assert sum(batch_sizes) == 10
         assert len(batch_sizes) > 1
-        # Each batch must stay under the backend's per-request ceiling.
-        assert all(size <= 3 for size in batch_sizes)
+        assert _sent_dataset_item_ids(mock_rest_client) == [
+            f"item-{i}" for i in range(10)
+        ]
+        # Assert the actual ceiling rather than a hand-computed batch size.
+        for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list:
+            batch_size_MB = sum(
+                sequence_splitter.get_payload_size_MB(item)
+                for item in call.kwargs["items"]
+            )
+            assert batch_size_MB <= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
 
 
 class TestBulkUploadItemsSerialization:
@@ -358,6 +391,29 @@ class TestBulkUploadItemsConcurrency:
             f"item-{i}" for i in range(items_count)
         )
 
+    def test_batch_upload_items__num_threads_far_exceeds_batches__worker_count_is_capped(
+        self,
+    ) -> None:
+        """An unbounded caller value would otherwise spawn a thread per batch."""
+        experiment, mock_rest_client = _create_experiment()
+        captured_max_workers: List[int] = []
+        real_executor = concurrent_futures.ThreadPoolExecutor
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            captured_max_workers.append(kwargs["max_workers"])
+            return real_executor(*args, **kwargs)
+
+        records = [_record(dataset_item_id=f"item-{i}") for i in range(3)]
+
+        with patch.object(
+            experiment_module.futures, "ThreadPoolExecutor", side_effect=spy
+        ):
+            experiment.batch_upload_items(records, num_threads=5000)
+
+        # 3 records fit in a single batch, so one worker is enough.
+        assert captured_max_workers == [1]
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
+
     def test_batch_upload_items__num_threads_below_one__raises_validation_error(
         self,
     ) -> None:
@@ -382,14 +438,19 @@ class TestBulkUploadItemsConcurrency:
         experiment, mock_rest_client = _create_experiment()
         release_stuck_batch = threading.Event()
         stuck_batch_entered = threading.Event()
-        call_count = itertools.count()
 
         def upload(**kwargs: Any) -> None:
-            if next(call_count) == 0:
+            # Keyed off the batch contents, not arrival order, so thread
+            # scheduling cannot change which batch stalls.
+            batch_ids = {item.dataset_item_id for item in kwargs["items"]}
+            if "item-0" in batch_ids:
                 stuck_batch_entered.set()
                 # Stands in for a batch parked on repeated 429s.
                 release_stuck_batch.wait(timeout=30)
                 return None
+            # Every other batch fails, so the test does not depend on which
+            # one the pool happens to run first.
+            stuck_batch_entered.wait(timeout=10)
             raise ApiError(status_code=400, headers={}, body="bad request")
 
         mock_rest_client.experiments.experiment_items_bulk.side_effect = upload

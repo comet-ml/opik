@@ -170,11 +170,14 @@ class Experiment:
             items: The experiment items to upload. Each item must provide exactly
                 one of ``evaluate_task_result`` or ``trace``.
             project_name: Project for traces auto-created from items that provide
-                ``evaluate_task_result``. Defaults to the experiment's project.
-                When set, every item-level ``trace.project_name`` must match it.
+                ``evaluate_task_result``. Defaults to the experiment's project;
+                blank is treated as unset. When set, every item-level
+                ``trace.project_name`` must match it.
             num_threads: Number of batches to upload concurrently. Defaults to 1
                 (sequential). Raising it trades ordering and a higher chance of
-                being rate limited for throughput.
+                being rate limited for throughput. Capped at the number of
+                batches and at
+                ``constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS``.
 
         Returns:
             None
@@ -196,6 +199,11 @@ class Experiment:
         resolved_project_name = (
             project_name if project_name is not None else self._project_name
         )
+        # The backend annotates project_name with @Pattern(NULL_OR_NOT_BLANK), so a
+        # blank string is rejected outright rather than falling back to the default
+        # project. Treat it as unset, which is what the caller meant.
+        if resolved_project_name is not None and not resolved_project_name.strip():
+            resolved_project_name = None
 
         bulk_converters.validate_records(items, project_name=resolved_project_name)
 
@@ -227,8 +235,13 @@ class Experiment:
         # calls shutdown(wait=True), which would re-join batches we just chose
         # not to wait for and park the caller behind a batch stuck in the
         # rate-limit retry loop.
+        # More workers than batches is pure waste, and an unbounded caller-supplied
+        # value would spawn a thread per batch.
+        worker_count = min(
+            num_threads, len(batches), constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS
+        )
         pool = futures.ThreadPoolExecutor(
-            max_workers=num_threads, thread_name_prefix="opik_experiment_items_bulk"
+            max_workers=worker_count, thread_name_prefix="opik_experiment_items_bulk"
         )
         submitted = [
             pool.submit(
