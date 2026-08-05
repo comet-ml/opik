@@ -1,0 +1,203 @@
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.tieredStorage.enabled .Values.clickhouse.tieredStorage.coldTierMigration.enabled }}
+{{- /*
+  Recreates any ClickHouse StatefulSet still missing the cold-tier cache volume
+  after the cold tier is enabled: orphan-delete (pods + data PVCs preserved) so
+  the operator re-adds the mount, one replica at a time, until all are Ready.
+  No-op when every replica already has the cache volume.
+*/ -}}
+{{- $cacheVct := .Values.clickhouse.tieredStorage.cold.cache.volumeName -}}
+{{- $cachePath := .Values.clickhouse.tieredStorage.cold.cache.path -}}
+{{- $chiName := printf "%s-clickhouse" (include "opik.name" $) -}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-sa
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "10"
+    {{- else }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-role
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "10"
+    {{- else }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+rules:
+  # Recreate the affected CH StatefulSet (orphan-delete) + reschedule its pod.
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-rb
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "10"
+    {{- else }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-sa
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opik.labels" $ | nindent 4 }}
+    component: {{ include "opik.name" $ }}-ch-cold-tier-migration
+    {{- with $.Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "15"
+    {{- else }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "15"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+spec:
+  backoffLimit: 2
+  # Hard cap on the whole Job (must exceed pollTimeoutSeconds).
+  activeDeadlineSeconds: {{ .Values.clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        app: ch-cold-tier-migration
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.clickhouse.tieredStorage.coldTierMigration.serviceAccountName | default (printf "%s-ch-cold-tier-migration-sa" (include "opik.fullname" .)) }}
+      {{- with (.Values.clickhouse.tieredStorage.coldTierMigration.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.clickhouse.tieredStorage.coldTierMigration.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migration
+          image: {{ .Values.clickhouse.tieredStorage.coldTierMigration.image }}
+          env:
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: CHI_NAME
+              value: {{ $chiName | quote }}
+            - name: CACHE_VCT
+              value: {{ $cacheVct | quote }}
+            - name: CACHE_PATH
+              value: {{ $cachePath | quote }}
+            - name: POLL_TIMEOUT
+              value: {{ .Values.clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds | quote }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+
+              echo "=== Cold-tier enable migration (recreate StatefulSets missing the cache volume) ==="
+              echo "namespace=${NAMESPACE} chi=${CHI_NAME} cacheVct=${CACHE_VCT} cachePath=${CACHE_PATH}"
+
+              # Operator-managed CH StatefulSets for this CHI.
+              CH_STS_SELECTOR="clickhouse.altinity.com/chi=${CHI_NAME}"
+
+              # A StatefulSet needs recreation when it lacks the cache VCT.
+              sts_missing_cache_vct() {
+                for sts in $(kubectl get sts -n "$NAMESPACE" -l "$CH_STS_SELECTOR" -o name 2>/dev/null); do
+                  vcts=$(kubectl get "$sts" -n "$NAMESPACE" \
+                    -o jsonpath='{range .spec.volumeClaimTemplates[*]}{.metadata.name}{" "}{end}' 2>/dev/null || echo "")
+                  case " $vcts " in
+                    *" ${CACHE_VCT} "*) : ;;              # already has it
+                    *) echo "${sts#statefulset.apps/}" ;; # missing -> needs recreation
+                  esac
+                done
+              }
+
+              # The pod for STS <name> is <name>-0 (altinity: one pod per replica STS).
+              recreate_one() {
+                sts="$1"
+                pod="${sts}-0"
+                echo ">> orphan-deleting StatefulSet ${sts} (keeps pod + data PVC); operator recreates it WITH ${CACHE_VCT}"
+                kubectl delete "sts/${sts}" -n "$NAMESPACE" --cascade=orphan --wait=true
+                # Give the operator a moment to recreate the STS with the cache VCT.
+                sleep 8
+                echo ">> deleting pod ${pod} so it reschedules with the ${CACHE_PATH} mount"
+                kubectl delete "pod/${pod}" -n "$NAMESPACE" --grace-period=0 --ignore-not-found=true
+              }
+
+              deadline=$(( $(date +%s) + POLL_TIMEOUT ))
+              migrated_any=0
+              while :; do
+                pending=$(sts_missing_cache_vct || true)
+                if [ -z "$pending" ]; then
+                  echo "All CH StatefulSets carry ${CACHE_VCT} — nothing to migrate."
+                  break
+                fi
+                echo "StatefulSets missing ${CACHE_VCT}:"
+                echo "$pending" | sed 's/^/  - /'
+                # One host at a time — the operator processes replicas sequentially.
+                first=$(echo "$pending" | head -n1)
+                recreate_one "$first"
+                migrated_any=1
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "ERROR: poll timeout (${POLL_TIMEOUT}s) before all replicas gained ${CACHE_VCT}" >&2
+                  kubectl get sts,pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
+                  exit 1
+                fi
+                sleep 10
+              done
+
+              # Wait for every CH pod to report Ready before declaring success.
+              echo "Waiting for all CH pods Ready..."
+              if ! kubectl wait --for=condition=Ready pod \
+                    -n "$NAMESPACE" -l "$CH_STS_SELECTOR" \
+                    --timeout="${POLL_TIMEOUT}s"; then
+                echo "ERROR: CH pods not all Ready within ${POLL_TIMEOUT}s" >&2
+                kubectl get pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
+                exit 1
+              fi
+
+              if [ "$migrated_any" -eq 1 ]; then
+                echo "=== Cold-tier migration complete — all replicas Ready with ${CACHE_VCT} ==="
+              else
+                echo "=== No migration needed — cold tier already healthy ==="
+              fi
+{{- end }}
