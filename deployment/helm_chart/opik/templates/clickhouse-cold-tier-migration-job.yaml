@@ -8,9 +8,12 @@
 {{- $cacheVct := .Values.clickhouse.tieredStorage.cold.cache.volumeName -}}
 {{- $cachePath := .Values.clickhouse.tieredStorage.cold.cache.path -}}
 {{- $chiName := printf "%s-clickhouse" (include "opik.name" $) -}}
-{{- /* One effective SA name for both the Job and the RoleBinding subject, so an
-       override still gets the RBAC it needs. */ -}}
-{{- $sa := .Values.clickhouse.tieredStorage.coldTierMigration.serviceAccountName | default (printf "%s-ch-cold-tier-migration-sa" (include "opik.fullname" .)) -}}
+{{- /* Effective SA name for the Job and the RoleBinding subject. When
+       serviceAccountName is overridden the account is externally managed, so we
+       reference it but do NOT render (and hook-delete) the chart's SA object. */ -}}
+{{- $saOverride := .Values.clickhouse.tieredStorage.coldTierMigration.serviceAccountName -}}
+{{- $sa := $saOverride | default (printf "%s-ch-cold-tier-migration-sa" (include "opik.fullname" .)) -}}
+{{- if not $saOverride }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -27,6 +30,7 @@ metadata:
     "helm.sh/hook-weight": "10"
     "helm.sh/hook-delete-policy": before-hook-creation
     {{- end }}
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
