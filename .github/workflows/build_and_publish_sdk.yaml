@@ -75,7 +75,7 @@ jobs:
 
         - name: Publish package distributions to PyPI
           if: inputs.is_release
-          uses: pypa/gh-action-pypi-publish@v1.14.1
+          uses: pypa/gh-action-pypi-publish@v1.14.2
           with:
             password: ${{ secrets.PYPI_API_TOKEN }}
             packages-dir: sdks/python/dist

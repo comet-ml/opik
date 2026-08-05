@@ -103,10 +103,12 @@ jobs:
 
       - name: Commit
         if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
-          git config --local user.name "Github Actions (${{ github.actor }})"
+          git config --local user.name "Github Actions (${ACTOR})"
           git add tests_end_to_end/coverage/taxonomy.yaml
           git commit -m "[OPIK-7532] [QA] chore: reconcile coverage taxonomy with spec tags"
 

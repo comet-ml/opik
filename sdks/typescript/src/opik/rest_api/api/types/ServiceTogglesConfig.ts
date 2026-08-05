@@ -26,10 +26,5 @@ export interface ServiceTogglesConfig {
     projectHomepageEnabled: boolean;
     agenticToolsEnabled: boolean;
     onlineScoringTracingEnabled: boolean;
-    v2WorkspaceAllowlistIds: string[];
-    v1WorkspaceAllowlistIds: string[];
-    forceWorkspaceVersion: string;
     defaultPageSize?: number;
-    v2WorkspaceAllowlist?: string;
-    v1WorkspaceAllowlist?: string;
 }
