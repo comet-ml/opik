@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 import { getEnvironmentConfig } from '../config/env.config';
 import { TestHelperClient } from '../helpers/test-helper-client';
+import { ProjectsPage } from '../page-objects/projects.page';
 import { ConfigurationPage } from '../page-objects/configuration.page';
 import { screenshot, tableMasks } from './utils/screenshot';
 
@@ -12,9 +13,11 @@ const ENV_PRODUCTION = 'visual-config-env-production';
 test.setTimeout(300000);
 
 test.describe('Visual Comparison - Configuration', () => {
+  let projectId = '';
   const { baseUrl, workspace } = getEnvironmentConfig().getConfig();
+  const projectName = () => process.env.VISUAL_PROJECT_NAME!;
 
-  test.beforeAll(async () => {
+  test.beforeAll(async ({ browser }) => {
     const client = new TestHelperClient();
 
     await client.createFeedbackDefinition(FEEDBACK_DEF_QUALITY, 'numerical', { min: 0, max: 1 });
@@ -27,6 +30,14 @@ test.describe('Visual Comparison - Configuration', () => {
 
     await client.createProviderApiKey('openai', 'sk-visual-test-fake-key-openai');
     await client.createProviderApiKey('anthropic', 'sk-visual-test-fake-key-anthropic');
+
+    const page = await browser.newPage();
+    const projectsPage = new ProjectsPage(page, baseUrl, workspace);
+    await projectsPage.goto();
+    await projectsPage.searchAndWait(projectName());
+    await projectsPage.waitForProject(projectName());
+    projectId = await projectsPage.clickProjectAndGetId(projectName());
+    await page.close();
   });
 
   test.afterAll(async () => {
@@ -61,28 +72,28 @@ test.describe('Visual Comparison - Configuration', () => {
 
   test('C01: Configuration - Feedback definitions', { tag: ['@vcap:configuration.config-feedback-definitions'] }, async ({ page }) => {
     const configurationPage = new ConfigurationPage(page, baseUrl, workspace);
-    await configurationPage.goto('feedback-definitions');
+    await configurationPage.goto('feedback-definitions', projectId);
     await configurationPage.waitForFeedbackDefinitionsReady(FEEDBACK_DEF_QUALITY);
     await screenshot(page, 'C01-config-feedback-definitions', tableMasks(page));
   });
 
   test('C02: Configuration - Environments', { tag: ['@vcap:configuration.config-environments'] }, async ({ page }) => {
     const configurationPage = new ConfigurationPage(page, baseUrl, workspace);
-    await configurationPage.goto('environments');
+    await configurationPage.goto('environments', projectId);
     await configurationPage.waitForEnvironmentsReady(ENV_STAGING);
     await screenshot(page, 'C02-config-environments', tableMasks(page));
   });
 
   test('C03: Configuration - AI providers', { tag: ['@vcap:configuration.config-ai-providers'] }, async ({ page }) => {
     const configurationPage = new ConfigurationPage(page, baseUrl, workspace);
-    await configurationPage.goto('ai-provider');
+    await configurationPage.goto('ai-provider', projectId);
     await configurationPage.waitForAiProvidersReady('OpenAI');
     await screenshot(page, 'C03-config-ai-providers', tableMasks(page));
   });
 
   test('C04: Configuration - Workspace preferences', { tag: ['@vcap:configuration.config-workspace-prefs'] }, async ({ page }) => {
     const configurationPage = new ConfigurationPage(page, baseUrl, workspace);
-    await configurationPage.goto('workspace-preferences');
+    await configurationPage.goto('workspace-preferences', projectId);
     await configurationPage.waitForWorkspacePreferencesReady();
     await screenshot(page, 'C04-config-workspace-prefs');
   });

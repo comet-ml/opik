@@ -8,7 +8,13 @@ export class ConfigurationPage extends BasePage {
     super(page, baseUrl, workspace);
   }
 
-  async goto(tab: ConfigurationTab): Promise<void> {
+  // Visiting a project first (rather than going straight to Configuration) pins the
+  // sidebar's "Back to <project>" state to a known project — otherwise it falls back
+  // to whichever project was most recently updated, an environment-dependent name that
+  // shifts the sidebar's pixel width and fails the screenshot comparison.
+  async goto(tab: ConfigurationTab, projectId: string): Promise<void> {
+    await this.page.goto(this.url(`projects/${projectId}/home`));
+    await this.page.waitForLoadState('load');
     await this.page.goto(this.url(`configuration?tab=${tab}`));
     await this.page.waitForLoadState('load');
     await this.dismissWelcomeDialogIfPresent();
