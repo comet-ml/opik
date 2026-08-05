@@ -942,11 +942,12 @@ clickhouse:
     coldTierMigration:
       enabled: true
       image: "alpine/kubectl:1.35.0"
-      # Budget for orphan-delete + operator-rebuild + reschedule, per replica;
-      # also covers the single-replica passive self-heal (~7 min).
-      pollTimeoutSeconds: 900
-      # Hard cap on the whole Job (must exceed pollTimeoutSeconds).
-      activeDeadlineSeconds: 1200
+      # Total budget for the whole run (all replicas: orphan-delete + operator
+      # rebuild + reschedule + wait Ready), shared across migration and readiness.
+      pollTimeoutSeconds: 1200
+      # Kubernetes hard cap on the Job: pollTimeoutSeconds plus startup/kubectl
+      # overhead. Must exceed pollTimeoutSeconds.
+      activeDeadlineSeconds: 1320
       # SA with delete on statefulsets + pods (falls back to the chart-created SA).
       serviceAccountName: ""
       nodeSelector: {}
