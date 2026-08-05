@@ -6,6 +6,7 @@ from json.decoder import JSONDecodeError
 
 from ..core.api_error import ApiError
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
+from ..core.datetime_utils import serialize_datetime
 from ..core.http_response import AsyncHttpResponse, HttpResponse
 from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
@@ -1080,6 +1081,8 @@ class RawProjectsClient:
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectStatsSummary]:
@@ -1095,6 +1098,10 @@ class RawProjectsClient:
         name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         sorting : typing.Optional[str]
 
@@ -1114,6 +1121,8 @@ class RawProjectsClient:
                 "size": size,
                 "name": name,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
                 "sorting": sorting,
             },
             request_options=request_options,
@@ -2327,6 +2336,8 @@ class AsyncRawProjectsClient:
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectStatsSummary]:
@@ -2342,6 +2353,10 @@ class AsyncRawProjectsClient:
         name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         sorting : typing.Optional[str]
 
@@ -2361,6 +2376,8 @@ class AsyncRawProjectsClient:
                 "size": size,
                 "name": name,
                 "filters": filters,
+                "from_time": serialize_datetime(from_time) if from_time is not None else None,
+                "to_time": serialize_datetime(to_time) if to_time is not None else None,
                 "sorting": sorting,
             },
             request_options=request_options,
