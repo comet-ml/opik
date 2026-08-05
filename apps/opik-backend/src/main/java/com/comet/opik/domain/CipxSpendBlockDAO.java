@@ -64,9 +64,9 @@ public class CipxSpendBlockDAO {
             @NonNull String projectId,
             @NonNull Instant startTime,
             @NonNull String model,
-            /** Per-call speed modifier from cipx.call.config; selects the rate table that prices
-             * the call. Denormalized onto every block for the same reason `model` is. '' = standard,
-             * incl. every row written before cipx emitted it. */
+            /** Per-call speed modifier; selects the rate table that prices the call. Carried on
+             * every block because block-level cost needs the value that priced it. '' = standard,
+             * incl. every row written before the field existed. */
             @NonNull String speed,
             int blockIdx,
             @NonNull String src,

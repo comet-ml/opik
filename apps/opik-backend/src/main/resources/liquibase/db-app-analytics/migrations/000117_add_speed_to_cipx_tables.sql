@@ -2,12 +2,9 @@
 --changeset aadereiko:000117_add_speed_to_cipx_tables
 --comment: Persist the per-call speed modifier on cipx_spends and cipx_spend_blocks
 --
--- Mirrors cipx wire.CallConfig.Speed, parsed from cipx.call.config alongside effort /
--- thinking_type / max_tokens. It selects which rate table prices the call, and is per-call
--- rather than per-session: one session can carry more than one value.
--- '' means standard, including every row written before cipx emitted the field.
--- Denormalized onto blocks as well as spends, for the same reason `model` is: a block's cost
--- is only computable alongside the value that priced it.
+-- Selects which rate table prices a call. Per-call, not per-session: one session can carry
+-- more than one value. '' means standard, including every row written before the field existed.
+-- Carried on blocks as well as spends because block-level cost needs the value that priced it.
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_spends ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS speed LowCardinality(String) DEFAULT '';

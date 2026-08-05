@@ -151,8 +151,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().speed()).isEqualTo("fast");
             });
 
-            // Denormalized onto every block row too, since the block-level breakdowns price
-            // from cipx_spend_blocks rather than from cipx_spends.
+            // Carried on every block row too.
             var blocks = getCipxBlocks(cipxSpan.id(), ws.workspaceId());
             assertThat(blocks).isNotEmpty();
             assertThat(blocks).allSatisfy(block -> assertThat(block.speed()).isEqualTo("fast"));
