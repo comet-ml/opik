@@ -64,10 +64,9 @@ public class CipxSpendBlockDAO {
             @NonNull String projectId,
             @NonNull Instant startTime,
             @NonNull String model,
-            /** Fast-mode rate modifier, read from cipx.call.config and denormalized onto every block
-             * next to `model` (which comes from cipx.call itself): a block's cost is only computable
-             * with the rate that produced it. '' = standard speed, which is also what every row
-             * written before this column reads as. */
+            /** Per-call speed modifier from cipx.call.config; selects the rate table that prices
+             * the call. Denormalized onto every block for the same reason `model` is. '' = standard,
+             * incl. every row written before cipx emitted it. */
             @NonNull String speed,
             int blockIdx,
             @NonNull String src,

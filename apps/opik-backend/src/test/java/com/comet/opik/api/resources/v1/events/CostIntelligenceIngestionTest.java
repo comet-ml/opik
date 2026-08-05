@@ -147,13 +147,12 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().thinkingType()).isEqualTo("adaptive");
                 assertThat(row.get().maxTokens()).isEqualTo(64000L);
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
-                // the rate modifier — it picks the rate table, so losing it mis-prices the call
+                // speed: selects the rate table, so it must survive ingestion
                 assertThat(row.get().speed()).isEqualTo("fast");
             });
 
-            // The modifier is denormalized onto every block row too — the per-user lane
-            // breakdowns price from cipx_spend_blocks, so a block that lost it would be
-            // priced at the standard rate no matter what cipx_spends says.
+            // Denormalized onto every block row too, since the block-level breakdowns price
+            // from cipx_spend_blocks rather than from cipx_spends.
             var blocks = getCipxBlocks(cipxSpan.id(), ws.workspaceId());
             assertThat(blocks).isNotEmpty();
             assertThat(blocks).allSatisfy(block -> assertThat(block.speed()).isEqualTo("fast"));
