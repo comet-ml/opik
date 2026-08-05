@@ -209,10 +209,13 @@ def _coerce_error_tolerance(value: Any) -> ErrorTolerance:
     """
     try:
         return ErrorTolerance(value)
-    except ValueError:
+    except (ValueError, TypeError):
         if value is not None:
+            # Only the type and a bounded excerpt: the blob is external input and
+            # could carry an arbitrarily large value.
             LOGGER.warning(
-                "Unrecognised error_tolerance %r in resume state; resuming at %s.",
+                "Unrecognised error_tolerance in resume state (%s: %.40s); resuming at %s.",
+                type(value).__name__,
                 value,
                 ErrorTolerance.METRIC_ERRORS.name,
             )

@@ -139,3 +139,28 @@ def test_evaluate__scoring_key_mapping_matches_nothing__warning_is_logged(fake_b
     logged = " ".join(str(call) for call in mock_warning.call_args_list)
     assert "no_such_dataset_key" in logged
     assert "not found in dataset item" in logged
+
+
+def test_evaluate__unsupported_evaluator__does_not_displace_the_first_metric_score(
+    fake_backend,
+):
+    # Consumers index into `score_results`; a skipped evaluator must not take the
+    # place of the first configured metric.
+    items = [
+        dataset_item.DatasetItem(
+            id="dataset-item-id-1",
+            input="q",
+            output="a",
+            evaluators=[
+                dataset_item.EvaluatorItem(
+                    name="code_metric_evaluator", type="code_metric", config={}
+                )
+            ],
+        )
+    ]
+
+    result = _run_evaluation([AlwaysPasses()], items=items)
+
+    score_results = result.test_results[0].score_results
+    assert score_results[0].name == "always_passes"
+    assert score_results[-1].name == "code_metric_evaluator"

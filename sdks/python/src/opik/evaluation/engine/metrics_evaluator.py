@@ -1,9 +1,9 @@
 import inspect
 import logging
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import opik
 import opik.opik_context as opik_context
-from typing import List, Dict, Any, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
@@ -146,8 +146,9 @@ def _extract_item_evaluators(
                 )
         except Exception as exception:
             LOGGER.error(
-                "Failed to instantiate evaluator from config: %s",
-                evaluator_item.config,
+                "Failed to instantiate evaluator %s from its config (keys: %s).",
+                evaluator_item.name,
+                sorted(evaluator_item.config),
                 exc_info=True,
             )
             if error_tolerance < ErrorTolerance.ALL_SCORING_ERRORS:
@@ -419,7 +420,7 @@ class MetricsEvaluator:
             scoring_key_mapping=self._scoring_key_mapping,
         )
 
-        score_results = self._skipped_evaluator_scores + _compute_metric_scores(
+        score_results = _compute_metric_scores(
             scoring_metrics=self._regular_metrics,
             mapped_scoring_inputs=mapped_scoring_inputs,
             scoring_key_mapping=self._scoring_key_mapping,
@@ -428,6 +429,9 @@ class MetricsEvaluator:
             trace_tool_context=trace_tool_context,
             error_tolerance=self._error_tolerance,
         )
+        # Appended, not prepended: consumers index into `score_results`, so a
+        # skipped evaluator must not displace the first configured metric.
+        score_results += self._skipped_evaluator_scores
 
         return score_results, mapped_scoring_inputs
 

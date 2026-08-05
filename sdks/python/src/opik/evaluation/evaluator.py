@@ -267,9 +267,11 @@ def evaluate(
             belongs to a single metric, so neither can be reported as one metric's
             failed score.
 
-            Tolerated failures are also recorded on a span named after the metric,
-            carrying the same ``error_info``, so they are visible in the trace even
-            though a failed score is never persisted as a feedback score.
+            A tolerated failure of a metric is also recorded on a span named after
+            it, carrying the same ``error_info``, so it is visible in the trace even
+            though a failed score is never persisted as a feedback score. Failures
+            building an item-level evaluator happen before any metric span exists,
+            so those carry the payload on the score result only.
 
             Tolerated failures are accumulated in the returned ``EvaluationResult``:
             every one is a ``ScoreResult`` with ``scoring_failed=True``, ``reason``
@@ -1613,7 +1615,7 @@ def evaluate_resume(
         trial_count=context.default_runs_per_item,
         experiment_scoring_functions=experiment_scoring_functions,
         source="experiment",
-        # The tolerance the original evaluate() call ran with, read back from the
+        # The tolerance the original evaluation call ran with, read back from the
         # resume state, so a resumed run does not silently become stricter than
         # the run it continues.
         error_tolerance=context.error_tolerance,

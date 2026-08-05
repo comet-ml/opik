@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 
 import opik
-from opik import exceptions, url_helpers
+from opik import exceptions, tracing_runtime_config, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik import evaluation
@@ -280,11 +280,12 @@ def test_evaluate__argument_span__is_created_for_successful_scores_too(fake_back
 def test_evaluate__tracing_disabled__no_argument_span_is_emitted(fake_backend):
     # `start_as_current_span` does not honour `set_tracing_active` on its own, so the
     # engine has to gate it: a run with tracing off must stay silent.
+    tracing_was_active = tracing_runtime_config.is_tracing_active()
     opik.set_tracing_active(False)
     try:
         _run_evaluation([AlwaysPasses()])
     finally:
-        opik.set_tracing_active(True)
+        opik.set_tracing_active(tracing_was_active)
 
     assert _spans_named(fake_backend, "always_passes_arg_validation") == []
 
