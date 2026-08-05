@@ -770,6 +770,8 @@ class ProjectsClient:
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsSummary:
@@ -785,6 +787,10 @@ class ProjectsClient:
         name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         sorting : typing.Optional[str]
 
@@ -803,7 +809,14 @@ class ProjectsClient:
         client.projects.get_project_stats()
         """
         _response = self._raw_client.get_project_stats(
-            page=page, size=size, name=name, filters=filters, sorting=sorting, request_options=request_options
+            page=page,
+            size=size,
+            name=name,
+            filters=filters,
+            from_time=from_time,
+            to_time=to_time,
+            sorting=sorting,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1666,6 +1679,8 @@ class AsyncProjectsClient:
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        from_time: typing.Optional[dt.datetime] = None,
+        to_time: typing.Optional[dt.datetime] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectStatsSummary:
@@ -1681,6 +1696,10 @@ class AsyncProjectsClient:
         name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        from_time : typing.Optional[dt.datetime]
+
+        to_time : typing.Optional[dt.datetime]
 
         sorting : typing.Optional[str]
 
@@ -1702,7 +1721,14 @@ class AsyncProjectsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_project_stats(
-            page=page, size=size, name=name, filters=filters, sorting=sorting, request_options=request_options
+            page=page,
+            size=size,
+            name=name,
+            filters=filters,
+            from_time=from_time,
+            to_time=to_time,
+            sorting=sorting,
+            request_options=request_options,
         )
         return _response.data
 

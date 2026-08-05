@@ -6468,6 +6468,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: "When set, scope the project metrics from this time (ISO-8601\
+            \ format); omitted keeps the all-time aggregates"
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Scope the project metrics up to this time (ISO-8601 format).
+            Must be after 'from_time'.
+          format: date-time
       - name: sorting
         in: query
         schema:
@@ -9268,33 +9282,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/workspaces/versions:
-    get:
-      tags:
-      - Workspaces
-      summary: Get workspace version
-      description: |-
-        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
-        or Opik V2 (project-first) navigation. The backend is the single authority for this
-        determination, clients must never derive the version themselves.
-
-        Determination logic (priority order):
-        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
-        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        3) Auth one-way V2 gate (authenticated mode only)
-        4) Version 1 entity check (entities without project_id)
-        5) Fallback on failure
-
-        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
-        Called by the frontend on workspace load.
-      operationId: getWorkspaceVersion
-      responses:
-        "200":
-          description: Workspace version
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WorkspaceVersion"
   /v1/private/workspaces/metrics/summaries:
     post:
       tags:
@@ -20931,7 +20918,6 @@ components:
       - datasetVersioningEnabled
       - demoDataEnabled
       - exportEnabled
-      - forceWorkspaceVersion
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
@@ -20945,8 +20931,6 @@ components:
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
-      - v1WorkspaceAllowlistIds
-      - v2WorkspaceAllowlistIds
       - vertexaiProviderEnabled
       - welcomeWizardEnabled
       type: object
@@ -21001,32 +20985,11 @@ components:
           type: boolean
         onlineScoringTracingEnabled:
           type: boolean
-        v2WorkspaceAllowlistIds:
-          uniqueItems: true
-          type: array
-          items:
-            minLength: 1
-            type: string
-        v1WorkspaceAllowlistIds:
-          uniqueItems: true
-          type: array
-          items:
-            minLength: 1
-            type: string
-        forceWorkspaceVersion:
-          minLength: 1
-          type: string
         defaultPageSize:
           maximum: 100
           minimum: 5
           type: integer
           format: int32
-        v2WorkspaceAllowlist:
-          type: string
-          writeOnly: true
-        v1WorkspaceAllowlist:
-          type: string
-          writeOnly: true
     SpanBatchUpdate:
       required:
       - ids
@@ -22620,22 +22583,6 @@ components:
           items:
             type: string
             format: uuid
-    WorkspaceVersion:
-      type: object
-      properties:
-        opik_version:
-          type: string
-          description: |-
-            The determined Opik navigation version for this workspace.
-            'version_1' = legacy workspace-scoped navigation,
-            'version_2' = new project-first navigation.
-          enum:
-          - version_1
-          - version_2
-      description: |-
-        Workspace version response.
-        The opik_version field indicates which navigation mode the frontend should render:
-        'version_1' (legacy workspace-scoped) or 'version_2' (project-first).
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:
