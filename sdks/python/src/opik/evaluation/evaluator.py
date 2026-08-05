@@ -321,6 +321,7 @@ def evaluate(
         nb_samples=nb_samples,
         dataset_sampler=dataset_sampler,
         dataset_item_ids=dataset_item_ids,
+        error_tolerance=error_tolerance,
     )
 
     experiment = client.create_experiment(
@@ -1167,6 +1168,7 @@ def evaluate_prompt(
         nb_samples=nb_samples,
         dataset_sampler=dataset_sampler,
         dataset_item_ids=dataset_item_ids,
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
 
     experiment = client.create_experiment(
@@ -1437,6 +1439,7 @@ def evaluate_optimization_trial(
         nb_samples=nb_samples,
         dataset_sampler=dataset_sampler,
         dataset_item_ids=dataset_item_ids,
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
 
     experiment = client.create_experiment(
@@ -1604,9 +1607,10 @@ def evaluate_resume(
         trial_count=context.default_runs_per_item,
         experiment_scoring_functions=experiment_scoring_functions,
         source="experiment",
-        # Resuming or replaying a trial does not carry the original
-        # caller's tolerance, so it runs at the default.
-        error_tolerance=ErrorTolerance.METRIC_ERRORS,
+        # The tolerance the original evaluate() call ran with, read back from the
+        # resume state, so a resumed run does not silently become stricter than
+        # the run it continues.
+        error_tolerance=context.error_tolerance,
     )
 
     merged = evaluation_result.merge_resume_results(

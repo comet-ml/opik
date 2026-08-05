@@ -296,3 +296,60 @@ def test_evaluate__argument_span__is_tagged_as_internal(fake_backend):
     spans = _spans_named(fake_backend, "always_passes.score_arguments")
     assert spans
     assert all(span.tags == [INTERNAL_SPAN_TAG] for span in spans)
+
+
+def test_evaluate__records_the_tolerance_in_the_resume_state(fake_backend):
+    # The blob evaluate() embeds is what evaluate_resume() later reads back, so the
+    # chosen tolerance has to reach it — otherwise a resumed run turns strict again.
+    import json
+
+    from opik.evaluation.resume import state as resume_state
+
+    captured = {}
+
+    def capture_experiment_config(**kwargs):
+        captured.update(kwargs)
+        experiment = mock.Mock()
+        experiment.prompts = None
+        return experiment
+
+    items = [dataset_item.DatasetItem(id="dataset-item-id-0", input="q", output="a")]
+    mock_dataset = mock.MagicMock(
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+            "get_version_info",
+            "get_execution_policy",
+            "project_name",
+            "get_evaluators",
+        ]
+    )
+    mock_dataset.name = "the-dataset-name"
+    mock_dataset.id = "the-dataset-id"
+    mock_dataset.dataset_items_count = 1
+    mock_dataset.get_version_info.return_value = mock.Mock(version_name="v1")
+    mock_dataset.project_name = None
+    mock_dataset.get_execution_policy.return_value = {}
+    mock_dataset.get_evaluators.return_value = []
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+        items
+    )
+
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", side_effect=capture_experiment_config
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock.Mock(return_value="any_url")
+        ):
+            evaluation.evaluate(
+                dataset=mock_dataset,
+                task=lambda item: {"output": item["output"]},
+                scoring_metrics=[AlwaysPasses()],
+                experiment_name="the-experiment-name",
+                task_threads=1,
+                error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
+            )
+
+    blob = json.loads(captured["experiment_config"][resume_state.RESUME_METADATA_KEY])
+    assert blob["error_tolerance"] == ErrorTolerance.ALL_SCORING_ERRORS
