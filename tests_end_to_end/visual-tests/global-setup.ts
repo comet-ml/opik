@@ -4,6 +4,46 @@ import { TestHelperClient } from './helpers/test-helper-client';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// Deleting a project only guarantees its row disappears from the list API — trace/span
+// cascade deletion happens asynchronously afterwards (spans are themselves a second-order
+// cascade off trace deletion, so they can lag even further behind). Recreating a project
+// with the same name (needed so screenshots stay stable across runs) can race that
+// cascade, leaving stale traces/spans attached to what looks like a freshly created
+// project. Rather than trust the delete+recreate timing, explicitly verify each project
+// is empty of both before any spec seeds real data into it, purging and re-checking until
+// it is or we time out.
+async function ensureProjectHasNoLeftoverData(
+  client: TestHelperClient,
+  projectName: string,
+  timeoutMs: number = 30000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const traces = await client.getTraces(projectName, 1000);
+    const spans = await client.searchSpans(projectName, { maxResults: 1000 });
+
+    if (traces.length === 0 && spans.length === 0) {
+      return;
+    }
+
+    if (traces.length > 0) {
+      console.log(`Found ${traces.length} leftover trace(s) in "${projectName}" from a previous run — purging`);
+      await client.deleteTraces(traces.map((trace) => trace.id));
+    }
+    if (spans.length > 0) {
+      console.log(`Found ${spans.length} leftover span(s) in "${projectName}" from a previous run — purging`);
+      await client.deleteSpansByProject(projectName);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  throw new Error(
+    `Project "${projectName}" still has leftover traces/spans after ${timeoutMs}ms — refusing to seed new data on top of stale state`,
+  );
+}
+
 export const AUTH_STATE_FILE = '.auth/user.json';
 const authFile = path.join(__dirname, AUTH_STATE_FILE);
 
@@ -13,6 +53,8 @@ const EMPTY_PROJECT_NAME = 'visual-empty-project';
 const SIDEBAR_PROJECT_NAME = 'visual-sidebar-project';
 const DATASET_NAME = 'visual-dataset';
 const TEST_SUITE_NAME = 'visual-testsuite';
+const EXPERIMENT_NAME = 'visual-experiment';
+const TEST_SUITE_EXP_NAME = 'visual-testsuite-exp';
 
 async function globalSetup(_config: FullConfig) {
   const envConfig = getEnvironmentConfig();
@@ -62,10 +104,22 @@ async function globalSetup(_config: FullConfig) {
 
   const client = new TestHelperClient();
 
-  // Clean up any leftover data from a previous run
+  // Clean up any leftover data from a previous run. Experiments aren't scoped to a
+  // project/dataset deletion cascade and are otherwise only cleaned up by
+  // global-teardown, which never runs if a previous CI run crashed, timed out, or
+  // was cancelled — so they must be swept here by name too, or they accumulate
+  // indefinitely across runs.
   console.log('Cleaning up any existing test data...');
-  try { await client.deleteDataset(TEST_SUITE_NAME); } catch { /* ignore */ }
-  try { await client.deleteDataset(DATASET_NAME); } catch { /* ignore */ }
+  try { await client.deleteExperimentsByName(TEST_SUITE_EXP_NAME); } catch { /* ignore */ }
+  try { await client.deleteExperimentsByName(EXPERIMENT_NAME); } catch { /* ignore */ }
+  try {
+    await client.deleteDataset(TEST_SUITE_NAME);
+    await client.waitForDatasetDeleted(TEST_SUITE_NAME, 30);
+  } catch { /* ignore */ }
+  try {
+    await client.deleteDataset(DATASET_NAME);
+    await client.waitForDatasetDeleted(DATASET_NAME, 30);
+  } catch { /* ignore */ }
   try {
     await client.deleteProject(PROJECT_NAME);
     await client.waitForProjectDeleted(PROJECT_NAME, 30);
@@ -82,12 +136,15 @@ async function globalSetup(_config: FullConfig) {
   console.log('Creating projects...');
   await client.createProject(PROJECT_NAME);
   await client.waitForProjectVisible(PROJECT_NAME, 15);
+  await ensureProjectHasNoLeftoverData(client, PROJECT_NAME);
 
   await client.createProject(EMPTY_PROJECT_NAME);
   await client.waitForProjectVisible(EMPTY_PROJECT_NAME, 15);
+  await ensureProjectHasNoLeftoverData(client, EMPTY_PROJECT_NAME);
 
   await client.createProject(SIDEBAR_PROJECT_NAME);
   await client.waitForProjectVisible(SIDEBAR_PROJECT_NAME, 15);
+  await ensureProjectHasNoLeftoverData(client, SIDEBAR_PROJECT_NAME);
 
   process.env.VISUAL_PROJECT_NAME = PROJECT_NAME;
   process.env.VISUAL_EMPTY_PROJECT_NAME = EMPTY_PROJECT_NAME;

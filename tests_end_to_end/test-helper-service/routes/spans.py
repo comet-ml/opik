@@ -3,6 +3,7 @@
 from flask import Blueprint, request
 from .utils import (
     get_opik_client,
+    get_opik_api_client,
     success_response,
     validate_required_fields,
 )
@@ -35,3 +36,21 @@ def search_spans():
     )
 
     return success_response({"spans": [s.dict() for s in spans]})
+
+
+@spans_bp.route("/delete-by-project", methods=["DELETE"])
+def delete_spans_by_project():
+    data = request.get_json()
+    validate_required_fields(data, ["project_name"])
+
+    project_name = data["project_name"]
+    max_results = data.get("max_results", 1000)
+
+    client = get_opik_client()
+    api_client = get_opik_api_client()
+
+    spans = client.search_spans(project_name=project_name, max_results=max_results, truncate=True)
+    for span in spans:
+        api_client.spans.delete_span_by_id(id=span.id)
+
+    return success_response({"deleted_count": len(spans)})
