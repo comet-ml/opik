@@ -8,11 +8,14 @@
 {{- $cacheVct := .Values.clickhouse.tieredStorage.cold.cache.volumeName -}}
 {{- $cachePath := .Values.clickhouse.tieredStorage.cold.cache.path -}}
 {{- $chiName := printf "%s-clickhouse" (include "opik.name" $) -}}
+{{- /* One effective SA name for both the Job and the RoleBinding subject, so an
+       override still gets the RBAC it needs. */ -}}
+{{- $sa := .Values.clickhouse.tieredStorage.coldTierMigration.serviceAccountName | default (printf "%s-ch-cold-tier-migration-sa" (include "opik.fullname" .)) -}}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-sa
+  name: {{ $sa }}
   namespace: {{ .Release.Namespace }}
   annotations:
     {{- if .Values.global.argocd }}
@@ -70,7 +73,7 @@ roleRef:
   name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-role
 subjects:
   - kind: ServiceAccount
-    name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-sa
+    name: {{ $sa }}
     namespace: {{ .Release.Namespace }}
 ---
 apiVersion: batch/v1
@@ -96,7 +99,9 @@ metadata:
     {{- end }}
 spec:
   backoffLimit: 2
-  # Hard cap on the whole Job (must exceed pollTimeoutSeconds).
+  # Kubernetes hard cap on the Job. The script bounds its own work by
+  # pollTimeoutSeconds (a single shared budget across migration + readiness), so
+  # this only needs a small buffer on top for startup/kubectl overhead.
   activeDeadlineSeconds: {{ .Values.clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds }}
   template:
     metadata:
@@ -104,7 +109,7 @@ spec:
         app: ch-cold-tier-migration
     spec:
       restartPolicy: Never
-      serviceAccountName: {{ .Values.clickhouse.tieredStorage.coldTierMigration.serviceAccountName | default (printf "%s-ch-cold-tier-migration-sa" (include "opik.fullname" .)) }}
+      serviceAccountName: {{ $sa }}
       {{- with (.Values.clickhouse.tieredStorage.coldTierMigration.nodeSelector | default .Values.nodeSelector) }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -139,31 +144,66 @@ spec:
               # Operator-managed CH StatefulSets for this CHI.
               CH_STS_SELECTOR="clickhouse.altinity.com/chi=${CHI_NAME}"
 
+              # Single shared budget for the whole run (migration + readiness).
+              DEADLINE=$(( $(date +%s) + POLL_TIMEOUT ))
+              remaining() { r=$(( DEADLINE - $(date +%s) )); [ "$r" -gt 0 ] && echo "$r" || echo 0; }
+
+              # Confirm the STS is owned by THIS CHI's operator before we touch it,
+              # so a stray StatefulSet that merely shares the label is never deleted.
+              owned_by_chi() {
+                owner=$(kubectl get "sts/$1" -n "$NAMESPACE" \
+                  -o jsonpath='{.metadata.ownerReferences[?(@.kind=="ClickHouseInstallation")].name}' 2>/dev/null || echo "")
+                [ "$owner" = "$CHI_NAME" ]
+              }
+
               # A StatefulSet needs recreation when it lacks the cache VCT.
               sts_missing_cache_vct() {
                 for sts in $(kubectl get sts -n "$NAMESPACE" -l "$CH_STS_SELECTOR" -o name 2>/dev/null); do
+                  name="${sts#statefulset.apps/}"
+                  owned_by_chi "$name" || continue
                   vcts=$(kubectl get "$sts" -n "$NAMESPACE" \
                     -o jsonpath='{range .spec.volumeClaimTemplates[*]}{.metadata.name}{" "}{end}' 2>/dev/null || echo "")
                   case " $vcts " in
-                    *" ${CACHE_VCT} "*) : ;;              # already has it
-                    *) echo "${sts#statefulset.apps/}" ;; # missing -> needs recreation
+                    *" ${CACHE_VCT} "*) : ;;  # already has it
+                    *) echo "$name" ;;        # missing -> needs recreation
                   esac
                 done
               }
 
-              # The pod for STS <name> is <name>-0 (altinity: one pod per replica STS).
+              # Orphan-delete the STS (keeps pod + data PVC) so the operator recreates
+              # it WITH the cache VCT, delete the pod so it remounts, then wait for
+              # THAT pod to come back Ready before returning — one host at a time.
               recreate_one() {
                 sts="$1"
                 pod="${sts}-0"
                 echo ">> orphan-deleting StatefulSet ${sts} (keeps pod + data PVC); operator recreates it WITH ${CACHE_VCT}"
                 kubectl delete "sts/${sts}" -n "$NAMESPACE" --cascade=orphan --wait=true
-                # Give the operator a moment to recreate the STS with the cache VCT.
-                sleep 8
                 echo ">> deleting pod ${pod} so it reschedules with the ${CACHE_PATH} mount"
                 kubectl delete "pod/${pod}" -n "$NAMESPACE" --grace-period=0 --ignore-not-found=true
+
+                # Poll (not a fixed sleep) until the operator has recreated the pod
+                # and it is Ready, so we never advance to the next replica — or exit
+                # the loop — while this one is still restarting.
+                echo ">> waiting for ${pod} to be recreated and Ready"
+                while :; do
+                  left="$(remaining)"
+                  if [ "$left" -eq 0 ]; then
+                    echo "ERROR: ${pod} not Ready within budget (${POLL_TIMEOUT}s)" >&2
+                    kubectl get sts,pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
+                    exit 1
+                  fi
+                  # --timeout must be >0 (0 means wait forever); cap each attempt.
+                  [ "$left" -gt 30 ] && left=30
+                  if kubectl get "pod/${pod}" -n "$NAMESPACE" >/dev/null 2>&1 \
+                     && kubectl wait --for=condition=Ready "pod/${pod}" \
+                          -n "$NAMESPACE" --timeout="${left}s" >/dev/null 2>&1; then
+                    echo ">> ${pod} Ready"
+                    return 0
+                  fi
+                  sleep 5
+                done
               }
 
-              deadline=$(( $(date +%s) + POLL_TIMEOUT ))
               migrated_any=0
               while :; do
                 pending=$(sts_missing_cache_vct || true)
@@ -177,23 +217,7 @@ spec:
                 first=$(echo "$pending" | head -n1)
                 recreate_one "$first"
                 migrated_any=1
-                if [ "$(date +%s)" -ge "$deadline" ]; then
-                  echo "ERROR: poll timeout (${POLL_TIMEOUT}s) before all replicas gained ${CACHE_VCT}" >&2
-                  kubectl get sts,pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
-                  exit 1
-                fi
-                sleep 10
               done
-
-              # Wait for every CH pod to report Ready before declaring success.
-              echo "Waiting for all CH pods Ready..."
-              if ! kubectl wait --for=condition=Ready pod \
-                    -n "$NAMESPACE" -l "$CH_STS_SELECTOR" \
-                    --timeout="${POLL_TIMEOUT}s"; then
-                echo "ERROR: CH pods not all Ready within ${POLL_TIMEOUT}s" >&2
-                kubectl get pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
-                exit 1
-              fi
 
               if [ "$migrated_any" -eq 1 ]; then
                 echo "=== Cold-tier migration complete — all replicas Ready with ${CACHE_VCT} ==="
