@@ -1,13 +1,12 @@
 import json
 import re
-import traceback
-from typing import Any, Dict, List, Optional
+from typing import List, Optional, Union
 
 import pydantic
 
 import opik.exceptions as exceptions
-from opik import datetime_helpers, opik_context
 from opik.api_objects import opik_client
+from opik.evaluation.models import base_model, models_factory
 
 from . import guard
 from .. import schemas
@@ -30,29 +29,15 @@ class _LLMJudgeDecision(pydantic.BaseModel):
     reason: str
 
 
-def _usage_dict(response: Any) -> Optional[Dict[str, Any]]:
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return None
-
-    values = {
-        "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
-        "total_tokens": usage.total_tokens,
-    }
-    if any(value is None for value in values.values()):
-        return None
-
-    return values
-
-
 class LLMJudge(guard.Guard):
     """
     Guard that validates text against a natural-language policy using an LLM as a judge.
 
-    The judge runs in the SDK and calls the Opik chat completions endpoint, which uses
-    the LLM provider configured in your Opik workspace. It does not require the guardrails
-    backend. The judge call is logged as a nested LLM span under the guardrail span.
+    The judge runs in the SDK, calling the model directly with the credentials configured
+    where your application runs (the usual provider environment variables), so any model
+    LiteLLM supports can be used. It does not require the guardrails backend, nor an LLM
+    provider configured in your Opik workspace. The judge call is logged as a nested LLM
+    span under the guardrail span.
     """
 
     local = True
@@ -61,7 +46,7 @@ class LLMJudge(guard.Guard):
         self,
         name: str,
         instructions: str,
-        model: str,
+        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     ) -> None:
         """
         Initialize an LLM judge guard.
@@ -69,17 +54,29 @@ class LLMJudge(guard.Guard):
         Args:
             name: Name of the check, used to label the guardrail results.
             instructions: Natural-language policy describing what the text must comply with.
-            model: Name of the model to judge with. Must be available through the LLM
-                provider configured in your Opik workspace.
+            model: The LLM to judge with. Can be a string (model name) or an
+                `opik.evaluation.models.OpikBaseModel` subclass instance. The model runs
+                where your application runs, so its provider credentials have to be
+                available there. Defaults to the model configured as ``default_llm``.
         """
         self._name = name
         self._instructions = instructions
-        self._model = model
+        self._init_model(model)
+
+    def _init_model(
+        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+    ) -> None:
+        if isinstance(model, base_model.OpikBaseModel):
+            self._model = model
+        else:
+            self._model = models_factory.get(
+                model_name=model, track=True, temperature=0.0
+            )
 
     def validate_local(
         self, text: str, client: opik_client.Opik
     ) -> List[schemas.ValidationResult]:
-        messages = [
+        messages: List[base_model.ConversationDict] = [
             {
                 "role": "system",
                 "content": _SYSTEM_PROMPT.format(instructions=self._instructions),
@@ -87,48 +84,19 @@ class LLMJudge(guard.Guard):
             {"role": "user", "content": text},
         ]
 
-        start_time = datetime_helpers.local_timestamp()
-
         # Any failure to run or parse the judgement fails closed (raises), so the
-        # protected code path does not proceed on an inconclusive check.
+        # protected code path does not proceed on an inconclusive check. The call itself
+        # is logged as a nested LLM span by the tracked model.
         try:
-            raw_response = client.rest_client.chat_completions.with_raw_response.create_chat_completions(
-                model=self._model,
-                temperature=0.0,
-                messages=messages,  # type: ignore[arg-type]
+            message = self._model.generate_chat_completion(
+                messages=messages, response_format=_LLMJudgeDecision
             )
-            response = raw_response.data
-            # The provider and resolved model are returned as response headers, not
-            # in the body, so they must be read from the raw response.
-            provider = raw_response.headers.get("x-opik-provider")
-            actual_model = raw_response.headers.get("x-opik-actual-model")
-            content = response.choices[0].message.content
+            content = message["content"]
             decision = self._parse_decision(content)
         except Exception as e:
-            self._log_span(
-                client,
-                messages,
-                start_time,
-                model=self._model,
-                error_info={
-                    "exception_type": type(e).__name__,
-                    "message": str(e),
-                    "traceback": traceback.format_exc(),
-                },
-            )
             raise exceptions.GuardrailValidationError(
                 f"LLM judge '{self._name}' could not be evaluated, failing closed: {e}"
             ) from e
-
-        self._log_span(
-            client,
-            messages,
-            start_time,
-            output={"content": content},
-            usage=_usage_dict(response),
-            model=actual_model or getattr(response, "model", None) or self._model,
-            provider=provider,
-        )
 
         return [
             schemas.ValidationResult(
@@ -137,7 +105,7 @@ class LLMJudge(guard.Guard):
                 validation_config={
                     "name": self._name,
                     "instructions": self._instructions,
-                    "model": self._model,
+                    "model": self._model.model_name,
                 },
                 validation_details={
                     "name": self._name,
@@ -146,35 +114,6 @@ class LLMJudge(guard.Guard):
                 },
             )
         ]
-
-    def _log_span(
-        self,
-        client: opik_client.Opik,
-        messages: List[Dict[str, str]],
-        start_time: Any,
-        **kwargs: Any,
-    ) -> None:
-        # Log the judge call as a nested LLM span under the guardrail span, in a
-        # single create call (with start and end times) to avoid the data loss
-        # that a create-then-end update can hit under batching. Recording is
-        # best-effort and must never affect the guardrail outcome.
-        current_span = opik_context.get_current_span_data()
-        if current_span is None:
-            return
-
-        try:
-            client.span(
-                trace_id=current_span.trace_id,
-                parent_span_id=current_span.id,
-                name="llm_judge",
-                type="llm",
-                input={"messages": messages},
-                start_time=start_time,
-                end_time=datetime_helpers.local_timestamp(),
-                **kwargs,
-            )
-        except Exception:
-            pass
 
     def _parse_decision(self, content: str) -> _LLMJudgeDecision:
         match = _JSON_OBJECT_PATTERN.search(content or "")
