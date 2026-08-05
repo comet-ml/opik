@@ -173,8 +173,7 @@ def test_build_guards__every_guard_type__merged_into_one_guard_list():
     assert llm_judge.local is True
     assert llm_judge._name == "policy_b"
     assert llm_judge._instructions == "must not mention competitors"
-    # The stored model name is resolved client-side, so the guard holds a model object.
-    assert llm_judge._model.model_name == "gpt-4o"
+    assert llm_judge._model == "gpt-4o"
 
 
 def test_build_guards__unknown_guard_type__error_raised():
