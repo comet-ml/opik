@@ -8,6 +8,13 @@
 {{- $cacheVct := .Values.clickhouse.tieredStorage.cold.cache.volumeName -}}
 {{- $cachePath := .Values.clickhouse.tieredStorage.cold.cache.path -}}
 {{- $chiName := printf "%s-clickhouse" (include "opik.name" $) -}}
+{{- $pollTimeout := int .Values.clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds -}}
+{{- $activeDeadline := int .Values.clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds -}}
+{{- /* The Job's hard cap must outlast the script's own budget, else Kubernetes
+       kills a legitimately-running migration. */ -}}
+{{- if le $activeDeadline $pollTimeout }}
+{{- fail (printf "clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds (%d) must be greater than pollTimeoutSeconds (%d)" $activeDeadline $pollTimeout) }}
+{{- end -}}
 {{- /* Effective SA name for the Job and the RoleBinding subject. When
        serviceAccountName is overridden the account is externally managed, so we
        reference it but do NOT render (and hook-delete) the chart's SA object. */ -}}
@@ -106,7 +113,7 @@ spec:
   # Kubernetes hard cap on the Job. The script bounds its own work by
   # pollTimeoutSeconds (a single shared budget across migration + readiness), so
   # this only needs a small buffer on top for startup/kubectl overhead.
-  activeDeadlineSeconds: {{ .Values.clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ $activeDeadline }}
   template:
     metadata:
       labels:
@@ -152,21 +159,31 @@ spec:
               DEADLINE=$(( $(date +%s) + POLL_TIMEOUT ))
               remaining() { r=$(( DEADLINE - $(date +%s) )); [ "$r" -gt 0 ] && echo "$r" || echo 0; }
 
+              # Fail loud on a failed kubectl read rather than mistaking an API/RBAC
+              # outage for "nothing to do".
+              die() { echo "ERROR: $*" >&2; exit 1; }
+
               # Confirm the STS is owned by THIS CHI's operator before we touch it,
               # so a stray StatefulSet that merely shares the label is never deleted.
+              # A failed read aborts (never treated as "unowned").
               owned_by_chi() {
                 owner=$(kubectl get "sts/$1" -n "$NAMESPACE" \
-                  -o jsonpath='{.metadata.ownerReferences[?(@.kind=="ClickHouseInstallation")].name}' 2>/dev/null || echo "")
+                  -o jsonpath='{.metadata.ownerReferences[?(@.kind=="ClickHouseInstallation")].name}') \
+                  || die "reading ownerReferences of sts/$1 failed"
                 [ "$owner" = "$CHI_NAME" ]
               }
 
-              # A StatefulSet needs recreation when it lacks the cache VCT.
+              # A StatefulSet needs recreation when it lacks the cache VCT. A failed
+              # list aborts so a discovery outage is never reported as a clean no-op.
               sts_missing_cache_vct() {
-                for sts in $(kubectl get sts -n "$NAMESPACE" -l "$CH_STS_SELECTOR" -o name 2>/dev/null); do
+                stses=$(kubectl get sts -n "$NAMESPACE" -l "$CH_STS_SELECTOR" -o name) \
+                  || die "listing ClickHouse StatefulSets failed"
+                for sts in $stses; do
                   name="${sts#statefulset.apps/}"
                   owned_by_chi "$name" || continue
                   vcts=$(kubectl get "$sts" -n "$NAMESPACE" \
-                    -o jsonpath='{range .spec.volumeClaimTemplates[*]}{.metadata.name}{" "}{end}' 2>/dev/null || echo "")
+                    -o jsonpath='{range .spec.volumeClaimTemplates[*]}{.metadata.name}{" "}{end}') \
+                    || die "reading volumeClaimTemplates of $sts failed"
                   case " $vcts " in
                     *" ${CACHE_VCT} "*) : ;;  # already has it
                     *) echo "$name" ;;        # missing -> needs recreation
@@ -210,7 +227,9 @@ spec:
 
               migrated_any=0
               while :; do
-                pending=$(sts_missing_cache_vct || true)
+                # Don't mask a discovery failure: a die() inside the subshell exits
+                # non-zero here, and we abort rather than treat it as "nothing to do".
+                pending=$(sts_missing_cache_vct) || exit 1
                 if [ -z "$pending" ]; then
                   echo "All CH StatefulSets carry ${CACHE_VCT} — nothing to migrate."
                   break
