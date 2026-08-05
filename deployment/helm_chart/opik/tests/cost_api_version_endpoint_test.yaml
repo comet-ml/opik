@@ -38,7 +38,7 @@ tests:
       # The rootPath is stripped so the upstream sees its own /cost-api/ver.
       - matchRegex:
           path: data["default.conf.template"]
-          pattern: 'rewrite \^/opik/cost-api/ver\$ /cost-api/ver break;'
+          pattern: 'rewrite \^/opik/cost-api/ver\$ /cost-api/ver\? break;'
 
   - it: exposes the version endpoint at the root when opik is standalone
     set:
@@ -94,4 +94,21 @@ tests:
           pattern: 'location = /opik/ci/ver \{'
       - matchRegex:
           path: data["default.conf.template"]
-          pattern: 'rewrite \^/opik/ci/ver\$ /ci/ver break;'
+          pattern: 'rewrite \^/opik/ci/ver\$ /ci/ver\? break;'
+
+  - it: discards the caller's query string on the way to the upstream
+    # Regression guard: without the trailing `?` nginx APPENDS the original query
+    # to the rewritten URI, so the upstream receives /cost-api/ver?<caller input>.
+    # The endpoint takes no parameters, so the proxied request must be query-free
+    # rather than depending on the upstream ignoring unknown arguments.
+    set:
+      standalone: false
+      component.frontend.aiSpendBackend.enabled: true
+    documentSelector: *nginx
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: '/cost-api/ver\? break;'
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: '/cost-api/ver break;'

@@ -204,7 +204,14 @@ data:
             # proxy_pass with a URI part inside a named location. Strips the opik
             # rootPath so the upstream sees its own {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver;
             # a no-op when rootPath is empty, and `break` stops further rewriting.
-            rewrite ^{{ $rootPath }}{{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver$ {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver break;
+            #
+            # The trailing `?` DISCARDS the caller's query string. Without it nginx
+            # appends the original query to the rewritten URI, so the upstream would
+            # receive /cost-api/ver?<anything the caller sent>. This endpoint takes
+            # no parameters, so the proxied request is now query-free regardless of
+            # what the caller appends, rather than relying on the upstream ignoring
+            # unknown arguments.
+            rewrite ^{{ $rootPath }}{{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver$ {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver? break;
             proxy_pass http://ai-cost-backend;
             proxy_redirect  off;
             proxy_set_header Host $host;
