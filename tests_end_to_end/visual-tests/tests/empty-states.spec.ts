@@ -119,14 +119,14 @@ test.describe('Visual Comparison - Empty States', () => {
 
   test('E13: Configuration - Environments empty state', { tag: ['@vcap:configuration.config-environments-empty'] }, async ({ page }) => {
     const configurationPage = new ConfigurationPage(page, baseUrl, workspace);
-    await configurationPage.goto('environments');
+    await configurationPage.goto('environments', projectId, projectName());
     await configurationPage.waitForEnvironmentsEmpty();
     await screenshot(page, 'E13-config-environments-empty');
   });
 
   test('E14: Configuration - AI providers empty state', { tag: ['@vcap:configuration.config-ai-providers-empty'] }, async ({ page }) => {
     const configurationPage = new ConfigurationPage(page, baseUrl, workspace);
-    await configurationPage.goto('ai-provider');
+    await configurationPage.goto('ai-provider', projectId, projectName());
     await configurationPage.waitForAiProvidersEmpty();
     await screenshot(page, 'E14-config-ai-providers-empty');
   });
