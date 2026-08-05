@@ -40,6 +40,10 @@ def search_spans():
 
 @spans_bp.route("/delete-by-project", methods=["DELETE"])
 def delete_spans_by_project():
+    """Spans have no working single- or bulk-delete endpoint of their own
+    (SpansResource.deleteById is an unimplemented 501 stub), so leftover spans
+    are purged by deleting their parent traces instead — trace deletion cascades
+    to spans asynchronously via TraceDeletedListener."""
     data = request.get_json()
     validate_required_fields(data, ["project_name"])
 
@@ -54,8 +58,9 @@ def delete_spans_by_project():
         spans = client.search_spans(project_name=project_name, max_results=max_results, truncate=True)
         if not spans:
             break
-        for span in spans:
-            api_client.spans.delete_span_by_id(id=span.id)
+        trace_ids = {span.trace_id for span in spans if span.trace_id}
+        if trace_ids:
+            api_client.traces.delete_traces(ids=list(trace_ids))
         deleted_count += len(spans)
 
     return success_response({"deleted_count": deleted_count})

@@ -44,6 +44,21 @@ async function ensureProjectHasNoLeftoverData(
   );
 }
 
+// Experiment names aren't unique, so a leftover experiment from a previous run
+// survives alongside a freshly created one instead of raising a 409 like datasets do.
+// Loop delete-by-name until it reports nothing left, instead of a single best-effort
+// attempt, so a stale experiment can't silently seed duplicate rows into the suite.
+async function purgeExperimentsByName(client: TestHelperClient, name: string, maxAttempts: number = 5): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const deletedCount = await client.deleteExperimentsByName(name);
+    if (deletedCount === 0) {
+      return;
+    }
+  }
+
+  throw new Error(`Experiment(s) named "${name}" still exist after ${maxAttempts} cleanup attempts`);
+}
+
 export const AUTH_STATE_FILE = '.auth/user.json';
 const authFile = path.join(__dirname, AUTH_STATE_FILE);
 
@@ -122,8 +137,8 @@ async function globalSetup(_config: FullConfig) {
   // was cancelled — so they must be swept here by name too, or they accumulate
   // indefinitely across runs.
   console.log('Cleaning up any existing test data...');
-  try { await client.deleteExperimentsByName(TEST_SUITE_EXP_NAME); } catch { /* ignore */ }
-  try { await client.deleteExperimentsByName(EXPERIMENT_NAME); } catch { /* ignore */ }
+  await purgeExperimentsByName(client, TEST_SUITE_EXP_NAME);
+  await purgeExperimentsByName(client, EXPERIMENT_NAME);
   try { await client.deleteDataset(TEST_SUITE_NAME); } catch { /* ignore - not found */ }
   await client.waitForDatasetDeleted(TEST_SUITE_NAME, 30);
   try { await client.deleteDataset(DATASET_NAME); } catch { /* ignore - not found */ }

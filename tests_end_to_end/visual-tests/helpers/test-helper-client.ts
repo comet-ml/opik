@@ -966,11 +966,13 @@ export class TestHelperClient {
     }
   }
 
-  async deleteExperimentsByName(name: string): Promise<void> {
+  async deleteExperimentsByName(name: string): Promise<number> {
     try {
-      await this.client.delete('/api/experiments/delete-by-name', {
+      const response = await this.client.delete('/api/experiments/delete-by-name', {
         data: { name },
       });
+
+      return response.data.deleted_count;
     } catch (error) {
       throw this.handleError(error, 'Failed to delete experiments by name');
     }
