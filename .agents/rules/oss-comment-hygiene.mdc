@@ -1,21 +1,26 @@
 ---
-description: Keep cipx / Cost Intelligence / ai-cost comments minimal in Opik OSS. Use when creating or reviewing PRs that touch those names, or when running create-pr. Does not apply to ordinary Opik comments.
+description: Keep cipx / Cost Intelligence / ai-cost comments minimal in Opik OSS. Use when creating or reviewing PRs that touch those names (in comment text or enclosing identifiers), or when running create-pr. Does not apply to ordinary Opik comments.
 alwaysApply: false
 ---
 # OSS Comment Hygiene — cipx / Cost Intelligence only
 
 Opik is public OSS. Comments that document the private **cipx / Cost Intelligence / ai-cost** stack must stay minimal. This rule does **not** apply to ordinary Opik comments.
 
-## When this rule applies (gate)
+## Name patterns (case-insensitive)
 
-Apply **only** when a new or expanded comment (or the PR description text about the change) mentions one of these private-project namings (case-insensitive), including compounds:
-
-- `cipx` (e.g. `cipx_spends`, `CipxSpend`, `metadata.cipx`)
+- `cipx` (e.g. `cipx_spends`, `CipxSpend`, `CipxSpendDAO`, `metadata.cipx`)
 - `cost intelligence` / `cost-intelligence` / `CostIntelligence`
 - `ai-cost` / `ai-spend` / `AI-Spend`
 - `cost-intelligence-proxy` / `cost-intelligence-proxy-internal`
 
-No match → **do nothing**. Do not ask to trim unrelated Opik comments.
+## When this rule applies (gate)
+
+Apply when a **new or expanded** comment is in scope because **either**:
+
+1. **Comment text** mentions a name pattern above, **or**
+2. **Enclosing identity** matches a name pattern — file path/name, type/class, method, field, parameter, or local variable (e.g. a Javadoc on a field inside `CipxSpendDAO`, or a `//` above `getCipxSpend(...)`, even if the comment itself has no keyword)
+
+No match on text **and** enclosing identity → **do nothing**. Do not ask to trim unrelated Opik comments.
 
 ## What “minimal” means when the gate matches
 

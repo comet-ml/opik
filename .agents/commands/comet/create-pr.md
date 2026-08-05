@@ -168,14 +168,12 @@ This workflow will:
 
 Follow `.agents/rules/oss-comment-hygiene.mdc`.
 
-**Gate first.** Scan `git diff origin/main...HEAD` for **added or expanded** comments (`//`, `/* */`, `#`, `--`, docstrings/Javadocs). The rule applies **only** if the comment text (or a clear compound in it) matches one of these private-project namings (case-insensitive):
+**Gate first.** Scan `git diff origin/main...HEAD` for **added or expanded** comments (`//`, `/* */`, `#`, `--`, docstrings/Javadocs). The rule applies if **either**:
 
-- `cipx`
-- `cost intelligence` / `cost-intelligence` / `CostIntelligence`
-- `ai-cost` / `ai-spend` / `AI-Spend`
-- `cost-intelligence-proxy` (incl. `-internal`)
+1. **Comment text** matches a private-project naming (case-insensitive): `cipx`, `cost intelligence` / `cost-intelligence` / `CostIntelligence`, `ai-cost` / `ai-spend` / `AI-Spend`, `cost-intelligence-proxy` (incl. `-internal`), **or**
+2. **Enclosing identity** matches those namings — file path/name, type/class, method, field, parameter, or local variable (e.g. comment inside `CipxSpendDAO` / on `getCipxSpend` / next to a `cipxSpan` param), even when the comment text has no keyword
 
-No match anywhere in added/expanded comments → **continue silently**. Do not judge, trim, or mention ordinary Opik comments.
+No match on text **and** enclosing identity → **continue silently**. Do not judge, trim, or mention ordinary Opik comments.
 
 **When the gate matches:** flag comments that are more than minimal for public Opik — private pricing, prod stats, Claude Code / proxy wire-path essays, private-repo links, sister-service billing narratives. Reference pattern: verbose `cipx_*` comments on `comet-ml/opik#7725`. Show file paths / hunks; continue. Do not block. Do not rewrite unless asked.
 
