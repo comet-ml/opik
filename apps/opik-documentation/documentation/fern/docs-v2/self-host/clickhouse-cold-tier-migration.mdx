@@ -1,0 +1,80 @@
+---
+headline: ClickHouse Cold-Tier Migration
+og:description: How the Opik Helm chart automatically recovers ClickHouse when the cold storage tier is enabled on a multi-replica cluster
+og:site_name: Opik Documentation
+og:title: 'Enabling the ClickHouse Cold Tier'
+subtitle: Enabling tiered (cold) ClickHouse storage on a multi-replica cluster
+title: ClickHouse Cold-Tier Migration
+---
+
+> **Important:** If you're using or looking to use Opik or Comet enterprise version please reach out to Sales@comet.com to gain access to the correct deployment documentation.
+
+# ClickHouse Cold-Tier Migration
+
+Opik's ClickHouse can use a tiered storage policy: hot data on a local disk and cold data on S3, fronted by a local read-through cache. When you enable the cold tier on a cluster running **more than one ClickHouse replica**, the Helm chart runs a migration job that makes the transition safe and automatic.
+
+## Why This Is Needed
+
+Enabling the cold tier renders a new ClickHouse `storage.xml` that references the cache path (`/var/cache/clickhouse_s3` by default). On a multi-replica cluster, the ClickHouse operator can push this new configuration to a pod **before** it rebuilds that pod's StatefulSet to add the cache volume and mount. When that happens the pod fails to start:
+
+```
+mkdir /var/cache/clickhouse_s3: Permission denied
+```
+
+The pod enters `CrashLoopBackOff` and self-heals on its own once the operator rebuilds the StatefulSet — but that passive recovery takes roughly 7 minutes per replica. The migration job automates the recovery so the cold-tier enablement completes quickly and without manual intervention.
+
+## Upgrade Instructions
+
+To enable the cold tier, set `tieredStorage.enabled: true` and provide the cold bucket configuration under `clickhouse.tieredStorage`:
+
+```yaml
+clickhouse:
+  tieredStorage:
+    enabled: true
+    cold:
+      s3:
+        endpoint: "https://<bucket>.s3.<region>.amazonaws.com"
+        region: "<region>"
+```
+
+The migration job runs automatically whenever the cold tier is enabled. It is controlled by:
+
+```yaml
+clickhouse:
+  tieredStorage:
+    coldTierMigration:
+      enabled: true
+```
+
+<Note>
+`coldTierMigration.enabled` defaults to `true`. It only does work when the cold tier is enabled, and is a no-op when every replica already has the cache volume — so it is safe to leave on across upgrades. Set it to `false` to opt out **without** disabling the cold tier.
+</Note>
+
+### How the Migration Works
+
+The migration runs as a post-upgrade hook (or ArgoCD `PostSync` hook) and is **data-preserving**:
+
+1. **Detects affected replicas**: finds any ClickHouse StatefulSet owned by this installation that is still missing the cache volume.
+2. **Recreates the StatefulSet**: deletes it with `--cascade=orphan`, so the operator recreates it **with** the cache volume while the pods and data PVCs are preserved.
+3. **Reschedules the pod**: deletes the affected pod so it reschedules with the cache mount, then waits for it to become `Ready` before moving on.
+4. **One replica at a time**: repeats sequentially until every replica has the cache volume and is `Ready`.
+
+No ClickHouse data is moved or deleted — only the StatefulSet object is recreated, and all PersistentVolumeClaims are kept.
+
+### Configuration Reference
+
+| Value | Default | Description |
+| --- | --- | --- |
+| `coldTierMigration.enabled` | `true` | Run the migration when the cold tier is enabled. Set `false` to opt out without disabling the cold tier. |
+| `coldTierMigration.image` | `alpine/kubectl:1.35.0` | Image used by the migration job. |
+| `coldTierMigration.pollTimeoutSeconds` | `1200` | Total budget for the run (all replicas: recreate + reschedule + wait Ready). |
+| `coldTierMigration.activeDeadlineSeconds` | `1320` | Kubernetes hard cap on the Job. Must be greater than `pollTimeoutSeconds`. |
+| `coldTierMigration.serviceAccountName` | `""` | Use an externally-managed ServiceAccount instead of the chart-created one. When set, the account must already have `get/list/delete` on `statefulsets` and `pods`. |
+
+## Single-Replica Clusters
+
+On a single-replica cluster the cold-tier enablement is disruptive for a few minutes but self-heals on its own, so the migration job simply exits as a no-op. No action is required.
+
+## Need Help?
+
+If you encounter issues enabling the cold tier, please check the [troubleshooting guide](/self-host/troubleshooting) or reach out for support.
