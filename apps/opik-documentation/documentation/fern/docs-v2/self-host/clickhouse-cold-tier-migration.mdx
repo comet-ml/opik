@@ -13,6 +13,10 @@ title: ClickHouse Cold-Tier Migration
 
 Opik's ClickHouse can use a tiered storage policy: hot data on a local disk and cold data on S3, fronted by a local read-through cache. When you enable the cold tier on a cluster running **more than one ClickHouse replica**, the Helm chart runs a migration job that makes the transition safe and automatic.
 
+<Note>
+This page covers enabling the cold tier on an existing multi-replica cluster. For running multiple ClickHouse replicas in general — including the two-phase install required for a fresh HA deployment — see [Scaling Opik](/self-host/scaling#replication-strategy).
+</Note>
+
 ## Why This Is Needed
 
 Enabling the cold tier renders a new ClickHouse `storage.xml` that references the cache path (`/var/cache/clickhouse_s3` by default). On a multi-replica cluster, the ClickHouse operator can push this new configuration to a pod **before** it rebuilds that pod's StatefulSet to add the cache volume and mount. When that happens the pod fails to start:
