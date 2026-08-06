@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash } from "lucide-react";
+import { Tag, Trash, SquarePen } from "lucide-react";
 import slugify from "slugify";
 import { Button } from "@/ui/button";
 import { Span, Trace } from "@/types/traces";
@@ -10,6 +10,7 @@ import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutati
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/v1/pages-shared/traces/AddTagDialog/AddTagDialog";
+import BatchAnnotateDialog from "@/v1/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
 import EvaluateButton from "@/v1/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/v1/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
@@ -102,6 +103,15 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           type={type}
         />
       )}
+      {canLogTraceSpanThread && (
+        <BatchAnnotateDialog
+          key={`annotate-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 5}
+          setOpen={setOpen}
+          projectId={projectId}
+        />
+      )}
       {showEvaluate && (
         <RunEvaluationDialog
           key={`evaluation-${resetKeyRef.current}`}
@@ -132,6 +142,21 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             disabled={disabled}
           >
             <Tag />
+          </Button>
+        </TooltipWrapper>
+      )}
+      {canLogTraceSpanThread && (
+        <TooltipWrapper content="Annotate traces">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => {
+              setOpen(5);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <SquarePen />
           </Button>
         </TooltipWrapper>
       )}
