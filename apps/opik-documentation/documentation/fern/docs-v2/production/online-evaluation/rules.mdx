@@ -37,7 +37,7 @@ When creating a new rule, you will be presented with the following options:
 2. **Sampling rate:** The percentage of traces to score. When set to `100%`, all traces will be scored.
 3. **Model:** The model to use to run the LLM as a Judge metric. For evaluating traces with images, make sure to select a model that supports vision capabilities.
 4. **Prompt:** The LLM as a Judge prompt to use. Opik provides a set of base prompts (Hallucination, Moderation, Answer Relevance) that you can use or you can define your own. Variables in the prompt should be in `{{variable_name}}` format.
-5. **Variable mapping:** This is the mapping of the variables in the prompt to the values from the trace.
+5. **Variable mapping:** This is the mapping of the variables in the prompt to the values from the trace. For large or attachment-heavy traces, you can instead use the reserved `{{trace}}`, `{{span}}` or `{{spans}}` variables described in [Evaluating large traces with an LLM as a Judge agent](#evaluating-large-traces-with-an-llm-as-a-judge-agent) below.
 6. **Score definition:** This is the format of the output of the LLM as a Judge metric. By adding more than one score, you can define LLM as a Judge metrics that score an LLM output along different dimensions.
 
 ### Opik's built-in LLM as a Judge metrics
@@ -120,6 +120,31 @@ Model: Vision-capable model required
   supported format (image URL or base64 encoded image).
 </Tip>
 
+## Evaluating large traces with an LLM as a Judge agent
+
+A single rendered prompt has limits: a trace with deeply nested spans or a long-running thread may not fit in the judge model's context window, and the judge has no way to open an image, audio or video attachment unless it's explicitly wired into the prompt. To handle this, Opik can run the LLM as a Judge as an **agent**: instead of receiving one static prompt, the judge is given a small set of tools it can call to explore the trace (or thread) and pull in only what it needs before returning its score.
+
+The judge agent has access to:
+
+- **`read`**: fetch the full detail of a trace, span, dataset or dataset item by ID
+- **`jq`** and **`search`**: query or regex-search data it has already read
+- **`get_trace_spans`**: list every span in the trace being evaluated
+- **`get_attachment`**: load an image, audio or video attachment so it can see or hear it
+
+Opik switches a rule into agent mode automatically when:
+
+- The estimated size of the trace (or thread) is above a configurable token threshold (50,000 tokens by default), or
+- Your prompt references the reserved `{{trace}}` (trace-level rules) or `{{span}}` (span-level rules) variable instead of mapping individual fields - use these when you want the judge to be able to open attachments, or
+- For thread rules, any trace in the conversation has an attachment, regardless of size.
+
+If you only want the full span tree injected into the prompt without triggering tool calls, use the `{{spans}}` variable instead.
+
+There is nothing to configure on the rule itself to enable this - Opik decides per evaluation whether to run inline or as an agent. You can see when agent mode kicks in from the rule's execution logs, which list each tool call the judge makes, and each evaluation is also captured as its own trace (tagged `source: evaluator`) so you can inspect every tool call and its result step by step.
+
+<Note>
+  Agent mode is disabled by default on self-hosted installations. Set the `TOGGLE_AGENTIC_TOOLS_ENABLED` environment variable to `true` to enable it, and `ONLINE_SCORING_AGENTIC_TOOLS_THRESHOLD_TOKENS` to change the size threshold that triggers it.
+</Note>
+
 ## Reviewing online evaluation scores
 
 The scores returned by the online evaluation rules will be stored as feedback scores for each trace. This will allow you to review these scores in the traces sidebar and track their changes over time in the Opik dashboard.
@@ -201,6 +226,8 @@ Similarly, for the Python metrics, you have the `Conversation` object available 
   }
 ]
 ```
+
+For long conversations, or ones where any trace has an attachment, Opik automatically runs the judge as an [agent](#evaluating-large-traces-with-an-llm-as-a-judge-agent) that can call tools to pull in individual traces, spans and attachments on demand rather than rendering the whole conversation into `{{context}}` at once.
 
 For online scoring rules on threads, Opik waits for a "cooldown period" after the last activity in a thread
 before running the evaluation. This ensures the scoring is done on the full context of the conversation.
