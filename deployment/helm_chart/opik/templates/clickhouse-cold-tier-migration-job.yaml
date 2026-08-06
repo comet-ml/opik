@@ -20,6 +20,14 @@
 {{- if le $activeDeadline $pollTimeout }}
 {{- fail (printf "clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds (%d) must be greater than pollTimeoutSeconds (%d)" $activeDeadline $pollTimeout) }}
 {{- end -}}
+{{- /* The migration job runs in .Release.Namespace and its RBAC is namespace-scoped
+       there, so it can only reach an operator in the same namespace. If the operator
+       subchart is relocated via namespaceOverride, this job can't find/bounce it —
+       reject that combination at render time rather than fail silently at runtime. */ -}}
+{{- $operatorValues := index .Values "altinity-clickhouse-operator" | default dict -}}
+{{- if $operatorValues.namespaceOverride }}
+{{- fail "clickhouse.tieredStorage.coldTierMigration is incompatible with altinity-clickhouse-operator.namespaceOverride (the migration job is namespace-scoped to the release namespace); set coldTierMigration.enabled=false or remove namespaceOverride" }}
+{{- end -}}
 {{- /* Effective SA name for the Job and the RoleBinding subject. When
        serviceAccountName is overridden the account is externally managed, so we
        reference it but do NOT render (and hook-delete) the chart's SA object. */ -}}
