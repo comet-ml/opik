@@ -34,7 +34,7 @@ jobs:
           matrix: ${{ steps.split.outputs.matrix }}
         steps:
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
               with:
                 fetch-depth: 1
                 sparse-checkout: |
@@ -65,7 +65,7 @@ jobs:
           matrix: ${{ fromJSON(needs.discover-tests.outputs.matrix) }}
         steps:
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
               with:
                 fetch-depth: 1
 

@@ -39,7 +39,7 @@ jobs:
     outputs:
       node_versions: ${{ steps.pick.outputs.versions }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/actions/select-e2e-matrix
           sparse-checkout-cone-mode: false
@@ -79,7 +79,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Login to GHCR
         uses: docker/login-action@v4
@@ -98,7 +98,7 @@ jobs:
           docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Set up Node.js ${{matrix.node_version}}
-        uses: actions/setup-node@v4.2.0
+        uses: actions/setup-node@v7
         with:
           node-version: ${{matrix.node_version}}
 

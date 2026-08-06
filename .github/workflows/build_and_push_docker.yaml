@@ -124,7 +124,7 @@ jobs:
           echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.build_from }}
 
@@ -145,7 +145,7 @@ jobs:
 
       - name: Checkout ai-spend plugin (private)
         if: inputs.image == 'opik-frontend' && matrix.image_type == 'comet'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: comet-ml/opik-plugin-ai-spend
           ref: ${{ inputs.ai_spend_plugin_ref }}

@@ -52,7 +52,7 @@ jobs:
       to: ${{ steps.range.outputs.to }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Diff refs (base/head, push before/after) must be reachable.
           fetch-depth: 0
@@ -122,7 +122,7 @@ jobs:
     name: "lint (${{ matrix.leg.name }})"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Shallow: the leg lints explicit files (paths come from detect's
           # matrix value, not a git diff here), so it needs the worktree content
@@ -139,7 +139,7 @@ jobs:
 
       - name: Set up Node.js
         if: matrix.leg.toolchain == 'node-fe' || matrix.leg.toolchain == 'node-ts'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
 
@@ -233,7 +233,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Only needs the render scripts + shared description TSV, not history.
           fetch-depth: 1
