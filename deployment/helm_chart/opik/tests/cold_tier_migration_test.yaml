@@ -1,0 +1,110 @@
+suite: clickhouse cold-tier migration job (gating, deadline guard, SA/RBAC identity)
+
+# The coldTierMigration job recovers the cold-tier enable wedge by bouncing the
+# ClickHouse operator. It renders only when cold tier + coldTierMigration are
+# enabled, fails fast when the Job deadline can't cover the script budget, and
+# must bind whichever ServiceAccount the Job actually runs as.
+
+templates:
+  - templates/clickhouse-cold-tier-migration-job.yaml
+
+set:
+  clickhouse.tieredStorage.enabled: true
+  clickhouse.tieredStorage.cold.s3.endpoint: https://b.s3.us-east-1.amazonaws.com
+  clickhouse.tieredStorage.cold.s3.region: us-east-1
+
+tests:
+  - it: renders nothing when the cold tier is disabled
+    set:
+      clickhouse.tieredStorage.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when coldTierMigration is disabled
+    set:
+      clickhouse.tieredStorage.coldTierMigration.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders SA + Role + RoleBinding + Job when enabled
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: fails the render when activeDeadlineSeconds is not greater than pollTimeoutSeconds
+    set:
+      clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds: 1320
+      clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds: 1320
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds (1320) must be greater than pollTimeoutSeconds (1320)"
+
+  - it: fails the render when pollTimeoutSeconds exceeds activeDeadlineSeconds
+    set:
+      clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds: 2000
+    asserts:
+      - failedTemplate: {}
+
+  # Identity: the account the Job runs as MUST be the RoleBinding subject, else the
+  # Job has no Role permissions. Default (chart-created) SA path.
+  - it: binds the default chart ServiceAccount to the Job and RoleBinding
+    documentSelector:
+      path: kind
+      value: ServiceAccount
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-opik-ch-cold-tier-migration-sa
+
+  - it: the Job runs as the chart SA and the RoleBinding subject matches (default)
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-opik-ch-cold-tier-migration-sa
+        documentSelector:
+          path: kind
+          value: Job
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-opik-ch-cold-tier-migration-sa
+        documentSelector:
+          path: kind
+          value: RoleBinding
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-opik-ch-cold-tier-migration-role
+        documentSelector:
+          path: kind
+          value: RoleBinding
+
+  # Override: reference the supplied name in the Job + RoleBinding subject, but do
+  # NOT render (and hook-delete) a chart ServiceAccount for an externally-managed one.
+  - it: uses the serviceAccountName override for the Job and RoleBinding subject
+    set:
+      clickhouse.tieredStorage.coldTierMigration.serviceAccountName: my-custom-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: my-custom-sa
+        documentSelector:
+          path: kind
+          value: Job
+      - equal:
+          path: subjects[0].name
+          value: my-custom-sa
+        documentSelector:
+          path: kind
+          value: RoleBinding
+
+  - it: does not render a chart ServiceAccount when serviceAccountName is overridden
+    set:
+      clickhouse.tieredStorage.coldTierMigration.serviceAccountName: my-custom-sa
+    asserts:
+      # Only Role + RoleBinding + Job render — no ServiceAccount object for an
+      # externally-managed account (so the hook cleanup can't delete it).
+      - hasDocuments:
+          count: 3
+      - notMatchRegexRaw:
+          pattern: "kind: ServiceAccount"
