@@ -768,7 +768,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 AND project_id IN :project_ids
                 AND trace_id IN :trace_ids
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                LIMIT 1 BY workspace_id, project_id, id
             )
             GROUP BY trace_id
             SETTINGS log_comment = '<log_comment>'
