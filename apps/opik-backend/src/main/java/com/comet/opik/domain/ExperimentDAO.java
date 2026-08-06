@@ -368,7 +368,7 @@ public class ExperimentDAO {
                         <endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                        <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
                     )
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON t.id = s.trace_id
@@ -1304,7 +1304,7 @@ public class ExperimentDAO {
                         <endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                        <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
                     )
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON t.id = s.trace_id

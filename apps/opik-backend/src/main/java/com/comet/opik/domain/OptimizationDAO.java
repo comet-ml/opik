@@ -329,7 +329,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                         AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT trace_id FROM experiment_items_final))
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                        LIMIT 1 BY workspace_id, project_id, id
                     )
                     GROUP BY trace_id
                 ) AS s ON t.id = s.trace_id

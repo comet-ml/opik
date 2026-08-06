@@ -808,7 +808,7 @@ public class SpanDAO {
             AND project_id IN (SELECT project_id FROM target_projects)
             AND trace_id IN :trace_ids
             ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            LIMIT 1 BY workspace_id, project_id, id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -820,7 +820,7 @@ public class SpanDAO {
      * instead of the (potentially large) {@code input}/{@code output}/{@code metadata} text. The latest
      * version of each span is taken with {@code argMax(..., last_updated_at)} grouped by {@code id} —
      * a hash aggregation that dedups the {@code ReplacingMergeTree} versions without the full-row
-     * {@code ORDER BY} + {@code LIMIT 1 BY id} sort that {@link #SELECT_BY_TRACE_IDS} pays. See OPIK-7454.
+     * {@code ORDER BY} + {@code LIMIT 1 BY workspace_id, project_id, id} sort that {@link #SELECT_BY_TRACE_IDS} pays. See OPIK-7454.
      */
     private static final String SELECT_SPANS_SIZE_BY_TRACE_IDS = """
             WITH target_projects AS (
