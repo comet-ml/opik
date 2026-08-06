@@ -246,7 +246,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND type = :type
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
@@ -267,7 +267,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND type = :type
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
