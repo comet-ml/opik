@@ -1,12 +1,12 @@
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-import httpx
-
 import opik.exceptions as exceptions
 from opik.api_objects import opik_client
 
 from . import rest_api_client
+
+TRAINING_REQUEST_TIMEOUT_SECONDS = 60
 
 
 def create_custom_guardrail(
@@ -51,7 +51,9 @@ def create_custom_guardrail(
     """
     client = opik_client.get_global_client()
     api_client = rest_api_client.GuardrailsApiClient(
-        httpx_client=httpx.Client(timeout=60),
+        httpx_client=rest_api_client.build_httpx_client(
+            config=client.config, timeout_seconds=TRAINING_REQUEST_TIMEOUT_SECONDS
+        ),
         host_url=client.config.guardrails_backend_host,
     )
 
