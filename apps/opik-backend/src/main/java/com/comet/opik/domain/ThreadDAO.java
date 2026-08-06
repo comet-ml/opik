@@ -183,7 +183,6 @@ class ThreadDAOImpl implements ThreadDAO {
                     workspace_id,
                     project_id,
                     trace_id,
-                    parent_span_id,
                     id,
                     last_updated_at,
                     usage,
@@ -202,7 +201,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                       <endif>
                   <endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), spans_agg AS (
                 SELECT
@@ -1096,7 +1095,6 @@ class ThreadDAOImpl implements ThreadDAO {
                         workspace_id,
                         project_id,
                         trace_id,
-                        parent_span_id,
                         id,
                         last_updated_at,
                         usage,
@@ -1111,7 +1109,7 @@ class ThreadDAOImpl implements ThreadDAO {
                           <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                           <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                       <endif>
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ), spans_agg AS (
                     SELECT

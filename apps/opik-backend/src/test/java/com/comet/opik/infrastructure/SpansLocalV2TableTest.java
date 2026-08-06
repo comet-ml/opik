@@ -166,6 +166,48 @@ class SpansLocalV2TableTest {
     }
 
     /**
+     * The dedup contract this table's key exists to provide. parent_span_id is not writable through the API, but
+     * ingestion does not validate it on every path, so two versions of one span id can carry different parents. On the
+     * live table parent_span_id is a key column, so such versions sort to different keys, never merge, and the
+     * "latest version" emulation resolves by the largest parent rather than the largest last_updated_at. Here the key
+     * is (workspace_id, project_id, trace_id, id), so both versions share a key and last_updated_at alone decides.
+     * <p>
+     * The stale version deliberately carries the larger parent, so the old five-column tiebreaker would have selected
+     * it — without that the assertions would hold for the wrong reason.
+     */
+    @Test
+    void sameIdWithDifferentParentsResolvesByLastUpdatedAtAndMergesToOneRow() {
+        var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var span = newStoredSpan(startTime, null, DEFAULT_TRUNCATION_THRESHOLD);
+
+        // Real UUIDv7s. v7 is time-ordered, so the parent minted later sorts above the earlier one.
+        var latestParent = ID_GENERATOR.generateId(startTime.minusSeconds(120));
+        var staleParent = ID_GENERATOR.generateId(startTime);
+        assertThat(latestParent.toString()).isLessThan(staleParent.toString());
+
+        var staleUpdatedAt = startTime.minusSeconds(60);
+
+        insertVersion(span, staleParent, staleUpdatedAt);
+        insertVersion(span, latestParent, startTime);
+
+        // Before the merge: both versions are still physically present, and the DAO's four-column read tuple already
+        // resolves to the newest one rather than to the largest parent.
+        assertThat(countRows(span)).isEqualTo(2L);
+        assertThat(getColumn(span, "CAST(parent_span_id AS String)", String.class))
+                .isEqualTo(latestParent.toString());
+        assertThat(getColumn(span, "last_updated_at", Instant.class)).isEqualTo(startTime);
+
+        optimizeFinal();
+
+        // After the merge: they collapse to a single row — impossible on the live five-column key, where the differing
+        // parent puts them on separate keys — and it is the newest version that survives.
+        assertThat(countRows(span)).isEqualTo(1L);
+        assertThat(getColumn(span, "CAST(parent_span_id AS String)", String.class))
+                .isEqualTo(latestParent.toString());
+        assertThat(getColumn(span, "last_updated_at", Instant.class)).isEqualTo(startTime);
+    }
+
+    /**
      * The two halves of the root-span sentinel contract, which differ and are easy to conflate. ClickHouse stores the
      * empty {@code FixedString(36)} NUL-padded, but trims the padding when casting to String — so the DAO's
      * {@code LENGTH(CAST(parent_span_id AS Nullable(String))) > 0} presence checks behave on this column exactly as they
@@ -512,6 +554,52 @@ class SpansLocalV2TableTest {
                     .bind("trace_id", span.traceId());
             return Mono.from(statement.execute());
         }).block();
+    }
+
+    /**
+     * Writes one version of a span: the key columns plus the two that decide dedup. last_updated_at is bound
+     * explicitly because it defaults to now64(6), which cannot express "an older version".
+     */
+    private void insertVersion(StoredSpan span, UUID parentSpanId, Instant lastUpdatedAt) {
+        transactionTemplateAsync.nonTransaction(connection -> {
+            var statement = connection.createStatement("""
+                    INSERT INTO spans_local_v2 (id, workspace_id, project_id, trace_id, parent_span_id, last_updated_at)
+                    SELECT :id, :workspace_id, :project_id, :trace_id, :parent_span_id,
+                           parseDateTime64BestEffort(:last_updated_at, 6, 'UTC')
+                    """)
+                    .bind("id", span.id())
+                    .bind("workspace_id", span.workspaceId())
+                    .bind("project_id", span.projectId())
+                    .bind("trace_id", span.traceId())
+                    .bind("parent_span_id", parentSpanId)
+                    .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(lastUpdatedAt));
+            return Mono.from(statement.execute());
+        }).block();
+    }
+
+    private long countRows(StoredSpan span) {
+        return transactionTemplateAsync.nonTransaction(connection -> {
+            var statement = connection.createStatement("""
+                    SELECT count() AS value
+                    FROM spans_local_v2
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND trace_id = :trace_id
+                    AND id = :id
+                    """)
+                    .bind("workspace_id", span.workspaceId())
+                    .bind("project_id", span.projectId())
+                    .bind("trace_id", span.traceId())
+                    .bind("id", span.id());
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("value", Long.class))));
+        }).block();
+    }
+
+    private void optimizeFinal() {
+        transactionTemplateAsync.nonTransaction(connection -> Mono
+                .from(connection.createStatement("OPTIMIZE TABLE spans_local_v2 FINAL").execute()))
+                .block();
     }
 
     /**

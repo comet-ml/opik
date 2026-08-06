@@ -485,10 +485,12 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_IDS = """
             WITH target_spans AS (
                 SELECT id, trace_id, type
-                FROM spans FINAL
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, id
             ),
             feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -676,6 +678,20 @@ class TraceDAOImpl implements TraceDAO {
                     arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
                     arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
                 FROM span_feedback_scores_grouped
+            ), spans_deduped AS (
+                SELECT
+                    trace_id,
+                    id,
+                    type,
+                    usage,
+                    total_estimated_cost,
+                    provider
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND trace_id IN :ids
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, id
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -685,10 +701,7 @@ class TraceDAOImpl implements TraceDAO {
                     toInt64(countIf(type = 'llm')) AS llm_span_count,
                     countIf(type = 'tool') > 0 AS has_tool_spans,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans FINAL
-                WHERE workspace_id = :workspace_id
-                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                AND trace_id IN :ids
+                FROM spans_deduped
                 GROUP BY trace_id
             ), experiments_agg AS (
                 SELECT
@@ -1872,7 +1885,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND trace_id IN (SELECT trace_id FROM target_spans)
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS s ON t.id = s.trace_id
                 GROUP BY
@@ -2232,13 +2245,11 @@ class TraceDAOImpl implements TraceDAO {
                     type,
                     workspace_id,
                     project_id
-                FROM spans
+                FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
              ), spans_agg AS (
                 SELECT
                     trace_id,
