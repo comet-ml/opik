@@ -1,9 +1,12 @@
 {{- if and .Values.clickhouse.enabled .Values.clickhouse.tieredStorage.enabled .Values.clickhouse.tieredStorage.coldTierMigration.enabled }}
 {{- /*
-  Recreates any ClickHouse StatefulSet still missing the cold-tier cache volume
-  after the cold tier is enabled: orphan-delete (pods + data PVCs preserved) so
-  the operator re-adds the mount, one replica at a time, until all are Ready.
-  No-op when every replica already has the cache volume.
+  When the cold tier is enabled on a multi-replica cluster, the ClickHouse
+  operator can push the new storage.xml to a pod before rebuilding its
+  StatefulSet with the cache volume, leaving the pod crash-looping. This job
+  recovers it by bouncing the altinity ClickHouse operator pod: a fresh operator
+  rebuilds each StatefulSet WITH the cache volume on its first reconcile pass. It
+  never touches the ClickHouse StatefulSets, pods, or data path, so it does not
+  add downtime. No-op when the cluster is already healthy.
 */ -}}
 {{- $cacheVct := .Values.clickhouse.tieredStorage.cold.cache.volumeName -}}
 {{- $cachePath := .Values.clickhouse.tieredStorage.cold.cache.path -}}
@@ -55,16 +58,17 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
     {{- end }}
 rules:
-  # Recreate the affected CH StatefulSet (orphan-delete) + reschedule its pod.
-  # watch is needed by `kubectl wait` (readiness polling).
+  # Detect the wedge (read CH StatefulSets/pods) and wait for readiness (watch).
+  # No delete on StatefulSets — recovery only bounces the operator pod.
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
-    verbs: ["get", "list", "watch", "delete"]
+    verbs: ["get", "list", "watch"]
+  # delete is needed only to bounce the altinity operator pod.
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch", "delete"]
-  # Read the ClickHouseInstallation status so we only act once the operator has
-  # finished its own reconcile (avoid racing an in-progress rollout).
+  # Read the ClickHouseInstallation status to distinguish a healthy cluster from
+  # a genuine wedge before acting.
   - apiGroups: ["clickhouse.altinity.com"]
     resources: ["clickhouseinstallations"]
     verbs: ["get", "list", "watch"]
@@ -155,137 +159,70 @@ spec:
             - |
               set -eu
 
-              echo "=== Cold-tier enable migration (recreate StatefulSets missing the cache volume) ==="
+              echo "=== Cold-tier enable migration (bounce the ClickHouse operator to rebuild StatefulSets with the cache volume) ==="
               echo "namespace=${NAMESPACE} chi=${CHI_NAME} cacheVct=${CACHE_VCT} cachePath=${CACHE_PATH}"
 
-              # Operator-managed CH StatefulSets for this CHI.
+              # Operator-managed CH StatefulSets/pods for this CHI.
               CH_STS_SELECTOR="clickhouse.altinity.com/chi=${CHI_NAME}"
 
-              # Single shared budget for the whole run (migration + readiness).
               DEADLINE=$(( $(date +%s) + POLL_TIMEOUT ))
               remaining() { r=$(( DEADLINE - $(date +%s) )); [ "$r" -gt 0 ] && echo "$r" || echo 0; }
-
-              # Fail loud on a failed kubectl read rather than mistaking an API/RBAC
-              # outage for "nothing to do".
               die() { echo "ERROR: $*" >&2; exit 1; }
 
-              # Don't race the operator: while it is progressing a healthy rollout,
-              # a StatefulSet may transiently lack the cache VCT — deleting it then
-              # would wedge the reconcile. Wait until one of two settled signals:
-              #   - CHI status=Completed        -> cluster healthy, nothing to fix
-              #   - a CH pod in CrashLoopBackOff -> the real cold-enable wedge, act now
-              # (The CHI stays InProgress for the whole wedge, so we must NOT wait for
-              # Completed alone — that would deadlock on the very case we fix.)
-              # Returns 0 to proceed to detection, or 1 if the cluster is already healthy.
-              wait_settled() {
-                echo ">> waiting for the operator to settle (CHI Completed) or a wedged pod to appear"
-                while :; do
-                  st=$(kubectl get chi "$CHI_NAME" -n "$NAMESPACE" \
-                        -o jsonpath='{.status.status}' 2>/dev/null || echo "")
-                  if [ "$st" = "Completed" ]; then
-                    echo ">> CHI ${CHI_NAME} is Completed — cluster healthy"
-                    return 1
-                  fi
-                  # Any CH pod waiting in CrashLoopBackOff is the wedge signal.
-                  wedged=$(kubectl get pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" \
-                    -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.state.waiting.reason}{" "}{end}{end}' 2>/dev/null || echo "")
-                  case " $wedged " in
-                    *CrashLoopBackOff*) echo ">> wedged pod detected (CrashLoopBackOff) — proceeding"; return 0 ;;
-                  esac
-                  echo "   CHI status=${st:-unknown}, no wedged pod yet — waiting..."
-                  [ "$(remaining)" -eq 0 ] && die "cluster neither reached Completed nor showed a wedge within ${POLL_TIMEOUT}s (last CHI status=${st:-unknown})"
-                  sleep 10
-                done
-              }
-
-              # Confirm the STS is owned by THIS CHI's operator before we touch it,
-              # so a stray StatefulSet that merely shares the label is never deleted.
-              # A failed read aborts (never treated as "unowned").
-              owned_by_chi() {
-                owner=$(kubectl get "sts/$1" -n "$NAMESPACE" \
-                  -o jsonpath='{.metadata.ownerReferences[?(@.kind=="ClickHouseInstallation")].name}') \
-                  || die "reading ownerReferences of sts/$1 failed"
-                [ "$owner" = "$CHI_NAME" ]
-              }
-
-              # A StatefulSet needs recreation when it lacks the cache VCT. A failed
-              # list aborts so a discovery outage is never reported as a clean no-op.
-              sts_missing_cache_vct() {
+              # True when any StatefulSet for this CHI still lacks the cache VCT.
+              cluster_needs_migration() {
                 stses=$(kubectl get sts -n "$NAMESPACE" -l "$CH_STS_SELECTOR" -o name) \
                   || die "listing ClickHouse StatefulSets failed"
+                [ -z "$stses" ] && return 1
                 for sts in $stses; do
-                  name="${sts#statefulset.apps/}"
-                  owned_by_chi "$name" || continue
                   vcts=$(kubectl get "$sts" -n "$NAMESPACE" \
                     -o jsonpath='{range .spec.volumeClaimTemplates[*]}{.metadata.name}{" "}{end}') \
                     || die "reading volumeClaimTemplates of $sts failed"
                   case " $vcts " in
-                    *" ${CACHE_VCT} "*) : ;;  # already has it
-                    *) echo "$name" ;;        # missing -> needs recreation
+                    *" ${CACHE_VCT} "*) : ;;   # this STS already has the cache VCT
+                    *) return 0 ;;             # at least one is missing it
                   esac
                 done
+                return 1
               }
 
-              # Orphan-delete the STS (keeps pod + data PVC) so the operator recreates
-              # it WITH the cache VCT, delete the pod so it remounts, then wait for
-              # THAT pod to come back Ready before returning — one host at a time.
-              recreate_one() {
-                sts="$1"
-                pod="${sts}-0"
-                echo ">> orphan-deleting StatefulSet ${sts} (keeps pod + data PVC); operator recreates it WITH ${CACHE_VCT}"
-                kubectl delete "sts/${sts}" -n "$NAMESPACE" --cascade=orphan --wait=true
-                echo ">> deleting pod ${pod} so it reschedules with the ${CACHE_PATH} mount"
-                kubectl delete "pod/${pod}" -n "$NAMESPACE" --grace-period=0 --ignore-not-found=true
-
-                # Poll (not a fixed sleep) until the operator has recreated the pod
-                # and it is Ready, so we never advance to the next replica — or exit
-                # the loop — while this one is still restarting.
-                echo ">> waiting for ${pod} to be recreated and Ready"
-                while :; do
-                  left="$(remaining)"
-                  if [ "$left" -eq 0 ]; then
-                    echo "ERROR: ${pod} not Ready within budget (${POLL_TIMEOUT}s)" >&2
-                    kubectl get sts,pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
-                    exit 1
-                  fi
-                  # --timeout must be >0 (0 means wait forever); cap each attempt.
-                  [ "$left" -gt 30 ] && left=30
-                  if kubectl get "pod/${pod}" -n "$NAMESPACE" >/dev/null 2>&1 \
-                     && kubectl wait --for=condition=Ready "pod/${pod}" \
-                          -n "$NAMESPACE" --timeout="${left}s" >/dev/null 2>&1; then
-                    echo ">> ${pod} Ready"
-                    return 0
-                  fi
-                  sleep 5
-                done
+              # Name of the altinity ClickHouse operator pod in this namespace.
+              operator_pod() {
+                kubectl get pods -n "$NAMESPACE" -o name 2>/dev/null \
+                  | grep -i 'clickhouse-operator' | head -n1
               }
 
-              migrated_any=0
-              while :; do
-                # Wait for a settled signal before acting. Returns non-zero when the
-                # CHI is already Completed (healthy) — nothing left to do.
-                if ! wait_settled; then
-                  break
-                fi
-                # Don't mask a discovery failure: a die() inside the subshell exits
-                # non-zero here, and we abort rather than treat it as "nothing to do".
-                pending=$(sts_missing_cache_vct) || exit 1
-                if [ -z "$pending" ]; then
-                  # wait_settled saw a wedged pod but every StatefulSet already has
-                  # the cache VCT, so recreating won't help — don't spin, fail loud.
-                  die "a ClickHouse pod is wedged but all StatefulSets already carry ${CACHE_VCT}; this migration cannot recover it"
-                fi
-                echo "StatefulSets missing ${CACHE_VCT}:"
-                echo "$pending" | sed 's/^/  - /'
-                # One host at a time — the operator processes replicas sequentially.
-                first=$(echo "$pending" | head -n1)
-                recreate_one "$first"
-                migrated_any=1
-              done
-
-              if [ "$migrated_any" -eq 1 ]; then
-                echo "=== Cold-tier migration complete — all replicas Ready with ${CACHE_VCT} ==="
-              else
-                echo "=== No migration needed — cold tier already healthy ==="
+              # If some StatefulSet lacks the cache VCT, bounce the operator so a
+              # fresh reconcile rebuilds every STS WITH the cache volume. This never
+              # deletes CH StatefulSets/pods, so it adds no downtime beyond the wedge.
+              if ! cluster_needs_migration; then
+                echo "=== No migration needed — all StatefulSets already carry ${CACHE_VCT} ==="
+                exit 0
               fi
+
+              op="$(operator_pod)"
+              [ -n "$op" ] || die "no altinity ClickHouse operator pod found in ${NAMESPACE}"
+              echo ">> StatefulSets missing ${CACHE_VCT}; bouncing operator ${op#pod/} so it rebuilds them with the cache volume"
+              kubectl delete "$op" -n "$NAMESPACE" --grace-period=30
+
+              # Wait until every CH pod is Ready and no StatefulSet is missing the VCT.
+              echo ">> waiting for all ClickHouse pods to be Ready with ${CACHE_VCT}"
+              while :; do
+                left="$(remaining)"
+                if [ "$left" -eq 0 ]; then
+                  echo "ERROR: cluster not healthy within ${POLL_TIMEOUT}s after bouncing the operator" >&2
+                  kubectl get sts,pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
+                  exit 1
+                fi
+                if ! cluster_needs_migration; then
+                  [ "$left" -gt 60 ] && left=60
+                  if kubectl wait --for=condition=Ready pod \
+                        -n "$NAMESPACE" -l "$CH_STS_SELECTOR" \
+                        --timeout="${left}s" >/dev/null 2>&1; then
+                    echo "=== Cold-tier migration complete — all replicas Ready with ${CACHE_VCT} ==="
+                    exit 0
+                  fi
+                fi
+                sleep 10
+              done
 {{- end }}
