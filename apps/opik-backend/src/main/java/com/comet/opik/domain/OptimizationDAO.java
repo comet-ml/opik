@@ -423,9 +423,17 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * The tagged-cost CTEs ({@code optimization_tagged_trace_ids} onwards) are deliberately duplicated in
      * {@link #FIND_WITHOUT_EXPERIMENTS} rather than shared through one templated constant: sharing would need a
      * flag every call site must remember to set, and forgetting it silently double-counts trial spend. The two
-     * copies are held in step by
-     * {@code OptimizationsResourceTest.GetOptimizerById.findAndGetById__whenOptimizationHasNoExperiments__taggedCostAgreesAndFollowsTheTag},
-     * which asserts the list and {@code getById} report the same figure - change one copy and it fails.
+     * copies are held in step by the {@code findAndGetById__*} tests in
+     * {@code OptimizationsResourceTest.GetOptimizerById}, each of which asserts the list and {@code getById}
+     * report the same figure - change one copy and they fail.
+     * <p>
+     * The spans read inside those CTEs keys its dedup on {@code id} and leaves {@code parent_span_id} out of
+     * both the sort tuple and the {@code LIMIT 1 BY}, matching every other spans read since OPIK-7750
+     * (#7764). That column is mutable across writes, so ahead of {@code last_updated_at} in the sort it picks
+     * the winner by largest parent rather than newest write, and inside the grouping a span re-ingested under
+     * a different parent survives as two rows and its cost enters this sum twice. {@code id} alone is unique
+     * per span. Both halves are pinned by
+     * {@code findAndGetById__whenTaggedSpanIsRewrittenUnderAnotherParent__spendIsChargedOnce}.
      * <p>
      * No numeric column this query returns may ever be NaN/Inf: the row mapper reads them as
      * {@code BigDecimal}, {@code BigDecimal.valueOf(NaN)} throws, and the clickhouse-r2dbc driver
@@ -758,12 +766,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         -- needs. The authoritative filter is the trace_id IN below.
                         AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
-                        -- parent_span_id is deliberately out of both the sort tuple and the
-                        -- grouping, matching every other spans read since OPIK-7750: it is
-                        -- mutable across upserts, so ahead of last_updated_at it picks the
-                        -- winner by largest parent instead of newest write, and in the
-                        -- grouping a span rewritten under a different parent survives twice
-                        -- and its cost lands in this sum twice. id alone is unique per span.
+                        -- Keys on id, without parent_span_id: see the dedup note on FIND.
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
                     )
@@ -921,12 +924,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         -- ClickHouse would substitute textually and re-scan.
                         AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
                         AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
-                        -- parent_span_id is deliberately out of both the sort tuple and the
-                        -- grouping, matching every other spans read since OPIK-7750: it is
-                        -- mutable across upserts, so ahead of last_updated_at it picks the
-                        -- winner by largest parent instead of newest write, and in the
-                        -- grouping a span rewritten under a different parent survives twice
-                        -- and its cost lands in this sum twice. id alone is unique per span.
+                        -- Keys on id, without parent_span_id: see the dedup note on FIND.
                         ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY workspace_id, project_id, id
                     )

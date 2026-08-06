@@ -46,6 +46,7 @@ import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -118,6 +119,7 @@ class OptimizationsResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+    private static final TimeBasedEpochGenerator ID_GENERATOR = Generators.timeBasedEpochGenerator();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -1416,17 +1418,23 @@ class OptimizationsResourceTest {
         }
 
         /**
-         * The tagged-cost branch must charge one span once, no matter how many physical rows it has. A span
-         * re-ingested with a different parent is the case that used to break that: {@code SpanDAO.INSERT} does
-         * not overwrite a differing parent, it stores the poison-pill value
-         * ({@code leftPad(new_parent, 40, '*')}), so the rewrite lands as a second row under a
-         * <em>different</em> {@code parent_span_id} - and a dedup grouping that still contained that column
-         * kept both rows and summed the cost twice. The grouping keys on {@code id} instead (OPIK-7750), which
-         * is unique per span, so this fixture must report the spend once.
+         * The tagged-cost branch must charge one span once, from its newest version, no matter how many
+         * physical rows it has. A span re-ingested under a different parent is the case that used to break
+         * both halves of that: {@code /v1/private/spans/batch} goes through {@code SpanDAO.BULK_INSERT},
+         * which binds {@code parent_span_id} straight from the request with no old-row merge, so the rewrite
+         * lands as a second row carrying a <em>different</em> parent. A dedup grouping that still contained
+         * that column then kept both rows and summed the cost twice, and a sort tuple that still contained it
+         * picked the winner by largest parent instead of newest write (OPIK-7750).
          * <p>
-         * The rewrite and a second, cheaper span go in ONE batch so the assertion has a deterministic edge to
-         * wait for: the total moves 0.07 -> 0.10 when the batch lands, and a fan-out would settle it at 0.17
-         * rather than leave it briefly stale.
+         * So the fixture makes the two versions differ in cost and gives the <em>stale</em> one the
+         * <em>larger</em> parent: both parents are v7 and minted in order, so the earlier-minted id is the
+         * smaller one and the relationship is deterministic rather than a coin flip. Each failure mode then
+         * lands on its own number - 0.08 correct (newest version, charged once, plus the companion), 0.10 if
+         * the sort picks the stale version by parent, 0.15 if the grouping keeps both rows.
+         * <p>
+         * The rewrite and the companion span go in ONE batch statement, so they become visible together: the
+         * total moves 0.07 -> 0.08 when the batch lands and never transits a wrong value, which is what makes
+         * waiting on 0.08 an edge rather than a value that is merely still stale.
          */
         @Test
         @DisplayName("Tagged cost when a span is re-ingested under another parent, then it is charged once")
@@ -1468,47 +1476,53 @@ class OptimizationsResourceTest {
                     .build();
             traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
 
-            // Parents must be v7 - the ingestion endpoint rejects anything else.
-            var idGenerator = Generators.timeBasedEpochGenerator();
+            // Parents must be v7 - the ingestion endpoint rejects anything else. Minted in order, so
+            // smallParent < largeParent holds by v7's time ordering; asserted rather than assumed.
+            var smallParent = ID_GENERATOR.generate();
+            var largeParent = ID_GENERATOR.generate();
+            assertThat(largeParent.toString()).isGreaterThan(smallParent.toString());
 
-            var rewrittenCost = BigDecimal.valueOf(0.07);
-            Span rewritten = podamFactory.manufacturePojo(Span.class).toBuilder()
+            var staleCost = BigDecimal.valueOf(0.07);
+            Span original = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectId(project.id())
                     .projectName(project.name())
                     .traceId(taggedTrace.id())
-                    .parentSpanId(idGenerator.generate())
+                    .parentSpanId(largeParent)
                     .startTime(Instant.now().minusSeconds(2))
                     .endTime(Instant.now().minusSeconds(1))
-                    .totalEstimatedCost(rewrittenCost)
+                    .totalEstimatedCost(staleCost)
                     .feedbackScores(null)
                     .build();
-            spanResourceClient.batchCreateSpans(List.of(rewritten), apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(List.of(original), apiKey, workspaceName);
 
             await().atMost(10, TimeUnit.SECONDS)
                     .pollInterval(1, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
-                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(rewrittenCost);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(staleCost);
                     });
 
-            // Same span id, different parent - INSERT poisons the column rather than overwriting it, so this
-            // is a second row keyed on the same id. The companion span is the arrival signal.
+            // Same span id, cheaper, under the SMALLER parent: newest by last_updated_at, oldest by parent.
+            var rewriteCost = BigDecimal.valueOf(0.05);
             var companionCost = BigDecimal.valueOf(0.03);
             Span companion = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectId(project.id())
                     .projectName(project.name())
                     .traceId(taggedTrace.id())
-                    .parentSpanId(idGenerator.generate())
+                    .parentSpanId(ID_GENERATOR.generate())
                     .startTime(Instant.now().minusSeconds(2))
                     .endTime(Instant.now().minusSeconds(1))
                     .totalEstimatedCost(companionCost)
                     .feedbackScores(null)
                     .build();
             spanResourceClient.batchCreateSpans(
-                    List.of(rewritten.toBuilder().parentSpanId(idGenerator.generate()).build(), companion),
+                    List.of(original.toBuilder()
+                            .parentSpanId(smallParent)
+                            .totalEstimatedCost(rewriteCost)
+                            .build(), companion),
                     apiKey, workspaceName);
 
-            var expected = rewrittenCost.add(companionCost);
+            var expected = rewriteCost.add(companionCost);
             await().atMost(10, TimeUnit.SECONDS)
                     .pollInterval(1, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
