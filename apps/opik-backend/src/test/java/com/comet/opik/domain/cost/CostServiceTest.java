@@ -778,6 +778,24 @@ class CostServiceTest {
     }
 
     /**
+     * Covers registering {@code sambanova} as a canonical provider so that the 19 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "sambanova"} (the deepseek, llama, qwen and minimax models served
+     * on SambaNova Cloud) are no longer silently dropped at load time. No SambaNova model
+     * publishes cache rates today, so all SambaNova requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesSambanovaModels() {
+        // sambanova/MiniMax-M2.7: input 6e-7, output 2.4e-6
+        // 1000 * 6e-7 + 200 * 2.4e-6 = 0.0006 + 0.00048 = 0.00108
+        BigDecimal cost = CostService.calculateCost("sambanova/MiniMax-M2.7", "sambanova",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00108");
+    }
+
+    /**
      * Covers the provider-prefix fallback in {@link CostService#findModelPrice}. Callers that
      * route a model through an aggregator ({@link com.comet.opik.api.resources.v1.events.BudgetGuard}
      * calls {@code CostService.calculateCost} via {@code LlmProviderFactoryImpl.getResolvedModelInfo},
