@@ -33,6 +33,10 @@ navigation:
             path: ../docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
+          - page: Agent Skills
+            path: ../docs-v2/prompt_engineering/agent-skills.mdx
+            slug: agent-skills
+            icon: fa-regular fa-graduation-cap
           - page: MCP Server
             path: ../docs-v2/prompt_engineering/mcp-server.mdx
             slug: mcp-server
@@ -597,6 +601,9 @@ navigation:
         skip-slug: true
         icon: fa-regular fa-robot
         contents:
+          - page: Agent Skills
+            path: ../docs-v2/prompt_engineering/agent-skills.mdx
+            slug: agent-skills
           - page: MCP Server
             path: ../docs-v2/prompt_engineering/mcp-server.mdx
             slug: mcp-server
