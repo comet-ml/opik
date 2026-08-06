@@ -56,6 +56,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -564,17 +565,28 @@ class DatasetsResourceCreateFromTracesTest {
         /**
          * The batch endpoint inserts rows verbatim, so re-sending a span id under a different parent stores
          * a second row that differs from the first on {@code parent_span_id} — a sort-key column. Both rows
-         * are then distinct versions: {@code FINAL} deduplicates by the full sorting key and keeps them, and
-         * so does this query, which groups on that same key. Deduplicating on {@code id} alone would collapse
-         * them instead and silently drop a version's usage.
+         * are then distinct versions as far as the table is concerned, and {@code FINAL} would keep them
+         * both, counting one logical span twice.
          * <p>
-         * The double count asserted here is not desirable in itself — it is what {@code FINAL} returns, and
-         * matching {@code FINAL} is the contract this query has to hold. Two batch calls rather than one
-         * batch of two spans, because a single batch deduplicates by id before insert.
+         * This query deliberately does not do that. It deduplicates on
+         * {@code (workspace_id, project_id, id)}, so a span id resolves to a single row within a project and
+         * is aggregated once. That is a conscious divergence from {@code FINAL}: a span id is meant to be
+         * unique within a project, and rows that disagree on the rest of the sort key are a data-structure
+         * artifact being addressed separately under the hyperscale work, not a state the read path should
+         * preserve and double-count.
+         * <p>
+         * Note which row survives: the {@code ORDER BY} still leads with the table's sort key, so the
+         * winner is the one with the greater {@code parent_span_id}, not the most recently written.
+         * {@code last_updated_at} only breaks ties once the whole tuple matches. That is a deliberate
+         * trade — leading with the sort key is what lets ClickHouse read in order — and it is only
+         * observable for rows that are already inconsistent.
+         * <p>
+         * Two batch calls rather than one batch of two spans, because a single batch deduplicates by id
+         * before insert.
          */
         @Test
-        @DisplayName("Success - a span re-sent under a different parent keeps both sort-key versions, matching FINAL")
-        void createDatasetItemsFromTraces__whenSpanReSentWithDifferentParent__aggregatesBothSortKeyVersions() {
+        @DisplayName("Success - a span re-sent under a different parent is still aggregated once")
+        void createDatasetItemsFromTraces__whenSpanReSentWithDifferentParent__isAggregatedOnce() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -591,18 +603,30 @@ class DatasetsResourceCreateFromTracesTest {
             int firstUsage = RandomUtils.secure().randomInt(1, 100);
             int secondUsage = RandomUtils.secure().randomInt(100, 200);
 
+            // Which of the two rows survives is decided by parent_span_id order, not by recency: the
+            // ORDER BY leads with the table's sort key so ClickHouse can still read in order, and
+            // last_updated_at only breaks ties once that whole tuple matches — which it does not here.
+            // Pin the two parents so the outcome is deterministic rather than dependent on which random
+            // UUID happens to sort higher.
+            var parents = Stream.of(GENERATOR.generate(), GENERATOR.generate())
+                    .sorted(Comparator.comparing(UUID::toString))
+                    .toList();
+            var lowerParent = parents.getFirst();
+            var higherParent = parents.getLast();
+
             spanResourceClient.batchCreateSpans(List.of(
-                    buildSpan(spanId, projectName, trace.id(), GENERATOR.generate(),
+                    buildSpan(spanId, projectName, trace.id(), higherParent,
                             Map.of(USAGE_KEY, firstUsage))),
                     apiKey, workspaceName);
 
             spanResourceClient.batchCreateSpans(List.of(
-                    buildSpan(spanId, projectName, trace.id(), GENERATOR.generate(),
+                    buildSpan(spanId, projectName, trace.id(), lowerParent,
                             Map.of(USAGE_KEY, secondUsage))),
                     apiKey, workspaceName);
 
+            // One version, not the sum — the span is counted once despite being stored twice.
             assertThat(aggregatedUsage(datasetId, trace.id(), apiKey, workspaceName))
-                    .isEqualTo(Map.of(USAGE_KEY, (long) (firstUsage + secondUsage)));
+                    .isEqualTo(Map.of(USAGE_KEY, (long) firstUsage));
         }
 
         private Trace createTrace(String projectName, String apiKey, String workspaceName) {

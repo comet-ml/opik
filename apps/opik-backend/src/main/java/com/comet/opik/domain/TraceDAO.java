@@ -488,7 +488,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                LIMIT 1 BY workspace_id, project_id, id
             ),
             feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -689,7 +689,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                LIMIT 1 BY workspace_id, project_id, id
             ), spans_agg AS (
                 SELECT
                     trace_id,
