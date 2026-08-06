@@ -456,6 +456,9 @@ public class CostService {
         BigDecimal outputAudioTokenPrice = Optional.ofNullable(modelCost.outputCostPerAudioToken())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
+        BigDecimal outputReasoningTokenPrice = Optional.ofNullable(modelCost.outputCostPerReasoningToken())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
         // Whole-prompt tiers: LiteLLM's above_{128k,200k,272k}_tokens rates replace the base
         // rate wholesale once the prompt strictly exceeds the threshold. Only include a tier
         // when at least one of its rates is non-zero; that keeps the tier list empty for the
@@ -490,6 +493,7 @@ public class CostService {
                 .audioInputCharacterPrice(audioInputCharacterPrice)
                 .inputAudioTokenPrice(inputAudioTokenPrice)
                 .outputAudioTokenPrice(outputAudioTokenPrice)
+                .outputReasoningTokenPrice(outputReasoningTokenPrice)
                 .calculator(calculator)
                 .promptTiers(List.copyOf(promptTiers))
                 .build();

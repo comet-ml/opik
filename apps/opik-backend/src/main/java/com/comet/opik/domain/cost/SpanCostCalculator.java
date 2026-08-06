@@ -39,11 +39,24 @@ class SpanCostCalculator {
                 ? Math.max(0, completionTokens - audioOutputTokens)
                 : completionTokens;
 
+        // Reasoning/thinking tokens are a subset of completion_tokens (SDK 1.6.0+ logs them under
+        // original_usage.completion_tokens_details.reasoning_tokens, with the bare OTel key as a
+        // fallback) and bill at a separate rate when the model publishes output_cost_per_reasoning_token.
+        // Subtract them from the standard-output bucket so they aren't billed at both rates.
+        int reasoningTokens = usage.getOrDefault("original_usage.completion_tokens_details.reasoning_tokens",
+                usage.getOrDefault("completion_tokens_details.reasoning_tokens", 0));
+
+        BigDecimal outputReasoningRate = modelPrice.outputReasoningTokenPrice();
+        int standardCompletionTokens = outputReasoningRate.compareTo(BigDecimal.ZERO) > 0
+                ? Math.max(0, nonAudioCompletionTokens - reasoningTokens)
+                : nonAudioCompletionTokens;
+
         return modelPrice.effectiveInputPrice(promptTokens).multiply(BigDecimal.valueOf(nonAudioPromptTokens))
                 .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
                 .add(modelPrice.effectiveOutputPrice(promptTokens)
-                        .multiply(BigDecimal.valueOf(nonAudioCompletionTokens)))
-                .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)));
+                        .multiply(BigDecimal.valueOf(standardCompletionTokens)))
+                .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)))
+                .add(outputReasoningRate.multiply(BigDecimal.valueOf(reasoningTokens)));
     }
 
     public static BigDecimal textGenerationWithCacheCostOpenAI(@NonNull ModelPrice modelPrice,
