@@ -1,0 +1,49 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog
+---
+
+## Guardrails: LLM-as-Judge, Prompt Injection Detection, and Custom Trained Classifiers
+
+Guardrails now cover three new validator types alongside the existing PII and Topic checks. **LLM Judge** guards run client-side through the Python SDK using your configured provider, logging the check as a nested span. **Prompt Injection** adds a dedicated classifier that flags injection attempts in user input. **Custom Guardrail** lets you train and serve your own classifier from the guardrails server, with an SDK helper (`create_custom_guardrail`) that reports training progress and an overwrite policy for retraining. All three new types are configured through the SDK and show up alongside PII/Topic guardrails in traces and alert filters; the in-app "Set a guardrail" dialog remains scoped to PII and Topic.
+
+The guardrails backend also gained a CPU-only Docker image and `--guardrails-cpu` deploy mode (previously GPU-only), a per-guardrail-name breakdown on the "Failed guardrails" metrics chart, and the ability to filter guardrail alerts by guardrail type.
+
+## Oversized Payloads No Longer Crash Ingestion
+
+A single inline field or an unusually large batch could previously push ingestion into an out-of-memory crash loop. Both SDKs now cap an individual span's input/output/metadata at a configurable per-field size before sending, replacing anything over the limit with a compact `opik_truncated` marker and a warning instead of shipping the full payload (Python and TypeScript SDKs now behave the same way here). The backend independently rejects requests whose declared size exceeds the configured limit with a `413` before reading the body, and caps the total decompressed document size during parsing, so an oversized request fails fast and cleanly instead of destabilizing the server.
+
+## Bug Fixes & Improvements
+
+- **Online evaluation rules can now target experiment traces** — Rules gained a trigger-scope setting (production traces, experiment traces, or both), so a rule can run during experiments in addition to (or instead of) production traffic. Existing rules keep running on production traces only, unchanged.
+
+- **LangChain: `OpikTracer` no longer leaks memory when reused across invocations** — A tracer built once and reused across many `invoke()` calls (the documented pattern) grew its internal per-run bookkeeping without ever releasing it, pinning full prompt/completion payloads in memory for the life of the process. Old run state is now cleaned up as each run finishes.
+
+- **Anthropic adaptive-thinking models now work as online-rule judges** — Online LLM-as-judge rules using `claude-sonnet-5`, `claude-opus-4-7`, or `claude-opus-4-8` as the judge model failed outright, since the judge-path request builder sent `temperature` unconditionally. Sampling parameters are now gated correctly for these models on the judge path, matching the Playground.
+
+- **Claude Opus 5 no longer rejected in the Playground** — Opus 5 also deprecates `temperature`/`top_p`, but was missing from the model capabilities list, so requests failed. It now behaves like the other adaptive-thinking Claude models: the sliders are hidden and the params are stripped.
+
+- **Metadata filter key: picking a suggestion now actually sticks** — Selecting an entry from the metadata filter key autocomplete dropdown could be silently overwritten by stale typed text a moment later, so the picked key reverted. Selecting a suggestion now reliably commits it.
+
+- **Fixed a heap-exhaustion crash loop in thread-level online scoring** — Threads with a very large number of spans could exhaust heap memory while preloading span data for scoring, crash-looping the service. Preload size is now bounded.
+
+- **Google ADK integration: LLM spans no longer get stuck "in progress"** — With ADK's `ContextCacheConfig` enabled under SSE streaming, extra internal context switches could cause Opik to lose track of an in-flight span, leaving it stuck without ever recording its output. Spans are now tracked by a stable per-call key that survives these context switches, so they always finalize correctly.
+
+- **Python SDK: hardened OQL filter-string parsing** — Incomplete filter strings, negative numbers, and unterminated quoted values in Opik Query Language strings could crash with an unhandled internal error instead of a clear one; all three now parse or fail predictably.
+
+- **Python SDK: `evaluate()` no longer double-runs scoring functions when reusing a metrics list** — Passing the same `scoring_metrics` list into multiple `evaluate()` calls accumulated wrapped scorer functions on that list across calls, so a later run silently scored every metric more than once.
+
+- **SDK: custom API URLs with a path no longer lose that path** — Setting a base URL that includes a path segment (e.g. a URL ending in `/api`) for permission checks could have that segment stripped, breaking requests behind a reverse-proxy path prefix.
+
+- **Recent Activity links now resolve correctly on Comet's cloud app** — Links from the Recent Activity list could resolve to a mangled URL when the app is served under the `/opik` path prefix, sending users to a broken page. Links are now built so the workspace/project name can't collide with the path prefix.
+
+- **Concurrent dataset uploads no longer 500 or silently drop rows** — Uploading to the same dataset from multiple parallel workers could hit a 500, or worse, have one worker's version silently overwrite another's without error. Version creation is now serialized per dataset so concurrent uploads compose correctly.
+
+- **Large file-based dataset uploads now land as a single version** — Uploading a large CSV/JSON file in batches previously created a new dataset version per batch (so a 10,000-row file could produce roughly ten versions, each progressively more expensive to write). The whole file now lands as one version regardless of batch count.
+
+- **Moonshot model costs now load correctly** — Moonshot wasn't registered as a canonical pricing provider, so calls through Moonshot models were costed at $0. Pricing now loads correctly, matching the same recent fix for Azure, xAI, DeepSeek, Perplexity, and Fireworks.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.0...2.2.7)
+
+_Releases_: `2.2.1`, `2.2.2`, `2.2.3`, `2.2.4`, `2.2.5`, `2.2.6`, `2.2.7`
