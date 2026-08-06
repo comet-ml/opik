@@ -14,14 +14,14 @@
     "report": "playwright show-report"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0",
-    "opik": "^2.0.40"
+    "js-yaml": "^5.2.3",
+    "opik": "^2.2.13"
   },
   "devDependencies": {
-    "@playwright/test": "^1.50.0",
+    "@playwright/test": "^1.62.1",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^22.0.0",
-    "allure-playwright": "^3.0.0",
-    "typescript": "^5.6.0"
+    "@types/node": "^26.1.2",
+    "allure-playwright": "^3.10.2",
+    "typescript": "^7.0.2"
   }
 }
