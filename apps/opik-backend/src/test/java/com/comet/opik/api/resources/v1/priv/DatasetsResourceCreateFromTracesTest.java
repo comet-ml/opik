@@ -509,13 +509,20 @@ class DatasetsResourceCreateFromTracesTest {
     /**
      * Span deduplication in {@code TraceDAO.SELECT_BY_IDS}, which this endpoint reaches through
      * {@code TraceEnrichmentService} (OPIK-7676). Both span reads in that query used to be
-     * {@code FROM spans FINAL}; they were replaced with an explicit dedup ordering by and grouping on the
-     * full sort key ({@code workspace_id, project_id, trace_id, parent_span_id, id}).
+     * {@code FROM spans FINAL}; they were replaced with an explicit dedup on the logical span key,
+     * {@code (workspace_id, project_id, id)}, ordered by the table's sort key so ClickHouse can still read
+     * in order.
+     * <p>
+     * That key is deliberately narrower than the sort key
+     * ({@code workspace_id, project_id, trace_id, parent_span_id, id}), so the query does not reproduce
+     * {@code FINAL} in every case: a span id stored under two different parents is aggregated once here and
+     * twice by {@code FINAL}. A span id is meant to be unique within a project, and rows that disagree on
+     * the rest of the sort key are a data-structure artifact being addressed under the hyperscale work.
      * <p>
      * {@code spans} is a ReplacingMergeTree and the aggregated columns are mutable, so the enriched
-     * {@code usage} — {@code sumMap(usage)} over the deduplicated spans — is the observable that both
-     * regressions show up in: dropping the dedup entirely, and deduplicating on a key narrower than the
-     * sort key.
+     * {@code usage} — {@code sumMap(usage)} over the deduplicated spans — is the observable for both cases
+     * below: a version updated in place must not be summed with its predecessor, and a version stored under
+     * a second parent must not be summed either.
      * <p>
      * Both tests draw the two versions' usage from disjoint non-zero ranges. That is the one constraint the
      * values carry: a summed aggregate has to be distinguishable from either version alone, which fails if
