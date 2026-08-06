@@ -2,9 +2,11 @@
 
 `e2e-compat/2.2.16` — branched from `origin/main` at `6b59553bd9`.
 
-**No test changes were needed.** Main's t1 suite passes against 2.2.16 as-is. This
-branch exists so the deployment team has a pinned, verified ref for 2.2.16 runs;
-it is `main` with this document added.
+**No version-compatibility changes were needed.** Main's t1 suite passes against
+2.2.16 as-is. This branch exists so the deployment team has a pinned, verified
+ref for 2.2.16 runs; it is `main` with this document added, plus the OPIK-7806
+model-picker stability fix cherry-picked from `main` (see below — a flake fix
+that applies equally to `main`, not a version adaptation).
 
 ## Scope
 
@@ -65,6 +67,38 @@ network log contains no experiment request at all. Ruled out as version skew —
 the spec is identical at `2.2.16` and `main`, and the latch commit (`bda4b16690`)
 predates the tag. Consistent with contention on the shared playground/LLM path
 under `WORKERS=2`. Left as-is; no quarantine.
+
+**Still open after OPIK-7806.** That ticket hardened the model-picker
+interactions on this branch (see below), but it does **not** fix this timeout —
+they are separate failure modes that surface through the same spec. The
+picker fix addresses an option-list remount; this flake is the experiment POST
+never being issued. Treat it as unresolved for 2.2.16.
+
+## OPIK-7806 — model-picker hardening (cherry-picked from `main`)
+
+Cherry-picked onto this branch so 2.2.16 runs get the same protection as `main`.
+
+The LLM model option list is rebuilt when `/v1/private/llm/models` and
+`/v1/private/llm-provider-key` resolve, and the suite configures a provider
+immediately before opening the Playground — so the dropdown can open inside that
+invalidation window and options detach mid-click (`element is not stable` →
+`element was detached from the DOM`). The search + option click is now wrapped in
+`toPass` in the playground, optimization-studio, and online-evaluation POMs, each
+confirming the selection actually registered. `ConfigurationPage` also no longer
+reports an empty provider table when the table is slow to render.
+
+Verified applicable to 2.2.16 by source inspection at the tag:
+
+- `PromptModelSelect/` is byte-identical between `2.2.16` and `main`.
+- `useLlmModels` carries the same `retry: 3` + backoff-to-10s config.
+- `useProviderKeys` at 2.2.16 has **no** `staleTime`, so it refetches more
+  eagerly than `main` — the race is at least as likely here.
+- All selectors the change relies on exist at the tag: `select-a-llm-model`,
+  the `Search model` placeholder, `ai-providers-tabpanel`,
+  `ai-provider-row-cell`, and the `No AI providers yet` empty-state string.
+
+Not re-run against a live 2.2.16 instance; the change is test-side only and
+typechecks clean on this branch.
 
 ## Environment notes for re-runs
 
