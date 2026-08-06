@@ -955,4 +955,21 @@ class CostServiceTest {
                 // custom-llm hits the same fallback, as it does for perplexity and moonshot.
                 Arguments.of("z-ai/glm-4.5", "custom-llm", "0.00104"));
     }
+
+    /**
+     * Covers registering {@code baseten} as a canonical provider so that the 11 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "baseten"} are no longer silently dropped at load time. No Baseten
+     * model publishes cache rates today, so all Baseten requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesBasetenModels() {
+        // baseten/zai-org/GLM-5: input 9.5e-07, output 3.15e-06
+        // 1000 * 9.5e-07 + 200 * 3.15e-06 = 0.00158
+        BigDecimal cost = CostService.calculateCost("baseten/zai-org/GLM-5", "baseten",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00158");
+    }
 }
