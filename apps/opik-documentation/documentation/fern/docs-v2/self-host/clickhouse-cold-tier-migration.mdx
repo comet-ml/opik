@@ -51,19 +51,36 @@ clickhouse:
 ```
 
 <Note>
-`coldTierMigration.enabled` defaults to `true`. It only does work when the cold tier is enabled, and is a no-op when every replica already has the cache volume — so it is safe to leave on across upgrades. Set it to `false` to opt out **without** disabling the cold tier.
+`coldTierMigration.enabled` defaults to `true`. It only does work when the cold tier is enabled, and is a no-op when every replica already has the cache volume — so it is safe to leave on across upgrades. Because it only bounces the operator (never deletes ClickHouse StatefulSets, pods, or data), it is safe on an existing release. To opt out **without** disabling the cold tier:
+
+```yaml
+clickhouse:
+  tieredStorage:
+    coldTierMigration:
+      enabled: false
+```
 </Note>
 
 ### How the Migration Works
 
-The migration runs as a post-upgrade hook (or ArgoCD `PostSync` hook) and is **data-preserving**:
+The migration runs as a post-upgrade hook (or ArgoCD `PostSync` hook) and is **data-preserving**. It recovers the cluster by bouncing the ClickHouse operator — it never deletes ClickHouse StatefulSets, pods, or data:
 
-1. **Detects affected replicas**: finds any ClickHouse StatefulSet owned by this installation that is still missing the cache volume.
-2. **Recreates the StatefulSet**: deletes it with `--cascade=orphan`, so the operator recreates it **with** the cache volume while the pods and data PVCs are preserved.
-3. **Reschedules the pod**: deletes the affected pod so it reschedules with the cache mount, then waits for it to become `Ready` before moving on.
-4. **One replica at a time**: repeats sequentially until every replica has the cache volume and is `Ready`.
+<Steps>
+<Step title="Detect">
+Check whether any ClickHouse StatefulSet is still missing the cold-tier cache volume. If none are, the job exits as a no-op.
+</Step>
+<Step title="Bounce the operator">
+Delete the altinity ClickHouse operator pod. A fresh operator re-reconciles from scratch.
+</Step>
+<Step title="Rebuild with the cache volume">
+On its first reconcile pass, the fresh operator rebuilds every ClickHouse StatefulSet **with** the cache volume — the affected pod remounts and recovers.
+</Step>
+<Step title="Wait for readiness">
+Wait until every ClickHouse pod is `Ready` and no StatefulSet is missing the cache volume.
+</Step>
+</Steps>
 
-No ClickHouse data is moved or deleted — only the StatefulSet object is recreated, and all PersistentVolumeClaims are kept.
+Because the job only restarts the operator, it adds no downtime beyond the wedge itself — no ClickHouse StatefulSet, pod, or PersistentVolumeClaim is deleted.
 
 ### Configuration Reference
 
@@ -73,17 +90,17 @@ All keys are under `clickhouse.tieredStorage.coldTierMigration`:
 | --- | --- | --- |
 | `clickhouse.tieredStorage.coldTierMigration.enabled` | `true` | Run the migration when the cold tier is enabled. Set `false` to opt out without disabling the cold tier. |
 | `clickhouse.tieredStorage.coldTierMigration.image` | `alpine/kubectl:1.35.0` | Image used by the migration job. |
-| `clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds` | `1200` | Total budget for the run (all replicas: recreate + reschedule + wait Ready). |
+| `clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds` | `1200` | Total budget for the run (bounce the operator, then wait for all replicas Ready). |
 | `clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds` | `1320` | Kubernetes hard cap on the Job. Must be greater than `pollTimeoutSeconds`. |
-| `clickhouse.tieredStorage.coldTierMigration.serviceAccountName` | `""` | Use an externally-managed ServiceAccount instead of the chart-created one. When set, the account must already have `get/list/delete` on `statefulsets` and `pods`. |
+| `clickhouse.tieredStorage.coldTierMigration.serviceAccountName` | `""` | Use an externally-managed ServiceAccount instead of the chart-created one. When set, the account must already have `get/list/watch` on `statefulsets` and `get/list/watch/delete` on `pods`. |
 
 <Warning>
-The migration ServiceAccount is granted `delete` on StatefulSets and pods. Leave `serviceAccountName` empty to use the chart-created, Job-scoped account. If you supply your own, use a dedicated, tightly-scoped ServiceAccount — a shared one would let other workloads delete those resources.
+The migration ServiceAccount is granted `delete` on pods (to bounce the operator). Leave `serviceAccountName` empty to use the chart-created, Job-scoped account. If you supply your own, use a dedicated, tightly-scoped ServiceAccount rather than a shared one.
 </Warning>
 
 ## Single-Replica Clusters
 
-On a single-replica cluster the cold-tier enablement is briefly disruptive and would self-heal on its own in roughly 6–7 minutes. The migration job still runs and recovers the replica the same way (recreate the StatefulSet, reschedule the pod), typically faster than waiting for the passive self-heal. No action is required either way. If the replica already has the cache volume, the job is a no-op.
+On a single-replica cluster the cold-tier enablement is briefly disruptive and would self-heal on its own in roughly 6–7 minutes. The migration job still runs and recovers the replica the same way (bounce the operator so it rebuilds the StatefulSet with the cache volume), typically faster than waiting for the passive self-heal. No action is required either way. If the replica already has the cache volume, the job is a no-op.
 
 ## Need Help?
 
