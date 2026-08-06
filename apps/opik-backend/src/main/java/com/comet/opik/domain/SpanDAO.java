@@ -722,7 +722,7 @@ public class SpanDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
             ) AS s
             LEFT JOIN (
                 SELECT
@@ -739,7 +739,7 @@ public class SpanDAO {
                 AND entity_id IN :ids
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
             ) AS c ON s.id = c.entity_id
             LEFT JOIN (
                 SELECT
