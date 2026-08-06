@@ -30,25 +30,52 @@ rules:
     #      `..|select(.error_info?)`, and log messages like "Completed bulk update for
     #      '%s' dataset items" match on the word "update".
     #   2. A FROM clause on its own line — a second, independent structural marker.
-    #   3. A `%s` that is NOT inside a single-quoted SQL string. A slot spliced into a
-    #      quoted literal (`WHERE cluster = '%s'`) is a value position, which the
-    #      health checks fill from a compile-time constant; those are a readability
-    #      concern, not injection, and are out of scope here (OPIK 7727). This gate
-    #      targets the clause-position splice the review actually flagged.
+    #   3. A `%s` in CLAUSE position: it must be the whole right-hand side of an
+    #      `AND` / `OR` / `WHERE` / `ON` / `HAVING` keyword, on a line containing no
+    #      single quote. This is what makes the rule injection-shaped rather than
+    #      merely "%s near SQL", and it excludes two large false-positive families:
+    #        - Value positions — `WHERE name = '%s'`, and the same with whitespace
+    #          inside the quotes (`= ' %s '`). The ClickHouse health checks fill these
+    #          from compile-time constants; a readability concern, not injection
+    #          (OPIK 7727).
+    #        - Projections — `SELECT %s AS value`, `%s AS ttft`. The slot names a
+    #          column, it does not splice a predicate. Real instances live in
+    #          SpansLocalV2TableTest, NaNAwareAggregateIntegrationTest and
+    #          TracesLocalV2CutoverTest; an earlier revision of this rule flagged all
+    #          27 of them.
     #
     # Deliberately `%s` only, not `%d`: MetadataDAO contains the real SQL literal
     # `STR_TO_DATE(value, '%Y-%m-%d')`, which pattern matching cannot distinguish from
     # an integer format slot. No real violation uses `%d`.
     #
+    # Fixtures for every case above live in java-sql-string-formatting.java next to this
+    # file, asserted with semgrep's own annotations. Run them after any regex edit:
+    #   semgrep test --config .semgrep/java-sql-string-formatting.yaml \
+    #                       .semgrep/java-sql-string-formatting.java
+    #
+    # VERIFICATION TRAP — read before measuring this rule's coverage. Semgrep's built-in
+    # semgrepignore excludes `test`/`tests` directories at any depth, so passing
+    # `apps/opik-backend/src/test/java` as a DIRECTORY scans zero files and reports a
+    # reassuring "0 findings". The pre-commit hook passes explicit FILENAMES, which
+    # bypasses that exclusion — so the hook sees files a directory scan never did. Always
+    # verify the way the hook runs:
+    #   semgrep --config .semgrep $(git ls-files 'apps/opik-backend/src/**/*.java')
+    # Measured that way, both trees are 1,687 files (1,259 main + 428 test).
+    #
     # Known limitation: a query written entirely on ONE line
     # (`"SELECT id FROM spans WHERE w = :w AND %s"`) is not caught, because requirements
-    # 1 and 2 are line-anchored. Dropping those anchors was measured and reintroduces
-    # the prompt-template false positive, which is the worse failure — it would block an
+    # 1-3 are line-anchored. Dropping those anchors was measured and reintroduces the
+    # prompt-template false positive, which is the worse failure — it would block an
     # unrelated commit and push a suppression comment into a file with no SQL in it.
     # Every real query in this codebase is a multi-line text block, so the gap is
     # theoretical; revisit if that stops being true.
+    #
+    # Also not caught: a spliced predicate that is not the entire right-hand side of a
+    # clause keyword (`AND %s AND deleted = 0`, or `AND (%s)`). Requirement 3 anchors the
+    # slot to end-of-line to keep projections out. Broadening it is possible but was not
+    # needed for any real or hypothetical case reviewed here.
     patterns:
       - pattern: $X
       - metavariable-regex:
           metavariable: $X
-          regex: (?sm)^"(?=.*^\s*(?i:SELECT|WITH)\b)(?=.*^\s*(?i:FROM)\b)(?=.*^[^\n]*\S[^\n]*(?<!')%s(?!')).*"$
+          regex: (?sm)^"(?=.*^\s*(?i:SELECT|WITH)\b)(?=.*^\s*(?i:FROM)\b)(?=.*^[^\n']*\b(?i:AND|OR|WHERE|ON|HAVING)\s+%s\s*$).*"$

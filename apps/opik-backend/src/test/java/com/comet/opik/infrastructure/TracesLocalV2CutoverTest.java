@@ -923,26 +923,34 @@ class TracesLocalV2CutoverTest {
 
     /** Stored (physically materialized) columns of a table — excludes {@code MATERIALIZED} / {@code ALIAS} columns. */
     private Set<String> baseColumns(String table) {
-        return columnNames(table, "default_kind NOT IN ('MATERIALIZED', 'ALIAS')");
+        return columnNames(table, false, "MATERIALIZED", "ALIAS");
     }
 
     /** MATERIALIZED (recomputed, not stored-from-insert) columns of a table. */
     private Set<String> materializedColumns(String table) {
-        return columnNames(table, "default_kind = 'MATERIALIZED'");
+        return columnNames(table, true, "MATERIALIZED");
     }
 
-    /** Column names of a table filtered by a {@code system.columns} predicate. */
-    private Set<String> columnNames(String table, String defaultKindPredicate) {
+    /**
+     * Column names of a table whose {@code default_kind} is in (or, when {@code include} is false, not in) the given
+     * kinds. The kinds are bound rather than spliced, so the query text stays a constant.
+     */
+    private Set<String> columnNames(String table, boolean include, String... defaultKinds) {
         var sql = """
                 SELECT name
                 FROM system.columns
                 WHERE database = :db
                   AND table = :t
-                  AND %s
-                """.formatted(defaultKindPredicate);
-        return template.stream(connection -> Flux.from(connection.createStatement(sql)
+                  <if(include)> AND default_kind IN :default_kinds<endif>
+                  <if(exclude)> AND default_kind NOT IN :default_kinds<endif>
+                """;
+        var stTemplate = TemplateUtils.newST(sql);
+        stTemplate.add(include ? "include" : "exclude", true);
+        var rendered = stTemplate.render();
+        return template.stream(connection -> Flux.from(connection.createStatement(rendered)
                 .bind("db", DATABASE_NAME)
                 .bind("t", table)
+                .bind("default_kinds", defaultKinds)
                 .execute())
                 .flatMap(result -> result.map((row, ignored) -> row.get("name", String.class))))
                 .collectList().block().stream().collect(Collectors.toUnmodifiableSet());
