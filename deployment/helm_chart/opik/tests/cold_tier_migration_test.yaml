@@ -47,6 +47,13 @@ tests:
     asserts:
       - failedTemplate: {}
 
+  - it: fails the render when the operator is relocated via namespaceOverride
+    set:
+      altinity-clickhouse-operator.namespaceOverride: other-ns
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.tieredStorage.coldTierMigration is incompatible with altinity-clickhouse-operator.namespaceOverride (the migration job is namespace-scoped to the release namespace); set coldTierMigration.enabled=false or remove namespaceOverride"
+
   # Identity: the account the Job runs as MUST be the RoleBinding subject, else the
   # Job has no Role permissions. Default (chart-created) SA path.
   - it: binds the default chart ServiceAccount to the Job and RoleBinding
