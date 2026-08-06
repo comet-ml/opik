@@ -155,10 +155,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Haiku 4.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
-      label: "Claude Opus 4.1",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
       label: "Claude Fable 5",
     },
@@ -892,6 +888,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-2.6-flash:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH,
+      label: "inclusionai/ling-3.0-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FREE,
       label: "inclusionai/ling-3.0-flash:free",
     },
@@ -1046,6 +1046,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_1,
       label: "meta/muse-spark-1.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_2,
+      label: "meta/muse-spark-1.2",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
@@ -2187,6 +2191,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_PLUS,
       label: "qwen/qwen3.7-plus",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_MAX,
+      label: "qwen/qwen3.8-max",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,

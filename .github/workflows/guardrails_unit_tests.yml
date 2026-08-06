@@ -2,8 +2,6 @@ name: "Guardrails Backend Unit Tests"
 run-name: "Guardrails Backend Unit Tests on ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 on:
   workflow_dispatch:
@@ -27,12 +25,18 @@ jobs:
     name: Guardrails Backend Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Only the "Publish Test Report" step needs these; keep them off the
+    # workflow-level default (least privilege).
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     defaults:
       run:
         working-directory: apps/opik-guardrails-backend/
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -68,7 +72,7 @@ jobs:
     if: always() && needs.unit-tests.result == 'failure' && github.event_name != 'pull_request'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false

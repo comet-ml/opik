@@ -85,20 +85,57 @@ When something "isn't appearing," the usual cause is a DOM race (a loading spinn
 
 ## Tags
 
-Every test carries a tier tag and a feature tag. Tiers are inclusive: `test:t2` runs `@t1-smoke|@t2-cuj`, `test:t3` runs all three.
+Every spec carries a tier tag and an `@area:` tag on the describe block, and at least one
+`@cap:` tag naming the capability it asserts. Tiers are inclusive: `test:t2` runs
+`@t1-smoke|@t2-cuj`, `test:t3` runs all three.
 
 - `@t1-smoke` — fast, deterministic, always-on core checks.
 - `@t2-cuj` — core user journeys; multi-step flows.
 - `@t3-nightly` — broader / slower coverage.
 
-Apply them on the describe block alongside the feature tag:
-
 ```ts
-test.describe('Dataset CRUD — smoke', { tag: ['@t1-smoke', '@datasets'] }, () => {
-  // ...
+test.describe('Trace Explore — smoke', { tag: ['@t1-smoke', '@area:traces'] }, () => {
+  test('Logs view shows seeded traces', { tag: ['@cap:traces.list-traces'] }, async ({ page }) => {
+    // ...
+  });
 });
 ```
 
-Pick the tier by what the test costs and how core it is; pick the feature tag to match the page family (`@datasets`, `@trace-explore`, `@experiments`, …).
+### `@area:` and `@cap:` values MUST exist in the taxonomy
+
+`tests_end_to_end/coverage/taxonomy.yaml` is the source of truth for both, and CI enforces it via
+the **`tag-lint`** job. **Never invent a tag name.** An unregistered value fails the build with
+`unknown capability '@cap:x.y' — not in taxonomy`.
+
+The taxonomy usually already reserves the capability you're about to cover, as
+`covered: false`. Grep before you write:
+
+```bash
+grep -n "your-feature" tests_end_to_end/coverage/taxonomy.yaml
+```
+
+If an entry exists, **use that exact name** and flip it to `covered: true` with the tier you
+assigned. If none fits, add a new one under the right area — a kebab-case name describing the
+user-facing capability, not the test's mechanics.
+
+A `@cap:` is written `@cap:<area>.<capability>` and must sit under the spec's own `@area:`.
+
+### Keeping the taxonomy in sync
+
+Adding or changing a spec means editing `taxonomy.yaml` in the **same** change:
+
+1. Add the spec's path to the area's `specs:` list.
+2. For each capability the spec now covers: set `covered: true` and record the `tier:`.
+3. If you're covering something not yet listed, add the capability entry first.
+
+### Run the linter before you push
+
+It's fast, needs no browser, and catches exactly the class of mistake CI would:
+
+```bash
+python3 tests_end_to_end/coverage/tag_lint.py --taxonomy tests_end_to_end/coverage/taxonomy.yaml --estate tests_end_to_end
+```
+
+Expect `0 problem(s)`. Full grammar: `tests_end_to_end/TESTING-TAGS.md`.
 
 **Exception — release-gate specs.** Dev-authored release-gate tests are the one case that does *not* follow the rules above: they live at `tests/_release-gate/<lead-ticket>.spec.ts` (not `tests/<feature>/`) and carry `@release-gate` + `@release-gate:<version>` instead of a tier tag, so they stay out of the curated `@t1-smoke`/`@t2-cuj`/`@t3-nightly` suites. They are governed by `.agents/skills/explore-feature/release-gate-contract.md`, not this file. If you're following these conventions, treat a spec under `_release-gate/` as intentional, not a violation.

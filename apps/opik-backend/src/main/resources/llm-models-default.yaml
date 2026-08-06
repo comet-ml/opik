@@ -162,13 +162,11 @@ anthropic:
   - id: "claude-haiku-4-5-20251001"
     label: "Claude Haiku 4.5"
     structuredOutput: true
-  - id: "claude-opus-4-1-20250805"
-    label: "Claude Opus 4.1"
-    structuredOutput: true
   - id: "claude-fable-5"
     label: "Claude Fable 5"
     structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
+  - id: "claude-opus-4-1-20250805"
   - id: "claude-opus-4-20250514"
   - id: "claude-sonnet-4-20250514"
   - id: "claude-sonnet-4-5-20250929"
@@ -694,6 +692,8 @@ openrouter:
     label: "inclusionai/ling-2.6-flash"
   - id: "inclusionai/ling-2.6-flash:free"
     label: "inclusionai/ling-2.6-flash:free"
+  - id: "inclusionai/ling-3.0-flash"
+    label: "inclusionai/ling-3.0-flash"
   - id: "inclusionai/ling-3.0-flash:free"
     label: "inclusionai/ling-3.0-flash:free"
   - id: "inclusionai/ring-2.6-1t"
@@ -782,6 +782,8 @@ openrouter:
   - id: "meta/muse-spark-1.1"
     label: "meta/muse-spark-1.1"
     structuredOutput: true
+  - id: "meta/muse-spark-1.2"
+    label: "meta/muse-spark-1.2"
   - id: "microsoft/mai-ds-r1"
     label: "microsoft/mai-ds-r1"
   - id: "microsoft/mai-ds-r1:free"
@@ -1407,6 +1409,8 @@ openrouter:
     label: "qwen/qwen3.7-max"
   - id: "qwen/qwen3.7-plus"
     label: "qwen/qwen3.7-plus"
+  - id: "qwen/qwen3.8-max"
+    label: "qwen/qwen3.8-max"
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true

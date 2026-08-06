@@ -1,30 +1,12 @@
 /**
- * Two-level workspace version resolution.
+ * Selects which App to mount from the workspace version in the store.
  *
- * Version is per-workspace, but the workspace is only fully resolved inside
- * the router tree (WorkspacePreloader). This creates a circular dependency:
- *   router selection → needs version → needs workspace → needs router
- *
- * We break the circle with two levels of checks:
- *
- * Level 1 — WorkspaceVersionGate (this component, BEFORE the router):
- *   resolveSyncWorkspaceVersion() always returns a version synchronously
- *   from: override > per-workspace cache > DEFAULT_WORKSPACE_VERSION.
- *   First paint renders the chosen App immediately — no Loader, no API
- *   call at this stage.
- *
- * Level 2 — WorkspaceVersionResolver (INSIDE the router, after WorkspacePreloader):
- *   1. Workspace is now fully resolved (auth, access, header set)
- *   2. Fetch version via React Query (reuses existing providers)
- *   3. Write the resolved version to the localStorage cache
- *   4. If it disagrees with what the gate picked → hard reload so the next
- *      module load picks the correct App synchronously from the cache.
- *
- * Reload is required because each App instantiates its own TanStack Router
- * at module scope. Swapping apps in place leaves the inactive router's URL
- * state stale and causes the two WorkspacePreloaders to disagree on the
- * active workspace. A full reload re-evaluates modules with the current
- * browser URL and resets both routers to a consistent initial state.
+ * Opik V2 is the only supported experience: resolveSyncWorkspaceVersion() always
+ * returns v2, so V2App is always mounted. The V1App branch and the downstream
+ * WorkspaceVersionResolver are kept until the V1 UI is removed (tracked
+ * separately) but are effectively inert — there is no backend version lookup
+ * (the `/workspaces/versions` endpoint has been removed) and nothing that
+ * resolves a workspace to v1.
  */
 import React, { Suspense } from "react";
 import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";

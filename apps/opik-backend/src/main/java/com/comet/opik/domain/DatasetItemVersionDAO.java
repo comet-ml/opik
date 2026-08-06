@@ -60,6 +60,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -97,6 +98,19 @@ public interface DatasetItemVersionDAO {
             @NonNull List<DatasetItemFilter> filters);
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
+
+    /**
+     * Counts how many of {@code itemIds} already exist in the given version.
+     * <p>
+     * Bounded alternative to {@link #getItemIdsAndHashes(UUID, UUID)} for the insert path, which only needs
+     * to classify an incoming batch as new vs. updated and does not need the hashes. Rows read scale with
+     * the batch size instead of the version size.
+     *
+     * @param itemIds the stable ids to look up; should be deduplicated by the caller. Null or empty
+     *                yields {@code 0} without querying.
+     * @return the number of distinct {@code itemIds} present in the version
+     */
+    Mono<Long> countExistingItemIds(UUID datasetId, UUID versionId, Set<UUID> itemIds);
 
     /**
      * Copies items from a source version to a new target version directly within dataset_item_versions.
@@ -379,6 +393,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             ORDER BY dataset_item_id DESC, last_updated_at DESC
             LIMIT 1 BY dataset_item_id
+            """;
+
+    /**
+     * Counts how many of the given stable ids already exist in a version.
+     * <p>
+     * The first three predicates are a prefix of the table's ordering key
+     * {@code (workspace_id, dataset_id, dataset_version_id, id)}, narrowing to the version's granules;
+     * {@code dataset_item_id} is not in the sort key and is instead served by the bloom-filter and
+     * minmax skip indexes added in migration {@code 000074}. This keeps rows read bounded by the
+     * incoming batch rather than by the size of the version being written to.
+     */
+    private static final String COUNT_EXISTING_ITEM_IDS = """
+            SELECT count(DISTINCT dataset_item_id) AS count
+            FROM dataset_item_versions
+            WHERE workspace_id = :workspace_id
+            AND dataset_id = :datasetId
+            AND dataset_version_id = :versionId
+            AND dataset_item_id IN :itemIds
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
@@ -2630,6 +2662,36 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doOnSuccess(items -> log.info("Retrieved '{}' item IDs and hashes for version '{}'", items.size(),
                             versionId))
                     .flatMapMany(Flux::fromIterable);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> countExistingItemIds(@NonNull UUID datasetId, @NonNull UUID versionId,
+            Set<UUID> itemIds) {
+        if (CollectionUtils.isEmpty(itemIds)) {
+            return Mono.just(0L);
+        }
+
+        log.debug("Counting existing item IDs among '{}' for dataset '{}', version '{}'", itemIds.size(), datasetId,
+                versionId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(COUNT_EXISTING_ITEM_IDS)
+                    .bind("datasetId", datasetId)
+                    .bind("versionId", versionId)
+                    .bind("itemIds", itemIds.stream().map(UUID::toString).toArray(String[]::new));
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "count_existing_item_ids");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L)
+                    .doOnSuccess(count -> log.debug(
+                            "Found existing items for version '{}' among '{}' incoming ids: '{}'", versionId,
+                            itemIds.size(), count))
+                    .doFinally(signalType -> endSegment(segment));
         });
     }
 

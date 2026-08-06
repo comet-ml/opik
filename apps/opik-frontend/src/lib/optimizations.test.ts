@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  aggregateCandidates,
   convertOptimizationVariableFormat,
   restorePromptVariableFormat,
   checkIsTestSuite,
@@ -32,6 +33,122 @@ const makeExperiment = (overrides: Partial<Experiment> = {}): Experiment => ({
   created_at: "2024-01-01T00:00:00Z",
   last_updated_at: "2024-01-01T00:00:00Z",
   ...overrides,
+});
+
+describe("aggregateCandidates — trial numbering", () => {
+  // A baseline plus three candidate trials, created in order.
+  const makeRun = () => [
+    makeExperiment({
+      id: "exp-base",
+      created_at: "2025-01-01T00:00:00Z",
+      metadata: { step_index: 0, candidate_id: "base" },
+    }),
+    makeExperiment({
+      id: "exp-1",
+      created_at: "2025-01-01T00:01:00Z",
+      metadata: {
+        step_index: 1,
+        candidate_id: "c1",
+        parent_candidate_ids: ["base"],
+      },
+    }),
+    makeExperiment({
+      id: "exp-2",
+      created_at: "2025-01-01T00:02:00Z",
+      metadata: {
+        step_index: 2,
+        candidate_id: "c2",
+        parent_candidate_ids: ["c1"],
+      },
+    }),
+    makeExperiment({
+      id: "exp-3",
+      created_at: "2025-01-01T00:03:00Z",
+      metadata: {
+        step_index: 3,
+        candidate_id: "c3",
+        parent_candidate_ids: ["c2"],
+      },
+    }),
+  ];
+
+  it("numbers every candidate including the baseline by default (v1, frozen)", () => {
+    const candidates = aggregateCandidates(makeRun(), undefined);
+    expect(candidates.map((c) => c.trialNumber)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("leaves the baseline unnumbered and counts candidates from 1 (v2)", () => {
+    // OPIK-7589: counting the baseline as Trial #1 shifted every candidate by
+    // one — the dot on step 3 carried a "Trial #4" card, and a run configured
+    // with max_trials=N ended on Trial #N+1.
+    const candidates = aggregateCandidates(makeRun(), undefined, {
+      unnumberedBaseline: true,
+    });
+    expect(candidates.map((c) => c.candidateId)).toEqual([
+      "base",
+      "c1",
+      "c2",
+      "c3",
+    ]);
+    expect(candidates.map((c) => c.trialNumber)).toEqual([null, 1, 2, 3]);
+  });
+
+  it("caps the highest trial number at the candidate count (matches max_trials)", () => {
+    const candidates = aggregateCandidates(makeRun(), undefined, {
+      unnumberedBaseline: true,
+    });
+    const numbered = candidates.filter((c) => c.trialNumber != null);
+    expect(Math.max(...numbered.map((c) => c.trialNumber as number))).toBe(
+      numbered.length,
+    );
+  });
+
+  it("treats the first-created experiment as the unnumbered baseline for old-style runs", () => {
+    // Old-style experiments carry no step_index metadata; aggregation assigns
+    // stepIndex by creation order, so the first one is the step-0 baseline.
+    const experiments = [
+      makeExperiment({ id: "exp-a", created_at: "2025-01-01T00:00:00Z" }),
+      makeExperiment({ id: "exp-b", created_at: "2025-01-01T00:01:00Z" }),
+      makeExperiment({ id: "exp-c", created_at: "2025-01-01T00:02:00Z" }),
+    ];
+    const candidates = aggregateCandidates(experiments, undefined, {
+      unnumberedBaseline: true,
+    });
+    expect(candidates.map((c) => c.trialNumber)).toEqual([null, 1, 2]);
+  });
+
+  it("returns no candidates for an empty run", () => {
+    expect(aggregateCandidates([], undefined)).toEqual([]);
+    expect(
+      aggregateCandidates([], undefined, { unnumberedBaseline: true }),
+    ).toEqual([]);
+  });
+
+  it("numbers every candidate from 1 when the run has no step-0 baseline", () => {
+    // A page of experiments that excludes step 0 (filtered or not yet loaded)
+    // has no baseline to exempt, so nothing goes unnumbered and the sequence
+    // still starts at 1 — never at 0, and never skipping a number.
+    const experiments = [
+      makeExperiment({
+        id: "exp-1",
+        created_at: "2025-01-01T00:01:00Z",
+        metadata: { step_index: 1, candidate_id: "c1" },
+      }),
+      makeExperiment({
+        id: "exp-2",
+        created_at: "2025-01-01T00:02:00Z",
+        metadata: {
+          step_index: 2,
+          candidate_id: "c2",
+          parent_candidate_ids: ["c1"],
+        },
+      }),
+    ];
+    const candidates = aggregateCandidates(experiments, undefined, {
+      unnumberedBaseline: true,
+    });
+    expect(candidates.map((c) => c.trialNumber)).toEqual([1, 2]);
+  });
 });
 
 describe("checkIsTestSuite", () => {

@@ -33,9 +33,6 @@ concurrency:
 
 permissions:
   contents: read
-  # Needed by the summary job to post/update the sticky timing comment on PRs.
-  # On fork PRs the token is read-only regardless, so that step is guarded.
-  pull-requests: write
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -55,7 +52,7 @@ jobs:
       to: ${{ steps.range.outputs.to }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Diff refs (base/head, push before/after) must be reachable.
           fetch-depth: 0
@@ -125,7 +122,7 @@ jobs:
     name: "lint (${{ matrix.leg.name }})"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Shallow: the leg lints explicit files (paths come from detect's
           # matrix value, not a git diff here), so it needs the worktree content
@@ -134,7 +131,7 @@ jobs:
 
       - name: Set up JDK 25
         if: matrix.leg.toolchain == 'java'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "25"
           distribution: "corretto"
@@ -142,7 +139,7 @@ jobs:
 
       - name: Set up Node.js
         if: matrix.leg.toolchain == 'node-fe' || matrix.leg.toolchain == 'node-ts'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
 
@@ -228,9 +225,15 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Needed to post/update the sticky timing comment on PRs. On fork PRs the
+    # token is read-only regardless, so that step is guarded. Scoped to this
+    # job rather than the workflow default (least privilege).
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Only needs the render scripts + shared description TSV, not history.
           fetch-depth: 1
@@ -315,7 +318,7 @@ jobs:
 
       - name: Post or update timing comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@v5
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-id: ${{ steps.find_comment.outputs.comment-id }}
