@@ -669,6 +669,21 @@ export class TestHelperClient {
     }
   }
 
+  async deleteSpansByProject(projectName: string, maxResults: number = 1000): Promise<number> {
+    try {
+      const response = await this.client.delete('/api/spans/delete-by-project', {
+        data: {
+          project_name: projectName,
+          max_results: maxResults,
+        },
+      });
+
+      return response.data.deleted_count;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete spans by project');
+    }
+  }
+
   async getTraces(projectName: string, size: number = 10): Promise<Trace[]> {
     try {
       const response = await this.client.post('/api/traces/get-traces', {
@@ -948,6 +963,18 @@ export class TestHelperClient {
       });
     } catch (error) {
       throw this.handleError(error, 'Failed to delete experiment');
+    }
+  }
+
+  async deleteExperimentsByName(name: string): Promise<number> {
+    try {
+      const response = await this.client.delete('/api/experiments/delete-by-name', {
+        data: { name },
+      });
+
+      return response.data.deleted_count;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete experiments by name');
     }
   }
 

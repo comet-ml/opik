@@ -65,13 +65,7 @@ export class ConfigurationPage {
    * caller's idempotency check would fail. Wait for the table to settle first.
    */
   async listConfiguredProviders(): Promise<string[]> {
-    const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
-    const firstRowCell = this.page.getByTestId('ai-provider-row-cell').first();
-    const emptyState = tabpanel.getByText('No AI providers yet');
-    await Promise.race([
-      firstRowCell.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined),
-      emptyState.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined),
-    ]);
+    await this.waitForProvidersTableSettled();
     const cells = this.page.getByTestId('ai-provider-row-cell');
     const count = await cells.count();
     const providers: string[] = [];
@@ -210,18 +204,33 @@ export class ConfigurationPage {
   }
 
   /**
+   * Block until the providers table has resolved into either a populated or an
+   * empty state. Counting rows before this settles reports zero for a populated
+   * table, which makes callers re-add a provider that already exists — and that
+   * redundant write invalidates the provider-key query right as dependent pages
+   * (Playground, Online evaluation) are opening their model pickers.
+   */
+  private async waitForProvidersTableSettled(): Promise<void> {
+    const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
+    const firstRowCell = this.page.getByTestId('ai-provider-row-cell').first();
+    const emptyState = tabpanel.getByText('No AI providers yet');
+    await expect
+      .poll(
+        async () =>
+          (await firstRowCell.isVisible().catch(() => false)) ||
+          (await emptyState.isVisible().catch(() => false)),
+        { timeout: 30_000, intervals: [100, 250, 500] },
+      )
+      .toBe(true);
+  }
+
+  /**
    * Idempotency check for Custom providers — a Custom row is identified by
    * (data-provider=custom-llm, name cell text === providerName). The first
    * cell in each row contains the provider_name.
    */
   private async hasCustomProvider(providerName: string): Promise<boolean> {
-    const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
-    const firstRowCell = this.page.getByTestId('ai-provider-row-cell').first();
-    const emptyState = tabpanel.getByText('No AI providers yet');
-    await Promise.race([
-      firstRowCell.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined),
-      emptyState.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined),
-    ]);
+    await this.waitForProvidersTableSettled();
     const customCells = this.page
       .getByTestId('ai-provider-row-cell')
       .and(this.page.locator(`[data-provider="${CUSTOM_PROVIDER_TYPE}"]`));

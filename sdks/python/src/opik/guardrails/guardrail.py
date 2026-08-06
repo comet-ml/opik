@@ -1,6 +1,8 @@
+import logging
 from typing import (
     List,
     Optional,
+    Sequence,
 )
 
 import httpx
@@ -15,8 +17,10 @@ from opik.message_processing.messages import (
 )
 from opik.opik_context import get_current_span_data, get_current_trace_data
 
-from . import guards, rest_api_client, schemas, tracing
+from . import guards, rest_api_client, schemas, stored_policies, tracing
 
+
+LOGGER = logging.getLogger(__name__)
 
 GUARDRAIL_DECORATOR = tracing.GuardrailsTrackDecorator()
 
@@ -76,6 +80,69 @@ class Guardrail:
         self._initialize_api_client(
             host_url=self._client.config.guardrails_backend_host,
         )
+
+    @classmethod
+    def from_stored_policies(
+        cls,
+        names: Optional[Sequence[str]] = None,
+        guardrail_timeout: Optional[int] = None,
+    ) -> "Guardrail":
+        """
+        Build a Guardrail from guardrail policies stored in your Opik workspace.
+
+        A policy is a named group of guards, stored in Opik. Referencing
+        policies by name keeps the checks an application runs configurable without a code
+        change. Policies the workspace applies unconditionally are always included, whether
+        or not they are named here.
+
+        The guards of all retrieved policies are checked together, as one flat set: which
+        policy a guard came from is not preserved.
+
+        Args:
+            names: Names of the policies to build the guardrail from. Every name must exist,
+                a name that does not is an error rather than a check silently not running.
+            guardrail_timeout: Timeout in seconds for the guardrails backend calls.
+
+        Returns:
+            Guardrail: Guardrail running the guards of the retrieved policies.
+
+        Raises:
+            opik.rest_api.core.ApiError: If the policies cannot be retrieved, for example
+                when one of ``names`` does not exist in the workspace.
+            opik.exceptions.GuardrailPolicyError: If a policy holds a guard type this SDK
+                version cannot run.
+
+        Example:
+
+        ```python
+        from opik.guardrails import Guardrail
+        from opik import exceptions
+
+        guardrail = Guardrail.from_stored_policies(names=["no_contact_information"])
+
+        try:
+            guardrail.validate("Call me at 555-0123")
+        except exceptions.GuardrailValidationFailed as e:
+            print("Guardrail failed:", e)
+        ```
+        """
+        client = opik_client.get_global_client()
+        policies = stored_policies.retrieve_policies(client=client, names=names)
+        policy_guards = stored_policies.build_guards(policies)
+
+        if len(policy_guards) == 0:
+            LOGGER.warning(
+                "No guards were found in the stored guardrail policies, so this guardrail "
+                "will let every input pass. Requested policy names: %s",
+                list(names) if names is not None else [],
+            )
+
+        LOGGER.debug(
+            "Built a guardrail from stored policies: %s",
+            [policy.name for policy in policies],
+        )
+
+        return cls(guards=policy_guards, guardrail_timeout=guardrail_timeout)
 
     def _initialize_api_client(self, host_url: str) -> None:
         self._api_client = rest_api_client.GuardrailsApiClient(
@@ -168,8 +235,11 @@ class Guardrail:
             )
             batch.append(guardrail_batch_item_message)
 
-        message = GuardrailBatchMessage(batch=batch)
-        self._client._streamer.put(message)
+        # A guardrail with no guards produces no results, and the backend rejects an empty
+        # guardrail batch (422). Sending it anyway would log an error and report data loss
+        # for something that was never lost.
+        if batch:
+            self._client._streamer.put(GuardrailBatchMessage(batch=batch))
 
         return result
 

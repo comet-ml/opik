@@ -64,6 +64,10 @@ public class CipxSpendBlockDAO {
             @NonNull String projectId,
             @NonNull Instant startTime,
             @NonNull String model,
+            /** Per-call speed modifier; selects the rate table that prices the call. Carried on
+             * every block because block-level cost needs the value that priced it. '' = standard,
+             * incl. every row written before the field existed. */
+            @NonNull String speed,
             int blockIdx,
             @NonNull String src,
             @NonNull String category,
@@ -99,6 +103,7 @@ public class CipxSpendBlockDAO {
                 Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
             JsonNode usage = call.path("usage");
+            JsonNode config = call.path("config");
             String model = call.path("model").asText("");
             long[] tierTokens = {
                     usage.path("input_tokens").asLong(0),
@@ -138,7 +143,8 @@ public class CipxSpendBlockDAO {
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
-                    .model(model);
+                    .model(model)
+                    .speed(config.path("speed").asText(""));
             if (blocks.isArray()) {
                 for (int idx = 0; idx < blocks.size(); idx++) {
                     JsonNode block = blocks.get(idx);
@@ -376,6 +382,7 @@ public class CipxSpendBlockDAO {
         node.put("span_id", row.spanId());
         node.put("block_idx", row.blockIdx());
         node.put("model", row.model());
+        node.put("speed", row.speed());
         node.put("src", row.src());
         node.put("category", row.category());
         node.put("side", row.side());

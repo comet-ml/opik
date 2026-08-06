@@ -1,4 +1,5 @@
 import { test, type Page, type Locator } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
 export interface CreateRuleDialogLLMJudgeFields {
@@ -157,10 +158,22 @@ export class OnlineEvaluationPage {
     const modelCombobox = d.getByRole('combobox').filter({
       hasText: /Select an LLM model|claude|gpt|Claude|GPT/i,
     });
-    await modelCombobox.click();
     const listbox = this.page.getByRole('listbox');
-    await listbox.getByPlaceholder('Search model').fill(fields.modelDisplayName);
-    await listbox.getByRole('option', { name: fields.modelDisplayName }).first().click();
+    await expect(async () => {
+      await modelCombobox.click();
+      await expect(listbox).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+
+    // The option list remounts when the model/provider-key queries resolve, so
+    // an option can detach between resolving and being clicked. Re-filter and
+    // re-click until the combobox reflects the selection.
+    await expect(async () => {
+      await listbox.getByPlaceholder('Search model').fill(fields.modelDisplayName);
+      const option = listbox.getByRole('option', { name: fields.modelDisplayName });
+      await expect(option.first()).toBeVisible({ timeout: 2_000 });
+      await option.first().click({ timeout: 2_000 });
+      await expect(modelCombobox).toContainText(fields.modelDisplayName, { timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
 
     // Change the output variable-mapping from default `output` to `output.output`
     // so the engine extracts the bare string (per the JsonPath semantics in
