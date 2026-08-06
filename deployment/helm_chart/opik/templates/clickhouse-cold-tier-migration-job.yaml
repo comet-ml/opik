@@ -56,12 +56,18 @@ metadata:
     {{- end }}
 rules:
   # Recreate the affected CH StatefulSet (orphan-delete) + reschedule its pod.
+  # watch is needed by `kubectl wait` (readiness polling).
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
-    verbs: ["get", "list", "delete"]
+    verbs: ["get", "list", "watch", "delete"]
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "delete"]
+    verbs: ["get", "list", "watch", "delete"]
+  # Read the ClickHouseInstallation status so we only act once the operator has
+  # finished its own reconcile (avoid racing an in-progress rollout).
+  - apiGroups: ["clickhouse.altinity.com"]
+    resources: ["clickhouseinstallations"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -163,6 +169,35 @@ spec:
               # outage for "nothing to do".
               die() { echo "ERROR: $*" >&2; exit 1; }
 
+              # Don't race the operator: while it is progressing a healthy rollout,
+              # a StatefulSet may transiently lack the cache VCT — deleting it then
+              # would wedge the reconcile. Wait until one of two settled signals:
+              #   - CHI status=Completed        -> cluster healthy, nothing to fix
+              #   - a CH pod in CrashLoopBackOff -> the real cold-enable wedge, act now
+              # (The CHI stays InProgress for the whole wedge, so we must NOT wait for
+              # Completed alone — that would deadlock on the very case we fix.)
+              # Returns 0 to proceed to detection, or 1 if the cluster is already healthy.
+              wait_settled() {
+                echo ">> waiting for the operator to settle (CHI Completed) or a wedged pod to appear"
+                while :; do
+                  st=$(kubectl get chi "$CHI_NAME" -n "$NAMESPACE" \
+                        -o jsonpath='{.status.status}' 2>/dev/null || echo "")
+                  if [ "$st" = "Completed" ]; then
+                    echo ">> CHI ${CHI_NAME} is Completed — cluster healthy"
+                    return 1
+                  fi
+                  # Any CH pod waiting in CrashLoopBackOff is the wedge signal.
+                  wedged=$(kubectl get pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" \
+                    -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.state.waiting.reason}{" "}{end}{end}' 2>/dev/null || echo "")
+                  case " $wedged " in
+                    *CrashLoopBackOff*) echo ">> wedged pod detected (CrashLoopBackOff) — proceeding"; return 0 ;;
+                  esac
+                  echo "   CHI status=${st:-unknown}, no wedged pod yet — waiting..."
+                  [ "$(remaining)" -eq 0 ] && die "cluster neither reached Completed nor showed a wedge within ${POLL_TIMEOUT}s (last CHI status=${st:-unknown})"
+                  sleep 10
+                done
+              }
+
               # Confirm the STS is owned by THIS CHI's operator before we touch it,
               # so a stray StatefulSet that merely shares the label is never deleted.
               # A failed read aborts (never treated as "unowned").
@@ -227,12 +262,18 @@ spec:
 
               migrated_any=0
               while :; do
+                # Wait for a settled signal before acting. Returns non-zero when the
+                # CHI is already Completed (healthy) — nothing left to do.
+                if ! wait_settled; then
+                  break
+                fi
                 # Don't mask a discovery failure: a die() inside the subshell exits
                 # non-zero here, and we abort rather than treat it as "nothing to do".
                 pending=$(sts_missing_cache_vct) || exit 1
                 if [ -z "$pending" ]; then
-                  echo "All CH StatefulSets carry ${CACHE_VCT} — nothing to migrate."
-                  break
+                  # wait_settled saw a wedged pod but every StatefulSet already has
+                  # the cache VCT, so recreating won't help — don't spin, fail loud.
+                  die "a ClickHouse pod is wedged but all StatefulSets already carry ${CACHE_VCT}; this migration cannot recover it"
                 fi
                 echo "StatefulSets missing ${CACHE_VCT}:"
                 echo "$pending" | sed 's/^/  - /'
