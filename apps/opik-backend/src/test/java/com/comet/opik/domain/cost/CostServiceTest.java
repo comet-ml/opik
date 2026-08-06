@@ -955,4 +955,21 @@ class CostServiceTest {
                 // custom-llm hits the same fallback, as it does for perplexity and moonshot.
                 Arguments.of("z-ai/glm-4.5", "custom-llm", "0.00104"));
     }
+
+    /**
+     * Covers registering {@code hyperbolic} as a canonical provider so that the 16 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "hyperbolic"} are no longer silently dropped at load time. No Hyperbolic
+     * model publishes cache rates today, so all Hyperbolic requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesHyperbolicModels() {
+        // hyperbolic/Qwen/QwQ-32B: input 2e-07, output 2e-07
+        // 1000 * 2e-07 + 200 * 2e-07 = 0.00024
+        BigDecimal cost = CostService.calculateCost("hyperbolic/Qwen/QwQ-32B", "hyperbolic",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00024");
+    }
 }
