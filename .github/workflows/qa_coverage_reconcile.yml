@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -54,7 +54,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -103,10 +103,12 @@ jobs:
 
       - name: Commit
         if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
-          git config --local user.name "Github Actions (${{ github.actor }})"
+          git config --local user.name "Github Actions (${ACTOR})"
           git add tests_end_to_end/coverage/taxonomy.yaml
           git commit -m "[OPIK-7532] [QA] chore: reconcile coverage taxonomy with spec tags"
 

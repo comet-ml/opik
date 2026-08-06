@@ -9,5 +9,7 @@ export interface GetProjectStatsRequest {
     size?: number;
     name?: string;
     filters?: string;
+    fromTime?: Date;
+    toTime?: Date;
     sorting?: string;
 }

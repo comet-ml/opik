@@ -47,7 +47,7 @@ jobs:
               echo "build_from=${INPUT_VERSION}" | tee -a "$GITHUB_OUTPUT"
             fi
         - name: Checkout
-          uses: actions/checkout@v6
+          uses: actions/checkout@v7
           with:
             ref: ${{steps.setup.outputs.build_from}}
             fetch-tags: true
@@ -75,7 +75,7 @@ jobs:
 
         - name: Publish package distributions to PyPI
           if: inputs.is_release
-          uses: pypa/gh-action-pypi-publish@v1.14.1
+          uses: pypa/gh-action-pypi-publish@v1.14.2
           with:
             password: ${{ secrets.PYPI_API_TOKEN }}
             packages-dir: sdks/python/dist

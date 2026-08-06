@@ -87,7 +87,7 @@ jobs:
         build_from: ${{ steps.version.outputs.build_from }}
     steps:
         - name: Checkout
-          uses: actions/checkout@v6
+          uses: actions/checkout@v7
           with:
             ref: ${{ inputs.ref || github.ref }}
 
@@ -230,7 +230,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Create git tag
         run: |

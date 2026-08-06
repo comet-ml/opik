@@ -17,6 +17,7 @@ type UseProjectStatisticsListParams = {
   page: number;
   size: number;
   logsSource?: LOGS_SOURCE;
+  windowDays?: number;
 };
 
 type UseProjectStatisticsListResponse = {
@@ -33,8 +34,21 @@ const getProjectStatisticsList = async (
     size,
     page,
     logsSource,
+    windowDays,
   }: UseProjectStatisticsListParams,
 ) => {
+  // Opt-in rolling window. Based on windowParams only if present for compatibility with v1.
+  const now = Date.now();
+  const windowParams =
+    windowDays != null
+      ? {
+          from_time: new Date(
+            now - windowDays * 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          to_time: new Date(now).toISOString(),
+        }
+      : undefined;
+
   const { data } = await api.get(`${PROJECTS_REST_ENDPOINT}stats`, {
     signal,
     params: {
@@ -45,6 +59,7 @@ const getProjectStatisticsList = async (
         undefined,
         logsSource ? generateLogsSourceFilter(logsSource) : undefined,
       ),
+      ...windowParams,
       size,
       page,
     },

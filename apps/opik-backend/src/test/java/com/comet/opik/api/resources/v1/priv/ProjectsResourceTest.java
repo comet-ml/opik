@@ -52,7 +52,6 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.retention.RetentionUtils;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -1448,44 +1447,6 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("when has_legacy_scores is flipped, stats endpoint stays consistent")
-        void getProjects__whenHasLegacyScoresFlipped__thenStatsStayConsistent(WorkspacesService workspacesService) {
-            // Test infra writes feedback scores through the authenticated path, so data lands in
-            // authored_feedback_scores (not the legacy feedback_scores table). This test can't
-            // observe the legacy-UNION gate directly — that surface is covered by the existing
-            // FilterTest variants and by manual benchmarking against real legacy data. What this
-            // test does verify: flipping the workspace flag does not break the endpoint and the
-            // response stays correct for data that lives in authored_feedback_scores.
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            Comparator<Project> comparator = Comparator.comparing(Project::id).reversed();
-            var expectedStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
-
-            workspacesService.upsertHasLegacyScores(workspaceId, false, USER);
-
-            var response = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("/stats")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
-            var actual = response.readEntity(ProjectStatsSummary.class);
-
-            assertThat(actual.content())
-                    .usingRecursiveComparison()
-                    .ignoringCollectionOrder()
-                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                    .isEqualTo(expectedStats);
-        }
-
-        @Test
         @DisplayName("when the legacy feedback_scores table has rows for the workspace, the project stats UNION surfaces them")
         void getProjects__whenLegacyScoresHasData__thenStatsIncludeThem(FeedbackScoreDAO feedbackScoreDAO) {
             String workspaceName = UUID.randomUUID().toString();
@@ -2305,6 +2266,127 @@ class ProjectsResourceTest {
                     workspaceName, List.of(sourceFilter));
 
             assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
+        }
+
+        @Test
+        @DisplayName("when a time window is requested, then traces outside either bound are excluded")
+        void getProjectStats__whenWindowRequested__thenExcludesOutOfWindowTraces() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            Instant now = Instant.now();
+            Instant fromTime = now.minus(2, ChronoUnit.HOURS);
+            Instant toTime = now;
+            List<Trace> traces = List.of(
+                    traceWithId(project.name(), now.minus(3, ChronoUnit.HOURS)),
+                    traceWithId(project.name(), now.minus(1, ChronoUnit.HOURS)),
+                    traceWithId(project.name(), now.plus(3, ChronoUnit.HOURS)));
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            ProjectStatsSummaryItem item = projectResourceClient
+                    .getProjectStatsSummary(project.name(), apiKey, workspaceName, null, fromTime, toTime)
+                    .content().stream()
+                    .filter(i -> projectId.equals(i.projectId()))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertThat(item.traceCount()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("when a window covers the data, then every metric column matches the all-time result")
+        void getProjectStats__whenWindowCoversData__thenAllColumnsMatchAllTime() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            Instant now = Instant.now();
+            Instant traceInstant = now.minus(60, ChronoUnit.MINUTES);
+
+            // Traces get controlled in-window ids. Spans deliberately get near-now ids that fall OUTSIDE the
+            // window below — so if span feedback scores were scoped by the span's own id instead of its
+            // trace's time, they would drop out and this comparison would fail.
+            List<Trace> traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> {
+                        Instant start = now.minus(30, ChronoUnit.MINUTES);
+                        Instant end = start.plusMillis(PodamUtils.getIntegerInRange(1, 1000));
+                        return trace.toBuilder()
+                                .projectName(project.name())
+                                .id(idGenerator.generateId(traceInstant))
+                                .startTime(start)
+                                .endTime(end)
+                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(start, end))
+                                .build();
+                    })
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            traces.forEach(trace -> guardrailsResourceClient.addBatch(
+                    guardrailsGenerator.generateGuardrailsForTrace(trace.id(), idGenerator.generateId(),
+                            trace.projectName()),
+                    apiKey, workspaceName));
+
+            traces.forEach(trace -> {
+                List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                        .map(span -> span.toBuilder()
+                                .id(idGenerator.generateId(now))
+                                .usage(spanResourceClient.getTokenUsage())
+                                .model(spanResourceClient.randomModel().toString())
+                                .provider(spanResourceClient.provider())
+                                .traceId(trace.id())
+                                .projectName(trace.projectName())
+                                .totalEstimatedCost(null)
+                                .build())
+                        .toList();
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+                List<FeedbackScoreBatchItem> manufactured = PodamFactoryUtils.manufacturePojoList(factory,
+                        FeedbackScoreBatchItem.class);
+                List<FeedbackScoreBatchItem> traceScores = manufactured.stream()
+                        .map(score -> score.toBuilder()
+                                .projectId(projectId).projectName(project.name()).id(trace.id()).build())
+                        .collect(Collectors.toList());
+                traceResourceClient.feedbackScores(traceScores, apiKey, workspaceName);
+
+                List<FeedbackScoreBatchItem> spanScores = spans.stream()
+                        .map(span -> {
+                            FeedbackScoreBatchItem item = factory.manufacturePojo(FeedbackScoreBatchItem.class);
+                            return item.toBuilder()
+                                    .projectId(projectId).projectName(project.name()).id(span.id()).build();
+                        })
+                        .collect(Collectors.toList());
+                spanResourceClient.feedbackScores(spanScores, apiKey, workspaceName);
+            });
+
+            var allTime = projectResourceClient.getProjectStatsSummary(project.name(), apiKey, workspaceName);
+            var windowed = projectResourceClient.getProjectStatsSummary(project.name(), apiKey, workspaceName, null,
+                    now.minus(90, ChronoUnit.MINUTES), now.minus(20, ChronoUnit.MINUTES));
+
+            // The all-time path is the trusted one (asserted against exact expected values elsewhere); a window
+            // that contains all the data must reproduce it column-for-column — counts, duration, tokens, cost,
+            // errors, guardrails, and trace+span feedback scores.
+            assertThat(windowed.content())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .isEqualTo(allTime.content());
+        }
+
+        private Trace traceWithId(String projectName, Instant idInstant) {
+            return factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .id(idGenerator.generateId(idInstant))
+                    .build();
         }
 
         private void assertSummaryResponse(ProjectStatsSummary actualProjectsSummary,

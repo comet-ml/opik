@@ -343,7 +343,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND id = :id
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
@@ -418,7 +418,7 @@ public class SpanDAO {
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -597,7 +597,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE id = :id
                 AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
@@ -721,8 +721,8 @@ public class SpanDAO {
                 WHERE id IN :ids
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
             ) AS s
             LEFT JOIN (
                 SELECT
@@ -739,7 +739,7 @@ public class SpanDAO {
                 AND entity_id IN :ids
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
             ) AS c ON s.id = c.entity_id
             LEFT JOIN (
                 SELECT
@@ -775,7 +775,7 @@ public class SpanDAO {
             WHERE id = :id
             AND project_id = :project_id
             AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -787,7 +787,7 @@ public class SpanDAO {
             FROM spans
             WHERE workspace_id = :workspace_id
             AND id = :id
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -807,8 +807,8 @@ public class SpanDAO {
             WHERE workspace_id = :workspace_id
             AND project_id IN (SELECT project_id FROM target_projects)
             AND trace_id IN :trace_ids
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY workspace_id, project_id, id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -820,7 +820,7 @@ public class SpanDAO {
      * instead of the (potentially large) {@code input}/{@code output}/{@code metadata} text. The latest
      * version of each span is taken with {@code argMax(..., last_updated_at)} grouped by {@code id} —
      * a hash aggregation that dedups the {@code ReplacingMergeTree} versions without the full-row
-     * {@code ORDER BY} + {@code LIMIT 1 BY id} sort that {@link #SELECT_BY_TRACE_IDS} pays. See OPIK-7454.
+     * {@code ORDER BY} + {@code LIMIT 1 BY workspace_id, project_id, id} sort that {@link #SELECT_BY_TRACE_IDS} pays. See OPIK-7454.
      */
     private static final String SELECT_SPANS_SIZE_BY_TRACE_IDS = """
             WITH target_projects AS (
@@ -1074,7 +1074,7 @@ public class SpanDAO {
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT 1 BY id
             ), page_ids AS (
@@ -1086,7 +1086,7 @@ public class SpanDAO {
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
-                ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             ), page_wide AS (
@@ -1106,7 +1106,7 @@ public class SpanDAO {
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT 1 BY id
             )
@@ -1128,7 +1128,7 @@ public class SpanDAO {
             <if(stream)>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>
-            ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1262,7 +1262,7 @@ public class SpanDAO {
                 <if(feedback_scores_empty_filters)>
                 AND fsc.feedback_scores_count = 0
                 <endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS latest_rows
             SETTINGS log_comment = '<log_comment>'
@@ -1787,7 +1787,7 @@ public class SpanDAO {
                         <if(environment)> :environment <else> s.environment <endif> as environment
                     FROM spans s
                     WHERE s.id IN :ids AND s.workspace_id = :workspace_id
-                    ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
+                    ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.id) DESC, s.last_updated_at DESC
                     LIMIT 1 BY s.id
                     SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
                     ;
