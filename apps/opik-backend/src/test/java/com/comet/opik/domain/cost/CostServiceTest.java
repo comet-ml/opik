@@ -955,4 +955,21 @@ class CostServiceTest {
                 // custom-llm hits the same fallback, as it does for perplexity and moonshot.
                 Arguments.of("z-ai/glm-4.5", "custom-llm", "0.00104"));
     }
+
+    /**
+     * Covers registering {@code lambda_ai} as a canonical provider so that the 20 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "lambda_ai"} are no longer silently dropped at load time. No Lambda
+     * model publishes cache rates today, so all Lambda requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesLambdaModels() {
+        // lambda_ai/lfm-7b: input 2.5e-08, output 4e-08
+        // 1000 * 2.5e-08 + 200 * 4e-08 = 0.000033
+        BigDecimal cost = CostService.calculateCost("lambda_ai/lfm-7b", "lambda_ai",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.000033");
+    }
 }
