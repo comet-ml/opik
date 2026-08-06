@@ -1061,6 +1061,7 @@ optimizationStalledReaper:
   lookbackMargin: 7d
   lockDuration: 4m
   batchSize: 100
+  candidateScanFactor: 10
 
 # Environment CRUD configuration
 environment:

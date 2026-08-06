@@ -38,6 +38,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
+import org.redisson.api.RedissonReactiveClient;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -85,6 +86,8 @@ class OptimizationStalledReaperServiceTest {
     // Scan-floor margin; every seeded run is fresh so any positive value keeps it inside the lookback window.
     private static final Duration LOOKBACK_MARGIN = Duration.ofDays(7);
     private static final int BATCH_SIZE = 100;
+    // Production default; the CTE bound is not what any test here exercises, so it only has to be >= 1.
+    private static final int CANDIDATE_SCAN_FACTOR = 10;
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -520,6 +523,13 @@ class OptimizationStalledReaperServiceTest {
         transition(id, OptimizationStatus.CANCELLED);
 
         assertThat(statusOf(id)).isEqualTo(OptimizationStatus.CANCELLED);
+
+        // The status flip alone is not the point: opik:cancel:<id> is the worker's ONLY cancellation channel
+        // (studio/cancellation.py polls it via MGET, with no DB-status fallback). Accepting the request while
+        // skipping the signal would flip the UI to CANCELLED and let the subprocess spend the full LLM
+        // budget — worse than the 409 this relaxation replaced (review: thiagohora).
+        assertThat(injector.getInstance(RedissonReactiveClient.class)
+                .getBucket("opik:cancel:" + id).isExists().block()).isTrue();
     }
 
     @Test
@@ -729,15 +739,35 @@ class OptimizationStalledReaperServiceTest {
         assertThat(transitioned).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("the smallest configurable candidateScanFactor still reaps")
+    void smallestCandidateScanFactorStillReaps() {
+        var id = seedStudioRun(OptimizationStatus.INITIALIZED);
+
+        // candidateScanFactor is now operator-tunable, so the bound it feeds (candidates LIMIT
+        // batchSize * factor) has to hold at the low end of its @Min(1) range as well as at the default:
+        // reaching the SQL as batchSize * 0 would cap the CTE at LIMIT 0 and make the reaper silently
+        // find nothing at all, with no error anywhere.
+        long transitioned = reconcile(IMMEDIATE, NEVER, NEVER, 1, 1);
+
+        assertThat(transitioned).isEqualTo(1);
+        assertThat(statusOf(id)).isEqualTo(OptimizationStatus.ERROR);
+    }
+
     private long reconcile(Duration initializedTimeout, Duration runningTimeout, int batchSize) {
         return reconcile(initializedTimeout, runningTimeout, NEVER, batchSize);
     }
 
     private long reconcile(Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout,
             int batchSize) {
+        return reconcile(initializedTimeout, runningTimeout, runningHardTimeout, batchSize, CANDIDATE_SCAN_FACTOR);
+    }
+
+    private long reconcile(Duration initializedTimeout, Duration runningTimeout, Duration runningHardTimeout,
+            int batchSize, int candidateScanFactor) {
         Long transitioned = optimizationService
                 .reconcileStalledStudioOptimizations(initializedTimeout, runningTimeout, runningHardTimeout,
-                        LOOKBACK_MARGIN, batchSize)
+                        LOOKBACK_MARGIN, batchSize, candidateScanFactor)
                 .block();
         assertThat(transitioned).isNotNull();
         return transitioned;

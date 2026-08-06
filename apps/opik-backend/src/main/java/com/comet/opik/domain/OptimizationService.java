@@ -84,7 +84,7 @@ public interface OptimizationService {
      * @return the number of runs transitioned to ERROR in this pass.
      */
     Mono<Long> reconcileStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
-            Duration runningHardTimeout, Duration lookbackMargin, int batchSize);
+            Duration runningHardTimeout, Duration lookbackMargin, int batchSize, int candidateScanFactor);
 }
 
 @Singleton
@@ -432,17 +432,14 @@ class OptimizationServiceImpl implements OptimizationService {
                     // with SYSTEM_USER; getOrDefault keeps the analytics identity resolution tolerant.
                     String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
 
-                    // Validate cancellation request for Studio optimizations. A run sitting on a
-                    // platform-detected failure counts as cancellable even though ERROR is terminal: the
-                    // reap may have been wrong and its worker may still be running, so refusing to cancel
-                    // would deny the user the one action that stops the work — the same reason a worker
-                    // report supersedes that ERROR below. A worker-reported failure stays uncancellable.
+                    // Validate cancellation request for Studio optimizations. What counts as cancellable —
+                    // including a run parked on a platform-detected failure, for the same reason a worker
+                    // report supersedes that ERROR below — lives in isCancellable, which the Redis signal
+                    // below shares: rejecting the request and signalling the worker have to agree.
                     boolean isStudioCancellation = update.status() == OptimizationStatus.CANCELLED
                             && optimization.studioConfig() != null;
-                    boolean isNotCancellable = !CANCELLABLE_STATUSES.contains(optimization.status())
-                            && !isSystemDetectedFailure(optimization);
 
-                    if (isStudioCancellation && isNotCancellable) {
+                    if (isStudioCancellation && !isCancellable(optimization)) {
                         return Mono.error(new ClientErrorException(
                                 "Cannot cancel optimization with status '%s'. Only optimizations with status %s can be cancelled."
                                         .formatted(optimization.status(), CANCELLABLE_STATUSES),
@@ -539,9 +536,8 @@ class OptimizationServiceImpl implements OptimizationService {
     private Mono<Void> signalCancellationIfNeeded(UUID id, Optimization optimization, OptimizationUpdate update) {
         boolean isStudioCancellation = update.status() == OptimizationStatus.CANCELLED
                 && optimization.studioConfig() != null;
-        boolean isCancellable = CANCELLABLE_STATUSES.contains(optimization.status());
 
-        if (!isStudioCancellation || !isCancellable) {
+        if (!isStudioCancellation || !isCancellable(optimization)) {
             return Mono.empty();
         }
 
@@ -769,7 +765,7 @@ class OptimizationServiceImpl implements OptimizationService {
     @WithSpan
     public Mono<Long> reconcileStalledStudioOptimizations(@NonNull Duration initializedTimeout,
             @NonNull Duration runningTimeout, @NonNull Duration runningHardTimeout, @NonNull Duration lookbackMargin,
-            int batchSize) {
+            int batchSize, int candidateScanFactor) {
         // Truncate to whole seconds up front, because that is the resolution the SQL side has: the DAO
         // binds these as :..._seconds. Leaving the sub-second remainder on the Java copies would make the
         // query and the guards below disagree by up to a second — the query would select a run the guard
@@ -780,7 +776,9 @@ class OptimizationServiceImpl implements OptimizationService {
         var hardCap = runningHardTimeout.truncatedTo(ChronoUnit.SECONDS);
         var lookback = lookbackMargin.truncatedTo(ChronoUnit.SECONDS);
 
-        return optimizationDAO.findStalledStudioOptimizations(initialized, running, hardCap, lookback, batchSize)
+        return optimizationDAO
+                .findStalledStudioOptimizations(initialized, running, hardCap, lookback, batchSize,
+                        candidateScanFactor)
                 // Sequential: stalled runs are rare and this keeps the reaper's DB/Redis footprint small.
                 .concatMap(stalled -> markStalledOptimizationAsError(stalled, initialized, running, hardCap))
                 .reduce(0L, Long::sum);
@@ -874,6 +872,23 @@ class OptimizationServiceImpl implements OptimizationService {
             return Mono.just(false);
         }
         return optimizationDAO.hasRecentStudioActivity(id, runningTimeout).map(active -> !active);
+    }
+
+    /**
+     * May a cancellation be accepted for this run? The two sides of cancelling — rejecting the request with a
+     * 409 and signalling the worker over Redis — MUST ask this one predicate, never
+     * {@link #CANCELLABLE_STATUSES} directly. They diverged once: admitting a system-detected failure only on
+     * the 409 side let the status flip to {@code CANCELLED} while {@code opik:cancel:<id>} was never written,
+     * and that key is the worker's only cancellation channel (it polls it via MGET, with no DB-status
+     * fallback). The run then read as cancelled in the UI while its subprocess ran on and spent the full LLM
+     * budget — the exact outcome admitting the status was meant to prevent (review: thiagohora).
+     *
+     * <p>Beyond the non-terminal statuses this admits a run parked on a reaper-written ERROR: that ERROR is a
+     * guess, its worker may still be running, and refusing to cancel would deny the user the one action that
+     * stops the work. A worker-reported failure is a real outcome and stays uncancellable.
+     */
+    private static boolean isCancellable(Optimization optimization) {
+        return CANCELLABLE_STATUSES.contains(optimization.status()) || isSystemDetectedFailure(optimization);
     }
 
     /**

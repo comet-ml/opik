@@ -33,6 +33,8 @@ class OptimizationStalledReaperJobTest {
     // Distinct from every other Duration above, so an argument-order slip into bestEffortLock is visible.
     private static final Duration LOCK_DURATION = Duration.minutes(4);
     private static final int BATCH_SIZE = 42;
+    // Distinct from BATCH_SIZE so a swap of the two int arguments is visible.
+    private static final int CANDIDATE_SCAN_FACTOR = 7;
 
     @Mock
     private OptimizationService optimizationService;
@@ -54,19 +56,21 @@ class OptimizationStalledReaperJobTest {
                 .lookbackMargin(LOOKBACK_MARGIN)
                 .lockDuration(LOCK_DURATION)
                 .batchSize(BATCH_SIZE)
+                .candidateScanFactor(CANDIDATE_SCAN_FACTOR)
                 .build();
         job = new OptimizationStalledReaperJob(optimizationService, lockService, config);
     }
 
     @Test
-    @DisplayName("runs the reconcile pass with the configured timeouts and batch size under the lock")
+    @DisplayName("runs the reconcile pass with the configured timeouts, batch size and scan factor under the lock")
     void runsReconcileUnderLock() {
         // Execute the guarded action (arg 1) so the reconcile call actually fires under the lock.
         when(lockService.bestEffortLock(any(), any(), any(), any(), any(), anyBoolean()))
                 .thenAnswer(invocation -> invocation.<Mono<Long>>getArgument(1));
         when(optimizationService.reconcileStalledStudioOptimizations(
                 INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(),
-                RUNNING_HARD_TIMEOUT.toJavaDuration(), LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE))
+                RUNNING_HARD_TIMEOUT.toJavaDuration(), LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE,
+                CANDIDATE_SCAN_FACTOR))
                 .thenReturn(Mono.just(3L));
 
         job.doJob(mock(JobExecutionContext.class));
@@ -75,7 +79,8 @@ class OptimizationStalledReaperJobTest {
         Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
                 .untilAsserted(() -> verify(optimizationService).reconcileStalledStudioOptimizations(
                         INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(),
-                        RUNNING_HARD_TIMEOUT.toJavaDuration(), LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE));
+                        RUNNING_HARD_TIMEOUT.toJavaDuration(), LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE,
+                        CANDIDATE_SCAN_FACTOR));
 
         // Pin the lock arguments too, not just the reconcile ones. lockDuration is the odd knob out — it
         // goes to a different collaborator, and this config now carries four Durations, so handing

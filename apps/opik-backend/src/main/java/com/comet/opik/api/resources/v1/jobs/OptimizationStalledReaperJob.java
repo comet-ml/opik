@@ -93,7 +93,8 @@ public class OptimizationStalledReaperJob extends Job implements InterruptableJo
                             config.runningTimeout().toJavaDuration(),
                             config.runningHardTimeout().toJavaDuration(),
                             config.lookbackMargin().toJavaDuration(),
-                            config.batchSize())
+                            config.batchSize(),
+                            config.candidateScanFactor())
                             .doOnSuccess(count -> {
                                 if (count > 0) {
                                     log.warn("Optimization stalled reaper marked '{}' stalled studio run(s) as ERROR",

@@ -96,7 +96,7 @@ public interface OptimizationDAO {
     Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(Set<UUID> datasetIds);
 
     Flux<StalledOptimization> findStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
-            Duration runningHardTimeout, Duration lookbackMargin, int limit);
+            Duration runningHardTimeout, Duration lookbackMargin, int limit, int candidateScanFactor);
 
     Mono<Boolean> hasRecentStudioActivity(UUID optimizationId, Duration window);
 
@@ -131,12 +131,6 @@ public interface OptimizationDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class OptimizationDAOImpl implements OptimizationDAO {
-
-    /**
-     * How many times the reaper's batch size the {@code candidates} CTE may hold — see the bound's
-     * rationale at its use site in {@link #findStalledStudioOptimizations}.
-     */
-    private static final int CANDIDATE_SCAN_FACTOR = 10;
 
     /**
      * Studio runs whose latest row version is stuck in a non-terminal status past the reaper threshold
@@ -1398,7 +1392,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     @Override
     public Flux<StalledOptimization> findStalledStudioOptimizations(@NonNull Duration initializedTimeout,
             @NonNull Duration runningTimeout, @NonNull Duration runningHardTimeout, @NonNull Duration lookbackMargin,
-            int limit) {
+            int limit, int candidateScanFactor) {
         // How far back the query scans (the last_updated_at FLOOR that lets the minmax skip index prune
         // granules): the largest timeout plus the configured reaper-downtime margin, so in normal operation
         // the floor is purely a scan bound and never a coverage gap — a run's last status change is only
@@ -1415,8 +1409,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
         // is the premise of this whole feature), so a bound of exactly `limit` could let live runs
         // crowd dead ones out of every pass. With the multiplier, starving a dead run needs that many
         // simultaneously-alive stale runs ahead of it, and alive runs eventually turn terminal and drop
-        // out of the CTE entirely.
-        int candidateLimit = limit * CANDIDATE_SCAN_FACTOR;
+        // out of the CTE entirely. The multiplier is operator-tunable
+        // (OPTIMIZATION_STALLED_REAPER_CANDIDATE_SCAN_FACTOR) so a deployment can trade probe cost against
+        // the query's reach without a release (review: thiagohora).
+        int candidateLimit = limit * candidateScanFactor;
         var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, runningHardTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d, candidateLimit=%d"
                 .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(),
                         runningHardTimeout.toSeconds(), lookbackSeconds, limit, candidateLimit);

@@ -33,7 +33,8 @@ class OptimizationStalledReaperConfigTest {
                 .runningHardTimeout(Duration.hours(24))
                 .lookbackMargin(Duration.days(7))
                 .lockDuration(Duration.minutes(4))
-                .batchSize(100);
+                .batchSize(100)
+                .candidateScanFactor(10);
     }
 
     @Test
@@ -106,6 +107,17 @@ class OptimizationStalledReaperConfigTest {
 
         assertThat(validator.validate(config))
                 .anyMatch(v -> v.getMessage().contains("runningHardTimeout must not be less than runningTimeout"));
+    }
+
+    @Test
+    @DisplayName("candidateScanFactor below 1 fails validation")
+    void candidateScanFactorBelowOneIsRejected() {
+        var config = validConfig().candidateScanFactor(0).build();
+
+        assertThat(validator.validate(config))
+                .as("a zero factor would bound the candidate CTE to LIMIT 0, so the reaper would silently "
+                        + "stop finding anything at all")
+                .anyMatch(v -> v.getPropertyPath().toString().equals("candidateScanFactor"));
     }
 
     @Test

@@ -78,6 +78,15 @@ import java.util.concurrent.TimeUnit;
  *        across instances is harmless.
  * @param batchSize maximum number of stalled runs reconciled per cycle, so a large backlog is drained
  *        over several cycles rather than in one burst.
+ * @param candidateScanFactor multiple of {@link #batchSize()} bounding the candidate set the reaper query's
+ *        two liveness probes fan out from. Without a bound that set is every non-terminal studio run whose
+ *        row has not changed in {@code runningTimeout} — which, because {@code last_updated_at} only advances
+ *        on a status change, includes every <em>healthy</em> in-flight run older than the timeout, so probe
+ *        cost would scale with fleet size instead of with configuration. It is a multiple rather than
+ *        {@code batchSize} itself because the ordering puts the stalest first and a healthy long run sorts
+ *        alongside a dead one (the premise of the whole progress-veto design): at exactly {@code batchSize},
+ *        live runs could crowd dead ones out of every pass. Raising it widens the query's reach at
+ *        proportionally higher probe cost; lowering it toward 1 reintroduces that starvation risk.
  */
 @Builder(toBuilder = true)
 public record OptimizationStalledReaperConfig(
@@ -89,7 +98,8 @@ public record OptimizationStalledReaperConfig(
         @NotNull @MinDuration(value = 6, unit = TimeUnit.HOURS) @MaxDuration(value = 30, unit = TimeUnit.DAYS) Duration runningHardTimeout,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS) @MaxDuration(value = 30, unit = TimeUnit.DAYS) Duration lookbackMargin,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration lockDuration,
-        @Min(1) @Max(10_000) int batchSize) {
+        @Min(1) @Max(10_000) int batchSize,
+        @Min(1) @Max(1_000) int candidateScanFactor) {
 
     /**
      * Enforce the {@link #lockDuration()} &lt; {@link #jobInterval()} invariant at boot instead of only
