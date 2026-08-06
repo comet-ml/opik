@@ -1081,20 +1081,46 @@ optimizationStalledReaper:
   # Description: Interval between reaper job executions
   jobInterval: ${OPTIMIZATION_STALLED_REAPER_JOB_INTERVAL:-5m}
   # Default: 5m
-  # Description: A run stuck in INITIALIZED longer than this is marked ERROR (the worker should call
-  #   mark_running within seconds; kept above normal queue latency to tolerate a backlog)
+  # Description: A run stuck in INITIALIZED with no activity for longer than this is marked ERROR (the
+  #   worker should call mark_running within seconds; kept above normal queue latency to tolerate a
+  #   backlog). A run that never left INITIALIZED but IS writing trials/items is spared by the same
+  #   progress signal runningTimeout uses, on the runningTimeout window — a failed mark_running callback
+  #   must not kill a run that is actually evaluating.
   initializedTimeout: ${OPTIMIZATION_STALLED_REAPER_INITIALIZED_TIMEOUT:-5m}
-  # Default: 8h
-  # Description: A run stuck in RUNNING longer than this is marked ERROR. MUST exceed the worker's max
-  #   execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, default 6h = 21600s) plus a buffer, since the row
-  #   has no per-progress heartbeat and last_updated_at only advances on a status change. If you raise
-  #   the worker timeout, raise this too or healthy long runs will be reaped.
-  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-8h}
+  # Default: 1h
+  # Description: A non-terminal run showing no activity for longer than this is marked ERROR. Activity is
+  #   liveness derived from run progress — the newest of last_updated_at, the latest trial experiment's
+  #   created_at, and the latest experiment item's created_at — so a healthy multi-hour run is never
+  #   reaped while it keeps evaluating items, and this does NOT need to exceed the worker's execution
+  #   timeout (OPTSTUDIO_EXECUTION_TIMEOUT, 6h). It MUST stay above the longest legitimate gap between
+  #   progress signals, or a slow-but-alive run gets reaped mid-flight. The widest such gap is NOT
+  #   between two items but at the very start of a run: between mark_running and the first trial
+  #   experiment the worker fetches and samples the dataset (up to OPTSTUDIO_DATASET_SAMPLES items) and,
+  #   for GEPA, builds the baseline — with nothing written meanwhile. 1h is sized for that head start,
+  #   not for the steady-state item cadence.
+  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-1h}
+  # Default: 24h
+  # Description: Absolute ceiling for a non-terminal run (INITIALIZED or RUNNING) measured from when the
+  #   run was created, reaped even if trial/item writes are still arriving (zombie-worker backstop;
+  #   preserves the "a run can never stay stuck indefinitely" guarantee, including for a run whose
+  #   mark_running callback never landed). Deliberately measured from created_at rather than last_updated_at:
+  #   any write to the row refreshes the latter, so a metadata PATCH or an SDK re-upsert would postpone the
+  #   backstop forever. created_at is preserved across re-upserts, so no client write can move it.
+  #   MUST exceed the worker's execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, 6h) plus a buffer — both are
+  #   measured from the same origin — and must not be below runningTimeout.
+  #   UPGRADE NOTE (breaking): runningTimeout used to be valid anywhere in [6h, 7d], so a deployment that
+  #   raised OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT above 24h will now FAIL TO BOOT against this
+  #   default. That is intentional — above the ceiling the activity window is unreachable, because the
+  #   ceiling always fires first — but such deployments must either lower runningTimeout (progress-based
+  #   liveness means it no longer has to cover a whole run) or raise this ceiling to match.
+  runningHardTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_HARD_TIMEOUT:-24h}
   # Default: 7d
-  # Description: Added to max(initializedTimeout, runningTimeout) to size the last_updated_at floor of the
-  #   reaper's scan. Pure reaper-downtime insurance (a run that stalled just before the reaper went down is
-  #   still caught on recovery if it was down less than this); not needed to find fresh stalls. Keep it only
-  #   as large as the longest expected reaper outage — a shorter margin also tightens skip-index pruning.
+  # Description: Added to max(initializedTimeout, runningTimeout, runningHardTimeout) to size the
+  #   last_updated_at floor of the reaper's scan. Pure reaper-downtime insurance (a run that stalled just
+  #   before the reaper went down is still caught on recovery if it was down less than this); not needed to
+  #   find fresh stalls. Keep it only as large as the longest expected reaper outage — a shorter margin also
+  #   tightens skip-index pruning. Folding runningHardTimeout into the maximum is what makes the floor safe:
+  #   since lookback >= runningHardTimeout, a run not yet past the ceiling is always younger than the floor.
   lookbackMargin: ${OPTIMIZATION_STALLED_REAPER_LOOKBACK_MARGIN:-7d}
   # Default: 4m
   # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent
@@ -1104,6 +1130,16 @@ optimizationStalledReaper:
   # Default: 100
   # Description: Maximum number of stalled runs reconciled per cycle (a large backlog drains over several cycles)
   batchSize: ${OPTIMIZATION_STALLED_REAPER_BATCH_SIZE:-100}
+  # Default: 10
+  # Description: Multiple of batchSize bounding the candidate set the query's two liveness probes fan out
+  #   from. Unbounded, that set is every non-terminal studio run whose row has not changed in runningTimeout
+  #   — and since last_updated_at only advances on a status change, that includes every HEALTHY in-flight run
+  #   older than the timeout, so probe cost would scale with fleet size rather than with configuration. It is
+  #   a multiple rather than batchSize itself because the ordering puts the stalest first and a healthy long
+  #   run sorts alongside a dead one: at exactly batchSize, live runs could crowd dead ones out of every
+  #   pass. Raise it to widen the query's reach at proportionally higher probe cost; a value near 1
+  #   reintroduces that starvation risk.
+  candidateScanFactor: ${OPTIMIZATION_STALLED_REAPER_CANDIDATE_SCAN_FACTOR:-10}
 
 # Environment CRUD configuration
 environment:

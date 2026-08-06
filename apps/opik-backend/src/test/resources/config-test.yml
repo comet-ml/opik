@@ -1057,9 +1057,11 @@ optimizationStalledReaper:
   jobInterval: 5m
   initializedTimeout: 15m
   runningTimeout: 26h
+  runningHardTimeout: 48h
   lookbackMargin: 7d
   lockDuration: 4m
   batchSize: 100
+  candidateScanFactor: 10
 
 # Environment CRUD configuration
 environment:
