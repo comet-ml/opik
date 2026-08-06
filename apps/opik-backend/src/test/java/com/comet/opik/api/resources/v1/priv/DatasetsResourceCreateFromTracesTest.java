@@ -582,11 +582,12 @@ class DatasetsResourceCreateFromTracesTest {
          * artifact being addressed separately under the hyperscale work, not a state the read path should
          * preserve and double-count.
          * <p>
-         * Note which row survives: the {@code ORDER BY} still leads with the table's sort key, so the
-         * winner is the one with the greater {@code parent_span_id}, not the most recently written.
-         * {@code last_updated_at} only breaks ties once the whole tuple matches. That is a deliberate
-         * trade — leading with the sort key is what lets ClickHouse read in order — and it is only
-         * observable for rows that are already inconsistent.
+         * Note which row survives: {@code parent_span_id} has been dropped from the {@code ORDER BY}
+         * tuple ahead of the {@code spans_local_v2} cutover, so the two rows now tie on
+         * {@code (workspace_id, project_id, trace_id, id)} and {@code last_updated_at} is what breaks the
+         * tie. The most recently written version wins, whichever way the parents happen to sort. The
+         * stale row below is deliberately given the greater {@code parent_span_id} — the row the old
+         * five-column tuple would have picked — so this test fails if that tiebreaker ever returns.
          * <p>
          * Two batch calls rather than one batch of two spans, because a single batch deduplicates by id
          * before insert.
@@ -610,11 +611,10 @@ class DatasetsResourceCreateFromTracesTest {
             int firstUsage = RandomUtils.secure().randomInt(1, 100);
             int secondUsage = RandomUtils.secure().randomInt(100, 200);
 
-            // Which of the two rows survives is decided by parent_span_id order, not by recency: the
-            // ORDER BY leads with the table's sort key so ClickHouse can still read in order, and
-            // last_updated_at only breaks ties once that whole tuple matches — which it does not here.
-            // Pin the two parents so the outcome is deterministic rather than dependent on which random
-            // UUID happens to sort higher.
+            // The stale row is written under the greater parent_span_id on purpose: that is the row the
+            // old five-column sort tuple would have picked. With parent_span_id out of the tuple the two
+            // rows tie and last_updated_at decides, so the later write has to win instead. Pinning the
+            // parents keeps that deterministic rather than dependent on which random UUID sorts higher.
             var parents = Stream.of(GENERATOR.generate(), GENERATOR.generate())
                     .sorted(Comparator.comparing(UUID::toString))
                     .toList();
@@ -631,9 +631,10 @@ class DatasetsResourceCreateFromTracesTest {
                             Map.of(USAGE_KEY, secondUsage))),
                     apiKey, workspaceName);
 
-            // One version, not the sum — the span is counted once despite being stored twice.
+            // One version, not the sum — the span is counted once despite being stored twice, and the
+            // version that counts is the latest write, not the one with the greater parent.
             assertThat(aggregatedUsage(datasetId, trace.id(), apiKey, workspaceName))
-                    .isEqualTo(Map.of(USAGE_KEY, (long) firstUsage));
+                    .isEqualTo(Map.of(USAGE_KEY, (long) secondUsage));
         }
 
         private Trace createTrace(String projectName, String apiKey, String workspaceName) {
