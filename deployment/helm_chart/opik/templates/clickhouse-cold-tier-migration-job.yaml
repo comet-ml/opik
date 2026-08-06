@@ -58,7 +58,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
     {{- end }}
 rules:
-  # Detect the wedge (read CH StatefulSets/pods) and wait for readiness (watch).
+  # Detect the wedge (read CH StatefulSets) and wait for readiness (watch).
   # No delete on StatefulSets — recovery only bounces the operator pod.
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
@@ -67,11 +67,6 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch", "delete"]
-  # Read the ClickHouseInstallation status to distinguish a healthy cluster from
-  # a genuine wedge before acting.
-  - apiGroups: ["clickhouse.altinity.com"]
-    resources: ["clickhouseinstallations"]
-    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -152,7 +147,8 @@ spec:
             - name: CACHE_PATH
               value: {{ $cachePath | quote }}
             - name: POLL_TIMEOUT
-              value: {{ .Values.clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds | quote }}
+              # Emit the int-parsed value so a non-integer override can't reach the shell.
+              value: {{ $pollTimeout | quote }}
           command:
             - /bin/sh
             - -c
@@ -186,10 +182,17 @@ spec:
                 return 1
               }
 
-              # Name of the altinity ClickHouse operator pod in this namespace.
+              # The altinity operator pod, selected by the operator-set label
+              # (clickhouse.altinity.com/app=chop) rather than a name substring, so a
+              # nameOverride/fullnameOverride or another operator-like workload can't
+              # be matched. Fails loud unless exactly one matches.
+              OPERATOR_SELECTOR="clickhouse.altinity.com/app=chop"
               operator_pod() {
-                kubectl get pods -n "$NAMESPACE" -o name 2>/dev/null \
-                  | grep -i 'clickhouse-operator' | head -n1
+                pods=$(kubectl get pods -n "$NAMESPACE" -l "$OPERATOR_SELECTOR" -o name 2>/dev/null) \
+                  || die "listing operator pods failed"
+                n=$(printf '%s\n' "$pods" | grep -c . || true)
+                [ "$n" -eq 1 ] || die "expected exactly 1 operator pod (${OPERATOR_SELECTOR}), found ${n}"
+                printf '%s\n' "$pods"
               }
 
               # If some StatefulSet lacks the cache VCT, bounce the operator so a
