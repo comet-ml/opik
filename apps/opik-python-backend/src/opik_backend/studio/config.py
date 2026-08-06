@@ -22,7 +22,21 @@ DEFAULT_REFERENCE_KEY = "answer"
 DEFAULT_CASE_SENSITIVE = False
 
 # Execution timeout for optimization jobs (default: 6 hours). The backend
-# stalled-run reaper's runningTimeout MUST stay above this (config.yml, default 8h).
+# stalled-run reaper's runningHardTimeout MUST stay above this (config.yml, default 24h);
+# its progress-based runningTimeout (default 1h) doesn't need to — it is fed by the trial
+# experiments and experiment items this worker writes throughout a run (OPIK-7459). What that
+# 1h does bound is the silent head start below: dataset fetch + sampling, and the GEPA baseline,
+# all before the first trial experiment exists. Slow that stretch down past an hour and the
+# reaper will read a healthy run as dead, so raise runningTimeout with it.
+#
+# It also interacts with the reaper's initializedTimeout (default 5m) via QUEUE DEPTH: only
+# MAX_CONCURRENT_JOBS slots run at once and each may hold one for the full timeout below, so a
+# submission behind a full queue waits with nothing touching its row and is temporarily marked ERROR.
+# That is self-healing — a later worker report supersedes a platform-detected failure, so mark_running
+# restores the run; see OptimizationService#isSystemDetectedFailure for the backend side rather than a
+# copy of it here. To avoid the transient ERROR entirely, initializedTimeout has to exceed the
+# worst-case wait: ceil(jobs_ahead_in_queue / MAX_CONCURRENT_JOBS) * OPTIMIZATION_TIMEOUT_SECS, where
+# jobs_ahead counts only the submissions queued before this one, not the ones already running.
 OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "21600"))
 
 # Dataset sampling (limits items used during optimization to prevent OOM)
