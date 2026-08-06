@@ -268,6 +268,13 @@ repos:
         files: ^scripts/precommit-.*\.(sh|py|tsv)$|^scripts/test_precommit_wrappers\.sh$|^\.pre-commit-config\.yaml$
         pass_filenames: false
 
+      - id: agent-configs-drift
+        name: 🤖🔄 agent configs in sync
+        entry: scripts/agent-configs-manifest.sh check
+        language: system
+        files: ^\.agents/
+        pass_filenames: false
+
   # ---------------------------------------------------------------------------
   # Frontend (apps/opik-frontend) — eslint --fix on changed files; whole-project
   # typecheck (tsc can't be per-file: path aliases + cross-file inference).
