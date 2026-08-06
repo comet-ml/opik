@@ -56,6 +56,9 @@ export interface Organization {
   onlyAdminsInviteByEmail: boolean;
   workspaceRolesEnabled: boolean;
   costIntelligenceEnabled: boolean;
+  // Name of the organization's reserved AI-spend workspace, present only when it exists and cost
+  // intelligence is enabled — the same condition under which that workspace can be opened.
+  aiSpendWorkspaceName?: string;
 }
 
 export enum ManagementPermissionsNames {
@@ -107,6 +110,9 @@ export interface Workspace {
   workspaceName: string;
   organizationId: string;
   default: boolean;
+  // Whether the caller is a member of the workspace, as opposed to seeing it as an organization
+  // admin. Returned by the point read; absent on the list endpoints, which imply it by inclusion.
+  member?: boolean;
   createdAt?: number;
   workspaceOwner?: string;
   workspaceCreator?: string;

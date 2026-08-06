@@ -1,6 +1,6 @@
 import { useOpikWorkspaceName } from "@/store/AppStore";
 import useUser from "@/plugins/comet/useUser";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import { buildUrl } from "@/plugins/comet/utils";
 import { ORGANIZATION_ROLE_TYPE } from "@/plugins/comet/types";
 import useOrganizations from "@/plugins/comet/useOrganizations";
@@ -10,16 +10,11 @@ const useInviteMembersURL = () => {
   const workspaceName = useOpikWorkspaceName();
 
   const { data: user } = useUser();
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
   const { data: organizations = [], isLoading } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
 
-  const workspace = allWorkspaces?.find(
-    (workspace) => workspace.workspaceName === workspaceName,
-  );
+  const workspace = useWorkspace(workspaceName);
   const organization = organizations?.find((org) => {
     return org.id === workspace?.organizationId;
   });

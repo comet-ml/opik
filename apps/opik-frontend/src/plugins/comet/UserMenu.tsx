@@ -49,7 +49,7 @@ import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
 import { buildUrl } from "./utils";
 
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import UserMenuAppLinks from "@/plugins/comet/UserMenuAppLinks";
@@ -69,13 +69,7 @@ const UserMenu = () => {
     enabled: !!user?.loggedIn,
   });
 
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
-
-  const workspace = allWorkspaces?.find(
-    (workspace) => workspace.workspaceName === workspaceName,
-  );
+  const workspace = useWorkspace(workspaceName);
 
   const { data: userPermissions } = useUserPermissions(
     {
@@ -100,8 +94,7 @@ const UserMenu = () => {
     !user.loggedIn ||
     isLoading ||
     !organizations ||
-    !userPermissions ||
-    !allWorkspaces
+    !userPermissions
   ) {
     return null;
   }
