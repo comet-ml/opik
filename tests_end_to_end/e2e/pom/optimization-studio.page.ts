@@ -122,9 +122,17 @@ export class OptimizationStudioPage {
         await this.modelCombobox().click();
         await expect(search).toBeVisible({ timeout: 2_000 });
       }).toPass({ timeout: 15_000 });
-      await search.fill(displayName);
-      await this.page.getByRole('option', { name: displayName }).click();
-      await expect(this.modelCombobox()).toContainText(displayName);
+
+      // The option list remounts when the model/provider-key queries resolve, so
+      // an option can detach between resolving and being clicked. Re-filter and
+      // re-click until the combobox reflects the selection.
+      await expect(async () => {
+        await search.fill(displayName);
+        const option = this.page.getByRole('option', { name: displayName });
+        await expect(option.first()).toBeVisible({ timeout: 2_000 });
+        await option.first().click({ timeout: 2_000 });
+        await expect(this.modelCombobox()).toContainText(displayName, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
     });
   }
 
