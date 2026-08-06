@@ -80,7 +80,7 @@ Wait until every ClickHouse pod is `Ready` and no StatefulSet is missing the cac
 </Step>
 </Steps>
 
-Because the job only restarts the operator, it adds no downtime beyond the wedge itself — no ClickHouse StatefulSet, pod, or PersistentVolumeClaim is deleted.
+The job itself only restarts the operator — it never deletes a ClickHouse StatefulSet, pod, or PersistentVolumeClaim. Recovery is far faster than the ~7 min/replica passive self-heal, though the operator's own rebuild of the affected StatefulSet may still briefly restart the wedged pod.
 
 ### Configuration Reference
 
