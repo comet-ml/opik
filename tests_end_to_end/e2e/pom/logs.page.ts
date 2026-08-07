@@ -267,13 +267,17 @@ export class LogsPage {
   }
 
   /**
-   * The open chip's popover. Only one chip popover is mounted at a time, so a
-   * bare dialog lookup resolves it — but it says nothing about *which* chip
-   * owns it, so callers acting on a specific chip must gate on that chip's
-   * aria-expanded (see openFilterChip) rather than on this alone.
+   * The open chip's popover. Keyed by testid, not by `role=dialog`: the Logs
+   * page mounts other dialogs (the delete-traces confirmation among them), and
+   * a bare role lookup would match those too — so the filter helpers would
+   * Escape-dismiss an unrelated confirmation.
+   *
+   * Only one chip popover is mounted at a time, so this resolves the open one —
+   * but it still says nothing about *which* chip owns it, so callers acting on
+   * a specific chip gate on that chip's aria-expanded (see openFilterChip).
    */
   get filterChipPopover(): Locator {
-    return this.page.getByRole('dialog');
+    return this.page.getByTestId('filter-chip-popover');
   }
 
   /** The "Clear all (N)" button, rendered only while at least one filter is applied. */

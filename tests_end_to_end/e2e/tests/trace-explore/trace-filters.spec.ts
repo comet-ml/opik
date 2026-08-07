@@ -159,4 +159,31 @@ test.describe('Trace filters', { tag: ['@t2-cuj', '@area:traces'] }, () => {
       });
     },
   );
+
+  test(
+    'Closing a filter chip leaves an unrelated Logs dialog open',
+    { tag: ['@cap:traces.filter-traces'] },
+    async ({ filterableTraces, project, page }) => {
+      const logs = new LogsPage(page);
+      const { all } = filterableTraces;
+
+      await test.step('Open the delete-traces confirmation', async () => {
+        await logs.goto(project.id);
+        await logs.waitForReady();
+        await logs.selectTrace(all[0].id);
+        await logs.bulkDeleteButton.click();
+        await expect(logs.deleteTracesDialog).toBeVisible();
+      });
+
+      await test.step('Closing a filter chip must not dismiss it', async () => {
+        // The Logs page mounts several dialogs. A filter-popover locator keyed
+        // on `role=dialog` would match this confirmation too, and the close
+        // helper would Escape it away — silently cancelling a destructive
+        // action the test under way still depends on.
+        await logs.closeFilterChip();
+
+        await expect(logs.deleteTracesDialog).toBeVisible();
+      });
+    },
+  );
 });

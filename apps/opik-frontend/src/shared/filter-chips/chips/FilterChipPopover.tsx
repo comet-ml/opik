@@ -44,6 +44,7 @@ const FilterChipPopover: React.FC<FilterChipPopoverProps> = ({
       align="start"
       sideOffset={4}
       className="w-auto rounded-md border border-border bg-background p-0 shadow-sm"
+      data-testid="filter-chip-popover"
       {...contentProps}
     >
       {children}
