@@ -2,4 +2,4 @@
 
 import typing
 
-AlertAlertType = typing.Union[typing.Literal["general", "slack", "pagerduty"], typing.Any]
+AlertAlertType = typing.Union[typing.Literal["general", "slack", "pagerduty", "feishu"], typing.Any]

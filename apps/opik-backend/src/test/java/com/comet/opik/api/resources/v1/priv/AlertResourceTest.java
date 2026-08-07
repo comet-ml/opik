@@ -44,6 +44,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.v1.events.webhooks.feishu.FeishuWebhookPayload;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayload;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackBlock;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayload;
@@ -119,8 +120,8 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
+import static com.comet.opik.api.resources.v1.events.webhooks.common.AlertWebhookUtils.BASE_URL_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
-import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
 import static com.comet.opik.utils.NumberUtils.formatDecimal;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -1247,6 +1248,10 @@ class AlertResourceTest {
                     // For PAGERDUTY just verify it's valid JSON
                     var pagerDutyPayload = JsonUtils.readValue(requestBodyJson, PagerDutyWebhookPayload.class);
                     assertThat(pagerDutyPayload).isNotNull();
+                } else if (alert.alertType() == AlertType.FEISHU) {
+                    // For FEISHU just verify it's valid JSON
+                    var feishuPayload = JsonUtils.readValue(requestBodyJson, FeishuWebhookPayload.class);
+                    assertThat(feishuPayload).isNotNull();
                 }
 
             } catch (Exception e) {
@@ -2365,7 +2370,8 @@ class AlertResourceTest {
         private Stream<Arguments> alertTypeProvider() {
             return Stream.of(
                     Arguments.of(AlertType.SLACK),
-                    Arguments.of(AlertType.PAGERDUTY));
+                    Arguments.of(AlertType.PAGERDUTY),
+                    Arguments.of(AlertType.FEISHU));
         }
 
         private Alert createAlertForEvent(AlertTrigger alertTrigger, AlertType alertType) {
@@ -3097,7 +3103,8 @@ class AlertResourceTest {
                     Arguments.of("alertType is null (defaults to GENERAL)", null),
                     Arguments.of("alertType is GENERAL", AlertType.GENERAL),
                     Arguments.of("alertType is SLACK", AlertType.SLACK),
-                    Arguments.of("alertType is PAGERDUTY", AlertType.PAGERDUTY));
+                    Arguments.of("alertType is PAGERDUTY", AlertType.PAGERDUTY),
+                    Arguments.of("alertType is FEISHU", AlertType.FEISHU));
         }
     }
 
