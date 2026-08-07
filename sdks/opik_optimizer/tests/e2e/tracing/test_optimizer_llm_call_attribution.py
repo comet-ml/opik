@@ -24,14 +24,40 @@ from opik_optimizer.core import llm_calls
 pytestmark = pytest.mark.e2e
 
 
-def _configured() -> bool:
+def _has_a_deliberate_target() -> bool:
+    """Is Opik pointed somewhere on purpose?
+
+    Deliberately not a credentials check. The e2e workflow stands up a self-hosted
+    Opik that needs no api_key, so gating on one skipped this test on every CI run
+    since it was added, on every Python version, while the other 21 tests in
+    tests/e2e ran unguarded against that same stack.
+
+    It cannot simply be dropped either. Unconfigured, `url_override` defaults to
+    OPIK_URL_CLOUD, and `OpikConfig.check_for_known_misconfigurations` returns early
+    when "pytest" is in sys.modules - so a bare `pytest tests/e2e` on a laptop would
+    silently queue unauthenticated requests at the public cloud and then spend the
+    poll loop below failing with "no trace carried the optimization id", which
+    describes neither the cause nor the fix.
+
+    So: run when the URL was moved off the cloud default (a self-hosted stack, which
+    is CI), or when a key is present (cloud, authenticated on purpose). Skip only
+    when nothing was configured at all.
+    """
     try:
-        return bool(opik.config.OpikConfig().api_key)
+        config = opik.config.OpikConfig()
     except Exception:
         return False
+    url = (config.url_override or "").rstrip("/")
+    if url and url != opik.config.OPIK_URL_CLOUD.rstrip("/"):
+        return True
+    return bool(config.api_key)
 
 
-@pytest.mark.skipif(not _configured(), reason="requires Opik credentials")
+@pytest.mark.skipif(
+    not _has_a_deliberate_target(),
+    reason="no Opik target configured: set OPIK_URL_OVERRIDE to a self-hosted stack "
+    "(as the e2e workflow does) or configure an api_key",
+)
 def test_optimizer_llm_call__lands_in_one_trace_tagged_with_the_optimization_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

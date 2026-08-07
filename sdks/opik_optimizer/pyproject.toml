@@ -93,7 +93,18 @@ ignore_missing_imports = false
 disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
-mypy_path = ["typings", "src"]
+# Both spellings on purpose: mypy resolves relative mypy_path entries against the
+# working directory, not against this file. Devs run mypy from sdks/opik_optimizer
+# (first pair resolves); pre-commit runs it from the repo root (second pair does).
+# Nonexistent entries are ignored, so each caller silently uses the pair that fits.
+# Without the root-relative pair, checking a test file on its own cannot resolve
+# opik_optimizer.* at all - which is every PR that touches tests but no source.
+mypy_path = [
+    "typings",
+    "src",
+    "sdks/opik_optimizer/typings",
+    "sdks/opik_optimizer/src",
+]
 exclude = "(^|.*/)scripts/benchmarks/"
 
 [[tool.mypy.overrides]]
