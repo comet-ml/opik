@@ -20,24 +20,37 @@ lib_dir="${TMPDIR:-/tmp}/opik-pmd-${PMD_VERSION}"
 
 # Resolve pmd-cli + its transitive deps into lib_dir once; later runs reuse it.
 #
-# Resolve into a process-private staging dir and publish it with a single atomic
-# rename, so a partially-populated cache is never visible under lib_dir. A
-# non-empty check alone can't distinguish a complete cache from one left behind
-# by an interrupted or concurrent resolve, and PmdCli would then run against a
-# broken classpath. The rename loser just discards its staging copy.
-if [ ! -d "$lib_dir" ]; then
+# Cache validity is decided by content, not by the directory existing: a stale or
+# aborted run can leave an empty (or partial) lib_dir behind, and Java would then
+# fail with ClassNotFoundException on PmdCli instead of the cache being repaired.
+# cache_ready checks for the two jars we actually launch from, so an invalid
+# directory is re-resolved rather than trusted.
+#
+# Publication is a single atomic rename out of a process-private staging dir, so
+# a partially-populated cache is never visible under lib_dir; a concurrent writer
+# either wins the rename or discards its staging copy.
+cache_ready() {
+	[ -d "$1" ] &&
+		compgen -G "$1/pmd-cli-*.jar" >/dev/null &&
+		compgen -G "$1/pmd-java-*.jar" >/dev/null
+}
+
+if ! cache_ready "$lib_dir"; then
+	# Drop an invalid cache so the rename below can publish a good one.
+	rm -rf "$lib_dir"
 	staging="${lib_dir}.staging.$$"
 	rm -rf "$staging"
 	if mvn -q org.apache.maven.plugins:maven-dependency-plugin:3.6.1:copy-dependencies \
 		-f "$(dirname "$0")/pmd-cli-pom.xml" \
 		-DoutputDirectory="$staging" \
-		-Dpmd.version="$PMD_VERSION" >/dev/null; then
+		-Dpmd.version="$PMD_VERSION" >/dev/null &&
+		cache_ready "$staging"; then
 		# mv onto an existing dir would nest instead of replace, so only the
 		# first writer publishes; a concurrent winner is equally valid.
 		mv -n "$staging" "$lib_dir" 2>/dev/null || true
 	fi
 	rm -rf "$staging"
-	if [ ! -d "$lib_dir" ]; then
+	if ! cache_ready "$lib_dir"; then
 		echo "precommit-pmd: failed to resolve PMD ${PMD_VERSION} from Maven Central." >&2
 		exit 1
 	fi
@@ -49,35 +62,9 @@ trap 'rm -f "$file_list"' EXIT
 
 # PMD accepts a bare `// NOPMD` or a bare @SuppressWarnings with no rationale,
 # which would silently defeat the "suppress with a reason" requirement the rule
-# message and CONTRIBUTING.md both state. PMD has no option to demand one, so
-# enforce it here: a suppression of this rule must carry trailing prose.
-#
-# `// NOPMD` on its own line or with nothing after it (optionally after a `-` or
-# `:` separator) is rejected; `// NOPMD - collides with java.util.Date` passes.
-bare=0
-while IFS= read -r f; do
-	[ -f "$f" ] || continue
-	if grep -nE '//[[:space:]]*NOPMD[[:space:]]*([-:][[:space:]]*)?$' "$f" >/dev/null; then
-		grep -nE '//[[:space:]]*NOPMD[[:space:]]*([-:][[:space:]]*)?$' "$f" \
-			| sed "s|^|$f:|;s|$| <- bare // NOPMD: add a reason, e.g. '// NOPMD - collides with the imported java.util.Date'|" >&2
-		bare=1
-	fi
-	# A bare @SuppressWarnings for this rule needs a reason too — as a trailing
-	# comment on the annotation line, or a comment on the line above it.
-	while IFS=: read -r ln _; do
-		[ -n "$ln" ] || continue
-		this=$(sed -n "${ln}p" "$f")
-		prev=$(sed -n "$((ln - 1))p" "$f")
-		case "$this" in *'//'*) continue ;; esac
-		case "$prev" in *'//'* | *'*'*) continue ;; esac
-		echo "$f:$ln: bare @SuppressWarnings(\"PMD.InlineFullyQualifiedName\"): add a reason as a comment on this line or the line above" >&2
-		bare=1
-	done <<EOF
-$(grep -nE '@SuppressWarnings\(.*PMD\.InlineFullyQualifiedName' "$f" || true)
-EOF
-done <"$file_list"
-
-if [ "$bare" -ne 0 ]; then
+# message, CONTRIBUTING.md and the backend skill all state. PMD has no option to
+# demand one, so enforce it here before invoking the CLI.
+if ! python3 "$(dirname "$0")/precommit-pmd-suppressions.py" "$@"; then
 	echo "precommit-pmd: suppressions of InlineFullyQualifiedName must state a reason." >&2
 	exit 1
 fi

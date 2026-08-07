@@ -56,28 +56,48 @@ check "passes the repo ruleset"      "apps/opik-backend/pmd-ruleset.xml" "$out"
 check "passes a --file-list"         "--file-list"                    "$out"
 check_empty "no-arg is a no-op"      "$(scripts/precommit-pmd.sh 2>&1)"
 
-# Suppressions must carry a rationale — PMD accepts bare ones, so the wrapper
-# rejects them before invoking the CLI (see OPIK-7832 review).
+# Suppressions must carry a rationale — PMD accepts bare ones, so the validator
+# rejects them before the CLI runs. Covers every documented reason form plus the
+# malformed shapes that a naive grep would wave through (OPIK-7832 review).
+echo "precommit-pmd-suppressions.py:"
 pmd_fix=$(mktemp -d)
-cat >"$pmd_fix/Bare.java" <<'JEOF'
-class Bare {
-    java.sql.Date d; // NOPMD
-}
-JEOF
-cat >"$pmd_fix/BareAnnotation.java" <<'JEOF'
-class BareAnnotation {
-    @SuppressWarnings("PMD.InlineFullyQualifiedName")
-    java.sql.Date d;
-}
-JEOF
-cat >"$pmd_fix/WithReason.java" <<'JEOF'
-class WithReason {
-    java.sql.Date d; // NOPMD - collides with the imported java.util.Date
-}
-JEOF
-check "rejects bare // NOPMD"        "must state a reason" "$(scripts/precommit-pmd.sh "$pmd_fix/Bare.java" 2>&1)"
-check "rejects bare @SuppressWarnings" "must state a reason" "$(scripts/precommit-pmd.sh "$pmd_fix/BareAnnotation.java" 2>&1)"
-check "allows a reasoned // NOPMD"   "net.sourceforge.pmd.cli.PmdCli" "$(scripts/precommit-pmd.sh "$pmd_fix/WithReason.java" 2>&1)"
+sup=scripts/precommit-pmd-suppressions.py
+
+# name:::java-source — rejected (bare or fake rationale)
+while IFS=':::' read -r name src; do
+	[ -n "$name" ] || continue
+	printf '%b' "$src" >"$pmd_fix/$name.java"
+	check_empty "rejects $name" "$(python3 "$sup" "$pmd_fix/$name.java" >/dev/null 2>&1 && echo "accepted")"
+done <<'CASES'
+bare-nopmd:::class C { java.sql.Date d; // NOPMD\n}\n
+nopmd-dash-only:::class C { java.sql.Date d; // NOPMD -\n}\n
+nopmd-empty-comment:::class C { java.sql.Date d; // NOPMD - //\n}\n
+bare-annotation:::class C {\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+annotation-after-multiplication:::class C {\n    int x = 2 * 3;\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+annotation-after-empty-comment:::class C {\n    //\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+multiline-annotation:::class C {\n    @SuppressWarnings({\n        "PMD.InlineFullyQualifiedName"})\n    java.sql.Date d;\n}\n
+CASES
+
+# name:::java-source — accepted (every documented reason form)
+while IFS=':::' read -r name src; do
+	[ -n "$name" ] || continue
+	printf '%b' "$src" >"$pmd_fix/$name.java"
+	check "allows $name" "ok" "$(python3 "$sup" "$pmd_fix/$name.java" 2>/dev/null && echo ok)"
+done <<'CASES'
+trailing-nopmd-reason:::class C { java.sql.Date d; // NOPMD - collides with java.util.Date\n}\n
+line-comment-above:::class C {\n    // collides with the imported java.util.Date\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+block-comment-above:::class C {\n    /* collides with the imported java.util.Date */\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+javadoc-above:::class C {\n    /**\n     * Collides with the imported java.util.Date.\n     */\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+trailing-comment-on-annotation:::class C {\n    @SuppressWarnings("PMD.InlineFullyQualifiedName") // collides with java.util.Date\n    java.sql.Date d;\n}\n
+multi-value-annotation-with-reason:::class C {\n    // collides with the imported java.util.Date\n    @SuppressWarnings({"PMD.InlineFullyQualifiedName", "unchecked"})\n    java.sql.Date d;\n}\n
+unrelated-suppression-untouched:::class C {\n    @SuppressWarnings("unchecked")\n    java.util.List<String> l;\n}\n
+CASES
+
+# End-to-end through the wrapper: rejection short-circuits before the CLI runs.
+check "wrapper blocks a bare suppression" "must state a reason" \
+	"$(scripts/precommit-pmd.sh "$pmd_fix/bare-nopmd.java" 2>&1)"
+check "wrapper runs the CLI when reasoned" "net.sourceforge.pmd.cli.PmdCli" \
+	"$(scripts/precommit-pmd.sh "$pmd_fix/trailing-nopmd-reason.java" 2>&1)"
 rm -rf "$pmd_fix"
 
 echo "precommit-fe-lint.sh:"
