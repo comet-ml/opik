@@ -30,17 +30,32 @@
           message="Inline fully-qualified name ''{0}'': import the type at the top of the file and use its simple name. If a simple-name collision in this file makes the FQN unavoidable, append '// NOPMD - &lt;reason&gt;' to the line."
           class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
         <description>
-Java types from java.* / javax.* must be imported at the top of the file and
-referenced by their simple name, not written out fully qualified inline.
+Types from any external package — java.*, jakarta.*, io.dropwizard.*, lombok.*,
+reactor.*, third-party — must be imported at the top of the file and referenced
+by their simple name, not written out fully qualified inline. This is a general
+heuristic, not a per-namespace allowlist: the convention is "import at the top",
+and it does not depend on which library the type comes from.
 
-Scoped to java.*/javax.* deliberately: inline com.comet.opik.* self-references
-are the same smell but are out of scope for OPIK-7832.
+Two exclusions, both structural rather than stylistic:
+
+  1. com.comet.opik.* self-references are out of scope for OPIK-7832. Same
+     smell, but excluded to keep this change's blast radius to external types.
+
+  2. Nested-type access (Alert.View.Public, Schema.AccessMode.READ_ONLY) is NOT
+     an inline FQN — it is how you reference a nested type, and often cannot be
+     shortened at all. PMD reports the nested path in @PackageQualifier just
+     like a package, so the lowercase-first-segment match below is what
+     separates real packages (java.util, io.dropwizard.core) from nested-type
+     paths (Alert.View). Without it the rule fires ~300 times on the codebase's
+     standard @JsonView pattern.
 
 A fully-qualified name is legitimate when two types share a simple name in one
 file (java.util.Date vs java.sql.Date, java.util.stream.Stream vs a domain
-Stream) — an import can only cover one of them. Suppress those with a trailing
+Stream) — an import can only cover one of them — or in any other case where the
+inline form is deliberate. Suppress those with a trailing
 '// NOPMD - &lt;reason&gt;' on the offending line, or
-@SuppressWarnings("PMD.InlineFullyQualifiedName") on the declaration.
+@SuppressWarnings("PMD.InlineFullyQualifiedName") on the declaration. The reason
+is the point: it is what makes the exception reviewable.
         </description>
         <priority>3</priority>
         <properties>
@@ -48,25 +63,32 @@ Stream) — an import can only cover one of them. Suppress those with a trailing
                 <value>
 <![CDATA[
 //ClassType[@FullyQualified = true()]
-          [starts-with(@PackageQualifier, 'java.') or starts-with(@PackageQualifier, 'javax.')]
+          [matches(@PackageQualifier, '^[a-z][a-zA-Z0-9_]*(\.[a-z][a-zA-Z0-9_]*)*$')]
+          [not(starts-with(@PackageQualifier, 'com.comet.opik'))]
 ]]>
                 </value>
             </property>
         </properties>
         <example>
 <![CDATA[
-// Bad — java.util.Locale written out inline
+// Bad — written out inline, whatever the namespace
 return s.toLowerCase(java.util.Locale.ROOT);
+throw new ClientErrorException(new io.dropwizard.jersey.errors.ErrorMessage(409, msg));
 
 // Good — imported at the top of the file
 import java.util.Locale;
+import io.dropwizard.jersey.errors.ErrorMessage;
 ...
 return s.toLowerCase(Locale.ROOT);
+throw new ClientErrorException(new ErrorMessage(409, msg));
 
 // Allowed — genuine simple-name collision, suppressed with a reason
 import java.util.Date;
 ...
 java.sql.Date sqlDate; // NOPMD - collides with the imported java.util.Date
+
+// Not an inline FQN — nested-type access, not reported
+@JsonView({Alert.View.Public.class, Alert.View.Write.class})
 ]]>
         </example>
     </rule>
