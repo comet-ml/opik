@@ -12,7 +12,7 @@ import useOrganizations from "@/plugins/comet/useOrganizations";
 import { ORGANIZATION_ROLE_TYPE } from "@/plugins/comet/types";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import { buildUrl } from "@/plugins/comet/utils";
-import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
+import useOrganizationAdmins from "@/plugins/comet/api/useOrganizationAdmins";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 interface RetentionBannerProps {
@@ -20,6 +20,7 @@ interface RetentionBannerProps {
 }
 
 const SHOW_BANNER_MIN_THRESHOLD = 0.8;
+const ADMINS_SHOWN = 3;
 
 const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   const { data: user } = useUser();
@@ -49,9 +50,10 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
     return org.id === workspace?.organizationId;
   });
 
-  const { data: organizationMembers } = useOrganizationMembers(
+  const { data: organizationAdmins } = useOrganizationAdmins(
     {
       organizationId: organization?.id ?? "",
+      limit: ADMINS_SHOWN,
     },
     {
       enabled: !!organization?.id,
@@ -59,10 +61,8 @@ const RetentionBanner = ({ onChangeHeight }: RetentionBannerProps) => {
   );
 
   const firstThreeAdmins = useMemo(() => {
-    return organizationMembers
-      ?.filter?.((m) => m.role === ORGANIZATION_ROLE_TYPE.admin)
-      .slice(0, 3);
-  }, [organizationMembers]);
+    return organizationAdmins?.slice(0, ADMINS_SHOWN);
+  }, [organizationAdmins]);
 
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;

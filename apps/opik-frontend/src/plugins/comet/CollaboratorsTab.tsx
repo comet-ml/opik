@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { UserPlus } from "lucide-react";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
-import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
+import useOrganizationMemberRoles from "@/plugins/comet/api/useOrganizationMemberRoles";
 import useWorkspaceRoles from "@/plugins/comet/api/useWorkspaceRoles";
 import useWorkspaceUsersRoles from "@/plugins/comet/api/useWorkspaceUsersRoles";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
@@ -107,10 +108,6 @@ const CollaboratorsTab = () => {
       },
     );
 
-  const { data: organizationMembers } = useOrganizationMembers({
-    organizationId: currentOrganization?.id || "",
-  });
-
   const { data: workspaceRoles = [], isPending: isWorkspaceRolesPending } =
     useWorkspaceRoles(
       { organizationId: currentOrganization?.id || "" },
@@ -133,6 +130,27 @@ const CollaboratorsTab = () => {
       { workspaceId: workspaceId || "" },
       {
         enabled: Boolean(workspaceId),
+      },
+    );
+
+  const memberNames = useMemo(
+    () =>
+      [...workspaceMembers, ...invitedMembers]
+        .map((member) => (member as WorkspaceMember).userName || member.email)
+        .filter(Boolean),
+    [workspaceMembers, invitedMembers],
+  );
+
+  const { data: organizationRoles, isLoading: isOrganizationRolesLoading } =
+    useOrganizationMemberRoles(
+      {
+        organizationId: currentOrganization?.id || "",
+        userNames: memberNames,
+      },
+      {
+        enabled: Boolean(currentOrganization?.id) && memberNames.length > 0,
+        // without this the table drops back to a skeleton whenever the member list changes
+        placeholderData: keepPreviousData,
       },
     );
 
@@ -183,11 +201,6 @@ const CollaboratorsTab = () => {
 
       const uniqueName = userName || member.email;
 
-      const memberInOrganization = organizationMembers?.find(
-        (memberInOrg) =>
-          (memberInOrg?.userName || memberInOrg?.email) === uniqueName,
-      );
-
       const userRoleData = workspaceUsersRoles.find(
         (userRole) => userRole.userName === uniqueName,
       );
@@ -198,7 +211,8 @@ const CollaboratorsTab = () => {
           ? userRoleData?.roleName || "No role assigned"
           : role,
         roleId: userRoleData?.roleId,
-        isAdmin: memberInOrganization?.role === ORGANIZATION_ROLE_TYPE.admin,
+        isAdmin:
+          organizationRoles?.[uniqueName] === ORGANIZATION_ROLE_TYPE.admin,
         permissions: userPermissions || [],
         permissionMismatch: userRoleData?.permissionMismatch,
         ...member,
@@ -218,7 +232,7 @@ const CollaboratorsTab = () => {
     workspaceMembers,
     invitedMembers,
     permissionsData,
-    organizationMembers,
+    organizationRoles,
     search,
     workspaceUsersRoles,
     isPermissionsManagementEnabled,
@@ -229,6 +243,8 @@ const CollaboratorsTab = () => {
       isPending ||
       isPermissionsPending ||
       isInvitedMembersPending ||
+      // a row whose organization role is not known yet would offer to change an admin's role
+      isOrganizationRolesLoading ||
       (isPermissionsManagementEnabled &&
         (isUsersRolesPending || isWorkspaceRolesPending));
 
