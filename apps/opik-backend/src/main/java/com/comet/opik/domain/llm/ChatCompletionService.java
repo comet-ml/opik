@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.google.common.base.Throwables;
+import dev.langchain4j.exception.NonRetriableException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.internal.RetryUtils;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -27,6 +28,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
@@ -61,7 +63,8 @@ public class ChatCompletionService {
         ChatCompletionResponse chatCompletionResponse;
         try {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-            chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
+            chatCompletionResponse = retryPolicy.withRetry(
+                    () -> failFastOnUnsupportedFeature(() -> llmProviderClient.generate(request, workspaceId)));
         } catch (RuntimeException runtimeException) {
             failIfUnsupportedFeature(runtimeException);
 
@@ -109,7 +112,7 @@ public class ChatCompletionService {
             log.info("Initiating chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             chatResponse = retryPolicy
-                    .withRetry(() -> languageModelClient.chat(chatRequest));
+                    .withRetry(() -> failFastOnUnsupportedFeature(() -> languageModelClient.chat(chatRequest)));
             log.info("Completed chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             return chatResponse;
@@ -129,6 +132,24 @@ public class ChatCompletionService {
     }
 
     /**
+     * {@link UnsupportedFeatureException} extends {@code LangChain4jException}, not {@code NonRetriableException}, so
+     * {@code RetryPolicy.withRetry} treats it like any transient failure and burns the whole retry budget (plus its
+     * backoff delays) on a call that can never succeed. Re-throwing it as {@link NonRetriableException} makes
+     * {@code withRetry} give up on the first attempt while leaving genuinely transient provider errors retryable. The
+     * original exception is kept as the cause, so {@link #failIfUnsupportedFeature} still recognises it downstream.
+     */
+    private <T> T failFastOnUnsupportedFeature(Callable<T> action) throws Exception {
+        try {
+            return action.call();
+        } catch (RuntimeException runtimeException) {
+            if (containsUnsupportedFeature(runtimeException)) {
+                throw new NonRetriableException(runtimeException);
+            }
+            throw runtimeException;
+        }
+    }
+
+    /**
      * langchain4j raises {@link UnsupportedFeatureException} when the request asks for a capability the selected
      * provider does not implement — e.g. {@code ToolChoice.REQUIRED} against Vertex AI Gemini. The provider is never
      * reached, so {@code getLlmProviderError} has nothing to map and the call used to surface as a 500. That is
@@ -137,7 +158,7 @@ public class ChatCompletionService {
      * burning their retry budget on it.
      */
     private void failIfUnsupportedFeature(RuntimeException runtimeException) {
-        if (ExceptionUtils.indexOfType(runtimeException, UnsupportedFeatureException.class) < 0) {
+        if (!containsUnsupportedFeature(runtimeException)) {
             return;
         }
 
@@ -145,6 +166,15 @@ public class ChatCompletionService {
         throw new BadRequestException(
                 buildDetailedErrorMessage(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, runtimeException),
                 runtimeException);
+    }
+
+    /**
+     * Walks the cause chain, so it matches whether the exception is thrown bare, wrapped by a provider client, or
+     * re-thrown by {@link #failFastOnUnsupportedFeature}. {@code ExceptionUtils} stops at the first already-visited
+     * throwable, so a self-referencing cause chain terminates rather than looping.
+     */
+    private boolean containsUnsupportedFeature(Throwable throwable) {
+        return ExceptionUtils.indexOfType(throwable, UnsupportedFeatureException.class) >= 0;
     }
 
     private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
@@ -167,6 +197,16 @@ public class ChatCompletionService {
 
     private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient) {
         return throwable -> {
+            // Checked before the provider-error mapper so the classification matches create() and scoreTrace(): if a
+            // provider envelope and an unsupported feature ever collide, the deterministic capability failure wins.
+            if (containsUnsupportedFeature(throwable)) {
+                log.warn(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, throwable);
+                handlers.handleError(new ErrorMessage(
+                        Response.Status.BAD_REQUEST.getStatusCode(),
+                        buildDetailedErrorMessage(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, throwable)));
+                return;
+            }
+
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(throwable);
 
             if (providerError.isPresent()) {
@@ -178,16 +218,6 @@ public class ChatCompletionService {
                     log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, userMessage);
                     handlers.handleError(
                             new ErrorMessage(userMessage.getResponse().getStatus(), userMessage.getMessage()));
-                    return;
-                }
-
-                // Same rationale as failIfUnsupportedFeature: an unsupported capability is a caller problem, not a
-                // server fault, so the stream reports it as a 400 rather than the default 500.
-                if (ExceptionUtils.indexOfType(throwable, UnsupportedFeatureException.class) >= 0) {
-                    log.warn(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, throwable);
-                    handlers.handleError(new ErrorMessage(
-                            Response.Status.BAD_REQUEST.getStatusCode(),
-                            buildDetailedErrorMessage(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, throwable)));
                     return;
                 }
 

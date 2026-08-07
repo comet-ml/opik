@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.ChunkedOutputHandlers;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.model.chat.ChatModel;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -27,6 +29,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +37,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -219,7 +227,7 @@ class ChatCompletionServiceTest {
 
         private static final String UNSUPPORTED_FEATURE_MESSAGE = "ToolChoice.REQUIRED is not supported yet by this model provider";
 
-        private static Stream<Arguments> unsupportedFeatureProvider() {
+        private static Stream<Arguments> unsupportedFeatureExceptionCases() {
             return Stream.of(
                     Arguments.of(
                             "thrown directly",
@@ -231,7 +239,7 @@ class ChatCompletionServiceTest {
         }
 
         @ParameterizedTest(name = "when UnsupportedFeatureException is {0}, then throw BadRequestException")
-        @MethodSource("unsupportedFeatureProvider")
+        @MethodSource("unsupportedFeatureExceptionCases")
         @DisplayName("create should map unsupported features to 400, not 500")
         void create__whenUnsupportedFeatureException__thenThrowBadRequest(
                 String testName, RuntimeException runtimeException) {
@@ -254,7 +262,7 @@ class ChatCompletionServiceTest {
         }
 
         @ParameterizedTest(name = "when UnsupportedFeatureException is {0}, then throw BadRequestException")
-        @MethodSource("unsupportedFeatureProvider")
+        @MethodSource("unsupportedFeatureExceptionCases")
         @DisplayName("scoreTrace should map unsupported features to 400, not 500")
         void scoreTrace__whenUnsupportedFeatureException__thenThrowBadRequest(
                 String testName, RuntimeException runtimeException) {
@@ -303,6 +311,80 @@ class ChatCompletionServiceTest {
             // The provider was never reached, so there is no provider error to map.
             verify(llmProviderFactory, never()).getService(anyString(), anyString());
             verify(llmProviderService, never()).getLlmProviderError(any());
+        }
+
+        @Test
+        @DisplayName("unsupported features must not consume the provider retry budget")
+        void create__whenUnsupportedFeatureException__thenNotRetried() {
+            // Given — a policy that would retry, unlike the single-attempt default used by the other tests
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString()))
+                    .thenThrow(new UnsupportedFeatureException(UNSUPPORTED_FEATURE_MESSAGE));
+
+            // When & Then
+            assertThatThrownBy(() -> retryingService.create(request, workspaceId))
+                    .isInstanceOf(BadRequestException.class);
+
+            // UnsupportedFeatureException extends LangChain4jException, not NonRetriableException, so without the
+            // fail-fast wrapper langchain4j's RetryPolicy would retry a call that can never succeed.
+            verify(llmProviderService, times(1)).generate(any(), anyString());
+        }
+
+        @Test
+        @DisplayName("transient failures must still be retried")
+        void create__whenTransientException__thenStillRetried() {
+            // Given
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderClientConfig.getMaxAttempts()).thenReturn(3);
+            var retryingService = new ChatCompletionService(llmProviderClientConfig, llmProviderFactory);
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("transient"));
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+
+            // When & Then
+            assertThatThrownBy(() -> retryingService.create(request, workspaceId))
+                    .isInstanceOf(InternalServerErrorException.class);
+
+            verify(llmProviderService, atLeast(2)).generate(any(), anyString());
+        }
+
+        @Test
+        @DisplayName("streaming gives unsupported features precedence over a provider error envelope")
+        void createAndStreamResponse__whenUnsupportedFeatureAndProviderError__thenReportBadRequest() {
+            // Given — the provider mapper would happily classify this throwable, but the capability failure wins
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+            var handlers = mock(ChunkedOutputHandlers.class);
+            var unsupported = new UnsupportedFeatureException(UNSUPPORTED_FEATURE_MESSAGE);
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            lenient().when(llmProviderService.getLlmProviderError(any()))
+                    .thenReturn(Optional.of(new ErrorMessage(503, "provider says unavailable")));
+            doAnswer(invocation -> {
+                Consumer<Throwable> errorHandler = invocation.getArgument(4);
+                errorHandler.accept(unsupported);
+                return null;
+            }).when(llmProviderService).generateStream(any(), anyString(), any(), any(), any());
+
+            // When
+            chatCompletionService.createAndStreamResponse(request, workspaceId, handlers);
+
+            // Then
+            var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);
+            verify(handlers).handleError(errorCaptor.capture());
+            assertThat(errorCaptor.getValue().getCode()).isEqualTo(400);
+            assertThat(errorCaptor.getValue().getMessage())
+                    .contains("Unsupported feature for the selected LLM provider")
+                    .contains(UNSUPPORTED_FEATURE_MESSAGE);
         }
 
         @Test
