@@ -1,15 +1,17 @@
 <?xml version="1.0"?>
 <!--
-  Single-purpose PMD ruleset: reject inline fully-qualified java.*/javax.* class
-  names where a top-of-file import would do (OPIK-7832).
+  Single-purpose PMD ruleset: reject inline fully-qualified class names from any
+  external package — java.*, jakarta.*, io.dropwizard.*, lombok.*, reactor.*,
+  third-party — where a top-of-file import would do (OPIK-7832). The convention
+  is "import at the top" regardless of which library the type comes from.
 
   Why a custom XPath rule and not PMD's built-in UnnecessaryFullyQualifiedName:
   the built-in rule only fires when the simple name is ALREADY in scope (i.e. the
   qualifier is deletable with no other edit). It reports nothing for the case we
   care about — an FQN in a file that does not import the type — because removing
   the qualifier there would not compile without also adding the import. Measured
-  on this codebase, the built-in rule found 4 of 35 target sites and missed the
-  Locale.ROOT / Collectors cases that motivated the ticket.
+  on this codebase, the built-in rule found 4 of the 35 java.*/javax.* sites and
+  missed the Locale.ROOT / Collectors cases that motivated the ticket.
 
   Why an AST rule and not a regex (Spotless replaceRegex / Checkstyle
   RegexpSinglelineJava): a text matcher cannot tell code from a string literal,
@@ -43,11 +45,16 @@ Two exclusions, both structural rather than stylistic:
 
   2. Nested-type access (Alert.View.Public, Schema.AccessMode.READ_ONLY) is NOT
      an inline FQN — it is how you reference a nested type, and often cannot be
-     shortened at all. PMD reports the nested path in @PackageQualifier just
-     like a package, so the lowercase-first-segment match below is what
-     separates real packages (java.util, io.dropwizard.core) from nested-type
-     paths (Alert.View). Without it the rule fires ~300 times on the codebase's
-     standard @JsonView pattern.
+     shortened at all. PMD reports the nested path in @PackageQualifier as a
+     flat string, identical in shape to a package, and without full type
+     resolution (which a fast pre-commit hook does not have) the AST offers no
+     attribute that tells the two apart. The discriminator below is therefore
+     the Java naming convention: a package qualifier's FIRST segment is
+     lowercase (java.util, io.dropwizard.core, vendor.API), while a nested-type
+     path begins with a class name and is therefore uppercase (Alert.View).
+     Only the first segment is constrained, so an uppercase segment later in a
+     real package (vendor.API.Type) is still caught. Without this the rule fires
+     ~300 times on the codebase's standard @JsonView pattern.
 
 A fully-qualified name is legitimate when two types share a simple name in one
 file (java.util.Date vs java.sql.Date, java.util.stream.Stream vs a domain
@@ -63,7 +70,7 @@ is the point: it is what makes the exception reviewable.
                 <value>
 <![CDATA[
 //ClassType[@FullyQualified = true()]
-          [matches(@PackageQualifier, '^[a-z][a-zA-Z0-9_]*(\.[a-z][a-zA-Z0-9_]*)*$')]
+          [matches(@PackageQualifier, '^[a-z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)*$')]
           [not(starts-with(@PackageQualifier, 'com.comet.opik'))]
 ]]>
                 </value>

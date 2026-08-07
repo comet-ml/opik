@@ -56,6 +56,30 @@ check "passes the repo ruleset"      "apps/opik-backend/pmd-ruleset.xml" "$out"
 check "passes a --file-list"         "--file-list"                    "$out"
 check_empty "no-arg is a no-op"      "$(scripts/precommit-pmd.sh 2>&1)"
 
+# Suppressions must carry a rationale — PMD accepts bare ones, so the wrapper
+# rejects them before invoking the CLI (see OPIK-7832 review).
+pmd_fix=$(mktemp -d)
+cat >"$pmd_fix/Bare.java" <<'JEOF'
+class Bare {
+    java.sql.Date d; // NOPMD
+}
+JEOF
+cat >"$pmd_fix/BareAnnotation.java" <<'JEOF'
+class BareAnnotation {
+    @SuppressWarnings("PMD.InlineFullyQualifiedName")
+    java.sql.Date d;
+}
+JEOF
+cat >"$pmd_fix/WithReason.java" <<'JEOF'
+class WithReason {
+    java.sql.Date d; // NOPMD - collides with the imported java.util.Date
+}
+JEOF
+check "rejects bare // NOPMD"        "must state a reason" "$(scripts/precommit-pmd.sh "$pmd_fix/Bare.java" 2>&1)"
+check "rejects bare @SuppressWarnings" "must state a reason" "$(scripts/precommit-pmd.sh "$pmd_fix/BareAnnotation.java" 2>&1)"
+check "allows a reasoned // NOPMD"   "net.sourceforge.pmd.cli.PmdCli" "$(scripts/precommit-pmd.sh "$pmd_fix/WithReason.java" 2>&1)"
+rm -rf "$pmd_fix"
+
 echo "precommit-fe-lint.sh:"
 out=$(scripts/precommit-fe-lint.sh apps/opik-frontend/src/a.tsx apps/opik-frontend/src/b.css 2>&1)
 check "routes .tsx to eslint"          "eslint"          "$out"
