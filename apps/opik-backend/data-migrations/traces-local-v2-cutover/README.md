@@ -83,10 +83,18 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    flushes, so a shorter client timeout would surface as ingestion errors during the window.
 7. **Schema-state flag wired, with a rollout plan** — `databaseAnalyticsDataModel.traceColumnsNonNullable` (env
    `ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE`, default `false`). The successor's `end_time`/`ttft` are
-   **non-nullable sentinel** columns, so the app must bind epoch/NaN instead of `null` once they are live — a `null`
-   bind is rejected. This flag switches that (writes, reads, filters, sorts); it **must be flipped in lockstep with the
-   EXCHANGE** (see "The final cutover window"). Confirm it is deployable on the target (env passthrough present) and that
-   you have a fleet-wide rollout mechanism (config push or rolling restart) ready.
+   **non-nullable sentinel** columns, so the app must represent an absent value as the epoch/NaN sentinel — not `null` —
+   once they are live. This flag switches that on **both** sides: the write bind, and the read/filter/sort translation
+   back (`epochToNull` on read, `nullIf(end_time, epoch)` in sorts, sentinel logic in the filter builder). It **must be
+   flipped in lockstep with the EXCHANGE** (see "The final cutover window"). Confirm it is deployable on the target (env
+   passthrough present) and that you have a fleet-wide rollout mechanism (config push or rolling restart) ready.
+   > **The failure mode is silent, so plan a positive check — not error-watching.** A `null` bind into the non-nullable
+   > successor is **not** rejected: ClickHouse's `input_format_null_as_default` (default `1`) converts it to the column
+   > DEFAULT, which is exactly the epoch/NaN sentinel. So a stale-`false` instance keeps **writing correctly** and emits
+   > no ingestion error — but it **reads back** an absent `end_time` as `1970-01-01` instead of `null`, and filters/sorts
+   > on absent values use the wrong semantics. Unlike `tracesDistributedWrapEnabled` (fail-loud, see the wrap
+   > prerequisite), a missed or partial rollout here shows up only as wrong data. Verify it positively: write an
+   > in-progress trace (no `end_time`) through the API on each instance and assert it reads back `end_time = null`.
 8. **Confirm Data Retention is disabled** (`RETENTION_ENABLED=false`, the default). If it is ever enabled, see the
    retention note above first.
 9. **Sufficient free disk** — the backfill writes a full second physical copy of `traces`, so node free space must clear
@@ -116,7 +124,18 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     WHERE source_table = 'traces' AND project_id = '';
     ```
     If non-zero, do NOT proceed: an unexpected row means the replay would miss those deletes — investigate/drain them first.
-14. Schedule during off-peak hours.
+14. **Privilege smoke test — run `delta_replay.sh` once BEFORE the backfill, with `--backfill-start` set to
+    `now()`.** Both statements execute but match nothing (no row has `created_at`/`last_updated_at` in the future, and
+    the bridge holds no events after that instant), so it is a functional no-op against the data — while still proving
+    the migration user can actually perform every kind of statement the cutover needs. Do this on a least-privilege user
+    and you catch grant gaps in seconds instead of mid-window.
+    > This is not hypothetical. On the first real-cluster run the deletion replay failed with
+    > `Code: 497 … necessary to have the grant ALTER UPDATE(_row_exists)`: ClickHouse implements a lightweight `DELETE`
+    > as `ALTER UPDATE _row_exists = 0`, so it authorises it as **`ALTER UPDATE` on that hidden column, not
+    > `ALTER DELETE`**. The read-only drivers (`estimate.sh`, `verify.sh`) cannot surface this — only executing a
+    > mutation can. Grant it **column-scoped** (`ALTER UPDATE(_row_exists)`) so the user can flip the delete mask
+    > without being able to modify any real data column.
+15. Schedule during off-peak hours.
 
 ## The sequence
 
@@ -143,7 +162,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    (reference SQL [`000002_delta_and_deletion_replay.sql`](scripts/db-app-analytics/000002_delta_and_deletion_replay.sql))
    — delta-insert (anchored at `backfill_start`), then **deletion replay**. The replay runs with
    `lightweight_deletes_sync = 2`, so it returns only once the delete mutation has applied on **every** replica.
-   clickhouse-client prints each statement's wall time; record the replay's wall time.
+   The driver passes `--time`, so clickhouse-client prints each statement's wall time in seconds (delta-insert first,
+   deletion replay second) — **record the second value**: the final-delta→EXCHANGE gap must fit inside the buffer hold
+   (Go/No-Go). Without `--time` a bare `--query` prints no timing at all.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/delta_replay.sh --database opik --backfill-start '<ts>'
    ```
@@ -193,6 +214,20 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > `MergeTree` where deletes still work — which is why the wrap is **opt-in** (`--with-wrap`) and the default stops after
 > the EXCHANGE. Defer the
 > wrap until the retarget flag is wired into the deploy. The wrap is the sharding-readiness layer, not the cutover.
+>
+> **"In lockstep" cannot mean simultaneous — plan for a short fail-loud delete window.** The toggle is a
+> config push plus a rolling restart; the wrap is a DDL statement. They cannot land at the same instant, so
+> one of two windows is unavoidable:
+> - **toggle first** (recommended): from the moment the last backend comes up with `true` until the wrap
+>   completes, every trace delete targets a `traces_local` that does not exist yet →
+>   `Code: 60 UNKNOWN_TABLE`. Reads and writes are unaffected.
+> - **wrap first**: from the swap until the rolling restart finishes, deletes hit the `Distributed` `traces`
+>   → `Code: 36`. Same blast radius, but it also exposes the cross-node `ON CLUSTER` skew with no buffer.
+>
+> Prefer **toggle first**, have the `--wrap-only` command ready to run the second both pods report ready, and
+> keep the window to seconds. Both directions are delete-path-only and fail loudly rather than corrupting
+> anything, which is what makes a short window acceptable — but on a shared environment announce it, and do
+> not leave the toggle `true` without the wrap (or vice versa) for any length of time.
 >
 > **Monitoring consequence of the flip:** `system.parts` only knows `traces_local` post-wrap, so the
 > `opik.clickhouse.partition.*` parts gauges relabel from `table="traces"` to `table="traces_local"`, while the
@@ -255,16 +290,37 @@ bridge row commits after that final replay's read but with `event_time < cutover
 as a size-triggered buffer flush; if delete load is high, quiesce user deletes for the final seconds.
 
 **The `traceColumnsNonNullable` flip (mandatory, and why it goes first).** The successor stores `end_time`/`ttft` as
-non-nullable epoch/NaN sentinels; the app must bind those sentinels — not `null` — the moment that schema is live under
-the name `traces`, or every write of an in-progress trace (no `end_time` yet) is **rejected** by the non-nullable
-column. The flag switches the app to sentinel binds (and sentinel→`null` on read). It is a **config** change rolled out
-across the fleet (not atomic), unlike the metadata-only `EXCHANGE`, so it cannot be flipped at the same instant. Roll it
-out to `true` on **all** instances **before** the `EXCHANGE`: binding the epoch/NaN sentinel into the *still-Nullable*
-source column is valid, and reads translate epoch/`null`→`null` either way, so `true` is write-safe on both schemas —
-this removes any write-rejection window. The copy machinery already tolerates the resulting NULL/epoch mix (backfill
-`coalesce`, verify normalizes both to `0`). The one transient caveat is that "`end_time` is empty"-style **filters** use
-sentinel logic against the still-Nullable table during that short pre-swap window; keep the window short and off-peak.
-On rollback, after swapping the Nullable original back, revert the flag to `false`.
+non-nullable epoch/NaN sentinels, and the flag is what makes the app agree with that representation — sentinel binds on
+write, and sentinel→`null` translation on read, filter and sort. It is a **config** change rolled out across the fleet
+(not atomic), unlike the metadata-only `EXCHANGE`, so it cannot be flipped at the same instant; roll it out to `true` on
+**all** instances **before** the `EXCHANGE`.
+
+*Why before, not after.* Not because writes would break — they would not (see prereq #7: a `null` bind is silently
+converted to the column DEFAULT, which is the sentinel, so writes succeed on either setting). It goes first because the
+**read** side must already speak sentinel the instant the successor is live under the name `traces`: while the flag is
+`false` against the successor, an absent `end_time` reads back as `1970-01-01` rather than `null`, and absent-value
+filters/sorts are wrong. Doing it first is safe because `true` is write-compatible with **both** schemas — binding the
+epoch/NaN sentinel into the *still-Nullable* source column is valid — and the copy machinery tolerates the resulting
+NULL/epoch mix (backfill `coalesce`, verify normalizes both to `0`).
+
+*Two caveats for the pre-swap window, so keep it short and off-peak.* Both affect rows written while the flag is `true`
+and `traces` is still the Nullable original — and note the window does not close at the `EXCHANGE`: on a rollback it
+**reopens** until the flag-revert restart lands on every instance, so the same rows keep accruing then (see "Rolling back
+the `traceColumnsNonNullable` flip").
+
+- "`end_time` is empty"-style **filters** use sentinel logic against the still-Nullable table.
+- **The sentinels persist in the original, and `duration` is computed wrong from them.** An absent value is written as
+  the epoch / `NaN` sentinel instead of `NULL`, against a column whose convention is `NULL`. The blast radius is wider
+  than in-progress traces: the `end_time` arm needs a trace with no `end_time` yet, but the **`ttft` arm hits any trace
+  written without a `ttft`** — the common case. Worse, the original's **`duration`** (a stored `MATERIALIZED` column)
+  guards only `end_time IS NOT NULL` and does not know the epoch sentinel, so a trace with no `end_time` gets a large
+  **negative** duration (≈ `-1.79e12` ms) instead of `NULL`. The successor's expression *does* guard the sentinel, so the
+  copy recomputes it as `NaN` and the **forward path is self-healing**; `verify.sh` is unaffected (it excludes
+  materialized columns by design). But a **stage B/C rollback promotes the frozen original**, making those sentinels and
+  negative durations live again while the healed successor copy is parked and then discarded by `finalize.sh` — so the
+  rollback path must repair them.
+
+On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
 ## Batching and throttling
 
@@ -437,8 +493,50 @@ run by hand.** Each `.sql` file is the single source a driver reads:
 | rollback | `000004_rollback_stage_{a,b,c}_*.sql` + `000004_rollback_reverse_replay.sql` | `rollback.sh` |
 | finalize — retire the parked backup (drop after cutover / recycle to empty shadow after rollback) | — | `finalize.sh` |
 
-Each driver takes the connection from the standard `clickhouse-client` env vars (`CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`,
-`CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`) and `--database`.
+Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOUSE_HOST`, `CLICKHOUSE_USER` and
+`CLICKHOUSE_PASSWORD`, plus `--database` and — when the native port is not 9000 — `--port`.
+
+> **Pass `--host` and `--port` together; the env vars are not enough.** Verified on 26.3:
+> `CLICKHOUSE_PORT` is **not honored at all** (set it to a bogus value and the client still dials 9000), and
+> `CLICKHOUSE_HOST` is honored **only while no connection flag is given** — so supplying `--port` alone silently reverts
+> the host to `localhost`. Every driver therefore takes `--host` and `--port`; user and password stay in the environment,
+> keeping the password out of `argv`. This matters for any real cutover, because a cluster is normally reached from the
+> ops host through a `kubectl port-forward` or a bastion on a **non-default local port** (9000 is often already taken by
+> a local ClickHouse). Pass the same `--host`/`--port` to every driver in the run.
+>
+> **The connecting user must be able to set `log_comment`.** Every driver tags its queries with `log_comment` for
+> cutover attribution in `query_log`. A `readonly = 1` profile rejects that outright — `Cannot modify 'log_comment'
+> setting in readonly mode` — so such a user cannot run **even the read-only drivers** (`estimate.sh`, `verify.sh`). Use
+> `readonly = 2` for a read-only assessor (it permits `SET` but no writes), and a non-readonly profile for the migration
+> user. This is worth checking before the window: an ops account that can happily run ad-hoc `SELECT`s may still fail
+> every driver on the first query.
+
+### Required privileges (provision these before the window)
+
+The cutover should run as a **dedicated least-privilege user**, not as the app/admin account and not as a
+read-only account. Two of these grants are **not guessable** — they were each found only by executing the
+step against a real cluster, because a local rehearsal running as admin exercises no grant at all and the
+read-only drivers cannot surface a mutation-privilege gap by construction.
+
+| Step | Statement | Privileges ClickHouse actually checks |
+|------|-----------|--------------------------------------|
+| all drivers | any query | able to set `log_comment` → **not** a `readonly = 1` profile (`readonly = 2` for a read-only assessor) |
+| `estimate.sh`, guards, settle gate | `SELECT` on `system.*`, `clusterAllReplicas(...)` | `SELECT ON system.*`, plus `REMOTE` and `CLUSTER` |
+| backfill / delta | `INSERT INTO <shadow> SELECT … FROM <source>` | `SELECT` on source, `INSERT` on shadow |
+| deletion replay | lightweight `DELETE FROM <shadow>` | **`ALTER UPDATE(_row_exists)`** on the shadow — *not* `ALTER DELETE`. A lightweight delete is implemented as `ALTER UPDATE _row_exists = 0`. Grant it **column-scoped** so the user can flip the delete mask without being able to rewrite any real column. |
+| `EXCHANGE` | `EXCHANGE TABLES <source> AND <shadow> ON CLUSTER` | **`INSERT` + `CREATE TABLE` + `DROP TABLE` on BOTH names** — `INSERT` is required even though the swap is metadata-only and moves no rows. |
+| post-swap `RENAME` | `RENAME TABLE <shadow> TO <backup>` | `CREATE TABLE` + `DROP TABLE` (grant `INSERT` on the backup name too, so the rename cannot trip the same check) |
+| **wrap** (sharding) | `CREATE TABLE traces_dist … ENGINE = Distributed(…)`, then `RENAME traces → traces_local, traces_dist → traces` | `CREATE TABLE` + `DROP TABLE` on **`traces_dist`** and **`traces_local`** — two names that **do not exist yet**, so a grant set scoped to the cutover's three names will NOT cover the wrap. Plus `SELECT` on `traces_local` (post-wrap reads route through the wrapper to it) and `REMOTE` for the `Distributed` engine. |
+| rollback stage A/B (if in scope) | stage A `TRUNCATE`, reverse replay | `TRUNCATE` on the shadow, and `ALTER UPDATE(_row_exists)` on the **source** (the reverse replay masks rows on the restored original). Withhold unless a rollback is actually planned. |
+| rollback stage C (if the wrap is applied) | 3-way `RENAME` + `DROP` of the ex-wrapper | `CREATE TABLE`/`DROP TABLE` on **`traces_dist_old`** and **`traces_post_rollback_backup`**, `DROP TABLE` on `traces_local`, plus `ALTER UPDATE(_row_exists)` on the restored `traces`. **Decide this before applying the wrap:** without these grants the wrap is a one-way door until another grant change lands. |
+| post-rollback sentinel repair (stage B/C only) | `ALTER TABLE traces UPDATE end_time = NULL …`, same for `ttft` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`traces`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a cutover user scoped to the rollback set gets `ACCESS_DENIED` on the repair that `rollback.sh` prints when it finishes (verified on dev and staging). Either grant these two columns with the rollback grants, or plan to run the repair as a more privileged user. |
+| `finalize.sh` (if in scope) | `TRUNCATE` / `DROP TABLE` | `TRUNCATE`, `DROP TABLE`, and `max_table_size_to_drop` override |
+
+**The boundary worth preserving.** For a *forward-only* cutover the user needs `INSERT` on the live source
+(forced by `EXCHANGE`) but needs **no `ALTER DELETE`/`ALTER UPDATE` on it and no `TRUNCATE` anywhere** — so
+it cannot delete or modify existing live rows, nor empty a table. The worst it can do to live data is add
+rows. Keep it that way: grant rollback/finalize privileges only when those steps are in scope, as a separate
+reviewed change.
 
 **`clickhouse-client` is an operator prerequisite on the machine that runs these scripts.** Every driver invokes it and
 reads the env above. It is a **client tool on the operator's host**, separate from ClickHouse itself, which the scripts
@@ -555,13 +653,50 @@ statements, so a failure *between* them needs a restart path:
   post-swap `RENAME` did not, the parked original is still under `traces_local_v2` and stage B aborts pointing at the
   one-line `RENAME` that finishes it (`traces_local_v2` → `traces_pre_cutover_backup`); run that, then re-run stage B.
 
-After a stage B or C rollback, `traces` is the Nullable original again — **revert `traceColumnsNonNullable` to `false`
-AND roll-restart every backend instance**. The flag is read from a **startup snapshot** of `OpikConfiguration` (bound via
-`toInstance`), so a config change does **not** take effect until each instance restarts — exactly like the forward
-rollout before the EXCHANGE. Until the restart completes, the app keeps binding sentinels (epoch/NaN) and using
-sentinel-based absent-value logic against the now-Nullable column, mixing sentinel and `null` representations: not a hard
-write failure, but inconsistent absent-value reads/filters/sorts. The rollback is therefore not fully complete until the
-rolling restart lands on the whole fleet.
+**Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
+again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
+complete until they land.
+
+1. **Revert `traceColumnsNonNullable` to `false` AND roll-restart every backend instance.** The flag is read from a
+   **startup snapshot** of `OpikConfiguration` (bound via `toInstance`), so a config change does **not** take effect until
+   each instance restarts — exactly like the forward rollout before the EXCHANGE. Until the restart completes, the app
+   keeps binding sentinels (epoch/NaN) and using sentinel-based absent-value logic against the now-Nullable column,
+   mixing sentinel and `null` representations: not a hard write failure, but inconsistent absent-value
+   reads/filters/sorts.
+2. **Repair the sentinels written into the original during the pre-swap window** (see the caveats under "The
+   `traceColumnsNonNullable` flip"). Those rows carry `end_time = epoch` / `ttft = NaN` where the original's convention is
+   `NULL`, and — because the original's `duration` expression guards only `end_time IS NOT NULL` — a large **negative**
+   `duration`. The promote made them live again, and the successor's healed copy is discarded by `finalize.sh`, so repair
+   them here. Do this **after** step 1, or in-flight writes keep minting more:
+   ```sql
+   -- how many need repair. Scope the count to the SENTINEL, not to `duration < 0`: a table can hold rows whose
+   -- end_time legitimately precedes start_time, and those are negative for reasons this repair does not address.
+   SELECT countIf(end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS sentinel_end_time,
+          countIf(isNaN(ttft))                                       AS sentinel_ttft,
+          countIf(duration < 0)                                      AS negative_duration_total,
+          countIf(duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS negative_from_sentinel
+   FROM <database>.traces;
+   -- restore the original's NULL convention; the mutation rewrites the parts and recomputes `duration`
+   ALTER TABLE <database>.traces ON CLUSTER '{cluster}'
+       UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9) SETTINGS mutations_sync = 2;
+   ALTER TABLE <database>.traces ON CLUSTER '{cluster}'
+       UPDATE ttft = NULL WHERE isNaN(ttft) SETTINGS mutations_sync = 2;
+   ```
+   A bare `MATERIALIZE COLUMN duration` does **not** fix it — it re-evaluates the same expression against the same
+   sentinel and reproduces the negative value.
+
+   **Success is `sentinel_end_time` and `sentinel_ttft` reaching `0` — NOT `negative_duration_total`.** Only
+   `negative_from_sentinel` is this repair's business. Rows whose `end_time` genuinely precedes `start_time` are a
+   pre-existing data-quality artifact of the source, faithfully carried by the migration, and they stay negative
+   afterwards. Measured while validating this runbook: the staging original held **8,378** negative durations of which
+   only **6** came from the sentinel, and dev held **3** of which **1** did. Waiting for a total of `0` would look like
+   a failed repair forever.
+
+   > **The repair needs privileges the migration user does not have.** It updates `end_time` and `ttft`, whereas the
+   > cutover user is granted only `ALTER UPDATE(_row_exists)` (all the reverse replay needs — see the privileges table).
+   > Run these two statements as a user holding `ALTER UPDATE(end_time)` / `ALTER UPDATE(ttft)` on `traces`, or add
+   > those column grants alongside the rollback grants. Verified on dev and staging: as granted, the cutover user
+   > gets `ACCESS_DENIED` here — so this cannot be pasted into the same session that just ran `rollback.sh`.
 
 **Point of no return.** The `EXCHANGE` is reversible for as long as the parked backup exists (stage B/C). Retiring that
 backup with `finalize.sh` is the one irreversible step, so gate it on an explicit soak:
@@ -657,6 +792,21 @@ CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/verify.sh --database o
 # After the EXCHANGE: `traces` is the successor and the old data is parked as traces_pre_cutover_backup:
 ./scripts/verify.sh --database opik --old-table traces_pre_cutover_backup --new-table traces
 ```
+
+**Verifying after a rollback.** After a stage B/C rollback the defaults do not apply — `traces_local_v2` no longer
+exists (the successor is parked as `traces_post_rollback_backup`), so a bare `verify.sh --database opik` dies with
+`Code: 60 … Unknown table … traces_local_v2`. The old-schema side is now the restored original and the new-schema side the
+parked successor:
+
+```bash
+./scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week N
+```
+
+Expect the **sealed historical weeks to match** and the **current week to mismatch**, by exactly the post-cutover writes
+the rollback discarded (the parked successor holds them; the restored original never did) — so bound the run with
+`--to-week N` at the last sealed week, exactly as for the post-EXCHANGE compare. A mismatch in a *sealed* week would be
+the real signal. Note the divergence is the **opposite** direction from the post-EXCHANGE case: here the *new-table* side
+is the superset.
 
 > **The pre-EXCHANGE compare is the gate; the post-EXCHANGE compare has a caveat.** `traces_pre_cutover_backup` is a
 > **frozen** snapshot as of `cutover_start`, but live `traces` keeps taking writes the instant the buffer drains — so
@@ -757,8 +907,11 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 - [ ] **Replication settled before the EXCHANGE** — `replication_queue` empty and the deletion-replay mutation
       `is_done` on **all** replicas (`exchange_and_wrap.sh` gates on this; do not `--force` past it in production).
 - [ ] **`traceColumnsNonNullable = true` rolled out to every backend instance before the EXCHANGE** — confirmed live on
-      the whole fleet (else in-progress-trace writes are rejected the instant the non-nullable schema goes live); revert
-      plan to `false` ready for rollback.
+      the whole fleet by a **positive** check, not by the absence of ingestion errors: write an in-progress trace (no
+      `end_time`) through the API and assert it reads back `end_time = null`. A stale-`false` instance still writes
+      correctly (`input_format_null_as_default` converts the `null` bind to the sentinel) and logs nothing — it just
+      serves wrong absent-value reads/filters/sorts. Revert plan to `false` ready for rollback, **plus** the pre-swap
+      sentinel/`duration` repair (see "Rolling back the `traceColumnsNonNullable` flip").
 - [ ] **Schema-parity guards green** — `cutoverCopiesEveryBaseColumn` and `successorMaterializedColumnsMatchSource` pass
       on the release, so the cutover copies every base column of `traces` and the two tables' base and materialized
       columns match.

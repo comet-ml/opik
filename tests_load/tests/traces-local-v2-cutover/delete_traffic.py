@@ -7,6 +7,13 @@ deletion-events bridge and must be replayed onto the destination — otherwise i
 It pulls a pool of existing trace ids via search and deletes them at the target rate, refilling as it drains. Run it
 during or after the backfill so the traces it deletes have already been copied — that is the leak the bridge prevents.
 
+`--resurrect-ratio` additionally re-creates a share of the just-deleted ids through the normal ingestion API, which is
+the only way to exercise the forward replay's RESURRECTION GUARD: such an id is bridged as deleted (event_time >=
+backfill_start) yet is live again on the source, so the replay must NOT mask it on the destination — a naive
+replay-by-key would drop a live row, silent data loss. Do not rely on the write/delete overlap to produce this by
+chance: `live_traffic.py` only ever updates ids from its own recent-creates buffer, so a rehearsal can easily see ZERO
+resurrections and leave the guard unexercised. Set it explicitly (e.g. `--resurrect-ratio 0.05`) when rehearsing.
+
 This is a best-effort TRAFFIC GENERATOR (deletes newest-first for the run's --duration), NOT a guaranteed full-drain:
 search returns the newest page, so during delete-mask visibility lag a refill can transiently return only ids already
 in `seen`/`pool`; the loop tolerates a few such empty refills (EMPTY_REFILL_LIMIT) before concluding the project is
@@ -15,6 +22,7 @@ drained. It does not assert every trace was deleted — its job is to exercise t
 Prerequisites: `OPIK_URL_OVERRIDE` pointing at the local install. Run `python delete_traffic.py --help` for options.
 """
 
+import random
 import signal
 import time
 
@@ -31,6 +39,12 @@ EMPTY_REFILL_LIMIT = 5
 # Newest-page size to pull per refill. Larger reaches past the just-deleted (still-visible) top ids to undeleted ones
 # during mask lag, so the run keeps finding work instead of stopping early.
 REFILL_FETCH = 2000
+# Seconds to wait after a delete before re-creating that id under --resurrect-ratio. A lightweight DELETE is an ASYNC
+# mutation: its mask applies to every row matching the predicate in the parts it sweeps, so an id re-created before the
+# mutation lands gets masked along with the original and never becomes live — the resurrection silently does not happen.
+# Measured locally: re-creating immediately left only ~40% of attempts actually live. Deferring past the mutation makes
+# the resurrection real, and costs nothing since the ids are queued rather than slept on (the delete rate is unaffected).
+RESURRECT_SETTLE_SECONDS = 3.0
 
 
 def _handle_sigint(_signum, _frame):
@@ -53,18 +67,38 @@ def _fetch_ids(client, project, want, exclude):
 @click.option("--tps", default=2.0, help="Target deletes per second.")
 @click.option("--duration", default=120, help="How long to run, in seconds (0 = until Ctrl-C).")
 @click.option("--batch", default=1, help="Trace ids per delete call.")
-def main(project, tps, duration, batch):
+@click.option("--resurrect-ratio", default=0.0,
+              help="Fraction of deleted ids to re-create under the SAME id via the ingestion API, exercising the "
+                   "replay's resurrection guard. 0 disables. Try 0.05 when rehearsing the cutover.")
+def main(project, tps, duration, batch, resurrect_ratio):
     signal.signal(signal.SIGINT, _handle_sigint)
     client = make_opik_client()
     interval = batch / tps if tps > 0 else 0.0
 
     seen: set[str] = set()
     pool: list[str] = []
+    # (ready_at, trace_id) queued for re-creation once the delete mutation has had RESURRECT_SETTLE_SECONDS to land.
+    pending_resurrect: list[tuple[float, str]] = []
     deleted = 0
+    resurrected = 0
     empty_refills = 0
     started = time.time()
-    LOGGER.info("delete traffic: project='%s' tps=%.2f batch=%d duration=%ss (Ctrl-C to stop)",
-                project, tps, batch, duration or "∞")
+
+    def flush_resurrections(force=False):
+        """Re-create every queued id whose delete has settled (all of them when force)."""
+        nonlocal resurrected
+        due = [tid for ready_at, tid in pending_resurrect if force or time.time() >= ready_at]
+        if not due:
+            return
+        pending_resurrect[:] = [(r, t) for r, t in pending_resurrect if t not in set(due)]
+        for trace_id in due:
+            # Same id, through the normal ingestion path: bridged as deleted, yet live again on the source.
+            client.trace(id=trace_id, name="resurrected-trace", project_name=project,
+                         input={"resurrected": True}, output={"resurrected": True}).end()
+            resurrected += 1
+
+    LOGGER.info("delete traffic: project='%s' tps=%.2f batch=%d duration=%ss resurrect-ratio=%.3f (Ctrl-C to stop)",
+                project, tps, batch, duration or "∞", resurrect_ratio)
 
     while not _stop and (duration == 0 or time.time() - started < duration):
         tick = time.time()
@@ -91,15 +125,34 @@ def main(project, tps, duration, batch):
         seen.update(ids)
         client.rest_client.traces.delete_traces(ids=ids)
         deleted += len(ids)
+        # Queue a share of the just-deleted ids for re-creation under the SAME id, once their delete mutation has
+        # settled. Such an id is bridged as deleted but live again on the source — the case the replay's resurrection
+        # guard must survive. They stay in `seen`, so a later refill never queues them for deletion again.
+        if resurrect_ratio > 0:
+            for trace_id in ids:
+                if random.random() < resurrect_ratio:
+                    pending_resurrect.append((time.time() + RESURRECT_SETTLE_SECONDS, trace_id))
+        flush_resurrections()
         if deleted % 50 == 0:
-            LOGGER.info("deleted %d traces", deleted)
+            LOGGER.info("deleted %d traces (resurrected %d)", deleted, resurrected)
         sleep = interval - (time.time() - tick)
         if sleep > 0:
             time.sleep(sleep)
 
+    # Drain the queue: wait out the settle window for the last deletes, then re-create the remainder.
+    if pending_resurrect:
+        time.sleep(RESURRECT_SETTLE_SECONDS)
+        flush_resurrections(force=True)
+    client.flush()  # the resurrections go through the batching ingest path, so flush before reporting
     elapsed = time.time() - started
-    LOGGER.info("done: deleted=%d in %.1fs (%.2f deletes/s effective)",
-                deleted, elapsed, deleted / elapsed if elapsed else 0)
+    LOGGER.info("done: deleted=%d resurrected=%d in %.1fs (%.2f deletes/s effective)",
+                deleted, resurrected, elapsed, deleted / elapsed if elapsed else 0)
+    if resurrect_ratio > 0 and resurrected == 0:
+        LOGGER.warning("resurrect-ratio was set but nothing was resurrected — the replay's resurrection guard is "
+                       "UNEXERCISED by this run. Raise --resurrect-ratio or --duration.")
+    elif resurrected:
+        LOGGER.info("Confirm the resurrections are live on the SOURCE before the replay runs — an id bridged as deleted "
+                    "yet live again is exactly what the guard must not mask on the destination.")
 
 
 if __name__ == "__main__":

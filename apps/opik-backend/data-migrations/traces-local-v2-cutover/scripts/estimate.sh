@@ -12,10 +12,22 @@
 # in by --write-cost-factor. For an exact figure, time one real window with backfill.sh and pass its rows/sec via
 # --rows-per-sec.
 #
-# Connection: clickhouse-client env vars (CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD).
+# Connection: CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment, plus --host and --port. CLICKHOUSE_PORT is
+# NOT honored by clickhouse-client, and CLICKHOUSE_HOST is honored only when no connection flag is given, so pass
+# --host and --port together. The user must be able to set `log_comment` (used for cutover attribution in
+# query_log): a `readonly = 1` profile rejects it outright ("Cannot modify 'log_comment' setting in readonly mode"),
+# so a read-only assessor needs `readonly = 2` and the migration user needs a non-readonly profile.
 #
 # Options:
 #   --database NAME            analytics database (e.g. opik). Required.
+#   --port N                  ClickHouse NATIVE port, when it is not the default 9000 — e.g. reaching a cluster through
+#                             a port-forward or bastion on a local port. Required because clickhouse-client honors
+#                             CLICKHOUSE_HOST / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment but does
+#                             NOT honor CLICKHOUSE_PORT, so the port cannot be passed via env.
+#   --host HOST               ClickHouse host. Pass it together with --port: clickhouse-client honors CLICKHOUSE_HOST
+#                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
+#                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
+#                             the password out of argv).
 #   --max-rows-per-insert R    the value you will pass to backfill.sh; sets how many windows the copy splits into.
 #                              Default 2000000 (matches backfill.sh).
 #   --pause-seconds S          backfill.sh --pause-seconds; added once per window as merge-catch-up idle time. Default 0.
@@ -30,6 +42,8 @@
 set -euo pipefail
 
 DATABASE=""
+CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
+CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 MAX_ROWS=2000000
 PAUSE_SECONDS=0
 PROBE_ROWS=200000
@@ -44,6 +58,8 @@ while [[ $# -gt 0 ]]; do
         --probe-rows) PROBE_ROWS="${2:?"$1 requires a value"}"; shift 2 ;;
         --write-cost-factor) WRITE_COST_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
         --rows-per-sec) ROWS_PER_SEC="${2:?"$1 requires a value"}"; shift 2 ;;
+        --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
+        --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -51,6 +67,8 @@ done
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
 # --database is interpolated into the probe/size SQL; require a plain ClickHouse identifier so it cannot alter the query.
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
+[[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
+[[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 # Numeric args flow into the probe/estimate SQL and awk; require sane numeric shapes so none can alter the query.
 [[ "$MAX_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-rows-per-insert must be a positive integer." >&2; exit 2; }
 [[ "$PROBE_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --probe-rows must be a positive integer." >&2; exit 2; }
@@ -59,7 +77,7 @@ done
 [[ -z "$ROWS_PER_SEC" || "$ROWS_PER_SEC" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --rows-per-sec must be a number." >&2; exit 2; }
 
 ch() {
-    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:estimate' --query "$1"
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:estimate' --query "$1"
 }
 
 # Physical rows to copy (count() honors the deleted-row mask, so masked rows are excluded — as the backfill excludes
@@ -108,7 +126,7 @@ FACTOR_NOTE=""
 if [[ -z "$ROWS_PER_SEC" ]]; then
     PROBE_ACTUAL="$(awk -v a="$PROBE_ROWS" -v b="$TOTAL_ROWS" 'BEGIN { print (a < b) ? a : b }')"
     echo "Probing read throughput with a $PROBE_ACTUAL-row SELECT ... FORMAT Null (no table created)..."
-    ELAPSED="$(clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:estimate' --time --query \
+    ELAPSED="$(clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:estimate' --time --query \
         "SELECT * FROM traces LIMIT $PROBE_ROWS FORMAT Null" 2>&1 1>/dev/null)"
     READ_RPS="$(awk -v r="$PROBE_ACTUAL" -v t="$ELAPSED" 'BEGIN { print (t > 0) ? r / t : 0 }')"
     [[ "$(awk -v v="$READ_RPS" 'BEGIN { print (v > 0) ? 1 : 0 }')" == "1" ]] || {
@@ -117,7 +135,10 @@ if [[ -z "$ROWS_PER_SEC" ]]; then
     }
     ROWS_PER_SEC="$(awk -v r="$READ_RPS" -v f="$WRITE_COST_FACTOR" 'BEGIN { print r / f }')"
     echo "Read throughput: ~$(printf '%.0f' "$READ_RPS") rows/sec ($PROBE_ACTUAL rows in ${ELAPSED}s)."
-    FACTOR_NOTE="  (read ${READ_RPS%.*}/s derated by write-cost-factor ${WRITE_COST_FACTOR})"
+    # Format with printf, not "${READ_RPS%.*}": awk's default OFMT is %.6g, so a fast probe yields
+    # "1.34228e+06" and the parameter expansion strips it to "1" — the note then reads "read 1/s",
+    # which looks like a collapsed cluster rather than 1.3M rows/sec.
+    FACTOR_NOTE="  (read $(printf '%.0f' "$READ_RPS")/s derated by write-cost-factor ${WRITE_COST_FACTOR})"
 fi
 
 # ETA = copy time + total throttle idle. Throttle idle is one --pause-seconds per window (a fresh run inserts every

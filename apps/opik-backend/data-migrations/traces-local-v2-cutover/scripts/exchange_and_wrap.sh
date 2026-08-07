@@ -16,10 +16,22 @@
 # so a re-run cannot silently swap the tables back, and a partial EXCHANGE (swap done, post-swap RENAME not) is detected
 # with the command to finish it.
 #
-# Connection: clickhouse-client env vars (CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD).
+# Connection: CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment, plus --host and --port. CLICKHOUSE_PORT is
+# NOT honored by clickhouse-client, and CLICKHOUSE_HOST is honored only when no connection flag is given, so pass
+# --host and --port together. The user must be able to set `log_comment` (used for cutover attribution in
+# query_log): a `readonly = 1` profile rejects it outright ("Cannot modify 'log_comment' setting in readonly mode"),
+# so a read-only assessor needs `readonly = 2` and the migration user needs a non-readonly profile.
 #
 # Options:
 #   --database NAME   analytics database (e.g. opik). Required.
+#   --port N                  ClickHouse NATIVE port, when it is not the default 9000 — e.g. reaching a cluster through
+#                             a port-forward or bastion on a local port. Required because clickhouse-client honors
+#                             CLICKHOUSE_HOST / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment but does
+#                             NOT honor CLICKHOUSE_PORT, so the port cannot be passed via env.
+#   --host HOST               ClickHouse host. Pass it together with --port: clickhouse-client honors CLICKHOUSE_HOST
+#                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
+#                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
+#                             the password out of argv).
 #   --backfill-start TS  the anchor printed by backfill.sh. REQUIRED for every EXCHANGE path (not --wrap-only): just
 #                     before the swap this runs a final deletion replay from that anchor, so deletes bridged since the
 #                     last delta_replay.sh don't leak live across the EXCHANGE (they'd be covered by neither the forward
@@ -63,6 +75,8 @@ SQL_FILE="$SCRIPT_DIR/db-app-analytics/000003_exchange_and_wrap.sql"
 DELTA_SQL_FILE="$SCRIPT_DIR/db-app-analytics/000002_delta_and_deletion_replay.sql"
 
 DATABASE=""
+CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
+CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 BACKFILL_START=""
 SKIP_WRAP=0
 WITH_WRAP=0
@@ -85,6 +99,8 @@ while [[ $# -gt 0 ]]; do
         --confirm-daos-retargeted) CONFIRM_DAOS_RETARGETED=1; shift ;;
         --confirm-buffer-raised) CONFIRM_BUFFER_RAISED=1; shift ;;
         --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
+        --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
+        --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -92,6 +108,8 @@ done
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
 # --database is interpolated into the reference SQL; require a plain ClickHouse identifier so it cannot alter the query.
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
+[[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
+[[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 [[ -f "$DELTA_SQL_FILE" ]] || { echo "ERROR: cannot find $DELTA_SQL_FILE" >&2; exit 2; }
 # --backfill-start (the anchor printed by backfill.sh) is interpolated into the final deletion replay; validate its shape.
@@ -147,7 +165,7 @@ if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
 fi
 
 ch() {
-    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "$1"
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "$1"
 }
 
 # Single scalar (empty string if the object does not exist).
@@ -178,7 +196,7 @@ assert_pre_exchange_topology() {
         if [[ -n "$(traces_engine traces_local_v2)" ]]; then
             echo "ERROR: the EXCHANGE already ran (traces holds the successor schema) but 'traces_local_v2' still exists —" >&2
             echo "       the post-swap RENAME did not complete. Finish it, then continue (e.g. --wrap-only or rollback.sh):" >&2
-            echo "         clickhouse-client --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
+            echo "         clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
         else
             echo "ERROR: the EXCHANGE already ran (traces is the successor; old data parked as traces_pre_cutover_backup)." >&2
             echo "       Do NOT re-run it — a second EXCHANGE would swap the tables back. Apply the deferred wrap with --wrap-only, or roll back with rollback.sh --stage B." >&2
@@ -208,7 +226,7 @@ assert_pre_wrap_topology() {
     if [[ -n "$(traces_engine traces_local_v2)" ]]; then
         echo "ERROR: --wrap-only: 'traces_local_v2' still exists — the post-EXCHANGE RENAME did not complete, so wrapping" >&2
         echo "       now would orphan the old data under the wrong name. Finish the rename first, then re-run --wrap-only:" >&2
-        echo "         clickhouse-client --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
+        echo "         clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
         exit 1
     fi
     if [[ -z "$(traces_engine traces_pre_cutover_backup)" ]]; then
@@ -267,7 +285,11 @@ run_block() {
     local sql
     sql="$(extract "$1")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
-    clickhouse-client --database "$DATABASE" --multiquery --query "$sql"
+    # Each ON CLUSTER DDL in the block emits one row per host (host, port, status, error, hosts_remaining,
+    # hosts_active); status 0 with an empty error means that host applied it. Labelled so the rows are not mistaken for
+    # output of the preceding step (e.g. the final deletion replay).
+    echo "  $1: ON CLUSTER responses per host (host, port, status, error, hosts_remaining, hosts_active):"
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 
 # Final deletion replay before the EXCHANGE. delta_replay.sh (step 2) replayed deletes only up to when it ran; cutover_start
@@ -281,7 +303,9 @@ run_final_deletion_replay() {
     sql="$(awk -v begin="-- >>> BEGIN deletion-replay" -v end="-- >>> END deletion-replay" '$0 == begin {f = 1; next} $0 == end {f = 0} f' "$DELTA_SQL_FILE")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
-    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap:final_deletion_replay' --multiquery --query "$sql"
+    # --time prints the statement's elapsed seconds to stderr (a bare --query prints nothing). This replay sits inside
+    # the final-delta -> EXCHANGE gap the buffer hold has to cover, so its wall time is the number to record.
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap:final_deletion_replay' --time --multiquery --query "$sql"
 }
 
 if [[ "$WRAP_ONLY" == "1" ]]; then
@@ -300,7 +324,7 @@ if [[ "$WRAP_ONLY" == "1" ]]; then
     exit 0
 fi
 
-CUTOVER_START="$(clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6))")"
+CUTOVER_START="$(clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:exchange_and_wrap' --query "SELECT toString(now64(6))")"
 echo "RECORD cutover_start=$CUTOVER_START  (pass to rollback.sh --cutover-start if you roll back after this point)"
 
 echo "Final deletion replay: masking deletes bridged since the last delta_replay so none leak across the swap..."

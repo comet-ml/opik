@@ -186,3 +186,165 @@ WHERE src_hash != dst_hash
 LIMIT 100
 SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- >>> END drill-down
+
+-- >>> BEGIN confirm-keys
+-- For a window the compare reported ok=0: decide whether the difference is REAL, or an artifact of
+-- windowing on created_at under FINAL. Returns one number -- the count of keys that GENUINELY differ.
+--
+-- Why the artifact exists. FINAL collapses ReplacingMergeTree versions only among the parts a query
+-- actually reads, and `created_at` is not in the sorting key, so a created_at predicate can select the
+-- part holding a SUPERSEDED version while excluding the part holding the winner. With no winner in the
+-- read set there is nothing to collapse against, so the stale row is returned as though it were live.
+-- Whether that happens differs between the unpartitioned source and the id_at-partitioned successor
+-- (different part layouts), so one side can surface a superseded row the other does not -- and the window
+-- "mismatches" even though both tables hold byte-identical live data. Observed on staging: one id written
+-- twice, five weeks apart, put its superseded version in an earlier week on the successor only.
+--
+-- Why this re-check is trustworthy. It filters ONLY on (workspace_id, project_id, id) -- the sorting key,
+-- which IS the dedup key. That predicate cannot hide a version from FINAL: every part contributes the
+-- granules holding the key, so FINAL always sees all versions of it and returns the true winner. The
+-- window bounds are used only to pick the candidate keys, never to decide the verdict.
+--
+-- 0  = every differing key has identical live rows on both sides -> superseded-version artifact, not a
+--      data difference (the live row is still compared, and must match, in the week its winner lands in).
+-- >0 = that many keys genuinely differ -> real fidelity failure.
+WITH
+    diff_keys AS (
+        SELECT key
+        FROM (
+            SELECT
+                (workspace_id, project_id, id) AS key,
+                cityHash64(
+            id,
+            workspace_id,
+            toString(project_id),
+            name,
+            toUnixTimestamp64Micro(toDateTime64(start_time, 6)),
+            coalesce(toUnixTimestamp64Micro(toDateTime64(end_time, 6)), toInt64(0)),
+            input,
+            output,
+            metadata,
+            arrayStringConcat(tags, '\x1f'),
+            toUnixTimestamp64Micro(toDateTime64(created_at, 6)),
+            toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)),
+            created_by,
+            last_updated_by,
+            error_info,
+            thread_id,
+            toString(visibility_mode),
+            truncation_threshold,
+            input_slim,
+            output_slim,
+            if(ttft IS NULL, 'nan', toString(ttft)),
+            toString(source),
+            toString(environment)) AS src_hash
+            FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
+            WHERE created_at >= toDateTime64('${WINDOW_LO}', 9)
+              AND created_at <  toDateTime64('${WINDOW_HI}', 9)
+              AND cityHash64(id) % ${SAMPLE_MOD} = 0
+        ) AS s
+        FULL OUTER JOIN (
+            SELECT
+                (workspace_id, project_id, id) AS key,
+                cityHash64(
+            id,
+            workspace_id,
+            toString(project_id),
+            name,
+            toUnixTimestamp64Micro(start_time),
+            toUnixTimestamp64Micro(end_time),
+            input,
+            output,
+            metadata,
+            arrayStringConcat(tags, '\x1f'),
+            toUnixTimestamp64Micro(created_at),
+            toUnixTimestamp64Micro(last_updated_at),
+            created_by,
+            last_updated_by,
+            error_info,
+            thread_id,
+            toString(visibility_mode),
+            truncation_threshold,
+            input_slim,
+            output_slim,
+            if(isNaN(ttft), 'nan', toString(ttft)),
+            toString(source),
+            toString(environment)) AS dst_hash
+            FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
+            WHERE created_at >= toDateTime64('${WINDOW_LO}', 6)
+              AND created_at <  toDateTime64('${WINDOW_HI}', 6)
+              AND cityHash64(id) % ${SAMPLE_MOD} = 0
+        ) AS d USING (key)
+        WHERE src_hash != dst_hash OR src_hash IS NULL OR dst_hash IS NULL
+    ),
+    -- Deliberately NOT limited: a verdict drawn from a truncated key set could call a window an artifact
+    -- while an unexamined key held a real difference. A genuinely broken window makes this heavy, which is
+    -- the right trade -- that is the case you want to stop on anyway.
+    src_live AS (
+        SELECT
+            (workspace_id, project_id, id) AS key,
+            cityHash64(
+            id,
+            workspace_id,
+            toString(project_id),
+            name,
+            toUnixTimestamp64Micro(toDateTime64(start_time, 6)),
+            coalesce(toUnixTimestamp64Micro(toDateTime64(end_time, 6)), toInt64(0)),
+            input,
+            output,
+            metadata,
+            arrayStringConcat(tags, '\x1f'),
+            toUnixTimestamp64Micro(toDateTime64(created_at, 6)),
+            toUnixTimestamp64Micro(toDateTime64(last_updated_at, 6)),
+            created_by,
+            last_updated_by,
+            error_info,
+            thread_id,
+            toString(visibility_mode),
+            truncation_threshold,
+            input_slim,
+            output_slim,
+            if(ttft IS NULL, 'nan', toString(ttft)),
+            toString(source),
+            toString(environment)) AS src_hash
+        FROM ${ANALYTICS_DB_DATABASE_NAME}.${OLD_TABLE} FINAL
+        WHERE (workspace_id, project_id, id) IN (SELECT key FROM diff_keys)
+    ),
+    dst_live AS (
+        SELECT
+            (workspace_id, project_id, id) AS key,
+            cityHash64(
+            id,
+            workspace_id,
+            toString(project_id),
+            name,
+            toUnixTimestamp64Micro(start_time),
+            toUnixTimestamp64Micro(end_time),
+            input,
+            output,
+            metadata,
+            arrayStringConcat(tags, '\x1f'),
+            toUnixTimestamp64Micro(created_at),
+            toUnixTimestamp64Micro(last_updated_at),
+            created_by,
+            last_updated_by,
+            error_info,
+            thread_id,
+            toString(visibility_mode),
+            truncation_threshold,
+            input_slim,
+            output_slim,
+            if(isNaN(ttft), 'nan', toString(ttft)),
+            toString(source),
+            toString(environment)) AS dst_hash
+        FROM ${ANALYTICS_DB_DATABASE_NAME}.${NEW_TABLE} FINAL
+        WHERE (workspace_id, project_id, id) IN (SELECT key FROM diff_keys)
+    )
+SELECT count() AS unresolved
+FROM src_live AS s
+FULL OUTER JOIN dst_live AS d USING (key)
+WHERE src_hash != dst_hash
+   OR src_hash IS NULL
+   OR dst_hash IS NULL
+SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
+-- >>> END confirm-keys

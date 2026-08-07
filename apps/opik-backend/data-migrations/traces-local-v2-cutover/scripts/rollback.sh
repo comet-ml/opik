@@ -30,7 +30,22 @@
 # backup that finalize.sh later recycles into an empty traces_local_v2); stage A discards the empty traces_local_v2
 # shadow and leaves traces untouched.
 #
-# Connection: clickhouse-client env vars (CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD).
+# Connection: CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment, plus --host and --port. CLICKHOUSE_PORT is
+# NOT honored by clickhouse-client, and CLICKHOUSE_HOST is honored only when no connection flag is given, so pass
+# --host and --port together. The user must be able to set `log_comment` (used for cutover attribution in
+# query_log): a `readonly = 1` profile rejects it outright ("Cannot modify 'log_comment' setting in readonly mode"),
+# so a read-only assessor needs `readonly = 2` and the migration user needs a non-readonly profile.
+#
+# Options:
+#   --database NAME           analytics database (e.g. opik). Required.
+#   --port N                  ClickHouse NATIVE port, when it is not the default 9000 — e.g. reaching a cluster through
+#                             a port-forward or bastion on a local port. Required because clickhouse-client honors
+#                             CLICKHOUSE_HOST / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment but does
+#                             NOT honor CLICKHOUSE_PORT, so the port cannot be passed via env.
+#   --host HOST               ClickHouse host. Pass it together with --port: clickhouse-client honors CLICKHOUSE_HOST
+#                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
+#                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
+#                             the password out of argv).
 
 set -euo pipefail
 
@@ -38,6 +53,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_DIR="$SCRIPT_DIR/db-app-analytics"
 
 DATABASE=""
+CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
+CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 STAGE=""
 CUTOVER_START=""
 CONFIRM_RETENTION_PAUSED=0
@@ -52,6 +69,8 @@ while [[ $# -gt 0 ]]; do
         --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
         --accept-post-cutover-write-loss) ACCEPT_WRITE_LOSS=1; shift ;;
         --reverse-replay-only) REVERSE_REPLAY_ONLY=1; shift ;;
+        --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
+        --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -59,6 +78,8 @@ done
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
 # --database and --cutover-start are interpolated into the reference SQL; validate their shapes so neither can alter it.
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
+[[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
+[[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 [[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 # Exactly one of --stage / --reverse-replay-only.
 if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
@@ -91,7 +112,7 @@ if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$ACCEPT_WRITE_LOSS" != "1" ]]; 
 fi
 
 ch() {
-    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_rollback' --query "$1"
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_rollback' --query "$1"
 }
 
 # Single scalar (or empty string if the object does not exist). Used by the topology guards below.
@@ -139,7 +160,7 @@ assert_topology() {
                     echo "ERROR: 'traces_pre_cutover_backup' not found but 'traces_local_v2' still exists — the forward" >&2
                     echo "       EXCHANGE's post-swap RENAME did not complete, so the parked original is still under" >&2
                     echo "       'traces_local_v2'. Finish that RENAME, then re-run stage B:" >&2
-                    echo "         clickhouse-client --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
+                    echo "         clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
                 else
                     echo "ERROR: 'traces_pre_cutover_backup' (parked original) not found; cannot swap back." >&2
                 fi
@@ -164,7 +185,7 @@ run_file() {
     sql="$(cat "$file")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
-    clickhouse-client --database "$DATABASE" --multiquery --query "$sql"
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 
 # Recovery mode: re-apply only the reverse-replay against the current live `traces`, for a stage B/C run whose promote
@@ -230,6 +251,29 @@ esac
 
 if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "Now in the canonical state: traces = original data (live), traces_post_rollback_backup = successor data (parked)."
-    echo "Verify (README 'Verifying the migration'), then run finalize.sh once healthy — it recycles the backup into an"
-    echo "empty traces_local_v2 (restoring the pre-cutover shadow), the one irreversible step."
+    echo "Verify with the POST-ROLLBACK table pair — the verify.sh defaults no longer apply (traces_local_v2 is gone), and"
+    echo "the CURRENT week legitimately mismatches by the post-cutover writes this rollback discarded, so bound it:"
+    echo "  ./verify.sh --database $DATABASE --old-table traces --new-table traces_post_rollback_backup --to-week <last sealed week>"
+    echo "Then run finalize.sh once healthy — it recycles the backup into an empty traces_local_v2 (restoring the"
+    echo "pre-cutover shadow), the one irreversible step."
+    echo
+    echo "NEXT, on the restored original (see README 'Rolling back the traceColumnsNonNullable flip'):"
+    echo "  1. Set databaseAnalyticsDataModel.traceColumnsNonNullable=false and roll-restart every backend instance."
+    echo "     Until that lands, absent end_time/ttft read back as the epoch/NaN sentinel instead of NULL."
+    echo "  2. Repair the epoch/NaN sentinels written into the still-Nullable original while the flag was true. The"
+    echo "     original stores an absent value as NULL, so those rows now read as 'ended at 1970' / 'ttft 0-ish', and"
+    echo "     its MATERIALIZED duration expression — which guards only 'end_time IS NOT NULL', not the sentinel —"
+    echo "     computed a large NEGATIVE duration that the promote made live again. Count, then restore NULL (a"
+    echo "     MATERIALIZE COLUMN alone would NOT fix it: it re-evaluates the same expression on the same sentinel):"
+    echo "       clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"SELECT countIf(end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS sentinel_end_time, countIf(isNaN(ttft)) AS sentinel_ttft, countIf(duration < 0) AS negative_duration_total, countIf(duration < 0 AND end_time = toDateTime64('1970-01-01 00:00:00', 9)) AS negative_from_sentinel FROM $DATABASE.traces\""
+    echo "       clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"ALTER TABLE $DATABASE.traces ON CLUSTER '{cluster}' UPDATE end_time = NULL WHERE end_time = toDateTime64('1970-01-01 00:00:00', 9) SETTINGS mutations_sync = 2\""
+    echo "       clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"ALTER TABLE $DATABASE.traces ON CLUSTER '{cluster}' UPDATE ttft = NULL WHERE isNaN(ttft) SETTINGS mutations_sync = 2\""
+    echo "     The mutation rewrites the affected parts and recomputes 'duration' from the restored NULL. Success is"
+    echo "     'sentinel_end_time' and 'sentinel_ttft' reaching 0 — NOT 'negative_duration_total': rows whose end_time"
+    echo "     genuinely precedes start_time are a pre-existing source artifact this repair does not address, and they"
+    echo "     stay negative (staging: 8378 negative, only 6 from the sentinel; dev: 3 and 1). Do step 1 FIRST, or"
+    echo "     in-flight writes keep minting more sentinels."
+    echo "     NOTE: these two statements need ALTER UPDATE(end_time) / ALTER UPDATE(ttft) on 'traces'. This script's own"
+    echo "     credentials very likely lack them — the cutover user is granted only ALTER UPDATE(_row_exists), which is"
+    echo "     all the reverse replay needs — so run the repair as a more privileged user or add those column grants."
 fi

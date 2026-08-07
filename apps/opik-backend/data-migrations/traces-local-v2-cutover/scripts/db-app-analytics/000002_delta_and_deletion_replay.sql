@@ -6,8 +6,9 @@
 -- this file, substitutes the placeholders and runs it — never run this file by hand:
 --   ../delta_replay.sh --database opik --backfill-start '2025-06-01 12:00:00.000000'
 -- The surrounding config operations (buffer raise/restore) and the go/no-go checkpoint stay with the operator, where
--- situational awareness matters most — those are config/judgement, not SQL. clickhouse-client prints each statement's
--- elapsed time, which is the replay measurement in step 5.
+-- situational awareness matters most — those are config/judgement, not SQL. The driver invokes clickhouse-client with
+-- --time, so it prints each statement's elapsed seconds to stderr (delta-insert first, deletion replay second); the
+-- second value is the replay measurement in step 5. A bare --query prints no timing, hence the flag.
 
 -- Step 1: BACKFILL_START is the timestamp captured BEFORE the backfill began. backfill.sh prints it at startup
 -- ("RECORD backfill_start=..."); if you ran the backfill manually, use the now64(6) you captured before the first
