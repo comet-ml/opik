@@ -438,8 +438,8 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("a synchronous BadRequestException still emits an error event and closes the stream")
-        void createAndStreamResponse__whenGenerateStreamThrowsBadRequest__thenErrorEmittedAndStreamClosed() {
+        @DisplayName("a synchronous BadRequestException is delivered in-stream rather than escaping as an HTTP status")
+        void createAndStreamResponse__whenGenerateStreamThrowsBadRequest__thenErrorDeliveredInStream() {
             // Given — a provider that rejects up-front throws before it can invoke the error callback
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
@@ -462,7 +462,7 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("a synchronous unsupported feature is streamed as a 400, not raised as an HTTP status")
+        @DisplayName("a synchronous unsupported feature is delivered in-stream as a code-400 ErrorMessage, leaving the HTTP response 200")
         void createAndStreamResponse__whenGenerateStreamThrowsUnsupportedFeature__thenErrorStreamed() {
             // Given — OpenAiResponses and friends run inline, so this escapes generateStream instead of reaching the
             // error callback the way VertexAI and Gemini do
