@@ -2,6 +2,8 @@ import inspect
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import pydantic
+
 import opik
 import opik.opik_context as opik_context
 
@@ -100,6 +102,22 @@ def _build_failed_score_result(
     )
 
 
+def _describe_evaluator_error(exception: Exception) -> str:
+    """Describe a failure to build an item evaluator without echoing its config.
+
+    ``evaluator_item.config`` comes from the dataset and can carry credentials.
+    Pydantic embeds the rejected input in the exception message and therefore in
+    the traceback too, so neither may reach the log; ``include_input=False``
+    keeps the field paths, which is the part worth having. Nothing is lost: the
+    full exception still reaches the caller, re-raised at the default tolerance
+    and on the failed score result above it.
+    """
+    if isinstance(exception, pydantic.ValidationError):
+        errors = exception.errors(include_url=False, include_input=False)
+        return f"{type(exception).__name__}: {errors}"
+    return type(exception).__name__
+
+
 def _extract_item_evaluators(
     item: dataset_item.DatasetItem,
     evaluator_model: Optional[str],
@@ -146,10 +164,10 @@ def _extract_item_evaluators(
                 )
         except Exception as exception:
             LOGGER.error(
-                "Failed to instantiate evaluator %s from its config (keys: %s).",
+                "Failed to instantiate evaluator %s from its config (keys: %s): %s.",
                 evaluator_item.name,
                 sorted(evaluator_item.config),
-                exc_info=True,
+                _describe_evaluator_error(exception),
             )
             if error_tolerance < ErrorTolerance.ALL_SCORING_ERRORS:
                 raise

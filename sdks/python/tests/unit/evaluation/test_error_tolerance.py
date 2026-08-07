@@ -194,14 +194,96 @@ def test_evaluate__item_evaluator_cannot_be_built__tolerance_all__accumulated_as
     assert _score_by_name(result, "always_passes").scoring_failed is False
 
 
+def test_evaluate__item_evaluator_cannot_be_built__config_values_are_not_logged(
+    fake_backend, capture_log
+):
+    # The config comes from the dataset and can carry credentials. Pydantic
+    # echoes the value it rejected verbatim in the exception message, so neither
+    # the message nor its traceback may be logged. Here the model's custom
+    # parameters arrive as a string instead of a dict, and carry a key.
+    item = dataset_item.DatasetItem(
+        id="dataset-item-id-0",
+        input="q",
+        output="a",
+        evaluators=[
+            dataset_item.EvaluatorItem(
+                name="judge_with_a_secret",
+                type="llm_judge",
+                config={
+                    "model": {
+                        "name": "gpt-4o",
+                        "customParameters": "api_key=sk-do-not-log-me",
+                    },
+                    "messages": [{"role": "USER", "content": "x"}],
+                    "variables": {},
+                    "schema": [{"name": "s", "type": "BOOLEAN", "description": "d"}],
+                },
+            )
+        ],
+    )
+
+    _run_evaluation(
+        [AlwaysPasses()],
+        error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
+        items=[item],
+    )
+
+    # `capture_log.text` renders exc_info too, so re-adding it would fail here.
+    logged = capture_log.text
+    assert "sk-do-not-log-me" not in logged
+
+    # Still diagnosable: which evaluator, which keys it was given, and which
+    # field pydantic rejected.
+    assert "judge_with_a_secret" in logged
+    assert "customParameters" in logged
+
+
 # --- persistence and API surface ------------------------------------------
 
 
-def test_evaluate__tolerated_failures__are_not_sent_to_the_backend(fake_backend):
-    _run_evaluation(
-        [AlwaysPasses(), NeedsMissingArgument()],
-        error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
-    )
+@pytest.mark.parametrize(
+    "metrics, items, error_tolerance, failed_score_name",
+    [
+        pytest.param(
+            [AlwaysPasses(), RaisesInScore()],
+            None,
+            ErrorTolerance.METRIC_ERRORS,
+            "raises_in_score",
+            id="error_inside_score__default_tolerance",
+        ),
+        pytest.param(
+            [AlwaysPasses(), RaisesInScore()],
+            None,
+            ErrorTolerance.ALL_SCORING_ERRORS,
+            "raises_in_score",
+            id="error_inside_score__tolerance_all",
+        ),
+        pytest.param(
+            [AlwaysPasses(), NeedsMissingArgument()],
+            None,
+            ErrorTolerance.ALL_SCORING_ERRORS,
+            "needs_missing_arg",
+            id="missing_score_argument__tolerance_all",
+        ),
+        pytest.param(
+            [AlwaysPasses()],
+            [ITEM_WITH_BROKEN_EVALUATOR],
+            ErrorTolerance.ALL_SCORING_ERRORS,
+            "broken_judge",
+            id="unbuildable_item_evaluator__tolerance_all",
+        ),
+    ],
+)
+def test_evaluate__tolerated_failures__are_not_sent_to_the_backend(
+    fake_backend, metrics, items, error_tolerance, failed_score_name
+):
+    # Every failure class has to be covered separately: they reach the backend
+    # boundary by different routes, and the filter that drops them is shared, so
+    # one passing case says nothing about the others.
+    result = _run_evaluation(metrics, error_tolerance=error_tolerance, items=items)
+
+    # The failure has to have actually happened, or its absence below proves nothing.
+    assert _score_by_name(result, failed_score_name).scoring_failed is True
 
     logged_score_names = {
         score.name

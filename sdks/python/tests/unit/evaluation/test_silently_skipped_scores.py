@@ -110,8 +110,14 @@ def test_evaluate__item_evaluator_type_is_unsupported__reported_as_a_failed_scor
     result = _run_evaluation([AlwaysPasses()], items=items)
 
     scores = {score.name: score for score in result.test_results[0].score_results}
-    assert scores["code_metric_evaluator"].scoring_failed is True
-    assert "Unsupported evaluator type" in scores["code_metric_evaluator"].reason
+    skipped = scores["code_metric_evaluator"]
+    assert skipped.scoring_failed is True
+    assert "Unsupported evaluator type" in skipped.reason
+    # Same structured payload every other engine-produced failure carries.
+    error_info = skipped.metadata["error_info"]
+    assert error_info["exception_type"] == "EvaluationError"
+    assert "code_metric" in error_info["message"]
+    assert error_info["traceback"]
 
     # The evaluation itself is unaffected — an unknown type must not abort it.
     assert scores["always_passes"].scoring_failed is False
@@ -163,4 +169,10 @@ def test_evaluate__unsupported_evaluator__does_not_displace_the_first_metric_sco
 
     score_results = result.test_results[0].score_results
     assert score_results[0].name == "always_passes"
-    assert score_results[-1].name == "code_metric_evaluator"
+    assert score_results[0].scoring_failed is False
+
+    # Displaced to the end, but still an annotated failure — not a silent pass.
+    skipped = score_results[-1]
+    assert skipped.name == "code_metric_evaluator"
+    assert skipped.scoring_failed is True
+    assert skipped.metadata["error_info"]["exception_type"] == "EvaluationError"
