@@ -1,6 +1,9 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.filter.PromptFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -343,5 +346,228 @@ class PromptResourceProjectScopedPromptsTest {
         List<Prompt> expectedPrompts = List.of(projectPrompt);
         findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, null,
                 null, projectId);
+    }
+
+    @Test
+    @DisplayName("Creating a version scoped to a project does not version a legacy project-less prompt")
+    void createPromptVersionDoesNotVersionLegacyProjectLessPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var legacyPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .template(null)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        var legacyPromptId = createPrompt(legacyPrompt, apiKey, workspaceName);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(sharedName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .projectId(projectId)
+                .build();
+
+        PromptVersion createdVersion;
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            createdVersion = response.readEntity(PromptVersion.class);
+        }
+
+        var projectPrompts = promptResourceClient.getPromptsByProjectId(projectId, apiKey, workspaceName);
+
+        assertThat(projectPrompts.content()).extracting(Prompt::name).containsExactly(sharedName);
+
+        // The version must land on a new project-scoped prompt, not on the legacy project-less one
+        var projectPrompt = projectPrompts.content().getFirst();
+        assertThat(projectPrompt.id()).isNotEqualTo(legacyPromptId);
+        assertThat(createdVersion.promptId()).isEqualTo(projectPrompt.id());
+        assertThat(promptResourceClient.getPrompt(legacyPromptId, apiKey, workspaceName).versionCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("Creating a version with no project does not version another project's prompt")
+    void createPromptVersionWithoutProjectDoesNotVersionProjectScopedPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var otherProjectPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(otherProjectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .template(null)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        var otherProjectPromptId = createPrompt(otherProjectPrompt, apiKey, workspaceName);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(sharedName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .build();
+
+        PromptVersion createdVersion;
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            createdVersion = response.readEntity(PromptVersion.class);
+        }
+
+        // The version must land on a new project-less prompt, never on the other project's prompt
+        assertThat(createdVersion.promptId()).isNotEqualTo(otherProjectPromptId);
+        assertThat(promptResourceClient.getPrompt(otherProjectPromptId, apiKey, workspaceName).versionCount())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("Creating a version with a name used by another project creates a separate project-scoped prompt")
+    void createPromptVersionWithNameFromAnotherProjectCreatesScopedPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var otherProjectPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(otherProjectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .template(null)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        var otherProjectPromptId = createPrompt(otherProjectPrompt, apiKey, workspaceName);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(sharedName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .projectId(projectId)
+                .build();
+
+        PromptVersion createdVersion;
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            createdVersion = response.readEntity(PromptVersion.class);
+        }
+
+        var projectPrompts = promptResourceClient.getPromptsByProjectId(projectId, apiKey, workspaceName);
+        var otherProjectPrompts = promptResourceClient.getPromptsByProjectId(otherProjectId, apiKey, workspaceName);
+
+        assertThat(projectPrompts.content()).extracting(Prompt::name).containsExactly(sharedName);
+        assertThat(otherProjectPrompts.content()).extracting(Prompt::name).containsExactly(sharedName);
+
+        // The version must land on a new prompt owned by projectId, never on the other project's prompt
+        var projectPrompt = projectPrompts.content().getFirst();
+        assertThat(projectPrompt.id()).isNotEqualTo(otherProjectPromptId);
+        assertThat(otherProjectPrompts.content().getFirst().id()).isEqualTo(otherProjectPromptId);
+        assertThat(otherProjectPrompts.content().getFirst().versionCount()).isZero();
+
+        // The requested version must actually be persisted against the new project-scoped prompt
+        assertThat(projectPrompt.versionCount()).isEqualTo(1L);
+        assertThat(createdVersion.promptId()).isEqualTo(projectPrompt.id());
+        assertThat(createdVersion.template()).isEqualTo(createVersionRequest.version().template());
+
+        var persistedVersion = promptResourceClient.getPromptVersion(createdVersion.id(), apiKey, workspaceName);
+        assertThat(persistedVersion.promptId()).isEqualTo(projectPrompt.id());
+        assertThat(persistedVersion.template()).isEqualTo(createVersionRequest.version().template());
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version with a null project_name resolves the project-less prompt")
+    void retrievePromptVersionWithNullProjectName() {
+        String projectName = null;
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Keeps the generated template: createPrompt only creates a version when one is present,
+        // and this test retrieves that version.
+        var workspacePrompt = buildPrompt()
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(workspacePrompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder()
+                .name(workspacePrompt.name())
+                .projectName(projectName)
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(workspacePrompt.template());
+        }
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version falls back to a workspace-level prompt with no project")
+    void retrievePromptVersionFallsBackToWorkspaceLevelPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String projectName = "project-" + UUID.randomUUID();
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        // Keeps the generated template: createPrompt only creates a version when one is present,
+        // and this test retrieves that version.
+        var workspacePrompt = buildPrompt()
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(workspacePrompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder()
+                .name(workspacePrompt.name())
+                .projectName(projectName)
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNotNull();
+            assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(workspacePrompt.template());
+        }
     }
 }
