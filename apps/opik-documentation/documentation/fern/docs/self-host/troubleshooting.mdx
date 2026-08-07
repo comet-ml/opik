@@ -163,15 +163,21 @@ Only do this when the schema genuinely matches the changelog. Re-baselining asse
 
 - The image version you are running against is the one the schema was migrated to. Re-baselining with a **newer** jar marks that version's extra migrations as applied without running them.
 - Every changeset in the pending list corresponds to an object that already exists — spot-check the most recent few, not just the first.
-- For ClickHouse (`dbAnalytics`, the default) on a multi-replica cluster, check **every** replica, not just the one you are connected to. A partially restored replica can look complete at the table level while its replicated tables are stale:
+- For ClickHouse (`dbAnalytics`, the default) on a multi-replica cluster, check **every** replica, not just the one you are connected to. A partially restored replica can look complete at the table level while its replicated tables are stale. `system.replicas` only reflects the node you are connected to, so query it cluster-wide:
 
   ```sql
-  SELECT database, table, is_readonly, absolute_delay
-  FROM system.replicas
-  WHERE database = '<your analytics database>'
+  -- Any replica that cannot accept writes is not settled.
+  SELECT hostName() AS host, database, table, is_readonly, absolute_delay
+  FROM clusterAllReplicas('{cluster}', system.replicas)
+  WHERE database = '<database_name>' AND is_readonly;
+
+  -- A stuck queue entry means replication is not merely behind, it is failing.
+  SELECT hostName() AS host, database, table, type, num_tries, last_exception
+  FROM clusterAllReplicas('{cluster}', system.replication_queue)
+  WHERE database = '<database_name>' AND num_tries > 10;
   ```
 
-  Substitute your `ANALYTICS_DB_DATABASE_NAME` (`opik` unless you overrode it). Every row should show `is_readonly = 0` and no meaningful `absolute_delay`; anything read-only or lagging means the schema is not settled, and re-baselining would freeze that gap in place.
+  Substitute `{cluster}` (your cluster macro) and `<database_name>` (your `ANALYTICS_DB_DATABASE_NAME`, `opik` by default); on a single-node install drop the `clusterAllReplicas(...)` wrapper and query `system.replicas` directly. **Both queries should return no rows.** A nonzero `absolute_delay` on its own is normal replication lag and is not a reason to stop — what matters is that no replica is read-only and no queue entry is failing repeatedly.
 
 - For MySQL (`--database db`) there is no replication view to check — confirm instead that the tables and columns named by the pending changesets already exist, and that the deployment has not been upgraded past the schema you are recovering.
 
@@ -212,6 +218,16 @@ If any of these is uncertain, stop and restore the changelog from a backup of th
     ```
 
     On Compose the service already pins its image, so no extra step is needed there.
+
+    <Callout intent="warning">
+      `envFrom` carries environment variables but not files. If your deployment terminates TLS to
+      MySQL or ClickHouse — anything setting `MYSQL_TRUSTSTORE_URL` / `MYSQL_CLIENTSTORE_URL`, or
+      relying on the chart's `ca-cert-injection` init container — the one-shot pod will start
+      without those certificates and fail to connect before it reaches the re-baseline. Copy the
+      relevant `volumes`, `volumeMounts` and init container from the live spec
+      (`kubectl get deploy opik-backend -n "$NS" -o yaml`) into the overrides as well. Exec'ing
+      into a surviving replica avoids this entirely, so prefer it whenever one is available.
+    </Callout>
   </Step>
   <Step>
     Review what would change, without writing anything:

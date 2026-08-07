@@ -89,7 +89,19 @@ echo
 # Fingerprint of the pending set as reviewed. The operator confirms against what they just read,
 # so if the ledger moves under us while the prompt waits — another operator recovering, or a
 # deployment applying migrations — we must not silently write a different set than the one shown.
-reviewed_pending="$(java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null)"
+#
+# `fast-forward --dry-run` emits the generated changelog-sync SQL, which embeds per-run values
+# (timestamps, ordering, Liquibase version banner). Comparing it verbatim would flag a change on
+# every capture, so reduce it to the changeset identities — the ID/AUTHOR/FILENAME triples in the
+# DATABASECHANGELOG inserts — which are stable for an unchanged pending set.
+pending_fingerprint() {
+  java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null \
+    | grep -oiE "INSERT INTO [^(]*DATABASECHANGELOG[^(]*\\([^)]*\\) VALUES \\('[^']*', *'[^']*', *'[^']*'" \
+    | sed -E "s/.*VALUES *\\('([^']*)', *'([^']*)', *'([^']*)'.*/\\1::\\2::\\3/" \
+    | sort
+}
+
+reviewed_pending="$(pending_fingerprint)"
 
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "ℹ️  Dry run — nothing was changed."
@@ -116,7 +128,7 @@ if [[ "$ASSUME_YES" != "true" ]]; then
   fi
 fi
 
-current_pending="$(java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null)"
+current_pending="$(pending_fingerprint)"
 if [[ "$current_pending" != "$reviewed_pending" ]]; then
   echo
   echo "❌ The pending changesets changed while this was waiting — the ledger was modified by" >&2
@@ -134,9 +146,9 @@ echo "🔍 Verifying '${DATABASE}' has nothing left pending..."
 java -jar "$JAR" "$DATABASE" status --verbose "$CONFIG"
 
 # `status` reports but never fails — it exits 0 whether or not changesets are pending, so it
-# cannot gate on its own. `fast-forward --dry-run` emits the DDL it *would* mark next and prints
-# nothing when the ledger is clean, which gives a signal that doesn't depend on parsing prose.
-remaining="$(java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null | tr -d '[:space:]')"
+# cannot gate on its own. Reuse the identity fingerprint: it is empty exactly when no changeset
+# remains pending, and unlike the raw SQL it is not perturbed by banners or timestamps.
+remaining="$(pending_fingerprint)"
 
 if [[ -n "$remaining" ]]; then
   echo
