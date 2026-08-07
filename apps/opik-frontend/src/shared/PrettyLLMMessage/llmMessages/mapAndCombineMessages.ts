@@ -9,9 +9,18 @@ import {
 export function mapAndCombineMessages(
   input: unknown,
   output: unknown,
+  formatHint?: string,
 ): LLMMapperResult {
-  const inputDetection = detectLLMMessages(input, { fieldType: "input" });
-  const outputDetection = detectLLMMessages(output, { fieldType: "output" });
+  const inputDetection = detectLLMMessages(
+    input,
+    { fieldType: "input" },
+    formatHint,
+  );
+  const outputDetection = detectLLMMessages(
+    output,
+    { fieldType: "output" },
+    formatHint,
+  );
 
   const inputResult = mapForDetection(input, inputDetection, "input");
   const outputResult = mapForDetection(output, outputDetection, "output");
