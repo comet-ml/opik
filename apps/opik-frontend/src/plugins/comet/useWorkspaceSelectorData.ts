@@ -20,6 +20,7 @@ import {
 import { isAiSpendWorkspace } from "@/plugins/comet/lib/aiSpend";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { buildUrl } from "@/plugins/comet/utils";
+import { postWorkspacePointRead } from "@/plugins/comet/lib/workspacePointRead";
 
 const useWorkspaceSelectorData = () => {
   const navigate = useNavigate();
@@ -72,17 +73,16 @@ const useWorkspaceSelectorData = () => {
     [navigate, recordVisit],
   );
 
+  // Where to land is a point read, not a scan of a downloaded list: the backend picks the caller's
+  // default workspace in the target organization (or, for an admin, the organization's first), and
+  // answers 404 -> null when the caller has none there.
   const handleChangeOrganization = useCallback(
-    (newOrganization: Organization) => {
-      const newOrganizationWorkspaces =
-        allWorkspaces?.filter(
-          (workspace) =>
-            workspace.organizationId === newOrganization.id &&
-            workspace.workspaceName !== DEFAULT_WORKSPACE_NAME &&
-            !isAiSpendWorkspace(workspace),
-        ) || [];
+    async (newOrganization: Organization) => {
+      const landing = await postWorkspacePointRead("/workspaces/retrieve-landing", {
+        organizationId: newOrganization.id,
+      });
 
-      if (newOrganizationWorkspaces.length === 0) {
+      if (!landing) {
         toast({
           description: `You are not part of any workspaces in ${newOrganization.name}, please ask to be invited to one`,
           variant: "destructive",
@@ -90,19 +90,13 @@ const useWorkspaceSelectorData = () => {
         return;
       }
 
-      const newWorkspace =
-        newOrganizationWorkspaces.find((workspace) => workspace.default) ||
-        newOrganizationWorkspaces[0];
-
-      if (newWorkspace) {
-        recordVisit(newWorkspace.workspaceName);
-        navigate({
-          to: "/$workspaceName",
-          params: { workspaceName: newWorkspace.workspaceName },
-        });
-      }
+      recordVisit(landing.workspaceName);
+      navigate({
+        to: "/$workspaceName",
+        params: { workspaceName: landing.workspaceName },
+      });
     },
-    [navigate, allWorkspaces, toast, recordVisit],
+    [navigate, toast, recordVisit],
   );
 
   const handleOrgSettingsClick = useCallback(() => {
