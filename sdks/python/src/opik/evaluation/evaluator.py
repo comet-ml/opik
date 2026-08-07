@@ -42,7 +42,12 @@ from .suite_evaluators.llm_judge import (
 )
 from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
-from .types import ExperimentScoreFunction, LLMTask, ScoringKeyMappingType
+from .types import (
+    ErrorTolerance,
+    ExperimentScoreFunction,
+    LLMTask,
+    ScoringKeyMappingType,
+)
 from .. import url_helpers, exceptions
 from ..api_objects.dataset.test_suite import suite_result_constructor
 
@@ -151,6 +156,7 @@ def evaluate(
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
     blueprint_id: Optional[str] = None,
+    error_tolerance: Union[ErrorTolerance, int] = ErrorTolerance.METRIC_ERRORS,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -240,7 +246,42 @@ def evaluate(
             - `tags contains "failed"` - Items with 'failed' tag
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
+
+        error_tolerance: How much failure the run absorbs before it gives up.
+            Accepts an ``opik.ErrorTolerance`` member or the equivalent int.
+
+            - ``ErrorTolerance.METRIC_ERRORS`` (10, default): errors raised *inside*
+              ``score`` are recorded as failed score results and the run continues.
+              Anything else aborts. This is the long-standing behaviour.
+            - ``ErrorTolerance.ALL_SCORING_ERRORS`` (20): additionally tolerate errors
+              that stop a metric from being scored at all — a required score argument
+              the dataset does not provide, or an item-level evaluator that cannot be
+              built. Note that neither level stops early — the evaluation task runs
+              for every dataset item before the first failure is re-raised, so a
+              misconfiguration affecting every item costs a full pass either way.
+              What the higher level changes is that you get an ``EvaluationResult``
+              back instead of an exception.
+
+            Two failures always abort, at every level: a failure of the evaluation
+            task itself, and a ``scoring_key_mapping`` callable that raises — neither
+            belongs to a single metric, so neither can be reported as one metric's
+            failed score.
+
+            A tolerated failure of a metric is also recorded on a span named after
+            it, carrying the same ``error_info``, so it is visible in the trace even
+            though a failed score is never persisted as a feedback score. Failures
+            building an item-level evaluator happen before any metric span exists,
+            so those carry the payload on the score result only.
+
+            Tolerated failures are accumulated in the returned ``EvaluationResult``:
+            every one is a ``ScoreResult`` with ``scoring_failed=True``, ``reason``
+            set to the error message and ``metadata["error_info"]`` holding the
+            structured payload (``exception_type``, ``message``, ``traceback``).
+            They are excluded from the aggregated statistics and are never sent to
+            the backend, so the score cell stays empty rather than showing a zero.
     """
+    error_tolerance = ErrorTolerance(error_tolerance)
+
     if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
         dataset = dataset.__internal_api__dataset__
@@ -282,6 +323,7 @@ def evaluate(
         nb_samples=nb_samples,
         dataset_sampler=dataset_sampler,
         dataset_item_ids=dataset_item_ids,
+        error_tolerance=error_tolerance,
     )
 
     experiment = client.create_experiment(
@@ -334,6 +376,7 @@ def evaluate(
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
         source="experiment",
+        error_tolerance=error_tolerance,
     )
 
 
@@ -583,6 +626,7 @@ def _evaluate_task(
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
     source: TraceSource,
+    error_tolerance: ErrorTolerance,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -598,6 +642,7 @@ def _evaluate_task(
             workers=task_threads,
             verbose=verbose,
             source=source,
+            error_tolerance=error_tolerance,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=items_iter,
@@ -734,6 +779,8 @@ def _evaluate_test_suite_task(
                 workers=task_threads,
                 verbose=verbose,
                 source=source,
+                # This entrypoint does not expose the setting; it runs strict.
+                error_tolerance=ErrorTolerance.METRIC_ERRORS,
             )
             test_results = evaluation_engine.run_and_score(
                 dataset_items=items_iter,
@@ -873,6 +920,8 @@ def evaluate_experiment(
             workers=scoring_threads,
             verbose=verbose,
             source="experiment",
+            # This entrypoint does not expose the setting; it runs strict.
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
         test_results = evaluation_engine.score_test_cases(
             test_cases=test_cases,
@@ -1125,6 +1174,7 @@ def evaluate_prompt(
         nb_samples=nb_samples,
         dataset_sampler=dataset_sampler,
         dataset_item_ids=dataset_item_ids,
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
 
     experiment = client.create_experiment(
@@ -1176,6 +1226,8 @@ def evaluate_prompt(
             workers=task_threads,
             verbose=verbose,
             source="experiment",
+            # This entrypoint does not expose the setting; it runs strict.
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=items_iter,
@@ -1395,6 +1447,7 @@ def evaluate_optimization_trial(
         nb_samples=nb_samples,
         dataset_sampler=dataset_sampler,
         dataset_item_ids=dataset_item_ids,
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
 
     experiment = client.create_experiment(
@@ -1442,6 +1495,9 @@ def evaluate_optimization_trial(
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
         source="optimization",
+        # Resuming or replaying a trial does not carry the original
+        # caller's tolerance, so it runs at the default.
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
 
 
@@ -1559,6 +1615,10 @@ def evaluate_resume(
         trial_count=context.default_runs_per_item,
         experiment_scoring_functions=experiment_scoring_functions,
         source="experiment",
+        # The tolerance the original evaluation call ran with, read back from the
+        # resume state, so a resumed run does not silently become stricter than
+        # the run it continues.
+        error_tolerance=context.error_tolerance,
     )
 
     merged = evaluation_result.merge_resume_results(
@@ -1721,6 +1781,8 @@ def evaluate_on_dict_items(
             workers=scoring_threads,
             verbose=verbose,
             source="experiment",
+            # This entrypoint does not expose the setting; it runs strict.
+            error_tolerance=ErrorTolerance.METRIC_ERRORS,
         )
         test_results = evaluation_engine.run_and_score(
             dataset_items=iter(dataset_items),
