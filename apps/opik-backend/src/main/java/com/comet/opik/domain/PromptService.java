@@ -305,8 +305,15 @@ class PromptServiceImpl implements PromptService {
     }
 
     private Prompt findByNameScoped(String workspaceId, String name, UUID projectId) {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(PromptDAO.class).findByName(name, workspaceId, projectId));
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            // A null projectId means "the project-less prompt", not "any project": passing it to findByName
+            // would drop the project predicate and match another project's prompt of the same name.
+            return projectId == null
+                    ? promptDAO.findByNameWithoutProject(name, workspaceId)
+                    : promptDAO.findByName(name, workspaceId, projectId);
+        });
     }
 
     private Prompt findByName(String workspaceId, String name, UUID projectId) {

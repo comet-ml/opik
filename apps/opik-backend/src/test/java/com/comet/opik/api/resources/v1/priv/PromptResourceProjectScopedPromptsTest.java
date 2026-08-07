@@ -215,6 +215,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
                 .template(null)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -263,6 +264,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
                 .template(null)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -287,6 +289,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectName(projectName)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
+                .template(null)
                 .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
@@ -318,6 +321,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
                 .template(null)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -328,6 +332,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
                 .template(null)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -337,6 +342,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(null)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
+                .template(null)
                 .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
@@ -369,6 +375,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(otherProjectId)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -404,6 +411,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(null)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -437,6 +445,51 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
+    @DisplayName("Creating a version with no project does not version another project's prompt")
+    void createPromptVersionWithoutProjectDoesNotVersionProjectScopedPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var otherProjectPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(otherProjectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .template(null)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        var otherProjectPromptId = createPrompt(otherProjectPrompt, apiKey, workspaceName);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(sharedName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .build();
+
+        PromptVersion createdVersion;
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            createdVersion = response.readEntity(PromptVersion.class);
+        }
+
+        // The version must land on a new project-less prompt, never on the other project's prompt
+        assertThat(createdVersion.promptId()).isNotEqualTo(otherProjectPromptId);
+        assertThat(promptResourceClient.getPrompt(otherProjectPromptId, apiKey, workspaceName).versionCount())
+                .isZero();
+    }
+
+    @Test
     @DisplayName("Retrieve prompt version with an unresolved project_name does not search the whole workspace")
     void retrievePromptVersionWithUnresolvedProjectNameDoesNotSearchWorkspace() {
         String apiKey = UUID.randomUUID().toString();
@@ -454,6 +507,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(otherProjectId)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -489,6 +543,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(otherProjectId)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -545,6 +600,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(null)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -577,6 +633,7 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(null)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
+                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
