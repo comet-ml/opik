@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.OllieReport;
 import com.comet.opik.api.OllieReport.OllieReportPage;
 import com.comet.opik.api.OllieReport.ReportStatus;
 import com.comet.opik.api.ReportPreference;
@@ -12,9 +13,11 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +43,12 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 public class ReportService {
 
     private static final AttributeKey<String> RESULT_KEY = stringKey("result");
+    private static final AttributeKey<String> STAGE_KEY = stringKey("stage");
+    private static final String STAGE_TRIGGER = "trigger";
+    private static final String STAGE_GENERATION = "generation";
+    private static final String STAGE_SWEEP = "sweep";
+    private static final AttributeKey<String> FAILURE_REASON_KEY = stringKey("failure_reason");
+    private static final String OTHER_FAILURE_REASON = "other";
     private static final AttributeKey<String> WORKSPACE_ID_KEY = stringKey("workspace_id");
     private static final AttributeKey<String> WORKSPACE_NAME_KEY = stringKey("workspace_name");
 
@@ -78,9 +87,9 @@ public class ReportService {
 
         this.finishedCounter = meter
                 .counterBuilder("opik.daily_report.finished")
-                .setDescription("Number of reports finalized via the completion callback or trigger failure, "
-                        + "by result (completed / failed / trigger_failed); stale sweeps are counted separately "
-                        + "by opik.daily_report.stale_swept")
+                .setDescription("Number of reports finalized, by result (completed / failed), the stage a "
+                        + "failure occurred in (trigger / generation / sweep), and failure_reason where the stage "
+                        + "does not already imply it")
                 .build();
 
         this.endToEndDuration = meter
@@ -89,6 +98,26 @@ public class ReportService {
                 .setUnit("ms")
                 .ofLongs()
                 .build();
+
+        meter.gaugeBuilder("opik.daily_report.pending")
+                .setDescription("Reports currently pending, per workspace. Every replica reports the same "
+                        + "database-wide count, so deduplicate replicas with max by (workspace_id) before summing "
+                        + "across workspaces")
+                .ofLongs()
+                .buildWithCallback(this::recordPendingReports);
+    }
+
+    private void recordPendingReports(ObservableLongMeasurement measurement) {
+        try {
+            transactionTemplate.inTransaction(READ_ONLY,
+                    handle -> handle.attach(OllieReportDAO.class).findPendingWorkspaceIds())
+                    .stream()
+                    .collect(Collectors.groupingBy(id -> id, Collectors.counting()))
+                    .forEach((workspaceId, count) -> measurement
+                            .record(count, Attributes.of(WORKSPACE_ID_KEY, workspaceId)));
+        } catch (Exception e) {
+            log.warn("Failed to read pending report count for metrics", e);
+        }
     }
 
     public Mono<UUID> generateReport(@NonNull UUID projectId) {
@@ -127,7 +156,7 @@ public class ReportService {
         orchestratorClient.triggerReportGeneration(
                 reportId.toString(), projectId.toString(), projectName,
                 workspaceName, customPrompt,
-                () -> markReportFailed(reportId, workspaceId, workspaceName, projectId));
+                reason -> markReportFailed(reportId, workspaceId, workspaceName, projectId, reason));
 
         triggeredCounter.add(1, Attributes.of(
                 WORKSPACE_ID_KEY, workspaceId,
@@ -138,23 +167,35 @@ public class ReportService {
 
     public Mono<Void> updateReport(@NonNull UUID projectId, @NonNull UUID reportId,
             @NonNull ReportStatus status, String content, String sessionId,
-            JsonNode recommendedActions) {
+            JsonNode recommendedActions, String failureReason) {
         var ctx = requestContext.get();
         String workspaceId = ctx.getWorkspaceId();
         String workspaceName = ctx.getWorkspaceName();
+        if (status == ReportStatus.PENDING) {
+            // Accepting this would emit a finished datapoint and record a duration for a report that is still
+            // pending, then count it again when the sweep terminates it.
+            throw new BadRequestException("Report completion requires a terminal status, got: " + status.getValue());
+        }
+        // A reason only describes a failure; ignore one sent alongside a completed report
+        String reason = status == ReportStatus.FAILED ? failureReason : null;
+        if (StringUtils.isNotBlank(reason) && !OllieReport.FailureReason.OUT_OF_CREDITS.equals(reason)) {
+            // Recorded anyway, but the UI will fall back to a generic failure and the metric buckets it as 'other'
+            log.warn("Unrecognised report failure reason '{}' for reportId='{}'; add it to FailureReason and give "
+                    + "the frontend a case for it if the generator now emits it", reason, reportId);
+        }
 
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(OllieReportDAO.class);
 
             int updated = dao.update(reportId, workspaceId, projectId, content, sessionId, recommendedActions,
-                    status.getValue());
+                    status.getValue(), reason);
             if (updated == 0) {
                 throw new NotFoundException("Report not found or already processed: " + reportId);
             }
 
             return dao.getCreatedAt(reportId, workspaceId);
         }))
-                .doOnNext(createdAt -> recordCompletionMetrics(workspaceId, workspaceName, status, createdAt))
+                .doOnNext(createdAt -> recordCompletionMetrics(workspaceId, workspaceName, status, reason, createdAt))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then();
     }
@@ -203,28 +244,48 @@ public class ReportService {
     }
 
     private void recordCompletionMetrics(String workspaceId, String workspaceName, ReportStatus status,
-            Instant createdAt) {
-        String result = status == ReportStatus.COMPLETED ? "completed" : "failed";
-        Attributes attrs = Attributes.of(
+            String failureReason, Instant createdAt) {
+        boolean completed = status == ReportStatus.COMPLETED;
+        Attributes outcome = outcomeAttributes(workspaceId, workspaceName, completed ? "completed" : "failed");
+
+        finishedCounter.add(1, completed
+                ? outcome
+                : failureAttributes(workspaceId, workspaceName, STAGE_GENERATION, failureReason));
+        endToEndDuration.record(Instant.now().toEpochMilli() - createdAt.toEpochMilli(), outcome);
+    }
+
+    private static Attributes outcomeAttributes(String workspaceId, String workspaceName, String result) {
+        return Attributes.of(
                 RESULT_KEY, result,
                 WORKSPACE_ID_KEY, workspaceId,
                 WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(workspaceName, workspaceId));
-
-        finishedCounter.add(1, attrs);
-        endToEndDuration.record(Instant.now().toEpochMilli() - createdAt.toEpochMilli(), attrs);
     }
 
-    private void markReportFailed(UUID reportId, String workspaceId, String workspaceName, UUID projectId) {
+    private static Attributes failureAttributes(String workspaceId, String workspaceName, String stage,
+            String failureReason) {
+        var builder = outcomeAttributes(workspaceId, workspaceName, "failed").toBuilder().put(STAGE_KEY, stage);
+        if (StringUtils.isNotBlank(failureReason)) {
+            builder.put(FAILURE_REASON_KEY, OllieReport.FailureReason.OUT_OF_CREDITS.equals(failureReason)
+                    ? failureReason
+                    : OTHER_FAILURE_REASON);
+        }
+        return builder.build();
+    }
+
+    private void markReportFailed(UUID reportId, String workspaceId, String workspaceName, UUID projectId,
+            String failureReason) {
         try {
             int updated = transactionTemplate.inTransaction(WRITE, handle -> handle.attach(OllieReportDAO.class)
-                    .update(reportId, workspaceId, projectId, null, null, null, ReportStatus.FAILED.getValue()));
+                    .update(reportId, workspaceId, projectId, null, null, null, ReportStatus.FAILED.getValue(),
+                            failureReason));
             if (updated > 0) {
-                finishedCounter.add(1, Attributes.of(
-                        RESULT_KEY, "trigger_failed",
-                        WORKSPACE_ID_KEY, workspaceId,
-                        WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(workspaceName, workspaceId)));
-                log.info("Marked report as failed reportId='{}' workspaceId='{}' projectId='{}'",
-                        reportId, workspaceId, projectId);
+                String metricReason = OllieReport.FailureReason.TRIGGER_FAILED.equals(failureReason)
+                        ? null
+                        : failureReason;
+                finishedCounter.add(1,
+                        failureAttributes(workspaceId, workspaceName, STAGE_TRIGGER, metricReason));
+                log.info("Marked report as failed reportId='{}' workspaceId='{}' projectId='{}' reason='{}'",
+                        reportId, workspaceId, projectId, failureReason);
             }
         } catch (Exception e) {
             log.error("Failed to mark report as failed reportId='{}' workspaceId='{}' projectId='{}'",
@@ -238,10 +299,13 @@ public class ReportService {
             Map<String, Long> sweptByWorkspace = dao
                     .findStalePendingWorkspaceIds(reportGenerationConfig.getStaleReportTimeoutMinutes()).stream()
                     .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
-            int failed = dao.failStaleReports(reportGenerationConfig.getStaleReportTimeoutMinutes());
+            int failed = dao.failStaleReports(reportGenerationConfig.getStaleReportTimeoutMinutes(),
+                    OllieReport.FailureReason.STALE_TIMEOUT);
             if (failed > 0) {
                 log.info("Marked {} stale pending reports as failed", failed);
             }
+            sweptByWorkspace.forEach((workspaceId, count) -> finishedCounter.add(count,
+                    failureAttributes(workspaceId, workspaceId, STAGE_SWEEP, null)));
             return sweptByWorkspace;
         });
     }
