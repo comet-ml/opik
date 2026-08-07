@@ -1,0 +1,31 @@
+---
+description: Keep cipx / Cost Intelligence / ai-cost comments minimal in Opik OSS. Use when creating or reviewing PRs that touch those names (in comment text or enclosing identifiers), or when running create-pr. Does not apply to ordinary Opik comments.
+alwaysApply: false
+---
+# OSS Comment Hygiene — cipx / Cost Intelligence only
+
+Opik is public OSS. Comments that document the private **cipx / Cost Intelligence / ai-cost** stack must stay minimal. This rule does **not** apply to ordinary Opik comments.
+
+## Name patterns (case-insensitive)
+
+- `cipx` (e.g. `cipx_spends`, `CipxSpend`, `CipxSpendDAO`, `metadata.cipx`)
+- `cost intelligence` / `cost-intelligence` / `CostIntelligence`
+- `ai-cost` / `ai-spend` / `AI-Spend`
+- `cost-intelligence-proxy` / `cost-intelligence-proxy-internal`
+
+## When this rule applies (gate)
+
+Apply when a **new or expanded** comment is in scope because **either**:
+
+1. **Comment text** mentions a name pattern above, **or**
+2. **Enclosing identity** matches a name pattern — file path/name, type/class, method, field, parameter, or local variable (e.g. a Javadoc on a field inside `CipxSpendDAO`, or a `//` above `getCipxSpend(...)`, even if the comment itself has no keyword)
+
+No match on text **and** enclosing identity → **do nothing**. Do not ask to trim unrelated Opik comments.
+
+## What “minimal” means when the gate matches
+
+Flag (attention only) if the comment goes beyond what the public Opik code needs — e.g. private pricing tables, prod traffic stats, agent/client/proxy wire-path narratives (any coding agent or IDE client), private-repo cross-links, or how sister services bill. Prefer a short public fact (`speed` from `cipx.call.config`; `''` = default) over a private-product essay.
+
+## Attention only
+
+Warn the author before merge. Do not block. Do not rewrite unless asked.
