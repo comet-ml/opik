@@ -22,6 +22,10 @@ concurrency:
 
 jobs:
   warn-on-migration-edits:
+    # Every step needs a PR to inspect and comment on. `workflow_dispatch` is declared for parity
+    # with the sibling migration workflows, but a manual run has no PR context — without this guard
+    # the files lookup would request `pulls//files` and fail before producing any output.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
