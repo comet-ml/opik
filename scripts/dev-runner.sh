@@ -848,7 +848,10 @@ stop_cost_api_local() {
     if [ -f "$COST_API_PID_FILE" ]; then
         local cost_api_pid
         cost_api_pid=$(cat "$COST_API_PID_FILE")
-        if kill -0 "$cost_api_pid" 2>/dev/null; then
+        # A negative value would make `kill` signal a whole process group, so anything
+        # that is not a plain decimal PID is treated as no process at all.
+        case "$cost_api_pid" in ''|*[!0-9]*) cost_api_pid="" ;; esac
+        if [ -n "$cost_api_pid" ] && kill -0 "$cost_api_pid" 2>/dev/null; then
             log_info "Stopping cost-api (PID: $cost_api_pid)..."
             # `uv run` spawns the uvicorn worker as a child; snapshot the
             # descendant tree before killing the parent so we can chase it down.
@@ -878,6 +881,14 @@ stop_cost_api_local() {
 # start path as a full run, so its env, ports and auth mode can't drift from what
 # dev-runner would otherwise set. Combine with the modifier flags as usual, e.g.
 # `--platform-enabled --cost-api-restart`.
+cost_api_managed_alive() {
+    [ -f "$COST_API_PID_FILE" ] || return 1
+    local pid
+    pid=$(cat "$COST_API_PID_FILE")
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$pid" 2>/dev/null
+}
+
 restart_cost_api_only() {
     if ! cost_api_enabled; then
         log_error "cost-api is not configured: AI_COST_BACKEND_PATH is empty and no sibling ai-cost-backend checkout was found"
@@ -886,9 +897,11 @@ restart_cost_api_only() {
 
     log_info "=== Restarting cost-api (leaving the rest of the stack up) ==="
 
-    # A reused instance has no PID file, so stop_cost_api_local would no-op and the
-    # start below would just adopt the same stale process.
-    if [ ! -f "$COST_API_PID_FILE" ] && cost_api_healthy; then
+    # Liveness, not just the file: with a PID file left over from a dead process and
+    # something healthy on the port, stop_cost_api_local would clean up the file
+    # without killing anything and start_cost_api_local would adopt that instance --
+    # reporting a restart that never happened.
+    if cost_api_healthy && ! cost_api_managed_alive; then
         log_error "cost-api on port ${AI_COST_BACKEND_PORT} was not started by this dev-runner, so it cannot be stopped here"
         log_error "Stop it where you started it, then re-run this command"
         return 1
