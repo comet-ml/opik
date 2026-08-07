@@ -874,6 +874,30 @@ stop_cost_api_local() {
     log_success "cost-api stopped"
 }
 
+# Bounce only cost-api, leaving the rest of the stack running. Goes through the same
+# start path as a full run, so its env, ports and auth mode can't drift from what
+# dev-runner would otherwise set. Combine with the modifier flags as usual, e.g.
+# `--platform-enabled --cost-api-restart`.
+restart_cost_api_only() {
+    if ! cost_api_enabled; then
+        log_error "cost-api is not configured: AI_COST_BACKEND_PATH is empty and no sibling ai-cost-backend checkout was found"
+        return 1
+    fi
+
+    log_info "=== Restarting cost-api (leaving the rest of the stack up) ==="
+
+    # A reused instance has no PID file, so stop_cost_api_local would no-op and the
+    # start below would just adopt the same stale process.
+    if [ ! -f "$COST_API_PID_FILE" ] && cost_api_healthy; then
+        log_error "cost-api on port ${AI_COST_BACKEND_PORT} was not started by this dev-runner, so it cannot be stopped here"
+        log_error "Stop it where you started it, then re-run this command"
+        return 1
+    fi
+
+    stop_cost_api_local
+    start_cost_api_local
+}
+
 display_cost_api_process_status() {
     if [ -f "$COST_API_PID_FILE" ] && kill -0 "$(cat "$COST_API_PID_FILE")" 2>/dev/null; then
         echo -e "cost-api: ${GREEN}RUNNING${NC} (PID: $(cat "$COST_API_PID_FILE"))"
@@ -1610,6 +1634,8 @@ show_usage() {
     echo "  --stop          - Stop Docker infrastructure, and BE and FE processes"
     echo "  --restart       - Stop, build, and start Docker infrastructure, and BE and FE processes (DEFAULT IF NO OPTIONS PROVIDED)"
     echo "  --quick-restart - Quick restart: stop BE/FE, rebuild BE only, start BE/FE (keeps infrastructure running)"
+    echo "  --cost-api-restart - Opik-team only: restart just cost-api (ai-cost-backend), leaving"
+    echo "                     everything else running. Combine with --platform-enabled to keep auth on."
     echo "  --verify        - Verify status of Docker infrastructure, and BE and FE processes"
     echo ""
     echo "BE-Only Mode (BE as process, FE in Docker):"
@@ -1835,6 +1861,9 @@ case "${1:-}" in
         ;;
     "--quick-restart")
         quick_restart_services
+        ;;
+    "--cost-api-restart")
+        restart_cost_api_only || exit 1
         ;;
     "--verify")
         verify_services
