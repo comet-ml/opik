@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.google.common.base.Throwables;
+import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.internal.RetryUtils;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -20,6 +21,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.ConnectException;
@@ -33,6 +35,7 @@ import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 @Slf4j
 public class ChatCompletionService {
     public static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
+    public static final String UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER = "Unsupported feature for the selected LLM provider";
     public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
 
     private final LlmProviderClientConfig llmProviderClientConfig;
@@ -60,6 +63,8 @@ public class ChatCompletionService {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
             chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
         } catch (RuntimeException runtimeException) {
+            failIfUnsupportedFeature(runtimeException);
+
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
             providerError
@@ -109,6 +114,8 @@ public class ChatCompletionService {
                     modelParameters.name(), workspaceId);
             return chatResponse;
         } catch (RuntimeException runtimeException) {
+            failIfUnsupportedFeature(runtimeException);
+
             LlmProviderService provider = llmProviderFactory.getService(workspaceId, modelParameters.name());
 
             Optional<ErrorMessage> providerError = provider.getLlmProviderError(runtimeException);
@@ -119,6 +126,25 @@ public class ChatCompletionService {
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
+    }
+
+    /**
+     * langchain4j raises {@link UnsupportedFeatureException} when the request asks for a capability the selected
+     * provider does not implement — e.g. {@code ToolChoice.REQUIRED} against Vertex AI Gemini. The provider is never
+     * reached, so {@code getLlmProviderError} has nothing to map and the call used to surface as a 500. That is
+     * misleading on two counts: nothing failed server-side, and no amount of retrying can make it succeed. Report it
+     * as a 400 so clients get an actionable error and the online-scoring consumers treat it as terminal instead of
+     * burning their retry budget on it.
+     */
+    private void failIfUnsupportedFeature(RuntimeException runtimeException) {
+        if (ExceptionUtils.indexOfType(runtimeException, UnsupportedFeatureException.class) < 0) {
+            return;
+        }
+
+        log.warn(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, runtimeException);
+        throw new BadRequestException(
+                buildDetailedErrorMessage(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, runtimeException),
+                runtimeException);
     }
 
     private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
@@ -155,6 +181,16 @@ public class ChatCompletionService {
                     return;
                 }
 
+                // Same rationale as failIfUnsupportedFeature: an unsupported capability is a caller problem, not a
+                // server fault, so the stream reports it as a 400 rather than the default 500.
+                if (ExceptionUtils.indexOfType(throwable, UnsupportedFeatureException.class) >= 0) {
+                    log.warn(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, throwable);
+                    handlers.handleError(new ErrorMessage(
+                            Response.Status.BAD_REQUEST.getStatusCode(),
+                            buildDetailedErrorMessage(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, throwable)));
+                    return;
+                }
+
                 log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
 
                 var errorMessage = new ErrorMessage(buildDetailedErrorMessage(throwable));
@@ -171,11 +207,15 @@ public class ChatCompletionService {
      * @return a detailed error message combining the base message with exception details
      */
     private String buildDetailedErrorMessage(Throwable throwable) {
+        return buildDetailedErrorMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+    }
+
+    private String buildDetailedErrorMessage(String baseMessage, Throwable throwable) {
         String exceptionDetails = extractErrorDetails(throwable);
         if (StringUtils.isNotBlank(exceptionDetails)) {
-            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
+            return baseMessage + ": " + exceptionDetails;
         }
-        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+        return baseMessage;
     }
 
     /**

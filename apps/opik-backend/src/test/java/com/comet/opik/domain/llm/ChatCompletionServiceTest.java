@@ -1,10 +1,16 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.exception.UnsupportedFeatureException;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.InternalServerErrorException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,8 +31,11 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,6 +52,9 @@ class ChatCompletionServiceTest {
 
     @Mock
     private LlmProviderService llmProviderService;
+
+    @Mock
+    private ChatModel chatModel;
 
     private ChatCompletionService chatCompletionService;
 
@@ -198,6 +210,116 @@ class ChatCompletionServiceTest {
 
             // Then
             assertThat(actualResponse).isEqualTo(expectedResponse);
+        }
+    }
+
+    @Nested
+    @DisplayName("Unsupported Feature Handling:")
+    class UnsupportedFeatureHandling {
+
+        private static final String UNSUPPORTED_FEATURE_MESSAGE = "ToolChoice.REQUIRED is not supported yet by this model provider";
+
+        private static Stream<Arguments> unsupportedFeatureProvider() {
+            return Stream.of(
+                    Arguments.of(
+                            "thrown directly",
+                            new UnsupportedFeatureException(UNSUPPORTED_FEATURE_MESSAGE)),
+                    Arguments.of(
+                            "wrapped in a RuntimeException",
+                            new RuntimeException("Retry wrapper",
+                                    new UnsupportedFeatureException(UNSUPPORTED_FEATURE_MESSAGE))));
+        }
+
+        @ParameterizedTest(name = "when UnsupportedFeatureException is {0}, then throw BadRequestException")
+        @MethodSource("unsupportedFeatureProvider")
+        @DisplayName("create should map unsupported features to 400, not 500")
+        void create__whenUnsupportedFeatureException__thenThrowBadRequest(
+                String testName, RuntimeException runtimeException) {
+            // Given
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString())).thenThrow(runtimeException);
+
+            // When
+            var thrown = catchThrowable(() -> chatCompletionService.create(request, workspaceId));
+
+            // Then
+            assertThat(thrown)
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("Unsupported feature for the selected LLM provider")
+                    .hasMessageContaining(UNSUPPORTED_FEATURE_MESSAGE);
+            assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
+        }
+
+        @ParameterizedTest(name = "when UnsupportedFeatureException is {0}, then throw BadRequestException")
+        @MethodSource("unsupportedFeatureProvider")
+        @DisplayName("scoreTrace should map unsupported features to 400, not 500")
+        void scoreTrace__whenUnsupportedFeatureException__thenThrowBadRequest(
+                String testName, RuntimeException runtimeException) {
+            // Given
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = LlmAsJudgeModelParameters.builder()
+                    .name("vertex_ai/gemini-3.1-flash-lite")
+                    .temperature(0.0)
+                    .build();
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class))).thenThrow(runtimeException);
+
+            // When
+            var thrown = catchThrowable(
+                    () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId));
+
+            // Then
+            assertThat(thrown)
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining("Unsupported feature for the selected LLM provider")
+                    .hasMessageContaining(UNSUPPORTED_FEATURE_MESSAGE);
+            assertThat(((BadRequestException) thrown).getResponse().getStatus()).isEqualTo(400);
+        }
+
+        @Test
+        @DisplayName("scoreTrace should not consult the provider error mapper for unsupported features")
+        void scoreTrace__whenUnsupportedFeatureException__thenSkipProviderErrorLookup() {
+            // Given
+            var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
+            var modelParameters = LlmAsJudgeModelParameters.builder()
+                    .name("vertex_ai/gemini-3.1-flash-lite")
+                    .temperature(0.0)
+                    .build();
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+            when(chatModel.chat(any(ChatRequest.class)))
+                    .thenThrow(new UnsupportedFeatureException(UNSUPPORTED_FEATURE_MESSAGE));
+
+            // When & Then
+            assertThatThrownBy(() -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId))
+                    .isInstanceOf(BadRequestException.class);
+
+            // The provider was never reached, so there is no provider error to map.
+            verify(llmProviderFactory, never()).getService(anyString(), anyString());
+            verify(llmProviderService, never()).getLlmProviderError(any());
+        }
+
+        @Test
+        @DisplayName("unrelated runtime exceptions should still produce a 500")
+        void create__whenUnrelatedException__thenStillThrowInternalServerError() {
+            // Given
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString())).thenThrow(new RuntimeException("boom"));
+            when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+
+            // When & Then
+            assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
+                    .isInstanceOf(InternalServerErrorException.class)
+                    .hasMessageContaining("Unexpected error calling LLM provider");
         }
     }
 
