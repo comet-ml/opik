@@ -1,143 +1,149 @@
 #!/usr/bin/env python3
-"""Reject suppressions of InlineFullyQualifiedName that don't state a reason.
+"""Require a stated reason on every InlineFullyQualifiedName suppression.
 
 PMD accepts a bare `// NOPMD` and a bare
 `@SuppressWarnings("PMD.InlineFullyQualifiedName")` with no rationale, and offers
 no option to require one. CONTRIBUTING.md and the opik-backend skill both require
 a reason, so the gate is enforced here.
 
-Accepted rationale forms:
-  java.sql.Date d;                        // NOPMD - collides with java.util.Date
-  // collides with java.util.Date
-  @SuppressWarnings("PMD.InlineFullyQualifiedName")
-  /* collides with java.util.Date */
-  @SuppressWarnings("PMD.InlineFullyQualifiedName")
-  @SuppressWarnings("PMD.InlineFullyQualifiedName") // collides with ...
+Input is PMD's own XML report (run with --show-suppressed), not the Java source:
+PMD reports one <suppressedviolation> per suppression it actually honoured for a
+rule, which means
 
-Rejected: no comment at all, an empty or punctuation-only comment, and a
-preceding line that merely happens to contain `*` (e.g. `int x = 2 * 3;`) or is
-unrelated Javadoc.
+  * only suppressions of THIS rule are policed — a bare `// NOPMD` silencing some
+    other PMD rule is none of this check's business, and
+  * the reason text for `// NOPMD - <reason>` arrives already parsed, in usermsg.
 
-Exits 1 and prints one diagnostic per offending site; exits 0 when clean.
+`@suppresswarnings` suppressions always carry an empty usermsg (the annotation has
+nowhere to put prose), so for those the reason must be an adjacent comment that
+names the rule or the NOPMD marker explicitly. Requiring the marker — rather than
+accepting any nearby comment — is what keeps unrelated Javadoc and code that
+merely contains `*/` from passing as justification.
+
+Accepted — every form below is covered by a regression test in
+scripts/test_precommit_wrappers.sh, so this list cannot drift from the behaviour:
+
+    java.sql.Date d; // NOPMD - collides with the imported java.util.Date
+
+    // NOPMD - collides with the imported java.util.Date
+    @SuppressWarnings("PMD.InlineFullyQualifiedName")
+    java.sql.Date d;
+
+    @SuppressWarnings("PMD.InlineFullyQualifiedName") // NOPMD - collides with ...
+    java.sql.Date d;
+
+Rejected: bare `// NOPMD`, `// NOPMD -`, a bare annotation, and any annotation
+whose only nearby comment is unrelated prose (Javadoc, or a code line that merely
+contains a comment marker) rather than an explicit suppression note.
+
+The marker comment must be on the annotation's own line or the line directly
+above it — a comment *below* the annotation is not searched.
+
+Usage: precommit-pmd-suppressions.py <pmd-report.xml>
+Exits 1 with one diagnostic per offending suppression; 0 when clean. Unreadable
+or malformed input is a failure, never a silent pass.
 """
 
 import re
 import sys
+import xml.etree.ElementTree as ET
 
-RULE = "PMD.InlineFullyQualifiedName"
+RULE = "InlineFullyQualifiedName"
+NS = {"pmd": "http://pmd.sourceforge.net/report/2.0.0"}
 
-# `// NOPMD` optionally followed by a `-`/`:` separator, then the rationale.
-NOPMD = re.compile(r"//\s*NOPMD\b[ \t]*[-:]?[ \t]*(?P<reason>.*)$")
+# <suppressedviolation> carries no rule name — only filename, suppressiontype,
+# msg and usermsg. Scoping to this rule therefore relies on the ruleset holding
+# exactly one rule, so every suppression PMD reports for it is ours: a `// NOPMD`
+# silencing some other PMD rule never appears in this report at all. The message
+# prefix is asserted as a guard, so adding a second rule to the ruleset surfaces
+# here instead of silently widening what this check polices.
+MSG_PREFIX = "Inline fully-qualified name"
 
-# Annotation start; the value may span lines, so only the opening is matched here.
-SUPPRESS_START = re.compile(r"@SuppressWarnings\s*\(")
+# The reason must be attached to an explicit suppression marker, so a stray
+# comment or Javadoc line can never be mistaken for a justification.
+MARKER = re.compile(rf"(?://\s*NOPMD|{RULE})\b[ \t]*[-:]?[ \t]*(?P<reason>.*)$")
 
-# A comment carries a reason only if it holds at least two consecutive word
-# characters — enough to reject `//`, `// -`, `/* */` and `// ...` while
-# accepting any real prose.
+# At least two consecutive word characters — rejects "", "-", "//", "...".
 WORDS = re.compile(r"\w{2,}")
 
 
-def strip_comment_markers(text: str) -> str:
-    text = text.strip()
-    for prefix in ("///", "//", "/**", "/*", "*/", "*"):
-        if text.startswith(prefix):
-            text = text[len(prefix) :]
-            break
-    return text.replace("*/", "").strip()
-
-
 def has_reason(text: str) -> bool:
-    return bool(WORDS.search(strip_comment_markers(text)))
+    return bool(WORDS.search(text.replace("*/", " ")))
 
 
-def is_comment_line(text: str) -> bool:
-    """True when the line is *only* a comment — not code that contains `*`."""
-    stripped = text.strip()
-    return stripped.startswith(("//", "/*", "*")) or stripped.endswith("*/")
+def annotation_reason(path: str, hint: str) -> bool:
+    """True when an explicit suppression note sits next to the annotation.
 
-
-def annotation_span(lines: list[str], start: int) -> int:
-    """Return the index of the line closing the annotation that opens at `start`.
-
-    The value can span lines (`@SuppressWarnings({\n "PMD.X"})`), so parens are
-    balanced from the opening one rather than assuming a single line.
+    PMD does not report a line for @SuppressWarnings suppressions, so the whole
+    file is scanned for annotations naming this rule; each must have a marker
+    comment carrying prose on its own line or on the line above.
     """
-    depth = 0
-    for i in range(start, len(lines)):
-        for ch in lines[i]:
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0:
-                    return i
-    return start
-
-
-def preceding_reason(lines: list[str], start: int) -> bool:
-    """Look upward from the annotation for a comment block carrying a reason.
-
-    Only contiguous comment-only lines are considered, so unrelated code above
-    the annotation is never mistaken for rationale. Any comment in the block
-    with real prose satisfies the requirement; a Javadoc block that says nothing
-    (or says nothing but punctuation) does not.
-    """
-    i = start - 1
-    while i >= 0 and is_comment_line(lines[i]):
-        if has_reason(lines[i]):
-            return True
-        i -= 1
-    return False
-
-
-def check(path: str) -> list[str]:
     try:
-        with open(path, encoding="utf-8", errors="replace") as fh:
+        with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
-    except OSError:
-        return []
+    except OSError as exc:
+        print(f"{path}: cannot read file to validate {hint}: {exc}", file=sys.stderr)
+        return False
 
-    problems = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-
-        match = NOPMD.search(line)
-        if match and not has_reason(match.group("reason")):
-            problems.append(
-                f"{path}:{i + 1}: bare `// NOPMD` — add a reason, e.g. "
-                "`// NOPMD - collides with the imported java.util.Date`"
-            )
-
-        if SUPPRESS_START.search(line):
-            end = annotation_span(lines, i)
-            block = "\n".join(lines[i : end + 1])
-            if RULE in block:
-                # A trailing comment on any line of the annotation counts, as
-                # does a contiguous comment block directly above it.
-                trailing = any(
-                    (m := NOPMD.search(ln)) and has_reason(m.group("reason"))
-                    or ("//" in ln and has_reason(ln.split("//", 1)[1]))
-                    for ln in lines[i : end + 1]
-                )
-                if not trailing and not preceding_reason(lines, i):
-                    problems.append(
-                        f'{path}:{i + 1}: bare @SuppressWarnings("{RULE}") — add a '
-                        "reason as a comment on this line or directly above it"
-                    )
-            i = end + 1
+    ok = True
+    for i, line in enumerate(lines):
+        if RULE not in line or "@SuppressWarnings" not in line:
             continue
-        i += 1
-
-    return problems
+        candidates = [line]
+        if i > 0:
+            candidates.append(lines[i - 1])
+        if not any(
+            (m := MARKER.search(c)) and has_reason(m.group("reason"))
+            for c in candidates
+        ):
+            print(
+                f'{path}:{i + 1}: @SuppressWarnings("PMD.{RULE}") needs a reason — '
+                'add `// NOPMD - <why>` on this line or directly above it',
+                file=sys.stderr,
+            )
+            ok = False
+    return ok
 
 
 def main(argv: list[str]) -> int:
-    problems = [p for path in argv for p in check(path)]
-    for p in problems:
-        print(p, file=sys.stderr)
-    return 1 if problems else 0
+    if len(argv) != 1:
+        print(f"usage: {sys.argv[0]} <pmd-report.xml>", file=sys.stderr)
+        return 1
+
+    try:
+        root = ET.parse(argv[0]).getroot()
+    except (OSError, ET.ParseError) as exc:
+        # Fail closed: an unreadable report means the suppressions were never
+        # checked, which must not look like success.
+        print(f"cannot read PMD report {argv[0]}: {exc}", file=sys.stderr)
+        return 1
+
+    ok = True
+    annotated_files = set()
+
+    for sv in root.findall("pmd:suppressedviolation", NS):
+        if not (sv.get("msg") or "").startswith(MSG_PREFIX):
+            continue
+        path = sv.get("filename") or "<unknown>"
+        kind = (sv.get("suppressiontype") or "").lower()
+        usermsg = sv.get("usermsg") or ""
+
+        if kind == "@suppresswarnings":
+            # usermsg is always empty for annotations; validate in the source.
+            annotated_files.add(path)
+        elif not has_reason(usermsg):
+            print(
+                f"{path}: bare `// NOPMD` suppressing {RULE} — add a reason, e.g. "
+                "`// NOPMD - collides with the imported java.util.Date`",
+                file=sys.stderr,
+            )
+            ok = False
+
+    for path in sorted(annotated_files):
+        if not annotation_reason(path, f"@SuppressWarnings(\"PMD.{RULE}\")"):
+            ok = False
+
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

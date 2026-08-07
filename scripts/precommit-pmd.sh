@@ -57,18 +57,53 @@ if ! cache_ready "$lib_dir"; then
 fi
 
 file_list="${TMPDIR:-/tmp}/opik-pmd-files.$$"
+report="${TMPDIR:-/tmp}/opik-pmd-report.$$.xml"
 printf '%s\n' "$@" >"$file_list"
-trap 'rm -f "$file_list"' EXIT
+trap 'rm -f "$file_list" "$report"' EXIT
+
+# One PMD run produces both outputs: the XML report (with --show-suppressed) is
+# what the suppression validator reads, and the violations are rendered from it
+# for the developer. PMD exits 4 when it found violations, which is not an error
+# here — the report still has to be inspected.
+set +e
+java -cp "$lib_dir/*" net.sourceforge.pmd.cli.PmdCli \
+	check --rulesets "$RULESET" --file-list "$file_list" \
+	--format xml --no-progress --no-cache --show-suppressed \
+	--report-file "$report"
+pmd_status=$?
+set -e
+
+if [ ! -s "$report" ]; then
+	echo "precommit-pmd: PMD produced no report (exit ${pmd_status})." >&2
+	exit 1
+fi
 
 # PMD accepts a bare `// NOPMD` or a bare @SuppressWarnings with no rationale,
 # which would silently defeat the "suppress with a reason" requirement the rule
 # message, CONTRIBUTING.md and the backend skill all state. PMD has no option to
-# demand one, so enforce it here before invoking the CLI.
-if ! python3 "$(dirname "$0")/precommit-pmd-suppressions.py" "$@"; then
+# demand one, so it is enforced from the report — which also scopes the check to
+# suppressions of THIS rule, leaving other rules' NOPMD comments alone.
+suppressions_ok=0
+python3 "$(dirname "$0")/precommit-pmd-suppressions.py" "$report" || suppressions_ok=$?
+
+# Render the violations the report recorded, so the developer sees the same
+# output the text formatter would have produced.
+python3 - "$report" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+ns = {"pmd": "http://pmd.sourceforge.net/report/2.0.0"}
+root = ET.parse(sys.argv[1]).getroot()
+for f in root.findall("pmd:file", ns):
+    for v in f.findall("pmd:violation", ns):
+        msg = re.sub(r"\s+", " ", (v.text or "").strip())
+        print(f"{f.get('name')}:{v.get('beginline')}:\t{v.get('rule')}:\t{msg}")
+PY
+
+if [ "$suppressions_ok" -ne 0 ]; then
 	echo "precommit-pmd: suppressions of InlineFullyQualifiedName must state a reason." >&2
 	exit 1
 fi
 
-exec java -cp "$lib_dir/*" net.sourceforge.pmd.cli.PmdCli \
-	check --rulesets "$RULESET" --file-list "$file_list" \
-	--format text --no-progress --no-cache
+exit "$pmd_status"

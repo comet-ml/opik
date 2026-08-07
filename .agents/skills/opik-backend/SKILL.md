@@ -66,7 +66,7 @@ throw new ClientErrorException(new io.dropwizard.jersey.errors.ErrorMessage(409,
 private static final java.util.regex.Pattern P = java.util.regex.Pattern.compile("[a-z_]+");
 ```
 
-It's a heuristic, so there are legitimate exceptions — a simple-name collision in one file (`java.util.Date` vs `java.sql.Date`), or any case where the inline form is deliberate. Take the exception with an inline suppression **and a reason**; the reason is what makes it reviewable:
+It's a heuristic, so there are legitimate exceptions — a simple-name collision in one file (`java.util.Date` vs `java.sql.Date`), or any case where the inline form is deliberate. Take the exception with an inline suppression **and a reason**; the reason is enforced, so a bare suppression fails the hook:
 
 ```java
 import java.util.Date;
@@ -74,7 +74,15 @@ import java.util.Date;
 java.sql.Date sqlDate; // NOPMD - collides with the imported java.util.Date
 ```
 
-`@SuppressWarnings("PMD.InlineFullyQualifiedName")` on the declaration works too. Don't disable the rule repo-wide.
+`@SuppressWarnings("PMD.InlineFullyQualifiedName")` works too, but the annotation can't carry prose — pair it with a `// NOPMD - <reason>` marker on its own line or directly above:
+
+```java
+// NOPMD - collides with the imported java.util.Date
+@SuppressWarnings("PMD.InlineFullyQualifiedName")
+java.sql.Date sqlDate;
+```
+
+An ordinary comment isn't enough: the marker is what distinguishes a justification from unrelated Javadoc. Suppressions of *other* PMD rules are unaffected. Don't disable the rule repo-wide.
 
 Two things are **not** violations and aren't reported:
 - **Nested-type access** — `Alert.View.Public.class`, `Schema.AccessMode.READ_ONLY`. That's how you reference a nested type, not an inline FQN.

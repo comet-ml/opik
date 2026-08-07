@@ -34,13 +34,27 @@ stub_dir=$(mktemp -d)
 tmp_home=$(mktemp -d)
 trap 'rm -rf "$stub_dir" "$tmp_home"' EXIT
 export TMPDIR="$tmp_home"
-for tool in mvn npx java; do
+for tool in mvn npx; do
 	cat >"$stub_dir/$tool" <<EOF
 #!/bin/sh
 echo "$tool \$*"
 EOF
 	chmod +x "$stub_dir/$tool"
 done
+# `java` additionally writes the empty-but-valid report its caller demands:
+# precommit-pmd.sh treats a missing report as a hard failure (a gate that can't
+# read its own output must not pass), so echoing the args alone would abort.
+cat >"$stub_dir/java" <<'EOF'
+#!/bin/sh
+echo "java $*"
+for arg in "$@"; do
+	case "$prev" in --report-file)
+		printf '<?xml version="1.0" encoding="UTF-8"?>\n<pmd xmlns="http://pmd.sourceforge.net/report/2.0.0" version="stub" timestamp="stub"></pmd>\n' >"$arg" ;;
+	esac
+	prev=$arg
+done
+EOF
+chmod +x "$stub_dir/java"
 export PATH="$stub_dir:$PATH"
 
 echo "precommit-spotless.sh:"
@@ -64,50 +78,82 @@ out=$(scripts/precommit-pmd.sh apps/opik-backend/src/main/java/com/comet/opik/Fo
 check "invokes the PMD CLI"          "net.sourceforge.pmd.cli.PmdCli" "$out"
 check "passes the repo ruleset"      "apps/opik-backend/pmd-ruleset.xml" "$out"
 check "passes a --file-list"         "--file-list"                    "$out"
+check "asks PMD for suppressed hits" "--show-suppressed"              "$out"
 check_empty "no-arg is a no-op"      "$(scripts/precommit-pmd.sh 2>&1)"
 
-# Suppressions must carry a rationale — PMD accepts bare ones, so the validator
-# rejects them before the CLI runs. Covers every documented reason form plus the
-# malformed shapes that a naive grep would wave through (OPIK-7832 review).
+# Suppressions of the FQN rule must state a reason. The validator reads PMD's XML
+# report (--show-suppressed), so these cases drive it with synthetic reports —
+# hermetic, and no real PMD needed. Covers every documented reason form plus the
+# malformed shapes earlier grep-based versions waved through (OPIK-7832 review).
 echo "precommit-pmd-suppressions.py:"
 pmd_fix=$(mktemp -d)
 sup=scripts/precommit-pmd-suppressions.py
+MSG="Inline fully-qualified name 'Date': import the type at the top of the file"
 
-# name:::java-source — rejected (bare or fake rationale)
+# report <file> <suppressiontype> <usermsg> — writes a one-suppression XML report.
+report() {
+	cat >"$pmd_fix/report.xml" <<XEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<pmd xmlns="http://pmd.sourceforge.net/report/2.0.0" version="7.26.0" timestamp="2026-01-01T00:00:00">
+<suppressedviolation filename="$1" suppressiontype="$2" msg="$MSG" usermsg="$3"></suppressedviolation>
+</pmd>
+XEOF
+}
+
+# --- // NOPMD: the reason arrives already parsed by PMD, in usermsg ---
+report "/x/C.java" "//nopmd" ""
+check_empty "rejects bare // NOPMD" "$(python3 "$sup" "$pmd_fix/report.xml" >/dev/null 2>&1 && echo accepted)"
+report "/x/C.java" "//nopmd" " - "
+check_empty "rejects // NOPMD with only a dash" "$(python3 "$sup" "$pmd_fix/report.xml" >/dev/null 2>&1 && echo accepted)"
+report "/x/C.java" "//nopmd" " - collides with the imported java.util.Date"
+check "allows // NOPMD with a reason" "ok" "$(python3 "$sup" "$pmd_fix/report.xml" 2>/dev/null && echo ok)"
+
+# --- @SuppressWarnings: usermsg is always empty, so the source is consulted ---
+# name:::java-source — rejected (no explicit suppression note next to the annotation)
 while IFS=':::' read -r name src; do
 	[ -n "$name" ] || continue
 	printf '%b' "$src" >"$pmd_fix/$name.java"
-	check_empty "rejects $name" "$(python3 "$sup" "$pmd_fix/$name.java" >/dev/null 2>&1 && echo "accepted")"
+	report "$pmd_fix/$name.java" "@suppresswarnings" ""
+	check_empty "rejects $name" "$(python3 "$sup" "$pmd_fix/report.xml" >/dev/null 2>&1 && echo accepted)"
 done <<'CASES'
-bare-nopmd:::class C { java.sql.Date d; // NOPMD\n}\n
-nopmd-dash-only:::class C { java.sql.Date d; // NOPMD -\n}\n
-nopmd-empty-comment:::class C { java.sql.Date d; // NOPMD - //\n}\n
 bare-annotation:::class C {\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
 annotation-after-multiplication:::class C {\n    int x = 2 * 3;\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
 annotation-after-empty-comment:::class C {\n    //\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
-multiline-annotation:::class C {\n    @SuppressWarnings({\n        "PMD.InlineFullyQualifiedName"})\n    java.sql.Date d;\n}\n
+annotation-after-code-with-comment-marker:::class C {\n    int value = 1; /* */\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+annotation-after-unrelated-javadoc:::class C {\n    /** Documents the class. */\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
 CASES
 
-# name:::java-source — accepted (every documented reason form)
+# name:::java-source — accepted (an explicit marker carrying prose)
 while IFS=':::' read -r name src; do
 	[ -n "$name" ] || continue
 	printf '%b' "$src" >"$pmd_fix/$name.java"
-	check "allows $name" "ok" "$(python3 "$sup" "$pmd_fix/$name.java" 2>/dev/null && echo ok)"
+	report "$pmd_fix/$name.java" "@suppresswarnings" ""
+	check "allows $name" "ok" "$(python3 "$sup" "$pmd_fix/report.xml" 2>/dev/null && echo ok)"
 done <<'CASES'
-trailing-nopmd-reason:::class C { java.sql.Date d; // NOPMD - collides with java.util.Date\n}\n
-line-comment-above:::class C {\n    // collides with the imported java.util.Date\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
-block-comment-above:::class C {\n    /* collides with the imported java.util.Date */\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
-javadoc-above:::class C {\n    /**\n     * Collides with the imported java.util.Date.\n     */\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
-trailing-comment-on-annotation:::class C {\n    @SuppressWarnings("PMD.InlineFullyQualifiedName") // collides with java.util.Date\n    java.sql.Date d;\n}\n
-multi-value-annotation-with-reason:::class C {\n    // collides with the imported java.util.Date\n    @SuppressWarnings({"PMD.InlineFullyQualifiedName", "unchecked"})\n    java.sql.Date d;\n}\n
-unrelated-suppression-untouched:::class C {\n    @SuppressWarnings("unchecked")\n    java.util.List<String> l;\n}\n
+marker-comment-above:::class C {\n    // NOPMD - collides with the imported java.util.Date\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+marker-comment-on-annotation:::class C {\n    @SuppressWarnings("PMD.InlineFullyQualifiedName") // NOPMD - collides with java.util.Date\n    java.sql.Date d;\n}\n
+rule-named-in-comment-above:::class C {\n    // InlineFullyQualifiedName: collides with the imported java.util.Date\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n
+multi-value-annotation-with-marker:::class C {\n    // NOPMD - collides with the imported java.util.Date\n    @SuppressWarnings({"PMD.InlineFullyQualifiedName", "unchecked"})\n    java.sql.Date d;\n}\n
 CASES
 
-# End-to-end through the wrapper: rejection short-circuits before the CLI runs.
-check "wrapper blocks a bare suppression" "must state a reason" \
-	"$(scripts/precommit-pmd.sh "$pmd_fix/bare-nopmd.java" 2>&1)"
-check "wrapper runs the CLI when reasoned" "net.sourceforge.pmd.cli.PmdCli" \
-	"$(scripts/precommit-pmd.sh "$pmd_fix/trailing-nopmd-reason.java" 2>&1)"
+# Suppressions of OTHER rules never reach this check: PMD only reports suppressions
+# it honoured for rules in our ruleset, so a foreign msg must be ignored.
+cat >"$pmd_fix/report.xml" <<XEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<pmd xmlns="http://pmd.sourceforge.net/report/2.0.0" version="7.26.0" timestamp="2026-01-01T00:00:00">
+<suppressedviolation filename="/x/C.java" suppressiontype="//nopmd" msg="Avoid unused local variables such as 'x'." usermsg=""></suppressedviolation>
+</pmd>
+XEOF
+check "ignores another rule's bare NOPMD" "ok" "$(python3 "$sup" "$pmd_fix/report.xml" 2>/dev/null && echo ok)"
+
+# Fail closed: a report that can't be read means suppressions were never checked.
+check_empty "fails closed on a missing report" \
+	"$(python3 "$sup" "$pmd_fix/does-not-exist.xml" >/dev/null 2>&1 && echo accepted)"
+printf 'not xml' >"$pmd_fix/bad.xml"
+check_empty "fails closed on a malformed report" \
+	"$(python3 "$sup" "$pmd_fix/bad.xml" >/dev/null 2>&1 && echo accepted)"
+check_empty "fails closed with no argument" \
+	"$(python3 "$sup" >/dev/null 2>&1 && echo accepted)"
 rm -rf "$pmd_fix"
 
 echo "precommit-fe-lint.sh:"
