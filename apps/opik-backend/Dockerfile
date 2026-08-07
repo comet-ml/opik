@@ -58,7 +58,7 @@ RUN yum update -y && \
 WORKDIR /opt/opik
 
 # Copy application files
-COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh provision_agent_insights_readonly_user.sh opik-otel-views.yaml ./
+COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh rebaseline_db_changelog.sh provision_agent_insights_readonly_user.sh opik-otel-views.yaml ./
 COPY --chown=1001:1001 redoc/ redoc/
 
 # Prepare shell scripts
