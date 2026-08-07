@@ -12,7 +12,8 @@ import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { isLandingRoute } from "@/lib/landingRoutes";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useLandingWorkspace from "@/plugins/comet/useLandingWorkspace";
+import useWorkspaceByName from "@/plugins/comet/useWorkspaceByName";
 import useAppStore, { useSetAppUser } from "@/store/AppStore";
 import { usePostHog } from "posthog-js/react";
 import Logo from "@/shared/Logo/Logo";
@@ -67,10 +68,6 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   const setAppUser = useSetAppUser();
   const { data: user, isLoading } = useUser();
 
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
-
   const { data: organizations } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
@@ -80,6 +77,43 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     strict: false,
     select: (params) => params["workspaceName"],
   });
+
+  // Point reads instead of the whole organization: the workspace named in the URL, and -- only if
+  // that one turns out not to be visible -- the user's own default workspace to fall back to. Its
+  // name comes from the user payload, so neither lookup needs a list (OPIK-7699).
+  const {
+    data: urlWorkspace,
+    isPending: isUrlWorkspacePending,
+    isError: isUrlWorkspaceError,
+  } = useWorkspaceByName(
+    { workspaceName: workspaceNameFromURL ?? "" },
+    { enabled: !!user?.loggedIn && !!workspaceNameFromURL },
+  );
+  const needsFallbackWorkspace =
+    !!user?.loggedIn && (!workspaceNameFromURL || urlWorkspace === null);
+  const {
+    data: userDefaultWorkspace,
+    isPending: isDefaultWorkspacePending,
+    isError: isDefaultWorkspaceError,
+  } = useWorkspaceByName(
+    { workspaceName: user?.defaultWorkspace ?? "" },
+    { enabled: needsFallbackWorkspace && !!user?.defaultWorkspace },
+  );
+  // Last resort, for a user whose default workspace no longer resolves: ask the backend where they
+  // land in their organization. Replaces the old "first row of the unordered list" fallback.
+  const needsLandingWorkspace =
+    needsFallbackWorkspace &&
+    (!user?.defaultWorkspace ||
+      userDefaultWorkspace === null ||
+      isDefaultWorkspaceError);
+  const {
+    data: landingWorkspace,
+    isPending: isLandingWorkspacePending,
+    isError: isLandingWorkspaceError,
+  } = useLandingWorkspace(
+    { organizationId: organizations?.[0]?.id ?? "" },
+    { enabled: needsLandingWorkspace && !!organizations?.[0]?.id },
+  );
   const { pathname } = useLocation();
   const isRootPath = matchRoute({ to: "/" });
 
@@ -103,11 +137,8 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 
     // Reo.Dev user identification for usage tracking
     // Prefer GitHub handle if available, otherwise use email
-    const workspace = allWorkspaces?.find(
-      (ws) => ws.workspaceName === workspaceNameFromURL,
-    );
     const organization = organizations?.find(
-      (org) => org.id === workspace?.organizationId,
+      (org) => org.id === urlWorkspace?.organizationId,
     );
 
     if (user.gitHub) {
@@ -136,7 +167,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     user?.email,
     user?.apiKeys,
     user?.gitHub,
-    allWorkspaces,
+    urlWorkspace,
     organizations,
     workspaceNameFromURL,
     setAppUser,
@@ -165,13 +196,21 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return children;
   }
 
-  if (!allWorkspaces) {
+  // A failure is not an answer: hold the loader rather than telling the user their workspace is
+  // private, which is what the list-based version did while it had no data either.
+  if (
+    (workspaceNameFromURL && (isUrlWorkspacePending || isUrlWorkspaceError)) ||
+    (needsFallbackWorkspace &&
+      user.defaultWorkspace &&
+      isDefaultWorkspacePending) ||
+    (needsLandingWorkspace &&
+      organizations?.[0] &&
+      (isLandingWorkspacePending || isLandingWorkspaceError))
+  ) {
     return <Loader />;
   }
 
-  const matchedWorkspace = workspaceNameFromURL
-    ? allWorkspaces.find((ws) => ws.workspaceName === workspaceNameFromURL)
-    : null;
+  const matchedWorkspace = workspaceNameFromURL ? urlWorkspace : null;
 
   // Hidden spend workspace resolves as "not found" → private-project message.
   const workspace = isHiddenSpendWorkspace(matchedWorkspace, pathname)
@@ -186,9 +225,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
 
     useAppStore.getState().setActiveWorkspaceName(workspace.workspaceName);
   } else {
-    const defaultWorkspace =
-      allWorkspaces.find((workspace) => workspace.default) ??
-      allWorkspaces?.[0];
+    const defaultWorkspace = userDefaultWorkspace ?? landingWorkspace;
 
     if (defaultWorkspace) {
       if (

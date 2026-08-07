@@ -6,7 +6,7 @@ import { Button } from "@/ui/button";
 import useAppStore from "@/store/AppStore";
 import useUser from "@/plugins/comet/useUser";
 import useOrganizations from "@/plugins/comet/useOrganizations";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import {
   ORGANIZATION_PLAN_ENTERPRISE,
   ORGANIZATION_ROLE_TYPE,
@@ -24,17 +24,11 @@ const UpgradeButton: React.FC = () => {
   const { data: organizations } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
+  const workspace = useWorkspace(workspaceName);
 
-  if (!user?.loggedIn || !organizations || !allWorkspaces) {
+  if (!user?.loggedIn || !organizations) {
     return null;
   }
-
-  const workspace = allWorkspaces.find(
-    (ws) => ws.workspaceName === workspaceName,
-  );
 
   const organization = organizations.find(
     (org) => org.id === workspace?.organizationId,

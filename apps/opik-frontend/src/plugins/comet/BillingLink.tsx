@@ -1,18 +1,10 @@
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
-import useUser from "@/plugins/comet/useUser";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import { buildUrl } from "@/plugins/comet/utils";
 
 const BillingLink = () => {
   const activeWorkspaceName = useActiveWorkspaceName();
-  const { data: user } = useUser();
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
-
-  const workspace = allWorkspaces?.find(
-    (w) => w.workspaceName === activeWorkspaceName,
-  );
+  const workspace = useWorkspace(activeWorkspaceName);
 
   if (!workspace?.organizationId) return null;
 

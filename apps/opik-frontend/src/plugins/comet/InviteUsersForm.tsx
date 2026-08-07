@@ -14,8 +14,7 @@ import {
   FormMessage,
 } from "@/ui/form";
 import { useOpikWorkspaceName } from "@/store/AppStore";
-import useUser from "@/plugins/comet/useUser";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import { useInviteUsersMutation } from "@/plugins/comet/api/useInviteMembersMutation";
 
 const USERNAME_MIN_LENGTH = 3;
@@ -60,10 +59,7 @@ type InviteUsersFormData = z.infer<typeof inviteUsersSchema>;
 
 const InviteUsersForm = () => {
   const workspaceName = useOpikWorkspaceName();
-  const { data: user } = useUser();
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
+  const workspace = useWorkspace(workspaceName);
 
   const form = useForm<InviteUsersFormData>({
     resolver: zodResolver(inviteUsersSchema),
@@ -78,9 +74,6 @@ const InviteUsersForm = () => {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    const workspace = allWorkspaces?.find(
-      (w) => w.workspaceName === workspaceName,
-    );
     if (!workspace) {
       return;
     }

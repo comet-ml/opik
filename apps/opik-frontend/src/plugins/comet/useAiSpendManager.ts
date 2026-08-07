@@ -1,7 +1,7 @@
 import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";
-import useAllWorkspaces from "./useAllWorkspaces";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
+import useWorkspaceByName from "./useWorkspaceByName";
 import { isAiSpendWorkspace } from "./lib/aiSpend";
 import { ORGANIZATION_PLAN_ENTERPRISE, ORGANIZATION_ROLE_TYPE } from "./types";
 
@@ -14,37 +14,28 @@ const useAiSpendManager = () => {
 
   const { data: organizations, isPending: isOrganizationsPending } =
     useOrganizations({ enabled: isEnabled });
-  const { data: allWorkspaces, isPending: isWorkspacesPending } =
-    useAllWorkspaces({ enabled: isEnabled });
 
-  const currentWorkspace = allWorkspaces?.find(
-    (w) => w.workspaceName === workspaceName,
-  );
+  const { data: currentWorkspace, isPending: isWorkspacePending } =
+    useWorkspaceByName({ workspaceName }, { enabled: isEnabled });
   const organization = organizations?.find(
     (org) => org.id === currentWorkspace?.organizationId,
   );
 
-  const spendWorkspace = allWorkspaces?.find(
-    (w) => w.organizationId === organization?.id && isAiSpendWorkspace(w),
-  );
-
-  const isEnterprise =
-    organization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
-  const isOrganizationAdmin =
-    organization?.role === ORGANIZATION_ROLE_TYPE.admin;
+  // Published by the organization payload only when the workspace exists and cost intelligence is
+  // on -- the same condition under which it can be opened -- so no list has to be scanned for it.
+  const spendWorkspaceName = organization?.aiSpendWorkspaceName;
 
   return {
     isPending:
       isEnabled &&
-      (isOrganizationsPending || isWorkspacesPending || !workspaceVersion),
+      (isOrganizationsPending || isWorkspacePending || !workspaceVersion),
     organization,
-    spendWorkspace,
-    spendWorkspaceName: spendWorkspace?.workspaceName,
-    isSpendWorkspaceActive: isAiSpendWorkspace(currentWorkspace),
-    isEnterprise,
-    isOrganizationAdmin,
+    spendWorkspaceName,
+    isSpendWorkspaceActive: isAiSpendWorkspace(currentWorkspace ?? undefined),
+    isEnterprise: organization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE,
+    isOrganizationAdmin: organization?.role === ORGANIZATION_ROLE_TYPE.admin,
     hasAccess:
-      Boolean(spendWorkspace) &&
+      Boolean(spendWorkspaceName) &&
       Boolean(organization?.costIntelligenceEnabled) &&
       workspaceVersion === "v2",
   };

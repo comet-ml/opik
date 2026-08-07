@@ -1,7 +1,7 @@
 import V1NewQuickstart from "@/v1/pages/GetStartedPage/NewQuickstart";
 import useUser from "./useUser";
 import useOrganizations from "@/plugins/comet/useOrganizations";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import { ORGANIZATION_PLAN_ENTERPRISE } from "./types";
 import useAppStore from "@/store/AppStore";
 
@@ -12,15 +12,9 @@ const GetStartedPage = () => {
   const { data: organizations } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
+  const currentWorkspace = useWorkspace(workspaceName);
 
   if (!user) return;
-
-  const currentWorkspace = allWorkspaces?.find(
-    (workspace) => workspace.workspaceName === workspaceName,
-  );
 
   const currentOrganization = organizations?.find((org) => {
     return org.id === currentWorkspace?.organizationId;
