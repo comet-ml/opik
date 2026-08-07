@@ -94,9 +94,13 @@ echo
 # (timestamps, ordering, Liquibase version banner). Comparing it verbatim would flag a change on
 # every capture, so reduce it to the changeset identities — the ID/AUTHOR/FILENAME triples in the
 # DATABASECHANGELOG inserts — which are stable for an unchanged pending set.
+# `|| true` is scoped to grep alone: no match is the legitimate "nothing pending" case, and under
+# `set -o pipefail` its exit 1 would otherwise abort the script — including right after a
+# successful re-baseline, when a clean ledger is exactly what we expect. A failing java or sed
+# still propagates.
 pending_fingerprint() {
   java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null \
-    | grep -oiE "INSERT INTO [^(]*DATABASECHANGELOG[^(]*\\([^)]*\\) VALUES \\('[^']*', *'[^']*', *'[^']*'" \
+    | { grep -oiE "INSERT INTO [^(]*DATABASECHANGELOG[^(]*\\([^)]*\\) VALUES \\('[^']*', *'[^']*', *'[^']*'" || true; } \
     | sed -E "s/.*VALUES *\\('([^']*)', *'([^']*)', *'([^']*)'.*/\\1::\\2::\\3/" \
     | sort
 }
