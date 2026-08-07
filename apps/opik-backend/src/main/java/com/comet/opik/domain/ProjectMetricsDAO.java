@@ -1660,17 +1660,19 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             }
 
             var statement = connection.createStatement(template.render())
-                    .bind("project_id", projectId)
                     .bind("uuid_from_time", request.uuidFromTime().toString())
                     .bind("workspace_id", workspaceId);
 
-            // Same hazard as OPIK-5678 above: only the span-based queries embed SpanMetricsQueries'
-            // shared CTE, which is the sole place `:project_ids` appears. The trace/thread prefixes
-            // use the scalar `:project_id` bound above, and binding a parameter their SQL doesn't
-            // declare raises NoSuchElementException from R2DBC. Per-project aggregation passes a set
-            // of one so the shared CTE keeps a single `IN` form for both callers.
+            // Same hazard as OPIK-5678 above, and it cuts both ways: R2DBC raises
+            // NoSuchElementException for any bind whose parameter the rendered SQL does not declare.
+            // The span-based queries embed SpanMetricsQueries' shared CTE, which binds the project as
+            // a set (`IN :project_ids`, a set of one here); every other query in this class uses the
+            // scalar `:project_id` from its trace/thread prefix. Neither placeholder appears in both,
+            // so each bind has to be gated on the metric type rather than applied unconditionally.
             if (SPAN_TIME_METRICS.contains(request.metricType())) {
                 statement.bind("project_ids", new UUID[]{projectId});
+            } else {
+                statement.bind("project_id", projectId);
             }
 
             // Bind uuid_to_time only if present
