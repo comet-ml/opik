@@ -31,6 +31,9 @@ interface QueryBuilderChipPopoverContentProps {
 
 type FocusedField = { rowId: string; kind: "key" | "value" } | null;
 
+const KEY_INPUT_TEST_ID = "filter-chip-key-input";
+const VALUE_INPUT_TEST_ID = "filter-chip-value-input";
+
 const isRowApplied =
   (
     hasKey: boolean,
@@ -147,7 +150,7 @@ const QueryBuilderChipPopoverContent: React.FC<
         {keyConfig && (
           <AutocompleteCell
             grow
-            testId="filter-chip-key-input"
+            testId={KEY_INPUT_TEST_ID}
             value={row.key ?? ""}
             placeholder={keyConfig.placeholder ?? "key"}
             options={keyOptions}
@@ -171,7 +174,7 @@ const QueryBuilderChipPopoverContent: React.FC<
         {showValue &&
           (isNumericValue ? (
             <NumericCell
-              testId="filter-chip-value-input"
+              testId={VALUE_INPUT_TEST_ID}
               value={String(row.value ?? "")}
               placeholder={valueConfig?.placeholder ?? "0"}
               autoFocus={focusValue}
@@ -189,7 +192,7 @@ const QueryBuilderChipPopoverContent: React.FC<
           ) : valueConfig?.options ? (
             <AutocompleteCell
               grow={!keyConfig}
-              testId="filter-chip-value-input"
+              testId={VALUE_INPUT_TEST_ID}
               value={String(row.value ?? "")}
               placeholder={valueConfig.placeholder ?? "value"}
               options={valueOptions}
@@ -200,7 +203,7 @@ const QueryBuilderChipPopoverContent: React.FC<
           ) : (
             <TextCell
               grow={!keyConfig}
-              testId="filter-chip-value-input"
+              testId={VALUE_INPUT_TEST_ID}
               value={String(row.value ?? "")}
               placeholder={valueConfig?.placeholder ?? "value"}
               autoFocus={focusValue}

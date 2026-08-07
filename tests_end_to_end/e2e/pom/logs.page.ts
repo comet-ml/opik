@@ -258,9 +258,12 @@ export class LogsPage {
    * TracesSpansTab.tsx). Keyed by testid rather than accessible name because an
    * applied chip rewrites its own label — "Tags" becomes "Tags: contains prod" —
    * so a name-based locator would stop matching the moment the filter lands.
+   *
+   * Chip ids are snake_case domain keys; the rendered testid is kebab-case (see
+   * chipTestId in the FE), so callers pass the id and this maps it.
    */
   filterChip(chipId: string): Locator {
-    return this.page.getByTestId(`filter-chip-${chipId}`);
+    return this.page.getByTestId(`filter-chip-${chipId.replace(/_/g, '-')}`);
   }
 
   /** The open chip's popover. Only one chip popover is mounted at a time. */
@@ -322,13 +325,23 @@ export class LogsPage {
   }
 
   /**
+   * One row of the open chip's query builder. A chip can hold several rows
+   * ("Add tag" appends one) and every row reuses the same cell testids, so the
+   * row scope is what keeps `fill()` unambiguous under Playwright strict mode.
+   * Defaults to the first row, which is the one a freshly-opened chip renders.
+   */
+  filterChipRow(index = 0): Locator {
+    return this.filterChipPopover.getByRole('listitem').nth(index);
+  }
+
+  /**
    * Apply a single-value filter (tags, name, error type, ...): open the chip,
    * type the value, then close so the debounced change commits.
    */
-  async applyFilter(chipId: string, value: string): Promise<void> {
+  async applyFilter(chipId: string, value: string, rowIndex = 0): Promise<void> {
     return test.step(`Filter by ${chipId} = "${value}"`, async () => {
       await this.openFilterChip(chipId);
-      await this.filterChipPopover.getByTestId('filter-chip-value-input').fill(value);
+      await this.filterChipRow(rowIndex).getByTestId('filter-chip-value-input').fill(value);
       await this.closeFilterChip();
     });
   }
@@ -337,12 +350,17 @@ export class LogsPage {
    * Apply a keyed filter (feedback scores, metadata): these render a key cell
    * plus a value cell, and the key must be set before the value counts as applied.
    */
-  async applyKeyedFilter(chipId: string, key: string, value: string): Promise<void> {
+  async applyKeyedFilter(
+    chipId: string,
+    key: string,
+    value: string,
+    rowIndex = 0,
+  ): Promise<void> {
     return test.step(`Filter by ${chipId} "${key}" = "${value}"`, async () => {
       await this.openFilterChip(chipId);
-      const popover = this.filterChipPopover;
-      await popover.getByTestId('filter-chip-key-input').fill(key);
-      await popover.getByTestId('filter-chip-value-input').fill(value);
+      const row = this.filterChipRow(rowIndex);
+      await row.getByTestId('filter-chip-key-input').fill(key);
+      await row.getByTestId('filter-chip-value-input').fill(value);
       await this.closeFilterChip();
     });
   }

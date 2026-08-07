@@ -3,6 +3,7 @@ import ChipShell from "@/shared/filter-chips/chips/BaseChip/ChipShell";
 import {
   BooleanChipDefinition,
   BooleanChipValue,
+  chipTestId,
 } from "@/shared/filter-chips/types";
 import { isBooleanApplied } from "@/shared/filter-chips/chips/BooleanChip/BooleanChip.logic";
 
@@ -25,7 +26,7 @@ const BooleanChip: React.FC<BooleanChipProps> = ({
     <ChipShell
       applied={applied}
       aria-pressed={applied}
-      data-testid={`filter-chip-${definition.id}`}
+      data-testid={chipTestId(definition.id)}
       onClear={onClear}
       onClick={
         applied ? () => onClear("chip_x") : () => onApply({ applied: true })
