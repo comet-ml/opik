@@ -28,7 +28,12 @@ check_empty() { # check_empty <name> <actual> — asserts no output
 # Stub bin dir placed first on PATH; each stub echoes its name + args so we can
 # assert what the wrapper would have invoked.
 stub_dir=$(mktemp -d)
-trap 'rm -rf "$stub_dir"' EXIT
+# Private TMPDIR so wrappers that cache under it (precommit-pmd.sh) can neither
+# see a real cache left by a developer's earlier run nor leave one behind. Without
+# this the suite passes locally on ambient state and fails on a clean CI runner.
+tmp_home=$(mktemp -d)
+trap 'rm -rf "$stub_dir" "$tmp_home"' EXIT
+export TMPDIR="$tmp_home"
 for tool in mvn npx java; do
 	cat >"$stub_dir/$tool" <<EOF
 #!/bin/sh
@@ -47,9 +52,14 @@ check_empty "no-arg is a no-op"      "$(scripts/precommit-spotless.sh 2>&1)"
 
 echo "precommit-pmd.sh:"
 # The lib cache is pre-created so the wrapper skips Maven resolution and goes
-# straight to the (stubbed) java invocation.
-pmd_lib="${TMPDIR:-/tmp}/opik-pmd-$(sed -n 's/^PMD_VERSION="\(.*\)"$/\1/p' scripts/precommit-pmd.sh)"
-mkdir -p "$pmd_lib" && : >"$pmd_lib/stub.jar"
+# straight to the (stubbed) java invocation. The jar names must satisfy the
+# wrapper's cache_ready() check — a generic stub.jar would send it into real
+# Maven resolution, which the stubbed mvn can't fulfil, aborting the suite.
+pmd_version=$(sed -n 's/^PMD_VERSION="\(.*\)"$/\1/p' scripts/precommit-pmd.sh)
+pmd_lib="${TMPDIR:-/tmp}/opik-pmd-${pmd_version}"
+mkdir -p "$pmd_lib"
+: >"$pmd_lib/pmd-cli-${pmd_version}.jar"
+: >"$pmd_lib/pmd-java-${pmd_version}.jar"
 out=$(scripts/precommit-pmd.sh apps/opik-backend/src/main/java/com/comet/opik/Foo.java 2>&1)
 check "invokes the PMD CLI"          "net.sourceforge.pmd.cli.PmdCli" "$out"
 check "passes the repo ruleset"      "apps/opik-backend/pmd-ruleset.xml" "$out"
