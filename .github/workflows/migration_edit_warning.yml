@@ -1,0 +1,133 @@
+name: "Migration Edit Warning"
+run-name: "Migration Edit Warning on ${{ github.ref_name }} by @${{ github.actor }}"
+
+# Applied migrations are immutable: once a changeset has run anywhere, editing it changes its
+# Liquibase checksum and every already-migrated deployment fails `liquibase update` with
+# ValidationFailedException *before executing anything*. This workflow does not block such a
+# PR — there are legitimate exceptions — it makes the edit impossible to merge unnoticed.
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/**/*.sql"
+      - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**/*.sql"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  warn-on-migration-edits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Detect modified migrations
+        id: detect
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # --paginate: the endpoint returns 30 files per page, and a migration edit could
+          # otherwise sit past the first page of a large PR and go unreported.
+          gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --jq '.[] | select(.status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-(state|analytics)/migrations/.*\\.sql$")) | .filename' \
+            > modified_migrations.txt
+
+          if [ -s modified_migrations.txt ]; then
+            echo "⚠️  Modified (not added) migration files detected:"
+            sed 's/^/   - /' modified_migrations.txt
+            echo "has_edits=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "✅ No existing migration files were modified."
+            echo "has_edits=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build warning comment
+        if: steps.detect.outputs.has_edits == 'true'
+        run: |
+          # shellcheck disable=SC2016 # the single-quoted lines emit literal markdown fences
+          {
+            echo "<!-- migration-edit-warning -->"
+            echo "### ⚠️ This PR edits migrations that have already been applied"
+            echo
+            echo "Applied migrations are normally immutable. Editing one changes its Liquibase"
+            echo "checksum, and \`liquibase update\` validates stored checksums **before executing"
+            echo "anything** — so without a waiver, every already-migrated deployment fails to start."
+            echo
+            echo "| Modified migration |"
+            echo "|---|"
+            sed 's/.*\///; s/^/| `/; s/$/` |/' modified_migrations.txt
+            echo
+            echo "**If this edit is intentional**, each changeset above must declare a checksum waiver"
+            echo "so existing deployments accept their stored pre-edit value:"
+            echo
+            echo '```sql'
+            echo "--changeset author:some_changeset"
+            echo "--validCheckSum ANY"
+            echo '```'
+            echo
+            echo "Note the accepted spellings are \`--validCheckSum ANY\` and \`--validCheckSum: ANY\`."
+            echo "The parser silently ignores \`--validCheckSum:ANY\` (no space) and an inline"
+            echo "\`validCheckSum:ANY\` on the \`--changeset\` line — both look right and do nothing."
+            echo
+            echo "**If it is not intentional**, add a new migration instead of editing an existing one."
+            echo
+            echo "_This check never fails the build — it exists so the edit is a deliberate, reviewed"
+            echo "decision rather than something that slips through._"
+          } > /tmp/migration-edit-warning.md
+
+          cat /tmp/migration-edit-warning.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Fork PRs get a read-only token, so the sticky comment is skipped there and the warning
+      # lives in the step summary above instead.
+      - name: Find prior warning comment
+        id: find_comment
+        if: steps.detect.outputs.has_edits == 'true' && github.event.pull_request.head.repo.fork == false
+        uses: peter-evans/find-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- migration-edit-warning -->"
+
+      - name: Post or update warning comment
+        if: steps.detect.outputs.has_edits == 'true' && github.event.pull_request.head.repo.fork == false
+        uses: peter-evans/create-or-update-comment@v5
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          edit-mode: replace
+          body-path: /tmp/migration-edit-warning.md
+
+      # Once the edits are reverted the warning is stale, so retract it rather than leaving a
+      # comment that contradicts the diff.
+      - name: Find stale warning comment
+        id: find_stale
+        if: steps.detect.outputs.has_edits == 'false' && github.event.pull_request.head.repo.fork == false
+        uses: peter-evans/find-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- migration-edit-warning -->"
+
+      - name: Retract stale warning comment
+        if: steps.detect.outputs.has_edits == 'false' && steps.find_stale.outputs.comment-id != '' && github.event.pull_request.head.repo.fork == false
+        uses: peter-evans/create-or-update-comment@v5
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find_stale.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            <!-- migration-edit-warning -->
+            ### ✅ No applied migrations are edited anymore
+
+            An earlier revision of this PR modified existing migration files. That is no longer the
+            case, so the previous warning no longer applies.

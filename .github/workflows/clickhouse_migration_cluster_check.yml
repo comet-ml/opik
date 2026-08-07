@@ -38,8 +38,10 @@ jobs:
           echo "🔍 Detecting newly added ClickHouse migration files..."
           
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # For PRs, use GitHub's built-in files API
-            gh api repos/${{ github.repository }}/pulls/${{ github.event.number }}/files \
+            # For PRs, use GitHub's built-in files API.
+            # --paginate is required: the endpoint returns 30 files per page, so a larger PR would
+            # silently drop migrations past the first page and report none to validate.
+            gh api --paginate repos/${{ github.repository }}/pulls/${{ github.event.number }}/files \
               --jq '.[] | select(.status == "added") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
             CHANGED_FILES=$(cat changed_files.txt || echo "")
             rm -f changed_files.txt
