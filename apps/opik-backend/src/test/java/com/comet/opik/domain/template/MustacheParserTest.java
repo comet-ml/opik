@@ -102,35 +102,38 @@ class MustacheParserTest {
     }
 
     @Nested
-    @DisplayName("renderUnescaped")
-    class RenderUnescaped {
+    @DisplayName("no HTML-escaping of substituted values (OPIK-7354)")
+    class NoHtmlEscaping {
 
         @Test
         @DisplayName("should not HTML-escape special characters")
         void shouldNotHtmlEscapeSpecialCharacters() {
             String template = "Content: {{value}}";
-            Map<String, Object> context = Map.of("value", "<b>bold</b> & 'quoted' \"text\"");
+            // Every character the escaping factory used to mangle, not just quotes: & < > ' " = `
+            var value = "<b>bold</b> & 'quoted' \"text\" a=1 `tick`";
+            Map<String, Object> context = Map.of("value", value);
 
-            String result = mustacheParser.renderUnescaped(template, context);
+            String result = mustacheParser.render(template, context);
 
-            assertThat(result).isEqualTo("Content: <b>bold</b> & 'quoted' \"text\"");
+            assertThat(result).isEqualTo("Content: " + value);
         }
 
         @Test
-        @DisplayName("should render normally for values without special characters")
-        void shouldRenderNormallyForPlainValues() {
-            String template = "Hello {{name}}, you are {{age}} years old.";
-            Map<String, Object> context = Map.of("name", "Alice", "age", 25);
+        @DisplayName("should keep JSON structure readable for the judge")
+        void shouldKeepJsonStructureReadable() {
+            String template = "INPUT:\n{{input}}";
+            Map<String, Object> context = Map.of("input", "{\"input\":\"Who painted the Mona Lisa?\"}");
 
-            String result = mustacheParser.renderUnescaped(template, context);
+            String result = mustacheParser.render(template, context);
 
-            assertThat(result).isEqualTo("Hello Alice, you are 25 years old.");
+            assertThat(result).isEqualTo("INPUT:\n{\"input\":\"Who painted the Mona Lisa?\"}");
+            assertThat(result).doesNotContain("&quot;");
         }
 
         @Test
         @DisplayName("should return empty string for null template")
         void shouldReturnEmptyStringForNullTemplate() {
-            String result = mustacheParser.renderUnescaped(null, Map.of());
+            String result = mustacheParser.render(null, Map.of());
 
             assertThat(result).isEmpty();
         }
@@ -140,28 +143,10 @@ class MustacheParserTest {
         void shouldThrowOnMalformedTemplate() {
             Map<String, Object> context = Map.of("name", "test");
 
-            assertThatThrownBy(() -> mustacheParser.renderUnescaped(
+            assertThatThrownBy(() -> mustacheParser.render(
                     "Hello {{name}} {{#section}} unclosed", context))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Invalid Mustache template");
-        }
-
-        @Test
-        @DisplayName("default render should HTML-escape while renderUnescaped should not")
-        void shouldDifferFromDefaultRender() {
-            String template = "Value: {{val}}";
-            Map<String, Object> context = Map.of("val", "<script>alert('xss')</script>");
-
-            String escaped = mustacheParser.render(template, context);
-            String unescaped = mustacheParser.renderUnescaped(template, context);
-
-            // Default render escapes HTML
-            assertThat(escaped).contains("&lt;script&gt;");
-            assertThat(escaped).doesNotContain("<script>");
-
-            // Unescaped render preserves HTML as-is
-            assertThat(unescaped).contains("<script>alert('xss')</script>");
-            assertThat(unescaped).doesNotContain("&lt;");
         }
     }
 }

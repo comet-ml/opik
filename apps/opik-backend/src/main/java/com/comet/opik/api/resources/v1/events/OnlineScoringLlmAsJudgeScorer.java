@@ -377,8 +377,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                     costGuard.limitUsd(), trace.id(), costGuard.spentUsd());
                         }
                         // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
-                        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
+                        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse,
+                                message.llmAsJudgeCode().schema());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "traceId", trace.id());
+                        OnlineScoringEngine.logUnreadableResponse(userFacingLogger, parsed, "traceId", trace.id());
                         return parsed.scores().stream()
                                 .map(item -> {
                                     String scoreName = item.name();

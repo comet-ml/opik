@@ -77,6 +77,9 @@ public class OnlineScoringEngine {
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
 
+    private static final int MAX_REPORTED_RESPONSE_CHARS = 500;
+    private static final int MAX_REPORTED_FIELD_NAMES = 10;
+
     private static final String SPANS_VARIABLE_NAME = "spans";
     private static final String TRACE_VARIABLE_NAME = "trace";
     private static final String SPAN_VARIABLE_NAME = "span";
@@ -1039,9 +1042,24 @@ public class OnlineScoringEngine {
                 .build();
     }
 
-    public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames) {
-        public static ParsedFeedbackScores empty() {
-            return new ParsedFeedbackScores(List.of(), List.of());
+    /**
+     * @param unreadableScoreNames scores whose value the judge gave in a form we cannot read
+     * @param problem              set when the answer as a whole yielded nothing; null otherwise
+     */
+    public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames,
+            List<String> unreadableScoreNames, ResponseProblem problem) {
+
+        static ParsedFeedbackScores problem(ResponseProblem.Kind kind, String evidence) {
+            return new ParsedFeedbackScores(List.of(), List.of(), List.of(),
+                    new ResponseProblem(kind, evidence));
+        }
+    }
+
+    public record ResponseProblem(Kind kind, String evidence) {
+        public enum Kind {
+            NOT_JSON,
+            NOT_A_JSON_OBJECT,
+            NO_SCORE_FIELDS
         }
     }
 
@@ -1052,21 +1070,55 @@ public class OnlineScoringEngine {
                 name, entityType, entityId));
     }
 
-    public static ParsedFeedbackScores toFeedbackScores(@NonNull ChatResponse chatResponse) {
+    /**
+     * Surfaces a judge answer we could not read on the rule's logs. Without it a failed parse looked like a
+     * successful run to the user: no score, no explanation (OPIK-7354).
+     */
+    public static void logUnreadableResponse(
+            Logger userFacingLogger, ParsedFeedbackScores parsed, String entityType, Object entityId) {
+        if (!parsed.unreadableScoreNames().isEmpty()) {
+            userFacingLogger.warn(
+                    "Could not read the score value for {} on {} '{}' — expected a number or a boolean",
+                    quoteAll(parsed.unreadableScoreNames()), entityType, entityId);
+        }
+        if (parsed.problem() != null) {
+            userFacingLogger.warn("Nothing was scored for {} '{}': {}", entityType, entityId,
+                    describe(parsed.problem()));
+        }
+    }
+
+    private static String describe(ResponseProblem problem) {
+        return switch (problem.kind()) {
+            case NOT_JSON -> "the judge's answer was not valid JSON (%s)".formatted(problem.evidence());
+            case NOT_A_JSON_OBJECT -> "the judge's answer was not a JSON object (%s)"
+                    .formatted(problem.evidence());
+            case NO_SCORE_FIELDS -> ("the judge's answer had none of the expected score fields. Its fields were "
+                    + "%s; expected { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }")
+                    .formatted(problem.evidence());
+        };
+    }
+
+    private static String sizeOf(String content) {
+        return "%,d chars".formatted(content.length());
+    }
+
+    public static ParsedFeedbackScores toFeedbackScores(@NonNull ChatResponse chatResponse,
+            @NonNull List<LlmAsJudgeOutputSchema> schema) {
         var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
         try {
             structuredResponse = OBJECT_MAPPER.readTree(content);
             if (!structuredResponse.isObject()) {
-                log.info("ChatResponse content returned into an empty JSON result");
-                return ParsedFeedbackScores.empty();
+                log.info("Judge answer was not a JSON object: size='{}' response='{}'", sizeOf(content),
+                        StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
+                return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_A_JSON_OBJECT, sizeOf(content));
             }
         } catch (JsonProcessingException e) {
-            log.error("parsing LLM response into a JSON: {}", content, e);
-            return ParsedFeedbackScores.empty();
+            log.error("Judge answer was not valid JSON: size='{}' response='{}'", sizeOf(content),
+                    StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null), e);
+            return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content));
         }
-        List<FeedbackScoreBatchItem> results = new ArrayList<>();
-        List<String> nullScoreNames = new ArrayList<>();
+        var collected = new CollectedScores();
         structuredResponse.properties().forEach(scoreMetric -> {
             var scoreName = scoreMetric.getKey();
             var scoreNested = scoreMetric.getValue();
@@ -1074,35 +1126,132 @@ public class OnlineScoringEngine {
                 log.debug("No score found for '{}' score in {}", scoreName, scoreNested);
                 return;
             }
-            var actualScore = scoreNested.path(SCORE_FIELD_NAME);
+            collected.accept(scoreName, scoreNested);
+        });
+        // The nested shape recognised nothing, so fall back to the flat one; if that recognises nothing
+        // either, no pass understood the answer.
+        if (collected.foundNothing()) {
+            collectFlatSingleScore(structuredResponse, schema, collected);
+
+            if (collected.foundNothing()) {
+                var topLevelKeys = StreamSupport.stream(
+                        Spliterators.spliteratorUnknownSize(structuredResponse.fieldNames(),
+                                Spliterator.ORDERED | Spliterator.NONNULL),
+                        false)
+                        .toList();
+                // Not wrapped in quotes: quoteAll already quotes each name.
+                var fields = topLevelKeys.isEmpty() ? "(none)" : quoteAll(topLevelKeys);
+                log.warn("Judge answer had no recognisable score fields: fields={} size='{}' response='{}'",
+                        fields, sizeOf(content),
+                        StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
+                return ParsedFeedbackScores.problem(ResponseProblem.Kind.NO_SCORE_FIELDS, fields);
+            }
+        }
+        return collected.toParsed();
+    }
+
+    private static final class CollectedScores {
+        private final List<FeedbackScoreBatchItem> scores = new ArrayList<>();
+        private final List<String> nullScoreNames = new ArrayList<>();
+        private final List<String> unreadableScoreNames = new ArrayList<>();
+
+        void accept(String scoreName, JsonNode scoreNode) {
+            var actualScore = scoreNode.path(SCORE_FIELD_NAME);
             if (actualScore.isNull()) {
                 log.debug("Skipping '{}' score because the judge returned a null value", scoreName);
                 nullScoreNames.add(scoreName);
                 return;
             }
-            var resultBuilder = FeedbackScoreBatchItem.builder()
-                    .name(scoreName)
-                    .reason(scoreNested.path(REASON_FIELD_NAME).asText())
-                    .source(ScoreSource.ONLINE_SCORING);
-            if (actualScore.isBoolean()) {
-                resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
-            } else {
-                resultBuilder.value(actualScore.decimalValue());
-            }
-            results.add(resultBuilder.build());
-        });
-        if (results.isEmpty() && nullScoreNames.isEmpty()) {
-            var topLevelKeys = StreamSupport.stream(
-                    Spliterators.spliteratorUnknownSize(structuredResponse.fieldNames(),
-                            Spliterator.ORDERED | Spliterator.NONNULL),
-                    false)
-                    .toList();
-            var truncated = content.length() > 500 ? content.substring(0, 500) + "..." : content;
-            log.warn(
-                    "Invalid LLM output format for feedback scores. Expected structure: { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }. Top-level keys: '{}'. Raw response (truncated): '{}'",
-                    topLevelKeys, truncated);
+            toScoreValue(actualScore).ifPresentOrElse(
+                    value -> scores.add(FeedbackScoreBatchItem.builder()
+                            .name(scoreName)
+                            .reason(extractReason(scoreNode))
+                            .source(ScoreSource.ONLINE_SCORING)
+                            .value(value)
+                            .build()),
+                    () -> unreadableScoreNames.add(scoreName));
         }
-        return new ParsedFeedbackScores(results, nullScoreNames);
+
+        // Nothing usable and nothing explicitly not-applicable — i.e. the pass did not recognise the shape
+        boolean foundNothing() {
+            return scores.isEmpty() && nullScoreNames.isEmpty() && unreadableScoreNames.isEmpty();
+        }
+
+        /** Copies so a caller cannot mutate a parsed result through the lists this accumulator still holds. */
+        ParsedFeedbackScores toParsed() {
+            return new ParsedFeedbackScores(List.copyOf(scores), List.copyOf(nullScoreNames),
+                    List.copyOf(unreadableScoreNames), null);
+        }
+    }
+
+    /** The names come from the judge's answer, so the count is capped to keep one reply off a huge log row. */
+    private static String quoteAll(List<String> names) {
+        var shown = names.stream().limit(MAX_REPORTED_FIELD_NAMES).map("'%s'"::formatted)
+                .collect(Collectors.joining(", "));
+        return names.size() <= MAX_REPORTED_FIELD_NAMES
+                ? shown
+                : "%s and %,d more".formatted(shown, names.size() - MAX_REPORTED_FIELD_NAMES);
+    }
+
+    /**
+     * Accepts the flat {@code { "score": ... }} shape that rules created before OPIK-7354 still instruct, on
+     * top of the schema-named nested shape. Single-score schemas only: a flat object carries no name, so with
+     * several scores there is nothing to attribute it to.
+     */
+    private static void collectFlatSingleScore(JsonNode structuredResponse, List<LlmAsJudgeOutputSchema> schema,
+            CollectedScores collected) {
+        if (schema.size() != 1 || !structuredResponse.has(SCORE_FIELD_NAME)) {
+            return;
+        }
+        log.debug("Reading '{}' score from a flat single-score response", schema.getFirst().name());
+        collected.accept(schema.getFirst().name(), structuredResponse);
+    }
+
+    /**
+     * {@code decimalValue()} answers {@code ZERO} for any non-numeric node, so a quoted score
+     * ({@code "score": "0.8"}) used to be stored as 0 — a wrong score rather than a missing one, and
+     * indistinguishable from a genuine zero (OPIK-7354). Quoted numbers and booleans are parsed, since
+     * judges quote them routinely; anything else yields empty so the caller can report it.
+     */
+    private static Optional<BigDecimal> toScoreValue(JsonNode actualScore) {
+        if (actualScore.isBoolean()) {
+            return Optional.of(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
+        }
+        if (actualScore.isNumber()) {
+            return Optional.of(actualScore.decimalValue());
+        }
+        if (!actualScore.isTextual()) {
+            return Optional.empty();
+        }
+        var text = actualScore.asText().trim();
+        if (text.equalsIgnoreCase("true")) {
+            return Optional.of(BigDecimal.ONE);
+        }
+        if (text.equalsIgnoreCase("false")) {
+            return Optional.of(BigDecimal.ZERO);
+        }
+        try {
+            return Optional.of(new BigDecimal(text));
+        } catch (NumberFormatException e) {
+            log.debug("Score value '{}' is neither a number nor a boolean", text);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Built-in templates asked for {@code "reason": ["..."]}, and {@code asText()} on an array yields an empty
+     * string — silently dropping the explanation. Comma-joined to match how the UI concatenates several
+     * reasons into one cell ({@code ReasonCell.tsx}).
+     */
+    private static String extractReason(JsonNode scoreNode) {
+        var reason = scoreNode.path(REASON_FIELD_NAME);
+        if (!reason.isArray()) {
+            return reason.asText();
+        }
+        return StreamSupport.stream(reason.spliterator(), false)
+                .map(JsonNode::asText)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.joining(", "));
     }
 
     private static String extractJson(String response) {
