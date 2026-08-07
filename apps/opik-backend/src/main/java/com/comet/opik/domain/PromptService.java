@@ -276,7 +276,9 @@ class PromptServiceImpl implements PromptService {
     private Prompt getOrCreatePrompt(String workspaceId, String name, String userName,
             TemplateStructure templateStructure, UUID projectId) {
 
-        Prompt prompt = findByName(workspaceId, name, projectId);
+        // Deliberately not the workspace fallback used by the read path: resolving a create through a legacy
+        // project-less prompt would version that prompt instead of creating the requested project-scoped one.
+        Prompt prompt = findByNameScoped(workspaceId, name, projectId);
 
         if (prompt != null) {
             // For existing prompts, ignore the templateStructure parameter and use the existing prompt's structure.
@@ -299,7 +301,12 @@ class PromptServiceImpl implements PromptService {
 
         return EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
-                .onErrorDo(() -> findByName(workspaceId, name, projectId));
+                .onErrorDo(() -> findByNameScoped(workspaceId, name, projectId));
+    }
+
+    private Prompt findByNameScoped(String workspaceId, String name, UUID projectId) {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(PromptDAO.class).findByName(name, workspaceId, projectId));
     }
 
     private Prompt findByName(String workspaceId, String name, UUID projectId) {

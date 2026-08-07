@@ -388,6 +388,55 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
+    @DisplayName("Creating a version scoped to a project does not version a legacy project-less prompt")
+    void createPromptVersionDoesNotVersionLegacyProjectLessPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var legacyPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        var legacyPromptId = createPrompt(legacyPrompt, apiKey, workspaceName);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(sharedName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .projectId(projectId)
+                .build();
+
+        PromptVersion createdVersion;
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            createdVersion = response.readEntity(PromptVersion.class);
+        }
+
+        var projectPrompts = promptResourceClient.getPromptsByProjectId(projectId, apiKey, workspaceName);
+
+        assertThat(projectPrompts.content()).extracting(Prompt::name).containsExactly(sharedName);
+
+        // The version must land on a new project-scoped prompt, not on the legacy project-less one
+        var projectPrompt = projectPrompts.content().getFirst();
+        assertThat(projectPrompt.id()).isNotEqualTo(legacyPromptId);
+        assertThat(createdVersion.promptId()).isEqualTo(projectPrompt.id());
+        assertThat(promptResourceClient.getPrompt(legacyPromptId, apiKey, workspaceName).versionCount()).isZero();
+    }
+
+    @Test
     @DisplayName("Retrieve prompt version with an unresolved project_name does not search the whole workspace")
     void retrievePromptVersionWithUnresolvedProjectNameDoesNotSearchWorkspace() {
         String apiKey = UUID.randomUUID().toString();
@@ -481,6 +530,36 @@ class PromptResourceProjectScopedPromptsTest {
         var persistedVersion = promptResourceClient.getPromptVersion(createdVersion.id(), apiKey, workspaceName);
         assertThat(persistedVersion.promptId()).isEqualTo(projectPrompt.id());
         assertThat(persistedVersion.template()).isEqualTo(createVersionRequest.version().template());
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version with a null project_name resolves the project-less prompt")
+    void retrievePromptVersionWithNullProjectName() {
+        String projectName = null;
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var workspacePrompt = buildPrompt()
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(workspacePrompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder()
+                .name(workspacePrompt.name())
+                .projectName(projectName)
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(workspacePrompt.template());
+        }
     }
 
     @Test

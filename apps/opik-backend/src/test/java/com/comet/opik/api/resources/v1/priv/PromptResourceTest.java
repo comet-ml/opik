@@ -2904,8 +2904,8 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when project_name does not match the prompt's project, then fall back to workspace-level and return it")
-        void whenProjectNameDoesNotMatchPromptProject__thenFallBackToWorkspaceAndReturnIt() {
+        @DisplayName("when project_name does not match the prompt's project, then do not fall back and return not found")
+        void whenProjectNameDoesNotMatchPromptProject__thenReturnNotFound() {
             var projectName = "project-" + UUID.randomUUID();
             projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -2929,15 +2929,18 @@ class PromptResourceTest {
                     .projectId(otherProjectId)
                     .build();
 
-            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+            createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
 
-            // Retrieve using a different project name: project-level lookup misses, falls back to workspace-wide and finds it
+            // The prompt belongs to otherProject, so a lookup scoped to a different project must not reach it
             var retrieveRequest = PromptVersionRetrieve.builder()
                     .name(prompt.name())
                     .projectName(projectName)
                     .build();
 
-            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+            try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
         }
 
         @Test
