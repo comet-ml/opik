@@ -746,13 +746,13 @@ areas:
       members-change-role:      { covered: false, cloud_only: true }
 
     visual:
-      config-feedback-definitions: { covered: false, state: default }
+      config-feedback-definitions: { covered: true,  state: default }
       config-feedback-def-empty:   { covered: false, state: empty, note: "'No feedback definitions yet'" }
-      config-environments:         { covered: false, state: default }
-      config-environments-empty:   { covered: false, state: empty, note: "'No environments yet'" }
-      config-ai-providers:         { covered: false, state: default }
-      config-ai-providers-empty:   { covered: false, state: empty, note: "'No AI providers yet'" }
-      config-workspace-prefs:      { covered: false, state: default }
+      config-environments:         { covered: true,  state: default }
+      config-environments-empty:   { covered: true,  state: empty, note: "'No environments yet'" }
+      config-ai-providers:         { covered: true,  state: default }
+      config-ai-providers-empty:   { covered: true,  state: empty, note: "'No AI providers yet'" }
+      config-workspace-prefs:      { covered: true,  state: default }
 
   onboarding:
     label: Get started
