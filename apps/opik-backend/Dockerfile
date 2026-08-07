@@ -31,9 +31,9 @@ LABEL org.opencontainers.image.vendor="Comet ML"
 # SHA256 checksum must match the official AWS RDS global bundle
 # Update this checksum when AWS updates the bundle: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 ARG RDS_CERT_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
-# hadolint ignore=DL3064
 # Not a secret: `changeit` is the stock JDK truststore password, and this truststore holds only
 # public AWS RDS CA certificates. Flagged because the variable name matches hadolint's heuristic.
+# hadolint ignore=DL3064
 ARG STORE_PASSWORD=changeit
 COPY install_rds_cert.sh /tmp/install_rds_cert.sh
 # perl is intentionally not installed: it pulls in perl-Archive-Tar, which is
