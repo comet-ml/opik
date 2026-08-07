@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionRetrieve;
@@ -384,6 +385,56 @@ class PromptResourceProjectScopedPromptsTest {
         }
 
         assertThat(projectId).isNotEqualTo(otherProjectId);
+    }
+
+    @Test
+    @DisplayName("Creating a version with a name used by another project creates a separate project-scoped prompt")
+    void createPromptVersionWithNameFromAnotherProjectCreatesScopedPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var otherProjectPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(otherProjectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        var otherProjectPromptId = createPrompt(otherProjectPrompt, apiKey, workspaceName);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(sharedName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .projectId(projectId)
+                .build();
+
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+        }
+
+        var projectPrompts = promptResourceClient.getPromptsByProjectId(projectId, apiKey, workspaceName);
+        var otherProjectPrompts = promptResourceClient.getPromptsByProjectId(otherProjectId, apiKey, workspaceName);
+
+        assertThat(projectPrompts.content()).extracting(Prompt::name).containsExactly(sharedName);
+        assertThat(otherProjectPrompts.content()).extracting(Prompt::name).containsExactly(sharedName);
+
+        // The version must land on a new prompt owned by projectId, never on the other project's prompt
+        assertThat(projectPrompts.content().getFirst().id()).isNotEqualTo(otherProjectPromptId);
+        assertThat(otherProjectPrompts.content().getFirst().id()).isEqualTo(otherProjectPromptId);
+        assertThat(otherProjectPrompts.content().getFirst().versionCount()).isZero();
     }
 
     @Test

@@ -2974,8 +2974,45 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when project_name does not match, fall back to workspace-wide, then return X-Opik-Deprecation header")
+        @DisplayName("when project_name does not match a project-less prompt, fall back to workspace-wide, then return X-Opik-Deprecation header")
         void whenProjectNameDoesNotMatch__thenReturnDeprecationHeader() {
+            var projectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .build();
+
+            createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt",
+                                prompt.name()));
+            }
+        }
+
+        @Test
+        @DisplayName("when the prompt belongs to another project, then do not fall back and return not found")
+        void whenPromptBelongsToAnotherProject__thenReturnNotFound() {
             var projectName = "project-" + UUID.randomUUID();
             projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -3007,10 +3044,7 @@ class PromptResourceTest {
 
             try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
                     TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
-                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt",
-                                prompt.name()));
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
 
