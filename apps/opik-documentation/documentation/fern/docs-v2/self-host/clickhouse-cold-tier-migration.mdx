@@ -1,0 +1,107 @@
+---
+headline: ClickHouse Cold-Tier Migration
+og:description: How the Opik Helm chart automatically recovers ClickHouse when the cold storage tier is enabled on a multi-replica cluster
+og:site_name: Opik Documentation
+og:title: 'Enabling the ClickHouse Cold Tier'
+subtitle: Enabling tiered (cold) ClickHouse storage on a multi-replica cluster
+title: ClickHouse Cold-Tier Migration
+---
+
+> **Important:** If you're using or considering the enterprise version of Opik or Comet, reach out to Sales@comet.com to access the enterprise deployment documentation.
+
+# ClickHouse Cold-Tier Migration
+
+Opik's ClickHouse can use a tiered storage policy: hot data on a local disk and cold data on S3, fronted by a local read-through cache. When you enable the cold tier, the Helm chart runs a migration job that makes the transition safe and automatic. This matters most on a cluster running **more than one ClickHouse replica**, where enabling the cold tier can otherwise wedge a replica for several minutes.
+
+<Note>
+This page covers enabling the cold tier on an existing multi-replica cluster. For running multiple ClickHouse replicas in general — including the two-phase install required for a fresh HA deployment — see [Scaling Opik](/self-host/scaling#replication-strategy).
+</Note>
+
+## Why This Is Needed
+
+Enabling the cold tier renders a new ClickHouse `storage.xml` that references the cache path (`/var/cache/clickhouse_s3` by default). On a multi-replica cluster, the ClickHouse operator can push this new configuration to a pod **before** it rebuilds that pod's StatefulSet to add the cache volume and mount. When that happens the pod fails to start:
+
+```
+mkdir /var/cache/clickhouse_s3: Permission denied
+```
+
+The pod enters `CrashLoopBackOff` and self-heals on its own once the operator rebuilds the StatefulSet — but that passive recovery takes roughly 7 minutes per replica. The migration job automates the recovery so the cold-tier enablement completes quickly and without manual intervention.
+
+## Upgrade Instructions
+
+To enable the cold tier, set `clickhouse.tieredStorage.enabled: true` and provide the cold bucket configuration under `clickhouse.tieredStorage`:
+
+```yaml
+clickhouse:
+  tieredStorage:
+    enabled: true
+    cold:
+      s3:
+        endpoint: "https://<bucket>.s3.<region>.amazonaws.com"
+        region: "<region>"
+```
+
+The migration job runs automatically whenever the cold tier is enabled. It is controlled by:
+
+```yaml
+clickhouse:
+  tieredStorage:
+    coldTierMigration:
+      enabled: true
+```
+
+<Note>
+`coldTierMigration.enabled` defaults to `true`. It only does work when the cold tier is enabled, and is a no-op when every replica already has the cache volume — so it is safe to leave on across upgrades. Because it only bounces the operator (never deletes ClickHouse StatefulSets, pods, or data), it is safe on an existing release. To opt out **without** disabling the cold tier:
+
+```yaml
+clickhouse:
+  tieredStorage:
+    coldTierMigration:
+      enabled: false
+```
+</Note>
+
+### How the Migration Works
+
+The migration runs as a post-upgrade hook (or ArgoCD `PostSync` hook) and is **data-preserving**. It recovers the cluster by bouncing the ClickHouse operator — it never deletes ClickHouse StatefulSets, pods, or data:
+
+<Steps>
+<Step title="Detect">
+Check whether any ClickHouse StatefulSet is still missing the cold-tier cache volume. If none are, the job exits as a no-op.
+</Step>
+<Step title="Bounce the operator">
+Delete the altinity ClickHouse operator pod. A fresh operator re-reconciles from scratch.
+</Step>
+<Step title="Rebuild with the cache volume">
+On its first reconcile pass, the fresh operator rebuilds every ClickHouse StatefulSet **with** the cache volume — the affected pod remounts and recovers.
+</Step>
+<Step title="Wait for readiness">
+Wait until every ClickHouse pod is `Ready` and no StatefulSet is missing the cache volume.
+</Step>
+</Steps>
+
+The job itself only restarts the operator — it never deletes a ClickHouse StatefulSet, pod, or PersistentVolumeClaim. Recovery is far faster than the ~7 min/replica passive self-heal, though the operator's own rebuild of the affected StatefulSet may still briefly restart the wedged pod.
+
+### Configuration Reference
+
+All keys are under `clickhouse.tieredStorage.coldTierMigration`:
+
+| Value | Default | Description |
+| --- | --- | --- |
+| `clickhouse.tieredStorage.coldTierMigration.enabled` | `true` | Run the migration when the cold tier is enabled. Set `false` to opt out without disabling the cold tier. |
+| `clickhouse.tieredStorage.coldTierMigration.image` | `alpine/kubectl:1.35.0` | Image used by the migration job. |
+| `clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds` | `1200` | Total budget for the run (bounce the operator, then wait for all replicas Ready). |
+| `clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds` | `1320` | Kubernetes hard cap on the Job. Must be greater than `pollTimeoutSeconds`. |
+| `clickhouse.tieredStorage.coldTierMigration.serviceAccountName` | `""` | Use an externally-managed ServiceAccount instead of the chart-created one. When set, the account must already have `get/list/watch` on `statefulsets` and `get/list/watch/delete` on `pods`. |
+
+<Warning>
+The migration ServiceAccount is granted `delete` on pods (to bounce the operator). Leave `serviceAccountName` empty to use the chart-created, Job-scoped account. If you supply your own, use a dedicated, tightly-scoped ServiceAccount rather than a shared one.
+</Warning>
+
+## Single-Replica Clusters
+
+On a single-replica cluster the cold-tier enablement is briefly disruptive and would self-heal on its own in roughly 6–7 minutes. The migration job still runs and recovers the replica the same way (bounce the operator so it rebuilds the StatefulSet with the cache volume), typically faster than waiting for the passive self-heal. No action is required either way. If the replica already has the cache volume, the job is a no-op.
+
+## Need Help?
+
+If you encounter issues enabling the cold tier, please check the [troubleshooting guide](/self-host/troubleshooting) or reach out for support.

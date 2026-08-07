@@ -944,6 +944,9 @@ navigation:
       - page: Helm chart migration
         path: ../docs-v2/self-host/helm.mdx
         slug: helm
+      - page: ClickHouse cold-tier migration
+        path: ../docs-v2/self-host/clickhouse-cold-tier-migration.mdx
+        slug: clickhouse-cold-tier-migration
       - page: Platform Architecture
         path: ../docs-v2/self-host/architecture.mdx
         slug: architecture

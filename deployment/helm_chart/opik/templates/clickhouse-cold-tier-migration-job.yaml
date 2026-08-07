@@ -1,0 +1,263 @@
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.tieredStorage.enabled .Values.clickhouse.tieredStorage.coldTierMigration.enabled }}
+{{- /*
+  When the cold tier is enabled, the ClickHouse operator can push the new
+  storage.xml to a pod before rebuilding its StatefulSet with the cache volume,
+  leaving the pod crash-looping. This job recovers it by bouncing the altinity
+  ClickHouse operator pod: a fresh operator rebuilds each StatefulSet WITH the
+  cache volume on its first reconcile pass. The job itself never deletes the
+  ClickHouse StatefulSets, pods, or data path — it only restarts the operator —
+  so recovery is far faster than the ~7 min/replica passive self-heal (the
+  operator's own rebuild may still briefly restart the wedged pod). No-op when
+  the cluster is already healthy.
+*/ -}}
+{{- $cacheVct := .Values.clickhouse.tieredStorage.cold.cache.volumeName -}}
+{{- $cachePath := .Values.clickhouse.tieredStorage.cold.cache.path -}}
+{{- $chiName := printf "%s-clickhouse" (include "opik.name" $) -}}
+{{- $pollTimeout := int .Values.clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds -}}
+{{- $activeDeadline := int .Values.clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds -}}
+{{- /* The Job's hard cap must outlast the script's own budget, else Kubernetes
+       kills a legitimately-running migration. */ -}}
+{{- if le $activeDeadline $pollTimeout }}
+{{- fail (printf "clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds (%d) must be greater than pollTimeoutSeconds (%d)" $activeDeadline $pollTimeout) }}
+{{- end -}}
+{{- /* The migration job runs in .Release.Namespace and its RBAC is namespace-scoped
+       there, so it can only reach an operator in the same namespace. If the operator
+       subchart is relocated via namespaceOverride, this job can't find/bounce it —
+       reject that combination at render time rather than fail silently at runtime. */ -}}
+{{- $operatorValues := index .Values "altinity-clickhouse-operator" | default dict -}}
+{{- if $operatorValues.namespaceOverride }}
+{{- fail "clickhouse.tieredStorage.coldTierMigration is incompatible with altinity-clickhouse-operator.namespaceOverride (the migration job is namespace-scoped to the release namespace); set coldTierMigration.enabled=false or remove namespaceOverride" }}
+{{- end -}}
+{{- /* Effective SA name for the Job and the RoleBinding subject. When
+       serviceAccountName is overridden the account is externally managed, so we
+       reference it but do NOT render (and hook-delete) the chart's SA object. */ -}}
+{{- $saOverride := .Values.clickhouse.tieredStorage.coldTierMigration.serviceAccountName -}}
+{{- $sa := $saOverride | default (printf "%s-ch-cold-tier-migration-sa" (include "opik.fullname" .)) -}}
+{{- if not $saOverride }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $sa }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "10"
+    {{- else }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-role
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "10"
+    {{- else }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+rules:
+  # Detect the wedge (read CH StatefulSets) and wait for readiness (watch).
+  # No delete on StatefulSets — recovery only bounces the operator pod.
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch"]
+  # delete is needed only to bounce the altinity operator pod.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-rb
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "10"
+    {{- else }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ $sa }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opik.fullname" . }}-ch-cold-tier-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opik.labels" $ | nindent 4 }}
+    component: {{ include "opik.name" $ }}-ch-cold-tier-migration
+    {{- with $.Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "15"
+    {{- else }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "15"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- end }}
+spec:
+  backoffLimit: 2
+  # Kubernetes hard cap on the Job. The script bounds its own work by
+  # pollTimeoutSeconds (a single shared budget across migration + readiness), so
+  # this only needs a small buffer on top for startup/kubectl overhead.
+  activeDeadlineSeconds: {{ $activeDeadline }}
+  template:
+    metadata:
+      labels:
+        app: ch-cold-tier-migration
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $sa }}
+      {{- with (.Values.clickhouse.tieredStorage.coldTierMigration.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.clickhouse.tieredStorage.coldTierMigration.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migration
+          image: {{ .Values.clickhouse.tieredStorage.coldTierMigration.image }}
+          env:
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: CHI_NAME
+              value: {{ $chiName | quote }}
+            - name: CACHE_VCT
+              value: {{ $cacheVct | quote }}
+            - name: CACHE_PATH
+              value: {{ $cachePath | quote }}
+            - name: POLL_TIMEOUT
+              # Emit the int-parsed value so a non-integer override can't reach the shell.
+              value: {{ $pollTimeout | quote }}
+            - name: OPERATOR_SELECTOR
+              # The altinity operator subchart's own selector labels, scoped to this
+              # release — identifies the operator pod without a name substring.
+              value: "app.kubernetes.io/name=altinity-clickhouse-operator,app.kubernetes.io/instance={{ .Release.Name }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+
+              echo "=== Cold-tier enable migration (bounce the ClickHouse operator to rebuild StatefulSets with the cache volume) ==="
+              echo "namespace=${NAMESPACE} chi=${CHI_NAME} cacheVct=${CACHE_VCT} cachePath=${CACHE_PATH}"
+
+              # Operator-managed CH StatefulSets/pods for this CHI.
+              CH_STS_SELECTOR="clickhouse.altinity.com/chi=${CHI_NAME}"
+
+              DEADLINE=$(( $(date +%s) + POLL_TIMEOUT ))
+              remaining() { r=$(( DEADLINE - $(date +%s) )); [ "$r" -gt 0 ] && echo "$r" || echo 0; }
+              die() { echo "ERROR: $*" >&2; exit 1; }
+
+              # Migration state of this CHI's StatefulSets:
+              #   none    -> no CH StatefulSet exists yet (operator hasn't created it)
+              #   missing -> at least one StatefulSet lacks the cache VCT (needs fix)
+              #   ok      -> every StatefulSet carries the cache VCT
+              migration_state() {
+                stses=$(kubectl get sts -n "$NAMESPACE" -l "$CH_STS_SELECTOR" -o name) \
+                  || die "listing ClickHouse StatefulSets failed"
+                if [ -z "$stses" ]; then echo none; return 0; fi
+                for sts in $stses; do
+                  vcts=$(kubectl get "$sts" -n "$NAMESPACE" \
+                    -o jsonpath='{range .spec.volumeClaimTemplates[*]}{.metadata.name}{" "}{end}') \
+                    || die "reading volumeClaimTemplates of $sts failed"
+                  case " $vcts " in
+                    *" ${CACHE_VCT} "*) : ;;
+                    *) echo missing; return 0 ;;
+                  esac
+                done
+                echo ok
+              }
+
+              # The altinity operator pod, selected by the subchart's own release-scoped
+              # selector labels (passed in as OPERATOR_SELECTOR), and verified to be
+              # owned by a ReplicaSet (the operator Deployment) — so a bare/spoofed pod
+              # that merely carries the labels is never deleted. Fails loud unless
+              # exactly one owned pod matches.
+              operator_pod() {
+                pods=$(kubectl get pods -n "$NAMESPACE" -l "$OPERATOR_SELECTOR" -o name 2>/dev/null) \
+                  || die "listing operator pods failed"
+                match=""
+                for p in $pods; do
+                  owner=$(kubectl get "$p" -n "$NAMESPACE" \
+                    -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null || echo "")
+                  [ "$owner" = "ReplicaSet" ] || continue
+                  match="${match}${p}
+              "
+                done
+                n=$(printf '%s' "$match" | grep -c . || true)
+                [ "$n" -eq 1 ] || die "expected exactly 1 operator pod (${OPERATOR_SELECTOR}, owned by a ReplicaSet), found ${n}"
+                printf '%s' "$match" | grep .
+              }
+
+              # Bounce the operator so a fresh reconcile rebuilds every StatefulSet WITH
+              # the cache volume. Never deletes CH StatefulSets/pods. Wait (within the
+              # deadline) for a StatefulSet to exist before deciding — the operator may
+              # not have created it yet when this post-upgrade hook first runs.
+              echo ">> checking cluster migration state (waiting for StatefulSets to appear if needed)"
+              while :; do
+                state="$(migration_state)"
+                case "$state" in
+                  ok)      echo "=== No migration needed — all StatefulSets already carry ${CACHE_VCT} ==="; exit 0 ;;
+                  missing) echo ">> a StatefulSet is missing ${CACHE_VCT} — will bounce the operator"; break ;;
+                  none)    echo "   no ClickHouse StatefulSet yet — waiting..." ;;
+                esac
+                [ "$(remaining)" -eq 0 ] && die "no ClickHouse StatefulSet appeared within ${POLL_TIMEOUT}s"
+                sleep 10
+              done
+
+              op="$(operator_pod)"
+              echo ">> bouncing operator ${op#pod/} so it rebuilds the StatefulSets with the cache volume"
+              kubectl delete "$op" -n "$NAMESPACE" --grace-period=30
+
+              # Wait until every CH pod is Ready and no StatefulSet is missing the VCT.
+              echo ">> waiting for all ClickHouse pods to be Ready with ${CACHE_VCT}"
+              while :; do
+                left="$(remaining)"
+                if [ "$left" -eq 0 ]; then
+                  echo "ERROR: cluster not healthy within ${POLL_TIMEOUT}s after bouncing the operator" >&2
+                  kubectl get sts,pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
+                  exit 1
+                fi
+                if [ "$(migration_state)" = "ok" ]; then
+                  [ "$left" -gt 60 ] && left=60
+                  if kubectl wait --for=condition=Ready pod \
+                        -n "$NAMESPACE" -l "$CH_STS_SELECTOR" \
+                        --timeout="${left}s" >/dev/null 2>&1; then
+                    echo "=== Cold-tier migration complete — all replicas Ready with ${CACHE_VCT} ==="
+                    exit 0
+                  fi
+                fi
+                sleep 10
+              done
+{{- end }}
