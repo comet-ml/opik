@@ -90,13 +90,23 @@ public class ChatCompletionService {
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
+        var errorHandler = getErrorHandler(handlers, llmProviderClient);
 
-        llmProviderClient.generateStream(
-                request,
-                workspaceId,
-                handlers::handleMessage,
-                handlers::handleClose,
-                getErrorHandler(handlers, llmProviderClient));
+        try {
+            llmProviderClient.generateStream(
+                    request,
+                    workspaceId,
+                    handlers::handleMessage,
+                    handlers::handleClose,
+                    errorHandler);
+        } catch (BadRequestException badRequestException) {
+            // A provider that rejects the request up-front fails before it can invoke the error callback. Routing it
+            // through the same handler emits the error event and closes the stream; otherwise the chunked output
+            // stays open and the SSE client hangs without ever being told why. Deliberately scoped to
+            // BadRequestException: other throwables keep propagating to the resource layer as before.
+            errorHandler.accept(badRequestException);
+            return;
+        }
 
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
                 request.model());
@@ -142,7 +152,7 @@ public class ChatCompletionService {
         try {
             return action.call();
         } catch (RuntimeException runtimeException) {
-            if (containsUnsupportedFeature(runtimeException)) {
+            if (findUnsupportedFeature(runtimeException).isPresent()) {
                 throw new NonRetriableException(runtimeException);
             }
             throw runtimeException;
@@ -158,14 +168,35 @@ public class ChatCompletionService {
      * burning their retry budget on it.
      */
     private void failIfUnsupportedFeature(RuntimeException runtimeException) {
-        if (!containsUnsupportedFeature(runtimeException)) {
+        var unsupportedFeature = findUnsupportedFeature(runtimeException);
+        if (unsupportedFeature.isEmpty()) {
             return;
         }
 
-        log.warn(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, runtimeException);
+        var message = buildUnsupportedFeatureMessage(unsupportedFeature.get());
+        // Logged without the throwable: this is an expected, deterministic client error, and at production volumes a
+        // stack trace per rejection buries the genuine provider failures.
+        log.warn(message);
+        // The message is carried as an ErrorMessage entity, not just on the exception: Jersey renders
+        // WebApplicationException via its Response, so a message-only constructor would return a bodiless 400 and the
+        // caller would never learn which capability was rejected.
         throw new BadRequestException(
-                buildDetailedErrorMessage(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, runtimeException),
+                message,
+                Response.status(Response.Status.BAD_REQUEST)
+                        .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), message))
+                        .build(),
                 runtimeException);
+    }
+
+    /**
+     * Built from the {@link UnsupportedFeatureException}'s own message rather than the chain's root cause, so the
+     * client is told which capability was rejected and nothing deeper in the chain can leak into the response.
+     */
+    private String buildUnsupportedFeatureMessage(UnsupportedFeatureException unsupportedFeature) {
+        String detail = unsupportedFeature.getMessage();
+        return StringUtils.isNotBlank(detail)
+                ? UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER + ": " + detail
+                : UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER;
     }
 
     /**
@@ -173,8 +204,11 @@ public class ChatCompletionService {
      * re-thrown by {@link #failFastOnUnsupportedFeature}. {@code ExceptionUtils} stops at the first already-visited
      * throwable, so a self-referencing cause chain terminates rather than looping.
      */
-    private boolean containsUnsupportedFeature(Throwable throwable) {
-        return ExceptionUtils.indexOfType(throwable, UnsupportedFeatureException.class) >= 0;
+    private Optional<UnsupportedFeatureException> findUnsupportedFeature(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .filter(UnsupportedFeatureException.class::isInstance)
+                .map(UnsupportedFeatureException.class::cast)
+                .findFirst();
     }
 
     private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
@@ -199,11 +233,11 @@ public class ChatCompletionService {
         return throwable -> {
             // Checked before the provider-error mapper so the classification matches create() and scoreTrace(): if a
             // provider envelope and an unsupported feature ever collide, the deterministic capability failure wins.
-            if (containsUnsupportedFeature(throwable)) {
-                log.warn(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, throwable);
-                handlers.handleError(new ErrorMessage(
-                        Response.Status.BAD_REQUEST.getStatusCode(),
-                        buildDetailedErrorMessage(UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER, throwable)));
+            var unsupportedFeature = findUnsupportedFeature(throwable);
+            if (unsupportedFeature.isPresent()) {
+                var message = buildUnsupportedFeatureMessage(unsupportedFeature.get());
+                log.warn(message);
+                handlers.handleError(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), message));
                 return;
             }
 

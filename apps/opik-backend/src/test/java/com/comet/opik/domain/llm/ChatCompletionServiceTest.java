@@ -39,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -314,6 +315,55 @@ class ChatCompletionServiceTest {
         }
 
         @Test
+        @DisplayName("the 400 response body carries the unsupported-feature message")
+        void create__whenUnsupportedFeatureException__thenResponseBodyCarriesMessage() {
+            // Given
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString()))
+                    .thenThrow(new UnsupportedFeatureException(UNSUPPORTED_FEATURE_MESSAGE));
+
+            // When
+            var thrown = (BadRequestException) catchThrowable(
+                    () -> chatCompletionService.create(request, workspaceId));
+
+            // Then — Jersey renders the Response, so the entity is what the caller actually receives
+            var response = thrown.getResponse();
+            assertThat(response.getStatus()).isEqualTo(400);
+            assertThat(response.getEntity()).isInstanceOf(ErrorMessage.class);
+
+            var errorMessage = (ErrorMessage) response.getEntity();
+            assertThat(errorMessage.getCode()).isEqualTo(400);
+            assertThat(errorMessage.getMessage())
+                    .isEqualTo("Unsupported feature for the selected LLM provider: " + UNSUPPORTED_FEATURE_MESSAGE);
+        }
+
+        @Test
+        @DisplayName("only the unsupported-feature message is exposed, not deeper causes")
+        void create__whenUnsupportedFeatureWrapsAnotherCause__thenDeeperDetailNotExposed() {
+            // Given — a deeper root cause that must not reach the client
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+            var wrapped = new RuntimeException("internal wiring detail",
+                    new UnsupportedFeatureException(UNSUPPORTED_FEATURE_MESSAGE));
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            when(llmProviderService.generate(any(), anyString())).thenThrow(wrapped);
+
+            // When
+            var thrown = (BadRequestException) catchThrowable(
+                    () -> chatCompletionService.create(request, workspaceId));
+
+            // Then
+            var errorMessage = (ErrorMessage) thrown.getResponse().getEntity();
+            assertThat(errorMessage.getMessage())
+                    .isEqualTo("Unsupported feature for the selected LLM provider: " + UNSUPPORTED_FEATURE_MESSAGE)
+                    .doesNotContain("internal wiring detail");
+        }
+
+        @Test
         @DisplayName("unsupported features must not consume the provider retry budget")
         void create__whenUnsupportedFeatureException__thenNotRetried() {
             // Given — a policy that would retry, unlike the single-attempt default used by the other tests
@@ -385,6 +435,30 @@ class ChatCompletionServiceTest {
             assertThat(errorCaptor.getValue().getMessage())
                     .contains("Unsupported feature for the selected LLM provider")
                     .contains(UNSUPPORTED_FEATURE_MESSAGE);
+        }
+
+        @Test
+        @DisplayName("a synchronous BadRequestException still emits an error event and closes the stream")
+        void createAndStreamResponse__whenGenerateStreamThrowsBadRequest__thenErrorEmittedAndStreamClosed() {
+            // Given — a provider that rejects up-front throws before it can invoke the error callback
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+            var handlers = mock(ChunkedOutputHandlers.class);
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            lenient().when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
+            doThrow(new BadRequestException("model rejected the request"))
+                    .when(llmProviderService).generateStream(any(), anyString(), any(), any(), any());
+
+            // When
+            chatCompletionService.createAndStreamResponse(request, workspaceId, handlers);
+
+            // Then — the caller is told why, rather than being left on an open stream. handleError writes the error
+            // and then closes, so this single call covers both halves of "error event, then close".
+            var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);
+            verify(handlers).handleError(errorCaptor.capture());
+            assertThat(errorCaptor.getValue().getCode()).isEqualTo(400);
+            assertThat(errorCaptor.getValue().getMessage()).contains("model rejected the request");
         }
 
         @Test
