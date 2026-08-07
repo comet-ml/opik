@@ -257,6 +257,9 @@ public interface PromptDAO {
     Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId,
             @Define("project_id") @Bind("project_id") UUID projectId);
 
+    @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id AND project_id IS NULL")
+    Prompt findByNameWithoutProject(@Bind("name") String name, @Bind("workspace_id") String workspaceId);
+
     @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy, "
             +
             " tags = COALESCE(:tags, tags) " +

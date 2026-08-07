@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.filter.PromptFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -343,5 +345,77 @@ class PromptResourceProjectScopedPromptsTest {
         List<Prompt> expectedPrompts = List.of(projectPrompt);
         findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, null,
                 null, projectId);
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version scoped to a project does not fall back to another project's prompt")
+    void retrievePromptVersionDoesNotFallBackToAnotherProjectPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        String otherProjectName = "project-" + UUID.randomUUID();
+        var otherProjectId = projectResourceClient.createProject(otherProjectName, apiKey, workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var otherProjectPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(otherProjectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(otherProjectPrompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder()
+                .name(sharedName)
+                .projectName(projectName)
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+
+        assertThat(projectId).isNotEqualTo(otherProjectId);
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version falls back to a workspace-level prompt with no project")
+    void retrievePromptVersionFallsBackToWorkspaceLevelPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String projectName = "project-" + UUID.randomUUID();
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        var workspacePrompt = buildPrompt()
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(workspacePrompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder()
+                .name(workspacePrompt.name())
+                .projectName(projectName)
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNotNull();
+            assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(workspacePrompt.template());
+        }
     }
 }
