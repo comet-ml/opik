@@ -61,6 +61,25 @@ Workflows are also scanned for **security** issues with [zizmor](https://github.
 ## Dockerfiles
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
 
+## Java imports (backend)
+Types from `java.*` / `javax.*` are imported at the top of the file and referenced by their simple name — not written out fully qualified inline. Write `Locale.ROOT` with `import java.util.Locale;`, not `java.util.Locale.ROOT`.
+
+This is enforced by [PMD](https://pmd.github.io/) via a single custom rule (`InlineFullyQualifiedName` in [`apps/opik-backend/pmd-ruleset.xml`](apps/opik-backend/pmd-ruleset.xml)), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Java files under `apps/opik-backend`. PMD is fetched from Maven Central by the hook wrapper, so it needs only the Maven/JDK toolchain the Spotless hook already uses — no manual install. Note this is a *custom* rule: PMD's built-in `UnnecessaryFullyQualifiedName` only flags a qualifier that is already redundant (the simple name is imported), not one that would become redundant by adding an import.
+
+A fully-qualified name is legitimate when two types share a simple name in one file — `java.util.Date` vs `java.sql.Date`, `java.util.stream.Stream` vs a domain `Stream` — since an import can only cover one of them. Suppress those inline, with a reason:
+
+```java
+import java.util.Date;
+...
+java.sql.Date sqlDate; // NOPMD - collides with the imported java.util.Date
+```
+
+`@SuppressWarnings("PMD.InlineFullyQualifiedName")` on the declaration works too. Both are scoped and visible in review; don't disable the rule repo-wide. FQNs inside comments, javadoc, and string literals are not flagged — the rule matches the parsed AST, so MapStruct's `@Mapping(expression = "java(java.util.Map.of())")`, where the FQN is required and no import can satisfy it, passes as-is.
+
+The gate is **going-forward-only**: it inspects changed files, so pre-existing inline FQNs elsewhere in the module are not reported until that file is touched. Running the hook with `--all-files` still reports them and is expected to be red.
+
+To run it on specific files: `pre-commit run pmd-inline-fqn --files <paths>`.
+
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`
 - `apps/opik-frontend/src/data/model_prices_and_context_window.json`

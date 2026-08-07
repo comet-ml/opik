@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<!--
+  Single-purpose PMD ruleset: reject inline fully-qualified java.*/javax.* class
+  names where a top-of-file import would do (OPIK-7832).
+
+  Why a custom XPath rule and not PMD's built-in UnnecessaryFullyQualifiedName:
+  the built-in rule only fires when the simple name is ALREADY in scope (i.e. the
+  qualifier is deletable with no other edit). It reports nothing for the case we
+  care about — an FQN in a file that does not import the type — because removing
+  the qualifier there would not compile without also adding the import. Measured
+  on this codebase, the built-in rule found 4 of 35 target sites and missed the
+  Locale.ROOT / Collectors cases that motivated the ticket.
+
+  Why an AST rule and not a regex (Spotless replaceRegex / Checkstyle
+  RegexpSinglelineJava): a text matcher cannot tell code from a string literal,
+  so it rejects MapStruct's @Mapping(expression = "java(java.util.Map.of())") in
+  TraceThreadMapper — where the FQN is required and no import can satisfy it. On
+  the AST that expression is a single string literal, so the FQN inside it is
+  correctly invisible to this rule.
+-->
+<ruleset name="opik-backend-code-style"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Opik backend code style: inline fully-qualified name gate.</description>
+
+    <rule name="InlineFullyQualifiedName"
+          language="java"
+          message="Inline fully-qualified name ''{0}'': import the type at the top of the file and use its simple name. If a simple-name collision in this file makes the FQN unavoidable, append '// NOPMD - &lt;reason&gt;' to the line."
+          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
+        <description>
+Java types from java.* / javax.* must be imported at the top of the file and
+referenced by their simple name, not written out fully qualified inline.
+
+Scoped to java.*/javax.* deliberately: inline com.comet.opik.* self-references
+are the same smell but are out of scope for OPIK-7832.
+
+A fully-qualified name is legitimate when two types share a simple name in one
+file (java.util.Date vs java.sql.Date, java.util.stream.Stream vs a domain
+Stream) — an import can only cover one of them. Suppress those with a trailing
+'// NOPMD - &lt;reason&gt;' on the offending line, or
+@SuppressWarnings("PMD.InlineFullyQualifiedName") on the declaration.
+        </description>
+        <priority>3</priority>
+        <properties>
+            <property name="xpath">
+                <value>
+<![CDATA[
+//ClassType[@FullyQualified = true()]
+          [starts-with(@PackageQualifier, 'java.') or starts-with(@PackageQualifier, 'javax.')]
+]]>
+                </value>
+            </property>
+        </properties>
+        <example>
+<![CDATA[
+// Bad — java.util.Locale written out inline
+return s.toLowerCase(java.util.Locale.ROOT);
+
+// Good — imported at the top of the file
+import java.util.Locale;
+...
+return s.toLowerCase(Locale.ROOT);
+
+// Allowed — genuine simple-name collision, suppressed with a reason
+import java.util.Date;
+...
+java.sql.Date sqlDate; // NOPMD - collides with the imported java.util.Date
+]]>
+        </example>
+    </rule>
+</ruleset>

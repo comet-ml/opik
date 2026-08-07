@@ -29,7 +29,7 @@ check_empty() { # check_empty <name> <actual> — asserts no output
 # assert what the wrapper would have invoked.
 stub_dir=$(mktemp -d)
 trap 'rm -rf "$stub_dir"' EXIT
-for tool in mvn npx; do
+for tool in mvn npx java; do
 	cat >"$stub_dir/$tool" <<EOF
 #!/bin/sh
 echo "$tool \$*"
@@ -44,6 +44,17 @@ check "passes -DspotlessFiles regex" "-DspotlessFiles=" "$out"
 check "targets the changed file"     "Foo"              "$out"
 check "escapes the dot in the regex" 'Foo\.java'        "$out"
 check_empty "no-arg is a no-op"      "$(scripts/precommit-spotless.sh 2>&1)"
+
+echo "precommit-pmd.sh:"
+# The lib cache is pre-created so the wrapper skips Maven resolution and goes
+# straight to the (stubbed) java invocation.
+pmd_lib="${TMPDIR:-/tmp}/opik-pmd-$(sed -n 's/^PMD_VERSION="\(.*\)"$/\1/p' scripts/precommit-pmd.sh)"
+mkdir -p "$pmd_lib" && : >"$pmd_lib/stub.jar"
+out=$(scripts/precommit-pmd.sh apps/opik-backend/src/main/java/com/comet/opik/Foo.java 2>&1)
+check "invokes the PMD CLI"          "net.sourceforge.pmd.cli.PmdCli" "$out"
+check "passes the repo ruleset"      "apps/opik-backend/pmd-ruleset.xml" "$out"
+check "passes a --file-list"         "--file-list"                    "$out"
+check_empty "no-arg is a no-op"      "$(scripts/precommit-pmd.sh 2>&1)"
 
 echo "precommit-fe-lint.sh:"
 out=$(scripts/precommit-fe-lint.sh apps/opik-frontend/src/a.tsx apps/opik-frontend/src/b.css 2>&1)
