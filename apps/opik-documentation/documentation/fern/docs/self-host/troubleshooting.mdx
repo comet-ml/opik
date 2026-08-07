@@ -163,7 +163,17 @@ Only do this when the schema genuinely matches the changelog. Re-baselining asse
 
 - The image version you are running against is the one the schema was migrated to. Re-baselining with a **newer** jar marks that version's extra migrations as applied without running them.
 - Every changeset in the pending list corresponds to an object that already exists — spot-check the most recent few, not just the first.
-- On a multi-replica cluster, check **every** replica, not just the one you are connected to. A partially restored replica can look complete at the table level while its replicated tables are stale. `SELECT database, table, is_readonly, absolute_delay FROM system.replicas WHERE database = 'opik'` should show `is_readonly = 0` everywhere; anything read-only or lagging means the schema is not settled and re-baselining would freeze that gap in place.
+- For ClickHouse (`dbAnalytics`, the default) on a multi-replica cluster, check **every** replica, not just the one you are connected to. A partially restored replica can look complete at the table level while its replicated tables are stale:
+
+  ```sql
+  SELECT database, table, is_readonly, absolute_delay
+  FROM system.replicas
+  WHERE database = '<your analytics database>'
+  ```
+
+  Substitute your `ANALYTICS_DB_DATABASE_NAME` (`opik` unless you overrode it). Every row should show `is_readonly = 0` and no meaningful `absolute_delay`; anything read-only or lagging means the schema is not settled, and re-baselining would freeze that gap in place.
+
+- For MySQL (`--database db`) there is no replication view to check — confirm instead that the tables and columns named by the pending changesets already exist, and that the deployment has not been upgraded past the schema you are recovering.
 
 If any of these is uncertain, stop and restore the changelog from a backup of the same version instead. `--yes` skips the prompt, not these checks — only use it in a runbook that has already performed them.
 </Callout>
@@ -177,10 +187,22 @@ If any of these is uncertain, stop and restore the changelog from a backup of th
     On Kubernetes:
 
     ```bash
-    kubectl run opik-rebaseline --rm -it --restart=Never \
-      --image=<the image your opik-backend deployment uses> \
-      --namespace=<your namespace> \
-      --overrides='{"spec":{"containers":[{"name":"opik-rebaseline","image":"<same image>","command":["bash"],"stdin":true,"tty":true,"envFrom":[{"secretRef":{"name":"<your opik-backend secret>"}},{"configMapRef":{"name":"<your opik-backend configmap>"}}]}]}}'
+    NS=<your namespace>
+
+    # Take the image from the failing deployment rather than using a floating tag —
+    # the recovery must run against the version the schema was migrated to.
+    IMAGE=$(kubectl get deploy opik-backend -n "$NS" \
+      -o jsonpath='{.spec.template.spec.containers[0].image}')
+
+    # --image is required by kubectl even though the override also sets it, so both
+    # read from $IMAGE to keep them from drifting apart.
+    kubectl run opik-rebaseline --rm -it --restart=Never -n "$NS" \
+      --image="$IMAGE" \
+      --overrides="$(cat <<JSON
+    {"spec":{"containers":[{"name":"opik-rebaseline","image":"$IMAGE","command":["bash"],"stdin":true,"tty":true,
+      "envFrom":[{"secretRef":{"name":"<your opik-backend secret>"}},{"configMapRef":{"name":"<your opik-backend configmap>"}}]}]}}
+    JSON
+    )"
     ```
 
     On Docker Compose:
@@ -189,7 +211,7 @@ If any of these is uncertain, stop and restore the changelog from a backup of th
     docker compose run --rm --entrypoint bash opik-backend
     ```
 
-    Copy the image reference from the failing deployment (`kubectl get deploy opik-backend -o jsonpath='{.spec.template.spec.containers[0].image}'`) rather than using `latest` — the recovery must run against the version the schema was migrated to.
+    On Compose the service already pins its image, so no extra step is needed there.
   </Step>
   <Step>
     Review what would change, without writing anything:

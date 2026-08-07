@@ -86,6 +86,11 @@ echo
 java -jar "$JAR" "$DATABASE" status --verbose "$CONFIG"
 echo
 
+# Fingerprint of the pending set as reviewed. The operator confirms against what they just read,
+# so if the ledger moves under us while the prompt waits — another operator recovering, or a
+# deployment applying migrations — we must not silently write a different set than the one shown.
+reviewed_pending="$(java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null)"
+
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "ℹ️  Dry run — nothing was changed."
   echo "   Re-run without --dry-run to record the changesets above as applied."
@@ -109,6 +114,15 @@ if [[ "$ASSUME_YES" != "true" ]]; then
     echo "Aborted — nothing was changed."
     exit 1
   fi
+fi
+
+current_pending="$(java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null)"
+if [[ "$current_pending" != "$reviewed_pending" ]]; then
+  echo
+  echo "❌ The pending changesets changed while this was waiting — the ledger was modified by" >&2
+  echo "   something else (another recovery, or a deployment applying migrations)." >&2
+  echo "   Nothing was written. Re-run to review the current set before confirming." >&2
+  exit 1
 fi
 
 echo
