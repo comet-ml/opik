@@ -1,4 +1,4 @@
-import type { Page, Locator } from '@playwright/test';
+import { test, type Page, type Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
@@ -95,6 +95,38 @@ export class OnlineEvaluationPage {
   /** Dialog root, scoped by testid. */
   get dialog(): Locator {
     return this.page.getByTestId('add-edit-rule-dialog');
+  }
+
+  /**
+   * Delete a rule through the row's kebab menu, confirming the destructive
+   * dialog. Resolves once the row is gone from the list.
+   *
+   * The kebab trigger, the menu items and the ConfirmDialog carry no
+   * data-testids (ConfirmDialog is a generic shared component); we scope by the
+   * row first, then use the accessible names, which are stable strings in
+   * RuleRowActionsCell / ConfirmDialog.
+   */
+  async deleteRuleByName(name: string): Promise<void> {
+    return test.step(`delete rule "${name}" via row actions`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+
+      const confirm = this.deleteRuleConfirmDialog;
+      await confirm.waitFor({ state: 'visible' });
+      await confirm.getByRole('button', { name: 'Delete evaluation rule' }).click();
+
+      await confirm.waitFor({ state: 'hidden' });
+      await row.waitFor({ state: 'detached' });
+    });
+  }
+
+  /** The destructive confirm dialog raised by the row's Delete action. */
+  get deleteRuleConfirmDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Delete evaluation rule' }),
+    });
   }
 
   /**
