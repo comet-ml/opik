@@ -116,9 +116,22 @@ echo "📌 Re-baselining '${DATABASE}' changelog..."
 java -jar "$JAR" "$DATABASE" fast-forward --all "$CONFIG"
 
 echo
-echo "🔍 Verifying — '${DATABASE}' should now report no pending changesets:"
+echo "🔍 Verifying '${DATABASE}' has nothing left pending..."
 java -jar "$JAR" "$DATABASE" status --verbose "$CONFIG"
 
+# `status` reports but never fails — it exits 0 whether or not changesets are pending, so it
+# cannot gate on its own. `fast-forward --dry-run` emits the DDL it *would* mark next and prints
+# nothing when the ledger is clean, which gives a signal that doesn't depend on parsing prose.
+remaining="$(java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null | tr -d '[:space:]')"
+
+if [[ -n "$remaining" ]]; then
+  echo
+  echo "❌ Re-baseline did not complete: '${DATABASE}' still reports pending changesets." >&2
+  echo "   The ledger is not clean, and a restarting replica would still try to replay them." >&2
+  echo "   Re-run with --dry-run to inspect what remains before retrying." >&2
+  exit 1
+fi
+
 echo
-echo "✅ Re-baseline complete. A restarting replica will now skip these changesets instead of"
-echo "   replaying them against the existing schema."
+echo "✅ Re-baseline complete — no changesets remain pending. A restarting replica will now skip"
+echo "   them instead of replaying them against the existing schema."
