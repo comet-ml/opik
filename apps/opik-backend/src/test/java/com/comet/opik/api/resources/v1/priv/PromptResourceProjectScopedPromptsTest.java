@@ -388,6 +388,40 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
+    @DisplayName("Retrieve prompt version with an unresolved project_name does not search the whole workspace")
+    void retrievePromptVersionWithUnresolvedProjectNameDoesNotSearchWorkspace() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var otherProjectPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(otherProjectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(otherProjectPrompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder()
+                .name(sharedName)
+                .projectName("project-does-not-exist-" + UUID.randomUUID())
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Test
     @DisplayName("Creating a version with a name used by another project creates a separate project-scoped prompt")
     void createPromptVersionWithNameFromAnotherProjectCreatesScopedPrompt() {
         String apiKey = UUID.randomUUID().toString();
@@ -419,10 +453,12 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(projectId)
                 .build();
 
+        PromptVersion createdVersion;
         try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
                 workspaceName)) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            createdVersion = response.readEntity(PromptVersion.class);
         }
 
         var projectPrompts = promptResourceClient.getPromptsByProjectId(projectId, apiKey, workspaceName);
@@ -432,9 +468,19 @@ class PromptResourceProjectScopedPromptsTest {
         assertThat(otherProjectPrompts.content()).extracting(Prompt::name).containsExactly(sharedName);
 
         // The version must land on a new prompt owned by projectId, never on the other project's prompt
-        assertThat(projectPrompts.content().getFirst().id()).isNotEqualTo(otherProjectPromptId);
+        var projectPrompt = projectPrompts.content().getFirst();
+        assertThat(projectPrompt.id()).isNotEqualTo(otherProjectPromptId);
         assertThat(otherProjectPrompts.content().getFirst().id()).isEqualTo(otherProjectPromptId);
         assertThat(otherProjectPrompts.content().getFirst().versionCount()).isZero();
+
+        // The requested version must actually be persisted against the new project-scoped prompt
+        assertThat(projectPrompt.versionCount()).isEqualTo(1L);
+        assertThat(createdVersion.promptId()).isEqualTo(projectPrompt.id());
+        assertThat(createdVersion.template()).isEqualTo(createVersionRequest.version().template());
+
+        var persistedVersion = promptResourceClient.getPromptVersion(createdVersion.id(), apiKey, workspaceName);
+        assertThat(persistedVersion.promptId()).isEqualTo(projectPrompt.id());
+        assertThat(persistedVersion.template()).isEqualTo(createVersionRequest.version().template());
     }
 
     @Test
