@@ -266,7 +266,12 @@ export class LogsPage {
     return this.page.getByTestId(`filter-chip-${chipId.replace(/_/g, '-')}`);
   }
 
-  /** The open chip's popover. Only one chip popover is mounted at a time. */
+  /**
+   * The open chip's popover. Only one chip popover is mounted at a time, so a
+   * bare dialog lookup resolves it — but it says nothing about *which* chip
+   * owns it, so callers acting on a specific chip must gate on that chip's
+   * aria-expanded (see openFilterChip) rather than on this alone.
+   */
   get filterChipPopover(): Locator {
     return this.page.getByRole('dialog');
   }
@@ -277,23 +282,36 @@ export class LogsPage {
   }
 
   /**
-   * Open a chip's popover. Radix keeps a pointer-blocking layer mounted for a
-   * beat after a previous popover closes, which intercepts the click and burns
-   * the action timeout — so wait for the popover to actually open and retry
-   * through that window rather than clicking once and hoping.
+   * Open a chip's popover, leaving *this* chip the open one.
+   *
+   * Readiness is gated on the requested chip's own aria-expanded, not on "some
+   * dialog is visible": only one chip popover is mounted at a time, so a
+   * generic dialog check would report success while a different chip owned it
+   * and the caller would then fill that chip's row instead. When another chip
+   * is open it is dismissed first — Radix ignores a click on a second trigger
+   * while one popover holds the pointer.
+   *
+   * The click is retried because Radix keeps a pointer-blocking layer mounted
+   * for a beat after a popover closes, which swallows the first click.
    */
   async openFilterChip(chipId: string): Promise<void> {
     return test.step(`Open the "${chipId}" filter chip`, async () => {
       const chip = this.filterChip(chipId);
       await chip.waitFor({ state: 'visible' });
+      const isOpen = async () =>
+        (await chip.getAttribute('aria-expanded').catch(() => null)) === 'true';
+
       await expect
         .poll(
           async () => {
-            if (await this.filterChipPopover.isVisible().catch(() => false)) return true;
-            await chip.click({ trial: false }).catch(() => {});
-            return this.filterChipPopover.isVisible().catch(() => false);
+            if (await isOpen()) return true;
+            if (await this.filterChipPopover.isVisible().catch(() => false)) {
+              await this.closeFilterChip();
+            }
+            await chip.click().catch(() => {});
+            return isOpen();
           },
-          { intervals: [100, 250, 500] },
+          { intervals: [100, 250, 500, 1000] },
         )
         .toBe(true);
     });

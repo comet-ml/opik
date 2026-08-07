@@ -129,4 +129,34 @@ test.describe('Trace filters', { tag: ['@t2-cuj', '@area:traces'] }, () => {
       });
     },
   );
+
+  test(
+    'Switching to a different chip while one is open filters by the chip that was asked for',
+    { tag: ['@cap:traces.filter-traces'] },
+    async ({ filterableTraces, project, page }) => {
+      const logs = new LogsPage(page);
+      const { all, sharedTag } = filterableTraces;
+      const tagged = all.filter((t) => t.tags.includes(sharedTag));
+
+      await test.step('Open Logs and leave the Metadata chip open', async () => {
+        await logs.goto(project.id);
+        await logs.waitForReady();
+        await logs.openFilterChip('metadata');
+        await expect(logs.filterChipPopover).toBeVisible();
+      });
+
+      await test.step(`Filter by tag "${sharedTag}" without closing Metadata first`, async () => {
+        // Only one chip popover is mounted at a time, so "a dialog is visible"
+        // does not mean the requested chip owns it. If the POM gated on that
+        // instead of the chip's own aria-expanded, the value would land in
+        // Metadata's row and no tag filter would apply — all rows would remain.
+        await logs.applyFilter('tags', sharedTag);
+
+        await expect(logs.traceRows).toHaveCount(tagged.length);
+        for (const trace of tagged) {
+          await expect(logs.traceRow(trace.id)).toBeVisible();
+        }
+      });
+    },
+  );
 });
