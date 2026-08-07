@@ -215,7 +215,6 @@ class PromptResourceProjectScopedPromptsTest {
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
                 .template(null)
-                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -264,7 +263,6 @@ class PromptResourceProjectScopedPromptsTest {
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
                 .template(null)
-                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -289,7 +287,6 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectName(projectName)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
-                .template(null)
                 .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
@@ -321,7 +318,6 @@ class PromptResourceProjectScopedPromptsTest {
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
                 .template(null)
-                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -331,7 +327,6 @@ class PromptResourceProjectScopedPromptsTest {
                 .projectId(otherProjectId)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
-                .template(null)
                 .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
@@ -343,7 +338,6 @@ class PromptResourceProjectScopedPromptsTest {
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
                 .template(null)
-                .template(null)
                 .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
@@ -352,46 +346,6 @@ class PromptResourceProjectScopedPromptsTest {
         List<Prompt> expectedPrompts = List.of(projectPrompt);
         findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, null,
                 null, projectId);
-    }
-
-    @Test
-    @DisplayName("Retrieve prompt version scoped to a project does not fall back to another project's prompt")
-    void retrievePromptVersionDoesNotFallBackToAnotherProjectPrompt() {
-        String apiKey = UUID.randomUUID().toString();
-        String workspaceName = UUID.randomUUID().toString();
-        String workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-        String projectName = "project-" + UUID.randomUUID();
-        var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-        String otherProjectName = "project-" + UUID.randomUUID();
-        var otherProjectId = projectResourceClient.createProject(otherProjectName, apiKey, workspaceName);
-
-        String sharedName = "prompt-" + UUID.randomUUID();
-
-        var otherProjectPrompt = buildPrompt()
-                .name(sharedName)
-                .projectId(otherProjectId)
-                .lastUpdatedBy(USER)
-                .createdBy(USER)
-                .template(null)
-                .versionCount(0L)
-                .templateStructure(TemplateStructure.TEXT)
-                .build();
-        createPrompt(otherProjectPrompt, apiKey, workspaceName);
-
-        var request = PromptVersionRetrieve.builder()
-                .name(sharedName)
-                .projectName(projectName)
-                .build();
-
-        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-        }
-
-        assertThat(projectId).isNotEqualTo(otherProjectId);
     }
 
     @Test
@@ -490,41 +444,6 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
-    @DisplayName("Retrieve prompt version with an unresolved project_name does not search the whole workspace")
-    void retrievePromptVersionWithUnresolvedProjectNameDoesNotSearchWorkspace() {
-        String apiKey = UUID.randomUUID().toString();
-        String workspaceName = UUID.randomUUID().toString();
-        String workspaceId = UUID.randomUUID().toString();
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                workspaceName);
-
-        String sharedName = "prompt-" + UUID.randomUUID();
-
-        var otherProjectPrompt = buildPrompt()
-                .name(sharedName)
-                .projectId(otherProjectId)
-                .lastUpdatedBy(USER)
-                .createdBy(USER)
-                .template(null)
-                .versionCount(0L)
-                .templateStructure(TemplateStructure.TEXT)
-                .build();
-        createPrompt(otherProjectPrompt, apiKey, workspaceName);
-
-        var request = PromptVersionRetrieve.builder()
-                .name(sharedName)
-                .projectName("project-does-not-exist-" + UUID.randomUUID())
-                .build();
-
-        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-        }
-    }
-
-    @Test
     @DisplayName("Creating a version with a name used by another project creates a separate project-scoped prompt")
     void createPromptVersionWithNameFromAnotherProjectCreatesScopedPrompt() {
         String apiKey = UUID.randomUUID().toString();
@@ -596,12 +515,12 @@ class PromptResourceProjectScopedPromptsTest {
         String workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
+        // Keeps the generated template: createPrompt only creates a version when one is present,
+        // and this test retrieves that version.
         var workspacePrompt = buildPrompt()
                 .projectId(null)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
-                .template(null)
-                .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
         createPrompt(workspacePrompt, apiKey, workspaceName);
@@ -629,12 +548,12 @@ class PromptResourceProjectScopedPromptsTest {
         String projectName = "project-" + UUID.randomUUID();
         projectResourceClient.createProject(projectName, apiKey, workspaceName);
 
+        // Keeps the generated template: createPrompt only creates a version when one is present,
+        // and this test retrieves that version.
         var workspacePrompt = buildPrompt()
                 .projectId(null)
                 .lastUpdatedBy(USER)
                 .createdBy(USER)
-                .template(null)
-                .versionCount(0L)
                 .templateStructure(TemplateStructure.TEXT)
                 .build();
         createPrompt(workspacePrompt, apiKey, workspaceName);

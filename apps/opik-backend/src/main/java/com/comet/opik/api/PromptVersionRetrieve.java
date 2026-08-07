@@ -24,7 +24,7 @@ public record PromptVersionRetrieve(
         String commit,
         @Pattern(regexp = Environment.NAME_PATTERN, message = Environment.NAME_PATTERN_MESSAGE) @Size(max = 150, message = "cannot exceed 150 characters") @Schema(description = "If provided, resolves to the version mapped to this environment for the prompt; mutually exclusive with commit and version_number") String environment,
         @Pattern(regexp = "v\\d+", message = "must match v<N>") @Size(max = 10, message = "cannot exceed 10 characters") @Schema(description = "If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment") String versionNumber,
-        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If provided, scopes the search to the specified project. The project must exist: an unknown project name returns 404 rather than searching other projects. If omitted, only prompts that are not scoped to any project are matched.") String projectName) {
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If provided, scopes the search to the specified project. Prompts that are not scoped to any project are still matched as a deprecated fallback, signalled by the X-Opik-Deprecation response header.") String projectName) {
 
     @JsonIgnore
     @AssertTrue(message = "commit, environment and version_number are mutually exclusive") public boolean isResolutionMutuallyExclusive() {
