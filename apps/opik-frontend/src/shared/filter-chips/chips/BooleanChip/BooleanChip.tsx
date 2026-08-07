@@ -25,6 +25,7 @@ const BooleanChip: React.FC<BooleanChipProps> = ({
     <ChipShell
       applied={applied}
       aria-pressed={applied}
+      data-testid={`filter-chip-${definition.id}`}
       onClear={onClear}
       onClick={
         applied ? () => onClear("chip_x") : () => onApply({ applied: true })

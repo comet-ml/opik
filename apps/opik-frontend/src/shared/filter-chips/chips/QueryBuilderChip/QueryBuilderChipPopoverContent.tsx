@@ -147,6 +147,7 @@ const QueryBuilderChipPopoverContent: React.FC<
         {keyConfig && (
           <AutocompleteCell
             grow
+            testId="filter-chip-key-input"
             value={row.key ?? ""}
             placeholder={keyConfig.placeholder ?? "key"}
             options={keyOptions}
@@ -170,6 +171,7 @@ const QueryBuilderChipPopoverContent: React.FC<
         {showValue &&
           (isNumericValue ? (
             <NumericCell
+              testId="filter-chip-value-input"
               value={String(row.value ?? "")}
               placeholder={valueConfig?.placeholder ?? "0"}
               autoFocus={focusValue}
@@ -187,6 +189,7 @@ const QueryBuilderChipPopoverContent: React.FC<
           ) : valueConfig?.options ? (
             <AutocompleteCell
               grow={!keyConfig}
+              testId="filter-chip-value-input"
               value={String(row.value ?? "")}
               placeholder={valueConfig.placeholder ?? "value"}
               options={valueOptions}
@@ -197,6 +200,7 @@ const QueryBuilderChipPopoverContent: React.FC<
           ) : (
             <TextCell
               grow={!keyConfig}
+              testId="filter-chip-value-input"
               value={String(row.value ?? "")}
               placeholder={valueConfig?.placeholder ?? "value"}
               autoFocus={focusValue}

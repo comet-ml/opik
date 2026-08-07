@@ -35,6 +35,7 @@ const QueryBuilderChip: React.FC<QueryBuilderChipProps> = ({
       onOpenChange={onOpenChange}
       onClear={onClear}
       contentProps={{ onOpenAutoFocus: (event) => event.preventDefault() }}
+      testId={`filter-chip-${definition.id}`}
     >
       <QueryBuilderChipPopoverContent
         definition={definition}

@@ -14,6 +14,7 @@ interface FilterChipPopoverProps {
   onOpenChange: (open: boolean) => void;
   onClear?: () => void;
   contentProps?: Pick<PopoverContentProps, "onOpenAutoFocus">;
+  testId?: string;
   children: React.ReactNode;
 }
 
@@ -25,6 +26,7 @@ const FilterChipPopover: React.FC<FilterChipPopoverProps> = ({
   onOpenChange,
   onClear,
   contentProps,
+  testId,
   children,
 }) => (
   <Popover open={open} onOpenChange={onOpenChange} modal>
@@ -35,6 +37,7 @@ const FilterChipPopover: React.FC<FilterChipPopoverProps> = ({
         valueSummaryFull={valueSummaryFull}
         isOpen={open}
         onClear={onClear}
+        data-testid={testId}
       />
     </PopoverTrigger>
     <PopoverContent

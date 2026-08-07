@@ -251,6 +251,132 @@ export class LogsPage {
     });
   }
 
+  // --- Filter chips ---
+
+  /**
+   * A filter chip's trigger button, keyed by chip id (see TRACE_CHIP_ORDER in
+   * TracesSpansTab.tsx). Keyed by testid rather than accessible name because an
+   * applied chip rewrites its own label — "Tags" becomes "Tags: contains prod" —
+   * so a name-based locator would stop matching the moment the filter lands.
+   */
+  filterChip(chipId: string): Locator {
+    return this.page.getByTestId(`filter-chip-${chipId}`);
+  }
+
+  /** The open chip's popover. Only one chip popover is mounted at a time. */
+  get filterChipPopover(): Locator {
+    return this.page.getByRole('dialog');
+  }
+
+  /** The "Clear all (N)" button, rendered only while at least one filter is applied. */
+  get clearAllFiltersButton(): Locator {
+    return this.page.getByTestId('filter-chips-clear-all');
+  }
+
+  /**
+   * Open a chip's popover. Radix keeps a pointer-blocking layer mounted for a
+   * beat after a previous popover closes, which intercepts the click and burns
+   * the action timeout — so wait for the popover to actually open and retry
+   * through that window rather than clicking once and hoping.
+   */
+  async openFilterChip(chipId: string): Promise<void> {
+    return test.step(`Open the "${chipId}" filter chip`, async () => {
+      const chip = this.filterChip(chipId);
+      await chip.waitFor({ state: 'visible' });
+      await expect
+        .poll(
+          async () => {
+            if (await this.filterChipPopover.isVisible().catch(() => false)) return true;
+            await chip.click({ trial: false }).catch(() => {});
+            return this.filterChipPopover.isVisible().catch(() => false);
+          },
+          { intervals: [100, 250, 500] },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * Close the open chip popover and wait for it to detach, so the next click
+   * isn't swallowed by the closing animation.
+   *
+   * Escape is pressed twice by design: the autocomplete cells handle the first
+   * one themselves (it resets the draft and blurs the input) without letting it
+   * reach the popover, so a single press leaves the popover open. The second
+   * press — now that focus has left the input — dismisses the popover itself.
+   */
+  async closeFilterChip(): Promise<void> {
+    return test.step('Close the open filter chip popover', async () => {
+      const popover = this.filterChipPopover;
+      await expect
+        .poll(
+          async () => {
+            if (!(await popover.isVisible().catch(() => true))) return false;
+            await this.page.keyboard.press('Escape');
+            return popover.isVisible().catch(() => false);
+          },
+          { intervals: [100, 250, 500, 1000] },
+        )
+        .toBe(false);
+    });
+  }
+
+  /**
+   * Apply a single-value filter (tags, name, error type, ...): open the chip,
+   * type the value, then close so the debounced change commits.
+   */
+  async applyFilter(chipId: string, value: string): Promise<void> {
+    return test.step(`Filter by ${chipId} = "${value}"`, async () => {
+      await this.openFilterChip(chipId);
+      await this.filterChipPopover.getByTestId('filter-chip-value-input').fill(value);
+      await this.closeFilterChip();
+    });
+  }
+
+  /**
+   * Apply a keyed filter (feedback scores, metadata): these render a key cell
+   * plus a value cell, and the key must be set before the value counts as applied.
+   */
+  async applyKeyedFilter(chipId: string, key: string, value: string): Promise<void> {
+    return test.step(`Filter by ${chipId} "${key}" = "${value}"`, async () => {
+      await this.openFilterChip(chipId);
+      const popover = this.filterChipPopover;
+      await popover.getByTestId('filter-chip-key-input').fill(key);
+      await popover.getByTestId('filter-chip-value-input').fill(value);
+      await this.closeFilterChip();
+    });
+  }
+
+  /** Toggle a boolean chip (e.g. "With errors"), which applies on a single click. */
+  async toggleBooleanFilter(chipId: string): Promise<void> {
+    return test.step(`Toggle the "${chipId}" filter`, async () => {
+      await this.filterChip(chipId).click();
+    });
+  }
+
+  /**
+   * Pin a chip that isn't shown by default by picking it from the "All filters"
+   * manager. Selecting an item pins the chip and opens its popover, so callers
+   * that follow with applyKeyedFilter() get a popover that's already open —
+   * openFilterChip() tolerates that.
+   */
+  async pinFilterChip(menuItemLabel: string): Promise<void> {
+    return test.step(`Pin the "${menuItemLabel}" filter chip`, async () => {
+      await this.page.getByTestId('filter-chip-manager-trigger').click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+      await menu.getByText(menuItemLabel, { exact: true }).click();
+    });
+  }
+
+  /** Clear every applied filter via the "Clear all (N)" button. */
+  async clearAllFilters(): Promise<void> {
+    return test.step('Clear all filters', async () => {
+      await this.clearAllFiltersButton.click();
+      await this.clearAllFiltersButton.waitFor({ state: 'hidden' });
+    });
+  }
+
   // --- Threads tab ---
 
   /** The Threads/Traces/Spans tab toggle for "Threads". */
