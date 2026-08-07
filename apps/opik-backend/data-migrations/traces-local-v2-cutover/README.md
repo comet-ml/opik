@@ -224,7 +224,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > - **wrap first**: from the swap until the rolling restart finishes, deletes hit the `Distributed` `traces`
 >   → `Code: 36`. Same blast radius, but it also exposes the cross-node `ON CLUSTER` skew with no buffer.
 >
-> Prefer **toggle first**, have the `--wrap-only` command ready to run the second both pods report ready, and
+> Prefer **toggle first**, have the `--wrap-only` command ready to run the moment every backend instance is up, and
 > keep the window to seconds. Both directions are delete-path-only and fail loudly rather than corrupting
 > anything, which is what makes a short window acceptable — but on a shared environment announce it, and do
 > not leave the toggle `true` without the wrap (or vice versa) for any length of time.
@@ -496,13 +496,13 @@ run by hand.** Each `.sql` file is the single source a driver reads:
 Each driver takes the connection from the `clickhouse-client` env vars `CLICKHOUSE_HOST`, `CLICKHOUSE_USER` and
 `CLICKHOUSE_PASSWORD`, plus `--database` and — when the native port is not 9000 — `--port`.
 
-> **Pass `--host` and `--port` together; the env vars are not enough.** Verified on 26.3:
+> **Pass `--host` and `--port` together; the env vars are not enough.** Verified on `clickhouse-client` 26.3:
 > `CLICKHOUSE_PORT` is **not honored at all** (set it to a bogus value and the client still dials 9000), and
 > `CLICKHOUSE_HOST` is honored **only while no connection flag is given** — so supplying `--port` alone silently reverts
 > the host to `localhost`. Every driver therefore takes `--host` and `--port`; user and password stay in the environment,
-> keeping the password out of `argv`. This matters for any real cutover, because a cluster is normally reached from the
-> ops host through a `kubectl port-forward` or a bastion on a **non-default local port** (9000 is often already taken by
-> a local ClickHouse). Pass the same `--host`/`--port` to every driver in the run.
+> keeping the password out of `argv`. This matters for any real cutover, because a remote cluster is usually reached over
+> a forwarded or tunnelled **non-default local port** (9000 is often already taken by a local ClickHouse). Pass the same
+> `--host`/`--port` to every driver in the run.
 >
 > **The connecting user must be able to set `log_comment`.** Every driver tags its queries with `log_comment` for
 > cutover attribution in `query_log`. A `readonly = 1` profile rejects that outright — `Cannot modify 'log_comment'
@@ -529,7 +529,7 @@ read-only drivers cannot surface a mutation-privilege gap by construction.
 | **wrap** (sharding) | `CREATE TABLE traces_dist … ENGINE = Distributed(…)`, then `RENAME traces → traces_local, traces_dist → traces` | `CREATE TABLE` + `DROP TABLE` on **`traces_dist`** and **`traces_local`** — two names that **do not exist yet**, so a grant set scoped to the cutover's three names will NOT cover the wrap. Plus `SELECT` on `traces_local` (post-wrap reads route through the wrapper to it) and `REMOTE` for the `Distributed` engine. |
 | rollback stage A/B (if in scope) | stage A `TRUNCATE`, reverse replay | `TRUNCATE` on the shadow, and `ALTER UPDATE(_row_exists)` on the **source** (the reverse replay masks rows on the restored original). Withhold unless a rollback is actually planned. |
 | rollback stage C (if the wrap is applied) | 3-way `RENAME` + `DROP` of the ex-wrapper | `CREATE TABLE`/`DROP TABLE` on **`traces_dist_old`** and **`traces_post_rollback_backup`**, `DROP TABLE` on `traces_local`, plus `ALTER UPDATE(_row_exists)` on the restored `traces`. **Decide this before applying the wrap:** without these grants the wrap is a one-way door until another grant change lands. |
-| post-rollback sentinel repair (stage B/C only) | `ALTER TABLE traces UPDATE end_time = NULL …`, same for `ttft` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`traces`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a cutover user scoped to the rollback set gets `ACCESS_DENIED` on the repair that `rollback.sh` prints when it finishes (verified on dev and staging). Either grant these two columns with the rollback grants, or plan to run the repair as a more privileged user. |
+| post-rollback sentinel repair (stage B/C only) | `ALTER TABLE traces UPDATE end_time = NULL …`, same for `ttft` | `ALTER UPDATE(end_time)` and `ALTER UPDATE(ttft)` on **`traces`** — **column privileges the rows above do NOT include.** The reverse replay needs only `ALTER UPDATE(_row_exists)`, so a user scoped to the rollback set gets `ACCESS_DENIED` on the repair `rollback.sh` prints when it finishes. Either grant these two columns with the rollback grants, or plan to run the repair as a more privileged user. |
 | `finalize.sh` (if in scope) | `TRUNCATE` / `DROP TABLE` | `TRUNCATE`, `DROP TABLE`, and `max_table_size_to_drop` override |
 
 **The boundary worth preserving.** For a *forward-only* cutover the user needs `INSERT` on the live source
@@ -685,18 +685,16 @@ complete until they land.
    A bare `MATERIALIZE COLUMN duration` does **not** fix it — it re-evaluates the same expression against the same
    sentinel and reproduces the negative value.
 
-   **Success is `sentinel_end_time` and `sentinel_ttft` reaching `0` — NOT `negative_duration_total`.** Only
-   `negative_from_sentinel` is this repair's business. Rows whose `end_time` genuinely precedes `start_time` are a
-   pre-existing data-quality artifact of the source, faithfully carried by the migration, and they stay negative
-   afterwards. Measured while validating this runbook: the staging original held **8,378** negative durations of which
-   only **6** came from the sentinel, and dev held **3** of which **1** did. Waiting for a total of `0` would look like
-   a failed repair forever.
+   **Success is `sentinel_end_time` and `sentinel_ttft` reaching `0` — not `negative_duration_total`.** A table can
+   also hold rows whose `end_time` genuinely precedes `start_time`. Those are a pre-existing source artifact that the
+   migration carries faithfully, they have nothing to do with the sentinel, and they stay negative. Where any exist,
+   waiting for a negative total of `0` would look like a failed repair forever.
 
-   > **The repair needs privileges the migration user does not have.** It updates `end_time` and `ttft`, whereas the
-   > cutover user is granted only `ALTER UPDATE(_row_exists)` (all the reverse replay needs — see the privileges table).
-   > Run these two statements as a user holding `ALTER UPDATE(end_time)` / `ALTER UPDATE(ttft)` on `traces`, or add
-   > those column grants alongside the rollback grants. Verified on dev and staging: as granted, the cutover user
-   > gets `ACCESS_DENIED` here — so this cannot be pasted into the same session that just ran `rollback.sh`.
+   > **These two statements need column privileges the cutover user may not hold.** They update `end_time` and `ttft`,
+   > while the rollback grant set carries only `ALTER UPDATE(_row_exists)` — all the reverse replay needs. A user
+   > scoped to that set gets `ACCESS_DENIED` here, so the repair cannot simply be pasted into the session that ran
+   > `rollback.sh`. Either grant both columns alongside the rollback grants, or run the repair as a more privileged
+   > user.
 
 **Point of no return.** The `EXCHANGE` is reversible for as long as the parked backup exists (stage B/C). Retiring that
 backup with `finalize.sh` is the one irreversible step, so gate it on an explicit soak:

@@ -135,9 +135,9 @@ if [[ -z "$ROWS_PER_SEC" ]]; then
     }
     ROWS_PER_SEC="$(awk -v r="$READ_RPS" -v f="$WRITE_COST_FACTOR" 'BEGIN { print r / f }')"
     echo "Read throughput: ~$(printf '%.0f' "$READ_RPS") rows/sec ($PROBE_ACTUAL rows in ${ELAPSED}s)."
-    # Format with printf, not "${READ_RPS%.*}": awk's default OFMT is %.6g, so a fast probe yields
-    # "1.34228e+06" and the parameter expansion strips it to "1" — the note then reads "read 1/s",
-    # which looks like a collapsed cluster rather than 1.3M rows/sec.
+    # Format with printf, not "${READ_RPS%.*}": awk's default OFMT is %.6g, so any probe above ~1e6 rows/sec
+    # is rendered as "1.34228e+06" and the parameter expansion strips it to "1" — reporting a fast cluster as
+    # "read 1/s". Display only; ROWS_PER_SEC is passed to awk, which parses the exponent form correctly.
     FACTOR_NOTE="  (read $(printf '%.0f' "$READ_RPS")/s derated by write-cost-factor ${WRITE_COST_FACTOR})"
 fi
 

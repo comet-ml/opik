@@ -195,10 +195,11 @@ SETTINGS join_use_nulls = 1, use_skip_indexes_if_final = 1;
 -- actually reads, and `created_at` is not in the sorting key, so a created_at predicate can select the
 -- part holding a SUPERSEDED version while excluding the part holding the winner. With no winner in the
 -- read set there is nothing to collapse against, so the stale row is returned as though it were live.
--- Whether that happens differs between the unpartitioned source and the id_at-partitioned successor
--- (different part layouts), so one side can surface a superseded row the other does not -- and the window
--- "mismatches" even though both tables hold byte-identical live data. Observed on staging: one id written
--- twice, five weeks apart, put its superseded version in an earlier week on the successor only.
+-- Whether that happens depends on part layout, which differs between the unpartitioned source and the
+-- id_at-partitioned successor, so one side can surface a superseded row the other does not -- and the
+-- window "mismatches" even though both tables hold byte-identical live data. Any id written more than
+-- once, far enough apart to land in different created_at weeks, can trigger it; trace ids are
+-- client-supplied, so a re-sent id is ordinary rather than exotic.
 --
 -- Why this re-check is trustworthy. It filters ONLY on (workspace_id, project_id, id) -- the sorting key,
 -- which IS the dedup key. That predicate cannot hide a version from FINAL: every part contributes the

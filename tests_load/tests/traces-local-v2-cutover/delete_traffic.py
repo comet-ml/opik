@@ -42,8 +42,8 @@ REFILL_FETCH = 2000
 # Seconds to wait after a delete before re-creating that id under --resurrect-ratio. A lightweight DELETE is an ASYNC
 # mutation: its mask applies to every row matching the predicate in the parts it sweeps, so an id re-created before the
 # mutation lands gets masked along with the original and never becomes live — the resurrection silently does not happen.
-# Measured locally: re-creating immediately left only ~40% of attempts actually live. Deferring past the mutation makes
-# the resurrection real, and costs nothing since the ids are queued rather than slept on (the delete rate is unaffected).
+# Re-creating immediately therefore loses most attempts, silently leaving the guard unexercised. Deferring past the
+# mutation makes the resurrection real, and costs nothing: ids are queued rather than slept on, so the delete rate holds.
 RESURRECT_SETTLE_SECONDS = 3.0
 
 

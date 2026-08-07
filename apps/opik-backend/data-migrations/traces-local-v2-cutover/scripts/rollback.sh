@@ -271,9 +271,8 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "     The mutation rewrites the affected parts and recomputes 'duration' from the restored NULL. Success is"
     echo "     'sentinel_end_time' and 'sentinel_ttft' reaching 0 — NOT 'negative_duration_total': rows whose end_time"
     echo "     genuinely precedes start_time are a pre-existing source artifact this repair does not address, and they"
-    echo "     stay negative (staging: 8378 negative, only 6 from the sentinel; dev: 3 and 1). Do step 1 FIRST, or"
-    echo "     in-flight writes keep minting more sentinels."
-    echo "     NOTE: these two statements need ALTER UPDATE(end_time) / ALTER UPDATE(ttft) on 'traces'. This script's own"
-    echo "     credentials very likely lack them — the cutover user is granted only ALTER UPDATE(_row_exists), which is"
-    echo "     all the reverse replay needs — so run the repair as a more privileged user or add those column grants."
+    echo "     stay negative. Do step 1 FIRST, or in-flight writes keep minting more sentinels."
+    echo "     NOTE: these two statements need ALTER UPDATE(end_time) / ALTER UPDATE(ttft) on 'traces'. A user scoped to"
+    echo "     the rollback grant set has only ALTER UPDATE(_row_exists) — all the reverse replay needs — and will get"
+    echo "     ACCESS_DENIED here, so run the repair as a more privileged user or add those two column grants."
 fi
