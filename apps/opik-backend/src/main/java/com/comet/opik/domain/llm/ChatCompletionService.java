@@ -99,12 +99,16 @@ public class ChatCompletionService {
                     handlers::handleMessage,
                     handlers::handleClose,
                     errorHandler);
-        } catch (BadRequestException badRequestException) {
-            // A provider that rejects the request up-front fails before it can invoke the error callback. Routing it
-            // through the same handler emits the error event and closes the stream; otherwise the chunked output
-            // stays open and the SSE client hangs without ever being told why. Deliberately scoped to
-            // BadRequestException: other throwables keep propagating to the resource layer as before.
-            errorHandler.accept(badRequestException);
+        } catch (BadRequestException | UnsupportedFeatureException clientError) {
+            // Streaming clients get one contract: HTTP 200 with the error delivered in-stream. VertexAI and Gemini
+            // already guarantee that by catching everything inside their own boundedElastic task, but
+            // OpenAiResponses, OpenAI, CustomLlm and Anthropic run inline, so a client-side rejection thrown before
+            // the provider engages would otherwise escape as an HTTP status and break the contract for those
+            // providers only. Caught by exact type rather than RuntimeException: no retry policy wraps this call, so
+            // these arrive unwrapped, and everything else keeps propagating to the resource layer untouched.
+            // Request-level validation such as an unsupported model is unaffected — ChatCompletionsResource rejects
+            // that before this method is called, and it stays a real 400.
+            errorHandler.accept(clientError);
             return;
         }
 

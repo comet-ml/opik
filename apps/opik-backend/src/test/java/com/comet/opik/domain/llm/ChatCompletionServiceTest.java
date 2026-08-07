@@ -462,6 +462,50 @@ class ChatCompletionServiceTest {
         }
 
         @Test
+        @DisplayName("a synchronous unsupported feature is streamed as a 400, not raised as an HTTP status")
+        void createAndStreamResponse__whenGenerateStreamThrowsUnsupportedFeature__thenErrorStreamed() {
+            // Given — OpenAiResponses and friends run inline, so this escapes generateStream instead of reaching the
+            // error callback the way VertexAI and Gemini do
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+            var handlers = mock(ChunkedOutputHandlers.class);
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            doThrow(new UnsupportedFeatureException(UNSUPPORTED_FEATURE_MESSAGE))
+                    .when(llmProviderService).generateStream(any(), anyString(), any(), any(), any());
+
+            // When — must not escape, so the resource still returns 200 with the stream
+            chatCompletionService.createAndStreamResponse(request, workspaceId, handlers);
+
+            // Then
+            var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);
+            verify(handlers).handleError(errorCaptor.capture());
+            assertThat(errorCaptor.getValue().getCode()).isEqualTo(400);
+            assertThat(errorCaptor.getValue().getMessage())
+                    .isEqualTo("Unsupported feature for the selected LLM provider: " + UNSUPPORTED_FEATURE_MESSAGE);
+        }
+
+        @Test
+        @DisplayName("unrelated synchronous failures still propagate to the resource layer")
+        void createAndStreamResponse__whenGenerateStreamThrowsUnrelated__thenPropagates() {
+            // Given
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var workspaceId = "test-workspace-id";
+            var handlers = mock(ChunkedOutputHandlers.class);
+
+            when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
+            doThrow(new IllegalStateException("connection pool exhausted"))
+                    .when(llmProviderService).generateStream(any(), anyString(), any(), any(), any());
+
+            // When & Then — not a client error, so it keeps its existing behaviour rather than becoming a 200
+            assertThatThrownBy(() -> chatCompletionService.createAndStreamResponse(request, workspaceId, handlers))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("connection pool exhausted");
+
+            verify(handlers, never()).handleError(any());
+        }
+
+        @Test
         @DisplayName("unrelated runtime exceptions should still produce a 500")
         void create__whenUnrelatedException__thenStillThrowInternalServerError() {
             // Given
