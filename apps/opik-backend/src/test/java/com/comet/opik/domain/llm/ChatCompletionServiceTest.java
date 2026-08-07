@@ -462,7 +462,7 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("a synchronous unsupported feature is delivered in-stream as a code-400 ErrorMessage, leaving the HTTP response 200")
+        @DisplayName("a synchronously thrown UnsupportedFeatureException is delivered in-stream as a code-400 ErrorMessage, leaving the HTTP response 200")
         void createAndStreamResponse__whenGenerateStreamThrowsUnsupportedFeature__thenErrorStreamed() {
             // Given — OpenAiResponses and friends run inline, so this escapes generateStream instead of reaching the
             // error callback the way VertexAI and Gemini do
