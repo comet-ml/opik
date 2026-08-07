@@ -40,6 +40,8 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
+import static com.comet.opik.domain.SpanMetricsQueries.SPAN_FILTERED_PREFIX;
+import static com.comet.opik.domain.SpanMetricsQueries.TOKEN_USAGE_NAMES;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -303,10 +305,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ) AS t
             )
             """;
-
-    // Shared with WorkspaceMetricsDAO via SpanMetricsQueries; per-project aggregation fixes a single project_id, which
-    // getMetric() selects with template.add("project_id", true).
-    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries.SPAN_FILTERED_PREFIX;
 
     private static final String THREAD_FILTERED_PREFIX = """
             WITH trace_threads_final AS (
@@ -1181,8 +1179,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
-    private static final String GET_PROJECT_TOKEN_USAGE_NAMES = SpanMetricsQueries.TOKEN_USAGE_NAMES;
-
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
@@ -1574,9 +1570,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             var template = getSTWithLogComment(query, PROJECT_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
                     userName, projectId.toString());
 
-            // Selects the single-project predicate in the shared SpanMetricsQueries CTE; project_id is bound below.
-            template.add("project_id", true);
-
             if (isTotal) {
                 template.add("bucket", "toDateTime(UUIDv7ToDateTime(toUUID(:uuid_from_time)))");
             } else {
@@ -1670,6 +1663,15 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     .bind("project_id", projectId)
                     .bind("uuid_from_time", request.uuidFromTime().toString())
                     .bind("workspace_id", workspaceId);
+
+            // Same hazard as OPIK-5678 above: only the span-based queries embed SpanMetricsQueries'
+            // shared CTE, which is the sole place `:project_ids` appears. The trace/thread prefixes
+            // use the scalar `:project_id` bound above, and binding a parameter their SQL doesn't
+            // declare raises NoSuchElementException from R2DBC. Per-project aggregation passes a set
+            // of one so the shared CTE keeps a single `IN` form for both callers.
+            if (SPAN_TIME_METRICS.contains(request.metricType())) {
+                statement.bind("project_ids", new UUID[]{projectId});
+            }
 
             // Bind uuid_to_time only if present
             if (request.uuidToTime() != null) {
@@ -1801,14 +1803,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     @Override
     public Mono<List<String>> getProjectTokenUsageNames(@NonNull String workspaceId, @NonNull UUID projectId) {
         return template.nonTransaction(connection -> {
-            var stTemplate = getSTWithLogComment(GET_PROJECT_TOKEN_USAGE_NAMES, "getProjectTokenUsageNames",
+            var stTemplate = getSTWithLogComment(TOKEN_USAGE_NAMES, "getProjectTokenUsageNames",
                     workspaceId, "", projectId.toString());
 
-            // Selects the single-project predicate in the shared SpanMetricsQueries query; project_id is bound below.
-            stTemplate.add("project_id", true);
-
             var statement = connection.createStatement(stTemplate.render())
-                    .bind("project_id", projectId)
+                    // Per-project aggregation binds a set of one; the shared query takes the IN form.
+                    .bind("project_ids", new UUID[]{projectId})
                     .bind("workspace_id", workspaceId);
 
             InstrumentAsyncUtils.Segment segment = startSegment("getProjectTokenUsageNames", "Clickhouse", "get");

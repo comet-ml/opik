@@ -62,14 +62,7 @@ Workflows are also scanned for **security** issues with [zizmor](https://github.
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
 
 ## SQL query construction (Java backend)
-Java files under `apps/opik-backend/` are scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed backend Java files. The pre-commit framework installs the pinned semgrep automatically — no manual install needed.
-
-The repo runs only its own rules, kept in [`.semgrep/`](.semgrep/) and version-controlled alongside the config; no upstream rule packs are enabled. Today that is a single rule, `sql-query-with-format-slot`, which fails a Java string literal or text block that contains both SQL and a `%s` format slot in a clause position.
-
-- **Why it blocks.** A query whose text is assembled with `%s` invites SQL injection and is harder to read and maintain. Bind values with `:named` parameters instead, and use a StringTemplate `<if(flag)>` conditional for fragments that vary structurally — see `ProjectMetricsDAO` / `WorkspaceMetricsDAO` for the established pattern.
-- **Run it locally** against the whole backend: `uvx --from semgrep==1.172.0 semgrep --config .semgrep apps/opik-backend/src`. To reproduce exactly what CI blocks on, add `--error`.
-- **Suppressing a finding** must be explicit and justified — never silent. Use an inline `// nosemgrep: sql-query-with-format-slot` comment with a short rationale, directly above the query. This is intended for genuinely dynamic query builders (such as `SortingQueryBuilder` / `FilterQueryBuilder`) that assemble fragments as strings but bind their values separately. There is deliberately no repo-level ignore list — a global exemption would fail open on every future file.
-- **Scope.** The rule matches `%s` only, not `%d`: `MetadataDAO` contains the real SQL literal `STR_TO_DATE(value, '%Y-%m-%d')`, which pattern matching cannot distinguish from an integer slot. Rationale for the rule's other scoping decisions is documented in comments in the rule file itself.
+Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
 
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`

@@ -15,9 +15,9 @@ final class SpanMetricsQueries {
     private SpanMetricsQueries() {
     }
 
-    // The project predicate is a StringTemplate conditional, not a spliced string: callers set exactly one of
-    // `project_id` (single project, {@link ProjectMetricsDAO}) or `project_ids` (a resolved set, {@link
-    // WorkspaceMetricsDAO}) and bind the matching value. workspace_id is always bound separately.
+    // The project predicate is bound, not spliced: both callers bind `project_ids`, a per-project set of one
+    // ({@link ProjectMetricsDAO}) or a resolved set of many ({@link WorkspaceMetricsDAO}). The `IN` form covers
+    // both, so the query text stays a constant with no conditional. workspace_id is always bound separately.
     static final String SPAN_FILTERED_PREFIX = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -40,8 +40,7 @@ final class SpanMetricsQueries {
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
-                      <if(project_id)> AND project_id = :project_id<endif>
-                      <if(project_ids)> AND project_id IN :project_ids<endif>
+                      AND project_id IN :project_ids
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
                     UNION ALL
@@ -56,8 +55,7 @@ final class SpanMetricsQueries {
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
-                      <if(project_id)> AND project_id = :project_id<endif>
-                      <if(project_ids)> AND project_id IN :project_ids<endif>
+                      AND project_id IN :project_ids
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
                 )
@@ -124,8 +122,7 @@ final class SpanMetricsQueries {
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
                     <endif>
                     WHERE workspace_id = :workspace_id
-                    <if(project_id)> AND project_id = :project_id<endif>
-                    <if(project_ids)> AND project_id IN :project_ids<endif>
+                    AND project_id IN :project_ids
                     <if(uuid_from_time)> AND id >= :uuid_from_time
                     AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time
@@ -152,18 +149,16 @@ final class SpanMetricsQueries {
             )
             """;
 
-    // Distinct span token-usage key names. The project predicate is a StringTemplate conditional, as in
-    // SPAN_FILTERED_PREFIX above: callers set exactly one of `project_id` (single project, {@link ProjectMetricsDAO})
-    // or `project_ids` (a resolved set, {@link WorkspaceMetricsDAO}) and bind the matching value; workspace_id is
-    // always bound separately. Shared so the two callers can't drift.
+    // Distinct span token-usage key names. The project predicate is bound as in SPAN_FILTERED_PREFIX above: both
+    // callers bind `project_ids`, a set of one ({@link ProjectMetricsDAO}) or many ({@link WorkspaceMetricsDAO});
+    // workspace_id is always bound separately. Shared so the two callers can't drift.
     static final String TOKEN_USAGE_NAMES = """
             SELECT DISTINCT name
             FROM (
                 SELECT usage
                 FROM spans final
                 WHERE workspace_id = :workspace_id
-                <if(project_id)> AND project_id = :project_id<endif>
-                <if(project_ids)> AND project_id IN :project_ids<endif>
+                AND project_id IN :project_ids
             )
             ARRAY JOIN
                 mapKeys(usage) AS name,
