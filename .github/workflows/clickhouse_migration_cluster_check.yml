@@ -35,19 +35,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔍 Detecting ClickHouse migration files that were added or modified..."
+          echo "🔍 Detecting newly added ClickHouse migration files..."
           
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             # For PRs, use GitHub's built-in files API
             gh api repos/${{ github.repository }}/pulls/${{ github.event.number }}/files \
-              --jq '.[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
+              --jq '.[] | select(.status == "added") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
             CHANGED_FILES=$(cat changed_files.txt || echo "")
             rm -f changed_files.txt
           else
             # For pushes to main, use GitHub API to get commit files
             # This works reliably regardless of fetch-depth
             gh api repos/${{ github.repository }}/commits/${{ github.sha }} \
-              --jq '.files[] | select(.status == "added" or .status == "modified") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
+              --jq '.files[] | select(.status == "added") | select(.filename | test("^apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/.*\\.sql$")) | .filename' > changed_files.txt
             CHANGED_FILES=$(cat changed_files.txt || echo "")
             rm -f changed_files.txt
           fi
@@ -68,7 +68,7 @@ jobs:
             echo "EOF" >> "$GITHUB_ENV"
             echo "HAS_MIGRATION_FILES=true" >> "$GITHUB_ENV"
           else
-            echo "📋 No ClickHouse migration files were added or modified."
+            echo "📋 No ClickHouse migration files were added."
             echo "✅ No validation needed."
             echo "HAS_MIGRATION_FILES=false" >> "$GITHUB_ENV"
           fi
@@ -108,11 +108,12 @@ jobs:
           echo "=========================================="
           echo "✅ No ClickHouse Migration Files Changed"
           echo "=========================================="
-          echo "📋 No ClickHouse migration files were added or modified in this change."
+          echo "📋 No ClickHouse migration files were added in this change."
           echo "✅ No validation required."
           echo
-          echo "💡 Note: This check only validates NEW or MODIFIED migration files."
-          echo "   Existing migration files are not checked as they cannot be changed."
+          echo "💡 Note: This check only validates NEWLY ADDED migration files."
+          echo "   Existing migration files are not checked — the ON CLUSTER convention"
+          echo "   post-dates the earliest ones, so it cannot be applied retroactively."
 
       - name: Summary for validated files
         if: env.HAS_MIGRATION_FILES == 'true' && success()

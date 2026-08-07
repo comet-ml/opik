@@ -1,10 +1,17 @@
 --liquibase formatted sql
 --changeset andrescrz:add_metadata_to_experiments
 --validCheckSum ANY
--- OPIK-7445: `ADD COLUMN` here gained `IF NOT EXISTS` so a lost/partial Liquibase ledger
--- degrades to a no-op replay instead of crashlooping the replica on DUPLICATE_COLUMN.
--- Editing an applied changeset changes its checksum, so already-migrated deployments must
--- accept the stored pre-edit value or `liquibase update` fails validation before running.
+-- ⚠️  EDITED AFTER RELEASE (OPIK-7445) — this changeset was already applied in production when
+-- it was modified. Migrations are normally immutable; this is a deliberate, reviewed exception.
+--
+-- What changed: `ADD COLUMN` gained `IF NOT EXISTS`, so a lost or partial Liquibase ledger
+-- replays as a no-op instead of crashlooping the replica on `Code: 15 DUPLICATE_COLUMN`.
+--
+-- Why `--validCheckSum ANY` is required: editing an applied changeset changes its checksum, and
+-- `liquibase update` validates stored checksums before executing anything. Without the waiver,
+-- every already-migrated deployment fails to start. Never remove one directive without the other.
+--
+-- Do NOT treat this file as a precedent for editing other applied migrations.
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments
     ADD COLUMN IF NOT EXISTS metadata String DEFAULT '';

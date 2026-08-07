@@ -21,9 +21,11 @@ extract_prefixes_from_list() {
 }
 
 # Function to get new migration files in PR
+# --diff-filter=A restricts this to genuinely added files. Without it, editing an existing
+# migration reports it as "new" and it then always conflicts with its own prefix in main.
 get_new_migrations() {
   local dir=$1
-  git diff --name-only origin/main...HEAD -- "$dir" | grep '\.sql$' || true
+  git diff --name-only --diff-filter=A origin/main...HEAD -- "$dir" | grep '\.sql$' || true
 }
 
 # Function to extract prefix from filename
