@@ -13,6 +13,7 @@ import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.aws.AwsModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
+import com.comet.opik.infrastructure.bundle.ManagedClickHouseMigrationResourceAccessor;
 import com.comet.opik.infrastructure.cache.CacheModule;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.infrastructure.db.NameGeneratorModule;
@@ -92,6 +93,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .name(DB_APP_ANALYTICS_NAME)
                 .migrationsFileName(DB_APP_ANALYTICS_MIGRATIONS_FILE_NAME)
                 .dataSourceFactoryFunction(OpikConfiguration::getDatabaseAnalyticsMigrations)
+                .resourceAccessorSupplier(ManagedClickHouseMigrationResourceAccessor::createIfEnabled)
                 .build());
         bootstrap.addBundle(GuiceBundle.builder()
                 .bundles(JdbiBundle
