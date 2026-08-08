@@ -973,4 +973,21 @@ class CostServiceTest {
                 // custom-llm hits the same fallback, as it does for perplexity and moonshot.
                 Arguments.of("z-ai/glm-4.5", "custom-llm", "0.00104"));
     }
+
+    /**
+     * Covers registering {@code nscale} as a canonical provider so that the 14 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "nscale"} are no longer silently dropped at load time. No Nscale
+     * model publishes cache rates today, so all Nscale requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesNscaleModels() {
+        // nscale/Qwen/QwQ-32B: input 1.8e-07, output 2e-07
+        // 1000 * 1.8e-07 + 200 * 2e-07 = 0.00022
+        BigDecimal cost = CostService.calculateCost("nscale/Qwen/QwQ-32B", "nscale",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00022");
+    }
 }

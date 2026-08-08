@@ -54,7 +54,8 @@ public class CostService {
             Map.entry("zai", "zai"),
             Map.entry("z-ai", "zai"),
             Map.entry("sambanova", "sambanova"),
-            Map.entry("nebius", "nebius"));
+            Map.entry("nebius", "nebius"),
+            Map.entry("nscale", "nscale"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
