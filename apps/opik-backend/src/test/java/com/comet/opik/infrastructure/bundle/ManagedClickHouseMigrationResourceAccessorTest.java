@@ -64,6 +64,23 @@ class ManagedClickHouseMigrationResourceAccessorTest {
     }
 
     @Test
+    void leavesReplicatedEnginesInCommentsAndStringsUnchanged() throws IOException {
+        var sql = """
+                -- ENGINE = ReplicatedMergeTree('/invalid')
+                SELECT 'ENGINE = ReplicatedMergeTree(''also invalid'')';
+                /* ENGINE = ReplicatedReplacingMergeTree('/invalid') */
+                ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/opik/events', '{replica}')
+                """;
+
+        assertThat(ManagedClickHouseMigrationResourceAccessor.transform("test.sql", sql)).isEqualTo("""
+                -- ENGINE = ReplicatedMergeTree('/invalid')
+                SELECT 'ENGINE = ReplicatedMergeTree(''also invalid'')';
+                /* ENGINE = ReplicatedReplacingMergeTree('/invalid') */
+                ENGINE = ReplicatedMergeTree()
+                """);
+    }
+
+    @Test
     void transformsEveryAnalyticsMigrationWithoutChangingUnrelatedResources() throws Exception {
         try (var managedAccessor = new ManagedClickHouseMigrationResourceAccessor();
                 var originalAccessor = ManagedClickHouseMigrationResourceAccessor.create(false)) {

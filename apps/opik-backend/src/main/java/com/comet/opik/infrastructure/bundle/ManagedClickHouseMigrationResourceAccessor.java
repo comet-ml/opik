@@ -22,6 +22,8 @@ public class ManagedClickHouseMigrationResourceAccessor extends ClassLoaderResou
     private static final String ANALYTICS_MIGRATIONS_PREFIX = "liquibase/db-app-analytics/";
     private static final String REPLICA_ARGUMENT = "'{replica}'";
     private static final String REPLICATED_REPLACING_MERGE_TREE = "ReplicatedReplacingMergeTree";
+    private static final Pattern NON_CODE_PATTERN = Pattern.compile(
+            "(?s)'(?:''|\\\\.|[^'\\\\])*(?:'|\\z)|--[^\\r\\n]*|/\\*.*?(?:\\*/|\\z)");
     private static final Pattern REPLICATED_ENGINE_PATTERN = Pattern.compile(
             "(?i)\\bENGINE\\s*=\\s*(ReplicatedReplacingMergeTree|ReplicatedMergeTree)\\s*\\(");
 
@@ -73,8 +75,13 @@ public class ManagedClickHouseMigrationResourceAccessor extends ClassLoaderResou
         var matcher = REPLICATED_ENGINE_PATTERN.matcher(sql);
         var transformed = new StringBuilder(sql.length());
         int previousEnd = 0;
+        int searchIndex = 0;
 
-        while (matcher.find(previousEnd)) {
+        while (matcher.find(searchIndex)) {
+            searchIndex = matcher.end();
+            if (isNonCode(sql, matcher.start())) {
+                continue;
+            }
             int openingParenthesis = matcher.end() - 1;
             int closingParenthesis = findClosingParenthesis(resourcePath, sql, openingParenthesis);
             var engine = matcher.group(1);
@@ -85,12 +92,23 @@ public class ManagedClickHouseMigrationResourceAccessor extends ClassLoaderResou
             transformed.append(String.join(", ", managedArguments));
             transformed.append(')');
             previousEnd = closingParenthesis + 1;
+            searchIndex = previousEnd;
         }
 
         if (previousEnd == 0) {
             return sql;
         }
         return transformed.append(sql, previousEnd, sql.length()).toString();
+    }
+
+    private static boolean isNonCode(String sql, int offset) {
+        var matcher = NON_CODE_PATTERN.matcher(sql);
+        while (matcher.find() && matcher.start() <= offset) {
+            if (offset < matcher.end()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int findClosingParenthesis(String resourcePath, String sql, int openingParenthesis)
@@ -162,10 +180,11 @@ public class ManagedClickHouseMigrationResourceAccessor extends ClassLoaderResou
             if (semanticArguments.size() <= maximumSemanticArguments) {
                 return semanticArguments;
             }
-        } else if (arguments.size() <= maximumSemanticArguments && arguments.stream().noneMatch(
-                argument -> argument.contains("/clickhouse/") || argument.contains("{replica}"))) {
-            return arguments;
-        }
+        } else
+            if (arguments.size() <= maximumSemanticArguments && arguments.stream().noneMatch(
+                    argument -> argument.contains("/clickhouse/") || argument.contains("{replica}"))) {
+                        return arguments;
+                    }
 
         throw unsafeArguments(resourcePath, "unrecognized %s argument list".formatted(engine));
     }

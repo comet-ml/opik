@@ -259,8 +259,9 @@ component:
 ```
 
 This makes Opik omit explicit ZooKeeper paths and replica names from replicated table engines so ClickHouse can use
-the managed service defaults. Keep this setting unchanged for the lifetime of the analytics database: it changes the
-SQL content used to calculate Liquibase checksums.
+the managed service defaults. The setting defaults to disabled when unset. Helm environment values are strings: only
+`"true"` (case-insensitive) enables it; `"false"` or any other value disables it. Keep this setting unchanged for the
+lifetime of the analytics database because it changes the SQL content used to calculate Liquibase checksums.
 
 # Delete your installation 
 

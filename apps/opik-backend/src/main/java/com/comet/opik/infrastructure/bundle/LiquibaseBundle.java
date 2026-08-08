@@ -35,8 +35,7 @@ public class LiquibaseBundle extends MigrationsBundle<OpikConfiguration> {
     @NonNull private final Function<OpikConfiguration, DataSourceFactory> dataSourceFactoryFunction;
 
     @Builder.Default
-    @NonNull
-    private final Supplier<ResourceAccessor> resourceAccessorSupplier = ClassLoaderResourceAccessor::new;
+    @NonNull private final Supplier<ResourceAccessor> resourceAccessorSupplier = ClassLoaderResourceAccessor::new;
 
     @Override
     public DataSourceFactory getDataSourceFactory(OpikConfiguration configuration) {
