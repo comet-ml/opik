@@ -533,6 +533,16 @@ def test_spearman_ranking_metric():
     assert result.value == pytest.approx((0.5 + 1) / 2)
 
 
+def test_spearman_ranking_metric_rejects_duplicate_items():
+    metric = SpearmanRanking(track=False)
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output=["a", "a", "b"], reference=["b", "a", "a"])
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output=["a", "b", "c"], reference=["a", "b", "b"])
+
+
 def test_vader_sentiment_metric_uses_custom_analyzer():
     class StubAnalyzer:
         def polarity_scores(self, text: str) -> dict:
