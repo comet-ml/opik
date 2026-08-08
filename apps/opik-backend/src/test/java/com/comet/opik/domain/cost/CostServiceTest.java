@@ -973,4 +973,21 @@ class CostServiceTest {
                 // custom-llm hits the same fallback, as it does for perplexity and moonshot.
                 Arguments.of("z-ai/glm-4.5", "custom-llm", "0.00104"));
     }
+
+    /**
+     * Covers registering {@code oci} as a canonical provider so that the 44 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "oci"} are no longer silently dropped at load time. No OCI
+     * model publishes cache rates today, so all OCI requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesOCIModels() {
+        // oci/xai.grok-3: input 3e-06, output 1.5e-05
+        // 1000 * 3e-06 + 200 * 1.5e-05 = 0.006
+        BigDecimal cost = CostService.calculateCost("oci/xai.grok-3", "oci",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.006");
+    }
 }
