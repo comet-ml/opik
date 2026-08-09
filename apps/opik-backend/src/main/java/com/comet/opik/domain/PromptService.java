@@ -276,7 +276,9 @@ class PromptServiceImpl implements PromptService {
     private Prompt getOrCreatePrompt(String workspaceId, String name, String userName,
             TemplateStructure templateStructure, UUID projectId) {
 
-        Prompt prompt = findByName(workspaceId, name, projectId);
+        // Deliberately not the workspace fallback used by the read path: resolving a create through a legacy
+        // project-less prompt would version that prompt instead of creating the requested project-scoped one.
+        Prompt prompt = findByNameScoped(workspaceId, name, projectId);
 
         if (prompt != null) {
             // For existing prompts, ignore the templateStructure parameter and use the existing prompt's structure.
@@ -299,7 +301,19 @@ class PromptServiceImpl implements PromptService {
 
         return EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
-                .onErrorDo(() -> findByName(workspaceId, name, projectId));
+                .onErrorDo(() -> findByNameScoped(workspaceId, name, projectId));
+    }
+
+    private Prompt findByNameScoped(String workspaceId, String name, UUID projectId) {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            // A null projectId means "the project-less prompt", not "any project": passing it to findByName
+            // would drop the project predicate and match another project's prompt of the same name.
+            return projectId == null
+                    ? promptDAO.findByNameWithoutProject(name, workspaceId)
+                    : promptDAO.findByName(name, workspaceId, projectId);
+        });
     }
 
     private Prompt findByName(String workspaceId, String name, UUID projectId) {
@@ -308,7 +322,7 @@ class PromptServiceImpl implements PromptService {
 
             Prompt prompt = promptDAO.findByName(name, workspaceId, projectId);
             if (prompt == null && projectId != null) {
-                prompt = promptDAO.findByName(name, workspaceId, null);
+                prompt = promptDAO.findByNameWithoutProject(name, workspaceId);
                 if (prompt != null) {
                     requestContext.get().setWorkspaceFallbackFor("Prompt", name);
                 }
@@ -858,10 +872,15 @@ class PromptServiceImpl implements PromptService {
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit, String environment,
             String versionNumber, String projectName) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        UUID projectId = null;
-        if (StringUtils.isNotBlank(projectName)) {
-            projectId = projectService.findProjectIdByName(workspaceId, projectName).orElse(null);
+        if (StringUtils.isBlank(projectName)) {
+            return retrievePromptVersion(name, commit, environment, versionNumber, (UUID) null);
         }
+
+        // An unresolved project must not degrade into a workspace-wide search: that would match another
+        // project's prompt of the same name, which is the cross-project read this scoping removes.
+        UUID projectId = projectService.findProjectIdByName(workspaceId, projectName)
+                .orElseThrow(() -> new NotFoundException(PROMPT_NOT_FOUND));
+
         return retrievePromptVersion(name, commit, environment, versionNumber, projectId);
     }
 
