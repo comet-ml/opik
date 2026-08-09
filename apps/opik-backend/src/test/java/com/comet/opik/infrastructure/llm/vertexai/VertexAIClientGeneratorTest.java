@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -99,6 +100,10 @@ class VertexAIClientGeneratorTest {
      */
     @BeforeAll
     void generateServiceAccountKey() throws Exception {
+        serviceAccountJson = serviceAccountJson(PROJECT_ID);
+    }
+
+    private String serviceAccountJson(String projectId) throws Exception {
         var keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048);
         var privateKey = keyPairGenerator.generateKeyPair().getPrivate();
@@ -107,7 +112,7 @@ class VertexAIClientGeneratorTest {
                 + Base64.getEncoder().encodeToString(privateKey.getEncoded())
                 + "\\n-----END PRIVATE KEY-----\\n";
 
-        serviceAccountJson = """
+        return """
                 {
                   "type": "service_account",
                   "project_id": "%s",
@@ -117,7 +122,7 @@ class VertexAIClientGeneratorTest {
                   "client_id": "1234567890",
                   "token_uri": "https://%s%s"
                 }
-                """.formatted(PROJECT_ID, pem, PROJECT_ID, wireMockHost(), TOKEN_PATH);
+                """.formatted(projectId, pem, projectId, wireMockHost(), TOKEN_PATH);
     }
 
     @AfterAll
@@ -161,7 +166,10 @@ class VertexAIClientGeneratorTest {
     }
 
     private void completeVia(String configuredLocation) {
-        var generator = new VertexAIClientGenerator(clientConfig());
+        completeVia(new VertexAIClientGenerator(clientConfig()), configuredLocation);
+    }
+
+    private void completeVia(VertexAIClientGenerator generator, String configuredLocation) {
         var request = ChatCompletionRequest.builder().model(MODEL).build();
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey(serviceAccountJson)
@@ -240,6 +248,75 @@ class VertexAIClientGeneratorTest {
                     .build();
 
             return VertexAITestClients.apiEndpointOf(generator.generate(config, request));
+        }
+    }
+
+    /**
+     * A {@link com.google.cloud.vertexai.VertexAI} carries a gRPC channel and a GAX executor whose core threads never
+     * time out, and the langchain4j constructor the generator uses discards the handle, so a client that is not reused
+     * is stranded for the life of the process.
+     * <p>
+     * These assert on instance identity rather than on the thread count, which is the symptom, because the count is not
+     * attributable here: WireMock cannot serve gRPC, so this class runs on {@link Transport#REST}, and the REST
+     * transport starts a GAX thread per request whether or not the client is reused. Under the {@code GRPC} transport
+     * production uses, a shared client serves any number of calls without starting another thread — so the number of
+     * clients built is the thing this fix controls, and the thing worth asserting.
+     */
+    @Nested
+    @DisplayName("Client caching")
+    class ClientCaching {
+
+        @Test
+        void reusesOneClientAcrossCallsWithTheSameCredentialsAndLocation() throws Exception {
+            var generator = new VertexAIClientGenerator(clientConfig());
+
+            assertThat(clientFor(generator, "global", serviceAccountJson))
+                    .isSameAs(clientFor(generator, "global", serviceAccountJson));
+        }
+
+        @Test
+        void reusesOneClientWhenTheLocationOnlyDiffersInCasingOrPadding() throws Exception {
+            var generator = new VertexAIClientGenerator(clientConfig());
+
+            assertThat(clientFor(generator, "  GLOBAL  ", serviceAccountJson))
+                    .isSameAs(clientFor(generator, "global", serviceAccountJson));
+        }
+
+        @Test
+        void buildsADistinctClientPerLocation() throws Exception {
+            var generator = new VertexAIClientGenerator(clientConfig());
+
+            assertThat(clientFor(generator, "eu", serviceAccountJson))
+                    .isNotSameAs(clientFor(generator, "us", serviceAccountJson));
+        }
+
+        /**
+         * Credentials are part of the key, so a rotated or workspace-specific key must never be served another
+         * workspace's client.
+         */
+        @Test
+        void buildsADistinctClientPerCredential() throws Exception {
+            var generator = new VertexAIClientGenerator(clientConfig());
+
+            assertThat(clientFor(generator, "global", serviceAccountJson))
+                    .isNotSameAs(clientFor(generator, "global", serviceAccountJson("other-project")));
+        }
+
+        @Test
+        void keepsCachingSeparatePerGenerator() throws Exception {
+            assertThat(clientFor(new VertexAIClientGenerator(clientConfig()), "global", serviceAccountJson))
+                    .isNotSameAs(clientFor(new VertexAIClientGenerator(clientConfig()), "global", serviceAccountJson));
+        }
+
+        private com.google.cloud.vertexai.VertexAI clientFor(VertexAIClientGenerator generator, String location,
+                String apiKey) {
+            var request = ChatCompletionRequest.builder().model(MODEL).build();
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(apiKey)
+                    .configuration(location == null ? Map.of() : Map.of("location", location))
+                    .build();
+
+            return VertexAITestClients.vertexAiOf(generator.generate(config, request));
         }
     }
 }
