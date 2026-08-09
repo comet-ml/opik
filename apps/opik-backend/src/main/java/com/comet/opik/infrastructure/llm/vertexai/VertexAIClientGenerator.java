@@ -38,19 +38,12 @@ import java.util.function.Consumer;
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
     // One VertexAI per (credentials, location); idle-only eviction so we never close a client mid-call.
-    private static final Duration DEFAULT_CLIENT_IDLE_TTL = Duration.ofMinutes(15);
-
     private final @NonNull LlmProviderClientConfig clientConfig;
     private final Cache<ClientKey, VertexAI> clients;
 
     public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig) {
-        this(clientConfig, idleTtl(clientConfig), VertexAIClientGenerator::close);
-    }
-
-    private static Duration idleTtl(LlmProviderClientConfig config) {
-        return Optional.ofNullable(config.getVertexAIClient().clientIdleTimeout())
-                .map(io.dropwizard.util.Duration::toJavaDuration)
-                .orElse(DEFAULT_CLIENT_IDLE_TTL);
+        this(clientConfig, clientConfig.getVertexAIClient().clientIdleTimeout().toJavaDuration(),
+                VertexAIClientGenerator::close);
     }
 
     @VisibleForTesting

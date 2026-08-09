@@ -6,9 +6,11 @@ import io.dropwizard.util.Duration;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,40 +32,28 @@ class VertexAIClientConfigTest {
                 .transport(Transport.GRPC);
     }
 
-    @Test
-    @DisplayName("no clientIdleTimeout is valid — the generator falls back to its default")
-    void nullIdleTimeoutIsValid() {
-        assertThat(validator.validate(validConfig().build())).isEmpty();
+    // null = unset, so the value comes from config.yml; 5m is the floor, 15m the shipped default.
+    static Stream<Duration> acceptedTimeouts() {
+        return Stream.of(null, Duration.minutes(5), Duration.minutes(15));
     }
 
-    @Test
-    @DisplayName("a 15m clientIdleTimeout is valid")
-    void defaultScaleIdleTimeoutIsValid() {
-        assertThat(validator.validate(validConfig().clientIdleTimeout(Duration.minutes(15)).build())).isEmpty();
+    @ParameterizedTest
+    @MethodSource("acceptedTimeouts")
+    @DisplayName("a clientIdleTimeout at/above the 5m floor (or unset) is accepted")
+    void acceptedIdleTimeoutsPassValidation(Duration timeout) {
+        assertThat(validator.validate(validConfig().clientIdleTimeout(timeout).build())).isEmpty();
     }
 
-    @Test
-    @DisplayName("the 5m floor is valid (boundary)")
-    void atFloorIsValid() {
-        assertThat(validator.validate(validConfig().clientIdleTimeout(Duration.minutes(5)).build())).isEmpty();
+    // 0 would disable the cache and reinstate the leak; the local-test 1m and 4m sit below the call-safe floor.
+    static Stream<Duration> rejectedTimeouts() {
+        return Stream.of(Duration.seconds(0), Duration.minutes(1), Duration.minutes(4));
     }
 
-    @Test
-    @DisplayName("below the 5m floor is rejected — e.g. the local-test 1m is not a valid prod value")
-    void belowFloorIsRejected() {
-        var config = validConfig().clientIdleTimeout(Duration.minutes(1)).build();
-
-        assertThat(validator.validate(config))
-                .as("near a call's duration a long in-flight call can outlive the idle window and get its client closed")
-                .anyMatch(v -> v.getPropertyPath().toString().equals("clientIdleTimeout"));
-    }
-
-    @Test
-    @DisplayName("a zero clientIdleTimeout is rejected — it would disable the cache and reinstate the per-call leak")
-    void zeroIdleTimeoutIsRejected() {
-        var config = validConfig().clientIdleTimeout(Duration.seconds(0)).build();
-
-        assertThat(validator.validate(config))
+    @ParameterizedTest
+    @MethodSource("rejectedTimeouts")
+    @DisplayName("a clientIdleTimeout below the 5m floor (incl. 0) is rejected")
+    void belowFloorIdleTimeoutsAreRejected(Duration timeout) {
+        assertThat(validator.validate(validConfig().clientIdleTimeout(timeout).build()))
                 .anyMatch(v -> v.getPropertyPath().toString().equals("clientIdleTimeout"));
     }
 }
