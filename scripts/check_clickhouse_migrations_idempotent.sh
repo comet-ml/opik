@@ -15,17 +15,21 @@ fi
 
 violations=""
 
-# Run grep; exit codes: 0 = matches found, 1 = no matches, 2+ = error.
-grep_output=$(grep -rni "add[[:space:]]\+column[[:space:]]\+" "$MIGRATIONS_DIR" 2>&1)
-grep_rc=$?
+# Run grep in an if-context so set -e does not abort on exit code 1 (no matches).
+# Exit codes: 0 = matches found, 1 = no matches, 2+ = real error.
+if grep_output=$(grep -rni "add[[:space:]]\+column[[:space:]]\+" "$MIGRATIONS_DIR" 2>&1); then
+    grep_rc=0
+else
+    grep_rc=$?
+fi
 
-if [ "$grep_rc" -eq 2 ]; then
+if [ "$grep_rc" -ge 2 ]; then
     echo "ERROR: grep failed while scanning $MIGRATIONS_DIR:"
     echo "$grep_output"
     exit 2
 fi
 
-# grep_rc 0 = matches found, 1 = no matches (no ADD COLUMN at all — trivially OK).
+# grep_rc 1 = no ADD COLUMN lines at all — trivially OK.
 if [ "$grep_rc" -eq 1 ]; then
     echo "OK: All ADD COLUMN statements in analytics migrations use IF NOT EXISTS."
     exit 0
