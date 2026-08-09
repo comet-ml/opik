@@ -52,6 +52,12 @@ public class HostProviderResolver {
             "inception"
     );
 
+    // Aliases for host labels that do not match the canonical provider name directly.
+    // For example, api.x.ai extracts the label "x" but the canonical provider is "xai".
+    private static final java.util.Map<String, String> LABEL_ALIASES = java.util.Map.of(
+            "x", "xai"
+    );
+
     /**
      * If {@code provider} looks like a hostname whose extracted label matches a known
      * canonical provider, return the canonical name. Otherwise return {@code provider}
@@ -79,9 +85,13 @@ public class HostProviderResolver {
         }
 
         String label = m.group(1);
-        if (KNOWN_PROVIDERS.contains(label)) {
-            log.debug("Resolved host-style provider '{}' to canonical '{}'", provider, label);
-            return label;
+
+        // Apply alias if the extracted label does not directly match the canonical name.
+        String canonical = LABEL_ALIASES.getOrDefault(label, label);
+
+        if (KNOWN_PROVIDERS.contains(canonical)) {
+            log.debug("Resolved host-style provider '{}' to canonical '{}'", provider, canonical);
+            return canonical;
         }
 
         log.debug("Host-style provider '{}' extracted label '{}' not in known providers, leaving unchanged",

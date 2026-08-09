@@ -32,6 +32,17 @@ class HostProviderResolverTest {
     }
 
     @Nested
+    @DisplayName("Aliased labels (host label differs from canonical name)")
+    class AliasedLabels {
+
+        @Test
+        void api_x_ai_resolves_to_xai_via_alias() {
+            // "api.x.ai" extracts label "x" which aliases to canonical "xai"
+            assertThat(HostProviderResolver.resolve("api.x.ai", null)).isEqualTo("xai");
+        }
+    }
+
+    @Nested
     @DisplayName("Known providers without api. prefix")
     class KnownProvidersWithoutApiPrefix {
 
