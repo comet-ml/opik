@@ -121,6 +121,9 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments
     ADD COLUMN IF NOT EXISTS created_by String DEFAULT '',
     ADD COLUMN IF NOT EXISTS last_updated_by String DEFAULT '';
 
+-- Note: rollbacks drop these columns unconditionally. This is intentional for development
+-- rollback flows. On production deployments these migrations run once and are not rolled back;
+-- column ownership cannot be determined at rollback time, so rollbacks are forward-only in practice.
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items DROP COLUMN created_by, DROP COLUMN last_updated_by;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans DROP COLUMN created_by, DROP COLUMN last_updated_by;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces DROP COLUMN created_by, DROP COLUMN last_updated_by;

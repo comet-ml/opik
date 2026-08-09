@@ -6,9 +6,10 @@ permissions:
 
 on:
   pull_request:
-    paths: 
+    paths:
       - "apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/**"
       - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
+      - "scripts/**"
   workflow_dispatch:
 
 
