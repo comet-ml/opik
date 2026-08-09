@@ -1,25 +1,31 @@
 #!/usr/bin/env bash
 # Fails if any ClickHouse analytics migration contains ADD COLUMN without IF NOT EXISTS.
 # All migrations from 000004 use IF NOT EXISTS; this script enforces the pattern for all files.
+# The check is case-insensitive and whitespace-tolerant so variants like
+# "add column" or "ADD  COLUMN" (extra space) are also caught.
 set -euo pipefail
 
 MIGRATIONS_DIR="apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations"
 
-# Extract every ADD COLUMN clause that lacks IF NOT EXISTS.
-# We parse line-by-line from grep -n output (format: "file:linenum:content").
-# Comment lines (content starting with --) are excluded by matching only lines
-# whose content portion does not start with --.
 violations=""
 while IFS= read -r line; do
-    # line format: <file>:<lineno>:<content>
-    # Extract content (everything after the second colon)
-    content="${line#*:*:}"
-    # Skip SQL comment lines (content starts with optional whitespace then --)
+    # line format from grep -n: <file>:<lineno>:<content>
+    # Extract the content portion (everything after the second colon).
+    content="${line#*:}"    # strip file prefix
+    content="${content#*:}" # strip line-number prefix
+    # Skip SQL comment lines (optional whitespace then --)
     if [[ "$content" =~ ^[[:space:]]*-- ]]; then
         continue
     fi
+    # Case-insensitive check: skip if IF NOT EXISTS is present
+    # (grep -i already matched ADD COLUMN case-insensitively above;
+    #  now check IF NOT EXISTS case-insensitively)
+    lower=$(echo "$content" | tr '[:upper:]' '[:lower:]')
+    if [[ "$lower" == *"if not exists"* ]]; then
+        continue
+    fi
     violations="${violations}${line}"$'\n'
-done < <(grep -rn "ADD COLUMN " "$MIGRATIONS_DIR" | grep -v "IF NOT EXISTS" || true)
+done < <(grep -rni "add[[:space:]]\+column[[:space:]]\+" "$MIGRATIONS_DIR" || true)
 
 if [ -n "$violations" ]; then
     echo "ERROR: Found ADD COLUMN without IF NOT EXISTS in analytics migrations:"
