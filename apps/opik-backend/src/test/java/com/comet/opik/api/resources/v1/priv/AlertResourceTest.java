@@ -2416,9 +2416,42 @@ class AlertResourceTest {
                     var pagerDutyPayload = verifyWebhookCalledAndGetPayload(PagerDutyWebhookPayload.class);
                     verifyPagerDutyPayloadStructure(pagerDutyPayload);
                 }
-                default ->
-                    throw new IllegalArgumentException("Unsupported alert type for alerts integration: " + alertType);
+                case FEISHU -> {
+                    var feishuPayload = verifyWebhookCalledAndGetPayload(FeishuWebhookPayload.class);
+                    verifyFeishuPayloadStructure(feishuPayload, expectedEventCount, expectedEventType,
+                            expectedDetailsContains);
+                }
             }
+        }
+
+        private void verifyFeishuPayloadStructure(FeishuWebhookPayload feishuPayload, int expectedEventCount,
+                String expectedEventType, List<String> expectedDetailsContains) {
+            assertThat(feishuPayload.msgType()).isEqualTo("interactive");
+            assertThat(feishuPayload.card().header().title().tag()).isEqualTo("plain_text");
+            assertThat(feishuPayload.card().header().title().content()).isEqualTo("Opik Alert: " + ALERT_NAME);
+            assertThat(feishuPayload.card().header().template()).isNotBlank();
+            assertThat(feishuPayload.card().elements()).hasSize(2);
+
+            var contentElement = feishuPayload.card().elements().getFirst();
+            assertThat(contentElement.tag()).isEqualTo("div");
+            assertThat(contentElement.text().tag()).isEqualTo("lark_md");
+
+            String content = contentElement.text().content();
+            assertThat(content).contains("**" + expectedEventCount + "**");
+            assertThat(content).contains(expectedEventType);
+
+            String normalizedContent = content.replace("*", "");
+            for (String expectedString : expectedDetailsContains) {
+                assertThat(normalizedContent).contains(expectedString.replace("*", ""));
+            }
+
+            var actionElement = feishuPayload.card().elements().getLast();
+            assertThat(actionElement.tag()).isEqualTo("action");
+            assertThat(actionElement.actions()).hasSize(1);
+            assertThat(actionElement.actions().getFirst().tag()).isEqualTo("button");
+            assertThat(actionElement.actions().getFirst().text().content()).isEqualTo("View in Opik");
+            assertThat(actionElement.actions().getFirst().url()).isNotBlank();
+            assertThat(actionElement.actions().getFirst().type()).isEqualTo("primary");
         }
 
         private void verifySlackBlockStructure(SlackWebhookPayload slackPayload, int expectedEventCount,

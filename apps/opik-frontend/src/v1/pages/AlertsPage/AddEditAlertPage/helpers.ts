@@ -1,3 +1,4 @@
+import type { ComponentType, SVGProps } from "react";
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import set from "lodash/set";
@@ -32,7 +33,10 @@ export const ALERT_TYPE_LABELS: Record<ALERT_TYPE, string> = {
   [ALERT_TYPE.feishu]: "Feishu",
 };
 
-export const ALERT_TYPE_ICONS = {
+export const ALERT_TYPE_ICONS: Record<
+  ALERT_TYPE,
+  ComponentType<SVGProps<SVGSVGElement>>
+> = {
   [ALERT_TYPE.general]: WebhookIcon,
   [ALERT_TYPE.slack]: SlackIcon,
   [ALERT_TYPE.pagerduty]: PagerDutyIcon,

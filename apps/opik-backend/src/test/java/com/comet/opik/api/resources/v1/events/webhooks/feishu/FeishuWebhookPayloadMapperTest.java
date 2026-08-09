@@ -384,6 +384,54 @@ class FeishuWebhookPayloadMapperTest {
     @Nested
     class ActionUrls {
 
+        static Stream<Arguments> workspaceLevelActionUrlProvider() {
+            UUID traceId = UUID.randomUUID();
+            UUID projectId = UUID.randomUUID();
+            UUID experimentId = UUID.randomUUID();
+
+            return Stream.of(
+                    Arguments.of(
+                            AlertEventType.PROMPT_CREATED,
+                            List.of(Prompt.builder().id(UUID.randomUUID()).name("prompt").build()),
+                            "/prompts"),
+                    Arguments.of(
+                            AlertEventType.TRACE_GUARDRAILS_TRIGGERED,
+                            List.of(List.of(Guardrail.builder()
+                                    .entityId(traceId)
+                                    .projectId(projectId)
+                                    .secondaryId(UUID.randomUUID())
+                                    .build())),
+                            "/projects"),
+                    Arguments.of(
+                            AlertEventType.EXPERIMENT_FINISHED,
+                            List.of(List.of(Experiment.builder()
+                                    .id(experimentId)
+                                    .datasetId(UUID.randomUUID())
+                                    .build())),
+                            "/experiments"),
+                    Arguments.of(
+                            AlertEventType.TRACE_ERRORS,
+                            List.of(MetricsAlertPayload.builder()
+                                    .metricValue("15")
+                                    .threshold("10")
+                                    .windowSeconds(3600)
+                                    .build()),
+                            "/projects"));
+        }
+
+        @ParameterizedTest(name = "{0} links to {2}")
+        @MethodSource("workspaceLevelActionUrlProvider")
+        void workspaceLevelEventShouldLinkToExpectedPage(
+                AlertEventType eventType, List<?> metadata, String expectedPath) {
+            var event = buildEvent(eventType, metadata);
+
+            FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
+
+            var actionElement = payload.card().elements().getLast();
+            assertThat(actionElement.actions().getFirst().url())
+                    .isEqualTo(BASE_URL + "/" + WORKSPACE_NAME + expectedPath);
+        }
+
         @Test
         void metricsAlertWithSingleProjectShouldLinkToProject() {
             String projectId = UUID.randomUUID().toString();
@@ -398,9 +446,9 @@ class FeishuWebhookPayloadMapperTest {
 
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
-            var actionElement = payload.card().elements().get(payload.card().elements().size() - 1);
+            var actionElement = payload.card().elements().getLast();
             assertThat(actionElement.tag()).isEqualTo("action");
-            assertThat(actionElement.actions().get(0).url())
+            assertThat(actionElement.actions().getFirst().url())
                     .isEqualTo(BASE_URL + "/" + WORKSPACE_NAME + "/projects/" + projectId + "/traces?type=traces");
         }
 
@@ -417,8 +465,8 @@ class FeishuWebhookPayloadMapperTest {
 
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
-            var actionElement = payload.card().elements().get(payload.card().elements().size() - 1);
-            assertThat(actionElement.actions().get(0).url())
+            var actionElement = payload.card().elements().getLast();
+            assertThat(actionElement.actions().getFirst().url())
                     .isEqualTo(BASE_URL + "/" + WORKSPACE_NAME + "/projects");
         }
 
@@ -436,8 +484,8 @@ class FeishuWebhookPayloadMapperTest {
 
             FeishuWebhookPayload payload = FeishuWebhookPayloadMapper.toFeishuPayload(event);
 
-            var actionElement = payload.card().elements().get(payload.card().elements().size() - 1);
-            assertThat(actionElement.actions().get(0).url())
+            var actionElement = payload.card().elements().getLast();
+            assertThat(actionElement.actions().getFirst().url())
                     .isEqualTo(BASE_URL + "/" + WORKSPACE_NAME + "/projects/" + projectId + "/traces?type=threads");
         }
     }
