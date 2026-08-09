@@ -84,6 +84,25 @@ describe("useTrialSidebarState", () => {
     );
   });
 
+  it("openTrial keeps the URL free of trialNumber for the unnumbered baseline", () => {
+    // The baseline is not a trial and carries no number (OPIK-7589); its deep
+    // link identifies it by experiment ids alone.
+    const { result } = renderHook(() => useTrialSidebarState());
+    act(() => {
+      result.current.openTrial({
+        experimentIds: ["exp-base"],
+        trialNumber: null,
+      });
+    });
+    expect(mockSetQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trials: ["exp-base"],
+        trialNumber: undefined,
+      }),
+      "replaceIn",
+    );
+  });
+
   it("close clears the sidebar params and the embedded table's params", () => {
     const { result } = renderHook(() => useTrialSidebarState());
     act(() => {

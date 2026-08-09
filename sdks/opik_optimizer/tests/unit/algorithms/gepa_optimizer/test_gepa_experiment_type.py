@@ -127,7 +127,7 @@ class TestAdapterEvaluatePassesExperimentType:
         )
         # Keep prompt rebuilding and config preparation out of the way.
         monkeypatch.setattr(
-            adapter, "_rebuild_prompts_from_candidate", lambda candidate: {}
+            adapter, "_rebuild_prompts_from_candidate", lambda candidate: ({}, [])
         )
         monkeypatch.setattr(
             adapter_module,
@@ -164,7 +164,7 @@ class TestAdapterEvaluatePassesExperimentType:
             fake_evaluate_with_result,
         )
         monkeypatch.setattr(
-            adapter, "_rebuild_prompts_from_candidate", lambda candidate: {}
+            adapter, "_rebuild_prompts_from_candidate", lambda candidate: ({}, [])
         )
         monkeypatch.setattr(
             adapter_module,

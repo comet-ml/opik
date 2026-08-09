@@ -380,7 +380,8 @@ class ProjectServiceImpl implements ProjectService {
 
     private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId,
             ProjectCriteria criteria) {
-        return traceDAO.getStatsByProjectIds(projectIds, workspaceId, criteria.filters())
+        return traceDAO.getStatsByProjectIds(projectIds, workspaceId, criteria.filters(), criteria.fromTime(),
+                criteria.toTime())
                 .map(stats -> stats.entrySet().stream()
                         .map(entry -> {
                             Map<String, Object> statsMap = entry.getValue().stats()

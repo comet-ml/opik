@@ -141,9 +141,24 @@ users.get(0)
 users.get(users.size() - 1)
 ```
 
-### SQL Text Blocks
+### SQL Query Construction
+
+**Never build a query out of Java string operations.** No `+`, no `String.format` /
+`.formatted(...)`, no `StringBuilder`, no `MessageFormat`, no `String.join` over clauses. A
+query is declared once as a text block, and everything that varies goes through exactly one of
+two mechanisms:
+
+| What varies | Mechanism |
+|-------------|-----------|
+| A **value** — id, name, timestamp, list of ids | `:placeholder` + `.bind("placeholder", value)` |
+| A **fragment** — predicate, sort clause, projected column, CTE | StringTemplate `<if(x)>…<endif>`, `<else>`, `<x>` + `template.add("x", …)` |
+
+Why: interpolating values is the SQL-injection surface, and interpolating fragments hides which
+query a DAO actually runs — the declaration site stops being readable, and callers drift apart
+over time.
+
 ```java
-// ✅ GOOD - text blocks for multi-line SQL
+// ✅ GOOD - text block, values bound, structure via StringTemplate
 @SqlQuery("""
         SELECT * FROM datasets
         WHERE workspace_id = :workspace_id
@@ -155,6 +170,49 @@ users.get(users.size() - 1)
         "WHERE workspace_id = :workspace_id " +
         "<if(name)> AND name like concat('%', :name, '%') <endif> ")
 ```
+
+A predicate that differs between callers is a **fragment**, so it belongs in the template — not
+in a `%s` slot the caller fills in:
+
+```java
+// ❌ BAD - caller splices the predicate in
+private static final String TOKEN_USAGE_NAMES_TEMPLATE = """
+        SELECT DISTINCT name FROM (
+            SELECT usage FROM spans FINAL
+            WHERE workspace_id = :workspace_id
+            AND %s
+        ) ...
+        """;
+
+static String tokenUsageNames(String projectPredicate) {
+    return TOKEN_USAGE_NAMES_TEMPLATE.formatted(projectPredicate);
+}
+
+// caller: tokenUsageNames("project_id IN :project_ids")
+
+// ✅ GOOD - both shapes live in the template, the caller picks one
+private static final String TOKEN_USAGE_NAMES = """
+        SELECT DISTINCT name FROM (
+            SELECT usage FROM spans FINAL
+            WHERE workspace_id = :workspace_id
+            <if(project_ids)> AND project_id IN :project_ids <endif>
+            <if(project_id)> AND project_id = :project_id <endif>
+        ) ...
+        """;
+
+var template = TemplateUtils.newST(TOKEN_USAGE_NAMES);
+template.add("project_ids", true);
+...
+statement.bind("project_ids", projectIds.toArray(new UUID[0]));
+```
+
+A fragment that genuinely can't be enumerated in the template — a user-chosen sort field or
+filter clause — must be produced by the allow-listed builders (`SortingQueryBuilder`,
+`FilterQueryBuilder`), never assembled from raw request strings.
+
+`.formatted(...)` stays correct for log and exception messages. The rule is about SQL text only.
+
+Some `%s` query templates predate this rule. Don't copy them and don't add new ones.
 
 ### Immutable Collections
 ```java

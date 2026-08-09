@@ -1,0 +1,64 @@
+name: Lint Test Tags
+run-name: "Lint Test Tags ${{ github.ref_name }} by @${{ github.actor }}"
+
+# Guards the coverage-map tags in tests_end_to_end/ (OPIK-7532).
+#
+# Why this gates PRs rather than running nightly: tier selection is `--grep`, so
+# a spec with a missing or typo'd tag is not a failure — it is silently never
+# selected, and `npm test` even passes `--pass-with-no-tests`. Catching that at
+# review time is the whole point; a nightly job would report it the next morning,
+# after the spec had already stopped running.
+#
+# Deliberately needs no secrets, no internal runner and no cross-repo checkout,
+# so it works on pull requests from external contributors too. That is also why
+# the taxonomy lives here in the repo next to the specs it describes rather than
+# in the (private) comet-automation-tests repo.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tests_end_to_end/**"
+      - ".github/workflows/tag_lint.yml"
+  push:
+    branches:
+      - 'main'
+    paths:
+      - "tests_end_to_end/**"
+      - ".github/workflows/tag_lint.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only: the lint never edits specs or the taxonomy.
+permissions:
+  contents: read
+
+jobs:
+
+  tag-lint:
+    name: tag-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Lint test tags
+        # --format github turns findings into ::error:: annotations, so they land
+        # on the offending line in the PR's Files-changed view.
+        run: |
+          python3 tests_end_to_end/coverage/tag_lint.py \
+            --taxonomy tests_end_to_end/coverage/taxonomy.yaml \
+            --estate tests_end_to_end \
+            --format github

@@ -43,6 +43,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -179,6 +180,48 @@ class DeletionEventTest {
         awaitAndAssertSpanDeletionEvents(projectId, spanIds);
     }
 
+    @Test
+    void deleteByIdOfReusedIdCapturesEventPerOwningProject() {
+        var projectName1 = randomName("project");
+        var projectName2 = randomName("project");
+
+        // Same id in two projects (externally-ingested ids are not globally unique). A null lastUpdatedAt keeps the
+        // single batch from deduping them by id, so both land in their own projects from one call.
+        var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName1)
+                .threadId(null)
+                .lastUpdatedAt(null)
+                .build();
+        var sharedId = trace1.id();
+        var trace2 = trace1.toBuilder()
+                .projectName(projectName2)
+                .build();
+        traceResourceClient.batchCreateTraces(List.of(trace1, trace2), API_KEY, WORKSPACE_NAME);
+        var projectId1 = traceResourceClient.getByProjectName(projectName1, API_KEY, WORKSPACE_NAME).getFirst()
+                .projectId();
+        var projectId2 = traceResourceClient.getByProjectName(projectName2, API_KEY, WORKSPACE_NAME).getFirst()
+                .projectId();
+        assertThat(projectId1).isNotEqualTo(projectId2);
+
+        // Spans for both projects share the trace id; create them in one call.
+        var spans1 = buildSpans(projectName1, sharedId);
+        var spans2 = buildSpans(projectName2, sharedId);
+        spanResourceClient.batchCreateSpans(Stream.concat(spans1.stream(), spans2.stream()).toList(), API_KEY,
+                WORKSPACE_NAME);
+        var spanIds1 = spans1.stream().map(Span::id).collect(Collectors.toUnmodifiableSet());
+        var spanIds2 = spans2.stream().map(Span::id).collect(Collectors.toUnmodifiableSet());
+
+        traceResourceClient.deleteTrace(sharedId, WORKSPACE_NAME, API_KEY);
+
+        // Delete-by-id resolves both owning projects and captures one trace event per project, each with the resolved
+        // (non-empty) project_id - never a single empty-project event for the id.
+        getAndAssertDeletionEvents(SourceTable.TRACES, List.of(
+                newExpectedTraceDeletionEvent(projectId1, sharedId),
+                newExpectedTraceDeletionEvent(projectId2, sharedId)));
+        awaitAndAssertSpanDeletionEvents(projectId1, spanIds1);
+        awaitAndAssertSpanDeletionEvents(projectId2, spanIds2);
+    }
+
     private static String randomName(String prefix) {
         return "%s-%s".formatted(prefix, RandomStringUtils.secure().nextAlphanumeric(32));
     }
@@ -208,14 +251,18 @@ class DeletionEventTest {
         return createdTraces;
     }
 
-    private Set<UUID> createSpans(String projectName, UUID traceId) {
-        var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+    private List<Span> buildSpans(String projectName, UUID traceId) {
+        return PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
                 .map(span -> span.toBuilder()
                         .projectName(projectName)
                         .traceId(traceId)
                         .feedbackScores(null)
                         .build())
                 .toList();
+    }
+
+    private Set<UUID> createSpans(String projectName, UUID traceId) {
+        var spans = buildSpans(projectName, traceId);
         spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
         return spans.stream().map(Span::id).collect(Collectors.toUnmodifiableSet());
     }

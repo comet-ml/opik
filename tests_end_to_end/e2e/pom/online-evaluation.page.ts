@@ -1,4 +1,5 @@
-import type { Page, Locator } from '@playwright/test';
+import { test, type Page, type Locator } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
 export interface CreateRuleDialogLLMJudgeFields {
@@ -97,6 +98,38 @@ export class OnlineEvaluationPage {
   }
 
   /**
+   * Delete a rule through the row's kebab menu, confirming the destructive
+   * dialog. Resolves once the row is gone from the list.
+   *
+   * The kebab trigger, the menu items and the ConfirmDialog carry no
+   * data-testids (ConfirmDialog is a generic shared component); we scope by the
+   * row first, then use the accessible names, which are stable strings in
+   * RuleRowActionsCell / ConfirmDialog.
+   */
+  async deleteRuleByName(name: string): Promise<void> {
+    return test.step(`delete rule "${name}" via row actions`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+
+      const confirm = this.deleteRuleConfirmDialog;
+      await confirm.waitFor({ state: 'visible' });
+      await confirm.getByRole('button', { name: 'Delete evaluation rule' }).click();
+
+      await confirm.waitFor({ state: 'hidden' });
+      await row.waitFor({ state: 'detached' });
+    });
+  }
+
+  /** The destructive confirm dialog raised by the row's Delete action. */
+  get deleteRuleConfirmDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Delete evaluation rule' }),
+    });
+  }
+
+  /**
    * Fill + submit the dialog for an LLM-as-judge rule using a canned template
    * (the canned templates ship their own prompt + variable mapping + score
    * definition; we only set Name, Model, and Template).
@@ -125,10 +158,22 @@ export class OnlineEvaluationPage {
     const modelCombobox = d.getByRole('combobox').filter({
       hasText: /Select an LLM model|claude|gpt|Claude|GPT/i,
     });
-    await modelCombobox.click();
     const listbox = this.page.getByRole('listbox');
-    await listbox.getByPlaceholder('Search model').fill(fields.modelDisplayName);
-    await listbox.getByRole('option', { name: fields.modelDisplayName }).first().click();
+    await expect(async () => {
+      await modelCombobox.click();
+      await expect(listbox).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+
+    // The option list remounts when the model/provider-key queries resolve, so
+    // an option can detach between resolving and being clicked. Re-filter and
+    // re-click until the combobox reflects the selection.
+    await expect(async () => {
+      await listbox.getByPlaceholder('Search model').fill(fields.modelDisplayName);
+      const option = listbox.getByRole('option', { name: fields.modelDisplayName });
+      await expect(option.first()).toBeVisible({ timeout: 2_000 });
+      await option.first().click({ timeout: 2_000 });
+      await expect(modelCombobox).toContainText(fields.modelDisplayName, { timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
 
     // Change the output variable-mapping from default `output` to `output.output`
     // so the engine extracts the bare string (per the JsonPath semantics in

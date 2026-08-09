@@ -3,7 +3,7 @@
 name: SDK E2E Libraries Integration Tests
 permissions:
   contents: read
-  packages: write
+  packages: read
 run-name: "SDK E2E Libraries Integration Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
@@ -66,6 +66,13 @@ jobs:
   build-opik:
     needs: [has_needed_secrets]
     if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
+    # The reusable build workflow pushes images to GHCR; pass down the
+    # packages: write grant here rather than at the workflow level (a called
+    # workflow's permissions can only be maintained or reduced from the
+    # caller's, never elevated).
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build_e2e_docker.yaml
 
   run_e2e_lib_integration:
@@ -81,10 +88,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -100,7 +107,7 @@ jobs:
           docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Install uv and set the Python version ${{ matrix.python_version }}
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           python-version: ${{ matrix.python_version }}
 
@@ -132,7 +139,7 @@ jobs:
           ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: '${{ secrets.GCP_CREDENTIALS_JSON }}'
 

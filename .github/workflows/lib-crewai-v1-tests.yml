@@ -39,15 +39,15 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python ${{matrix.python_version}}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v9.0.0
 
       - name: Install opik
         run: uv pip install --system .
@@ -63,7 +63,7 @@ jobs:
           uv pip install --system -r library_integration/crewai/requirements_v1.txt
 
       - name: Configure AWS credentials for Bedrock
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.BEDROCK_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.BEDROCK_AWS_SECRET_ACCESS_KEY }}

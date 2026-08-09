@@ -28,5 +28,36 @@ data:
   PYTHON_CODE_EXECUTOR_IMAGE_TAG: {{ $.Chart.AppVersion | quote }}
   {{- end }}
   {{- end }}
+  {{- if eq $key "backend" }}
+  {{- /* Hyperscale / analytics data-model flags, derived from the clickhouse, databaseAnalytics,
+         databaseAnalyticsDataModel and partitionMetrics values. They mirror the defaults in
+         apps/opik-backend/config.yml so the chart states them explicitly instead of relying on the
+         image's built-in default, and every downstream slice has a flag to flip without a chart
+         change. An explicit key under component.backend.env wins over anything derived here. */}}
+  {{- $env := $value.env | default dict }}
+  {{- $da := $.Values.databaseAnalytics }}
+  {{- $dm := $.Values.databaseAnalyticsDataModel }}
+  {{- $pm := $.Values.partitionMetrics }}
+  {{- range $k, $v := dict
+        "ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED" $.Values.clickhouse.sharding.enabled
+        "ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED" $da.coldStorageDiskHealthCheckEnabled
+        "UUID_VALIDATION_ENABLED" $da.uuidV7ValidationEnabled
+        "UUID_VALIDATION_AUDIT_ONLY" $da.uuidV7ValidationAuditOnly
+        "UUID_VALIDATION_WINDOW" $da.uuidV7ValidationWindow
+        "ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE" $dm.traceColumnsNonNullable
+        "ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE" $dm.spanColumnsNonNullable
+        "ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED" $dm.traceDeletionEventsCaptureEnabled
+        "ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED" $dm.spanDeletionEventsCaptureEnabled
+        "ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE" $dm.deletionEventsInsertBatchSize
+        "ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED" $dm.tracesDistributedWrapEnabled
+        "PARTITION_METRICS_ENABLED" $pm.enabled
+        "PARTITION_METRICS_INTERVAL" $pm.interval
+        "PARTITION_METRICS_LWD_TABLES" $pm.lwdTables
+      }}
+  {{- if not (hasKey $env $k) }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}

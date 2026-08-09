@@ -36,12 +36,12 @@ jobs:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
       OPIK_SENTRY_ENABLE: False
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v9.0.0
       - name: Install dependencies
         run: |
           uv pip install --system -U ipython nbconvert

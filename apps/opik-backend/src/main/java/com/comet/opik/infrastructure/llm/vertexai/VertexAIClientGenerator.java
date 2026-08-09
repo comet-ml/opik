@@ -5,7 +5,6 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.google.auth.oauth2.ServiceAccountCredentials;
-import com.google.cloud.vertexai.Transport;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerationConfig;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
@@ -19,9 +18,11 @@ import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -98,6 +99,19 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         return generationConfig.build();
     }
 
+    /**
+     * The location is free-text in the provider configuration but ends up in the {@code locations/%s} resource path as
+     * well as the host, so it has to be canonicalised before either is derived from it. The configured endpoint keys
+     * are constrained to the same lower-case form, so both sides of the lookup agree on the key.
+     */
+    private static String canonicalLocation(String location) {
+        return location.strip().toLowerCase(Locale.ROOT);
+    }
+
+    private Optional<String> apiEndpointFor(String canonicalLocation) {
+        return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints().get(canonicalLocation));
+    }
+
     private VertexAI getVertexAI(LlmProviderClientApiConfig config) {
         try {
             var credentials = ServiceAccountCredentials.fromStream(
@@ -106,12 +120,17 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             VertexAI.Builder builder = new VertexAI.Builder();
 
             Optional.ofNullable(config.configuration().get("location"))
-                    .ifPresent(builder::setLocation);
+                    .filter(StringUtils::isNotBlank)
+                    .map(VertexAIClientGenerator::canonicalLocation)
+                    .ifPresent(location -> {
+                        builder.setLocation(location);
+                        apiEndpointFor(location).ifPresent(builder::setApiEndpoint);
+                    });
 
             return builder
                     .setProjectId(credentials.getProjectId())
                     .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
-                    .setTransport(Transport.GRPC)
+                    .setTransport(clientConfig.getVertexAIClient().transport())
                     .build();
 
         } catch (Exception e) {

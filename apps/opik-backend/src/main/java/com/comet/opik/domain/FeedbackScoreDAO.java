@@ -65,12 +65,6 @@ public interface FeedbackScoreDAO {
 
     Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
 
-    /**
-     * Returns {@code true} iff the legacy {@code feedback_scores} ClickHouse table has at least
-     * one row for the workspace. Called once during workspace version determination so subsequent
-     * stats queries can skip the legacy table UNION when no data exists there.
-     */
-    Mono<Boolean> hasLegacyScores(String workspaceId);
 }
 
 @Singleton
@@ -252,7 +246,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND type = :type
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
@@ -273,7 +267,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND type = :type
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
@@ -683,24 +677,4 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         });
     }
 
-    private static final String HAS_LEGACY_FEEDBACK_SCORES = """
-            SELECT 1
-            FROM feedback_scores
-            WHERE workspace_id = :workspace_id
-            LIMIT 1
-            SETTINGS log_comment = '<log_comment>'
-            """;
-
-    @Override
-    public Mono<Boolean> hasLegacyScores(@NonNull String workspaceId) {
-        return asyncTemplate.nonTransaction(connection -> {
-            var template = getSTWithLogComment(HAS_LEGACY_FEEDBACK_SCORES,
-                    "has_legacy_feedback_scores", workspaceId, "", "");
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId);
-            return Flux.from(statement.execute())
-                    .flatMap(result -> Flux.from(result.map((row, metadata) -> true)))
-                    .hasElements();
-        });
-    }
 }

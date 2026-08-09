@@ -186,7 +186,6 @@ from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWrite
 from .automation_rule_evaluator_write_trigger_scope import AutomationRuleEvaluatorWriteTriggerScope
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
-from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
 from .blueprint_page_history import BlueprintPageHistory
@@ -723,8 +722,6 @@ from .workspace_project_user_count import WorkspaceProjectUserCount
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
-from .workspace_version import WorkspaceVersion
-from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -873,7 +870,6 @@ __all__ = [
     "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
-    "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
     "BlueprintPageHistory",
@@ -1401,6 +1397,4 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
-    "WorkspaceVersion",
-    "WorkspaceVersionOpikVersion",
 ]

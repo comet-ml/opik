@@ -1,5 +1,5 @@
 import React from "react";
-import { Database, History, RotateCw, Route, X } from "lucide-react";
+import { Copy, Database, History, Route, X } from "lucide-react";
 import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
 import { OPTIMIZATION_STATUS, Optimization } from "@/types/optimizations";
@@ -122,10 +122,13 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {/* Opens the new-run panel prefilled from this run (see handleRerun); it
+            never launches a run directly, so the label and icon describe
+            duplicating rather than re-executing. */}
         {canRerun && (
           <Button variant="outline" size="2xs" onClick={handleRerun}>
-            <RotateCw className="size-3.5 shrink-0" />
-            <span className="ml-1.5">Rerun</span>
+            <Copy className="size-3.5 shrink-0" />
+            <span className="ml-1.5">Duplicate run</span>
           </Button>
         )}
         {canStop && (

@@ -14,10 +14,13 @@ jobs:
     run:
         runs-on: ubuntu-latest
         timeout-minutes: 15
-        permissions: write-all
+        # Only needs to check out the repo and post the preview-link PR comment.
+        permissions:
+          contents: read
+          pull-requests: write
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
                 
             - name: Install Fern
               working-directory: apps/opik-documentation/documentation

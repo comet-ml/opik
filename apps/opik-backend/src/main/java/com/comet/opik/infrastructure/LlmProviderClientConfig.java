@@ -1,9 +1,13 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
+import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
+import com.comet.opik.infrastructure.llm.VertexAIClientConfig;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
@@ -11,15 +15,6 @@ import java.util.concurrent.TimeUnit;
 
 @Data
 public class LlmProviderClientConfig {
-
-    public record OpenAiClientConfig(String url) {
-    }
-
-    public record AnthropicClientConfig(String url, String version) {
-    }
-
-    public record VertexAIClientConfig(String scope) {
-    }
 
     @Min(1) private Integer maxAttempts;
 
@@ -45,11 +40,11 @@ public class LlmProviderClientConfig {
 
     private Boolean logResponses;
 
-    @Valid private LlmProviderClientConfig.OpenAiClientConfig openAiClient;
+    @Valid private OpenAiClientConfig openAiClient;
 
-    @Valid private LlmProviderClientConfig.AnthropicClientConfig anthropicClient;
+    @Valid private AnthropicClientConfig anthropicClient;
 
-    @Valid private LlmProviderClientConfig.VertexAIClientConfig vertexAIClient;
+    @Valid @NotNull private VertexAIClientConfig vertexAIClient;
 
     private String openRouterUrl;
 }

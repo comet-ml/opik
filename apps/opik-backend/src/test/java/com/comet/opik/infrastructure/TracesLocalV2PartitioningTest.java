@@ -13,17 +13,23 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -32,21 +38,29 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Exercises the traces_local_v2 partition design (migration 000101) end to end: the {@code id_at DateTime MATERIALIZED
- * UUIDv7ToDateTime(toUUID(id))} → {@code PARTITION BY toMonday(id_at)} chain. Two behaviors are pinned as permanent
- * regression guards:
+ * Exercises the traces_local_v2 partition design (migration 000114) end to end: the {@code id_at DateTime64(0)
+ * MATERIALIZED UUIDv7ToDateTime(toUUID(id))} → {@code PARTITION BY toYYYYMMDD(toDate32(id_at) -
+ * toIntervalDay(toDayOfWeek(id_at, 1)))} chain. The key computes the honest Monday of {@code id_at}'s week in
+ * {@code Date32}, so it never wraps a far-future id the way a 16-bit {@code toMonday} {@code Date} would. Behaviors
+ * pinned as permanent regression guards:
  *
  * <ul>
  *   <li><b>Partition stability across upserts.</b> {@code id_at} is computed by ClickHouse from the immutable {@code id},
  *   so two versions of the same logical row (differing only in {@code last_updated_at}) must land in one weekly
  *   partition — the property {@code ReplacingMergeTree}'s in-partition dedup depends on. Regresses if the
  *   {@code id_at} expression or the partition key stops deriving from the immutable {@code id}.</li>
- *   <li><b>Partition pruning.</b> The planner does not infer that {@code id} is monotonic through
- *   {@code UUIDv7ToDateTime} in the partition expression, so an {@code id}-range predicate alone prunes only via the
- *   primary key (every partition is still read). Adding the parallel {@code toMonday(id_at)} bound the {@code TraceDAO}
- *   read path emits — derived from the same UUIDv7 as the id-range bound — is what prunes partitions. Read via
- *   {@code EXPLAIN indexes = 1}: the {@code MinMax} index block reflects part-level pruning on the partition-expression
- *   column, so its selected count drops below the total exactly when partition pruning engages.</li>
+ *   <li><b>Pruning with the unchanged read predicates.</b> The read path emits {@code toMonday(id_at)} bounds paired with
+ *   its id-range. The key expression is not {@code toMonday}, yet those bounds still prune: {@code id_at} is a column of
+ *   the partition key, so ClickHouse keeps a {@code MinMax} over {@code id_at} per part, and {@code toMonday(id_at)} is
+ *   monotonic over a part's narrow {@code id_at} range — so the predicate prunes parts via that {@code MinMax}. An
+ *   id-range predicate alone does not prune (the planner doesn't infer {@code id → id_at} monotonicity through
+ *   {@code UUIDv7ToDateTime}). Read via {@code EXPLAIN indexes = 1}: the {@code MinMax} block's selected count drops
+ *   below the total exactly when pruning engages.</li>
+ *   <li><b>Honest far-future isolation.</b> A legitimate row whose UUIDv7 carries a far-future timestamp lands in its own
+ *   distinct, honest weekly partition, never mixed with a real recent week.</li>
+ *   <li><b>Week-expression correctness.</b> The {@code Date32} Monday equals {@code toMonday} across the in-range
+ *   calendar and stays honest where {@code toMonday} wraps — both far-future ids and the epoch week a non-v7 id lands
+ *   in — independent of the datetime setting.</li>
  * </ul>
  *
  * <p>Runs directly against ClickHouse via {@link TransactionTemplateAsync} over the test container's connection factory
@@ -118,10 +132,10 @@ class TracesLocalV2PartitioningTest {
                 .bind("id_hi", seed.ids().get(2)));
 
         // Queries the same inner id range (weeks 1..2 of the four seeded) as idRangeWithToMondayBoundPrunesPartitions,
-        // so the two are a controlled pair whose only difference is the added toMonday(id_at) bound. No id_at predicate:
-        // the MinMax index on the partition column has nothing to prune by, so every part is read. Should the target
-        // LTS start inferring id monotonicity through UUIDv7ToDateTime, this fails — the signal to revisit whether the
-        // read path still needs its explicit id_at predicate.
+        // so the two are a controlled pair whose only difference is the added toMonday(id_at) bound. With no id_at
+        // predicate the id_at MinMax has nothing to constrain (the planner doesn't infer id -> id_at monotonicity through
+        // UUIDv7ToDateTime), so every part is read. Should the target LTS start inferring that, this fails — the signal
+        // to revisit whether the read path still needs its explicit id_at predicate.
         assertThat(actualParts.selected()).isEqualTo(actualParts.total());
     }
 
@@ -129,8 +143,10 @@ class TracesLocalV2PartitioningTest {
     void idRangeWithToMondayBoundPrunesPartitions() {
         var seed = seedConsecutiveWeeklyPartitions();
 
-        // The exact predicate the TraceDAO read path emits: each id-range bound carries a parallel toMonday(id_at)
-        // bound derived from the same UUIDv7, expressed on the partition expression itself.
+        // The exact predicate the TraceDAO read path emits: each id-range bound carries a parallel toMonday(id_at) bound
+        // derived from the same UUIDv7. id_at is a column of the partition-key expression, so ClickHouse keeps a MinMax
+        // over id_at per part; toMonday is monotonic over a part's narrow id_at range, so these bounds prune parts via
+        // that MinMax even though the key expression itself does not mention toMonday.
         var actualParts = minMaxParts("""
                 SELECT
                     id
@@ -146,9 +162,8 @@ class TracesLocalV2PartitioningTest {
                 .bind("id_hi", seed.ids().get(2)));
 
         // ids 1..2 are the inner two of the four seeded weeks, so week 0 sits below the range and week 3 above; both
-        // prune away, demonstrating pruning on each bound. ClickHouse folds the toMonday(id_at) bound back onto the
-        // id_at MinMax via toMonday's monotonicity, so the pruning shows on the MinMax entry (the Partition entry then
-        // reports the already-pruned set).
+        // prune away, demonstrating pruning on each bound. The toMonday(id_at) bounds prune via the id_at MinMax (id_at
+        // being a partition-key column), so the MinMax entry's selected count drops below the total.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
     }
 
@@ -169,9 +184,78 @@ class TracesLocalV2PartitioningTest {
                 .bind("workspace_id", seed.workspaceId())
                 .bind("id", seed.ids().get(1)));
 
-        // Equality on the partition expression pins the scan to the single week id 1 lands in; the other three seeded
-        // weeks (and every out-of-window part) fall away, so the selected count drops below the total.
+        // Equality on toMonday(id_at) prunes via the id_at MinMax to the single week id 1 lands in; the other three
+        // seeded weeks (and every out-of-window part) fall away, so selected drops below total.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
+    }
+
+    /**
+     * The partition key wraps the honest {@code Date32} week in {@code toYYYYMMDD}, so it resolves to {@code UInt32}: the
+     * partition id stays a human-readable {@code YYYYMMDD} (e.g. 20250303), legible in ZooKeeper paths, part directory
+     * names and system.parts, rather than the opaque days-since-epoch integer a bare {@code Date32} key would produce.
+     * Pinning the type makes a revert to that bare key fail here.
+     */
+    @Test
+    void partitionKeyResolvesToUInt32ForReadableIds() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var id = ID_GENERATOR.generateId(weekInstant(0));
+        insert(List.of(id), workspaceId, projectId, weekInstant(0));
+
+        assertThat(partitionKeyTypeFor(workspaceId, projectId, id)).isEqualTo("Tuple(UInt32)");
+    }
+
+    /**
+     * The correctness guarantee for legitimate rows whose UUIDv7 carries a far-future timestamp (the litellm ~2201 bug):
+     * they must occupy their own honest weekly partition, never mixed into a real recent week — otherwise a per-week
+     * {@code DROP PARTITION} / retention / tiering operation on that real week would also touch these rows, and vice
+     * versa. Seeds a present-day row and a ~2201 row under one (workspace, project) and asserts they land in different
+     * partitions and that the far-future row's partition is its honest ~2201 week (not the ~2021 that a 16-bit {@code toMonday}
+     * would wrap it into).
+     */
+    @Test
+    void farFutureRowIsolatesIntoItsOwnHonestWeeklyPartition() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var presentId = ID_GENERATOR.generateId(weekInstant(0));
+        var farFutureId = ID_GENERATOR.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+        insert(List.of(presentId, farFutureId), workspaceId, projectId, weekInstant(0));
+
+        var presentPartition = partitionIdFor(workspaceId, projectId, presentId);
+        var farFuturePartition = partitionIdFor(workspaceId, projectId, farFutureId);
+
+        assertThat(farFuturePartition).isNotEqualTo(presentPartition).startsWith("2201");
+    }
+
+    /**
+     * Pins the far-future-safe weekly-Monday expression {@code toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))}
+     * (OPIK-7456). {@code toMonday} returns a 16-bit {@code Date} that wraps past year 2149, so a legitimate row whose
+     * UUIDv7 carries a far-future timestamp partitions into a plausible recent week and mixes with real data. The
+     * {@code Date32} expression computes the same Monday as {@code toMonday} across the normal range without ever
+     * wrapping. Asserts the equivalence day-by-day across a full week and across a year boundary.
+     */
+    @ParameterizedTest(name = "honest week == toMonday for {0}")
+    @ValueSource(strings = {
+            "2025-03-03", "2025-03-04", "2025-03-05", "2025-03-06", "2025-03-07", "2025-03-08", "2025-03-09",
+            "2024-12-30", "2024-12-31", "2025-01-01", "2025-01-05"})
+    void honestWeekExpressionMatchesToMondayInRange(String date) {
+        assertThat(weekProbe(date, "toMonday(d) = hw")).isEqualTo(1L);
+    }
+
+    /**
+     * Where {@code toMonday}'s 16-bit {@code Date} wraps, the {@code Date32} expression stays honest — at both extremes:
+     * far-future ids (litellm ~2201) that {@code toMonday} folds into a recent week, and the epoch week it underflows to
+     * ~2149, reachable by any non-v7 {@code id} (a v4 or nil UUID), for which {@code UUIDv7ToDateTime} returns
+     * {@code 1970-01-01}. Asserts the <em>exact</em> expected Monday as {@code YYYYMMDD} against a Java oracle
+     * ({@code toMonday} can't be the oracle — it wraps), pinning both ends of the {@code Date32} window and catching an
+     * off-by-one-week regression that would still land on some Monday in the right year.
+     */
+    @ParameterizedTest(name = "honest week is the exact Monday of {0}''s week")
+    @ValueSource(strings = {"1970-01-01", "2160-06-01", "2201-06-01", "2250-06-01", "2298-06-01"})
+    void honestWeekExpressionStaysHonestWhereToMondayWraps(String date) {
+        var expectedMonday = LocalDate.parse(date).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(weekProbe(date, "toYYYYMMDD(hw)"))
+                .isEqualTo(Long.parseLong(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE)));
     }
 
     /**
@@ -241,6 +325,52 @@ class TracesLocalV2PartitioningTest {
                 .bind("id", id)
                 .execute())
                 .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("distinct_partitions", Long.class)))))
+                .block();
+    }
+
+    private String partitionKeyTypeFor(String workspaceId, UUID projectId, UUID id) {
+        return partitionInfoFor(workspaceId, projectId, id).getRight();
+    }
+
+    private String partitionIdFor(String workspaceId, UUID projectId, UUID id) {
+        return partitionInfoFor(workspaceId, projectId, id).getLeft();
+    }
+
+    private Pair<String, String> partitionInfoFor(String workspaceId, UUID projectId, UUID id) {
+        return transactionTemplateAsync.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                SELECT
+                    _partition_id AS partition_id,
+                    toTypeName(_partition_value) AS key_type
+                FROM traces_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id = :id
+                LIMIT 1
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId)
+                .bind("id", id)
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> Pair.of(
+                        row.get("partition_id", String.class), row.get("key_type", String.class))))))
+                .block();
+    }
+
+    /**
+     * Evaluates {@code expr} against a single date bound to {@code d} (a {@code DateTime64} at noon UTC, as {@code id_at}
+     * is), with {@code hw} pre-bound to the honest weekly-Monday expression. The date is a value, so it is a bind
+     * parameter; {@code expr} is a SQL fragment the test supplies (a bind can't stand in for a fragment), so it is
+     * interpolated. Returns the scalar as a long ({@code toInt64} normalizes booleans/dates for a uniform read).
+     */
+    private long weekProbe(String date, String expr) {
+        return transactionTemplateAsync.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                WITH toDateTime64(:date, 0, 'UTC') AS d,
+                     toDate32(d) - toIntervalDay(toDayOfWeek(d, 1)) AS hw
+                SELECT toInt64(%s) AS v
+                """.formatted(expr))
+                .bind("date", date + " 12:00:00")
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> row.get("v", Long.class)))))
                 .block();
     }
 

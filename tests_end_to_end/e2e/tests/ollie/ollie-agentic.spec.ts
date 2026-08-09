@@ -19,7 +19,7 @@ function skipIfOllieDisabled(envConfig: { features: { ollie: boolean } }): void 
   test.skip(!envConfig.features.ollie, 'Ollie is cloud/client-only (OLLIE_ENABLED off)');
 }
 
-test.describe('Ollie — sidebar surface', { tag: ['@t1-smoke', '@ollie'] }, () => {
+test.describe('Ollie — sidebar surface', { tag: ['@t1-smoke', '@area:ollie', '@cap:ollie.sidebar-persists-nav'] }, () => {
   test.beforeEach(({ envConfig }) => skipIfOllieDisabled(envConfig));
 
   test('Ollie sidebar mounts on a project page and persists across navigation', async ({
@@ -45,7 +45,7 @@ test.describe('Ollie — sidebar surface', { tag: ['@t1-smoke', '@ollie'] }, () 
   });
 });
 
-test.describe('Ollie — context awareness', { tag: ['@t2-cuj', '@ollie'] }, () => {
+test.describe('Ollie — context awareness', { tag: ['@t2-cuj', '@area:ollie', '@cap:ollie.context-badge-count'] }, () => {
   test.beforeEach(({ envConfig }) => skipIfOllieDisabled(envConfig));
 
   const SEEDED_TRACES = 3;
@@ -79,7 +79,7 @@ test.describe('Ollie — context awareness', { tag: ['@t2-cuj', '@ollie'] }, () 
   });
 });
 
-test.describe('Ollie — /analyze flow', { tag: ['@t3-nightly', '@ollie'] }, () => {
+test.describe('Ollie — /analyze flow', { tag: ['@t3-nightly', '@area:ollie', '@cap:ollie.analyze-command'] }, () => {
   test.beforeEach(({ envConfig }) => skipIfOllieDisabled(envConfig));
 
   test('Ollie returns a structured response for /analyze on a project with traces', async ({

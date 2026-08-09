@@ -64,6 +64,10 @@ public class CipxSpendBlockDAO {
             @NonNull String projectId,
             @NonNull Instant startTime,
             @NonNull String model,
+            /** Per-call speed modifier; selects the rate table that prices the call. Carried on
+             * every block because block-level cost needs the value that priced it. '' = standard,
+             * incl. every row written before the field existed. */
+            @NonNull String speed,
             int blockIdx,
             @NonNull String src,
             @NonNull String category,
@@ -76,6 +80,10 @@ public class CipxSpendBlockDAO {
             @NonNull String toolUseId,
             @NonNull String resource,
             @NonNull String kind,
+            /** Which variant of `category` the block is (memory: auto_memory vs project_instructions
+             * vs rule vs user_global). '' = unknown, incl. every block written before cipx emitted
+             * it -- consumers must treat it as "can't tell", not as a default value. */
+            @NonNull String subcategory,
             @NonNull String tier,
             @NonNull String lane,
             @NonNull String bdLane,
@@ -95,6 +103,7 @@ public class CipxSpendBlockDAO {
                 Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
             JsonNode usage = call.path("usage");
+            JsonNode config = call.path("config");
             String model = call.path("model").asText("");
             long[] tierTokens = {
                     usage.path("input_tokens").asLong(0),
@@ -134,7 +143,8 @@ public class CipxSpendBlockDAO {
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
-                    .model(model);
+                    .model(model)
+                    .speed(config.path("speed").asText(""));
             if (blocks.isArray()) {
                 for (int idx = 0; idx < blocks.size(); idx++) {
                     JsonNode block = blocks.get(idx);
@@ -185,6 +195,7 @@ public class CipxSpendBlockDAO {
                     .toolUseId(block.path("tool_use_id").asText(""))
                     .resource(resource)
                     .kind(kind)
+                    .subcategory(block.path("subcategory").asText(""))
                     .tier(tier >= 0 ? tierName(tier, writeTier) : "")
                     .lane(lane(category, toolServer))
                     .bdLane(bdLane(category, toolServer))
@@ -209,6 +220,7 @@ public class CipxSpendBlockDAO {
                     .toolUseId("")
                     .resource("")
                     .kind("")
+                    .subcategory("")
                     .tier(tierName(tier, writeTier))
                     .lane("unattributed")
                     .bdLane("")
@@ -312,7 +324,7 @@ public class CipxSpendBlockDAO {
     /**
      * Bulk insert via the ClickHouse v2 HTTP client using JSONEachRow, NOT the R2DBC statement path
      * the sibling cipx DAOs use. One span event fans out to hundreds of block rows (~350/span, so a
-     * 200-span batch is ~70k rows x 24 columns), and the R2DBC driver resolves every named bind with
+     * 200-span batch is ~70k rows x 26 columns), and the R2DBC driver resolves every named bind with
      * a linear scan over the statement's parameter list — O(n^2) over ~1.7M parameters, hours of CPU
      * for a single event (see ExperimentAggregatesDAO.insertExperimentItems for the same trade-off).
      * The JSONEachRow payload is one HTTP body with no per-parameter work at all.
@@ -370,6 +382,7 @@ public class CipxSpendBlockDAO {
         node.put("span_id", row.spanId());
         node.put("block_idx", row.blockIdx());
         node.put("model", row.model());
+        node.put("speed", row.speed());
         node.put("src", row.src());
         node.put("category", row.category());
         node.put("side", row.side());
@@ -381,6 +394,7 @@ public class CipxSpendBlockDAO {
         node.put("tool_use_id", row.toolUseId());
         node.put("resource", row.resource());
         node.put("kind", row.kind());
+        node.put("subcategory", row.subcategory());
         node.put("tier", row.tier());
         node.put("lane", row.lane());
         node.put("bd_lane", row.bdLane());

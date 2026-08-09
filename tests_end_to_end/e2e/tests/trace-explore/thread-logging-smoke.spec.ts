@@ -1,8 +1,8 @@
 import { test, expect } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
 
-test.describe('Thread logging — smoke', { tag: ['@t1-smoke', '@trace-explore'] }, () => {
-  test('Threads view groups a multi-turn conversation with the correct message count and endpoints', async ({
+test.describe('Thread logging — smoke', { tag: ['@t1-smoke', '@area:threads'] }, () => {
+  test('Threads view groups a multi-turn conversation with the correct message count and endpoints', { tag: ['@cap:threads.list-threads', '@cap:threads.thread-message-count'] }, async ({
     conversation,
     page,
   }) => {
@@ -39,7 +39,7 @@ test.describe('Thread logging — smoke', { tag: ['@t1-smoke', '@trace-explore']
     });
   });
 
-  test('Thread detail panel renders the conversation turns in order with the right input and output', async ({
+  test('Thread detail panel renders the conversation turns in order with the right input and output', { tag: ['@cap:threads.open-thread-panel', '@cap:threads.turn-order-io'] }, async ({
     conversation,
     page,
   }) => {

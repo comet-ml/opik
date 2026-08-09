@@ -1363,11 +1363,25 @@ public class FilterQueryBuilder {
         return "%s.\"%s\"".formatted(JSONPATH_ROOT, jsonKey);
     }
 
+    /**
+     * Resolves the key bound as {@code :filterKey} for a filter.
+     * <p>
+     * The analytics DB path is delegated to {@link JsonPathUtils#toAnalyticsDbJsonPath(String)} so that
+     * a key holding characters unquoted dot notation cannot express resolves normally instead of
+     * aborting the query. The state DB path is unchanged.
+     */
     private static String getKey(Filter filter) {
 
-        if (filter.key().startsWith(JSONPATH_ROOT)
-                || (filter.field().getType() != FieldType.DICTIONARY
-                        && filter.field().getType() != FieldType.DICTIONARY_STATE_DB)) {
+        if (filter.field().getType() != FieldType.DICTIONARY
+                && filter.field().getType() != FieldType.DICTIONARY_STATE_DB) {
+            return filter.key();
+        }
+
+        if (filter.field().getType() == FieldType.DICTIONARY) {
+            return JsonPathUtils.toAnalyticsDbJsonPath(filter.key());
+        }
+
+        if (filter.key().startsWith(JSONPATH_ROOT)) {
             return filter.key();
         }
 
@@ -1375,11 +1389,7 @@ public class FilterQueryBuilder {
             return "%s%s".formatted(JSONPATH_ROOT, filter.key());
         }
 
-        if (filter.field().getType() == FieldType.DICTIONARY_STATE_DB) {
-            return getSQLJsonPath(filter.key());
-        }
-
-        return "%s.%s".formatted(JSONPATH_ROOT, filter.key());
+        return getSQLJsonPath(filter.key());
     }
 
     /**

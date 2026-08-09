@@ -1,8 +1,8 @@
 import { test, expect } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
 
-test.describe('Trace Explore — smoke', { tag: ['@t1-smoke', '@trace-explore'] }, () => {
-  test('Logs view shows seeded traces with correct count and ordering', async ({
+test.describe('Trace Explore — smoke', { tag: ['@t1-smoke', '@area:traces'] }, () => {
+  test('Logs view shows seeded traces with correct count and ordering', { tag: ['@cap:traces.list-traces', '@cap:traces.trace-ordering'] }, async ({
     project,
     sdkClient,
     testNamespace,
@@ -45,7 +45,7 @@ test.describe('Trace Explore — smoke', { tag: ['@t1-smoke', '@trace-explore'] 
     });
   });
 
-  test('Trace panel renders the seeded trace header, input, output, span count, and project breadcrumb', async ({
+  test('Trace panel renders the seeded trace header, input, output, span count, and project breadcrumb', { tag: ['@cap:traces.open-trace-panel'] }, async ({
     opikTrace,
     project,
     page,

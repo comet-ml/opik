@@ -593,6 +593,18 @@ component:
     # deployment turns it on the same way on both comet.com (comet-helm) and
     # single-tenant SaaS (comet-ml-helm-chart). rootPath-aware, so it works
     # whether opik is served at the root or under /opik.
+    #
+    # This also exposes cost-api's version endpoint at <rootPath>/cost-api/ver
+    # (exact match only, so none of cost-api's other routes become reachable),
+    # mirroring opik's own <rootPath>/api/is-alive/ver so release tooling can read
+    # the deployed cost-api version.
+    #
+    # Scope of that guarantee: this chart owns the proxy hop only — it forwards
+    # <rootPath>/cost-api/ver to the ai-cost-backend service with the rootPath
+    # stripped. The response is cost-api's own contract, not this chart's: it
+    # serves that path unauthenticated and answers {"version": "<build version>"}.
+    # Nothing here pins that, so if cost-api changes the shape or starts requiring
+    # auth, this location keeps proxying and the consumer sees the new behaviour.
     aiSpendBackend:
       enabled: false
       host: ai-cost-backend
@@ -681,9 +693,78 @@ altinity-clickhouse-operator:
     enabled: false
     interval: '' # workaround for https://github.com/Altinity/clickhouse-operator/issues/1759
 
+# Backend-side settings for the analytics (ClickHouse) database. Rendered into the backend env
+# ConfigMap; each key maps to the env var of the same name documented in apps/opik-backend/config.yml.
+# An explicit key under component.backend.env always wins over the value derived here.
+databaseAnalytics:
+  # Gates the `clickhouse-cold-storage-disk` readiness probe, which fails readiness when the `cold_s3`
+  # tiered-storage disk isn't reachable from the node. Independent of clickhouse.tieredStorage.enabled
+  # on purpose: the disk is provisioned first and only becomes load-bearing once a migration attaches
+  # the `tiered_replicated` policy to a table, so this is turned on separately, after that.
+  coldStorageDiskHealthCheckEnabled: false
+  # UUIDv7 ingestion validation. `enabled` is the kill-switch; while it is false the other two are
+  # inert. `auditOnly` counts out-of-window ids (opik.ingestion.uuid_v7.rejected, tagged by workspace)
+  # and logs them instead of rejecting with HTTP 400, so offenders surface without breaking ingestion.
+  uuidV7ValidationEnabled: false
+  uuidV7ValidationAuditOnly: false
+  # Validation window as a Dropwizard duration. Writes whose `id` is a UUIDv7 embedding a timestamp
+  # further than this into the past or future are out of window. Accepted range is 12h .. 45d; the
+  # backend rejects anything outside that at startup.
+  uuidV7ValidationWindow: 24h
+
+# Cutover toggles for the trace/span analytics data model. Each one is flipped in lockstep with a
+# migration, so they stay false until that migration runs — see apps/opik-backend/config.yml for the
+# exact ordering constraints.
+databaseAnalyticsDataModel:
+  # Turn true once the traces table's Nullable end_time/duration/ttft columns are replaced with
+  # sentinel-defaulted non-nullable ones, in lockstep with the cutover EXCHANGE. Gates reads too.
+  traceColumnsNonNullable: false
+  # Spans sibling of traceColumnsNonNullable, for the later spans cutover. Flip independently.
+  spanColumnsNonNullable: false
+  # Turn true once the trace backfill starts, so trace deletes also record the deleted ids in the
+  # deletion_events_local bridge. Scope to the backfill-to-cutover window.
+  traceDeletionEventsCaptureEnabled: false
+  # Spans sibling: captures the span ids removed by the trace-delete cascade. Flip independently.
+  spanDeletionEventsCaptureEnabled: false
+  # Rows per INSERT into the deletion_events_local bridge.
+  deletionEventsInsertBatchSize: 1000
+  # Turn true in lockstep with applying the Distributed wrap, so trace delete/retention mutations target
+  # traces_local (a Distributed traces rejects mutations). Leave false while traces is still a MergeTree.
+  tracesDistributedWrapEnabled: false
+
+# ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
+# lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
+# a single instance polling.
+partitionMetrics:
+  enabled: false
+  # Poll interval as a Dropwizard duration. Min 30s, max 1h.
+  interval: 5m
+  # Comma-separated tables scanned for lightweight-deleted (masked) rows.
+  lwdTables: "traces,spans"
+
 clickhouse:
   enabled: true
   shardsCount: 1
+  # Declares that this deployment fronts its tables with Distributed tables (the Hyperscale
+  # topology). While off, nothing here is rendered, so upgrading the chart never reshapes an
+  # existing cluster on its own. Turning it on does two things:
+  #   - enables the backend's `clickhouse-cluster` readiness probe, which verifies the Distributed
+  #     cluster definition is visible from the node (ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED — set
+  #     that key explicitly under component.backend.env to decouple the two)
+  #   - pins internal_replication on each shard of the ClickHouseInstallation, whenever
+  #     replicasCount > 1. With the flag off the operator infers it from replicasCount > 1 instead,
+  #     which is the behaviour every deployment already has.
+  #
+  # Note this is deliberately NOT tied to shardsCount > 1. internal_replication governs replica
+  # fan-out *within* a shard, not the number of shards: on a single shard with 2 replicas it decides
+  # whether an INSERT into the Distributed table writes one replica and lets ReplicatedMergeTree
+  # replicate the parts, or writes both directly. That single-shard case is the near-term target —
+  # the traces cutover fronts the table with a Distributed table that is "transparent on a single
+  # shard", with real sharding turned on later — so gating on shardsCount > 1 would exclude the very
+  # deployment this is meant to cover. Turn the flag on when the Distributed tables land, whatever
+  # shardsCount is.
+  sharding:
+    enabled: false
   # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
   # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
@@ -873,10 +954,44 @@ clickhouse:
         export backupname=backup$(date +'%Y%m%d%H%M')
         echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
         clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
+    restore:
+      # Set to true to create the restore job (does not run by default).
+      # IMPORTANT: set this back to false once the restore has completed.
+      # Otherwise the next `helm upgrade` re-creates the job and restores again.
+      createJob: false
+      # -- Name of the backup to restore, REQUIRED when createJob is true (Helm
+      # rendering fails otherwise). Must be a `name` from the backup server's
+      # `/backup/list`, e.g. "2026-01-16" — a backup the backup server created.
+      # Backups written by the SQL-based CronJob above cannot be restored by it.
+      backupName: ""
+      # Override with any image that has bash and curl — the job needs nothing else.
+      image: "amazon/aws-cli:2.27.49"
+      # Hard cap on the job runtime (seconds) so a stuck restore whose status
+      # never resolves cannot run forever. Default: 24h.
+      activeDeadlineSeconds: 86400
+      extraEnv: {}
+      resources:
+        limits:
+          cpu: 10m
+          memory: 64Mi
+        requests:
+          cpu: 10m
+          memory: 32Mi
+      nodeSelector: {}  # Defaults to .Values.clickhouse.nodeSelector if not specified
+      affinity: {}  # Defaults to .Values.clickhouse.affinity if not specified
+      tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
   backupServer:
     enabled: false
     image: altinity/clickhouse-backup:2.6.39
     port: 7171
+    # Service the restore job uses to reach the clickhouse-backup REST API.
+    # The backup port is exposed on the operator's per-replica service, so this
+    # defaults (in the restore job template) to chi-<opik.name>-clickhouse-cluster-0-0
+    # — opik.name, not the release name — on service.port, falling back to
+    # backupServer.port. Override name/port if your shard/replica layout differs.
+    service:
+      name: ""
+      port: ""
     monitoring:
       enabled: false
       additionalLabels: {}

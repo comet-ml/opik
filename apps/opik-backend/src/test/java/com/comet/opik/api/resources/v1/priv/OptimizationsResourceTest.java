@@ -77,6 +77,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -528,6 +529,170 @@ class OptimizationsResourceTest {
                     .isEqualTo(optimization);
         }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("Get optimizer by id when a trial item references an unfinished or missing trace")
+        void getByIdWhenTrialItemReferencesUnfinishedTrace(boolean traceExists) {
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            createTrialWithUnfinishedTraceItem(id, traceExists, API_KEY, TEST_WORKSPACE_NAME);
+
+            // The run must not vanish (OPIK-7459): duration aggregates are simply absent.
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            // Whole-payload comparison for the same reason as the sibling find test: a row that comes back
+            // corrupted rather than missing must fail here too.
+            assertThat(actualOptimization)
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringCollectionOrderInFields("feedbackScores")
+                    .isEqualTo(optimization.toBuilder().id(id).numTrials(1L).build());
+            // Ignored by the comparison above, and the point of this test.
+            assertThat(actualOptimization.bestDuration()).isNull();
+            assertThat(actualOptimization.baselineDuration()).isNull();
+        }
+
+        @Test
+        @DisplayName("Get optimizer by id when a trial carries a non-finite experiment score")
+        void getByIdWhenTrialCarriesNonFiniteScore() {
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // A string-typed "NaN" parses as valid JSON, and FIND's CAST turns it into a Float64 nan —
+            // the exact input the isFinite guard in experiment_scores_parsed filters. Without the guard
+            // it propagates into the aggregates, the row mapper cannot read it as BigDecimal, and the
+            // whole run silently vanishes (OPIK-7459 — same driver behavior as the NaN duration case
+            // above). This cannot be seeded through the API (ExperimentScore.value is a BigDecimal, so
+            // "NaN" is rejected at deserialization) — the column stores raw JSON that older/foreign
+            // writers may have shaped differently, hence the raw insert. A non-finite JSON *number*
+            // (e.g. 1e999) is a different failure mode: simdjson rejects the whole document and
+            // JSONExtractArrayRaw returns [], losing every score of the trial but never producing nan.
+            insertTrialWithRawScores(id,
+                    "[{\"name\":\"finite_metric\",\"value\":0.75},{\"name\":\"nan_metric\",\"value\":\"NaN\"}]");
+
+            // The run must not vanish: the non-finite score entry is simply excluded from the aggregates.
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization.id()).isEqualTo(id);
+            assertThat(actualOptimization.numTrials()).isEqualTo(1L);
+            assertThat(actualOptimization.experimentScores())
+                    .extracting(FeedbackScoreAverage::name)
+                    .containsExactly("finite_metric");
+        }
+
+        @Test
+        @DisplayName("Get optimizer by id when a candidate mixes a finished trial with one still in flight")
+        void getByIdWhenCandidateMixesFinishedAndUnfinishedTrials() {
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .objectiveName(objectiveName)
+                    .build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Both trials share one candidate_id, which is the grain candidate_metrics averages over
+            // (GROUP BY optimization_id, candidate_id). This is the shape the old NaN did not merely lose
+            // the row for, but silently returned a WRONG NUMBER for: isNotNull(NaN) is true, so the
+            // unfinished trial's trace_count entered the weighted-duration denominator while NaN poisoned
+            // the numerator. The NULL this PR introduces is skipped by both sum() and isNotNull(), so the
+            // arithmetic must reflect the finished trial alone.
+            var candidateId = UUID.randomUUID().toString();
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));
+
+            var finishedTrial = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(id)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(metadata)
+                    .experimentScores(List.of(ExperimentScore.builder()
+                            .name(objectiveName)
+                            .value(BigDecimal.valueOf(0.9))
+                            .build()))
+                    .build();
+            var finishedTrialId = experimentResourceClient.create(finishedTrial, API_KEY, TEST_WORKSPACE_NAME);
+
+            var unfinishedTrial = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(id)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(metadata)
+                    .build();
+            var unfinishedTrialId = experimentResourceClient.create(unfinishedTrial, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Exactly one finished trace, of exactly one second, so the expected p50 is unambiguous.
+            var traceStart = Instant.now().minusSeconds(30);
+            linkItemWithTrace(finishedTrialId, traceStart, traceStart.plusMillis(1_000));
+            linkItemWithTrace(unfinishedTrialId, Instant.now(), null);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+                        // duration_p50 is milliseconds and weighted_duration divides by 1000, so a single
+                        // one-second trace is 1.0 — not 0.5, which is what averaging the unfinished
+                        // trial's trace_count into the denominator would produce.
+                        assertThat(actual.bestDuration()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestDuration(),
+                                BigDecimal.valueOf(1.0))).isZero();
+                        assertThat(actual.baselineDuration()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineDuration(),
+                                BigDecimal.valueOf(1.0))).isZero();
+                    });
+        }
+
+        @Test
+        @DisplayName("returns the run when a candidate's objective scores overflow to infinity")
+        void getByIdWhenCandidateObjectiveScoresOverflow() {
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .objectiveName(objectiveName)
+                    .build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Reaches the OTHER branch of the mapper's getFiniteBigDecimal guard. FIND's isFinite filters
+            // stop non-finite values ENTERING, so every other regression test here only exercises the
+            // null branch and the !isFinite return is dead code as far as the suite is concerned. But the
+            // columns the mapper reads are DERIVED: candidate_metrics sums objective_score * trace_count
+            // before dividing, so two trials in one candidate each carrying a finite 1e308 — which the
+            // isFinite filter accepts — sum to +Inf. Without the mapper guard the driver's BigDecimal
+            // conversion throws, ClickHouseResult.map swallows it, and the row silently disappears: the
+            // exact 404 this PR exists to fix, reopened by arithmetic rather than by input.
+            var candidateId = UUID.randomUUID().toString();
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));
+            var hugeButFinite = new BigDecimal("1e308");
+
+            var trialIds = Stream.of(1, 2)
+                    .map(ignored -> experimentResourceClient.create(experimentResourceClient
+                            .createPartialExperiment()
+                            .optimizationId(id)
+                            .type(ExperimentType.TRIAL)
+                            .metadata(metadata)
+                            .experimentScores(List.of(ExperimentScore.builder()
+                                    .name(objectiveName)
+                                    .value(hugeButFinite)
+                                    .build()))
+                            .build(), API_KEY, TEST_WORKSPACE_NAME))
+                    .toList();
+
+            var traceStart = Instant.now().minusSeconds(30);
+            trialIds.forEach(trialId -> linkItemWithTrace(trialId, traceStart, traceStart.plusMillis(1_000)));
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        // The run must still be reachable — that is the whole point of the guard.
+                        var actual = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+                        assertThat(actual.id()).isEqualTo(id);
+                        // An overflowed aggregate is reported as absent rather than as a bogus number.
+                        assertThat(actual.bestObjectiveScore()).isNull();
+                        assertThat(actual.baselineObjectiveScore()).isNull();
+                        // The durations are unaffected by the overflow and must still be computed.
+                        assertThat(actual.bestDuration()).isNotNull();
+                    });
+        }
+
         @Test
         @DisplayName("Get optimizer by id with feedback scores")
         void getByIdWithFeedbackScores() {
@@ -726,14 +891,12 @@ class OptimizationsResourceTest {
                         assertThat(actualOptimization.numTrials()).isEqualTo(2L);
 
                         // Baseline = earliest candidate's objective score
-                        assertThat(actualOptimization.baselineObjectiveScore()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.baselineObjectiveScore(), baselineScore)).isZero();
+                        StatsUtils.assertBigDecimalEquals(
+                                actualOptimization.baselineObjectiveScore(), baselineScore);
 
                         // Best = highest objective score across candidates
-                        assertThat(actualOptimization.bestObjectiveScore()).isNotNull();
-                        assertThat(StatsUtils.bigDecimalComparator(
-                                actualOptimization.bestObjectiveScore(), bestScore)).isZero();
+                        StatsUtils.assertBigDecimalEquals(
+                                actualOptimization.bestObjectiveScore(), bestScore);
 
                         // Duration fields are populated (traces have start/end times)
                         assertThat(actualOptimization.baselineDuration()).isNotNull();
@@ -753,6 +916,112 @@ class OptimizationsResourceTest {
                         assertThat(actualOptimization.experimentScores()).isNotEmpty();
                         assertThat(actualOptimization.experimentScores())
                                 .anyMatch(score -> score.name().equals(objectiveName));
+                    });
+        }
+
+        /**
+         * When two candidates tie on the objective score, the best duration and cost are taken from the
+         * earliest-created candidate - the same candidate the baseline resolves to. So under a tie the best and
+         * baseline values must coincide, and because the two candidates are given clearly different costs and
+         * durations, picking the later candidate instead would break that equality. Without a defined tie-break
+         * these two fields are arbitrary: the previous implementation returned different values for the same data
+         * depending only on the query plan.
+         */
+        @Test
+        @DisplayName("Get optimizer by id when candidates tie on score, then best matches the earliest candidate")
+        void getById__whenCandidatesTieOnScore__bestComesFromEarliestCandidate() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "tie-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            var objectiveName = "accuracy";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .build(),
+                    apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Both candidates score identically, so only the tie-break decides which one best_* comes from.
+            var tiedScore = BigDecimal.valueOf(0.75);
+
+            var earliest = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(tiedScore).build()))
+                    .build();
+            experimentResourceClient.create(earliest, apiKey, workspaceName);
+
+            var later = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(tiedScore).build()))
+                    .build();
+            experimentResourceClient.create(later, apiKey, workspaceName);
+
+            // The fixture creates one trace and one span per dataset item, so per-trace cost reduces to the span
+            // cost. The two costs must differ in their integer parts: bigDecimalComparator falls back to comparing
+            // only toBigInteger(), so 0.01 and 0.99 would compare equal and could not tell the candidates apart.
+            var earliestCost = BigDecimal.valueOf(1);
+            var laterCost = BigDecimal.valueOf(9);
+
+            createTracesSpansAndItems(earliest, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(3), Instant.now().minusSeconds(2), earliestCost);
+            createTracesSpansAndItems(later, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(30), Instant.now().minusSeconds(1), laterCost);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual).isNotNull();
+                        assertThat(actual.numTrials()).isEqualTo(2L);
+
+                        // Both candidates score the same, so only the tie-break decides best_*
+                        StatsUtils.assertBigDecimalEquals(actual.bestObjectiveScore(), tiedScore);
+
+                        StatsUtils.assertBigDecimalEquals(actual.baselineObjectiveScore(), tiedScore);
+
+                        // Under a tie the earliest candidate wins. Asserting best equals baseline alone would
+                        // still pass if both rollups picked the later candidate, so also require that neither
+                        // reports the later candidate's cost. Together these catch either rollup drifting,
+                        // without depending on how per-trace cost is derived.
+                        assertThat(actual.bestCost()).isNotNull();
+                        assertThat(actual.baselineCost()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestCost(), laterCost))
+                                .isNotZero();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineCost(), laterCost))
+                                .isNotZero();
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), actual.baselineCost());
+
+                        StatsUtils.assertBigDecimalEquals(actual.bestDuration(), actual.baselineDuration());
                     });
         }
 
@@ -807,6 +1076,89 @@ class OptimizationsResourceTest {
 
     private Dataset buildDataset() {
         return DatasetResourceClient.buildDataset(podamFactory);
+    }
+
+    /**
+     * Appends one experiment item to an existing trial, backed by a real trace. A null {@code endTime}
+     * leaves the trace unfinished, so it contributes no duration — letting a caller build a candidate
+     * that mixes finished and in-flight trials.
+     */
+    private void linkItemWithTrace(UUID experimentId, Instant startTime, Instant endTime) {
+        var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .startTime(startTime)
+                .endTime(endTime)
+                .duration(null)
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE_NAME);
+
+        var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .traceId(trace.id())
+                .feedbackScores(null)
+                .build();
+        experimentResourceClient.createExperimentItem(Set.of(item), API_KEY, TEST_WORKSPACE_NAME);
+    }
+
+    /**
+     * Links a trial with one experiment item to the run, the item's trace either still unfinished (no
+     * end time, so no duration) or missing entirely — the state a worker killed mid-trial leaves
+     * behind. Regression state for OPIK-7459: FIND's duration quantile over zero finished traces
+     * produced NaN, the row mapper cannot read NaN as BigDecimal, and the r2dbc driver swallows mapper
+     * exceptions — so the whole run silently vanished from both getById and find.
+     */
+    private void createTrialWithUnfinishedTraceItem(UUID optimizationId, boolean traceExists, String apiKey,
+            String workspaceName) {
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .optimizationId(optimizationId)
+                .type(ExperimentType.TRIAL)
+                .build();
+        var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+        var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .endTime(null)
+                .duration(null)
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        if (traceExists) {
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+        }
+
+        var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .traceId(trace.id())
+                .feedbackScores(null)
+                .build();
+        experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+    }
+
+    /**
+     * Inserts a trial experiment row straight into ClickHouse with a raw {@code experiment_scores}
+     * JSON string. The API cannot produce every shape this column can hold ({@code ExperimentScore}
+     * types {@code value} as a {@code BigDecimal}), but FIND must survive whatever raw JSON is already
+     * stored — see getByIdWhenTrialCarriesNonFiniteScore.
+     */
+    private void insertTrialWithRawScores(UUID optimizationId, String experimentScoresJson) {
+        var experiment = experimentResourceClient.createPartialExperiment().build();
+        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("");
+                var statement = connection.prepareStatement(
+                        ("INSERT INTO %s.experiments (workspace_id, dataset_id, id, name, optimization_id, "
+                                + "experiment_scores, created_by, last_updated_by) "
+                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)").formatted(DATABASE_NAME))) {
+            statement.setString(1, WORKSPACE_ID);
+            statement.setString(2, experiment.datasetId().toString());
+            statement.setString(3, experiment.id().toString());
+            statement.setString(4, experiment.name());
+            statement.setString(5, optimizationId.toString());
+            statement.setString(6, experimentScoresJson);
+            statement.setString(7, USER);
+            statement.setString(8, USER);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to seed trial experiment with raw scores", e);
+        }
     }
 
     @Test
@@ -967,6 +1319,36 @@ class OptimizationsResourceTest {
             // Verify results
             assertOptimizationPage(optimizationPage, 1, 2,
                     optimizationPage.content().size(), expectedOptimizations.reversed());
+        }
+
+        @Test
+        @DisplayName("Find optimizations includes a run whose trial item references an unfinished trace")
+        void findIncludesRunWhoseTrialItemReferencesUnfinishedTrace() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            createTrialWithUnfinishedTraceItem(id, true, apiKey, workspaceName);
+
+            // The run must stay on the list (OPIK-7459): duration aggregates are simply absent.
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, null, null, null, 200);
+
+            // Compare the whole payload, not just the id: the bug this guards against is a row silently
+            // mutating or disappearing on the mapping path, so "one row came back" is too weak an
+            // assertion — name, status, objectiveName or datasetName could all be wrong and still pass.
+            assertOptimizationPage(optimizationPage, 1, 1, 1,
+                    List.of(optimization.toBuilder().id(id).numTrials(1L).build()));
+            // Both duration fields are in OPTIMIZATION_IGNORED_FIELDS, so the recursive comparison above
+            // does not cover them — they are the point of this test and are asserted explicitly.
+            assertThat(optimizationPage.content().getFirst().bestDuration()).isNull();
+            assertThat(optimizationPage.content().getFirst().baselineDuration()).isNull();
         }
 
         @Test

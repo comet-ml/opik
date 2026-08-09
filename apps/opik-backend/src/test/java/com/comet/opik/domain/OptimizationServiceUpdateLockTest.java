@@ -28,6 +28,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -98,7 +99,9 @@ class OptimizationServiceUpdateLockTest {
 
     private void stubHappyPath(UUID id) {
         when(optimizationDAO.getById(id)).thenReturn(Mono.just(existing(id)));
-        when(optimizationDAO.update(eq(id), any())).thenReturn(Mono.just(1L));
+        // An ordinary update never clears error_info — only a worker report superseding a
+        // platform-detected failure does, so assert the false explicitly rather than matching any().
+        when(optimizationDAO.update(eq(id), any(), eq(false))).thenReturn(Mono.just(1L));
         // Pass the guarded action through so the update completes under the (mocked) lock.
         when(lockService.executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
@@ -115,7 +118,7 @@ class OptimizationServiceUpdateLockTest {
         StepVerifier.create(update(id, update)).expectNext(1L).verifyComplete();
 
         verify(lockService).executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any());
-        verify(optimizationDAO).update(eq(id), any());
+        verify(optimizationDAO).update(eq(id), any(), eq(false));
     }
 
     @Test
@@ -129,7 +132,7 @@ class OptimizationServiceUpdateLockTest {
         StepVerifier.create(update(id, update)).expectNext(1L).verifyComplete();
 
         verify(lockService).executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any());
-        verify(optimizationDAO).update(eq(id), any());
+        verify(optimizationDAO).update(eq(id), any(), eq(false));
     }
 
     @Test
@@ -145,6 +148,6 @@ class OptimizationServiceUpdateLockTest {
         // The write must NOT bypass the lock: surface the error rather than risk a lock-free lost update.
         StepVerifier.create(update(id, update)).expectError(RedisException.class).verify();
 
-        verify(optimizationDAO, never()).update(any(), any());
+        verify(optimizationDAO, never()).update(any(), any(), anyBoolean());
     }
 }

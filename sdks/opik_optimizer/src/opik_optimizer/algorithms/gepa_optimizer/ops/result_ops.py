@@ -28,6 +28,7 @@ def build_algorithm_result(
     train_items: list[dict[str, Any]],
     gepa_result: Any,
     experiment_config: dict[str, Any] | None,
+    known_placeholder_keys: set[str] | None = None,
 ) -> AlgorithmResult:
     history_entries = optimizer.get_history_entries()
     if history_entries and best_idx >= 0:
@@ -70,10 +71,11 @@ def build_algorithm_result(
         selection_policy=candidate_selection_strategy,
     )
 
-    final_prompts = candidate_ops.rebuild_prompts_from_candidate(
+    final_prompts, _ = candidate_ops.rebuild_prompts_from_candidate(
         base_prompts=optimizable_prompts,
         candidate=best_candidate,
         allowed_roles=getattr(optimizer, "_optimizable_roles", None),
+        known_placeholder_keys=known_placeholder_keys,
     )
 
     metadata: dict[str, Any] = {
@@ -96,6 +98,8 @@ def build_algorithm_result(
         "selected_candidate_opik_score": best_score,
         "adapter_metric_used": True,
         "adapter_metric_call_count": optimizer._adapter_metric_calls,
+        "reflection_call_count": optimizer._reflection_call_count,
+        "max_reflection_calls": optimizer._max_reflection_calls,
         "dataset_item_ids": [item.get("id") for item in train_items],
     }
     if best_matches_seed:

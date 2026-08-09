@@ -21,25 +21,23 @@ export const TRIAL_CARD_WIDTH = 220;
 type TrialCardProps = {
   candidate: AggregatedCandidate;
   status: CandidateDataPoint["status"];
-  stepIndex: number;
   isTestSuite?: boolean;
   isBest?: boolean;
 };
 
 /**
  * Content of a single trial card — the header (trial name + status dot + label,
- * e.g. "Passed step 1", "Discarded in step 2", "Best trial") and the metric
- * rows. Rendered inside a core Popover (hover tooltip) or Card (pinned best).
+ * e.g. "Passed", "Discarded", "Best trial") and the metric rows. Rendered
+ * inside a core Popover (hover tooltip) or Card (pinned best).
  */
 const TrialCard: React.FC<TrialCardProps> = ({
   candidate,
   status,
-  stepIndex,
   isTestSuite,
   isBest,
 }) => {
   const { title, statusLabel, dotColor, dotRingColor, rows } =
-    buildTrialCardModel({ candidate, status, stepIndex, isTestSuite, isBest });
+    buildTrialCardModel({ candidate, status, isTestSuite, isBest });
 
   return (
     <>

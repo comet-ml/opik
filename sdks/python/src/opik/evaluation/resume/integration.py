@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from ...api_objects.dataset import dataset
 from ..samplers import base_dataset_sampler
+from ..types import ErrorTolerance
 from . import checkpoint as checkpoint_module
 from . import state as state_module
 
@@ -47,6 +48,7 @@ def resume_state_for_evaluate(
     nb_samples: Optional[int],
     dataset_sampler: Optional[base_dataset_sampler.BaseDatasetSampler],
     dataset_item_ids: Optional[List[str]],
+    error_tolerance: ErrorTolerance,
 ) -> Dict[str, Any]:
     """Build the resume blob for ``evaluate`` / ``evaluate_prompt`` / ``evaluate_optimization_trial``."""
     dataset_version_name = _dataset_version_name_or_none(dataset_)
@@ -66,6 +68,7 @@ def resume_state_for_evaluate(
             requires_local_checkpoint=(
                 dataset_sampler is not None or dataset_item_ids is not None
             ),
+            error_tolerance=error_tolerance,
         ),
     )
 

@@ -19,7 +19,11 @@ import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
 import RunErrorPanel from "./RunErrorPanel";
 import EmptyRunWarningPanel from "./EmptyRunWarningPanel";
-import { computeEmptyRunWarning } from "./optimizationOverviewHelpers";
+import {
+  EMPTY_RUN_CAUSE,
+  computeEmptyRunCause,
+  findActiveTrialCandidate,
+} from "./optimizationOverviewHelpers";
 import TrialSidebar from "./TrialSidebar/TrialSidebar";
 import TrialSidebarContent from "./TrialSidebar/TrialSidebarContent";
 import { computeCandidateStatuses } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
@@ -133,12 +137,8 @@ const OptimizationPage: React.FC = () => {
     ? baselineCandidate ?? bestCandidate
     : bestCandidate;
 
-  // Heuristic: a COMPLETED run that produced no usable scores (OPIK-7029). Drives
-  // both the amber warning panel and the KPI score-card caption below.
-  const isEmptyCompletedRun = useMemo(
-    () => computeEmptyRunWarning(candidates, optimization?.status),
-    [candidates, optimization?.status],
-  );
+  // Drives the panel copy, its severity, and the KPI score-card caption.
+  const emptyRunCause = computeEmptyRunCause(candidates, optimization?.status);
 
   // Single status source for the chart, the trials table, and the sidebar's
   // status card.
@@ -153,13 +153,14 @@ const OptimizationPage: React.FC = () => {
     [candidates, isTestSuite, isInProgress, inProgressInfo],
   );
 
-  // The candidate behind the open sidebar; matched by trial number with an
-  // experiment-ids fallback for deep links minted before numbering.
+  // The candidate behind the open sidebar — see findActiveTrialCandidate for
+  // why experiment ids are trusted over the URL's trial number.
   const activeTrialCandidate = useMemo(
     () =>
-      candidates.find((c) => c.trialNumber === trialSidebar.trialNumber) ??
-      candidates.find((c) =>
-        c.experimentIds.some((id) => trialSidebar.experimentIds.includes(id)),
+      findActiveTrialCandidate(
+        candidates,
+        trialSidebar.experimentIds,
+        trialSidebar.trialNumber,
       ),
     [candidates, trialSidebar.trialNumber, trialSidebar.experimentIds],
   );
@@ -240,10 +241,11 @@ const OptimizationPage: React.FC = () => {
                   <RunErrorPanel optimization={optimization} />
                 </div>
               )}
-            {optimization && isEmptyCompletedRun && (
+            {optimization && emptyRunCause !== EMPTY_RUN_CAUSE.NONE && (
               <div className="shrink-0">
                 <EmptyRunWarningPanel
                   optimization={optimization}
+                  cause={emptyRunCause}
                   scoringHealth={optimization.metadata?.scoring_health}
                 />
               </div>
@@ -257,7 +259,7 @@ const OptimizationPage: React.FC = () => {
                 objectiveName={optimization?.objective_name}
                 optimizationCreatedAt={optimization?.created_at}
                 optimizationLastUpdatedAt={optimization?.last_updated_at}
-                scoringFailed={isEmptyCompletedRun}
+                emptyRunCause={emptyRunCause}
                 scoringHealth={optimization?.metadata?.scoring_health}
                 isInProgress={
                   !!optimization?.status &&
@@ -361,6 +363,7 @@ const OptimizationPage: React.FC = () => {
         open={trialSidebar.open}
         onClose={trialSidebar.close}
         trialNumber={trialSidebar.trialNumber}
+        isBaseline={activeTrialCandidate?.trialNumber === null}
         trialExperiments={trialExperiments}
       >
         <TrialSidebarContent

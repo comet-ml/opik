@@ -1,12 +1,15 @@
 import { describe, it, expect } from "vitest";
 
 import {
-  computeEmptyRunWarning,
+  EMPTY_RUN_CAUSE,
+  computeEmptyRunCause,
   getCompletedRunDurationSeconds,
   getEmptyRunKPICaption,
-  getEmptyRunWarningMessage,
+  getEmptyRunMessage,
+  getEmptyRunTitle,
   getOptimizationDurationSeconds,
   getOptimizationRefetchInterval,
+  findActiveTrialCandidate,
 } from "./optimizationOverviewHelpers";
 import {
   AggregatedCandidate,
@@ -111,24 +114,26 @@ describe("getCompletedRunDurationSeconds", () => {
   });
 });
 
-describe("computeEmptyRunWarning", () => {
-  it("does not warn while the run is unfinished or errored", () => {
+describe("computeEmptyRunCause", () => {
+  it("stays NONE while the run is unfinished or errored", () => {
     const candidates = [makeCandidate({ candidateId: "a", stepIndex: 0 })];
-    expect(
-      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.RUNNING),
-    ).toBe(false);
-    expect(
-      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.INITIALIZED),
-    ).toBe(false);
-    expect(computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.ERROR)).toBe(
-      false,
+    expect(computeEmptyRunCause(candidates, OPTIMIZATION_STATUS.RUNNING)).toBe(
+      EMPTY_RUN_CAUSE.NONE,
     );
-    expect(computeEmptyRunWarning(candidates, undefined)).toBe(false);
+    expect(
+      computeEmptyRunCause(candidates, OPTIMIZATION_STATUS.INITIALIZED),
+    ).toBe(EMPTY_RUN_CAUSE.NONE);
+    expect(computeEmptyRunCause(candidates, OPTIMIZATION_STATUS.ERROR)).toBe(
+      EMPTY_RUN_CAUSE.NONE,
+    );
+    expect(computeEmptyRunCause(candidates, undefined)).toBe(
+      EMPTY_RUN_CAUSE.NONE,
+    );
   });
 
-  it("warns on a COMPLETED run where no non-baseline trial scored", () => {
+  it("reports SCORING_FAILED when candidates ran but none scored", () => {
     const candidates = [
-      // A scored baseline does not count — it is expected on every run.
+      // A scored baseline does not count; it is expected on every run.
       makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
       makeCandidate({
         candidateId: "a",
@@ -144,20 +149,36 @@ describe("computeEmptyRunWarning", () => {
       }),
     ];
     expect(
-      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
-    ).toBe(true);
+      computeEmptyRunCause(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(EMPTY_RUN_CAUSE.SCORING_FAILED);
   });
 
-  it("warns on a COMPLETED run that produced no non-baseline trials at all", () => {
+  it("reports NO_CANDIDATES when the baseline scored but nothing else was generated", () => {
+    // The OPIK-7458 case: a strong seed prompt, so the metric demonstrably worked.
     const candidates = [
-      makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
+      makeCandidate({ candidateId: "base", stepIndex: 0, score: 1 }),
     ];
     expect(
-      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
-    ).toBe(true);
+      computeEmptyRunCause(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(EMPTY_RUN_CAUSE.NO_CANDIDATES);
   });
 
-  it("does not warn when at least one non-baseline trial scored", () => {
+  it("reports SCORING_FAILED when nothing was generated AND the baseline never scored", () => {
+    const candidates = [
+      makeCandidate({ candidateId: "base", stepIndex: 0, score: undefined }),
+    ];
+    expect(
+      computeEmptyRunCause(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(EMPTY_RUN_CAUSE.SCORING_FAILED);
+  });
+
+  it("reports SCORING_FAILED for a COMPLETED run with no candidate rows at all", () => {
+    expect(computeEmptyRunCause([], OPTIMIZATION_STATUS.COMPLETED)).toBe(
+      EMPTY_RUN_CAUSE.SCORING_FAILED,
+    );
+  });
+
+  it("stays NONE when at least one non-baseline trial scored", () => {
     const candidates = [
       makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
       makeCandidate({
@@ -174,8 +195,19 @@ describe("computeEmptyRunWarning", () => {
       }),
     ];
     expect(
-      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
-    ).toBe(false);
+      computeEmptyRunCause(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(EMPTY_RUN_CAUSE.NONE);
+  });
+});
+
+describe("getEmptyRunTitle", () => {
+  it("names the cause instead of always claiming there are no scores", () => {
+    expect(getEmptyRunTitle(EMPTY_RUN_CAUSE.NO_CANDIDATES)).toBe(
+      "No candidates generated",
+    );
+    expect(getEmptyRunTitle(EMPTY_RUN_CAUSE.SCORING_FAILED)).toBe(
+      "No usable scores",
+    );
   });
 });
 
@@ -201,10 +233,52 @@ describe("getOptimizationRefetchInterval", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getEmptyRunWarningMessage — Wave 2 exact-count path + Wave-1 fallback
+// getEmptyRunMessage: Wave 2 exact-count path + Wave-1 fallback
 // ---------------------------------------------------------------------------
 
-describe("getEmptyRunWarningMessage", () => {
+describe("getEmptyRunMessage", () => {
+  const FAILED = EMPTY_RUN_CAUSE.SCORING_FAILED;
+
+  it("says nothing when there is no empty-run cause", () => {
+    expect(getEmptyRunMessage(EMPTY_RUN_CAUSE.NONE)).toBeNull();
+    expect(
+      getEmptyRunMessage(EMPTY_RUN_CAUSE.NONE, {
+        failed_count: 5,
+        total_count: 5,
+      }),
+    ).toBeNull();
+  });
+
+  // --- NO_CANDIDATES (OPIK-7458) ---
+
+  it("names the optimizer, not the metric, when no candidates were generated", () => {
+    const msg = getEmptyRunMessage(EMPTY_RUN_CAUSE.NO_CANDIDATES);
+    expect(msg).toContain("produced no prompt variants to score");
+    expect(msg).toContain("the baseline prompt was kept");
+    expect(msg).not.toContain("failed");
+    expect(msg).not.toContain("run it again");
+  });
+
+  it("ignores scoring_health for NO_CANDIDATES (the baseline scored, so counts can't explain it)", () => {
+    // The regression from OPIK-7458: a degenerate {0, 0} health object used to
+    // route this run into the metric-failure copy via the `total_count > 0` guard.
+    const degenerate: OptimizationScoringHealth = {
+      failed_count: 0,
+      total_count: 0,
+    };
+    const populated: OptimizationScoringHealth = {
+      failed_count: 0,
+      total_count: 30,
+    };
+    const expected = getEmptyRunMessage(EMPTY_RUN_CAUSE.NO_CANDIDATES);
+    expect(getEmptyRunMessage(EMPTY_RUN_CAUSE.NO_CANDIDATES, degenerate)).toBe(
+      expected,
+    );
+    expect(getEmptyRunMessage(EMPTY_RUN_CAUSE.NO_CANDIDATES, populated)).toBe(
+      expected,
+    );
+  });
+
   // --- Exact-count path (scoring_health present) ---
 
   it("uses all-failed framing when every item failed (plural)", () => {
@@ -212,7 +286,7 @@ describe("getEmptyRunWarningMessage", () => {
       failed_count: 5,
       total_count: 5,
     };
-    const msg = getEmptyRunWarningMessage(health);
+    const msg = getEmptyRunMessage(FAILED, health);
     expect(msg).toContain("All 5 items failed to score");
   });
 
@@ -221,7 +295,7 @@ describe("getEmptyRunWarningMessage", () => {
       failed_count: 1,
       total_count: 1,
     };
-    const msg = getEmptyRunWarningMessage(health);
+    const msg = getEmptyRunMessage(FAILED, health);
     // A one-item dataset reads "The item failed …", never "All 1 item …".
     expect(msg).toContain("The item failed to score");
     expect(msg).not.toContain("All 1");
@@ -233,7 +307,7 @@ describe("getEmptyRunWarningMessage", () => {
       failed_count: 3,
       total_count: 10,
     };
-    const msg = getEmptyRunWarningMessage(health);
+    const msg = getEmptyRunMessage(FAILED, health);
     expect(msg).toContain("3 of 10 items failed to score");
     // Partial framing should NOT say "All"
     expect(msg).not.toMatch(/^All /);
@@ -244,7 +318,7 @@ describe("getEmptyRunWarningMessage", () => {
       failed_count: 1,
       total_count: 10,
     };
-    const msg = getEmptyRunWarningMessage(health);
+    const msg = getEmptyRunMessage(FAILED, health);
     // "1 of 10 items" — the noun agrees with the total, not the failed count.
     expect(msg).toContain("1 of 10 items failed to score");
   });
@@ -254,7 +328,7 @@ describe("getEmptyRunWarningMessage", () => {
       failed_count: 0,
       total_count: 10,
     };
-    expect(getEmptyRunWarningMessage(health)).toBeNull();
+    expect(getEmptyRunMessage(FAILED, health)).toBeNull();
   });
 
   it("falls back to the heuristic message when total_count is 0 (degenerate health object)", () => {
@@ -265,7 +339,7 @@ describe("getEmptyRunWarningMessage", () => {
     };
     // With total_count === 0, the guard `total_count > 0` is false, so we
     // return the heuristic fallback (non-null).
-    const msg = getEmptyRunWarningMessage(health);
+    const msg = getEmptyRunMessage(FAILED, health);
     expect(msg).not.toBeNull();
     expect(msg).toContain("no usable scores");
   });
@@ -273,7 +347,7 @@ describe("getEmptyRunWarningMessage", () => {
   // --- Heuristic fallback (absent scoring_health) ---
 
   it("returns the Wave-1 heuristic copy when scoring_health is absent", () => {
-    const msg = getEmptyRunWarningMessage(undefined);
+    const msg = getEmptyRunMessage(FAILED, undefined);
     // The static Wave-1 message must be returned unchanged.
     expect(msg).toBe(
       "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.",
@@ -282,22 +356,30 @@ describe("getEmptyRunWarningMessage", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getEmptyRunKPICaption — compact caption for the KPI score card
+// getEmptyRunKPICaption: compact caption for the KPI score card
 // ---------------------------------------------------------------------------
 
 describe("getEmptyRunKPICaption", () => {
-  it("returns null when the run is not empty (isEmptyRun=false)", () => {
-    expect(getEmptyRunKPICaption(false)).toBeNull();
+  const FAILED = EMPTY_RUN_CAUSE.SCORING_FAILED;
+
+  it("returns null when the run has no empty-run cause", () => {
+    expect(getEmptyRunKPICaption(EMPTY_RUN_CAUSE.NONE)).toBeNull();
     expect(
-      getEmptyRunKPICaption(false, {
+      getEmptyRunKPICaption(EMPTY_RUN_CAUSE.NONE, {
         failed_count: 5,
         total_count: 5,
       }),
     ).toBeNull();
   });
 
+  it("captions a no-candidates run neutrally, since the score shown is the baseline's", () => {
+    const caption = getEmptyRunKPICaption(EMPTY_RUN_CAUSE.NO_CANDIDATES);
+    expect(caption).toBe("No candidates generated. Baseline prompt kept.");
+    expect(caption).not.toContain("failed");
+  });
+
   it("all-failed exact count caption (plural)", () => {
-    const caption = getEmptyRunKPICaption(true, {
+    const caption = getEmptyRunKPICaption(FAILED, {
       failed_count: 8,
       total_count: 8,
     });
@@ -306,7 +388,7 @@ describe("getEmptyRunKPICaption", () => {
   });
 
   it("all-failed exact count caption (singular)", () => {
-    const caption = getEmptyRunKPICaption(true, {
+    const caption = getEmptyRunKPICaption(FAILED, {
       failed_count: 1,
       total_count: 1,
     });
@@ -316,7 +398,7 @@ describe("getEmptyRunKPICaption", () => {
   });
 
   it("partial failure exact count caption", () => {
-    const caption = getEmptyRunKPICaption(true, {
+    const caption = getEmptyRunKPICaption(FAILED, {
       failed_count: 4,
       total_count: 12,
     });
@@ -326,12 +408,74 @@ describe("getEmptyRunKPICaption", () => {
 
   it("returns null when failed_count is 0", () => {
     expect(
-      getEmptyRunKPICaption(true, { failed_count: 0, total_count: 10 }),
+      getEmptyRunKPICaption(FAILED, { failed_count: 0, total_count: 10 }),
     ).toBeNull();
   });
 
   it("falls back to Wave-1 heuristic copy when scoring_health is absent", () => {
-    const caption = getEmptyRunKPICaption(true, undefined);
+    const caption = getEmptyRunKPICaption(FAILED, undefined);
     expect(caption).toBe("No usable scores — check the logs.");
+  });
+});
+
+// OPIK-7589: the baseline stopped being Trial #1, so a `trialNumber` minted
+// before that change means one trial further along than it says. Experiment ids
+// never drifted, so they decide.
+describe("findActiveTrialCandidate", () => {
+  const baseline = makeCandidate({
+    candidateId: "base",
+    stepIndex: 0,
+    trialNumber: null,
+    experimentIds: ["exp-base"],
+  });
+  const first = makeCandidate({
+    candidateId: "c1",
+    stepIndex: 1,
+    trialNumber: 1,
+    experimentIds: ["exp-1"],
+  });
+  const second = makeCandidate({
+    candidateId: "c2",
+    stepIndex: 2,
+    trialNumber: 2,
+    experimentIds: ["exp-2"],
+  });
+  const candidates = [baseline, first, second];
+
+  it("opens the baseline for a legacy link that called it Trial #1", () => {
+    // The exact regression: pre-renumbering the baseline was Trial #1, so its
+    // own deep link pairs the baseline's experiment id with trialNumber=1.
+    // Trusting the number would open candidate c1 instead.
+    expect(findActiveTrialCandidate(candidates, ["exp-base"], 1)).toBe(
+      baseline,
+    );
+  });
+
+  it("opens the named trial for a legacy link one number ahead", () => {
+    expect(findActiveTrialCandidate(candidates, ["exp-1"], 2)).toBe(first);
+  });
+
+  it("resolves current links, where ids and number agree", () => {
+    expect(findActiveTrialCandidate(candidates, ["exp-2"], 2)).toBe(second);
+  });
+
+  it("resolves the baseline, which has no trial number to carry", () => {
+    expect(findActiveTrialCandidate(candidates, ["exp-base"], null)).toBe(
+      baseline,
+    );
+  });
+
+  it("falls back to the trial number when no id is in the loaded page", () => {
+    expect(findActiveTrialCandidate(candidates, ["exp-unloaded"], 2)).toBe(
+      second,
+    );
+  });
+
+  it("resolves nothing when neither the ids nor the number match", () => {
+    expect(
+      findActiveTrialCandidate(candidates, ["exp-unloaded"], 99),
+    ).toBeUndefined();
+    expect(findActiveTrialCandidate(candidates, [], null)).toBeUndefined();
+    expect(findActiveTrialCandidate([], ["exp-1"], 1)).toBeUndefined();
   });
 });
