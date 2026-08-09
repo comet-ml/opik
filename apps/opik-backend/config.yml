@@ -1244,6 +1244,10 @@ llmProviderClient:
     # Default: GRPC
     # Description: Transport used by the Vertex AI SDK. One of GRPC or REST
     transport: ${LLM_PROVIDER_VERTEXAI_TRANSPORT:-GRPC}
+    # Default: 15m · Minimum: 5m
+    # Description: How long an idle Vertex AI client (gRPC channel + thread pool) is kept before it is closed. Reset on
+    # every use, so an actively scoring workspace keeps its client; a quiet one is released this long after its last call.
+    clientIdleTimeout: ${LLM_PROVIDER_VERTEXAI_CLIENT_IDLE_TIMEOUT:-15m}
     # Description: API endpoint per multi-region location, keyed by lower-case location. The SDK derives the host from
     # the location as '<location>-aiplatform.googleapis.com', which is only correct for single-region locations, so
     # multi-region locations need their host set explicitly. Single-region locations are not listed and keep the SDK

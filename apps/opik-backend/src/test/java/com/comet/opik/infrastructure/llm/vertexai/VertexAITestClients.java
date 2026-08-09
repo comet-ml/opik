@@ -8,12 +8,7 @@ import lombok.experimental.UtilityClass;
 
 import java.lang.reflect.Field;
 
-/**
- * Reads back the {@link VertexAI} a generated model is bound to. The model exposes neither it nor the host it settled
- * on, and both are needed: the host for the cases that must not issue a request — a single-region location resolves to
- * a real Google host, so calling it would mean network egress and DNS timeouts in CI — and the client itself to tell a
- * reused instance from a freshly built one.
- */
+/** Reads back the {@link VertexAI} (and the host) a generated model is bound to — neither is exposed publicly. */
 @UtilityClass
 class VertexAITestClients {
 

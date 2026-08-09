@@ -251,17 +251,8 @@ class VertexAIClientGeneratorTest {
         }
     }
 
-    /**
-     * A {@link com.google.cloud.vertexai.VertexAI} carries a gRPC channel and a GAX executor whose core threads never
-     * time out, and the langchain4j constructor the generator uses discards the handle, so a client that is not reused
-     * is stranded for the life of the process.
-     * <p>
-     * These assert on instance identity rather than on the thread count, which is the symptom, because the count is not
-     * attributable here: WireMock cannot serve gRPC, so this class runs on {@link Transport#REST}, and the REST
-     * transport starts a GAX thread per request whether or not the client is reused. Under the {@code GRPC} transport
-     * production uses, a shared client serves any number of calls without starting another thread — so the number of
-     * clients built is the thing this fix controls, and the thing worth asserting.
-     */
+    // Assert client identity, not thread count: this suite runs on REST (WireMock), which starts a GAX thread per
+    // call regardless of reuse; only gRPC (prod) makes a shared client add none.
     @Nested
     @DisplayName("Client caching")
     class ClientCaching {
@@ -290,10 +281,6 @@ class VertexAIClientGeneratorTest {
                     .isNotSameAs(clientFor(generator, "us", serviceAccountJson));
         }
 
-        /**
-         * Credentials are part of the key, so a rotated or workspace-specific key must never be served another
-         * workspace's client.
-         */
         @Test
         void buildsADistinctClientPerCredential() throws Exception {
             var generator = new VertexAIClientGenerator(clientConfig());
@@ -306,6 +293,18 @@ class VertexAIClientGeneratorTest {
         void keepsCachingSeparatePerGenerator() throws Exception {
             assertThat(clientFor(new VertexAIClientGenerator(clientConfig()), "global", serviceAccountJson))
                     .isNotSameAs(clientFor(new VertexAIClientGenerator(clientConfig()), "global", serviceAccountJson));
+        }
+
+        // Without the removal listener the reuse tests still pass but eviction would leak; this guards that wiring.
+        @Test
+        void handsEachEvictedClientToTheCloseHook() {
+            var evicted = new java.util.ArrayList<com.google.cloud.vertexai.VertexAI>();
+            var generator = new VertexAIClientGenerator(clientConfig(), java.time.Duration.ofMinutes(15), evicted::add);
+
+            var client = clientFor(generator, "global", serviceAccountJson);
+            generator.invalidateAllClients();
+
+            assertThat(evicted).containsExactly(client);
         }
 
         private com.google.cloud.vertexai.VertexAI clientFor(VertexAIClientGenerator generator, String location,

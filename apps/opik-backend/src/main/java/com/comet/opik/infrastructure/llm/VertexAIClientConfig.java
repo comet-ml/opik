@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure.llm;
 
 import com.google.cloud.vertexai.Transport;
+import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MinDuration;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -8,6 +10,7 @@ import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Configuration for the Vertex AI client.
@@ -35,5 +38,8 @@ public record VertexAIClientConfig(
         @NotBlank String scope,
         @NotEmpty Map<@Pattern(regexp = "[a-z0-9-]+", message = "must be a lower-case location such as 'global'") String, //
                 @NotBlank @Pattern(regexp = "[A-Za-z0-9.-]+(:\\d+)?/?", message = "must be a host such as 'aiplatform.googleapis.com', with no scheme or path") String> multiRegionApiEndpoints,
-        @NotNull Transport transport) {
+        @NotNull Transport transport,
+        // Cached-client idle TTL. Floored at 5m — comfortably above any single call, so an idle timeout can't fire
+        // mid-call and close the client; too low (or 0) would also thrash or disable the cache. null → default (15m).
+        @MinDuration(value = 5, unit = TimeUnit.MINUTES) Duration clientIdleTimeout) {
 }
