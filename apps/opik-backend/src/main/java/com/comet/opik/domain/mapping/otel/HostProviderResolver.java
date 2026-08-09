@@ -85,7 +85,7 @@ public class HostProviderResolver {
         // These cover cases where the SLD label alone is ambiguous (e.g. "x" in "api.x.ai").
         String hostAlias = HOST_ALIASES.get(normalized);
         if (hostAlias != null) {
-            log.debug("Resolved host-style provider '{}' to canonical '{}' via host alias", provider, hostAlias);
+            log.debug("Resolved host-style provider: provider='{}' canonical='{}'", provider, hostAlias);
             return hostAlias;
         }
 
@@ -97,12 +97,11 @@ public class HostProviderResolver {
         String label = m.group(1);
 
         if (KNOWN_PROVIDERS.contains(label)) {
-            log.debug("Resolved host-style provider '{}' to canonical '{}'", provider, label);
+            log.debug("Resolved host-style provider: provider='{}' canonical='{}'", provider, label);
             return label;
         }
 
-        log.debug("Host-style provider '{}' extracted label '{}' not in known providers, leaving unchanged",
-                provider, label);
+        log.debug("Host-style provider not recognized: provider='{}' label='{}'", provider, label);
         return provider;
     }
 }

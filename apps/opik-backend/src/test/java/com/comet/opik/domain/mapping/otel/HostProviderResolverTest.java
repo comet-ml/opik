@@ -26,7 +26,7 @@ class HostProviderResolverTest {
             "api.mistral.ai,    mistral",
             "api.ai21.com,      ai21",
         })
-        void resolves_api_prefixed_host_to_canonical(String host, String expected) {
+        void resolvesApiPrefixedHostToCanonical(String host, String expected) {
             assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected.trim());
         }
     }
@@ -35,20 +35,16 @@ class HostProviderResolverTest {
     @DisplayName("Full-host aliases (host whose label alone is ambiguous)")
     class HostAliases {
 
-        @Test
-        void apiXAiResolvesToXaiViaAlias() {
-            assertThat(HostProviderResolver.resolve("api.x.ai", null)).isEqualTo("xai");
-        }
-
-        @Test
-        void xAiResolvesToXaiViaAlias() {
-            assertThat(HostProviderResolver.resolve("x.ai", null)).isEqualTo("xai");
-        }
-
-        @Test
-        void apiXExampleDoesNotMatchXaiAlias() {
-            // "api.x.example" should NOT become "xai" — only exact host aliases apply
-            assertThat(HostProviderResolver.resolve("api.x.example", null)).isEqualTo("api.x.example");
+        @ParameterizedTest(name = "{0} -> {1}")
+        @CsvSource({
+            // Both "api." and bare forms must resolve via the HOST_ALIASES map
+            "x.ai,          xai",
+            // Unrelated TLDs must NOT match the alias — only exact hosts are mapped
+            "api.x.example, api.x.example",
+            "x.example,     x.example",
+        })
+        void hostAliasResolution(String host, String expected) {
+            assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected.trim());
         }
     }
 
@@ -61,7 +57,7 @@ class HostProviderResolverTest {
             "cerebras.ai, cerebras",
             "groq.com,    groq",
         })
-        void resolves_bare_host_to_canonical(String host, String expected) {
+        void resolvesBareHostToCanonical(String host, String expected) {
             assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(expected.trim());
         }
     }
@@ -72,7 +68,7 @@ class HostProviderResolverTest {
 
         @ParameterizedTest(name = "''{0}'' unchanged")
         @ValueSource(strings = {"openai", "anthropic", "bedrock", "groq", "cerebras", "xai", "deepseek"})
-        void canonical_name_is_returned_unchanged(String provider) {
+        void canonicalNameIsReturnedUnchanged(String provider) {
             assertThat(HostProviderResolver.resolve(provider, null)).isEqualTo(provider);
         }
     }
@@ -87,7 +83,7 @@ class HostProviderResolverTest {
             "api.somevendor.io",
             "internal.company.host",
         })
-        void unknown_host_is_returned_unchanged(String host) {
+        void unknownHostIsReturnedUnchanged(String host) {
             assertThat(HostProviderResolver.resolve(host, null)).isEqualTo(host);
         }
 
@@ -113,7 +109,7 @@ class HostProviderResolverTest {
 
         @ParameterizedTest(name = "{0} -> cerebras")
         @ValueSource(strings = {"API.CEREBRAS.AI", "Api.Cerebras.Ai", "API.cerebras.AI"})
-        void case_insensitive_match(String host) {
+        void caseInsensitiveMatch(String host) {
             assertThat(HostProviderResolver.resolve(host, null)).isEqualTo("cerebras");
         }
     }
