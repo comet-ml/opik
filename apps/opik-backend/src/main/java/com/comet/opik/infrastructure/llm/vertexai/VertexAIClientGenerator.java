@@ -8,12 +8,8 @@ import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerationConfig;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import com.google.common.hash.Hashing;
-import com.google.common.util.concurrent.UncheckedExecutionException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -27,36 +23,25 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ExecutionException;
-import java.util.function.Consumer;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
-    // One VertexAI per (credentials, location); idle-only eviction so we never close a client mid-call.
+    // One VertexAI per (credentials, location), reused for the process lifetime: building one per call leaked its
+    // non-daemon gRPC threads. No eviction, so a cached client is never closed while a request is still using it.
     private final @NonNull LlmProviderClientConfig clientConfig;
-    private final Cache<ClientKey, VertexAI> clients;
+    private final Map<ClientKey, VertexAI> clients = new ConcurrentHashMap<>();
 
     public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig) {
-        this(clientConfig, clientConfig.getVertexAIClient().clientIdleTimeout().toJavaDuration(),
-                VertexAIClientGenerator::close);
-    }
-
-    @VisibleForTesting
-    VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig, @NonNull Duration clientIdleTtl,
-            @NonNull Consumer<VertexAI> onEvict) {
         this.clientConfig = clientConfig;
-        this.clients = CacheBuilder.newBuilder()
-                .expireAfterAccess(clientIdleTtl)
-                .<ClientKey, VertexAI>removalListener(notification -> onEvict.accept(notification.getValue()))
-                .build();
     }
 
-    // credentialsDigest, not the raw key, so the cache never retains the service-account secret.
+    // credentialsDigest, not the raw key, so the map never retains the service-account secret.
     private record ClientKey(String credentialsDigest, String location) {
     }
 
@@ -147,50 +132,33 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
         var key = new ClientKey(credentialsDigest(config.apiKey()), location.orElse(null));
 
-        try {
-            return clients.get(key, () -> buildVertexAI(config.apiKey(), location));
-        } catch (ExecutionException | UncheckedExecutionException e) {
-            throw failWithError(e.getCause() instanceof Exception cause ? cause : e);
-        }
+        return clients.computeIfAbsent(key, ignored -> buildVertexAI(config.apiKey(), location));
     }
 
-    private VertexAI buildVertexAI(String apiKey, Optional<String> location) throws IOException {
-        var credentials = ServiceAccountCredentials.fromStream(
-                new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
+    private VertexAI buildVertexAI(String apiKey, Optional<String> location) {
+        try {
+            var credentials = ServiceAccountCredentials.fromStream(
+                    new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
 
-        VertexAI.Builder builder = new VertexAI.Builder();
+            VertexAI.Builder builder = new VertexAI.Builder();
 
-        location.ifPresent(canonicalLocation -> {
-            builder.setLocation(canonicalLocation);
-            apiEndpointFor(canonicalLocation).ifPresent(builder::setApiEndpoint);
-        });
+            location.ifPresent(canonicalLocation -> {
+                builder.setLocation(canonicalLocation);
+                apiEndpointFor(canonicalLocation).ifPresent(builder::setApiEndpoint);
+            });
 
-        return builder
-                .setProjectId(credentials.getProjectId())
-                .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
-                .setTransport(clientConfig.getVertexAIClient().transport())
-                .build();
+            return builder
+                    .setProjectId(credentials.getProjectId())
+                    .setCredentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()))
+                    .setTransport(clientConfig.getVertexAIClient().transport())
+                    .build();
+        } catch (IOException e) {
+            throw failWithError(e);
+        }
     }
 
     private static String credentialsDigest(String apiKey) {
         return Hashing.sha256().hashString(apiKey, StandardCharsets.UTF_8).toString();
-    }
-
-    private static void close(VertexAI client) {
-        if (client == null) {
-            return;
-        }
-
-        try {
-            client.close();
-        } catch (Exception e) {
-            log.warn("Failed to close Vertex AI client", e);
-        }
-    }
-
-    @VisibleForTesting
-    void invalidateAllClients() {
-        clients.invalidateAll();
     }
 
     @Override

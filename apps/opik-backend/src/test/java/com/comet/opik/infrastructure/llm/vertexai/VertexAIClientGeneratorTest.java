@@ -295,18 +295,6 @@ class VertexAIClientGeneratorTest {
                     .isNotSameAs(clientFor(new VertexAIClientGenerator(clientConfig()), "global", serviceAccountJson));
         }
 
-        // Without the removal listener the reuse tests still pass but eviction would leak; this guards that wiring.
-        @Test
-        void handsEachEvictedClientToTheCloseHook() {
-            var evicted = new java.util.ArrayList<com.google.cloud.vertexai.VertexAI>();
-            var generator = new VertexAIClientGenerator(clientConfig(), java.time.Duration.ofMinutes(15), evicted::add);
-
-            var client = clientFor(generator, "global", serviceAccountJson);
-            generator.invalidateAllClients();
-
-            assertThat(evicted).containsExactly(client);
-        }
-
         private com.google.cloud.vertexai.VertexAI clientFor(VertexAIClientGenerator generator, String location,
                 String apiKey) {
             var request = ChatCompletionRequest.builder().model(MODEL).build();
