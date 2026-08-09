@@ -98,28 +98,28 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_items
     ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id);
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items
-    ADD COLUMN created_by String DEFAULT '',
-    ADD COLUMN last_updated_by String DEFAULT '';
+    ADD COLUMN IF NOT EXISTS created_by String DEFAULT '',
+    ADD COLUMN IF NOT EXISTS last_updated_by String DEFAULT '';
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans
-    ADD COLUMN created_by String DEFAULT '',
-    ADD COLUMN last_updated_by String DEFAULT '';
+    ADD COLUMN IF NOT EXISTS created_by String DEFAULT '',
+    ADD COLUMN IF NOT EXISTS last_updated_by String DEFAULT '';
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces
-    ADD COLUMN created_by String DEFAULT '',
-    ADD COLUMN last_updated_by String DEFAULT '';
+    ADD COLUMN IF NOT EXISTS created_by String DEFAULT '',
+    ADD COLUMN IF NOT EXISTS last_updated_by String DEFAULT '';
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores
-    ADD COLUMN created_by String DEFAULT '',
-    ADD COLUMN last_updated_by String DEFAULT '';
+    ADD COLUMN IF NOT EXISTS created_by String DEFAULT '',
+    ADD COLUMN IF NOT EXISTS last_updated_by String DEFAULT '';
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items
-    ADD COLUMN created_by String DEFAULT '',
-    ADD COLUMN last_updated_by String DEFAULT '';
+    ADD COLUMN IF NOT EXISTS created_by String DEFAULT '',
+    ADD COLUMN IF NOT EXISTS last_updated_by String DEFAULT '';
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments
-    ADD COLUMN created_by String DEFAULT '',
-    ADD COLUMN last_updated_by String DEFAULT '';
+    ADD COLUMN IF NOT EXISTS created_by String DEFAULT '',
+    ADD COLUMN IF NOT EXISTS last_updated_by String DEFAULT '';
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items DROP COLUMN created_by, DROP COLUMN last_updated_by;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans DROP COLUMN created_by, DROP COLUMN last_updated_by;

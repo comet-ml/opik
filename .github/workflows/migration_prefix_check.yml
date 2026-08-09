@@ -29,3 +29,7 @@ jobs:
       - name: Check for migration prefix conflicts
         shell: bash
         run: ./scripts/check_backend_migration_conflicts.sh
+
+      - name: Check ADD COLUMN idempotency in analytics migrations
+        shell: bash
+        run: ./scripts/check_clickhouse_migrations_idempotent.sh
