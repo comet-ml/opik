@@ -52,10 +52,12 @@ public class HostProviderResolver {
             "inception"
     );
 
-    // Aliases for host labels that do not match the canonical provider name directly.
-    // For example, api.x.ai extracts the label "x" but the canonical provider is "xai".
-    private static final java.util.Map<String, String> LABEL_ALIASES = java.util.Map.of(
-            "x", "xai"
+    // Full-host aliases for providers whose canonical name cannot be inferred from the
+    // second-level domain label alone. Keyed on the normalized hostname (lower-case,
+    // with or without the "api." prefix stripped). Only exact-match entries are applied.
+    private static final java.util.Map<String, String> HOST_ALIASES = java.util.Map.of(
+            "api.x.ai", "xai",
+            "x.ai", "xai"
     );
 
     /**
@@ -79,6 +81,14 @@ public class HostProviderResolver {
             return provider;
         }
 
+        // Check full-host aliases first (exact match on the normalized hostname).
+        // These cover cases where the SLD label alone is ambiguous (e.g. "x" in "api.x.ai").
+        String hostAlias = HOST_ALIASES.get(normalized);
+        if (hostAlias != null) {
+            log.debug("Resolved host-style provider '{}' to canonical '{}' via host alias", provider, hostAlias);
+            return hostAlias;
+        }
+
         Matcher m = HOST_PATTERN.matcher(normalized);
         if (!m.matches()) {
             return provider;
@@ -86,12 +96,9 @@ public class HostProviderResolver {
 
         String label = m.group(1);
 
-        // Apply alias if the extracted label does not directly match the canonical name.
-        String canonical = LABEL_ALIASES.getOrDefault(label, label);
-
-        if (KNOWN_PROVIDERS.contains(canonical)) {
-            log.debug("Resolved host-style provider '{}' to canonical '{}'", provider, canonical);
-            return canonical;
+        if (KNOWN_PROVIDERS.contains(label)) {
+            log.debug("Resolved host-style provider '{}' to canonical '{}'", provider, label);
+            return label;
         }
 
         log.debug("Host-style provider '{}' extracted label '{}' not in known providers, leaving unchanged",
