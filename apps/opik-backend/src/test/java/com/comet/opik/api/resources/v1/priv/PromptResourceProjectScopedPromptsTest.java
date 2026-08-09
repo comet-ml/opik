@@ -507,6 +507,75 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
+    @DisplayName("Retrieve prompt version scoped to a project does not reach another project's prompt")
+    void retrievePromptVersionDoesNotReachAnotherProjectPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String projectName = "project-" + UUID.randomUUID();
+        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var otherProjectPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(otherProjectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(otherProjectPrompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder()
+                .name(sharedName)
+                .projectName(projectName)
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version with an unresolved project_name does not search the whole workspace")
+    void retrievePromptVersionWithUnresolvedProjectNameDoesNotSearchWorkspace() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+
+        var otherProjectPrompt = buildPrompt()
+                .name(sharedName)
+                .projectId(otherProjectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(otherProjectPrompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder()
+                .name(sharedName)
+                .projectName("project-does-not-exist-" + UUID.randomUUID())
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Test
     @DisplayName("Retrieve prompt version with a null project_name resolves the project-less prompt")
     void retrievePromptVersionWithNullProjectName() {
         String projectName = null;

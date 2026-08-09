@@ -872,10 +872,15 @@ class PromptServiceImpl implements PromptService {
     public PromptVersion retrievePromptVersion(@NonNull String name, String commit, String environment,
             String versionNumber, String projectName) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        UUID projectId = null;
-        if (StringUtils.isNotBlank(projectName)) {
-            projectId = projectService.findProjectIdByName(workspaceId, projectName).orElse(null);
+        if (StringUtils.isBlank(projectName)) {
+            return retrievePromptVersion(name, commit, environment, versionNumber, (UUID) null);
         }
+
+        // An unresolved project must not degrade into a workspace-wide search: that would match another
+        // project's prompt of the same name, which is the cross-project read this scoping removes.
+        UUID projectId = projectService.findProjectIdByName(workspaceId, projectName)
+                .orElseThrow(() -> new NotFoundException(PROMPT_NOT_FOUND));
+
         return retrievePromptVersion(name, commit, environment, versionNumber, projectId);
     }
 
