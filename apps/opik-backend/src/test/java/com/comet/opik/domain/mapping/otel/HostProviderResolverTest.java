@@ -32,13 +32,23 @@ class HostProviderResolverTest {
     }
 
     @Nested
-    @DisplayName("Aliased labels (host label differs from canonical name)")
-    class AliasedLabels {
+    @DisplayName("Full-host aliases (host whose label alone is ambiguous)")
+    class HostAliases {
 
         @Test
-        void api_x_ai_resolves_to_xai_via_alias() {
-            // "api.x.ai" extracts label "x" which aliases to canonical "xai"
+        void apiXAiResolvesToXaiViaAlias() {
             assertThat(HostProviderResolver.resolve("api.x.ai", null)).isEqualTo("xai");
+        }
+
+        @Test
+        void xAiResolvesToXaiViaAlias() {
+            assertThat(HostProviderResolver.resolve("x.ai", null)).isEqualTo("xai");
+        }
+
+        @Test
+        void apiXExampleDoesNotMatchXaiAlias() {
+            // "api.x.example" should NOT become "xai" — only exact host aliases apply
+            assertThat(HostProviderResolver.resolve("api.x.example", null)).isEqualTo("api.x.example");
         }
     }
 
