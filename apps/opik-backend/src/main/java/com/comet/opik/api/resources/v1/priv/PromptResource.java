@@ -448,7 +448,9 @@ public class PromptResource {
     @POST
     @Path("/versions/retrieve")
     @Operation(operationId = "retrievePromptVersion", summary = "Retrieve prompt version", description = "Retrieve prompt version. When project_name is supplied the lookup is scoped to that project: a prompt belonging to a different project is never matched, and an unknown project name returns 404. Legacy prompts with no project are still resolved as a deprecated fallback, signalled by the X-Opik-Deprecation response header.", responses = {
-            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersion.class))),
+            @ApiResponse(responseCode = "200", description = "OK", headers = {
+                    @Header(name = RequestContext.WORKSPACE_FALLBACK_HEADER, description = "Present only when the prompt was resolved through the deprecated workspace-wide fallback, i.e. it has no project. Absent for project-scoped prompts.", schema = @Schema(implementation = String.class))
+            }, content = @Content(schema = @Schema(implementation = PromptVersion.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),

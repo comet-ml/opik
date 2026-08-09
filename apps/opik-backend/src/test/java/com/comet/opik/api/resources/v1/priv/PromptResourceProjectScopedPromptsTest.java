@@ -28,6 +28,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -572,6 +574,26 @@ class PromptResourceProjectScopedPromptsTest {
         try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   "})
+    @DisplayName("Retrieve prompt version rejects a blank project_name")
+    void retrievePromptVersionRejectsBlankProjectName(String projectName) {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var request = PromptVersionRetrieve.builder()
+                .name("prompt-" + UUID.randomUUID())
+                .projectName(projectName)
+                .build();
+
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
         }
     }
 
