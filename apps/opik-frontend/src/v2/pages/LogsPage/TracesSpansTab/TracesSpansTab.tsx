@@ -22,10 +22,10 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
-  ProjectDateRangeDefault,
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import { ProjectDateRangeDefault } from "@/v2/pages-shared/traces/resolveProjectDateRangeDefault";
 import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
 
 import useTracesOrSpansExist from "@/hooks/useTracesOrSpansExist";

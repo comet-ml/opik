@@ -2,11 +2,9 @@ import { useMemo, useCallback, useEffect } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
-import {
-  useMetricDateRangeWithQueryAndStorage,
-  ProjectDateRangeDefault,
-} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_TYPE } from "@/constants/traces";
+import { ProjectDateRangeDefault } from "@/v2/pages-shared/traces/resolveProjectDateRangeDefault";
 import { LOGS_SOURCE } from "@/types/traces";
 import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 

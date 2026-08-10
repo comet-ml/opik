@@ -5,8 +5,12 @@ import Loader from "@/shared/Loader/Loader";
 import {
   useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
-  useProjectDateRangeDefault,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import {
+  resolveProjectDateRangeDefault,
+  ProjectDateRangeDefault,
+} from "@/v2/pages-shared/traces/resolveProjectDateRangeDefault";
+import useProjectById from "@/api/projects/useProjectById";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
 import ProjectDashboardViewSelector from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardViewSelector";
@@ -36,8 +40,14 @@ const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
 const DEFAULT_TEMPLATE = PROJECT_TEMPLATE_LIST[0];
 const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 
-const ProjectDashboardsPage: React.FunctionComponent = () => {
-  const projectId = useActiveProjectId()!;
+type ProjectDashboardsContentProps = {
+  projectId: string;
+  dateRangeDefault: ProjectDateRangeDefault;
+};
+
+const ProjectDashboardsContent: React.FunctionComponent<
+  ProjectDashboardsContentProps
+> = ({ projectId, dateRangeDefault }) => {
   const workspaceName = useActiveWorkspaceName();
 
   const {
@@ -78,10 +88,6 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
   }, [isPending, dashboardId, dashboard, setDashboardId]);
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
-
-  // Only the initial default changes — the picker still works, and non-demo projects keep the
-  // workspace-wide 30-day default.
-  const dateRangeDefault = useProjectDateRangeDefault(projectId);
 
   const { dateRange, handleDateRangeChange, minDate, maxDate, dateRangeValue } =
     useMetricDateRangeWithQueryAndStorage({
@@ -156,6 +162,34 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
         {!isPending && dashboard && <DashboardContent />}
       </div>
     </PageBodyScrollContainer>
+  );
+};
+
+/**
+ * Resolves the project before mounting the content.
+ *
+ * The date-range state below is backed by use-local-storage-state, which captures its
+ * `defaultValue` once (useState) and writes that captured value into storage. A content mount that
+ * happened while the project name was still unknown would therefore freeze the workspace 30-day
+ * default and keep it after the demo project's 24h default arrived. Gating the mount makes the
+ * captured value right by construction. A failed lookup reports not-pending, so this cannot hang.
+ */
+const ProjectDashboardsPage: React.FunctionComponent = () => {
+  const projectId = useActiveProjectId()!;
+  const { data: project, isPending: isProjectPending } = useProjectById(
+    { projectId },
+    { refetchOnMount: false },
+  );
+
+  if (isProjectPending) {
+    return <Loader />;
+  }
+
+  return (
+    <ProjectDashboardsContent
+      projectId={projectId}
+      dateRangeDefault={resolveProjectDateRangeDefault(project?.name, true)}
+    />
   );
 };
 

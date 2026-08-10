@@ -11,7 +11,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import SetGuardrailDialog from "@/v2/pages-shared/traces/GuardrailConfig/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useLogsType from "@/v2/pages/LogsPage/useLogsType";
-import { resolveProjectDateRangeDefault } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import { resolveProjectDateRangeDefault } from "@/v2/pages-shared/traces/resolveProjectDateRangeDefault";
 
 const LogsPage = () => {
   const projectId = useActiveProjectId()!;

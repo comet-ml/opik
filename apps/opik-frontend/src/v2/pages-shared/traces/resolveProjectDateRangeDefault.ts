@@ -1,10 +1,9 @@
-import useProjectById from "@/api/projects/useProjectById";
 import { DEMO_PROJECT_NAME } from "@/constants/shared";
 import { DateRangePreset } from "@/shared/DateRangeSelect";
 import {
   DATE_RANGE_PRESET_PAST_24_HOURS,
   DEFAULT_DATE_PRESET,
-} from "./constants";
+} from "./MetricDateRangeSelect/constants";
 
 /**
  * Keeps the demo project's picked range out of the range shared by real projects.
@@ -67,27 +66,4 @@ export const resolveProjectDateRangeDefault = (
     initSyncReady: isSettled,
     storageKeySuffix: isDemoProject ? DEMO_STORAGE_KEY_SUFFIX : "",
   };
-};
-
-/**
- * resolveProjectDateRangeDefault for a caller that holds only a project id.
- *
- *
- * Prefer the resolver directly when the project is already in scope — a parent that owns the query
- * should pass its result down rather than have children re-observe it (performance.md, "Don't
- * refetch what the parent already has").
- */
-export const useProjectDateRangeDefault = (projectId?: string) => {
-  const { data: project, isPending } = useProjectById(
-    { projectId: projectId! },
-    { enabled: Boolean(projectId), refetchOnMount: false },
-  );
-
-  // Settled means "we know as much as we ever will". Nothing to look up counts, and so does a
-  // failed lookup — react-query reports a cached error as not-pending with no data, and falling
-  // back to the workspace default beats hanging the URL sync forever.
-  return resolveProjectDateRangeDefault(
-    project?.name,
-    projectId ? !isPending : true,
-  );
 };

@@ -2,7 +2,7 @@ import React from "react";
 import TracesSpansTab from "@/v2/pages/LogsPage/TracesSpansTab/TracesSpansTab";
 import ThreadsTab from "@/v2/pages/LogsPage/ThreadsTab/ThreadsTab";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
-import { ProjectDateRangeDefault } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import { ProjectDateRangeDefault } from "@/v2/pages-shared/traces/resolveProjectDateRangeDefault";
 
 type LogsTabProps = {
   projectId: string;
