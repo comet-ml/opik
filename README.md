@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.23](https://img.shields.io/badge/Version-2.2.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.23](https://img.shields.io/badge/AppVersion-2.2.23-informational?style=flat-square)
+![Version: 2.2.24](https://img.shields.io/badge/Version-2.2.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.24](https://img.shields.io/badge/AppVersion-2.2.24-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -266,6 +266,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
+| component.backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
 | component.backend.image.repository | string | `"opik-backend"` |  |
 | component.backend.ingress.annotations | object | `{}` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
@@ -379,6 +380,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.extraServerHeaders.X-XSS-Protection | string | `"0"` |  |
 | component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
+| component.frontend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
 | component.frontend.ingress.annotations | object | `{}` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
@@ -434,6 +436,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
+| component.python-backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
 | component.python-backend.ingress.annotations | object | `{}` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
