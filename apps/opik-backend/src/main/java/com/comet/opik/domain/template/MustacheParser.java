@@ -25,11 +25,12 @@ import java.util.Set;
 @Singleton
 public class MustacheParser implements TemplateParser {
 
-    public static final MustacheFactory MF = new DefaultMustacheFactory();
-
-    // No-escape factory: renders values without HTML-escaping.
-    // Matches the frontend's `escape: (val) => val` behavior.
-    private static final MustacheFactory MF_NO_ESCAPE = new DefaultMustacheFactory() {
+    /**
+     * Renders values as written: every consumer feeds an LLM, and escaping a substituted trace input hid its
+     * JSON structure from the judge (OPIK-7354). Escaping also mangled {@code =} and backticks, not just
+     * quotes. Matches the frontend preview and {@link PythonTemplateParser}, which never escaped.
+     */
+    private static final MustacheFactory MF = new DefaultMustacheFactory() {
         @Override
         public void encode(String value, Writer writer) {
             try {
@@ -74,25 +75,6 @@ public class MustacheParser implements TemplateParser {
             return renderTemplate(context, mustache);
         } catch (MustacheException ex) {
             log.error("Failed to parse Mustache template for rendering:", ex);
-            throw new IllegalArgumentException("Invalid Mustache template", ex);
-        }
-    }
-
-    /**
-     * Renders a template without HTML-escaping substituted values.
-     * Use this for playground template rendering where values may contain
-     * special characters that should not be escaped.
-     */
-    public String renderUnescaped(String template, Map<String, ?> context) {
-        if (template == null) {
-            return "";
-        }
-
-        try {
-            Mustache mustache = MF_NO_ESCAPE.compile(new StringReader(template), "template");
-            return renderTemplate(context, mustache);
-        } catch (MustacheException ex) {
-            log.error("Failed to parse Mustache template for unescaped rendering:", ex);
             throw new IllegalArgumentException("Invalid Mustache template", ex);
         }
     }
