@@ -84,6 +84,20 @@ class CostServiceTest {
     }
 
     @Test
+    void calculateCostUsesBareOpenAICacheUsageKey() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 100,
+                "prompt_tokens_details.cached_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // The bare OpenAI usage shape includes cached tokens in prompt_tokens. 800 * 0.0000025 +
+        // 100 * 0.00001 + 200 * 0.00000125 = 0.00325.
+        assertThat(cost).isEqualByComparingTo("0.00325");
+    }
+
+    @Test
     void calculateCostUsesIncludedCacheCalculatorForNestedOtelUsageShape() {
         Map<String, Integer> usage = Map.of(
                 "prompt_tokens", 1_000,

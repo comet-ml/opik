@@ -63,8 +63,9 @@ class SpanCostCalculator {
         // Get the cached read input tokens; fall back to OTel bare key for LiteLLM/OTel spans
         int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens",
                 usage.getOrDefault("original_usage.input_tokens_details.cached_tokens",
-                        usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY,
-                                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_OTEL_KEY, 0))));
+                        usage.getOrDefault("prompt_tokens_details.cached_tokens",
+                                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY,
+                                        usage.getOrDefault(CACHE_READ_INPUT_TOKENS_OTEL_KEY, 0)))));
 
         // Audio input tokens (OpenAI realtime models like gpt-4o-realtime-preview, gpt-realtime)
         // are billed at a separate rate when the model publishes input_cost_per_audio_token.
