@@ -118,6 +118,15 @@ public class ChatCompletionService {
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
+        } finally {
+            // Close the Vertex client (reused across retries) to release its GAX threads; other providers self-reclaim.
+            if (languageModelClient instanceof AutoCloseable closeable) {
+                try {
+                    closeable.close();
+                } catch (Exception e) {
+                    log.warn("Failed to close language model client", e);
+                }
+            }
         }
     }
 

@@ -9,9 +9,7 @@ import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerationConfig;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import com.google.common.base.Preconditions;
-import com.google.common.hash.Hashing;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiChatModel;
 import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiStreamingChatModel;
@@ -24,35 +22,28 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
-    // One VertexAI per (credentials, location), reused across calls.
     private final @NonNull LlmProviderClientConfig clientConfig;
-    private final Map<ClientKey, VertexAI> clients = new ConcurrentHashMap<>();
 
     public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig) {
         this.clientConfig = clientConfig;
     }
 
-    // Key on a digest of the credential, not the raw JSON.
-    private record ClientKey(String credentialsDigest, String location) {
-    }
+    // Fresh VertexAI per call, owned by the returned wrapper which closes it — reclaiming the GAX threads it holds.
+    CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
 
-    private ChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-
-        VertexAI vertexAI = getVertexAI(apiKey);
+        VertexAI vertexAI = buildVertexAI(apiKey);
 
         GenerationConfig generationConfig = getGenerationConfig(request);
 
         GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
 
-        return new VertexAiGeminiChatModel(generativeModel, generationConfig);
+        return new CloseableVertexAiChatModel(new VertexAiGeminiChatModel(generativeModel, generationConfig), vertexAI);
     }
 
     private GenerativeModel getGenerativeModel(ChatCompletionRequest request, VertexAI vertexAI,
@@ -64,16 +55,17 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                 .withGenerationConfig(generationConfig);
     }
 
-    public StreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
+    CloseableVertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
 
-        VertexAI vertexAI = getVertexAI(apiKey);
+        VertexAI vertexAI = buildVertexAI(apiKey);
 
         GenerationConfig generationConfig = getGenerationConfig(request);
 
         GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
 
-        return new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig);
+        return new CloseableVertexAiStreamingChatModel(
+                new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig), vertexAI);
     }
 
     private InternalServerErrorException failWithError(Exception e) {
@@ -124,14 +116,12 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints().get(canonicalLocation));
     }
 
-    private VertexAI getVertexAI(LlmProviderClientApiConfig config) {
+    private VertexAI buildVertexAI(LlmProviderClientApiConfig config) {
         var location = Optional.ofNullable(config.configuration().get("location"))
                 .filter(StringUtils::isNotBlank)
                 .map(VertexAIClientGenerator::canonicalLocation);
 
-        var key = new ClientKey(credentialsDigest(config.apiKey()), location.orElse(null));
-
-        return clients.computeIfAbsent(key, ignored -> buildVertexAI(config.apiKey(), location));
+        return buildVertexAI(config.apiKey(), location);
     }
 
     private VertexAI buildVertexAI(String apiKey, Optional<String> location) {
@@ -154,10 +144,6 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         } catch (IOException e) {
             throw failWithError(e);
         }
-    }
-
-    private static String credentialsDigest(String apiKey) {
-        return Hashing.sha256().hashString(apiKey, StandardCharsets.UTF_8).toString();
     }
 
     @Override

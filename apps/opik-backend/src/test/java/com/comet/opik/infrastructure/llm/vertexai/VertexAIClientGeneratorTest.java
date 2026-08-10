@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.google.cloud.vertexai.Transport;
+import com.google.cloud.vertexai.VertexAI;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import org.junit.jupiter.api.AfterAll;
@@ -251,53 +252,51 @@ class VertexAIClientGeneratorTest {
         }
     }
 
-    // Assert client identity, not thread count: this suite runs on REST (WireMock), which starts a GAX thread per
-    // call regardless of reuse; only gRPC (prod) makes a shared client add none.
     @Nested
-    @DisplayName("Client caching")
-    class ClientCaching {
+    @DisplayName("Client ownership")
+    class ClientOwnership {
 
-        @ParameterizedTest
-        @CsvSource({"global, global", "'  GLOBAL  ', global"})
-        @DisplayName("equivalent locations reuse one client")
-        void reusesOneClientForEquivalentLocations(String first, String second) {
-            var generator = new VertexAIClientGenerator(clientConfig());
-
-            assertThat(clientFor(generator, first, serviceAccountJson))
-                    .isSameAs(clientFor(generator, second, serviceAccountJson));
-        }
-
+        // Force the lazy prediction client into existence so its shutdown is observable.
         @Test
-        void buildsADistinctClientPerLocation() throws Exception {
+        @DisplayName("closing the returned client shuts down the VertexAI it owns")
+        void closingTheReturnedClientShutsDownTheVertexAI() throws Exception {
             var generator = new VertexAIClientGenerator(clientConfig());
-
-            assertThat(clientFor(generator, "eu", serviceAccountJson))
-                    .isNotSameAs(clientFor(generator, "us", serviceAccountJson));
-        }
-
-        @Test
-        void buildsADistinctClientPerCredential() throws Exception {
-            var generator = new VertexAIClientGenerator(clientConfig());
-
-            assertThat(clientFor(generator, "global", serviceAccountJson))
-                    .isNotSameAs(clientFor(generator, "global", serviceAccountJson("other-project")));
-        }
-
-        @Test
-        void keepsCachingSeparatePerGenerator() throws Exception {
-            assertThat(clientFor(new VertexAIClientGenerator(clientConfig()), "global", serviceAccountJson))
-                    .isNotSameAs(clientFor(new VertexAIClientGenerator(clientConfig()), "global", serviceAccountJson));
-        }
-
-        private com.google.cloud.vertexai.VertexAI clientFor(VertexAIClientGenerator generator, String location,
-                String apiKey) {
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
-                    .apiKey(apiKey)
-                    .configuration(location == null ? Map.of() : Map.of("location", location))
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
                     .build();
 
-            return VertexAITestClients.vertexAiOf(generator.generate(config, request));
+            var client = generator.generate(config, request);
+            VertexAI vertexAI = VertexAITestClients.vertexAiOf(client);
+
+            var predictionClient = vertexAI.getPredictionServiceClient();
+            assertThat(predictionClient.isShutdown()).isFalse();
+
+            ((AutoCloseable) client).close();
+
+            assertThat(predictionClient.isShutdown()).isTrue();
+        }
+
+        @Test
+        @DisplayName("closing the returned streaming client shuts down the VertexAI it owns")
+        void closingTheReturnedStreamingClientShutsDownTheVertexAI() throws Exception {
+            var generator = new VertexAIClientGenerator(clientConfig());
+            var request = ChatCompletionRequest.builder().model(MODEL).build();
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            var client = generator.newVertexAIStreamingClient(config, request);
+            VertexAI vertexAI = client.vertexAI();
+
+            var predictionClient = vertexAI.getPredictionServiceClient();
+            assertThat(predictionClient.isShutdown()).isFalse();
+
+            client.close();
+
+            assertThat(predictionClient.isShutdown()).isTrue();
         }
     }
 }

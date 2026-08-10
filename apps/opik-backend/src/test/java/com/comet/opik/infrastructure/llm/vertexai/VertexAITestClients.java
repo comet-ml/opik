@@ -1,14 +1,10 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.google.cloud.vertexai.VertexAI;
-import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.vertexai.gemini.VertexAiGeminiChatModel;
 import lombok.experimental.UtilityClass;
 
-import java.lang.reflect.Field;
-
-/** Reads back the {@link VertexAI} (and the host) a generated model is bound to — neither is exposed publicly. */
+/** Reads back the {@link VertexAI} (and its host) that a generated model is bound to. */
 @UtilityClass
 class VertexAITestClients {
 
@@ -17,17 +13,9 @@ class VertexAITestClients {
     }
 
     static VertexAI vertexAiOf(ChatModel model) {
-        try {
-            Field generativeModelField = VertexAiGeminiChatModel.class.getDeclaredField("generativeModel");
-            generativeModelField.setAccessible(true);
-            var generativeModel = generativeModelField.get(model);
-
-            Field vertexAiField = GenerativeModel.class.getDeclaredField("vertexAi");
-            vertexAiField.setAccessible(true);
-
-            return (VertexAI) vertexAiField.get(generativeModel);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Could not read the client off the generated model", e);
+        if (model instanceof CloseableVertexAiChatModel wrapper) {
+            return wrapper.vertexAI();
         }
+        throw new AssertionError("Expected a CloseableVertexAiChatModel but got " + model.getClass());
     }
 }

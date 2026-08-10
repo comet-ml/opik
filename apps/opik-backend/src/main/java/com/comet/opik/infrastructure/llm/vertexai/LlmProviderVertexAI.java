@@ -19,6 +19,7 @@ import reactor.core.scheduler.Schedulers;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @RequiredArgsConstructor
@@ -30,8 +31,10 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        ChatResponse response = llmProviderClientGenerator.generate(config, request).chat(getChatMessages(request));
-        return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
+        try (var client = llmProviderClientGenerator.newVertexAIClient(config, request)) {
+            ChatResponse response = client.chat(getChatMessages(request));
+            return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
+        }
     }
 
     @Override
@@ -41,18 +44,49 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
         Schedulers.boundedElastic()
                 .schedule(() -> {
+                    CloseableVertexAiStreamingChatModel client;
                     try {
-                        var streamingChatLanguageModel = llmProviderClientGenerator.newVertexAIStreamingClient(config,
-                                request);
-
-                        List<ChatMessage> chatMessages = getChatMessages(request);
-                        streamingChatLanguageModel
-                                .chat(chatMessages,
-                                        new ChunkedResponseHandler(handleMessage, handleClose, handleError,
-                                                request.model()));
+                        client = llmProviderClientGenerator.newVertexAIStreamingClient(config, request);
                     } catch (Exception e) {
                         handleError.accept(e);
                         handleClose.run();
+                        return;
+                    }
+
+                    // Async: close once the stream terminates (onComplete/onError), exactly once — not when this returns.
+                    var closed = new AtomicBoolean(false);
+                    Runnable closeOnce = () -> {
+                        if (closed.compareAndSet(false, true)) {
+                            try {
+                                client.close();
+                            } catch (RuntimeException e) {
+                                log.warn("Failed to close Vertex AI streaming client", e);
+                            }
+                        }
+                    };
+                    Runnable handleCloseAndRelease = () -> {
+                        try {
+                            handleClose.run();
+                        } finally {
+                            closeOnce.run();
+                        }
+                    };
+                    Consumer<Throwable> handleErrorAndRelease = throwable -> {
+                        try {
+                            handleError.accept(throwable);
+                        } finally {
+                            closeOnce.run();
+                        }
+                    };
+
+                    try {
+                        List<ChatMessage> chatMessages = getChatMessages(request);
+                        client.chat(chatMessages,
+                                new ChunkedResponseHandler(handleMessage, handleCloseAndRelease, handleErrorAndRelease,
+                                        request.model()));
+                    } catch (Exception e) {
+                        handleErrorAndRelease.accept(e);
+                        handleCloseAndRelease.run();
                     }
                 });
     }
