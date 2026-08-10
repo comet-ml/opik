@@ -5,11 +5,8 @@ import Loader from "@/shared/Loader/Loader";
 import {
   useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
-  DATE_RANGE_PRESET_PAST_24_HOURS,
-  DEFAULT_DATE_PRESET,
+  useDemoProjectDateRangeDefault,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
-import useProjectById from "@/api/projects/useProjectById";
-import { DEMO_PROJECT_NAME } from "@/constants/shared";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
 import ProjectDashboardViewSelector from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardViewSelector";
@@ -82,28 +79,15 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 
-  // The seeded demo project is compressed into the last 10 hours so its trace/span ids clear
-  // the UUIDv7 ingestion window. Charts bucket by that id-embedded timestamp and the interval
-  // follows the selected range (>3 days is daily), so the workspace-wide 30-day default would
-  // collapse the whole demo into a single bar. Default it to 24h instead, which buckets hourly
-  // and renders the curve. Only the initial default changes — the picker still works, and other
-  // projects keep the 30-day default.
-  const { data: project, isPending: isProjectPending } = useProjectById(
-    { projectId },
-    { enabled: Boolean(projectId) },
-  );
-  const isDemoProject = project?.name === DEMO_PROJECT_NAME;
+  // Only the initial default changes — the picker still works, and non-demo projects keep the
+  // workspace-wide 30-day default.
+  const demoDateRangeDefault = useDemoProjectDateRangeDefault(projectId);
 
   const { dateRange, handleDateRangeChange, minDate, maxDate, dateRangeValue } =
     useMetricDateRangeWithQueryAndStorage({
       key: "dashboard_time_range",
       localStorageKey: "opik-project-insights-daterange",
-      defaultValue: isDemoProject
-        ? DATE_RANGE_PRESET_PAST_24_HOURS
-        : DEFAULT_DATE_PRESET,
-      // Hold the URL sync until the project name is known, otherwise the 30-day default lands in
-      // the URL first and the demo default never gets to apply.
-      initSyncReady: !isProjectPending,
+      ...demoDateRangeDefault,
     });
 
   useEffect(() => {

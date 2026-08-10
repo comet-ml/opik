@@ -22,6 +22,7 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
+  useDemoProjectDateRangeDefault,
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
@@ -834,6 +835,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
 
+  // Must match the default useLogsType passes — all three Logs consumers share one date-range
+  // key, so a disagreement would leave the resolved range dependent on mount order.
+  const demoDateRangeDefault = useDemoProjectDateRangeDefault(projectId);
+
   const {
     dateRange,
     handleDateRangeChange,
@@ -843,6 +848,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage({
     excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+    ...demoDateRangeDefault,
   });
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,

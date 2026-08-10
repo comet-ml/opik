@@ -2,7 +2,10 @@ import { useMemo, useCallback, useEffect } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
-import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import {
+  useMetricDateRangeWithQueryAndStorage,
+  useDemoProjectDateRangeDefault,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
 import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
@@ -23,8 +26,11 @@ type UseLogsTypeOptions = {
 const useLogsType = (options: UseLogsTypeOptions) => {
   const { projectId } = options;
 
-  const { intervalStart, intervalEnd } =
-    useMetricDateRangeWithQueryAndStorage();
+  // Must match the default the Logs tabs pass — all three share one date-range key, so a
+  // disagreement would leave the resolved range dependent on mount order.
+  const { intervalStart, intervalEnd } = useMetricDateRangeWithQueryAndStorage(
+    useDemoProjectDateRangeDefault(projectId),
+  );
 
   const { data: threadsStats, isError: isStatsError } = useThreadsStatistic(
     {
