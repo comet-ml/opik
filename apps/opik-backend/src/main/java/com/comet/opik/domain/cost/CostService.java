@@ -39,8 +39,7 @@ public class CostService {
             Map.entry("bedrock_converse", "bedrock"),
             Map.entry("microsoft", "azure"),
             Map.entry("moonshotai", "moonshot"),
-            Map.entry("z-ai", "zai"),
-            Map.entry("cerebras", "cerebras"));
+            Map.entry("z-ai", "zai"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
