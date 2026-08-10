@@ -11,7 +11,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import SetGuardrailDialog from "@/v2/pages-shared/traces/GuardrailConfig/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useLogsType from "@/v2/pages/LogsPage/useLogsType";
-import { resolveProjectDateRangeDefault } from "@/v2/pages-shared/traces/resolveProjectDateRangeDefault";
+import { resolveProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 
 const LogsPage = () => {
   const projectId = useActiveProjectId()!;
@@ -35,14 +35,14 @@ const LogsPage = () => {
   // share one date-range key, so they have to agree; deriving it once removes the possibility of
   // disagreeing. Note project?.name rather than projectName — the latter falls back to the raw id
   // while loading, which would read as "not the demo project".
-  const dateRangeDefault = resolveProjectDateRangeDefault(
+  const dateRangeConfig = resolveProjectDateRangeConfig(
     project?.name,
     !isProjectPending,
   );
 
   const { logsType, needsDefaultResolution, setLogsType } = useLogsType({
     projectId,
-    dateRangeDefault,
+    dateRangeConfig,
   });
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
@@ -79,7 +79,7 @@ const LogsPage = () => {
           <LogsTab
             projectId={projectId}
             projectName={projectName}
-            dateRangeDefault={dateRangeDefault}
+            dateRangeConfig={dateRangeConfig}
             logsType={logsType}
             onLogsTypeChange={setLogsType}
           />

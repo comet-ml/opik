@@ -17,10 +17,14 @@ const DEMO_STORAGE_KEY_SUFFIX = `-${DEMO_PROJECT_NAME}`;
 /**
  * Spread straight into useMetricDateRangeWithQueryAndStorage.
  *
+ * More than a default: it also carries when the URL may be synced (`initSyncReady`) and which
+ * storage slot to persist into (`storageKeySuffix`), so callers should pass the whole object rather
+ * than pick the default out of it.
+ *
  * Returned for every project, not just the demo one — an ordinary project gets the workspace
- * default and an empty suffix.
+ * default, immediate readiness and an empty suffix.
  */
-export type ProjectDateRangeDefault = {
+export type ProjectDateRangeConfig = {
   defaultValue: DateRangePreset;
   initSyncReady: boolean;
   storageKeySuffix: string;
@@ -53,10 +57,10 @@ export type ProjectDateRangeDefault = {
  *   settled: the override simply does not apply and the workspace default stands, which is better
  *   than never syncing the URL at all.
  */
-export const resolveProjectDateRangeDefault = (
+export const resolveProjectDateRangeConfig = (
   projectName: string | undefined,
   isSettled: boolean,
-): ProjectDateRangeDefault => {
+): ProjectDateRangeConfig => {
   const isDemoProject = projectName === DEMO_PROJECT_NAME;
 
   return {

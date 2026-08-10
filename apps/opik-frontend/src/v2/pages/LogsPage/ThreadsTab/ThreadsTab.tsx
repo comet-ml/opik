@@ -23,7 +23,7 @@ import {
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
-import { ProjectDateRangeDefault } from "@/v2/pages-shared/traces/resolveProjectDateRangeDefault";
+import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 
 import {
   COLUMN_COMMENTS_ID,
@@ -384,7 +384,7 @@ type ThreadsTabProps = {
   projectName: string;
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
-  dateRangeDefault: ProjectDateRangeDefault;
+  dateRangeConfig: ProjectDateRangeConfig;
 };
 
 export const ThreadsTab: React.FC<ThreadsTabProps> = ({
@@ -392,7 +392,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   projectName,
   logsType,
   onLogsTypeChange,
-  dateRangeDefault,
+  dateRangeConfig,
 }) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
@@ -406,7 +406,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage({
     excludePresets: [DATE_RANGE_PRESET_ALLTIME],
-    ...dateRangeDefault,
+    ...dateRangeConfig,
   });
   const [search = "", setSearch] = useQueryParam(
     "threads_search",

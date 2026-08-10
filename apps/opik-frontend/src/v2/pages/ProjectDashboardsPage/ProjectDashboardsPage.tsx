@@ -7,9 +7,9 @@ import {
   MetricDateRangeSelect,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import {
-  resolveProjectDateRangeDefault,
-  ProjectDateRangeDefault,
-} from "@/v2/pages-shared/traces/resolveProjectDateRangeDefault";
+  resolveProjectDateRangeConfig,
+  ProjectDateRangeConfig,
+} from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 import useProjectById from "@/api/projects/useProjectById";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
@@ -42,12 +42,12 @@ const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 
 type ProjectDashboardsContentProps = {
   projectId: string;
-  dateRangeDefault: ProjectDateRangeDefault;
+  dateRangeConfig: ProjectDateRangeConfig;
 };
 
 const ProjectDashboardsContent: React.FunctionComponent<
   ProjectDashboardsContentProps
-> = ({ projectId, dateRangeDefault }) => {
+> = ({ projectId, dateRangeConfig }) => {
   const workspaceName = useActiveWorkspaceName();
 
   const {
@@ -93,7 +93,7 @@ const ProjectDashboardsContent: React.FunctionComponent<
     useMetricDateRangeWithQueryAndStorage({
       key: "dashboard_time_range",
       localStorageKey: "opik-project-insights-daterange",
-      ...dateRangeDefault,
+      ...dateRangeConfig,
     });
 
   useEffect(() => {
@@ -188,7 +188,7 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
   return (
     <ProjectDashboardsContent
       projectId={projectId}
-      dateRangeDefault={resolveProjectDateRangeDefault(project?.name, true)}
+      dateRangeConfig={resolveProjectDateRangeConfig(project?.name, true)}
     />
   );
 };
