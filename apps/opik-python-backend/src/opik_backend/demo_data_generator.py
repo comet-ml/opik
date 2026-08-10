@@ -31,12 +31,23 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
+# Upper bound on how far in the past any demo id's embedded UUIDv7 timestamp may sit.
+#
+# Ingestion validates every trace/span id against a window around now
+# (UuidValidationConfig.window, enforced by UuidV7TimestampValidator). Operators can tune
+# that window but not below 12h (@MinDuration(value = 12, unit = HOURS)), so a dataset
+# confined to the last 10h is accepted under *any* legal configuration — OSS Docker, Helm
+# and Comet cloud alike — leaving 2h of slack for clock skew between this seeder and the
+# backend. The demo ships to every deployment and seeds into each user's own workspace, so
+# it has to clear validation on its own; it cannot lean on an environment-specific bypass.
+DEMO_ID_MAX_AGE = datetime.timedelta(hours=10)
+
+
 @dataclass
 class DemoDataContext:
     """Context object to hold state for a single demo data creation invocation.
     This prevents race conditions when multiple users sign up concurrently."""
     uuid_map: dict = field(default_factory=dict)
-    trace_time_shift: dict = field(default_factory=dict)
 
 
 def make_http_request(base_url, message, workspace_name, comet_api_key):
@@ -136,184 +147,257 @@ def create_project(base_url, workspace_name, comet_api_key, project_name):
     _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
     return status_code
 
-def calculate_time_shift_to_now(traces):
+def demo_block_key(trace):
     """
-    Calculate time shift to move the latest end_time to 'now' while preserving time differences.
+    Group key for the unit whose internal timing must survive compression.
 
-    Args:
-        traces: List of trace dictionaries with 'start_time' and 'end_time' keys
+    A thread is one chatbot conversation: its traces are near-simultaneous (a whole thread
+    spans under 6s) and the Threads tab derives thread duration from them, so the offsets
+    *inside* a thread have to come through untouched. Traces with no thread_id form their
+    own single-trace block.
+    """
+    thread_id = trace.get("thread_id")
+    if thread_id:
+        return ("thread", thread_id)
+    return ("trace", trace["id"])
+
+def rebase_span_tree(trace_spans, new_trace_start):
+    """
+    Anchor one trace's span tree to that trace's new start_time.
+
+    The tree moves as a rigid body — every span shifts by the same delta — so parent/child
+    containment, sibling ordering and every duration survive exactly.
+
+    The delta is measured from the tree's own root span rather than from the trace's old
+    start_time, because in the raw demo data the two disagree: spans are all bunched into a
+    few hours while traces spread across 30 days, leaving most spans dated up to 30 days
+    *after* the trace they belong to. Shifting spans by their trace's delta would carry that
+    skew along and push them past now, tripping the too_far_future check. Re-anchoring on the
+    root span drops the skew instead.
+
+    Only the root span is positioned; span durations are whatever the dataset already had, so
+    a tree filling its trace's window exactly is a property of the demo data (verified for all
+    116 trees by test_demo_timeline) rather than something enforced here.
 
     Returns:
-        datetime.timedelta: The time shift to apply to all timestamps
+    - dict: old span id -> (start_time, end_time)
     """
-    if not traces:
-        return datetime.timedelta(0)
+    if not trace_spans:
+        return {}
 
-    # Find the maximum end_time among all traces
-    traces_with_end_time = [trace['end_time'] for trace in traces if 'end_time' in trace]
-    if not traces_with_end_time:
-        return datetime.timedelta(0)
+    roots = [span for span in trace_spans if not span.get("parent_span_id")]
+    # Every demo trace has exactly one root span. Fall back to the earliest span if a tree
+    # ever arrives rootless, which still places the whole tree inside the window.
+    anchor = min(roots or trace_spans, key=lambda span: span["start_time"])["start_time"]
+    offset = new_trace_start - anchor
 
-    max_end_time = max(traces_with_end_time)
+    return {
+        span["id"]: (span["start_time"] + offset, span["end_time"] + offset)
+        for span in trace_spans
+    }
 
-    # Current time (now)
-    now = datetime.datetime.now()
-
-    # Calculate shift to move max_end_time to now
-    time_shift = now - max_end_time
-
-    return time_shift
-
-def apply_time_shift(time_object, time_shift):
+def compress_demo_timeline(traces, spans, now=None, max_age=DEMO_ID_MAX_AGE):
     """
-    Apply a time shift to a datetime object.
+    Map the demo dataset's ~30-day timeline onto the last `max_age` so that every
+    id-embedded timestamp clears the UUIDv7 ingestion window.
 
-    Args:
-        time_object: datetime object to shift
-        time_shift: datetime.timedelta to apply
+    Demo ids are minted from start_time (uuid7_from_datetime), so the id timestamps inherit
+    the dataset's own 30-day spread. Under reject-mode validation that costs ~97% of traces
+    an HTTP 400 for too_old. Compression takes it out of the gaps *between* conversations,
+    which is where all the slack is:
 
-    Returns:
-        datetime: Shifted datetime object
-    """
-    return time_object + time_shift
+    - every trace keeps its exact duration, so latencies stay realistic;
+    - offsets inside a thread are preserved exactly, so thread durations stay realistic;
+    - block ordering is preserved, so the traces list and over-time chart keep their shape;
+    - inter-thread gaps (~12h on average) shrink to minutes, and that alone buys the whole
+      30d -> `max_age` reduction.
 
-def set_time_shift(context: DemoDataContext, trace_id, time_shift):
-    context.trace_time_shift[trace_id] = time_shift
-
-def get_time_shift(context: DemoDataContext, trace_id):
-    """
-    Get the time shift value for a given trace ID from the context.
+    The newest trace ends at `now`, matching the previous behaviour.
 
     Parameters:
-    - context: DemoDataContext object holding the state
-    - trace_id (string): The trace ID to retrieve the time shift value for.
+    - traces: List of trace dictionaries to lay out
+    - spans: List of span dictionaries, rebased onto their parent trace (see rebase_span_tree)
+    - now: Instant the newest trace should end at; defaults to datetime.datetime.now()
+    - max_age: Width of the target window
 
     Returns:
-    datetime.timedelta: The time shift value for the provided trace ID. If the trace ID is not found in the dictionary, a default value of 0 timedelta is returned.
+    - tuple: (dict old trace id -> (start, end), dict old span id -> (start, end))
     """
-    if trace_id in context.trace_time_shift:
-        time_shift = context.trace_time_shift[trace_id]
-        return time_shift
-    return datetime.timedelta(0)
+    if now is None:
+        now = datetime.datetime.now()
+    if not traces:
+        return {}, {}
 
-def process_traces_with_time_shift(traces, context: DemoDataContext, project_name: str):
+    spans_by_trace: dict = {}
+    for span in spans:
+        spans_by_trace.setdefault(span["trace_id"], []).append(span)
+
+    blocks: dict = {}
+    for original_trace in traces:
+        blocks.setdefault(demo_block_key(original_trace), []).append(original_trace)
+
+    # Chronological, tie-broken on the block's lowest trace id so a given dataset always
+    # produces the same layout regardless of iteration order.
+    ordered_blocks = sorted(
+        blocks.values(),
+        key=lambda block: (
+            min(item["start_time"] for item in block),
+            min(item["id"] for item in block),
+        ),
+    )
+
+    block_starts = [min(item["start_time"] for item in block) for block in ordered_blocks]
+    block_ends = [max(item["end_time"] for item in block) for block in ordered_blocks]
+    block_durations = [end - start for start, end in zip(block_starts, block_ends)]
+
+    # Blocks overlap in the raw data (27 of 59 overlap the next one). Clamping a negative
+    # gap at zero gives up the overlap but keeps block order, which is what the traces list
+    # and the over-time chart actually read.
+    gaps = [
+        max(next_start - prev_end, datetime.timedelta(0))
+        for prev_end, next_start in zip(block_ends, block_starts[1:])
+    ]
+
+    total_duration = sum(block_durations, datetime.timedelta(0))
+    total_gap = sum(gaps, datetime.timedelta(0))
+
+    # Block durations are never scaled, so only the space between blocks can absorb the
+    # reduction.
+    gap_budget = max_age - total_duration
+    if gap_budget <= datetime.timedelta(0):
+        # The shipped dataset is ~7min of trace time against a 10h target, so this needs a
+        # drastically different demo dataset to trigger. Collapse the gaps rather than
+        # scaling by a negative factor, and say so loudly.
+        logger.warning(
+            "Demo trace durations (%s) exceed the target window (%s); collapsing all gaps",
+            total_duration, max_age)
+        gap_scale = 0.0
+    elif total_gap > gap_budget:
+        gap_scale = gap_budget / total_gap
+    else:
+        # Already inside the window — keep the timeline as-is and only move it to `now`.
+        gap_scale = 1.0
+
+    # Break ties when several traces share a start_time down to the millisecond, by nudging
+    # each subsequent one a microsecond later. uuid7_from_datetime derives the UUID's
+    # temporal prefix from the timestamp, so this keeps colliding traces distinguishable and
+    # their relative order stable.
+    ms_counter: dict = {}
+    trace_times: dict = {}
+    span_times: dict = {}
+
+    cursor = now - max_age
+    for idx, block in enumerate(ordered_blocks):
+        for original_trace in block:
+            new_start = cursor + (original_trace["start_time"] - block_starts[idx])
+
+            ms_key = int(new_start.timestamp() * 1000)
+            offset_us = ms_counter.get(ms_key, 0)
+            ms_counter[ms_key] = offset_us + 1
+            # Nudge start and end together so the duration is preserved and end_time can
+            # never slip behind start_time.
+            new_start = new_start + datetime.timedelta(microseconds=offset_us)
+
+            new_end = new_start + (original_trace["end_time"] - original_trace["start_time"])
+            trace_times[original_trace["id"]] = (new_start, new_end)
+            # Rebase against the trace's final start so the span tree tracks the microsecond
+            # nudge above and stays aligned with its trace.
+            span_times.update(
+                rebase_span_tree(spans_by_trace.get(original_trace["id"], []), new_start))
+
+        cursor = cursor + block_durations[idx]
+        if idx < len(gaps):
+            cursor = cursor + gaps[idx] * gap_scale
+
+    # The walk above lands a little short of `now` — clamped overlaps and gap_scale rounding
+    # leave a residue — so close the gap and pin the newest trace's end to `now`. The shift is
+    # uniform, and it is backwards by at most a few microseconds when a millisecond tie-break
+    # nudged the last trace past `now`, so the oldest id can sit a hair beyond `max_age`. The
+    # 2h of margin `max_age` keeps below the 12h configuration minimum absorbs that easily.
+    correction = now - max(end for _, end in trace_times.values())
+    if correction:
+        trace_times = {
+            key: (start + correction, end + correction)
+            for key, (start, end) in trace_times.items()
+        }
+        span_times = {
+            key: (start + correction, end + correction)
+            for key, (start, end) in span_times.items()
+        }
+
+    return trace_times, span_times
+
+def build_trace_writes(traces, trace_times, context: DemoDataContext, project_name: str):
     """
-    Process traces with proper time shifts and time-based UUIDs, returning a list of
-    TraceWrite objects ready for a single synchronous POST /v1/private/traces/batch call.
-
-    Shifts all trace timestamps to present time while preserving temporal relationships,
-    and generates time-based UUIDs for consistent ordering.
-
-    Calculates time shift from the latest end_time across traces only
-    to ensure all data is brought to present while preserving time distances.
+    Turn demo trace dictionaries into TraceWrite objects ready for a single synchronous
+    POST /v1/private/traces/batch call, using the timeline from compress_demo_timeline.
 
     Parameters:
     - traces: List of trace dictionaries to process
+    - trace_times: dict old trace id -> (start_time, end_time)
     - context: DemoDataContext object holding state
     - project_name: Project name to attach to every TraceWrite
 
     Returns:
-    - tuple: (list[TraceWrite] ready to POST, datetime.timedelta time_shift applied)
+    - list[TraceWrite]: Traces ready to POST
     """
-    # Calculate time shift from traces only to move latest trace end_time to now
-    # This same shift will be applied to spans to preserve all time distances
-    time_shift = calculate_time_shift_to_now(traces)
-
-    # Track per-millisecond counters to break ties when multiple traces share the same
-    # start_time down to the millisecond. uuid7_from_datetime derives the UUID's temporal
-    # prefix from the ms-resolution timestamp, so two traces landing on the same ms can
-    # produce UUIDs that collide (or get silently deduplicated by the backend). Adding a
-    # monotonic microsecond offset ensures each trace gets a distinct UUID7 prefix.
-    ms_counter: dict = {}
     trace_writes: list = []
 
-    for idx, original_trace in enumerate(sorted(traces, key=lambda x: x["id"])):
+    for original_trace in sorted(traces, key=lambda x: x["id"]):
         # Create a copy to avoid mutating the original demo_data
         trace = dict(original_trace)
         # Store the old ID before modification
         old_trace_id = trace["id"]
-        # Apply time shift to maintain time differences
-        shifted_start = apply_time_shift(trace["start_time"], time_shift)
-        shifted_end = apply_time_shift(trace["end_time"], time_shift)
-
-        # Deduplicate sub-millisecond timestamps: if multiple traces land on the same
-        # millisecond after the shift, offset each by 1 µs so their UUID7s are distinct.
-        ms_key = int(shifted_start.timestamp() * 1000)
-        offset_us = ms_counter.get(ms_key, 0)
-        ms_counter[ms_key] = offset_us + 1
-        if offset_us > 0:
-            shifted_start = shifted_start + datetime.timedelta(microseconds=offset_us)
-            # Shift end_time by the same amount so duration is preserved and we never
-            # end up with end_time < start_time (would violate ordering invariants).
-            shifted_end = shifted_end + datetime.timedelta(microseconds=offset_us)
-
-        trace["start_time"] = shifted_start
-        trace["end_time"] = shifted_end
-        new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
-        trace["id"] = new_id
+        trace["start_time"], trace["end_time"] = trace_times[old_trace_id]
+        trace["id"] = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
         # Attach project_name directly so the TraceWrite targets the right project.
         trace["project_name"] = project_name
         # Remove fields that shouldn't be in the trace payload
         trace.pop("project_id", None)
         trace.pop("workspace_id", None)
-        set_time_shift(context, new_id, time_shift)
         trace_writes.append(TraceWrite(**trace))
 
-    return trace_writes, time_shift
+    return trace_writes
 
-def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, project_name: str):
+def build_span_writes(spans, span_times, context: DemoDataContext, project_name: str):
     """
-    Process spans with the same time shift as their parent traces, returning a list of
-    SpanWrite objects ready for a single synchronous POST /v1/private/spans/batch call.
+    Turn demo span dictionaries into SpanWrite objects ready for a single synchronous
+    POST /v1/private/spans/batch call, using the timeline from compress_demo_timeline.
 
-    Spans use the time shift passed from trace processing to maintain relative timing.
-
-    First pass generates all time-based UUIDs and stores time shifts.
-    Second pass builds all SpanWrite objects with properly shifted times and parent_span_id mappings.
+    First pass mints every span's time-based UUID so parent_span_id references resolve in the
+    second pass. Second pass builds the SpanWrite objects.
 
     Parameters:
     - spans: List of span dictionaries to process
-    - time_shift: The time shift to apply (from traces)
+    - span_times: dict old span id -> (start_time, end_time)
     - context: DemoDataContext object holding state
     - project_name: Project name to attach to every SpanWrite
 
     Returns:
     - list[SpanWrite]: Spans ready to POST
     """
-    # First pass: Generate all time-based UUIDs and store time shifts for spans
-    # This ensures all parent span IDs are mapped before we reference them
-    span_time_shifts = {}
+    # First pass: mint all time-based UUIDs so every parent span id is mapped before we
+    # reference it.
     for original_span in sorted(spans, key=lambda x: x["id"]):
-        # Create a copy to avoid mutating the original demo_data
-        span = dict(original_span)
-        # Store the old ID before modification
-        old_span_id = span["id"]
-        # Apply the same time shift as parent trace to maintain relative timing
-        span["start_time"] = apply_time_shift(span["start_time"], time_shift)
-        span["end_time"] = apply_time_shift(span["end_time"], time_shift)
-        # Generate time-based UUID based on shifted start_time (consistent with traces)
-        new_id = get_new_uuid_by_time(context, old_span_id, span["start_time"])
-        # Remove fields that shouldn't be in the span data
-        span.pop("project_id", None)
-        span.pop("workspace_id", None)
-        # Store the time shift for use in second pass
-        span_time_shifts[old_span_id] = (span["start_time"], span["end_time"], time_shift)
+        start_time, _ = span_times[original_span["id"]]
+        get_new_uuid_by_time(context, original_span["id"], start_time)
 
-    # Second pass: build SpanWrite objects with properly shifted times and parent_span_id mappings
+    # Second pass: build SpanWrite objects with the new times and remapped ids
     span_writes: list = []
     for original_span in sorted(spans, key=lambda x: x["id"]):
         # Create a copy to avoid mutating the original demo_data
         span = dict(original_span)
-        # Use the stored time shifts from first pass
         old_span_id = original_span["id"]
-        if old_span_id in span_time_shifts:
-            span["start_time"], span["end_time"], _ = span_time_shifts[old_span_id]
+        span["start_time"], span["end_time"] = span_times[old_span_id]
         # Use the mapped UUIDs from context
-        span["id"] = get_new_uuid(context, original_span["id"])
+        span["id"] = get_new_uuid(context, old_span_id)
         span["trace_id"] = get_new_uuid(context, original_span["trace_id"])
-        if "parent_span_id" in span:
-            new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
-            span["parent_span_id"] = new_parent_span_id
+        # Remap only a real parent id. Testing for the key alone would also match a present-but-
+        # empty value, and get_new_uuid would happily mint a parent for it — turning a root span
+        # into a child of a span that does not exist. This also keeps root detection identical to
+        # rebase_span_tree, so the two can't disagree about which spans are roots.
+        if span.get("parent_span_id"):
+            span["parent_span_id"] = get_new_uuid(context, span["parent_span_id"])
         # Attach project_name directly so the SpanWrite targets the right project.
         span["project_name"] = project_name
         # Remove fields that shouldn't be in the span payload
@@ -445,11 +529,16 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
             #     non-2xx, which propagates up to our outer except as a loud failure;
             #   - no ClickHouse read is needed for verification, so we avoid false
             #     positives from CH replica lag.
-            trace_writes, time_shift = process_traces_with_time_shift(demo_traces, context, project_name)
+            # Lay traces and spans out on a single compressed timeline first: the ids are
+            # minted from start_time, so every id has to land inside the UUIDv7 ingestion
+            # window or the backend rejects the write with a 400.
+            trace_times, span_times = compress_demo_timeline(demo_traces, demo_spans)
+
+            trace_writes = build_trace_writes(demo_traces, trace_times, context, project_name)
             logger.info("Posting %d traces synchronously via REST for workspace %s", len(trace_writes), workspace_name)
             client.rest_client.traces.create_traces(traces=trace_writes)
 
-            span_writes = process_spans_with_time_shift(demo_spans, time_shift, context, project_name)
+            span_writes = build_span_writes(demo_spans, span_times, context, project_name)
             logger.info("Posting %d spans synchronously via REST for workspace %s", len(span_writes), workspace_name)
             client.rest_client.spans.create_spans(spans=span_writes)
 

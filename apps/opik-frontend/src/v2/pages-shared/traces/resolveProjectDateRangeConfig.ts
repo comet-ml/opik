@@ -1,0 +1,73 @@
+import { DEMO_PROJECT_NAME } from "@/constants/shared";
+import { DateRangePreset } from "@/shared/DateRangeSelect";
+import {
+  DATE_RANGE_PRESET_PAST_24_HOURS,
+  DEFAULT_DATE_PRESET,
+} from "./MetricDateRangeSelect/constants";
+
+/**
+ * Keeps the demo project's picked range out of the range shared by real projects.
+ *
+ * Built from the full demo project name rather than a short literal like `-demo`, so it cannot
+ * collide with a customer's own project that happens to be named "demo", and so it follows any
+ * rename of DEMO_PROJECT_NAME on its own.
+ */
+const DEMO_STORAGE_KEY_SUFFIX = `-${DEMO_PROJECT_NAME}`;
+
+/**
+ * Spread straight into useMetricDateRangeWithQueryAndStorage.
+ *
+ * More than a default: it also carries when the URL may be synced (`initSyncReady`) and which
+ * storage slot to persist into (`storageKeySuffix`), so callers should pass the whole object rather
+ * than pick the default out of it.
+ *
+ * Returned for every project, not just the demo one — an ordinary project gets the workspace
+ * default, immediate readiness and an empty suffix.
+ */
+export type ProjectDateRangeConfig = {
+  defaultValue: DateRangePreset;
+  initSyncReady: boolean;
+  storageKeySuffix: string;
+};
+
+/**
+ * The chart date-range default for a project, overridden for the seeded demo project.
+ *
+ * The demo project is compressed into the last ~10 hours so its trace/span ids clear the UUIDv7
+ * ingestion window. Charts bucket by that id-embedded timestamp and the interval follows the
+ * selected range (anything over 3 days buckets daily), so the workspace-wide 30-day default would
+ * collapse the entire demo into a single bar. 24 hours buckets hourly and renders the curve.
+ *
+ * All three fields matter:
+ *
+ * - `defaultValue` is the 24h override itself.
+ * - `initSyncReady` holds the URL sync until the project name is known. Without it the 30-day
+ *   placeholder gets pinned into the URL first and wins permanently.
+ * - `storageKeySuffix` gives the demo project its own persistence slot. The stored range is sticky
+ *   across projects and outranks any default, so without this the demo would inherit whatever range
+ *   the user last picked on a real project and never apply 24h at all.
+ *
+ * Pure on purpose: a page whose consumers share one date-range key must feed them all the same
+ * values, or whichever mounts first decides and the result turns on mount order. Resolving once in
+ * the parent and passing the result down makes that structurally impossible — see LogsPage, which
+ * has three consumers (useLogsType, TracesSpansTab, ThreadsTab).
+ *
+ * @param projectName the project's name, or undefined while it is not known
+ * @param isSettled whether the name is as resolved as it is going to get. A failed lookup counts as
+ *   settled: the override simply does not apply and the workspace default stands, which is better
+ *   than never syncing the URL at all.
+ */
+export const resolveProjectDateRangeConfig = (
+  projectName: string | undefined,
+  isSettled: boolean,
+): ProjectDateRangeConfig => {
+  const isDemoProject = projectName === DEMO_PROJECT_NAME;
+
+  return {
+    defaultValue: isDemoProject
+      ? DATE_RANGE_PRESET_PAST_24_HOURS
+      : DEFAULT_DATE_PRESET,
+    initSyncReady: isSettled,
+    storageKeySuffix: isDemoProject ? DEMO_STORAGE_KEY_SUFFIX : "",
+  };
+};

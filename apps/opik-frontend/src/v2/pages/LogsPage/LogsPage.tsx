@@ -11,6 +11,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import SetGuardrailDialog from "@/v2/pages-shared/traces/GuardrailConfig/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useLogsType from "@/v2/pages/LogsPage/useLogsType";
+import { resolveProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 
 const LogsPage = () => {
   const projectId = useActiveProjectId()!;
@@ -19,7 +20,7 @@ const LogsPage = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
-  const { data: project } = useProjectById(
+  const { data: project, isPending: isProjectPending } = useProjectById(
     {
       projectId,
     },
@@ -30,8 +31,18 @@ const LogsPage = () => {
 
   const projectName = project?.name || projectId;
 
+  // Resolved here, from the query this page already owns, and passed to every consumer below. They
+  // share one date-range key, so they have to agree; deriving it once removes the possibility of
+  // disagreeing. Note project?.name rather than projectName — the latter falls back to the raw id
+  // while loading, which would read as "not the demo project".
+  const dateRangeConfig = resolveProjectDateRangeConfig(
+    project?.name,
+    !isProjectPending,
+  );
+
   const { logsType, needsDefaultResolution, setLogsType } = useLogsType({
     projectId,
+    dateRangeConfig,
   });
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
@@ -57,12 +68,18 @@ const LogsPage = () => {
             </div>
           )}
         </PageBodyStickyContainer>
-        {needsDefaultResolution ? (
+        {/* Also waits on the project, not just the logs-type default: use-local-storage-state
+            captures its `defaultValue` once, with useState, so a tab that mounts before the project
+            name is known would freeze the placeholder 30-day default and keep it after the real one
+            arrives. Mounting the tabs only once it is settled makes the captured value the right one
+            by construction. A failed lookup reports not-pending, so this cannot hang. */}
+        {needsDefaultResolution || isProjectPending ? (
           <Loader />
         ) : (
           <LogsTab
             projectId={projectId}
             projectName={projectName}
+            dateRangeConfig={dateRangeConfig}
             logsType={logsType}
             onLogsTypeChange={setLogsType}
           />
