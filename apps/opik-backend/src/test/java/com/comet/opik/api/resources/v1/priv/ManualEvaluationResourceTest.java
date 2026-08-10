@@ -90,8 +90,11 @@ class ManualEvaluationResourceTest {
 
     // The judge is told the rule's schema names, so a mocked reply has to use them: the parser only
     // accepts declared names (OPIK-7354). PODAM would otherwise generate random ones.
-    private static final List<LlmAsJudgeOutputSchema> RELEVANCE_SCHEMA = List.of(
-            new LlmAsJudgeOutputSchema("Relevance", LlmAsJudgeOutputSchemaType.INTEGER, "Relevance of the summary"));
+    private static final List<LlmAsJudgeOutputSchema> RELEVANCE_SCHEMA = List.of(LlmAsJudgeOutputSchema.builder()
+            .name("Relevance")
+            .type(LlmAsJudgeOutputSchemaType.INTEGER)
+            .description("Relevance of the summary")
+            .build());
 
     private static final String VALID_AI_MSG_TXT = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"}}";
 
