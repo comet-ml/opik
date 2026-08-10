@@ -32,8 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
-    // One VertexAI per (credentials, location), reused for the process lifetime: building one per call leaked its
-    // non-daemon gRPC threads. No eviction, so a cached client is never closed while a request is still using it.
+    // One VertexAI per (credentials, location), reused across calls.
     private final @NonNull LlmProviderClientConfig clientConfig;
     private final Map<ClientKey, VertexAI> clients = new ConcurrentHashMap<>();
 
@@ -41,7 +40,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         this.clientConfig = clientConfig;
     }
 
-    // credentialsDigest, not the raw key, so the map never retains the service-account secret.
+    // Key on a digest of the credential, not the raw JSON.
     private record ClientKey(String credentialsDigest, String location) {
     }
 
