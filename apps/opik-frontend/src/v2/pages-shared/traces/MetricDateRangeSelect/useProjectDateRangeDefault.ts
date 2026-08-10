@@ -15,8 +15,13 @@ import {
  */
 const DEMO_STORAGE_KEY_SUFFIX = `-${DEMO_PROJECT_NAME}`;
 
-/** Spread straight into useMetricDateRangeWithQueryAndStorage. */
-export type DemoProjectDateRangeDefault = {
+/**
+ * Spread straight into useMetricDateRangeWithQueryAndStorage.
+ *
+ * Returned for every project, not just the demo one — an ordinary project gets the workspace
+ * default and an empty suffix.
+ */
+export type ProjectDateRangeDefault = {
   defaultValue: DateRangePreset;
   initSyncReady: boolean;
   storageKeySuffix: string;
@@ -49,10 +54,10 @@ export type DemoProjectDateRangeDefault = {
  *   settled: the override simply does not apply and the workspace default stands, which is better
  *   than never syncing the URL at all.
  */
-export const resolveDemoProjectDateRangeDefault = (
+export const resolveProjectDateRangeDefault = (
   projectName: string | undefined,
   isSettled: boolean,
-): DemoProjectDateRangeDefault => {
+): ProjectDateRangeDefault => {
   const isDemoProject = projectName === DEMO_PROJECT_NAME;
 
   return {
@@ -65,13 +70,14 @@ export const resolveDemoProjectDateRangeDefault = (
 };
 
 /**
- * resolveDemoProjectDateRangeDefault for a caller that holds only a project id.
+ * resolveProjectDateRangeDefault for a caller that holds only a project id.
+ *
  *
  * Prefer the resolver directly when the project is already in scope — a parent that owns the query
  * should pass its result down rather than have children re-observe it (performance.md, "Don't
  * refetch what the parent already has").
  */
-export const useDemoProjectDateRangeDefault = (projectId?: string) => {
+export const useProjectDateRangeDefault = (projectId?: string) => {
   const { data: project, isPending } = useProjectById(
     { projectId: projectId! },
     { enabled: Boolean(projectId), refetchOnMount: false },
@@ -80,7 +86,7 @@ export const useDemoProjectDateRangeDefault = (projectId?: string) => {
   // Settled means "we know as much as we ever will". Nothing to look up counts, and so does a
   // failed lookup — react-query reports a cached error as not-pending with no data, and falling
   // back to the workspace default beats hanging the URL sync forever.
-  return resolveDemoProjectDateRangeDefault(
+  return resolveProjectDateRangeDefault(
     project?.name,
     projectId ? !isPending : true,
   );

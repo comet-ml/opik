@@ -4,7 +4,7 @@ import useLocalStorageState from "use-local-storage-state";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import {
   useMetricDateRangeWithQueryAndStorage,
-  DemoProjectDateRangeDefault,
+  ProjectDateRangeDefault,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
@@ -21,7 +21,7 @@ type UseLogsTypeOptions = {
    * Resolved by LogsPage from the project query it already owns, and shared with the tabs. All three
    * read one date-range key, so they must be given the same values.
    */
-  dateRangeDefault: DemoProjectDateRangeDefault;
+  dateRangeDefault: ProjectDateRangeDefault;
 };
 
 /**

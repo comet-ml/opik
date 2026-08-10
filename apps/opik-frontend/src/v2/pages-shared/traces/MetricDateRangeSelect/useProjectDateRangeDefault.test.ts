@@ -12,9 +12,9 @@ vi.mock("@/api/projects/useProjectById", () => ({
 
 import useProjectById from "@/api/projects/useProjectById";
 import {
-  resolveDemoProjectDateRangeDefault,
-  useDemoProjectDateRangeDefault,
-} from "./useDemoProjectDateRangeDefault";
+  resolveProjectDateRangeDefault,
+  useProjectDateRangeDefault,
+} from "./useProjectDateRangeDefault";
 
 const mockProjectQuery = (
   data: { name: string } | undefined,
@@ -26,21 +26,21 @@ const mockProjectQuery = (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
-describe("resolveDemoProjectDateRangeDefault", () => {
+describe("resolveProjectDateRangeDefault", () => {
   it("should default the demo project to 24 hours so its charts bucket hourly", () => {
-    const result = resolveDemoProjectDateRangeDefault(DEMO_PROJECT_NAME, true);
+    const result = resolveProjectDateRangeDefault(DEMO_PROJECT_NAME, true);
 
     expect(result.defaultValue).toBe(DATE_RANGE_PRESET_PAST_24_HOURS);
   });
 
   it("should leave other projects on the workspace-wide default", () => {
-    const result = resolveDemoProjectDateRangeDefault("My Real Project", true);
+    const result = resolveProjectDateRangeDefault("My Real Project", true);
 
     expect(result.defaultValue).toBe(DEFAULT_DATE_PRESET);
   });
 
   it("should not claim the demo default before the name is known", () => {
-    const result = resolveDemoProjectDateRangeDefault(undefined, false);
+    const result = resolveProjectDateRangeDefault(undefined, false);
 
     expect(result.defaultValue).toBe(DEFAULT_DATE_PRESET);
     expect(result.initSyncReady).toBe(false);
@@ -49,7 +49,7 @@ describe("resolveDemoProjectDateRangeDefault", () => {
   it("should not mistake the raw project id for a project name", () => {
     // LogsPage's own `projectName` falls back to the id while loading; callers must pass
     // project?.name instead, and an id must never read as the demo project.
-    const result = resolveDemoProjectDateRangeDefault(
+    const result = resolveProjectDateRangeDefault(
       "019feaba-9c9b-71c3-93f5-905be65789c5",
       true,
     );
@@ -63,32 +63,26 @@ describe("resolveDemoProjectDateRangeDefault", () => {
   // and the 24h default would never apply.
   describe("storageKeySuffix", () => {
     it("should give the demo project its own storage slot, named after the project", () => {
-      const result = resolveDemoProjectDateRangeDefault(
-        DEMO_PROJECT_NAME,
-        true,
-      );
+      const result = resolveProjectDateRangeDefault(DEMO_PROJECT_NAME, true);
 
       expect(result.storageKeySuffix).toBe(`-${DEMO_PROJECT_NAME}`);
     });
 
     it("should leave other projects on the shared storage slot", () => {
-      const result = resolveDemoProjectDateRangeDefault(
-        "My Real Project",
-        true,
-      );
+      const result = resolveProjectDateRangeDefault("My Real Project", true);
 
       expect(result.storageKeySuffix).toBe("");
     });
 
     it("should not claim the demo slot before the name resolves", () => {
-      const result = resolveDemoProjectDateRangeDefault(undefined, false);
+      const result = resolveProjectDateRangeDefault(undefined, false);
 
       expect(result.storageKeySuffix).toBe("");
     });
   });
 });
 
-describe("useDemoProjectDateRangeDefault", () => {
+describe("useProjectDateRangeDefault", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -97,7 +91,7 @@ describe("useDemoProjectDateRangeDefault", () => {
     mockProjectQuery({ name: DEMO_PROJECT_NAME });
 
     const { result } = renderHook(() =>
-      useDemoProjectDateRangeDefault("project-1"),
+      useProjectDateRangeDefault("project-1"),
     );
 
     expect(result.current.defaultValue).toBe(DATE_RANGE_PRESET_PAST_24_HOURS);
@@ -108,7 +102,7 @@ describe("useDemoProjectDateRangeDefault", () => {
     mockProjectQuery(undefined, true);
 
     const { result } = renderHook(() =>
-      useDemoProjectDateRangeDefault("project-1"),
+      useProjectDateRangeDefault("project-1"),
     );
 
     expect(result.current.initSyncReady).toBe(false);
@@ -120,7 +114,7 @@ describe("useDemoProjectDateRangeDefault", () => {
     // the URL sync for any caller without a project.
     mockProjectQuery(undefined, true);
 
-    const { result } = renderHook(() => useDemoProjectDateRangeDefault());
+    const { result } = renderHook(() => useProjectDateRangeDefault());
 
     expect(result.current.initSyncReady).toBe(true);
     expect(result.current.defaultValue).toBe(DEFAULT_DATE_PRESET);
@@ -132,7 +126,7 @@ describe("useDemoProjectDateRangeDefault", () => {
     mockProjectQuery(undefined, false);
 
     const { result } = renderHook(() =>
-      useDemoProjectDateRangeDefault("project-1"),
+      useProjectDateRangeDefault("project-1"),
     );
 
     expect(result.current.initSyncReady).toBe(true);
@@ -143,7 +137,7 @@ describe("useDemoProjectDateRangeDefault", () => {
   it("should not query when there is no projectId", () => {
     mockProjectQuery(undefined, true);
 
-    renderHook(() => useDemoProjectDateRangeDefault());
+    renderHook(() => useProjectDateRangeDefault());
 
     expect(useProjectById).toHaveBeenCalledWith(
       expect.anything(),
@@ -155,7 +149,7 @@ describe("useDemoProjectDateRangeDefault", () => {
     // Pages that own this query opt out of refetch-on-mount; re-observing it must not undo that.
     mockProjectQuery({ name: DEMO_PROJECT_NAME });
 
-    renderHook(() => useDemoProjectDateRangeDefault("project-1"));
+    renderHook(() => useProjectDateRangeDefault("project-1"));
 
     expect(useProjectById).toHaveBeenCalledWith(
       expect.anything(),

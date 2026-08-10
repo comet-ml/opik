@@ -20,7 +20,7 @@ import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
 import {
   useMetricDateRangeWithQueryAndStorage,
-  DemoProjectDateRangeDefault,
+  ProjectDateRangeDefault,
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
@@ -384,7 +384,7 @@ type ThreadsTabProps = {
   projectName: string;
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
-  dateRangeDefault: DemoProjectDateRangeDefault;
+  dateRangeDefault: ProjectDateRangeDefault;
 };
 
 export const ThreadsTab: React.FC<ThreadsTabProps> = ({

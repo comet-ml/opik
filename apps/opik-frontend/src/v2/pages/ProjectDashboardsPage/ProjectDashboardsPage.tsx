@@ -5,7 +5,7 @@ import Loader from "@/shared/Loader/Loader";
 import {
   useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
-  useDemoProjectDateRangeDefault,
+  useProjectDateRangeDefault,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
@@ -81,13 +81,13 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
 
   // Only the initial default changes — the picker still works, and non-demo projects keep the
   // workspace-wide 30-day default.
-  const demoDateRangeDefault = useDemoProjectDateRangeDefault(projectId);
+  const dateRangeDefault = useProjectDateRangeDefault(projectId);
 
   const { dateRange, handleDateRangeChange, minDate, maxDate, dateRangeValue } =
     useMetricDateRangeWithQueryAndStorage({
       key: "dashboard_time_range",
       localStorageKey: "opik-project-insights-daterange",
-      ...demoDateRangeDefault,
+      ...dateRangeDefault,
     });
 
   useEffect(() => {
