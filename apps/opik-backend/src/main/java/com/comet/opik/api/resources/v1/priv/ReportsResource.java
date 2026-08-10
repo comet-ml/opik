@@ -77,6 +77,7 @@ public class ReportsResource {
     @Path("/{reportId}/complete")
     @Operation(operationId = "completeReport", summary = "Complete report generation", description = "Callback from Ollie to update report status and content after generation.", responses = {
             @ApiResponse(responseCode = "204", description = "Report updated"),
+            @ApiResponse(responseCode = "400", description = "Status is not terminal"),
             @ApiResponse(responseCode = "404", description = "Report not found")
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)

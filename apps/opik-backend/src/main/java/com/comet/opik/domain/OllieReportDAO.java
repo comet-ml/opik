@@ -81,9 +81,15 @@ interface OllieReportDAO {
     List<String> findStalePendingWorkspaceIds(@Bind("staleMinutes") int staleMinutes);
 
     @SqlQuery("""
-            SELECT workspace_id FROM ollie_reports WHERE status = 'pending'
+            SELECT workspace_id, COUNT(*) AS pending_count FROM ollie_reports
+            WHERE status = 'pending'
+            GROUP BY workspace_id
             """)
-    List<String> findPendingWorkspaceIds();
+    @RegisterConstructorMapper(WorkspacePendingCount.class)
+    List<WorkspacePendingCount> countPendingByWorkspace();
+
+    record WorkspacePendingCount(String workspaceId, long pendingCount) {
+    }
 
     @SqlUpdate("""
             UPDATE ollie_reports SET status = 'failed', failure_reason = :failureReason

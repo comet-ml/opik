@@ -75,10 +75,9 @@ public record OllieReport(
             @JsonView(View.Write.class) @NotNull ReportStatus status,
             @JsonView(View.Write.class) String sessionId,
             @JsonView(View.Write.class) JsonNode recommendedActions,
-            @JsonView(View.Write.class) @Size(max = 64) @Schema(description = "Why the report failed. Use one of "
-                    + "the documented values so the UI and metrics can act on it; an unrecognised value is still "
-                    + "recorded, but renders as a generic failure.", allowableValues = {
-                            FailureReason.OUT_OF_CREDITS}) String failureReason) {
+            @JsonView(View.Write.class) @Size(max = 64) @Schema(description = "Why the report failed. Only "
+                    + "'out_of_credits' is acted on; any other value is recorded but renders as a generic "
+                    + "failure.") String failureReason) {
     }
 
     public static class FailureReason {

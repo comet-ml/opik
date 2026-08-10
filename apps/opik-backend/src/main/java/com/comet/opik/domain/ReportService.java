@@ -110,11 +110,9 @@ public class ReportService {
     private void recordPendingReports(ObservableLongMeasurement measurement) {
         try {
             transactionTemplate.inTransaction(READ_ONLY,
-                    handle -> handle.attach(OllieReportDAO.class).findPendingWorkspaceIds())
-                    .stream()
-                    .collect(Collectors.groupingBy(id -> id, Collectors.counting()))
-                    .forEach((workspaceId, count) -> measurement
-                            .record(count, Attributes.of(WORKSPACE_ID_KEY, workspaceId)));
+                    handle -> handle.attach(OllieReportDAO.class).countPendingByWorkspace())
+                    .forEach(row -> measurement
+                            .record(row.pendingCount(), Attributes.of(WORKSPACE_ID_KEY, row.workspaceId())));
         } catch (Exception e) {
             log.warn("Failed to read pending report count for metrics", e);
         }
@@ -294,19 +292,26 @@ public class ReportService {
     }
 
     public Map<String, Long> failStaleReports() {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
+        Map<String, Long> sweptByWorkspace = transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(OllieReportDAO.class);
-            Map<String, Long> sweptByWorkspace = dao
+            Map<String, Long> swept = dao
                     .findStalePendingWorkspaceIds(reportGenerationConfig.getStaleReportTimeoutMinutes()).stream()
                     .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
-            int failed = dao.failStaleReports(reportGenerationConfig.getStaleReportTimeoutMinutes(),
+            dao.failStaleReports(reportGenerationConfig.getStaleReportTimeoutMinutes(),
                     OllieReport.FailureReason.STALE_TIMEOUT);
-            if (failed > 0) {
-                log.info("Marked {} stale pending reports as failed", failed);
-            }
+            return swept;
+        });
+
+        // Reporting stays outside the transaction: a failure here must not roll back a sweep that already
+        // committed, leaving rows pending after the metric has counted them as swept.
+        if (!sweptByWorkspace.isEmpty()) {
+            log.info("Marked {} stale pending reports as failed",
+                    sweptByWorkspace.values().stream().mapToLong(Long::longValue).sum());
+            // No reason on the metric: a sweep can only ever be a stale timeout, so stage=sweep already says it.
+            // The row still records it, because ollie_reports has no stage column to carry that.
             sweptByWorkspace.forEach((workspaceId, count) -> finishedCounter.add(count,
                     failureAttributes(workspaceId, workspaceId, STAGE_SWEEP, null)));
-            return sweptByWorkspace;
-        });
+        }
+        return sweptByWorkspace;
     }
 }
