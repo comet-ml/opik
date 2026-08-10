@@ -257,20 +257,14 @@ class VertexAIClientGeneratorTest {
     @DisplayName("Client caching")
     class ClientCaching {
 
-        @Test
-        void reusesOneClientAcrossCallsWithTheSameCredentialsAndLocation() throws Exception {
+        @ParameterizedTest
+        @CsvSource({"global, global", "'  GLOBAL  ', global"})
+        @DisplayName("equivalent locations reuse one client")
+        void reusesOneClientForEquivalentLocations(String first, String second) {
             var generator = new VertexAIClientGenerator(clientConfig());
 
-            assertThat(clientFor(generator, "global", serviceAccountJson))
-                    .isSameAs(clientFor(generator, "global", serviceAccountJson));
-        }
-
-        @Test
-        void reusesOneClientWhenTheLocationOnlyDiffersInCasingOrPadding() throws Exception {
-            var generator = new VertexAIClientGenerator(clientConfig());
-
-            assertThat(clientFor(generator, "  GLOBAL  ", serviceAccountJson))
-                    .isSameAs(clientFor(generator, "global", serviceAccountJson));
+            assertThat(clientFor(generator, first, serviceAccountJson))
+                    .isSameAs(clientFor(generator, second, serviceAccountJson));
         }
 
         @Test
