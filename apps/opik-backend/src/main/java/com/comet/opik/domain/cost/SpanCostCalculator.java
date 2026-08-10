@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 @UtilityClass
@@ -16,6 +17,12 @@ class SpanCostCalculator {
     private static final String CACHE_CREATION_INPUT_TOKENS_KEY = "cache_creation_input_tokens";
     private static final String CACHE_READ_INPUT_TOKENS_OTEL_KEY = "cache_read.input_tokens";
     private static final String CACHE_CREATION_INPUT_TOKENS_OTEL_KEY = "cache_creation.input_tokens";
+    private static final List<String> OPENAI_CACHE_READ_USAGE_KEYS = List.of(
+            "original_usage.prompt_tokens_details.cached_tokens",
+            "original_usage.input_tokens_details.cached_tokens",
+            "prompt_tokens_details.cached_tokens",
+            CACHE_READ_INPUT_TOKENS_KEY,
+            CACHE_READ_INPUT_TOKENS_OTEL_KEY);
 
     public static BigDecimal textGenerationCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
         int promptTokens = usage.getOrDefault("prompt_tokens", 0);
@@ -61,11 +68,7 @@ class SpanCostCalculator {
         int totalPromptTokens = inputTokens;
 
         // Get the cached read input tokens; fall back to OTel bare key for LiteLLM/OTel spans
-        int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens",
-                usage.getOrDefault("original_usage.input_tokens_details.cached_tokens",
-                        usage.getOrDefault("prompt_tokens_details.cached_tokens",
-                                usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY,
-                                        usage.getOrDefault(CACHE_READ_INPUT_TOKENS_OTEL_KEY, 0)))));
+        int cachedReadInputTokens = firstPositiveUsageValue(usage, OPENAI_CACHE_READ_USAGE_KEYS);
 
         // Audio input tokens (OpenAI realtime models like gpt-4o-realtime-preview, gpt-realtime)
         // are billed at a separate rate when the model publishes input_cost_per_audio_token.
@@ -119,6 +122,16 @@ class SpanCostCalculator {
                 .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)))
                 .add(modelPrice.effectiveCacheReadInputTokenPrice(totalPromptTokens)
                         .multiply(BigDecimal.valueOf(cachedReadInputTokens)));
+    }
+
+    private static int firstPositiveUsageValue(Map<String, Integer> usage, List<String> keys) {
+        for (String key : keys) {
+            Integer value = usage.get(key);
+            if (value != null && value > 0) {
+                return value;
+            }
+        }
+        return 0;
     }
 
     /**

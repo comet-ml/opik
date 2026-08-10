@@ -158,7 +158,15 @@ class SpanCostCalculatorTest {
                         Map.of("prompt_tokens", 1000, "completion_tokens", 100,
                                 "original_usage.input_tokens_details.cached_tokens", 300),
                         "Responses API input_tokens_details.cached_tokens key",
-                        "10.50"));
+                        "10.50"),
+                // A zero-valued higher-priority representation should not mask a nonzero
+                // cached-token value from another supported representation.
+                Arguments.of(
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                                "original_usage.prompt_tokens_details.cached_tokens", 0,
+                                "prompt_tokens_details.cached_tokens", 200),
+                        "zero-valued higher-priority key does not mask a nonzero fallback",
+                        "11.00"));
     }
 
     @ParameterizedTest(name = "{1}")
