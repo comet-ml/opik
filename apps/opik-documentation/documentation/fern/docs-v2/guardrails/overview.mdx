@@ -10,6 +10,25 @@ layout: overview
 
 Guardrails are real-time checks that run inline with your LLM calls to catch unsafe inputs and outputs before they reach a user. Unlike offline testing, guardrails operate in production on live traffic, acting as a safety layer around your application.
 
+## What Opik offers
+
+- **Five guard types** — PII detection, allowed and restricted topics, prompt injection and jailbreak detection, an LLM-as-a-judge check written in plain language, and your own trained classifier.
+- **Stored policies** — define your checks once in the Opik UI and reference them by name from your application. Workspace-wide policies can also be enforced on every application, whether or not it asks for them.
+- **Model fine-tuning** — for a check the built-in guards do not cover, fine-tune a language model on your own labeled examples. Opik hosts the training, reports how accurate the result is, and serves the model inline. No training infrastructure of your own, and no deployment step.
+- **Full observability** — every guardrail run is logged as a span on the trace it protects, so you can inspect what failed and track failure rates over time.
+
+## Concepts
+
+Three words come up throughout these pages, and it helps to separate them up front.
+
+| Term | What it is |
+| --- | --- |
+| **Guard** | One check, configured — for example "block credit card numbers". Each guard has a type: PII, topic, prompt injection, LLM judge, or custom classifier. |
+| **Policy** | A named group of guards, stored in your workspace. Your application references the name, so the checks can change without a code change. |
+| **Guardrail** | What your application actually calls. You build it from one or more policies, and it runs every guard those policies hold on each piece of text you give it. |
+
+In short: a policy is configuration, a guardrail is what executes. One guardrail can combine several policies, and one policy can be used by any number of applications.
+
 ## Why guardrails matter
 
 LLMs are non-deterministic. The same prompt can produce different responses, and no amount of pre-production testing can guarantee that every response in production will be safe. Guardrails close that gap by enforcing your requirements on every request, as it happens.
@@ -49,8 +68,14 @@ Use **[online evaluation](/production/online-evaluation/rules)** when you want t
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Guardrails" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
-    Set up PII, topic, and manual guardrails with the Python SDK.
+  <Card title="Policies" href="/guardrails/policies" icon="fa-regular fa-list-check">
+    Define your checks once in the UI and reference them by name from your application.
+  </Card>
+  <Card title="Guards" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
+    What each of the five guard types detects, and what you configure on it.
+  </Card>
+  <Card title="Custom models" href="/guardrails/custom-guardrails" icon="fa-regular fa-brain">
+    Fine-tune a model on your own labeled examples for a check of your own.
   </Card>
   <Card title="Online evaluation" href="/production/online-evaluation/rules" icon="fa-regular fa-gauge-high">
     Score production traces with automated LLM-as-a-Judge metrics.
