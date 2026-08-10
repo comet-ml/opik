@@ -561,7 +561,10 @@ public class CostService {
         }
 
         if (isPositive(cacheCreationInputTokenPrice) || isPositive(cacheReadInputTokenPrice)) {
-            return PROVIDERS_CACHE_COST_CALCULATOR.getOrDefault(provider, SpanCostCalculator::textGenerationCost);
+            BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> providerCalculator = PROVIDERS_CACHE_COST_CALCULATOR
+                    .getOrDefault(provider, SpanCostCalculator::textGenerationCost);
+
+            return (modelPrice, usage) -> calculateCacheCostByUsageShape(modelPrice, usage, providerCalculator);
         }
 
         if (isPositive(inputPrice) || isPositive(outputPrice)) {
@@ -569,6 +572,60 @@ public class CostService {
         }
 
         return SpanCostCalculator::defaultCost;
+    }
+
+    private static BigDecimal calculateCacheCostByUsageShape(
+            ModelPrice modelPrice,
+            Map<String, Integer> usage,
+            BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> providerCalculator) {
+
+        // Cache-aware calculators use different semantics: OpenAI and Google include cached input
+        // in the prompt total, while Anthropic and Bedrock report cached buckets separately. Prefer
+        // explicit shape signals when they are present, and keep the provider fallback for ambiguous
+        // payloads such as a bare cache-read-only OTel usage map.
+        if (containsAnyUsageKey(usage,
+                "original_usage.input_tokens",
+                "original_usage.output_tokens",
+                "original_usage.cache_read_input_tokens",
+                "original_usage.cache_creation_input_tokens",
+                "cache_creation_input_tokens",
+                "cache_read.input_tokens",
+                "cache_creation.input_tokens")) {
+            return SpanCostCalculator.textGenerationWithCacheCostAnthropic(modelPrice, usage);
+        }
+
+        if (containsAnyUsageKey(usage,
+                "original_usage.inputTokens",
+                "original_usage.outputTokens",
+                "original_usage.cacheReadInputTokens",
+                "original_usage.cacheWriteInputTokens")) {
+            return SpanCostCalculator.textGenerationWithCacheCostBedrock(modelPrice, usage);
+        }
+
+        if (containsAnyUsageKey(usage,
+                "original_usage.prompt_token_count",
+                "original_usage.candidates_token_count",
+                "original_usage.cached_content_token_count")) {
+            return SpanCostCalculator.textGenerationWithCacheCostGoogle(modelPrice, usage);
+        }
+
+        if (containsAnyUsageKey(usage,
+                "original_usage.prompt_tokens_details.cached_tokens",
+                "original_usage.input_tokens_details.cached_tokens",
+                "prompt_tokens_details.cached_tokens")) {
+            return SpanCostCalculator.textGenerationWithCacheCostOpenAI(modelPrice, usage);
+        }
+
+        return providerCalculator.apply(modelPrice, usage);
+    }
+
+    private static boolean containsAnyUsageKey(Map<String, Integer> usage, String... keys) {
+        for (String key : keys) {
+            if (usage.containsKey(key)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isPositive(BigDecimal value) {

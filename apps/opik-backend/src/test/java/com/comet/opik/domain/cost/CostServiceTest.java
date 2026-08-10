@@ -38,6 +38,64 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
 
+    @Test
+    void calculateCostUsesUsageShapeWhenProviderCacheCalculatorDoesNotMatch() {
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 800,
+                "original_usage.output_tokens", 100,
+                "original_usage.cache_read_input_tokens", 200,
+                "original_usage.cache_creation_input_tokens", 50);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // Anthropic-style usage keeps cached tokens separate from input_tokens. gpt-4o pricing is
+        // 800 * 0.0000025 + 100 * 0.00001 + 200 * 0.00000125 = 0.00325.
+        assertThat(cost).isEqualByComparingTo("0.00325");
+    }
+
+    @Test
+    void calculateCostUsesAnthropicCalculatorForBareCacheCreationToken() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 800,
+                "completion_tokens", 100,
+                "cache_read_input_tokens", 200,
+                "cache_creation_input_tokens", 50);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // Bare cache_creation_input_tokens identifies the Anthropic-style split: prompt_tokens is
+        // the non-cached input bucket, so 800 * 0.0000025 + 100 * 0.00001 + 200 * 0.00000125 = 0.00325.
+        assertThat(cost).isEqualByComparingTo("0.00325");
+    }
+
+    @Test
+    void calculateCostUsesOpenAICalculatorForOpenAIUsageShape() {
+        Map<String, Integer> usage = Map.of(
+                "original_usage.prompt_tokens", 800,
+                "original_usage.completion_tokens", 100,
+                "original_usage.prompt_tokens_details.cached_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+
+        // OpenAI-style usage includes cached tokens in prompt_tokens. 600 * 0.000001 +
+        // 100 * 0.000005 + 200 * 0.0000001 = 0.00112.
+        assertThat(cost).isEqualByComparingTo("0.00112");
+    }
+
+    @Test
+    void calculateCostUsesAnthropicCalculatorForNestedOtelUsageShape() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 800,
+                "completion_tokens", 100,
+                "cache_read.input_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openai", usage, null);
+
+        // The nested OTel cache shape keeps cached input separate from prompt_tokens. 800 *
+        // 0.0000025 + 100 * 0.00001 + 200 * 0.00000125 = 0.00325.
+        assertThat(cost).isEqualByComparingTo("0.00325");
+    }
+
     /**
      * Covers every branch of the new audio-token handling in
      * {@link SpanCostCalculator#textGenerationCost}:
