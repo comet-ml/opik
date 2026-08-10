@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 
 @Slf4j
@@ -85,6 +86,22 @@ public class CostService {
                     Map.entry("vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle),
                     Map.entry("gemini", SpanCostCalculator::textGenerationWithCacheCostGoogle),
                     Map.entry("vertex_ai-anthropic_models", SpanCostCalculator::textGenerationWithCacheCostAnthropic));
+
+    private static final Set<String> OTEL_INCLUDED_CACHE_USAGE_KEYS = Set.of(
+            "cache_read.input_tokens",
+            "cache_creation.input_tokens");
+    private static final Set<String> ANTHROPIC_USAGE_KEYS = Set.of(
+            "original_usage.cache_read_input_tokens",
+            "original_usage.cache_creation_input_tokens");
+    private static final Set<String> BEDROCK_USAGE_KEYS = Set.of(
+            "original_usage.cacheReadInputTokens",
+            "original_usage.cacheWriteInputTokens");
+    private static final Set<String> GOOGLE_USAGE_KEYS = Set.of(
+            "original_usage.cached_content_token_count");
+    private static final Set<String> OPENAI_USAGE_KEYS = Set.of(
+            "original_usage.prompt_tokens_details.cached_tokens",
+            "original_usage.input_tokens_details.cached_tokens",
+            "prompt_tokens_details.cached_tokens");
 
     static {
         try {
@@ -579,53 +596,62 @@ public class CostService {
             Map<String, Integer> usage,
             BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> providerCalculator) {
 
-        // Cache-aware calculators use different semantics: OpenAI and Google include cached input
-        // in the prompt total, while Anthropic and Bedrock report cached buckets separately. Prefer
-        // explicit shape signals when they are present, and keep the provider fallback for ambiguous
-        // payloads such as a bare cache-read-only OTel usage map.
-        if (containsAnyUsageKey(usage,
-                "original_usage.input_tokens",
-                "original_usage.output_tokens",
-                "original_usage.cache_read_input_tokens",
-                "original_usage.cache_creation_input_tokens",
-                "cache_creation_input_tokens",
-                "cache_read.input_tokens",
-                "cache_creation.input_tokens")) {
-            return SpanCostCalculator.textGenerationWithCacheCostAnthropic(modelPrice, usage);
+        CacheUsageShape shape = findSingleCacheUsageShape(usage);
+        if (shape != null) {
+            return switch (shape) {
+                case OTEL -> SpanCostCalculator.textGenerationWithCacheCostOtel(modelPrice, usage);
+                case ANTHROPIC -> SpanCostCalculator.textGenerationWithCacheCostAnthropic(modelPrice, usage);
+                case BEDROCK -> SpanCostCalculator.textGenerationWithCacheCostBedrock(modelPrice, usage);
+                case GOOGLE -> SpanCostCalculator.textGenerationWithCacheCostGoogle(modelPrice, usage);
+                case OPENAI -> SpanCostCalculator.textGenerationWithCacheCostOpenAI(modelPrice, usage);
+            };
         }
 
-        if (containsAnyUsageKey(usage,
-                "original_usage.inputTokens",
-                "original_usage.outputTokens",
-                "original_usage.cacheReadInputTokens",
-                "original_usage.cacheWriteInputTokens")) {
-            return SpanCostCalculator.textGenerationWithCacheCostBedrock(modelPrice, usage);
-        }
-
-        if (containsAnyUsageKey(usage,
-                "original_usage.prompt_token_count",
-                "original_usage.candidates_token_count",
-                "original_usage.cached_content_token_count")) {
-            return SpanCostCalculator.textGenerationWithCacheCostGoogle(modelPrice, usage);
-        }
-
-        if (containsAnyUsageKey(usage,
-                "original_usage.prompt_tokens_details.cached_tokens",
-                "original_usage.input_tokens_details.cached_tokens",
-                "prompt_tokens_details.cached_tokens")) {
-            return SpanCostCalculator.textGenerationWithCacheCostOpenAI(modelPrice, usage);
-        }
-
+        // A cache-read-only payload using bare cache_read_input_tokens and mixed-provider maps are
+        // intentionally left to the provider calculator. The former is ambiguous across
+        // integrations; the latter cannot be safely interpreted by a single shape detector.
         return providerCalculator.apply(modelPrice, usage);
     }
 
-    private static boolean containsAnyUsageKey(Map<String, Integer> usage, String... keys) {
+    private static CacheUsageShape findSingleCacheUsageShape(Map<String, Integer> usage) {
+        CacheUsageShape match = null;
+        int matches = 0;
+
+        for (CacheUsageShape shape : CacheUsageShape.values()) {
+            if (containsAnyUsageKey(usage, usageKeys(shape))) {
+                match = shape;
+                matches++;
+            }
+        }
+
+        return matches == 1 ? match : null;
+    }
+
+    private static Set<String> usageKeys(CacheUsageShape shape) {
+        return switch (shape) {
+            case OTEL -> OTEL_INCLUDED_CACHE_USAGE_KEYS;
+            case ANTHROPIC -> ANTHROPIC_USAGE_KEYS;
+            case BEDROCK -> BEDROCK_USAGE_KEYS;
+            case GOOGLE -> GOOGLE_USAGE_KEYS;
+            case OPENAI -> OPENAI_USAGE_KEYS;
+        };
+    }
+
+    private static boolean containsAnyUsageKey(Map<String, Integer> usage, Set<String> keys) {
         for (String key : keys) {
             if (usage.containsKey(key)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private enum CacheUsageShape {
+        OTEL,
+        ANTHROPIC,
+        BEDROCK,
+        GOOGLE,
+        OPENAI
     }
 
     private static boolean isPositive(BigDecimal value) {

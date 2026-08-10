@@ -316,4 +316,32 @@ class SpanCostCalculatorTest {
                 Arguments.of(anthropic, "Anthropic"),
                 Arguments.of(bedrock, "Bedrock"));
     }
+
+    @ParameterizedTest(name = "{1}")
+    @MethodSource("provideOtelIncludedCacheCostCases")
+    void textGenerationWithCacheCostOtelSubtractsIncludedCacheTokens(
+            Map<String, Integer> usage, String description, String expectedCost) {
+        ModelPrice modelPrice = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .cacheCreationInputTokenPrice(new BigDecimal("0.015"))
+                .cacheReadInputTokenPrice(new BigDecimal("0.005"))
+                .build();
+
+        BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostOtel(modelPrice, usage);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideOtelIncludedCacheCostCases() {
+        return Stream.of(
+                // input=1000 includes cache_read=200, so only 800 regular input tokens are billed.
+                Arguments.of(Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                        "cache_read.input_tokens", 200),
+                        "OTel cache-read usage", "11.00"),
+                // input=1000 includes cache_read=200 and cache_creation=50, so 750 regular input tokens remain.
+                Arguments.of(Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                        "cache_read.input_tokens", 200, "cache_creation.input_tokens", 50),
+                        "OTel cache-read and cache-creation usage", "11.25"));
+    }
 }

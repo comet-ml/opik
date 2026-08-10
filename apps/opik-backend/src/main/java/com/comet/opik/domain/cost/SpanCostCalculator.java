@@ -120,6 +120,26 @@ class SpanCostCalculator {
                         .multiply(BigDecimal.valueOf(cachedReadInputTokens)));
     }
 
+    /**
+     * Calculates cost for the OpenTelemetry GenAI usage shape, where cache buckets are included in
+     * {@code prompt_tokens} and reported again as nested cache usage keys.
+     */
+    public static BigDecimal textGenerationWithCacheCostOtel(@NonNull ModelPrice modelPrice,
+            @NonNull Map<String, Integer> usage) {
+        int inputTokens = usage.getOrDefault("prompt_tokens", 0);
+        int outputTokens = usage.getOrDefault("completion_tokens", 0);
+        int cacheReadInputTokens = usage.getOrDefault(CACHE_READ_INPUT_TOKENS_OTEL_KEY, 0);
+        int cacheCreationInputTokens = usage.getOrDefault(CACHE_CREATION_INPUT_TOKENS_OTEL_KEY, 0);
+        int nonCachedInputTokens = Math.max(0, inputTokens - cacheReadInputTokens - cacheCreationInputTokens);
+
+        return modelPrice.effectiveInputPrice(inputTokens).multiply(BigDecimal.valueOf(nonCachedInputTokens))
+                .add(modelPrice.effectiveOutputPrice(inputTokens).multiply(BigDecimal.valueOf(outputTokens)))
+                .add(modelPrice.effectiveCacheReadInputTokenPrice(inputTokens)
+                        .multiply(BigDecimal.valueOf(cacheReadInputTokens)))
+                .add(modelPrice.effectiveCacheCreationInputTokenPrice(inputTokens)
+                        .multiply(BigDecimal.valueOf(cacheCreationInputTokens)));
+    }
+
     public static BigDecimal textGenerationWithCacheCostAnthropic(@NonNull ModelPrice modelPrice,
             @NonNull Map<String, Integer> usage) {
         return textGenerationWithCachedTokensNotIncludedInCost(modelPrice, usage, "original_usage.input_tokens",
