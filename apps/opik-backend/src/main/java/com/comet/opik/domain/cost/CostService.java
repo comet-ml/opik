@@ -102,6 +102,18 @@ public class CostService {
             "original_usage.prompt_tokens_details.cached_tokens",
             "original_usage.input_tokens_details.cached_tokens",
             "prompt_tokens_details.cached_tokens");
+    private static final List<String> ANTHROPIC_INPUT_USAGE_KEYS = List.of(
+            "original_usage.input_tokens",
+            "prompt_tokens");
+    private static final List<String> BEDROCK_INPUT_USAGE_KEYS = List.of(
+            "original_usage.inputTokens",
+            "prompt_tokens");
+    private static final List<String> GOOGLE_INPUT_USAGE_KEYS = List.of(
+            "original_usage.prompt_token_count",
+            "prompt_tokens");
+    private static final List<String> OPENAI_INPUT_USAGE_KEYS = List.of(
+            "original_usage.prompt_tokens",
+            "prompt_tokens");
 
     static {
         try {
@@ -607,24 +619,24 @@ public class CostService {
             };
         }
 
-        // A cache-read-only payload using bare cache_read_input_tokens and mixed-provider maps are
-        // intentionally left to the provider calculator. The former is ambiguous across
-        // integrations; the latter cannot be safely interpreted by a single shape detector.
+        // Payloads with no valid, unambiguous shape remain on the provider calculator. This covers
+        // bare cache keys, inconsistent cache totals, and mixed-provider maps.
         return providerCalculator.apply(modelPrice, usage);
     }
 
     private static CacheUsageShape findSingleCacheUsageShape(Map<String, Integer> usage) {
         CacheUsageShape match = null;
-        int matches = 0;
 
         for (CacheUsageShape shape : CacheUsageShape.values()) {
             if (containsAnyUsageKey(usage, usageKeys(shape))) {
+                if (!isValidUsageShape(usage, shape) || match != null) {
+                    return null;
+                }
                 match = shape;
-                matches++;
             }
         }
 
-        return matches == 1 ? match : null;
+        return match;
     }
 
     private static Set<String> usageKeys(CacheUsageShape shape) {
@@ -637,6 +649,92 @@ public class CostService {
         };
     }
 
+    private static boolean isValidUsageShape(Map<String, Integer> usage, CacheUsageShape shape) {
+        return switch (shape) {
+            case OTEL -> isValidOtelUsageShape(usage);
+            case ANTHROPIC -> isValidSeparatedCacheUsageShape(usage, ANTHROPIC_INPUT_USAGE_KEYS,
+                    ANTHROPIC_USAGE_KEYS);
+            case BEDROCK -> isValidSeparatedCacheUsageShape(usage, BEDROCK_INPUT_USAGE_KEYS,
+                    BEDROCK_USAGE_KEYS);
+            case GOOGLE -> isValidInclusiveCacheUsageShape(usage, GOOGLE_INPUT_USAGE_KEYS, GOOGLE_USAGE_KEYS);
+            case OPENAI -> isValidInclusiveCacheUsageShape(usage, OPENAI_INPUT_USAGE_KEYS, OPENAI_USAGE_KEYS);
+        };
+    }
+
+    private static boolean isValidOtelUsageShape(Map<String, Integer> usage) {
+        Integer inputTokens = usage.get("prompt_tokens");
+        if (!isNonNegative(inputTokens)) {
+            return false;
+        }
+
+        long cacheTokens = 0;
+        boolean hasPositiveCacheTokens = false;
+        for (String key : OTEL_INCLUDED_CACHE_USAGE_KEYS) {
+            if (usage.containsKey(key)) {
+                Integer value = usage.get(key);
+                if (!isNonNegative(value)) {
+                    return false;
+                }
+                cacheTokens += value;
+                hasPositiveCacheTokens |= value > 0;
+            }
+        }
+
+        return hasPositiveCacheTokens && cacheTokens <= inputTokens;
+    }
+
+    private static boolean isValidSeparatedCacheUsageShape(Map<String, Integer> usage,
+            List<String> inputKeys, Set<String> cacheKeys) {
+        if (!isNonNegative(firstUsageValue(usage, inputKeys))) {
+            return false;
+        }
+
+        return hasNonNegativePositiveCacheValue(usage, cacheKeys);
+    }
+
+    private static boolean isValidInclusiveCacheUsageShape(Map<String, Integer> usage,
+            List<String> inputKeys, Set<String> cacheKeys) {
+        Integer inputTokens = firstUsageValue(usage, inputKeys);
+        if (!isNonNegative(inputTokens)) {
+            return false;
+        }
+
+        long cacheValue = 0;
+        boolean hasPositiveCacheValue = false;
+        for (String key : cacheKeys) {
+            if (usage.containsKey(key)) {
+                Integer value = usage.get(key);
+                if (!isNonNegative(value)) {
+                    return false;
+                }
+                if (value > 0) {
+                    hasPositiveCacheValue = true;
+                    if (cacheValue != 0 && cacheValue != value) {
+                        return false;
+                    }
+                    cacheValue = value;
+                }
+            }
+        }
+
+        return hasPositiveCacheValue && cacheValue <= inputTokens;
+    }
+
+    private static boolean hasNonNegativePositiveCacheValue(Map<String, Integer> usage,
+            Set<String> cacheKeys) {
+        boolean hasPositiveCacheValue = false;
+        for (String key : cacheKeys) {
+            if (usage.containsKey(key)) {
+                Integer value = usage.get(key);
+                if (!isNonNegative(value)) {
+                    return false;
+                }
+                hasPositiveCacheValue |= value > 0;
+            }
+        }
+        return hasPositiveCacheValue;
+    }
+
     private static boolean containsAnyUsageKey(Map<String, Integer> usage, Set<String> keys) {
         for (String key : keys) {
             if (usage.containsKey(key)) {
@@ -644,6 +742,19 @@ public class CostService {
             }
         }
         return false;
+    }
+
+    private static Integer firstUsageValue(Map<String, Integer> usage, List<String> keys) {
+        for (String key : keys) {
+            if (usage.containsKey(key)) {
+                return usage.get(key);
+            }
+        }
+        return null;
+    }
+
+    private static boolean isNonNegative(Integer value) {
+        return value != null && value >= 0;
     }
 
     private enum CacheUsageShape {

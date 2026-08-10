@@ -141,6 +141,21 @@ class CostServiceTest {
     }
 
     @Test
+    void calculateCostFallsBackForInconsistentNestedOtelCacheUsage() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 100,
+                "completion_tokens", 10,
+                "cache_read.input_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+
+        // The cache marker cannot describe an inclusive cache bucket when it exceeds the prompt
+        // total. Fall back to the provider calculator: 100 * 0.000001 + 10 * 0.000005
+        // + 200 * 0.0000001 = 0.00017.
+        assertThat(cost).isEqualByComparingTo("0.00017");
+    }
+
+    @Test
     void calculateCostFallsBackToProviderCalculatorForMixedUsageShapes() {
         Map<String, Integer> usage = Map.of(
                 "prompt_tokens", 1_000,
