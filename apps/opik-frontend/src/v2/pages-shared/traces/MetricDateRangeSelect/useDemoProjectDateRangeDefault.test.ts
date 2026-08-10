@@ -91,4 +91,39 @@ describe("useDemoProjectDateRangeDefault", () => {
       expect.objectContaining({ enabled: false }),
     );
   });
+
+  // The stored range is sticky across projects and outranks any defaultValue, so without its own
+  // storage slot the demo project would inherit whatever range was last picked on a real project
+  // and the 24h default would never apply.
+  describe("storageKeySuffix", () => {
+    it("should give the demo project its own storage slot", () => {
+      mockProjectQuery({ name: DEMO_PROJECT_NAME });
+
+      const { result } = renderHook(() =>
+        useDemoProjectDateRangeDefault("project-1"),
+      );
+
+      expect(result.current.storageKeySuffix).toBe(`-${DEMO_PROJECT_NAME}`);
+    });
+
+    it("should leave other projects on the shared storage slot", () => {
+      mockProjectQuery({ name: "My Real Project" });
+
+      const { result } = renderHook(() =>
+        useDemoProjectDateRangeDefault("project-1"),
+      );
+
+      expect(result.current.storageKeySuffix).toBe("");
+    });
+
+    it("should not claim the demo slot before the project name resolves", () => {
+      mockProjectQuery(undefined, true);
+
+      const { result } = renderHook(() =>
+        useDemoProjectDateRangeDefault("project-1"),
+      );
+
+      expect(result.current.storageKeySuffix).toBe("");
+    });
+  });
 });

@@ -173,8 +173,11 @@ def rebase_span_tree(trace_spans, new_trace_start):
     few hours while traces spread across 30 days, leaving most spans dated up to 30 days
     *after* the trace they belong to. Shifting spans by their trace's delta would carry that
     skew along and push them past now, tripping the too_far_future check. Re-anchoring on the
-    root span drops the skew instead: each tree is internally consistent and exactly as long
-    as its trace, so it ends up filling the trace's window.
+    root span drops the skew instead.
+
+    Only the root span is positioned; span durations are whatever the dataset already had, so
+    a tree filling its trace's window exactly is a property of the demo data (verified for all
+    116 trees by test_demo_timeline) rather than something enforced here.
 
     Returns:
     - dict: old span id -> (start_time, end_time)
@@ -389,7 +392,11 @@ def build_span_writes(spans, span_times, context: DemoDataContext, project_name:
         # Use the mapped UUIDs from context
         span["id"] = get_new_uuid(context, old_span_id)
         span["trace_id"] = get_new_uuid(context, original_span["trace_id"])
-        if "parent_span_id" in span:
+        # Remap only a real parent id. Testing for the key alone would also match a present-but-
+        # empty value, and get_new_uuid would happily mint a parent for it — turning a root span
+        # into a child of a span that does not exist. This also keeps root detection identical to
+        # rebase_span_tree, so the two can't disagree about which spans are roots.
+        if span.get("parent_span_id"):
             span["parent_span_id"] = get_new_uuid(context, span["parent_span_id"])
         # Attach project_name directly so the SpanWrite targets the right project.
         span["project_name"] = project_name

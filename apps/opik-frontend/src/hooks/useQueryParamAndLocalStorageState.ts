@@ -24,11 +24,11 @@ type UseQueryParamAndLocalStorageStateParams<T> = {
   /**
    * Holds back the init sync until the caller's `defaultValue` is settled.
    *
-   * The sync below writes the current value to the URL once, on mount. A caller whose
-   * `defaultValue` depends on async data (say, a fetched project) would otherwise have the
-   * placeholder default pinned into the URL before the real one arrives, and the URL then wins
-   * forever. Passing `false` until the data lands defers the write to the first render that
-   * knows the right default. Ignored unless `syncQueryWithLocalStorageOnInit` is set.
+   * The sync below writes the current value to the URL once, on the first render where it is
+   * eligible — by default that is mount, but `false` here pushes it to the first render that
+   * passes. A caller whose `defaultValue` depends on async data (say, a fetched project) would
+   * otherwise have the placeholder default pinned into the URL before the real one arrives, and
+   * the URL then wins forever. Ignored unless `syncQueryWithLocalStorageOnInit` is set.
    */
   initSyncReady?: boolean;
   syncLocalStorageAcrossTabs?: boolean;
@@ -58,7 +58,8 @@ const useQueryParamAndLocalStorageState = <T>({
     queryOptions,
   );
 
-  // sync localStorage → URL on mount, only when URL has no value
+  // sync localStorage → URL once, on the first render where initSyncReady passes (mount unless a
+  // caller defers it), and only when the URL has no value
   useEffect(() => {
     if (
       syncQueryWithLocalStorageOnInit &&

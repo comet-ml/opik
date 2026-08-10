@@ -193,4 +193,77 @@ describe("useMetricDateRangeWithQueryAndStorage", () => {
       );
     });
   });
+
+  describe("storageKeySuffix", () => {
+    it("should append the suffix to an explicit localStorage key", () => {
+      renderHook(() =>
+        useMetricDateRangeWithQueryAndStorage({
+          localStorageKey: "opik-project-insights-daterange",
+          storageKeySuffix: "-some-scope",
+        }),
+      );
+
+      expect(useQueryParamAndLocalStorageState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          localStorageKey: "opik-project-insights-daterange-some-scope",
+        }),
+      );
+    });
+
+    it("should append the suffix to the key derived from the URL key", () => {
+      renderHook(() =>
+        useMetricDateRangeWithQueryAndStorage({
+          storageKeySuffix: "-some-scope",
+        }),
+      );
+
+      expect(useQueryParamAndLocalStorageState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          localStorageKey: "local-time_range-some-scope",
+        }),
+      );
+    });
+
+    it("should leave the key untouched when no suffix is given", () => {
+      renderHook(() =>
+        useMetricDateRangeWithQueryAndStorage({
+          localStorageKey: "opik-project-insights-daterange",
+        }),
+      );
+
+      expect(useQueryParamAndLocalStorageState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          localStorageKey: "opik-project-insights-daterange",
+        }),
+      );
+    });
+
+    // Regression: a sticky range persisted by another project must not mask the demo default.
+    // A suffixed key reads a different slot, so the stored value simply is not seen.
+    it("should not let a value stored under the unsuffixed key win", () => {
+      const storage: Record<string, string> = {
+        "opik-project-insights-daterange": DEFAULT_DATE_PRESET,
+      };
+      vi.mocked(useQueryParamAndLocalStorageState).mockImplementation(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ({ localStorageKey, defaultValue }: any) => [
+          storage[localStorageKey] ?? defaultValue,
+          mockSetValue,
+        ],
+      );
+
+      const { result } = renderHook(() =>
+        useMetricDateRangeWithQueryAndStorage({
+          localStorageKey: "opik-project-insights-daterange",
+          defaultValue: DATE_RANGE_PRESET_PAST_24_HOURS,
+          storageKeySuffix: "-some-scope",
+        }),
+      );
+
+      expect(result.current.dateRangeValue).toBe(
+        DATE_RANGE_PRESET_PAST_24_HOURS,
+      );
+      expect(result.current.interval).toBe(INTERVAL_TYPE.HOURLY);
+    });
+  });
 });

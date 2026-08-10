@@ -17,6 +17,8 @@ import pytest
 
 from opik_backend.demo_data_generator import (
     DEMO_ID_MAX_AGE,
+    DemoDataContext,
+    build_span_writes,
     compress_demo_timeline,
     rebase_span_tree,
     uuid7_from_datetime,
@@ -225,6 +227,72 @@ class TestStructurePreserved:
         buckets = collections.Counter(
             int((NOW - start).total_seconds() // 3600) for start, _ in trace_times.values())
         assert len(buckets) >= 8, f"traces clumped into {len(buckets)} hourly buckets: {buckets}"
+
+
+class TestRootSpanDetection:
+    """A root span must survive as a root through build_span_writes.
+
+    Testing for the presence of the `parent_span_id` key alone would also match a present-but-empty
+    value, and the id remapping would mint a parent for it — making the span a child of a span that
+    was never written. rebase_span_tree treats the same values as rootless, so the two have to agree
+    or a trace's tree gets anchored on one span and parented on another.
+    """
+
+    @pytest.mark.parametrize("parent_value", [None, ""])
+    def test_empty_parent_span_id_stays_empty(self, parent_value):
+        start = datetime.datetime(2026, 3, 17, 10, 0, 0)
+        span = {
+            "id": "span-1",
+            "trace_id": "trace-1",
+            "parent_span_id": parent_value,
+            "start_time": start,
+            "end_time": start + datetime.timedelta(seconds=1),
+        }
+
+        writes = build_span_writes(
+            [span], {"span-1": (start, start + datetime.timedelta(seconds=1))},
+            DemoDataContext(), "proj")
+
+        assert writes[0].parent_span_id == parent_value
+
+    def test_a_real_parent_is_still_remapped(self):
+        start = datetime.datetime(2026, 3, 17, 10, 0, 0)
+        times = {
+            "root": (start, start + datetime.timedelta(seconds=2)),
+            "child": (start, start + datetime.timedelta(seconds=1)),
+        }
+        spans = [
+            {"id": "root", "trace_id": "trace-1",
+             "start_time": times["root"][0], "end_time": times["root"][1]},
+            {"id": "child", "trace_id": "trace-1", "parent_span_id": "root",
+             "start_time": times["child"][0], "end_time": times["child"][1]},
+        ]
+
+        writes = build_span_writes(spans, times, DemoDataContext(), "proj")
+        by_old_order = {write.id: write for write in writes}
+        child = next(w for w in writes if w.parent_span_id)
+
+        # The parent points at the root's *new* id, not the placeholder from the dataset.
+        assert child.parent_span_id in by_old_order
+        assert child.parent_span_id != "root"
+
+    def test_rebase_agrees_with_build_on_what_is_a_root(self):
+        start = datetime.datetime(2026, 3, 17, 10, 0, 0)
+        span = {
+            "id": "span-1",
+            "trace_id": "trace-1",
+            "parent_span_id": None,
+            "start_time": start,
+            "end_time": start + datetime.timedelta(seconds=1),
+        }
+
+        # rebase_span_tree anchors on it, meaning it considers it the root...
+        rebased = rebase_span_tree([span], NOW)
+        assert rebased["span-1"][0] == NOW
+
+        # ...and build_span_writes must not then give it a parent.
+        writes = build_span_writes([span], rebased, DemoDataContext(), "proj")
+        assert not writes[0].parent_span_id
 
 
 class TestCompressionEdgeCases:
