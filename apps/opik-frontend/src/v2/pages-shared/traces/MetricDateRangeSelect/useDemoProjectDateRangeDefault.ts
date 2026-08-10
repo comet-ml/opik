@@ -38,7 +38,14 @@ const DEMO_STORAGE_KEY_SUFFIX = `-${DEMO_PROJECT_NAME}`;
 export const useDemoProjectDateRangeDefault = (projectId?: string) => {
   const { data: project, isPending } = useProjectById(
     { projectId: projectId! },
-    { enabled: Boolean(projectId) },
+    {
+      enabled: Boolean(projectId),
+      // Pages that render several consumers of this hook (Logs has three) already hold this query,
+      // and LogsPage deliberately opts out of refetch-on-mount. Matching that keeps mounting a tab
+      // from triggering a refetch the page had already ruled out. The query key is shared, so all
+      // observers read one cache entry rather than issuing their own request.
+      refetchOnMount: false,
+    },
   );
   const isDemoProject = project?.name === DEMO_PROJECT_NAME;
 

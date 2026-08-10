@@ -268,13 +268,20 @@ class TestRootSpanDetection:
              "start_time": times["child"][0], "end_time": times["child"][1]},
         ]
 
-        writes = build_span_writes(spans, times, DemoDataContext(), "proj")
-        by_old_order = {write.id: write for write in writes}
-        child = next(w for w in writes if w.parent_span_id)
+        context = DemoDataContext()
+        writes = build_span_writes(spans, times, context, "proj")
+        writes_by_id = {write.id: write for write in writes}
 
-        # The parent points at the root's *new* id, not the placeholder from the dataset.
-        assert child.parent_span_id in by_old_order
-        assert child.parent_span_id != "root"
+        # Resolve each write through the id map rather than guessing from list order.
+        root_write = writes_by_id[context.uuid_map["root"]]
+        child_write = writes_by_id[context.uuid_map["child"]]
+
+        # The child points at the root's *new* id — not its own, not the dataset placeholder.
+        assert child_write.parent_span_id == root_write.id
+        assert child_write.parent_span_id != child_write.id
+        assert child_write.parent_span_id != "root"
+        # ...and the root itself stays a root.
+        assert not root_write.parent_span_id
 
     def test_rebase_agrees_with_build_on_what_is_a_root(self):
         start = datetime.datetime(2026, 3, 17, 10, 0, 0)
