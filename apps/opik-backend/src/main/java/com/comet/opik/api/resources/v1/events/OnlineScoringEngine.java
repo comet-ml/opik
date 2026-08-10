@@ -45,6 +45,7 @@ import org.slf4j.Logger;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1054,9 +1055,9 @@ public class OnlineScoringEngine {
     public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames,
             List<String> unreadableScoreNames, ResponseProblem problem) {
 
-        static ParsedFeedbackScores problem(ResponseProblem.Kind kind, String evidence) {
+        static ParsedFeedbackScores problem(ResponseProblem.Kind kind, String evidence, List<String> fields) {
             return new ParsedFeedbackScores(List.of(), List.of(), List.of(),
-                    new ResponseProblem(kind, evidence));
+                    new ResponseProblem(kind, evidence, fields));
         }
 
         /**
@@ -1077,11 +1078,14 @@ public class OnlineScoringEngine {
                             .toList(),
                     nullScoreNames.stream().map(userFacing).toList(),
                     unreadableScoreNames.stream().map(userFacing).toList(),
-                    problem);
+                    problem == null
+                            ? null
+                            : new ResponseProblem(problem.kind(), problem.evidence(),
+                                    problem.fields().stream().map(userFacing).toList()));
         }
     }
 
-    public record ResponseProblem(Kind kind, String evidence) {
+    public record ResponseProblem(Kind kind, String evidence, List<String> fields) {
         public enum Kind {
             NOT_JSON,
             NOT_A_JSON_OBJECT,
@@ -1120,7 +1124,7 @@ public class OnlineScoringEngine {
                     .formatted(problem.evidence());
             case NO_SCORE_FIELDS -> ("the judge's answer had none of the expected score fields. Its fields were "
                     + "%s; expected { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }")
-                    .formatted(problem.evidence());
+                    .formatted(renderFields(problem.fields()));
         };
     }
 
@@ -1137,12 +1141,13 @@ public class OnlineScoringEngine {
             if (!structuredResponse.isObject()) {
                 log.warn("Judge answer was not a JSON object: size='{}' response='{}'", sizeOf(content),
                         StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
-                return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_A_JSON_OBJECT, sizeOf(content));
+                return ParsedFeedbackScores.problem(
+                        ResponseProblem.Kind.NOT_A_JSON_OBJECT, sizeOf(content), List.of());
             }
         } catch (JsonProcessingException e) {
             log.warn("Judge answer was not valid JSON: size='{}' error='{}' response='{}'", sizeOf(content),
                     e.getOriginalMessage(), StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
-            return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content));
+            return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content), List.of());
         }
         Map<String, String> declaredNames = schema.stream().collect(Collectors.toMap(
                 definition -> definition.name().toLowerCase(), LlmAsJudgeOutputSchema::name, (first, dup) -> first));
@@ -1172,12 +1177,12 @@ public class OnlineScoringEngine {
                                 Spliterator.ORDERED | Spliterator.NONNULL),
                         false)
                         .toList();
-                // Not wrapped in quotes: quoteAll already quotes each name.
-                var fields = topLevelKeys.isEmpty() ? "(none)" : quoteAll(topLevelKeys);
+                // Not wrapped in quotes: each name is quoted by renderFields.
                 log.warn("Judge answer had no recognisable score fields: fields={} size='{}' response='{}'",
-                        fields, sizeOf(content),
+                        renderFields(topLevelKeys), sizeOf(content),
                         StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
-                return ParsedFeedbackScores.problem(ResponseProblem.Kind.NO_SCORE_FIELDS, fields);
+                return ParsedFeedbackScores.problem(
+                        ResponseProblem.Kind.NO_SCORE_FIELDS, "", topLevelKeys);
             }
         }
         return collected.toParsed();
@@ -1195,14 +1200,15 @@ public class OnlineScoringEngine {
                 nullScoreNames.add(scoreName);
                 return;
             }
-            toScoreValue(actualScore).filter(OnlineScoringEngine::isStorable).ifPresentOrElse(
-                    value -> scores.add(FeedbackScoreBatchItem.builder()
-                            .name(scoreName)
-                            .reason(extractReason(scoreNode))
-                            .source(ScoreSource.ONLINE_SCORING)
-                            .value(value)
-                            .build()),
-                    () -> unreadableScoreNames.add(scoreName));
+            toScoreValue(actualScore).filter(OnlineScoringEngine::isStorable)
+                    .map(OnlineScoringEngine::toStorableScale).ifPresentOrElse(
+                            value -> scores.add(FeedbackScoreBatchItem.builder()
+                                    .name(scoreName)
+                                    .reason(extractReason(scoreNode))
+                                    .source(ScoreSource.ONLINE_SCORING)
+                                    .value(value)
+                                    .build()),
+                            () -> unreadableScoreNames.add(scoreName));
         }
 
         // Nothing usable and nothing explicitly not-applicable — i.e. the pass did not recognise the shape
@@ -1217,13 +1223,33 @@ public class OnlineScoringEngine {
         }
     }
 
+    /** How a judge's field-name list is shown, wherever it is shown — the log and the user's message agree. */
+    private static String renderFields(List<String> names) {
+        return names.isEmpty() ? "(none)" : quoteAll(names);
+    }
+
     /** The names come from the judge's answer, so the count is capped to keep one reply off a huge log row. */
     private static String quoteAll(List<String> names) {
-        var shown = names.stream().limit(MAX_REPORTED_FIELD_NAMES).map("'%s'"::formatted)
+        var shown = names.stream().limit(MAX_REPORTED_FIELD_NAMES)
+                // The names come from the judge's answer and land in a persisted, user-visible log line, so
+                // control characters are stripped: a newline inside a name could otherwise forge a log entry.
+                .map(name -> "'%s'".formatted(name.replaceAll("\\p{Cntrl}", " ")))
                 .collect(Collectors.joining(", "));
         return names.size() <= MAX_REPORTED_FIELD_NAMES
                 ? shown
                 : "%s and %,d more".formatted(shown, names.size() - MAX_REPORTED_FIELD_NAMES);
+    }
+
+    /**
+     * {@code feedback_scores.value} is {@code Decimal(18, 9)} and ClickHouse silently drops extra digits
+     * rather than rejecting them, so a judge answering with more precision would be stored as a different
+     * number than the one scoring used. Rounded here so the two agree; values already within scale are
+     * returned untouched, keeping their exact representation.
+     */
+    private static BigDecimal toStorableScale(BigDecimal value) {
+        return value.scale() > ValidationUtils.SCALE
+                ? value.setScale(ValidationUtils.SCALE, RoundingMode.HALF_UP)
+                : value;
     }
 
     /**

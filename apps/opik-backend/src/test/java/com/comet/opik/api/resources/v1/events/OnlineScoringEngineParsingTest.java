@@ -11,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 
@@ -42,6 +43,17 @@ class OnlineScoringEngineParsingTest {
 
     private static List<LlmAsJudgeOutputSchema> singleScoreSchema(String name) {
         return List.of(new LlmAsJudgeOutputSchema(name, LlmAsJudgeOutputSchemaType.BOOLEAN, "test"));
+    }
+
+    /** The reason logUnreadableResponse writes for this result — i.e. what the user actually reads. */
+    private static String renderedWarning(OnlineScoringEngine.ParsedFeedbackScores parsed) {
+        var logger = Mockito.mock(Logger.class);
+        OnlineScoringEngine.logUnreadableResponse(logger, parsed, "traceId", "t-1");
+        var reason = ArgumentCaptor.forClass(Object.class);
+        // Matched on the message: logUnreadableResponse also warns about unreadable values, with the same arity.
+        Mockito.verify(logger).warn(Mockito.contains("Nothing was scored"), Mockito.any(), Mockito.any(),
+                reason.capture());
+        return String.valueOf(reason.getValue());
     }
 
     private static ChatResponse chatResponse(String aiMessage) {
@@ -247,7 +259,7 @@ class OnlineScoringEngineParsingTest {
 
         assertThat(parsed.scores()).isEmpty();
         assertThat(parsed.problem().kind()).isEqualTo(OnlineScoringEngine.ResponseProblem.Kind.NO_SCORE_FIELDS);
-        assertThat(parsed.problem().evidence()).contains("answer_relevance_score");
+        assertThat(parsed.problem().fields()).containsExactly("answer_relevance_score", "reason");
     }
 
     @Test
@@ -256,7 +268,7 @@ class OnlineScoringEngineParsingTest {
         var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse("{}"), singleScoreSchema("S"));
 
         assertThat(parsed.problem().kind()).isEqualTo(OnlineScoringEngine.ResponseProblem.Kind.NO_SCORE_FIELDS);
-        assertThat(parsed.problem().evidence()).isEqualTo("(none)");
+        assertThat(parsed.problem().fields()).isEmpty();
     }
 
     @Test
@@ -266,10 +278,12 @@ class OnlineScoringEngineParsingTest {
                 .mapToObj("\"field_%d\": 1"::formatted)
                 .collect(Collectors.joining(",", "{", "}"));
 
-        var evidence = OnlineScoringEngine.toFeedbackScores(chatResponse(manyFields), singleScoreSchema("S"))
-                .problem().evidence();
+        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse(manyFields), singleScoreSchema("S"));
 
-        assertThat(evidence).matches("^('field_\\d+', ){9}'field_\\d+' and 490 more$");
+        assertThat(parsed.problem().fields()).hasSize(500);
+        // What the user actually reads is capped, with the remainder counted.
+        assertThat(renderedWarning(parsed)).matches(
+                ".*Its fields were ('field_\\d+', ){9}'field_\\d+' and 490 more;.*");
     }
 
     @Test
@@ -293,7 +307,7 @@ class OnlineScoringEngineParsingTest {
 
         assertThat(parsed.scores()).isEmpty();
         assertThat(parsed.problem().kind()).isEqualTo(OnlineScoringEngine.ResponseProblem.Kind.NO_SCORE_FIELDS);
-        assertThat(parsed.problem().evidence()).contains("Totally Wrong Name");
+        assertThat(parsed.problem().fields()).containsExactly("Totally Wrong Name");
     }
 
     @Test
@@ -357,6 +371,57 @@ class OnlineScoringEngineParsingTest {
     }
 
     @Test
+    @DisplayName("translate internal score names inside the problem, not just the score lists")
+    void whenTheProblemNamesAnInternalKey_thenItIsTranslatedToo() {
+        // "assertion_1" is declared, but its value is not an object carrying a score, so it is reported
+        // through the problem rather than through unreadableScoreNames.
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"assertion_1\": \"not an object\"}"),
+                List.of(new LlmAsJudgeOutputSchema("assertion_1", LlmAsJudgeOutputSchemaType.BOOLEAN, "d"),
+                        new LlmAsJudgeOutputSchema("assertion_2", LlmAsJudgeOutputSchemaType.BOOLEAN, "d")))
+                .withUserFacingNames(Map.of("assertion_1", "Answer mentions the refund window"));
+
+        assertThat(parsed.problem().fields()).containsExactly("Answer mentions the refund window");
+        assertThat(renderedWarning(parsed))
+                .contains("Answer mentions the refund window")
+                .doesNotContain("assertion_1");
+    }
+
+    @Test
+    @DisplayName("strip control characters from judge-supplied field names before they are logged")
+    void whenAFieldNameCarriesControlCharacters_thenTheyAreStripped() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"broken\\nWARN forged log line\": 1}"), singleScoreSchema("S"));
+
+        assertThat(renderedWarning(parsed)).doesNotContain("\n");
+        assertThat(renderedWarning(parsed)).contains("broken WARN forged log line");
+    }
+
+    @Test
+    @DisplayName("round a score with more precision than the column keeps, so stored matches scored")
+    void whenScoreHasExcessPrecision_thenItIsRoundedToTheStorableScale() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"S\":{\"score\":0.1234567891,\"reason\":\"r\"}}"), singleScoreSchema("S"));
+
+        var value = parsed.scores().getFirst().value();
+        assertThat(value.scale()).isLessThanOrEqualTo(9);
+        assertThat(value).isEqualByComparingTo(new BigDecimal("0.123456789"));
+    }
+
+    @Test
+    @DisplayName("rounding after the bounds check cannot produce an unstorable value")
+    void whenScoreIsJustUnderTheMaximumWithExcessPrecision_thenItRoundsToTheMaximum() {
+        // Quoted, so every digit survives: an unquoted JSON number this large is parsed as a double and
+        // loses the excess precision long before it reaches us.
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"S\":{\"score\":\"999999999.9999999985\",\"reason\":\"r\"}}"),
+                singleScoreSchema("S"));
+
+        assertThat(parsed.scores().getFirst().value())
+                .isEqualByComparingTo(new BigDecimal("999999999.999999999"));
+    }
+
+    @Test
     @DisplayName("a readable response reports nothing to the user")
     void whenResponseIsReadable_thenNothingIsReported() {
         var parsed = OnlineScoringEngine.toFeedbackScores(
@@ -397,7 +462,7 @@ class OnlineScoringEngineParsingTest {
     void logUnreadableResponse_whenAnswerUnusable_thenWarnsWithTheReason() {
         var logger = Mockito.mock(Logger.class);
         var problem = new OnlineScoringEngine.ResponseProblem(
-                OnlineScoringEngine.ResponseProblem.Kind.NOT_JSON, "Sure! Let me help.");
+                OnlineScoringEngine.ResponseProblem.Kind.NOT_JSON, "Sure! Let me help.", List.of());
 
         OnlineScoringEngine.logUnreadableResponse(logger,
                 new OnlineScoringEngine.ParsedFeedbackScores(List.of(), List.of(), List.of(), problem),
