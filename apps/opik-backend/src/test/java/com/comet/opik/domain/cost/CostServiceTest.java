@@ -1071,8 +1071,10 @@ class CostServiceTest {
     @Test
     void calculateCostForPreviouslyUnregisteredProvider() {
         // together_ai is in model_prices_and_context_window.json but was never in the old allowlist.
+        // together-ai-21.1b-41b: input_cost_per_token=8e-7, output_cost_per_token=8e-7
+        // Expected: (100 * 8e-7) + (50 * 8e-7) = 0.00012
         var usage = Map.of("prompt_tokens", 100, "completion_tokens", 50);
         BigDecimal cost = CostService.calculateCost("together-ai-21.1b-41b", "together_ai", usage, null);
-        assertThat(cost).isNotNull().isGreaterThan(BigDecimal.ZERO);
+        assertThat(cost).isNotNull().isEqualByComparingTo(new BigDecimal("0.00012"));
     }
 }
