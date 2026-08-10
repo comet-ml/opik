@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -269,6 +270,90 @@ class OnlineScoringEngineParsingTest {
                 .problem().evidence();
 
         assertThat(evidence).matches("^('field_\\d+', ){9}'field_\\d+' and 490 more$");
+    }
+
+    @Test
+    @DisplayName("an unrelated nested object must not hijack the score name or suppress the flat fallback")
+    void whenAnUnrelatedNestedObjectCarriesAScore_thenTheFlatScoreStillWins() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"score\": true, \"reason\": [\"matches\"],"
+                        + "\"details\": {\"score\": 0.4, \"reason\": \"partial overlap\"}}"),
+                singleScoreSchema("Meaning Match"));
+
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("Meaning Match");
+        assertThat(parsed.scores().getFirst().value()).isEqualByComparingTo(BigDecimal.ONE);
+    }
+
+    @Test
+    @DisplayName("a score name the rule does not declare is reported, not stored under its own name")
+    void whenTheJudgeInventsAScoreName_thenNothingIsStoredAndItIsReported() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"Totally Wrong Name\": {\"score\": true, \"reason\": \"r\"}}"),
+                singleScoreSchema("Meaning Match"));
+
+        assertThat(parsed.scores()).isEmpty();
+        assertThat(parsed.problem().kind()).isEqualTo(OnlineScoringEngine.ResponseProblem.Kind.NO_SCORE_FIELDS);
+        assertThat(parsed.problem().evidence()).contains("Totally Wrong Name");
+    }
+
+    @Test
+    @DisplayName("match the declared score name case-insensitively, storing the rule's spelling")
+    void whenTheJudgeChangesCase_thenTheDeclaredNameIsUsed() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"meaning match\": {\"score\": true, \"reason\": \"r\"}}"),
+                singleScoreSchema("Meaning Match"));
+
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("Meaning Match");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"yes", "YES", "y", "pass", "passed", "true"})
+    @DisplayName("read the affirmative spellings judges use on a boolean metric")
+    void whenScoreIsAnAffirmativeWord_thenParsesAsOne(String word) {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"S\":{\"score\":\"%s\",\"reason\":\"r\"}}".formatted(word)),
+                singleScoreSchema("S"));
+
+        assertThat(parsed.scores().getFirst().value()).isEqualByComparingTo(BigDecimal.ONE);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"no", "NO", "n", "fail", "failed", "false"})
+    @DisplayName("read the negative spellings judges use on a boolean metric")
+    void whenScoreIsANegativeWord_thenParsesAsZero(String word) {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"S\":{\"score\":\"%s\",\"reason\":\"r\"}}".formatted(word)),
+                singleScoreSchema("S"));
+
+        assertThat(parsed.scores().getFirst().value()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1e30", "1000000000", "-1000000000"})
+    @DisplayName("report a score outside the storable range instead of failing the whole batch insert")
+    void whenScoreIsOutOfRange_thenReportsItRatherThanStoringIt(String rawScore) {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"S\":{\"score\":%s,\"reason\":\"r\"}}".formatted(rawScore)),
+                singleScoreSchema("S"));
+
+        assertThat(parsed.scores()).isEmpty();
+        assertThat(parsed.unreadableScoreNames()).containsExactly("S");
+    }
+
+    @Test
+    @DisplayName("re-key score names through the user-facing mapping before they are logged or stored")
+    void whenAMappingIsGiven_thenNamesAreRekeyed() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"assertion_1\":{\"score\":true,\"reason\":\"r\"},"
+                        + "\"assertion_2\":{\"score\":\"nonsense\",\"reason\":\"r\"}}"),
+                List.of(new LlmAsJudgeOutputSchema("assertion_1", LlmAsJudgeOutputSchemaType.BOOLEAN, "d"),
+                        new LlmAsJudgeOutputSchema("assertion_2", LlmAsJudgeOutputSchemaType.BOOLEAN, "d")))
+                .withUserFacingNames(Map.of("assertion_1", "Answer mentions the refund window",
+                        "assertion_2", "Answer cites a policy"));
+
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name)
+                .containsExactly("Answer mentions the refund window");
+        assertThat(parsed.unreadableScoreNames()).containsExactly("Answer cites a policy");
     }
 
     @Test

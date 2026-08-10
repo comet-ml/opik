@@ -729,12 +729,12 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
           'INPUT: "Who painted the Mona Lisa?"\n' +
           'GROUND_TRUTH: "Leonardo da Vinci"\n' +
           'OUTPUT: "It was painted by Leonardo da Vinci."\n' +
-          "→ TRUE — the output conveys the same factual answer as the ground truth.\n" +
+          '→ {"{score_name}": {"score": true, "reason": "Output conveys the same factual answer as the ground truth."}}\n' +
           "\n" +
           'INPUT: "Who painted the Mona Lisa?"\n' +
           'GROUND_TRUTH: "Leonardo da Vinci"\n' +
           'OUTPUT: "Pablo Picasso"\n' +
-          "→ FALSE — the output names a different painter than the ground truth.\n" +
+          '→ {"{score_name}": {"score": false, "reason": "Output names a different painter than the ground truth."}}\n' +
           "\n" +
           "----------------------------------------\n" +
           "\n" +
@@ -941,7 +941,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
         name: "User frustration",
         description:
           "User frustration score checks if the output is frustrating to the user",
-        type: LLM_SCHEMA_TYPE.INTEGER,
+        type: LLM_SCHEMA_TYPE.DOUBLE,
         unsaved: false,
       },
     ],

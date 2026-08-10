@@ -15,6 +15,7 @@ import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
+import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,8 +39,8 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.text.StringEscapeUtils;
 import org.slf4j.Logger;
 
 import java.io.UncheckedIOException;
@@ -60,6 +61,7 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -79,6 +81,12 @@ public class OnlineScoringEngine {
 
     private static final int MAX_REPORTED_RESPONSE_CHARS = 500;
     private static final int MAX_REPORTED_FIELD_NAMES = 10;
+
+    private static final Map<String, Boolean> PASS_FAIL_SCORES = Map.of(
+            "pass", true, "passed", true, "fail", false, "failed", false);
+
+    private static final BigDecimal MIN_SCORE_VALUE = new BigDecimal(ValidationUtils.MIN_FEEDBACK_SCORE_VALUE);
+    private static final BigDecimal MAX_SCORE_VALUE = new BigDecimal(ValidationUtils.MAX_FEEDBACK_SCORE_VALUE);
 
     private static final String SPANS_VARIABLE_NAME = "spans";
     private static final String TRACE_VARIABLE_NAME = "trace";
@@ -841,22 +849,19 @@ public class OnlineScoringEngine {
                 case "image_url" -> {
                     if (part.imageUrl() != null && part.imageUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.imageUrl().url(), replacements, promptType);
-                        var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
-                        builder.addContent(ImageContent.from(unescapedUrl));
+                        builder.addContent(ImageContent.from(url));
                     }
                 }
                 case "video_url" -> {
                     if (part.videoUrl() != null && part.videoUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.videoUrl().url(), replacements, promptType);
-                        var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
-                        builder.addContent(VideoContent.from(unescapedUrl));
+                        builder.addContent(VideoContent.from(url));
                     }
                 }
                 case "audio_url" -> {
                     if (part.audioUrl() != null && part.audioUrl().url() != null) {
                         var url = TemplateParseUtils.render(part.audioUrl().url(), replacements, promptType);
-                        var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
-                        builder.addContent(AudioContent.from(unescapedUrl));
+                        builder.addContent(AudioContent.from(url));
                     }
                 }
                 default -> log.warn("Unknown content type: {}", part.type());
@@ -1053,6 +1058,27 @@ public class OnlineScoringEngine {
             return new ParsedFeedbackScores(List.of(), List.of(), List.of(),
                     new ResponseProblem(kind, evidence));
         }
+
+        /**
+         * Re-keys every score name through {@code mapping} so the rule's logs and the stored scores use the
+         * names the user configured. The test-suite path rewrites each schema name to {@code assertion_N}
+         * before prompting, so without this the logs name a score the user has never seen.
+         */
+        public ParsedFeedbackScores withUserFacingNames(@NonNull Map<String, String> mapping) {
+            if (mapping.isEmpty()) {
+                return this;
+            }
+            UnaryOperator<String> userFacing = name -> mapping.getOrDefault(name, name);
+            return new ParsedFeedbackScores(
+                    scores.stream()
+                            .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
+                                    .name(userFacing.apply(item.name()))
+                                    .build())
+                            .toList(),
+                    nullScoreNames.stream().map(userFacing).toList(),
+                    unreadableScoreNames.stream().map(userFacing).toList(),
+                    problem);
+        }
     }
 
     public record ResponseProblem(Kind kind, String evidence) {
@@ -1109,15 +1135,17 @@ public class OnlineScoringEngine {
         try {
             structuredResponse = OBJECT_MAPPER.readTree(content);
             if (!structuredResponse.isObject()) {
-                log.info("Judge answer was not a JSON object: size='{}' response='{}'", sizeOf(content),
+                log.warn("Judge answer was not a JSON object: size='{}' response='{}'", sizeOf(content),
                         StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
                 return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_A_JSON_OBJECT, sizeOf(content));
             }
         } catch (JsonProcessingException e) {
-            log.error("Judge answer was not valid JSON: size='{}' response='{}'", sizeOf(content),
-                    StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null), e);
+            log.warn("Judge answer was not valid JSON: size='{}' error='{}' response='{}'", sizeOf(content),
+                    e.getOriginalMessage(), StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
             return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content));
         }
+        Map<String, String> declaredNames = schema.stream().collect(Collectors.toMap(
+                definition -> definition.name().toLowerCase(), LlmAsJudgeOutputSchema::name, (first, dup) -> first));
         var collected = new CollectedScores();
         structuredResponse.properties().forEach(scoreMetric -> {
             var scoreName = scoreMetric.getKey();
@@ -1126,7 +1154,12 @@ public class OnlineScoringEngine {
                 log.debug("No score found for '{}' score in {}", scoreName, scoreNested);
                 return;
             }
-            collected.accept(scoreName, scoreNested);
+            var declaredName = declaredNames.get(scoreName.toLowerCase());
+            if (declaredName == null) {
+                log.debug("Ignoring '{}': not a score declared by the rule", scoreName);
+                return;
+            }
+            collected.accept(declaredName, scoreNested);
         });
         // The nested shape recognised nothing, so fall back to the flat one; if that recognises nothing
         // either, no pass understood the answer.
@@ -1162,7 +1195,7 @@ public class OnlineScoringEngine {
                 nullScoreNames.add(scoreName);
                 return;
             }
-            toScoreValue(actualScore).ifPresentOrElse(
+            toScoreValue(actualScore).filter(OnlineScoringEngine::isStorable).ifPresentOrElse(
                     value -> scores.add(FeedbackScoreBatchItem.builder()
                             .name(scoreName)
                             .reason(extractReason(scoreNode))
@@ -1224,11 +1257,10 @@ public class OnlineScoringEngine {
             return Optional.empty();
         }
         var text = actualScore.asText().trim();
-        if (text.equalsIgnoreCase("true")) {
-            return Optional.of(BigDecimal.ONE);
-        }
-        if (text.equalsIgnoreCase("false")) {
-            return Optional.of(BigDecimal.ZERO);
+        var asBoolean = Optional.ofNullable(BooleanUtils.toBooleanObject(text))
+                .orElseGet(() -> PASS_FAIL_SCORES.get(text.toLowerCase()));
+        if (asBoolean != null) {
+            return Optional.of(asBoolean ? BigDecimal.ONE : BigDecimal.ZERO);
         }
         try {
             return Optional.of(new BigDecimal(text));
@@ -1236,6 +1268,20 @@ public class OnlineScoringEngine {
             log.debug("Score value '{}' is neither a number nor a boolean", text);
             return Optional.empty();
         }
+    }
+
+    /**
+     * The feedback-score column is {@code Decimal(18, 9)}. The {@code @DecimalMin}/{@code @DecimalMax} on
+     * {@link FeedbackScoreBatchItem} only run for request bodies, and this path builds the item directly, so
+     * an out-of-range judge value would reach the insert and fail the whole batch — losing every score in it,
+     * not just this one. Reported as unreadable instead.
+     */
+    private static boolean isStorable(BigDecimal value) {
+        if (value.compareTo(MIN_SCORE_VALUE) >= 0 && value.compareTo(MAX_SCORE_VALUE) <= 0) {
+            return true;
+        }
+        log.debug("Score value '{}' is outside the storable range", value);
+        return false;
     }
 
     /**

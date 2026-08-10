@@ -409,16 +409,16 @@ class OnlineScoringEngineTest {
 
         onlineScoringSampler.onTracesCreated(event);
 
-        Mono.delay(Duration.ofMillis(300)).block();
+        Awaitility.await().untilAsserted(() -> {
+            Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
 
-        Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
-
-        assertThat(captor.getValue()).hasSize(1);
-        var score = captor.getValue().getFirst();
-        assertThat(score.name()).isEqualTo("Meaning Match");
-        assertThat(score.value()).isEqualByComparingTo(BigDecimal.ONE);
-        assertThat(score.reason()).isEqualTo("the answer matches the expected meaning");
-        assertThat(score.id()).isEqualTo(trace.id());
+            assertThat(captor.getValue()).hasSize(1);
+            var score = captor.getValue().getFirst();
+            assertThat(score.name()).isEqualTo("Meaning Match");
+            assertThat(score.value()).isEqualByComparingTo(BigDecimal.ONE);
+            assertThat(score.reason()).isEqualTo("the answer matches the expected meaning");
+            assertThat(score.id()).isEqualTo(trace.id());
+        });
     }
 
     @Test
