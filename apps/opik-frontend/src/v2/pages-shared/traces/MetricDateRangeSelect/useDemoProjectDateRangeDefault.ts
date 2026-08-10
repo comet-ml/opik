@@ -1,5 +1,6 @@
 import useProjectById from "@/api/projects/useProjectById";
 import { DEMO_PROJECT_NAME } from "@/constants/shared";
+import { DateRangePreset } from "@/shared/DateRangeSelect";
 import {
   DATE_RANGE_PRESET_PAST_24_HOURS,
   DEFAULT_DATE_PRESET,
@@ -14,48 +15,73 @@ import {
  */
 const DEMO_STORAGE_KEY_SUFFIX = `-${DEMO_PROJECT_NAME}`;
 
+/** Spread straight into useMetricDateRangeWithQueryAndStorage. */
+export type DemoProjectDateRangeDefault = {
+  defaultValue: DateRangePreset;
+  initSyncReady: boolean;
+  storageKeySuffix: string;
+};
+
 /**
- * Resolves the chart date-range default for a project, overriding it for the seeded demo project.
+ * The chart date-range default for a project, overridden for the seeded demo project.
  *
  * The demo project is compressed into the last ~10 hours so its trace/span ids clear the UUIDv7
  * ingestion window. Charts bucket by that id-embedded timestamp and the interval follows the
  * selected range (anything over 3 days buckets daily), so the workspace-wide 30-day default would
  * collapse the entire demo into a single bar. 24 hours buckets hourly and renders the curve.
  *
- * Spread the whole result into useMetricDateRangeWithQueryAndStorage — all three fields matter:
+ * All three fields matter:
  *
  * - `defaultValue` is the 24h override itself.
- * - `initSyncReady` holds the URL sync until the project name lands. Without it the 30-day
+ * - `initSyncReady` holds the URL sync until the project name is known. Without it the 30-day
  *   placeholder gets pinned into the URL first and wins permanently.
  * - `storageKeySuffix` gives the demo project its own persistence slot. The stored range is sticky
  *   across projects and outranks any default, so without this the demo would inherit whatever range
  *   the user last picked on a real project and never apply 24h at all.
  *
- * Every consumer sharing one date-range key must pass the same values — the Logs page has three
- * (useLogsType, TracesSpansTab, ThreadsTab) — otherwise whichever mounts first decides, and the
- * result depends on mount order.
+ * Pure on purpose: a page whose consumers share one date-range key must feed them all the same
+ * values, or whichever mounts first decides and the result turns on mount order. Resolving once in
+ * the parent and passing the result down makes that structurally impossible — see LogsPage, which
+ * has three consumers (useLogsType, TracesSpansTab, ThreadsTab).
+ *
+ * @param projectName the project's name, or undefined while it is not known
+ * @param isSettled whether the name is as resolved as it is going to get. A failed lookup counts as
+ *   settled: the override simply does not apply and the workspace default stands, which is better
+ *   than never syncing the URL at all.
  */
-export const useDemoProjectDateRangeDefault = (projectId?: string) => {
-  const { data: project, isPending } = useProjectById(
-    { projectId: projectId! },
-    {
-      enabled: Boolean(projectId),
-      // Pages that render several consumers of this hook (Logs has three) already hold this query,
-      // and LogsPage deliberately opts out of refetch-on-mount. Matching that keeps mounting a tab
-      // from triggering a refetch the page had already ruled out. The query key is shared, so all
-      // observers read one cache entry rather than issuing their own request.
-      refetchOnMount: false,
-    },
-  );
-  const isDemoProject = project?.name === DEMO_PROJECT_NAME;
+export const resolveDemoProjectDateRangeDefault = (
+  projectName: string | undefined,
+  isSettled: boolean,
+): DemoProjectDateRangeDefault => {
+  const isDemoProject = projectName === DEMO_PROJECT_NAME;
 
   return {
     defaultValue: isDemoProject
       ? DATE_RANGE_PRESET_PAST_24_HOURS
       : DEFAULT_DATE_PRESET,
-    // A disabled query stays pending forever, so treat "no project to look up" as settled rather
-    // than blocking the URL sync indefinitely.
-    initSyncReady: projectId ? !isPending : true,
+    initSyncReady: isSettled,
     storageKeySuffix: isDemoProject ? DEMO_STORAGE_KEY_SUFFIX : "",
   };
+};
+
+/**
+ * resolveDemoProjectDateRangeDefault for a caller that holds only a project id.
+ *
+ * Prefer the resolver directly when the project is already in scope — a parent that owns the query
+ * should pass its result down rather than have children re-observe it (performance.md, "Don't
+ * refetch what the parent already has").
+ */
+export const useDemoProjectDateRangeDefault = (projectId?: string) => {
+  const { data: project, isPending } = useProjectById(
+    { projectId: projectId! },
+    { enabled: Boolean(projectId), refetchOnMount: false },
+  );
+
+  // Settled means "we know as much as we ever will". Nothing to look up counts, and so does a
+  // failed lookup — react-query reports a cached error as not-pending with no data, and falling
+  // back to the workspace default beats hanging the URL sync forever.
+  return resolveDemoProjectDateRangeDefault(
+    project?.name,
+    projectId ? !isPending : true,
+  );
 };
