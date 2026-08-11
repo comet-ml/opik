@@ -261,6 +261,18 @@ def test_evaluate__happyflow(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
+                            name="equals_metric_arg_validation",
+                            tags=["__opik_eval_internal__"],
+                            input={"metric_name": "equals_metric"},
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
                             name="equals_metric",
                             input={
                                 "ignored_kwargs": {
@@ -339,6 +351,18 @@ def test_evaluate__happyflow(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
+                            name="equals_metric_arg_validation",
+                            tags=["__opik_eval_internal__"],
+                            input={"metric_name": "equals_metric"},
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
                             name="equals_metric",
                             input={
                                 "ignored_kwargs": {
@@ -355,7 +379,7 @@ def test_evaluate__happyflow(
                             end_time=ANY_BUT_NONE,
                             spans=[],
                             source="experiment",
-                        )
+                        ),
                     ],
                     source="experiment",
                 ),
@@ -659,6 +683,18 @@ def test_evaluate_with_scoring_key_mapping(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
+                            name="equals_metric_arg_validation",
+                            tags=["__opik_eval_internal__"],
+                            input={"metric_name": "equals_metric"},
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
                             name="equals_metric",
                             input={
                                 "ignored_kwargs": {
@@ -743,6 +779,18 @@ def test_evaluate_with_scoring_key_mapping(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
+                            name="equals_metric_arg_validation",
+                            tags=["__opik_eval_internal__"],
+                            input={"metric_name": "equals_metric"},
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
                             name="equals_metric",
                             input={
                                 "ignored_kwargs": {
@@ -761,7 +809,7 @@ def test_evaluate_with_scoring_key_mapping(
                             end_time=ANY_BUT_NONE,
                             spans=[],
                             source="experiment",
-                        )
+                        ),
                     ],
                     source="experiment",
                 ),
@@ -1582,7 +1630,32 @@ def test_evaluate_prompt_happyflow(
                     output=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
-                    spans=[ANY_BUT_NONE],
+                    # The argument-preparation span, then the metric's own span.
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="equals_metric_arg_validation",
+                            tags=["__opik_eval_internal__"],
+                            input={"metric_name": "equals_metric"},
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="equals_metric",
+                            input=ANY_BUT_NONE,
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                    ],
                     source="experiment",
                 ),
             ],
@@ -1642,7 +1715,32 @@ def test_evaluate_prompt_happyflow(
                     output=ANY_BUT_NONE,
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
-                    spans=[ANY_BUT_NONE],
+                    # The argument-preparation span, then the metric's own span.
+                    spans=[
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="equals_metric_arg_validation",
+                            tags=["__opik_eval_internal__"],
+                            input={"metric_name": "equals_metric"},
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
+                            name="equals_metric",
+                            input=ANY_BUT_NONE,
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                    ],
                     source="experiment",
                 ),
             ],
@@ -1813,6 +1911,18 @@ def test_evaluate__aggregated_metric__happy_flow(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
+                            name="aggregated_metric_arg_validation",
+                            tags=["__opik_eval_internal__"],
+                            input={"metric_name": "aggregated_metric"},
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
                             name="aggregated_metric",
                             input={
                                 "kwargs": {
@@ -1937,6 +2047,18 @@ def test_evaluate__aggregated_metric__happy_flow(
                         SpanModel(
                             id=ANY_BUT_NONE,
                             type="general",
+                            name="aggregated_metric_arg_validation",
+                            tags=["__opik_eval_internal__"],
+                            input={"metric_name": "aggregated_metric"},
+                            output=ANY_BUT_NONE,
+                            start_time=ANY_BUT_NONE,
+                            end_time=ANY_BUT_NONE,
+                            spans=[],
+                            source="experiment",
+                        ),
+                        SpanModel(
+                            id=ANY_BUT_NONE,
+                            type="general",
                             name="aggregated_metric",
                             input={
                                 "kwargs": {
@@ -1998,7 +2120,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                 ),
                             ],
                             source="experiment",
-                        )
+                        ),
                     ],
                     source="experiment",
                 ),

@@ -18,11 +18,23 @@
 # Usage:
 #   CLICKHOUSE_HOST=... CLICKHOUSE_PASSWORD=... ./backfill.sh --database opik [options]
 #
-# Connection: passed straight to clickhouse-client via the standard env vars it honors
-# (CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD). --database is required.
+# Connection: CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment, plus --host and --port. CLICKHOUSE_PORT is
+# NOT honored by clickhouse-client, and CLICKHOUSE_HOST is honored only when no connection flag is given, so pass
+# --host and --port together. The user must be able to set `log_comment` (used for cutover attribution in
+# query_log): a `readonly = 1` profile rejects it outright ("Cannot modify 'log_comment' setting in readonly mode"),
+# so a read-only assessor needs `readonly = 2` and the migration user needs a non-readonly profile.
+# --database is required.
 #
 # Options:
 #   --database NAME           analytics database (e.g. opik). Required.
+#   --port N                  ClickHouse NATIVE port, when it is not the default 9000 — e.g. reaching a cluster through
+#                             a port-forward or bastion on a local port. Required because clickhouse-client honors
+#                             CLICKHOUSE_HOST / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment but does
+#                             NOT honor CLICKHOUSE_PORT, so the port cannot be passed via env.
+#   --host HOST               ClickHouse host. Pass it together with --port: clickhouse-client honors CLICKHOUSE_HOST
+#                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
+#                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
+#                             the password out of argv).
 #   --dry-run                 print the window plan and per-window source counts; do not INSERT.
 #   --from-week N             start at week offset N (0-based from the anchor Monday). Default 0.
 #   --to-week M               stop after week offset M (inclusive). Default: last week with data.
@@ -36,7 +48,7 @@
 #                             ClickHouse default); lower it on a memory-constrained data node. Applied to the INSERT.
 #   --divergence P            max tolerated |src-dst|/src per window before aborting. Default 0.0001 (0.01%).
 #   --pause-seconds S         sleep S seconds after each inserted window, to let destination merges catch up and bound
-#                             the part count / IO pressure. Default 0. Recommended 30-60 on the ~4 TB table at peak.
+#                             the part count / IO pressure. Default 0. Recommended 30-60 on a large table at peak.
 #   --min-free-factor F       abort at startup unless node free disk >= F x the current `traces` on-disk size (the
 #                             backfill writes a full second copy). Default 2.0. Pass 0 to skip the check. This is a
 #                             whole-node floor; on tiered storage validate per-volume (hot) headroom separately.
@@ -46,7 +58,10 @@
 #                             headroom out of band. (No effect on a single-volume/default policy.)
 #   --state-file PATH         file the captured backfill_start is written to and reused from. On resume the ORIGINAL
 #                             anchor is kept; re-minting a later one would miss deletes that fired during the first run
-#                             against already-copied rows. Default ./traces_cutover_backfill_start.
+#                             against already-copied rows. Default ./traces_cutover_backfill_start — note this is
+#                             CWD-RELATIVE, so resuming from a different directory would not find it; pass an absolute
+#                             path for a multi-session cutover. If the anchor is missing while the destination already
+#                             holds rows, the script ABORTS rather than mint a later one (that would leak deletes).
 
 set -euo pipefail
 
@@ -59,6 +74,8 @@ SRC_TABLE="traces"
 DST_TABLE="traces_local_v2"
 
 DATABASE=""
+CH_HOST=""                # host; empty = clickhouse-client default/env. See --host.
+CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 DRY_RUN=0
 FROM_WEEK=0
 TO_WEEK=""
@@ -68,7 +85,7 @@ MAX_INSERT_BLOCK_SIZE=1048576  # rows: SETTINGS max_insert_block_size for the IN
                           # the smaller of this and min_insert_block_size_bytes (256 MB default), which dominates for wide
                           # trace rows; lower it on a memory-constrained node. 1048576 is the ClickHouse default.
 DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled window before aborting (0.01%).
-PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 at ~4 TB peak.
+PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 for a large table at peak.
 MIN_FREE_FACTOR="2.0"     # multiple of the current traces on-disk size that node free space must clear before starting.
 STATE_FILE="./traces_cutover_backfill_start"  # backfill_start is persisted here and reused on resume (keeps one anchor).
 CONFIRM_TIERED_HEADROOM=0 # required when the destination storage_policy is tiered/mismatched (see preflight_capacity).
@@ -90,6 +107,8 @@ while [[ $# -gt 0 ]]; do
         --min-free-factor) MIN_FREE_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
         --confirm-tiered-headroom) CONFIRM_TIERED_HEADROOM=1; shift ;;
         --state-file) STATE_FILE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
+        --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -97,6 +116,8 @@ done
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
 # --database is interpolated into the reference SQL; require a plain ClickHouse identifier so it cannot alter the query.
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
+[[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
+[[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 # --state-file is an operator-owned path read with cat and written with > (both quoted); reject a blank or multi-line
 # value so the single-line anchor round-trips cleanly.
 [[ -n "$STATE_FILE" && "$STATE_FILE" != *$'\n'* ]] || { echo "ERROR: --state-file must be a non-empty single-line path." >&2; exit 2; }
@@ -112,7 +133,7 @@ done
 
 # Every query runs against the analytics database; --query keeps output scriptable (TSV, no formatting).
 ch() {
-    clickhouse-client --database "$DATABASE" --log_comment 'traces_local_v2_cutover:backfill' --query "$1"
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --log_comment 'traces_local_v2_cutover:backfill' --query "$1"
 }
 
 log() {
@@ -195,7 +216,7 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_LO}'/$lo}"
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
-    clickhouse-client --database "$DATABASE" --multiquery --query "$sql"
+    clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 
 # Insert one window whose physical row count is already within the per-statement bound. Reconciliation is dedup-aware
@@ -281,6 +302,17 @@ if [[ "$ROWS" == "0" ]]; then
     exit 0
 fi
 
+# The successor must exist before anything else (runbook prerequisite #2: created empty by migration 000101, recreated by
+# 000114). Checked explicitly so its absence reads as the prerequisite it is, rather than surfacing later as a raw
+# ClickHouse "unknown table" from the capacity probe, the resume check or the first INSERT. Post-cutover the shadow has
+# been renamed away, so this also stops a stray re-run after a completed cutover.
+if [[ -z "$(ch "SELECT name FROM system.tables WHERE database = '$DATABASE' AND name = '$DST_TABLE'")" ]]; then
+    log "ABORT: successor table '$DATABASE.$DST_TABLE' does not exist. It is created empty by Liquibase (migration 000101," >&2
+    log "       recreated by 000114) — confirm those changesets are applied on this instance. If a cutover already" >&2
+    log "       completed, the shadow was renamed away and there is nothing to backfill." >&2
+    exit 1
+fi
+
 preflight_capacity
 
 # backfill_start: the single anchor for BOTH the delta-insert and the deletion replay in step 2. Captured BEFORE the
@@ -295,6 +327,25 @@ if [[ "$DRY_RUN" != "1" ]]; then
         [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: $STATE_FILE does not contain a valid backfill_start timestamp ('YYYY-MM-DD HH:MM:SS[.ffffff]')." >&2; exit 1; }
         log "REUSING backfill_start=$BACKFILL_START from $STATE_FILE (resume: original anchor kept)"
     else
+        # Refuse to mint a FRESH anchor onto a destination that already holds rows. That combination is contradictory:
+        # a genuine first run starts from an empty successor (migration 000101/000114 creates it empty; a stage-A
+        # rollback truncates it back to empty), so a non-empty destination means this is a RESUME whose original anchor
+        # has been lost — most often because --state-file defaults to a CWD-relative path and the resume ran from a
+        # different directory. Minting a later anchor there is silent data loss: deletes that fired between the real
+        # anchor and this one, against rows the earlier run already copied, are seen by neither the delta (bounded by
+        # the anchor) nor the deletion replay (same bound), so they leak live across the EXCHANGE. The pre-EXCHANGE
+        # verify.sh would flag it, but only as a late, hard-to-attribute mismatch after the copy has been redone.
+        DST_ROWS_AT_ANCHOR="$(ch "SELECT count() FROM $DST_TABLE")"
+        if [[ "$DST_ROWS_AT_ANCHOR" != "0" ]]; then
+            log "ABORT: no anchor in '$STATE_FILE', but $DST_TABLE already holds $DST_ROWS_AT_ANCHOR row(s) — this is a RESUME whose" >&2
+            log "       original backfill_start was lost, and minting a fresh (later) anchor would make the delta and the" >&2
+            log "       deletion replay blind to deletes in the gap, leaking them across the EXCHANGE. Recover the original" >&2
+            log "       anchor, then either point --state-file at the file holding it or write it back:" >&2
+            log "         printf '%s' '<original backfill_start>' > '$STATE_FILE'" >&2
+            log "       If it is unrecoverable, restart the copy cleanly instead (discards the partial shadow):" >&2
+            log "         ./rollback.sh --database $DATABASE --stage A" >&2
+            exit 1
+        fi
         BACKFILL_START="$(ch "SELECT toString(now64(6))")"
         printf '%s' "$BACKFILL_START" > "$STATE_FILE"
         log "RECORD backfill_start=$BACKFILL_START  (saved to $STATE_FILE; pass this to step 2: 000002_delta_and_deletion_replay.sql)"

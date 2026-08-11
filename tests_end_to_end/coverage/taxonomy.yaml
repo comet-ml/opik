@@ -249,6 +249,7 @@ areas:
       - trace-explore/trace-explore-smoke.spec.ts
       - trace-explore/trace-spans-depth.spec.ts
       - trace-explore/trace-delete.spec.ts
+      - trace-explore/trace-filters.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -260,7 +261,7 @@ areas:
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
-      filter-traces:          { covered: false, note: "OQL / FiltersButton" }
+      filter-traces:          { covered: true,  tier: t2-cuj }
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
@@ -614,6 +615,7 @@ areas:
     spec_dir: online-evaluation
     specs:
       - online-evaluation/online-evaluation-smoke.spec.ts
+      - online-evaluation/online-evaluation-delete-rule.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -627,7 +629,7 @@ areas:
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }
       enable-disable-rule:     { covered: false }
-      delete-rule:             { covered: false }
+      delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       automation-logs:         { covered: false }
 
     visual:
@@ -746,13 +748,13 @@ areas:
       members-change-role:      { covered: false, cloud_only: true }
 
     visual:
-      config-feedback-definitions: { covered: false, state: default }
+      config-feedback-definitions: { covered: true,  state: default }
       config-feedback-def-empty:   { covered: false, state: empty, note: "'No feedback definitions yet'" }
-      config-environments:         { covered: false, state: default }
-      config-environments-empty:   { covered: false, state: empty, note: "'No environments yet'" }
-      config-ai-providers:         { covered: false, state: default }
-      config-ai-providers-empty:   { covered: false, state: empty, note: "'No AI providers yet'" }
-      config-workspace-prefs:      { covered: false, state: default }
+      config-environments:         { covered: true,  state: default }
+      config-environments-empty:   { covered: true,  state: empty, note: "'No environments yet'" }
+      config-ai-providers:         { covered: true,  state: default }
+      config-ai-providers-empty:   { covered: true,  state: empty, note: "'No AI providers yet'" }
+      config-workspace-prefs:      { covered: true,  state: default }
 
   onboarding:
     label: Get started
