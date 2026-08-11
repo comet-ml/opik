@@ -44,6 +44,24 @@ jobs:
       issues: write # to comment the Jira link back on the issue
 
     steps:
+      # Fail before touching the issue. Without this, an unconfigured repo would
+      # reach the sync, fail on a Jira 401, and leave a failure notice on a real
+      # issue — noise caused by setup, not by the issue.
+      - name: Check Jira credentials are configured
+        env:
+          JIRA_BASE_URL: ${{ vars.JC_JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JC_JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JC_JIRA_API_TOKEN }}
+        run: |
+          missing=""
+          [ -n "${JIRA_BASE_URL}" ]   || missing="${missing} vars.JC_JIRA_BASE_URL"
+          [ -n "${JIRA_USER_EMAIL}" ] || missing="${missing} secrets.JC_JIRA_USER_EMAIL"
+          [ -n "${JIRA_API_TOKEN}" ]  || missing="${missing} secrets.JC_JIRA_API_TOKEN"
+          if [ -n "${missing}" ]; then
+            echo "::error::JC → Jira is not configured. Missing:${missing}"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v5
         with:

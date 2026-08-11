@@ -6,8 +6,13 @@ ticket in the `OPIK` Jira project and comments the link back on the issue.
 This directory holds the resolution logic for that sync. See
 [OPIK-7833](https://comet-ml.atlassian.net/browse/OPIK-7833).
 
-> **Status: steps 1–3 of 5.** The sync works end to end and is wired to the
-> label. Still to do: shadow-run against n8n, then switch n8n off.
+> **Status: complete and verified, not yet enabled.** The sync works end to end
+> and is wired to the `JC` label. Two things are needed to turn it on, both
+> outside this repo: the three config values below, and switching off the
+> existing n8n workflow that reacts to the same label.
+>
+> **Do not merge this while n8n is still live** — both would react to the same
+> label and each would create its own ticket.
 
 ## Files
 
@@ -56,6 +61,35 @@ label as a retry — and how issue #7000 ended up with two tickets. Instead this
 - says explicitly to re-run the workflow rather than re-label.
 
 Re-run **JC Label to Jira** from the Actions tab with the issue number.
+
+## Cutover checklist
+
+1. Create the Jira service account and add the three config values above.
+2. Disable the n8n workflow that currently reacts to the `JC` label (n8n lives
+   at `n8n.dev.comet.com`; the deployment is in `comet-gitops`). Nothing in this
+   repo can turn it off.
+3. Merge this.
+4. Apply `JC` to one issue and confirm a single ticket, a single remote link, and
+   one comment.
+5. Optionally backfill: run the workflow manually against previously-labeled
+   issues to attach remote links to the ~50 legacy tickets, upgrading them to the
+   tier 1 fast path. Idempotent, so it can be re-run freely.
+
+### Verified before handover
+
+- Live create, then two re-runs: one ticket, one remote link, one comment. The
+  second and third runs matched via tier 1.
+- Two consecutive failures left exactly one notice; the recovery run cleared it.
+- Replay across all 79 labeled issues: 65 matched, 14 correctly unmatched
+  (4 test issues, 4 with only a hand-written citing ticket, 6 never synced).
+- `actionlint` and `zizmor` (offline, high severity) clean; 28 unit tests pass.
+
+### Not yet exercised
+
+The workflow has never run on GitHub's runners — it was driven directly. The
+`if:` gate, concurrency group and dry-run wiring were checked against
+representative event payloads, but the first real label event is still the first
+true test of the YAML itself.
 
 ## The two decisions
 
