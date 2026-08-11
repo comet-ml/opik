@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { UserPlus } from "lucide-react";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
@@ -133,7 +132,9 @@ const CollaboratorsTab = () => {
       },
     );
 
-  const memberNames = useMemo(
+  // userName where there is one, e-mail for someone who has only been invited — these are the
+  // identifiers the roles map is keyed by, not display names.
+  const memberIdentifiers = useMemo(
     () =>
       [...workspaceMembers, ...invitedMembers]
         .map((member) => (member as WorkspaceMember).userName || member.email)
@@ -145,12 +146,16 @@ const CollaboratorsTab = () => {
     useOrganizationMemberRoles(
       {
         organizationId: currentOrganization?.id || "",
-        userNames: memberNames,
+        userNames: memberIdentifiers,
       },
       {
-        enabled: Boolean(currentOrganization?.id) && memberNames.length > 0,
-        // without this the table drops back to a skeleton whenever the member list changes
-        placeholderData: keepPreviousData,
+        enabled:
+          Boolean(currentOrganization?.id) && memberIdentifiers.length > 0,
+        // Deliberately no keepPreviousData. It would hold the previous map while a changed member
+        // list refetches, with isLoading false, so a row that is not in that map yet reads as
+        // "not an organization admin" and unlocks a control that must stay disabled. The member
+        // list only changes when someone is added, invited or removed, so the skeleton this costs
+        // is rare and is exactly the moment the old roles stop describing the rows on screen.
       },
     );
 

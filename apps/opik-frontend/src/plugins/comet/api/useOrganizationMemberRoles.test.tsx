@@ -126,6 +126,42 @@ describe("useOrganizationMemberRoles", () => {
       { userNames: ["alice", "bob"] },
     ]);
   });
+
+  it("does not confuse two name sets that would join to the same string", async () => {
+    // ["a", "b"] and ["a,b"] are different sets of members, but a comma-joined key renders both
+    // as "a,b" — the second would then be served the first one's roles.
+    mockPost.mockResolvedValue({ data: { roles: {} } });
+
+    renderHook(
+      () =>
+        useOrganizationMemberRoles({
+          organizationId: "org-1",
+          userNames: ["a", "b"],
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+
+    renderHook(
+      () =>
+        useOrganizationMemberRoles({
+          organizationId: "org-1",
+          userNames: ["a,b"],
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(2));
+
+    expect(
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: [ORGANIZATION_MEMBER_ROLES_QUERY_KEY] }),
+    ).toHaveLength(2);
+    expect(mockPost.mock.calls.map((call) => call[1])).toEqual([
+      { userNames: ["a", "b"] },
+      { userNames: ["a,b"] },
+    ]);
+  });
 });
 
 describe("useOrganizationAdmins", () => {
