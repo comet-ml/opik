@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
+import com.comet.opik.utils.ValidationUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import org.junit.jupiter.api.DisplayName;
@@ -57,7 +58,7 @@ class OnlineScoringEngineParsingTest {
         var logger = Mockito.mock(Logger.class);
         OnlineScoringEngine.logUnreadableResponse(logger, parsed, "traceId", "t-1");
         var reason = ArgumentCaptor.forClass(Object.class);
-        // Matched on the message: logUnreadableResponse also warns about unreadable values, with the same arity.
+        // Matched on the message: logUnreadableResponse also warns about unusable values.
         Mockito.verify(logger).warn(Mockito.contains("Nothing was scored"), Mockito.any(), Mockito.any(),
                 reason.capture());
         return String.valueOf(reason.getValue());
@@ -346,7 +347,7 @@ class OnlineScoringEngineParsingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"yes", "YES", "y", "pass", "passed", "true"})
+    @ValueSource(strings = {"yes", "YES", "y", "pass", "PASS", "passed", "true", "TRUE"})
     @DisplayName("read the affirmative spellings judges use on a boolean metric")
     void whenScoreIsAnAffirmativeWord_thenParsesAsOne(String word) {
         var parsed = OnlineScoringEngine.toFeedbackScores(
@@ -357,7 +358,7 @@ class OnlineScoringEngineParsingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"no", "NO", "n", "fail", "failed", "false"})
+    @ValueSource(strings = {"no", "NO", "n", "fail", "FAIL", "failed", "FAILED", "false"})
     @DisplayName("read the negative spellings judges use on a boolean metric")
     void whenScoreIsANegativeWord_thenParsesAsZero(String word) {
         var parsed = OnlineScoringEngine.toFeedbackScores(
@@ -478,8 +479,11 @@ class OnlineScoringEngineParsingTest {
                 new OnlineScoringEngine.ParsedFeedbackScores(List.of(), List.of(), List.of("Tone"), null),
                 "traceId", "t-1");
 
-        Mockito.verify(logger).warn(Mockito.contains("Could not read the score value"),
-                Mockito.eq("'Tone'"), Mockito.eq("traceId"), Mockito.eq("t-1"));
+        // The message covers unreadable and out-of-range alike, and states the storable range.
+        Mockito.verify(logger).warn(Mockito.contains("Could not use the score value"),
+                Mockito.eq("'Tone'"), Mockito.eq("traceId"), Mockito.eq("t-1"),
+                Mockito.eq(ValidationUtils.MIN_FEEDBACK_SCORE_VALUE),
+                Mockito.eq(ValidationUtils.MAX_FEEDBACK_SCORE_VALUE));
     }
 
     @Test

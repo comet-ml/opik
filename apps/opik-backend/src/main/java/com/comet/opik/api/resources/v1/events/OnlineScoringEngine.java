@@ -54,6 +54,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -1053,6 +1054,7 @@ public class OnlineScoringEngine {
      * @param unreadableScoreNames scores whose value the judge gave in a form we cannot read
      * @param problem              set when the answer as a whole yielded nothing; null otherwise
      */
+    @Builder(toBuilder = true)
     public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames,
             List<String> unreadableScoreNames, ResponseProblem problem) {
 
@@ -1082,13 +1084,15 @@ public class OnlineScoringEngine {
                     unreadableScoreNames.stream().map(userFacing).toList(),
                     problem == null
                             ? null
-                            : new ResponseProblem(problem.kind(), problem.evidence(),
-                                    problem.fields().stream().map(userFacing).toList(),
-                                    problem.omittedFields()));
+                            : problem.toBuilder()
+                                    .fields(problem.fields().stream().map(userFacing).toList())
+                                    .build());
         }
     }
 
-    public record ResponseProblem(Kind kind, String evidence, List<String> fields, int omittedFields) {
+    @Builder(toBuilder = true)
+    public record ResponseProblem(@NonNull Kind kind, @NonNull String evidence, @NonNull List<String> fields,
+            int omittedFields) {
         public enum Kind {
             NOT_JSON,
             NOT_A_JSON_OBJECT,
@@ -1111,8 +1115,10 @@ public class OnlineScoringEngine {
             Logger userFacingLogger, ParsedFeedbackScores parsed, String entityType, Object entityId) {
         if (!parsed.unreadableScoreNames().isEmpty()) {
             userFacingLogger.warn(
-                    "Could not read the score value for {} on {} '{}' — expected a number or a boolean",
-                    quoteAll(parsed.unreadableScoreNames()), entityType, entityId);
+                    "Could not use the score value for {} on {} '{}' — expected a boolean or a number"
+                            + " between {} and {}",
+                    sanitizeAndQuote(parsed.unreadableScoreNames()), entityType, entityId,
+                    ValidationUtils.MIN_FEEDBACK_SCORE_VALUE, ValidationUtils.MAX_FEEDBACK_SCORE_VALUE);
         }
         if (parsed.problem() != null) {
             userFacingLogger.warn("Nothing was scored for {} '{}': {}", entityType, entityId,
@@ -1153,7 +1159,8 @@ public class OnlineScoringEngine {
             return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content), List.of(), 0);
         }
         Map<String, String> declaredNames = schema.stream().collect(Collectors.toMap(
-                definition -> definition.name().toLowerCase(), LlmAsJudgeOutputSchema::name, (first, dup) -> first));
+                definition -> definition.name().toLowerCase(Locale.ROOT), LlmAsJudgeOutputSchema::name,
+                (first, dup) -> first));
         var collected = new CollectedScores();
         structuredResponse.properties().forEach(scoreMetric -> {
             var scoreName = scoreMetric.getKey();
@@ -1162,7 +1169,7 @@ public class OnlineScoringEngine {
                 log.debug("No score found for '{}' score in {}", scoreName, scoreNested);
                 return;
             }
-            var declaredName = declaredNames.get(scoreName.toLowerCase());
+            var declaredName = declaredNames.get(scoreName.toLowerCase(Locale.ROOT));
             if (declaredName == null) {
                 log.debug("Ignoring '{}': not a score declared by the rule", scoreName);
                 return;
@@ -1201,28 +1208,28 @@ public class OnlineScoringEngine {
         private final List<String> unreadableScoreNames = new ArrayList<>();
         private final Set<String> claimedNames = new HashSet<>();
 
-        void accept(String scoreName, JsonNode scoreNode) {
+        void accept(String declaredName, JsonNode scoreNode) {
             // Names match case-insensitively, so several keys in one answer can claim the same declared score.
             // Both would be inserted and collapse to whichever row wins on timestamp, so the first one wins.
-            if (!claimedNames.add(scoreName)) {
-                log.debug("Skipping a repeated '{}' score: the answer claimed it more than once", scoreName);
+            if (!claimedNames.add(declaredName)) {
+                log.debug("Skipping a repeated '{}' score: the answer claimed it more than once", declaredName);
                 return;
             }
             var actualScore = scoreNode.path(SCORE_FIELD_NAME);
             if (actualScore.isNull()) {
-                log.debug("Skipping '{}' score because the judge returned a null value", scoreName);
-                nullScoreNames.add(scoreName);
+                log.debug("Skipping '{}' score because the judge returned a null value", declaredName);
+                nullScoreNames.add(declaredName);
                 return;
             }
             toScoreValue(actualScore).filter(OnlineScoringEngine::isStorable)
                     .map(OnlineScoringEngine::toStorableScale).ifPresentOrElse(
                             value -> scores.add(FeedbackScoreBatchItem.builder()
-                                    .name(scoreName)
+                                    .name(declaredName)
                                     .reason(extractReason(scoreNode))
                                     .source(ScoreSource.ONLINE_SCORING)
                                     .value(value)
                                     .build()),
-                            () -> unreadableScoreNames.add(scoreName));
+                            () -> unreadableScoreNames.add(declaredName));
         }
 
         // Nothing usable and nothing explicitly not-applicable — i.e. the pass did not recognise the shape
@@ -1242,11 +1249,11 @@ public class OnlineScoringEngine {
         if (names.isEmpty()) {
             return "(none)";
         }
-        var shown = quoteAll(names);
+        var shown = sanitizeAndQuote(names);
         return omitted == 0 ? shown : "%s and %,d more".formatted(shown, omitted);
     }
 
-    private static String quoteAll(List<String> names) {
+    private static String sanitizeAndQuote(List<String> names) {
         return names.stream()
                 // The names come from the judge's answer and land in a persisted, user-visible log line, so
                 // control characters are stripped: a newline inside a name could otherwise forge a log entry.
@@ -1298,7 +1305,7 @@ public class OnlineScoringEngine {
         }
         var text = actualScore.asText().trim();
         var asBoolean = Optional.ofNullable(BooleanUtils.toBooleanObject(text))
-                .orElseGet(() -> PASS_FAIL_SCORES.get(text.toLowerCase()));
+                .orElseGet(() -> PASS_FAIL_SCORES.get(text.toLowerCase(Locale.ROOT)));
         if (asBoolean != null) {
             return Optional.of(asBoolean ? BigDecimal.ONE : BigDecimal.ZERO);
         }
