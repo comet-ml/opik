@@ -102,18 +102,43 @@ async function findByRemoteLink(globalId) {
   return null;
 }
 
-/** Tier 2 — JQL over the GitHub URL in the description. */
+/**
+ * Tier 2 — JQL over the GitHub URL in the description.
+ *
+ * A GitHub URL can legitimately appear in more than one ticket: engineers cite
+ * the issue in follow-up and sibling tickets. Only tickets carrying
+ * `github-sync` were created by this automation, so:
+ *
+ *   - prefer a `github-sync` ticket as the match, and
+ *   - only report `duplicates` when *several* of them exist, which is the
+ *     genuine double-create this sync must prevent.
+ *
+ * Without that filter the replay reported 33 "duplicates", of which only 6 were
+ * real — the other 27 were hand-written tickets that merely referenced the URL.
+ */
 async function findByJql(jql) {
   if (!JIRA_READY) return null;
-  const body = JSON.stringify({ jql, maxResults: 2, fields: ['key'] });
+  const body = JSON.stringify({
+    jql,
+    maxResults: 10,
+    fields: ['key', 'labels'],
+  });
   const data = await jira('/rest/api/3/search/jql', { method: 'POST', body });
   const issues = data.issues || [];
-  if (issues.length > 1) {
-    // Two tickets pointing at one GitHub issue: exactly the OPIK-6834/6835
-    // duplicate class this ticket exists to prevent. Surface it.
-    return { key: issues[0].key, duplicates: issues.map((i) => i.key) };
+  if (!issues.length) return null;
+
+  const synced = issues.filter((i) =>
+    (i.fields?.labels || []).includes('github-sync'),
+  );
+
+  if (synced.length > 1) {
+    return { key: synced[0].key, duplicates: synced.map((i) => i.key) };
   }
-  return issues.length ? issues[0].key : null;
+  if (synced.length === 1) return synced[0].key;
+
+  // No sync-created ticket. Something references this issue, but the sync never
+  // made one — report the reference so it can be triaged, not as a duplicate.
+  return { key: issues[0].key, related: issues.map((i) => i.key) };
 }
 
 async function main() {
@@ -148,6 +173,7 @@ async function main() {
   const tally = {
     matched: 0,
     wouldCreate: 0,
+    relatedOnly: 0,
     duplicates: 0,
     unconfidentType: 0,
     byVia: {},
@@ -187,16 +213,20 @@ async function main() {
 
     const key = existing?.key ?? null;
     const dupes = existing?.duplicates ?? null;
+    const related = existing?.related ?? null;
 
     tally.byType[type.type] = (tally.byType[type.type] || 0) + 1;
     tally.bySignal[type.signal] = (tally.bySignal[type.signal] || 0) + 1;
     if (!type.confident) tally.unconfidentType += 1;
 
+    // `key` is null when only citing tickets were found, so the live sync would
+    // still create. Count that as would-create and flag it for a human.
     if (key) {
       tally.matched += 1;
       tally.byVia[existing.via] = (tally.byVia[existing.via] || 0) + 1;
     } else if (!error) {
       tally.wouldCreate += 1;
+      if (related) tally.relatedOnly += 1;
     }
     if (dupes) tally.duplicates += 1;
 
@@ -211,6 +241,7 @@ async function main() {
       existingKey: key,
       matchedVia: existing?.via ?? null,
       duplicates: dupes,
+      related,
       error,
     });
 
@@ -222,6 +253,7 @@ async function main() {
     const warn = [
       type.confident ? '' : ' [type:unconfident]',
       dupes ? ` [DUPES ${dupes.join(',')}]` : '',
+      related ? ` [related ${related.join(',')}]` : '',
     ].join('');
     console.log(
       `#${String(issue.number).padEnd(5)} ${type.type.padEnd(4)} ${verdict}${warn}`,
@@ -232,6 +264,7 @@ async function main() {
   console.log(`replayed          ${rows.length}`);
   console.log(`matched existing  ${tally.matched}`);
   console.log(`would create      ${tally.wouldCreate}`);
+  console.log(`  ...of which referenced by a non-synced ticket: ${tally.relatedOnly}`);
   console.log(`duplicate pairs   ${tally.duplicates}`);
   console.log(`unconfident type  ${tally.unconfidentType}`);
   console.log(`matched via       ${JSON.stringify(tally.byVia)}`);

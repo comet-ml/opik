@@ -64,33 +64,53 @@ export JIRA_API_TOKEN=...
 
 ### Reading the output
 
-- `match OPIK-1234 (via)` — an existing ticket was found; the live sync would
-  skip creation.
-- `WOULD-CREATE` — no ticket found.
-- `[DUPES ...]` — more than one ticket points at this issue. Pre-existing data
-  problems, surfaced rather than hidden.
+- `match OPIK-1234 (via)` — an existing synced ticket was found; the live sync
+  would skip creation.
+- `WOULD-CREATE` — no synced ticket found.
+- `[DUPES ...]` — several **sync-created** tickets point at this issue. A real
+  double-create; pre-existing, surfaced rather than hidden.
+- `[related ...]` — a ticket cites this issue but was not created by the sync.
+  Not a match: the sync would still create. Worth a human look.
 - `[type:unconfident]` — no label and no title prefix; type fell back to `Task`.
 
 ## Latest replay
 
-79 labeled issues, tier 3 only (no Jira credentials):
+79 labeled issues, all three tiers live:
 
 ```
-matched existing  65
+matched existing  65      (tier 2: 64, tier 3: 1)
 would create      14
-duplicate pairs    1     (#4440 → OPIK-3453/3454/3455/3456)
+  ...referenced by a non-synced ticket: 4
+duplicate pairs    6
 unconfident type   4
 ```
 
-The 14 unmatched are **not** resolver failures. Verified by hand:
+### Duplicates: 6, not 33
 
-- **4 are test issues** — "[Bug]: This is a test", "[FR]: test", "Test", "Test2".
-- **2 have tickets created manually**, with a reworded summary and no
-  comment-back (#6619 → OPIK-7647, #6344 → OPIK-6058). Tier 2 catches these once
-  Jira credentials are supplied; tier 3 cannot, because nothing was ever posted
-  to the issue.
-- **The rest were never synced** — the label was applied and nothing happened.
-  That silent-failure mode is the core thing this rewrite fixes.
+The GitHub URL appears in more than one ticket whenever an engineer cites the
+issue from a follow-up. Matching on the URL alone reported 33 "duplicates"; only
+6 were real. Tier 2 therefore filters on the `github-sync` label — only tickets
+this automation created count — and reports a `related` list for citing tickets
+so they surface for triage without being mistaken for a double-create.
 
-Re-run with Jira credentials before the cutover to confirm tier 2 closes the
-gap on the second group.
+The 6 genuine ones (two sync-created tickets for one issue) are pre-existing data
+problems, not resolver output:
+
+```
+#4639 OPIK-3825/3748   #4504 OPIK-3722/3721   #4440 OPIK-3456/3455
+#4439 OPIK-3451/3450   #4379 OPIK-3400/3399   #3680 OPIK-3722/3721
+```
+
+### The 14 unmatched are all correct
+
+Verified individually:
+
+- **4 test issues** — "[Bug]: This is a test", "Test", "Test2", "[FR]: test".
+  These were synced to the unrelated `YT` project, which the resolver correctly
+  ignores.
+- **4 have only a citing ticket** (`related=`), never a synced one — #6619,
+  #6344, #4633, #4483. A human wrote those tickets by hand.
+- **6 were never synced at all** — the label went on and nothing happened. That
+  silent-failure mode is the core thing this rewrite fixes.
+
+No issue that was genuinely synced is reported as WOULD-CREATE.

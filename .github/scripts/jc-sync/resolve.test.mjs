@@ -228,6 +228,42 @@ test('tier 2 duplicate reports are normalised onto the result', async () => {
   assert.deepEqual(hit.duplicates, ['OPIK-6834', 'OPIK-6835']);
 });
 
+test('tier 2 related-only hits are not treated as a match', async () => {
+  // Engineers cite the GitHub URL in follow-up tickets. Those reference the
+  // issue but were never created by the sync, so they must not read as a
+  // duplicate — 27 of 33 reported "duplicates" in the first replay were these.
+  const hit = await findExistingTicket(ISSUE, {
+    findByRemoteLink: async () => null,
+    findByJql: async () => ({ key: 'OPIK-4121', related: ['OPIK-4121'] }),
+    listIssueComments: async () => [],
+  });
+  assert.equal(hit.key, null, 'a citing ticket is not a synced ticket');
+  assert.deepEqual(hit.related, ['OPIK-4121']);
+  assert.ok(!('duplicates' in hit));
+});
+
+test('a related-only tier 2 hit still falls through to tier 3', async () => {
+  // Regression: returning early on `related` skipped the comment check, so
+  // issues with both a citing ticket and a real marker comment (#5551) were
+  // reported as WOULD-CREATE despite having been synced.
+  let commentsRead = false;
+  const hit = await findExistingTicket(ISSUE, {
+    findByRemoteLink: async () => null,
+    findByJql: async () => ({ key: 'OPIK-6426', related: ['OPIK-6426'] }),
+    listIssueComments: async () => {
+      commentsRead = true;
+      return [
+        '**Jira Ticket Created:** [OPIK-5551](https://x/browse/OPIK-5551)',
+      ];
+    },
+  });
+  assert.ok(commentsRead, 'tier 3 must still run');
+  assert.equal(hit.key, 'OPIK-5551');
+  assert.equal(hit.via, 'github-comment');
+  // The citing ticket is still reported alongside the real match.
+  assert.deepEqual(hit.related, ['OPIK-6426']);
+});
+
 test('a single-key result carries no duplicates field', async () => {
   const hit = await findExistingTicket(ISSUE, {
     findByRemoteLink: async () => null,

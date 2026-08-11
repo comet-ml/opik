@@ -156,11 +156,23 @@ export async function findExistingTicket(
   // would match unrelated tickets.
   const needle = issueUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
   const jql = `project = ${JIRA_PROJECT} AND description ~ ${JSON.stringify(`"${needle}"`)}`;
-  // Callers may return a bare key or {key, duplicates}; normalise both.
+  // Callers may return a bare key, or {key, duplicates} / {key, related}.
+  // `duplicates` means several sync-created tickets exist (a real double-create).
+  // `related` means only hand-written tickets reference this issue — a weak
+  // match worth reporting but not the same failure.
   const byJql = await findByJql(jql);
-  if (byJql) {
-    const key = typeof byJql === 'string' ? byJql : byJql.key;
-    const dupes = typeof byJql === 'string' ? null : byJql.duplicates;
+  const jqlRelated =
+    byJql && typeof byJql !== 'string' && byJql.related?.length
+      ? byJql.related
+      : null;
+
+  // A `related`-only result is NOT a match — those tickets merely cite the
+  // issue. Fall through to tier 3 rather than short-circuiting on it, or an
+  // issue that has both a citing ticket and a real marker comment gets missed.
+  if (byJql && !jqlRelated) {
+    const isStr = typeof byJql === 'string';
+    const key = isStr ? byJql : byJql.key;
+    const dupes = isStr ? null : byJql.duplicates;
     if (key) {
       return {
         key,
@@ -171,8 +183,8 @@ export async function findExistingTicket(
   }
 
   // Collect across *all* marker comments rather than returning on the first.
-  // Issue #4348 carries four (YT-51/52/53/54) — stopping early would report a
-  // clean single match and hide exactly the duplication this sync must surface.
+  // Issue #4348 carries four — stopping early would report a clean single match
+  // and hide exactly the duplication this sync must surface.
   const comments = await listIssueComments();
   const keys = [];
   for (const body of comments) {
@@ -186,7 +198,13 @@ export async function findExistingTicket(
       key: keys[0],
       via: 'github-comment',
       ...(keys.length > 1 ? { duplicates: keys } : {}),
+      ...(jqlRelated ? { related: jqlRelated } : {}),
     };
+  }
+
+  // Nothing synced, but something cites the issue — surface it for triage.
+  if (jqlRelated) {
+    return { key: null, via: null, related: jqlRelated };
   }
 
   return null;
