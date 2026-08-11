@@ -20,7 +20,11 @@
  * Jira credentials are optional: without them tiers 1 and 2 are skipped and the
  * run degrades to comment-only matching, which still exercises tier 3.
  */
-import { findExistingTicket, resolveIssueType } from './resolve.mjs';
+import {
+  findExistingTicket,
+  remoteLinkJql,
+  resolveIssueType,
+} from './resolve.mjs';
 
 const REPO_OWNER = process.env.JC_REPO_OWNER || 'comet-ml';
 const REPO_NAME = process.env.JC_REPO_NAME || 'opik';
@@ -93,13 +97,24 @@ async function jira(path, init = {}) {
   return res.json();
 }
 
-/** Tier 1 — exact remote-link lookup. */
+/**
+ * Tier 1 — exact remote-link lookup.
+ *
+ * `issuesWithRemoteLinksByGlobalId()` is an indexed JQL function, so this is a
+ * true exact match rather than tier 2's text search. Historical tickets carry
+ * no remote links, so during a replay of the backlog this correctly returns
+ * null and falls through.
+ */
 async function findByRemoteLink(globalId) {
   if (!JIRA_READY) return null;
-  // Jira has no "search remote links across issues" endpoint, so this is only
-  // resolvable once a ticket is known. Historical tickets have no remote links
-  // at all, so in a replay this correctly returns null and we fall through.
-  return null;
+  const body = JSON.stringify({
+    jql: remoteLinkJql(globalId),
+    maxResults: 2,
+    fields: ['key'],
+  });
+  const data = await jira('/rest/api/3/search/jql', { method: 'POST', body });
+  const issues = data.issues || [];
+  return issues.length ? issues[0].key : null;
 }
 
 /**

@@ -29,6 +29,16 @@ export const TRIGGER_LABEL = 'JC';
 export const COMMENT_MARKER = 'Jira Ticket Created:';
 
 /**
+ * JQL that finds the issue carrying a given remote-link globalId.
+ *
+ * Jira indexes remote links, so this is an exact lookup rather than the text
+ * search tier 2 relies on. Verified against a live ticket.
+ */
+export function remoteLinkJql(globalId) {
+  return `issue in issuesWithRemoteLinksByGlobalId(${JSON.stringify(globalId)})`;
+}
+
+/**
  * Deterministic Jira remote-link id for a GitHub issue.
  *
  * Keyed on the numeric repo id rather than `owner/name` so a repo rename or
