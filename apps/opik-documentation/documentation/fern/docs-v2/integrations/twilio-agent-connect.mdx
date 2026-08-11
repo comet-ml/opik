@@ -1,0 +1,182 @@
+---
+description: Start here to integrate Opik into your Twilio Agent Connect voice agent
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: Twilio Agent Connect
+og:description: Learn to integrate Opik with Twilio Agent Connect to trace every caller
+  turn and attach call recordings to your voice agent conversations.
+og:site_name: Opik Documentation
+og:title: Integrate Opik with Twilio Agent Connect
+title: Observability for Twilio Agent Connect with Opik
+---
+
+[Twilio Agent Connect](https://www.twilio.com/docs/agent-connect) (TAC) is a framework for building AI agents that answer real phone calls. It handles the telephony, speech-to-text and text-to-speech, and calls your handler with the caller's transcribed message.
+
+This guide explains how to log your voice agent to Opik. You will trace every caller turn, group the turns of a call into a single conversation, and attach the call recording so you can listen to what the caller heard.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=docs&utm_content=twilio&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=docs&utm_content=twilio&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=docs&utm_content=twilio&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
+
+Install the `opik` and `twilio-agent-connect` packages:
+
+```bash
+pip install opik twilio-agent-connect
+```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/advanced/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+## Logging traces
+
+Twilio Agent Connect calls your handler once for every caller turn. Add the `@opik.track` decorator to that handler and each turn becomes a trace.
+
+Set `thread_id` to the conversation id so that every turn of the same phone call is grouped into a single Opik thread:
+
+```python title="agent.py"
+import opik
+from opik import opik_context
+from tac import TAC, TACConfig
+from tac.models.session import ConversationSession
+from tac.models.tac import TACMemoryResponse
+
+tac = TAC(TACConfig(
+    account_sid=TWILIO_ACCOUNT_SID,
+    auth_token=TWILIO_AUTH_TOKEN,
+    api_key=TWILIO_API_KEY,
+    api_secret=TWILIO_API_SECRET,
+    phone_number=TWILIO_PHONE_NUMBER,
+))
+
+
+@opik.track(name="voice-agent-turn", project_name="my-voice-agent")
+async def handle_message_ready(
+    message: str,
+    context: ConversationSession,
+    memory: TACMemoryResponse | None,
+) -> str:
+    # Group every turn of this call into one Opik thread
+    opik_context.update_current_trace(thread_id=context.conversation_id)
+
+    response = await run_my_agent(message, context, memory)
+    return response
+
+
+tac.on_message_ready(handle_message_ready)
+```
+
+That is the whole tracing setup. One caller turn is one trace, and one phone call is one thread.
+
+<Tip>
+  Any function you call from the handler can be traced too. Add `@opik.track` to your
+  retrieval step, your tools and your LLM calls, and they appear as nested spans on the
+  turn's trace.
+</Tip>
+
+You can also log useful call details as metadata:
+
+```python
+opik_context.update_current_trace(
+    thread_id=context.conversation_id,
+    metadata={
+        "channel": context.channel,
+        "profile_id": context.profile_id,
+    },
+)
+```
+
+## Logging call recordings
+
+Your handler receives text, because Twilio performs the speech-to-text and text-to-speech. To listen to a conversation in Opik, record the call with Twilio and attach the audio to your thread. Opik plays audio attachments inline.
+
+### Step 1: Start the recording
+
+Twilio Agent Connect lets you run code when an inbound call arrives. Use that hook to start a recording, and tell Twilio where to notify you when the audio is ready:
+
+```python title="recording.py"
+from twilio.rest import Client
+from tac.models.voice import TwiMLOptions, TwiMLRequest
+
+twilio = Client(TWILIO_API_KEY, TWILIO_API_SECRET, TWILIO_ACCOUNT_SID)
+
+
+async def start_recording(request: TwiMLRequest) -> TwiMLOptions:
+    twilio.calls(request.call_sid).recordings.create(
+        recording_channels="dual",
+        recording_status_callback=f"{PUBLIC_URL}/recording",
+    )
+    return TwiMLOptions()
+
+
+voice_channel.on_inbound_call_twiml(start_recording)
+```
+
+`recording_channels="dual"` keeps the caller and the agent on separate audio channels.
+
+### Step 2: Attach the recording
+
+When the call ends, Twilio calls your webhook with a link to the audio. Download it and attach it to a trace in the same thread:
+
+```python title="recording.py"
+import httpx
+import opik
+from opik import Attachment
+
+opik_client = opik.Opik(project_name="my-voice-agent")
+
+
+@app.post("/recording")
+async def recording_ready(request: Request):
+    form = await request.form()
+    call_sid = form["CallSid"]
+
+    audio = httpx.get(
+        f"{form['RecordingUrl']}.mp3",
+        auth=(TWILIO_API_KEY, TWILIO_API_SECRET),
+    )
+
+    opik_client.trace(
+        name="call-recording",
+        thread_id=call_sid,
+        output={"duration_s": int(form["RecordingDuration"])},
+        attachments=[
+            Attachment(
+                data=audio.content,
+                file_name=f"call-{call_sid}.mp3",
+                content_type="audio/mpeg",
+            )
+        ],
+    )
+    opik_client.flush()
+```
+
+Twilio uses the call SID as the conversation id, so the recording lands in the same Opik thread as the turns of that call. Open the thread in Opik and you can read the transcript and play the audio side by side.
+
+<Note>
+  Call recording is subject to local laws on consent. Check the rules that apply where
+  your callers are before you enable it.
+</Note>
+
+## What gets logged
+
+With this setup, Opik records:
+
+- **Threads**: one per phone call, containing every turn in order
+- **Traces**: one per caller turn, with the caller's message and the agent's reply
+- **Spans**: your retrieval, tools and LLM calls, including token usage and cost
+- **Attachments**: the call recording, playable in the Opik UI
+
+## Further improvements
+
+If you have any questions or suggestions for improving the Twilio Agent Connect integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.
