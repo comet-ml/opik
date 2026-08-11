@@ -719,6 +719,9 @@ navigation:
               - page: Temporal
                 path: ../docs-v2/integrations/temporal.mdx
                 slug: temporal
+              - page: Twilio Agent Connect
+                path: ../docs-v2/integrations/twilio-agent-connect.mdx
+                slug: twilio-agent-connect
               - page: VoltAgent
                 path: ../docs-v2/integrations/voltagent.mdx
                 slug: voltagent
