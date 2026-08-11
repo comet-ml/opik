@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import orderBy from "lodash/orderBy";
 import sortBy from "lodash/sortBy";
-import toLower from "lodash/toLower";
 
 import { useToast } from "@/ui/use-toast";
-import { calculateWorkspaceName } from "@/lib/utils";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import useUser from "@/plugins/comet/useUser";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useWorkspace from "@/plugins/comet/useWorkspace";
+import useOrganizationWorkspacesPage from "@/plugins/comet/useOrganizationWorkspacesPage";
 import useRecentWorkspaces from "@/plugins/comet/useRecentWorkspaces";
 import useAppStore from "@/store/AppStore";
 import {
@@ -22,6 +21,8 @@ import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { buildUrl } from "@/plugins/comet/utils";
 import { postWorkspacePointRead } from "@/plugins/comet/lib/workspacePointRead";
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 const useWorkspaceSelectorData = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -30,22 +31,75 @@ const useWorkspaceSelectorData = () => {
   const [isOrgSubmenuOpen, setIsOrgSubmenuOpen] = useState(false);
 
   const { data: user } = useUser();
-  const { data: allWorkspaces, isLoading } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
   const { data: organizations } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
   const currentOrganization = useCurrentOrganization();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const organizationId = currentOrganization?.id ?? "";
 
-  const { getVisitedAt, recordVisit } = useRecentWorkspaces();
+  // Identity of the active workspace via the point read (shared cache with bootstrap), so the recency
+  // record carries id + organizationId and the switcher can render recents without a list download.
+  const activeWorkspace = useWorkspace();
+  const { recentWorkspaces, recordVisit } = useRecentWorkspaces();
 
-  // Mark the active workspace as recently visited so recency ordering reflects
+  // Debounce the search term so each keystroke does not fire a server request.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [search]);
+  const trimmedSearch = debouncedSearch.trim();
+  const isSearching = trimmedSearch.length > 0;
+
+  // One bounded page per slice from the visibility-scoped endpoint; `search` reaches the server.
+  const {
+    data: pagedData,
+    isLoading: isPageLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useOrganizationWorkspacesPage(
+    { organizationId, search: trimmedSearch || undefined },
+    {
+      enabled: !!user?.loggedIn && !!organizationId,
+      // Keep the previous slice on screen while a new search term loads, so the trigger and list do
+      // not flash a skeleton on every keystroke.
+      placeholderData: keepPreviousData,
+    },
+  );
+
+  // Mark the active workspace as recently visited (with identity) so recency ordering reflects
   // arrivals via direct URL, not only in-menu switches.
   useEffect(() => {
-    if (workspaceName) recordVisit(workspaceName);
-  }, [workspaceName, recordVisit]);
+    if (activeWorkspace) recordVisit(activeWorkspace);
+  }, [activeWorkspace, recordVisit]);
+
+  const serverWorkspaces = useMemo<Workspace[]>(
+    () => (pagedData?.pages ?? []).flatMap((page) => page.data),
+    [pagedData],
+  );
+  const total = pagedData?.pages?.[0]?.total ?? 0;
+
+  // Recently visited, scoped to the current organization and stripped of the personal "default" and
+  // reserved AI-spend workspaces (the endpoint hides them; recents are local so we filter here).
+  const recents = useMemo<Workspace[]>(
+    () =>
+      recentWorkspaces
+        .map<Workspace>((workspace) => ({
+          workspaceId: workspace.workspaceId,
+          workspaceName: workspace.workspaceName,
+          organizationId: workspace.organizationId,
+          default: false,
+        }))
+        .filter(
+          (workspace) =>
+            workspace.organizationId === organizationId &&
+            workspace.workspaceName !== DEFAULT_WORKSPACE_NAME &&
+            !isAiSpendWorkspace(workspace),
+        ),
+    [recentWorkspaces, organizationId],
+  );
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
@@ -64,7 +118,7 @@ const useWorkspaceSelectorData = () => {
 
   const handleChangeWorkspace = useCallback(
     (newWorkspace: Workspace) => {
-      recordVisit(newWorkspace.workspaceName);
+      recordVisit(newWorkspace);
       navigate({
         to: "/$workspaceName",
         params: { workspaceName: newWorkspace.workspaceName },
@@ -78,9 +132,10 @@ const useWorkspaceSelectorData = () => {
   // answers 404 -> null when the caller has none there.
   const handleChangeOrganization = useCallback(
     async (newOrganization: Organization) => {
-      const landing = await postWorkspacePointRead("/workspaces/retrieve-landing", {
-        organizationId: newOrganization.id,
-      });
+      const landing = await postWorkspacePointRead(
+        "/workspaces/retrieve-landing",
+        { organizationId: newOrganization.id },
+      );
 
       if (!landing) {
         toast({
@@ -90,7 +145,7 @@ const useWorkspaceSelectorData = () => {
         return;
       }
 
-      recordVisit(landing.workspaceName);
+      recordVisit(landing);
       navigate({
         to: "/$workspaceName",
         params: { workspaceName: landing.workspaceName },
@@ -108,62 +163,27 @@ const useWorkspaceSelectorData = () => {
     }
   }, [currentOrganization, workspaceName]);
 
-  const memberWorkspaces = useMemo(() => {
-    if (!allWorkspaces || !currentOrganization) return [];
-    return allWorkspaces.filter(
-      (workspace) =>
-        workspace.organizationId === currentOrganization.id &&
-        workspace.workspaceName !== DEFAULT_WORKSPACE_NAME &&
-        !isAiSpendWorkspace(workspace),
-    );
-  }, [allWorkspaces, currentOrganization]);
-
-  const filteredWorkspaces = useMemo(() => {
-    const trimmed = search.trim();
-    if (!trimmed) return memberWorkspaces;
-
-    const searchLower = toLower(trimmed);
-    return memberWorkspaces.filter((workspace) => {
-      const displayName = calculateWorkspaceName(workspace.workspaceName);
-      return toLower(displayName).includes(searchLower);
-    });
-  }, [memberWorkspaces, search]);
-
-  // Recently visited first (mirrors the projects menu's last-updated ordering),
-  // falling back to alphabetical for workspaces that have never been visited.
-  const sortedWorkspaces = useMemo(
-    () =>
-      orderBy(
-        filteredWorkspaces,
-        [
-          (workspace) => getVisitedAt(workspace.workspaceName),
-          (workspace) =>
-            toLower(calculateWorkspaceName(workspace.workspaceName)),
-        ],
-        ["desc", "asc"],
-      ),
-    [filteredWorkspaces, getVisitedAt],
-  );
-
   const sortedOrganizations = useMemo(() => {
     if (!organizations) return [];
     return sortBy(organizations, "name");
   }, [organizations]);
 
   const hasMultipleOrganizations = organizations && organizations.length > 1;
-  const hasMemberWorkspaces = memberWorkspaces.length > 0;
-  const shouldShowDropdown = hasMemberWorkspaces || hasMultipleOrganizations;
+  const hasWorkspaces = total > 0 || recents.length > 0;
+  const shouldShowDropdown = hasWorkspaces || hasMultipleOrganizations;
   const isOrgAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
   return {
     user,
     workspaceName,
     currentOrganization,
-    isLoading,
+    // Only the first-slice load blocks the menu; loading more is inline.
+    isLoading: isPageLoading,
     organizations,
 
     search,
     setSearch,
+    isSearching,
     isDropdownOpen,
     setIsDropdownOpen,
     isOrgSubmenuOpen,
@@ -174,11 +194,16 @@ const useWorkspaceSelectorData = () => {
     handleChangeOrganization,
     handleOrgSettingsClick,
 
-    sortedWorkspaces,
+    recents,
+    serverWorkspaces,
+    total,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+
     sortedOrganizations,
 
     shouldShowDropdown,
-    hasMemberWorkspaces,
     hasMultipleOrganizations,
     isOrgAdmin,
   };

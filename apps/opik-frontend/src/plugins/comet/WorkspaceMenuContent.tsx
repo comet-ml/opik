@@ -51,7 +51,14 @@ const MenuSectionLabel: React.FC<
 interface WorkspaceMenuContentProps {
   workspaceName: string;
   currentOrganization: Organization;
-  sortedWorkspaces: Workspace[];
+  // Recently visited (current org, from local history) and the server-paged list of everything else.
+  recents: Workspace[];
+  serverWorkspaces: Workspace[];
+  total: number;
+  isSearching: boolean;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => void;
   sortedOrganizations: Organization[];
   hasMultipleOrganizations: boolean | undefined;
   isOrgSubmenuOpen: boolean;
@@ -66,7 +73,13 @@ interface WorkspaceMenuContentProps {
 const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
   workspaceName,
   currentOrganization,
-  sortedWorkspaces,
+  recents,
+  serverWorkspaces,
+  total,
+  isSearching,
+  hasNextPage,
+  isFetchingNextPage,
+  fetchNextPage,
   sortedOrganizations,
   hasMultipleOrganizations,
   isOrgSubmenuOpen,
@@ -86,39 +99,55 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
     unpinWorkspace,
   } = usePinnedWorkspaces(currentOrganization.id);
 
-  const isSearching = search.trim().length > 0;
+  // Pinned rows render from the pin store directly (it carries id + name), so they no longer depend
+  // on the workspace being present in a downloaded list.
+  const pinnedWorkspaces = useMemo<Workspace[]>(
+    () =>
+      pinnedConfig.map((pinned) => ({
+        workspaceId: pinned.workspaceId,
+        workspaceName: pinned.workspaceName,
+        organizationId: currentOrganization.id,
+        default: false,
+      })),
+    [pinnedConfig, currentOrganization.id],
+  );
 
-  // When searching, show all matches flat (virtualized above the threshold).
-  // Otherwise cluster into Pinned + Recently visited (capped) sections.
-  const workspacesById = useMemo(
-    () =>
-      new Map(
-        sortedWorkspaces.map((workspace) => [workspace.workspaceId, workspace]),
-      ),
-    [sortedWorkspaces],
+  const pinnedIds = useMemo(
+    () => new Set(pinnedConfig.map((pinned) => pinned.workspaceId)),
+    [pinnedConfig],
   );
-  // Pinned rows keep the hook's insertion order (stable, like the projects menu),
-  // limited to workspaces present in the current (search-filtered) list.
-  const pinnedWorkspaces = useMemo(
-    () =>
-      pinnedConfig
-        .map((pinned) => workspacesById.get(pinned.workspaceId))
-        .filter((workspace): workspace is Workspace => Boolean(workspace)),
-    [pinnedConfig, workspacesById],
-  );
+
   const recentlyVisitedWorkspaces = useMemo(
     () =>
-      sortedWorkspaces
-        .filter((workspace) => !isPinned(workspace.workspaceId))
+      recents
+        .filter((workspace) => !pinnedIds.has(workspace.workspaceId))
         .slice(0, RECENTLY_VISITED_SIZE),
-    [sortedWorkspaces, isPinned],
+    [recents, pinnedIds],
+  );
+
+  // The "everything else" list: server rows minus what is already shown as pinned / recently visited.
+  const shownAboveIds = useMemo(() => {
+    const ids = new Set(pinnedIds);
+    recentlyVisitedWorkspaces.forEach((workspace) =>
+      ids.add(workspace.workspaceId),
+    );
+    return ids;
+  }, [pinnedIds, recentlyVisitedWorkspaces]);
+
+  const restWorkspaces = useMemo(
+    () =>
+      serverWorkspaces.filter(
+        (workspace) => !shownAboveIds.has(workspace.workspaceId),
+      ),
+    [serverWorkspaces, shownAboveIds],
   );
 
   const shouldVirtualize =
-    isSearching && sortedWorkspaces.length > WORKSPACE_VIRTUALIZATION_THRESHOLD;
+    isSearching &&
+    serverWorkspaces.length > WORKSPACE_VIRTUALIZATION_THRESHOLD;
 
   const virtualizer = useVirtualizer({
-    count: shouldVirtualize ? sortedWorkspaces.length : 0,
+    count: shouldVirtualize ? serverWorkspaces.length : 0,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => WORKSPACE_ITEM_HEIGHT,
     overscan: WORKSPACE_VIRTUAL_OVERSCAN,
@@ -131,6 +160,27 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
       unpinWorkspace(workspace.workspaceId);
     }
   };
+
+  const notShownCount = Math.max(total - serverWorkspaces.length, 0);
+
+  const renderLoadMore = () =>
+    hasNextPage ? (
+      <DropdownMenuItem
+        size="sm"
+        className="justify-center text-light-slate"
+        disabled={isFetchingNextPage}
+        onSelect={(e) => {
+          e.preventDefault();
+          fetchNextPage();
+        }}
+      >
+        {isFetchingNextPage
+          ? "Loading…"
+          : notShownCount > 0
+            ? `Load more (${notShownCount} more)`
+            : "Load more"}
+      </DropdownMenuItem>
+    ) : null;
 
   const renderWorkspaceItem = (workspace: Workspace) => {
     const wsDisplayName = calculateWorkspaceName(workspace.workspaceName);
@@ -182,6 +232,9 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
       </DropdownMenuItem>
     );
   };
+
+  const isEmpty =
+    (isSearching ? serverWorkspaces.length : total + recents.length) === 0;
 
   return (
     <>
@@ -304,39 +357,42 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
         ref={scrollRef}
         className="max-h-[50vh] overflow-y-auto overflow-x-hidden"
       >
-        {sortedWorkspaces.length === 0 ? (
+        {isEmpty ? (
           <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
             <span className="comet-body-s text-muted-slate">
               No workspaces found
             </span>
           </div>
         ) : isSearching ? (
-          shouldVirtualize ? (
-            <div
-              style={{
-                height: `${virtualizer.getTotalSize()}px`,
-                position: "relative",
-              }}
-            >
-              {virtualizer.getVirtualItems().map((virtualRow) => (
-                <div
-                  key={virtualRow.key}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: `${virtualRow.size}px`,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                >
-                  {renderWorkspaceItem(sortedWorkspaces[virtualRow.index])}
-                </div>
-              ))}
-            </div>
-          ) : (
-            sortedWorkspaces.map(renderWorkspaceItem)
-          )
+          <>
+            {shouldVirtualize ? (
+              <div
+                style={{
+                  height: `${virtualizer.getTotalSize()}px`,
+                  position: "relative",
+                }}
+              >
+                {virtualizer.getVirtualItems().map((virtualRow) => (
+                  <div
+                    key={virtualRow.key}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    {renderWorkspaceItem(serverWorkspaces[virtualRow.index])}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              serverWorkspaces.map(renderWorkspaceItem)
+            )}
+            {renderLoadMore()}
+          </>
         ) : (
           <>
             {pinnedWorkspaces.length > 0 && (
@@ -354,6 +410,17 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
                 {recentlyVisitedWorkspaces.map(renderWorkspaceItem)}
               </>
             )}
+            {restWorkspaces.length > 0 && (
+              <>
+                {(pinnedWorkspaces.length > 0 ||
+                  recentlyVisitedWorkspaces.length > 0) && (
+                  <DropdownMenuSeparator className="my-1" />
+                )}
+                <MenuSectionLabel>All workspaces</MenuSectionLabel>
+                {restWorkspaces.map(renderWorkspaceItem)}
+              </>
+            )}
+            {renderLoadMore()}
           </>
         )}
       </div>

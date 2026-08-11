@@ -37,7 +37,13 @@ const SidebarWorkspaceSelector: React.FC<SidebarWorkspaceSelectorProps> = ({
     handleChangeWorkspace,
     handleChangeOrganization,
 
-    sortedWorkspaces,
+    recents,
+    serverWorkspaces,
+    total,
+    isSearching,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
     sortedOrganizations,
 
     shouldShowDropdown,
@@ -158,7 +164,13 @@ const SidebarWorkspaceSelector: React.FC<SidebarWorkspaceSelectorProps> = ({
         <WorkspaceMenuContent
           workspaceName={workspaceName}
           currentOrganization={currentOrganization}
-          sortedWorkspaces={sortedWorkspaces}
+          recents={recents}
+          serverWorkspaces={serverWorkspaces}
+          total={total}
+          isSearching={isSearching}
+          hasNextPage={Boolean(hasNextPage)}
+          isFetchingNextPage={isFetchingNextPage}
+          fetchNextPage={fetchNextPage}
           sortedOrganizations={sortedOrganizations}
           hasMultipleOrganizations={hasMultipleOrganizations}
           isOrgSubmenuOpen={isOrgSubmenuOpen}
