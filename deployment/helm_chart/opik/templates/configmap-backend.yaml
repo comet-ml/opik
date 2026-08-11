@@ -49,6 +49,7 @@ data:
         "ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED" $dm.traceDeletionEventsCaptureEnabled
         "ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED" $dm.spanDeletionEventsCaptureEnabled
         "ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE" $dm.deletionEventsInsertBatchSize
+        "ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED" $dm.tracesDistributedWrapEnabled
         "PARTITION_METRICS_ENABLED" $pm.enabled
         "PARTITION_METRICS_INTERVAL" $pm.interval
         "PARTITION_METRICS_LWD_TABLES" $pm.lwdTables

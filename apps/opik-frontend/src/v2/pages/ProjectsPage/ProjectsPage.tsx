@@ -112,6 +112,9 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
   },
 ];
 
+const PROJECT_STATS_WINDOW_DAYS = 30;
+const WINDOW_SUFFIX = ` (${PROJECT_STATS_WINDOW_DAYS}d)`;
+
 const ProjectsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -141,44 +144,44 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "duration.p50",
-        label: "Avg duration",
+        label: `Avg duration${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
       },
       {
         id: "duration.p90",
-        label: "Duration (p90)",
+        label: `Duration (p90)${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p90,
         cell: DurationCell as never,
       },
       {
         id: "duration.p99",
-        label: "Duration (p99)",
+        label: `Duration (p99)${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p99,
         cell: DurationCell as never,
       },
       {
         id: "total_estimated_cost_sum",
-        label: "Total cost",
+        label: `Total cost${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
       },
       {
         id: "trace_count",
-        label: "Trace count",
+        label: `Trace count${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
       },
       {
         id: "thread_count",
-        label: "Thread count",
+        label: `Thread count${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
       },
       {
         id: "error_count",
-        label: "Errors",
+        label: `Errors${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.errors,
         cell: ErrorsCountCell as never,
         customMeta: {
@@ -206,7 +209,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.total_tokens",
-        label: "Avg total tokens",
+        label: `Avg total tokens${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.total_tokens)
@@ -215,7 +218,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.prompt_tokens",
-        label: "Avg input tokens",
+        label: `Avg input tokens${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.prompt_tokens)
@@ -224,7 +227,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.completion_tokens",
-        label: "Avg output tokens",
+        label: `Avg output tokens${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.completion_tokens)
@@ -233,7 +236,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Avg feedback scores",
+        label: `Avg feedback scores${WINDOW_SUFFIX}`,
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: (row) => get(row, "feedback_scores", []),
         cell: FeedbackScoreListCell as never,
@@ -247,7 +250,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         ? [
             {
               id: COLUMN_GUARDRAILS_ID,
-              label: "Guardrails",
+              label: `Guardrails${WINDOW_SUFFIX}`,
               type: COLUMN_TYPE.category,
               iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: ProjectWithStatistic) =>
@@ -338,6 +341,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         page: page!,
         size: size!,
         logsSource: LOGS_SOURCE.sdk,
+        windowDays: PROJECT_STATS_WINDOW_DAYS,
       },
       {
         placeholderData: keepPreviousData,

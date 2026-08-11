@@ -6,8 +6,9 @@
 -- this file, substitutes the placeholders and runs it — never run this file by hand:
 --   ../delta_replay.sh --database opik --backfill-start '2025-06-01 12:00:00.000000'
 -- The surrounding config operations (buffer raise/restore) and the go/no-go checkpoint stay with the operator, where
--- situational awareness matters most — those are config/judgement, not SQL. clickhouse-client prints each statement's
--- elapsed time, which is the replay measurement in step 5.
+-- situational awareness matters most — those are config/judgement, not SQL. The driver invokes clickhouse-client with
+-- --time, so it prints each statement's elapsed seconds to stderr (delta-insert first, deletion replay second); the
+-- second value is the replay measurement in step 5. A bare --query prints no timing, hence the flag.
 
 -- Step 1: BACKFILL_START is the timestamp captured BEFORE the backfill began. backfill.sh prints it at startup
 -- ("RECORD backfill_start=..."); if you ran the backfill manually, use the now64(6) you captured before the first
@@ -90,26 +91,19 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- >>> END delta-insert
 
 -- Step 4: Deletion replay — remove from the destination every row that was deleted on the source since backfill_start
--- AND is still deleted there. Two branches, mirroring the product's two delete paths (TraceService.delete): a delete
--- resolves each trace's owning project and deletes per project; ids it cannot resolve fall back to a workspace-scoped
--- delete (TraceDAO DELETE_BY_ID with no project filter). The bridge records the first with the project and the second
--- with an EMPTY project_id (DeletionEventDAO: "project_id is empty for workspace-scoped source tables"). So:
---   * events WITH a project -> match the FULL key (workspace_id, project_id, id). Exact, prunes on the destination
---     primary key, and correct even when an id is reused across projects (ids are not globally unique).
---   * events WITHOUT a project -> match (workspace_id, id). A faithful mirror of the source's workspace-scoped delete.
+-- AND is still deleted there. Single FULL-KEY branch: since OPIK-7483 every trace delete resolves its owning project(s)
+-- and deletes each under the full (workspace_id, project_id, id) key — there is no project-less delete path, so no
+-- deletion event is ever bridged with an empty project_id for source_table='traces' (a pre-cutover prereq asserts the
+-- bridge holds none — see README "Prerequisites"). So the replay matches the FULL key (workspace_id, project_id, id):
+-- exact, prunes on the destination primary key, and correct even when an id is reused across projects (not globally unique).
 -- RESURRECTION GUARD (the `NOT IN traces` arm): a trace can be deleted and then re-created/updated under the same id
 -- during the window (client-supplied ids; the delete is a mask, a newer insert wins under FINAL). Such an id is bridged
 -- as deleted but is LIVE again on the source, and the backfill/delta already copied its live version. Deleting it by key
--- would drop a row that is live on the source — silent data loss. So each branch deletes only ids that are NOT currently
+-- would drop a row that is live on the source — silent data loss. So the replay deletes only ids that are NOT currently
 -- live on the source (mask-honored). The `id IN (deleted_ids since anchor)` bound keeps the deleted-id set tiny
 -- (retention is off, so these are user-scale deletes); `traces` has no id skip index (000088 indexes only
 -- created_at/last_updated_at — id minmax/bloom indexes exist only on traces_local_v2), so this source lookup is a
--- bounded id-filtered read of that tiny set, not a value-indexed prune of the ~4 TB table.
--- KNOWN RESIDUAL (workspace-scoped arm only): its guard keys on (workspace_id, id), so an id live in ONE project shields
--- the deletion of that id's now-deleted copies in OTHER projects (ids are not globally unique). Requires cross-project id
--- reuse + a workspace-scoped delete + a resurrection in the window — rare. The 000005 FINAL fingerprint flags it as an
--- extra destination row (ok=0) rather than passing silently. OPIK-7483 removes the workspace-scoped delete path at the
--- source (deletes always carry project_id), retiring this arm and the residual.
+-- bounded id-filtered read of that tiny set, not a value-indexed prune of the full `traces` table.
 -- allow_nondeterministic_mutations: a lightweight DELETE with cross-table subqueries is flagged nondeterministic, but
 -- deletion_events_local and traces are replicated and identical on every node and the window predicate is fixed, so the
 -- subqueries resolve to the same set on every replica. Idempotent (never masks a live-on-source id, so re-runs converge).
@@ -117,8 +111,9 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- accepted it. The mutation is otherwise asynchronous, so without this the verify step (and the EXCHANGE) could run
 -- against a replica where the mask is not yet applied — a false mismatch, or worse an incomplete cutover.
 -- Uses ${BACKFILL_START}. Retention is disabled everywhere (see step 6), so this is user-scale volume — a single
--- mutation. If it is ever large (e.g. retention enabled), bound each mutation by a partition predicate and loop the
--- weeks, e.g. AND toMonday(id_at) = toDate('<week>').
+-- mutation. If it is ever large (e.g. retention enabled), bound each mutation by a created_at week (the non-wrapping,
+-- minmax-indexed slice backfill.sh uses) and loop the weeks — NOT toMonday(id_at), which wraps far-future/epoch ids
+-- (OPIK-7456) and no longer matches the successor's honest-Date32 partition expression.
 -- length(...) = 36 guards: toFixedString(x, 36) THROWS on a value longer than 36 bytes, which would abort the whole
 -- replay on a single malformed bridge row. For source_table='traces' the ids are 36-char UUIDs, so this is latent — but
 -- a malformed (non-36-char) deleted_id/project_id can't match a real trace id anyway, so skipping it via the length
@@ -142,31 +137,6 @@ WHERE (
         SELECT
             workspace_id,
             project_id,
-            id
-        FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
-        WHERE id IN (
-            SELECT toFixedString(deleted_id, 36)
-            FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
-            WHERE source_table = 'traces'
-              AND event_time >= toDateTime64('${BACKFILL_START}', 6)
-              AND length(deleted_id) = 36
-        )
-    )
-)
-OR (
-    (workspace_id, id) IN (
-        SELECT
-            workspace_id,
-            toFixedString(deleted_id, 36)
-        FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
-        WHERE source_table = 'traces'
-          AND event_time >= toDateTime64('${BACKFILL_START}', 6)
-          AND project_id = ''
-          AND length(deleted_id) = 36
-    )
-    AND (workspace_id, id) NOT IN (
-        SELECT
-            workspace_id,
             id
         FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
         WHERE id IN (

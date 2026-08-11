@@ -3401,6 +3401,43 @@ class GetTracesByProjectResourceTest {
                     values.all(), filters, Map.of());
         }
 
+        @Test
+        @DisplayName("get trace stats without filters aggregates span feedback scores")
+        void getTraceStats__whenNoFilters__thenSpanFeedbackScoresAggregated() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(3)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var traceIdToSpanFeedbackScoresMap = new HashMap<UUID, FeedbackScore>();
+            var traceIdToSpansMap = new HashMap<UUID, List<Span>>();
+            var templateScore = initFeedbackScoreItem().build();
+
+            // Every trace has spans carrying span-level feedback scores. With no filter the stats query
+            // takes the else branch and must still aggregate them through the inverted span-score lookup
+            // (OPIK-7331): span_scores -> scored_span_traces -> span_fs, without a full spans scan.
+            traces.forEach(trace -> processTraceWithFeedbackScores(trace, projectName, apiKey, workspaceName,
+                    templateScore, 70, 90, traceIdToSpansMap, traceIdToSpanFeedbackScoresMap));
+
+            var expectedTraces = enrichTracesWithSpanData(traces, traceIdToSpanFeedbackScoresMap, traceIdToSpansMap);
+
+            var values = traceStatsAssertion.transformTestParams(expectedTraces, expectedTraces, List.of());
+            traceStatsAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), List.of(), Map.of());
+        }
+
         private Stream<Arguments> getTracesByProject__whenFilterSpanFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
             return Stream.of(
                     Arguments.of(Operator.IS_NOT_EMPTY,

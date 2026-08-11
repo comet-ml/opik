@@ -67,7 +67,7 @@ jobs:
       # PHASE 1: Checkout & Environment Setup
       # ========================================
       - name: "📥 Checkout repository"
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: "🔍 Get PR/commit information"
         id: get-pr-info
@@ -89,7 +89,7 @@ jobs:
           echo "📝 Author: $AUTHOR"
 
       - name: "📦 Setup Node.js"
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -124,7 +124,7 @@ jobs:
         run: |
           echo "::group::Building Opik from branch: ${REF_NAME}"
           cd ${{ github.workspace }}
-          TOGGLE_WELCOME_WIZARD_ENABLED="false" TOGGLE_FORCE_WORKSPACE_VERSION="version_2" ./opik.sh --build
+          TOGGLE_WELCOME_WIZARD_ENABLED="false" ./opik.sh --build
           echo "::endgroup::"
           echo "✅ Opik build complete"
 
@@ -382,7 +382,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false

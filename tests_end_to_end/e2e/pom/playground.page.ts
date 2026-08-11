@@ -476,8 +476,19 @@ export class PlaygroundPage {
       await this.modelPicker(index).click();
       await expect(listbox).toBeVisible({ timeout: 2_000 });
     }).toPass({ timeout: 15_000 });
-    await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
-    await listbox.getByRole('option', { name: modelDisplayName, exact: true }).first().click();
+
+    // The option list remounts when /llm/models or /provider-keys resolves, and
+    // the suite configures a provider immediately before opening the Playground —
+    // so the dropdown routinely opens inside that refetch window and options are
+    // detached mid-click. Re-filter and re-click until the popover actually
+    // closes, which is the only reliable signal the selection registered.
+    await expect(async () => {
+      await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+      const option = listbox.getByRole('option', { name: modelDisplayName, exact: true });
+      await expect(option.first()).toBeVisible({ timeout: 2_000 });
+      await option.first().click({ timeout: 2_000 });
+      await expect(listbox).toBeHidden({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
   }
 
   private async fillMessageBody(messageRow: Locator, text: string): Promise<void> {

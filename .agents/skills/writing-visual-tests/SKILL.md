@@ -122,6 +122,8 @@ docker ps --format '{{.Names}}\t{{.Status}}'   # look for opik-opik-frontend-1, 
 
 If containers are already up (healthy, running), leave them alone — don't `--stop`/`--clean`/restart something a teammate or another task left running. Only run `./opik.sh` (no flags) to start what's missing.
 
+**A rebuilt stack is not a fresh one.** `./opik.sh --build` rebuilds images but reuses existing Docker volumes (MySQL, ClickHouse, …) unless you explicitly wipe them — so a container that just restarted can still be serving months of accumulated local data: projects, feedback definitions, environments, AI provider keys, whatever previous sessions (yours or a teammate's) left behind. If your test's scope includes a **default** or **empty** state — anything you'd normally get "for free" on a brand-new workspace — don't trust what a long-lived instance currently shows. See "Know your defaults before you seed or delete" below before writing any seed/cleanup code against it. If a genuinely fresh stack (fresh volumes) is feasible and not disruptive to concurrent work, prefer it for this kind of test; if not, fall back to reasoning from the Liquibase migrations directly rather than from the current DB contents.
+
 Start the test helper service (check port 5555 is free first):
 
 ```bash
@@ -178,7 +180,7 @@ rm -rf test-results screenshots/comparison visual-report allure-results
 - On a fresh clone, or after `git clean`, **no baselines exist at all** — every screenshot name in every spec needs generating before you can run a compare pass.
 - Adding a *new* screenshot name always needs a fresh baseline, regardless of whether other baselines in the same directory already exist from a previous session.
 
-**Always (re)generate baselines for whatever you touched** before judging a compare run — via `--update-snapshots` (see the loop below). Don't assume "the baseline is already there"; check, or just regenerate, it's cheap:
+**Always (re)generate baselines for the whole suite**, not just the spec you touched, before judging a compare run — via `--update-snapshots` (see the loop below). Don't assume "the baseline is already there"; check, or just regenerate, it's cheap:
 
 ```bash
 ls tests_end_to_end/visual-tests/screenshots/baseline/ | grep <your-prefix>
@@ -192,23 +194,23 @@ Regenerate whenever any of these change, not just on first add: the screenshot n
 2. **Seed data.** Add a `test-helper-service` route if no existing one produces the shape you need (see "Adding a seed endpoint" below), plus a `TestHelperClient` method.
 3. **Page object(s).** Follow the pattern above exactly; reuse an existing page object if the page already has one.
 4. **Spec.** One `test()` per screenshot, unique names (see "Unique screenshot names").
-5. **Generate/refresh the baseline** — every time, whether or not one already exists (see "Baselines are local and gitignored" above):
+5. **Generate/refresh baselines for the whole suite** — every time, whether or not baselines already exist (see "Baselines are local and gitignored" above). Run **all** spec files, not just the one you touched: adding or changing a test can shift shared page chrome, and stale baselines in untouched files are otherwise only caught by accident.
    ```bash
    cd tests_end_to_end/visual-tests
-   SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test tests/<name>.spec.ts --update-snapshots --reporter=list
+   SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test --update-snapshots --reporter=list
    ```
-   `SKIP_TEARDOWN=1` keeps the seeded project alive for a fast next run; the plain `npx playwright test` invocation still always cleans and recreates it at the *start* (global-setup), so each run starts from a known state.
-6. **Stress-test for stability — do not skip this.** Run the compare pass (no `--update-snapshots`) several times in a row:
+   `SKIP_TEARDOWN=1` keeps the seeded projects alive for a fast next run; the plain `npx playwright test` invocation still always cleans and recreates them at the *start* (global-setup), so each run starts from a known state. If the full-suite run surfaces failures in files you didn't touch, don't reflexively blame your change — check whether those baselines simply predate a recent, unrelated app change (compare `ls -la screenshots/baseline/` timestamps against recent frontend commits) before deciding whether to regenerate them or investigate further; confirm with the user before regenerating baselines outside the scope of your own change.
+6. **Stress-test for stability — do not skip this.** Run the full-suite compare pass (no `--update-snapshots`) 3 times in a row:
    ```bash
-   for i in 1 2 3 4 5; do
+   for i in 1 2 3; do
      echo "=== Run $i ==="
-     SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test tests/<name>.spec.ts --reporter=list
+     SKIP_TEARDOWN=1 OPIK_BASE_URL=http://localhost:5173 npx playwright test --reporter=list
    done
    ```
    A single green run proves nothing — real timestamps, real durations, and font/layout jitter only show up over several runs. If anything fails, open the `*-diff.png` attachment under `test-results/` before touching anything — it tells you exactly which pixels moved. Don't guess. If you change the spec, masks, or seed data in response, go back to step 5 and regenerate the baseline before stress-testing again — a stale baseline will just fail for a different, misleading reason.
    > macOS gotcha: `timeout` is not a built-in command (no coreutils by default) — a loop like `timeout 60 npx playwright test ...` silently no-ops. Don't wrap runs in `timeout`.
-   > Shell-tool gotcha: 5 sequential runs of a multi-test spec easily exceed a shell tool's default ~2-minute timeout, cutting the loop off mid-run. That's a harness timeout, not a test failure — don't read it as one. Pass an explicit longer timeout for the whole loop (e.g. 5+ minutes), or split into separate invocations and resume numbering (`for i in 3 4 5; do ...`) if one gets cut off.
-7. **Final full run, then work through the "Cleanup checklist" above** — one run *without* `SKIP_TEARDOWN` first (so `global-teardown.ts` actually deletes the seeded project server-side), then every item in the checklist. Config restore and stopping `test-helper-service` are only two of several things left behind.
+   > Shell-tool gotcha: 3 sequential runs of the full suite easily exceed a shell tool's default ~2-minute timeout, cutting the loop off mid-run. That's a harness timeout, not a test failure — don't read it as one. Pass an explicit longer timeout for the whole loop (e.g. 5+ minutes), or split into separate invocations and resume numbering (`for i in 2 3; do ...`) if one gets cut off.
+7. **Final full run, then work through the "Cleanup checklist" above** — one run *without* `SKIP_TEARDOWN` first (so `global-teardown.ts` actually deletes the seeded projects server-side), then every item in the checklist. Config restore and stopping `test-helper-service` are only two of several things left behind.
 
 ## Unique screenshot names
 
@@ -280,6 +282,23 @@ Follow the existing pattern in `test-helper-service/routes/*.py`: a Flask bluepr
   ```
 - Attachments: resolve paths via the existing `resolve_attachment_path()` helper (relative to `tests_end_to_end/`), and check in a small fixture file under `visual-tests/fixtures/` if one doesn't already exist for your case.
 
+## Know your defaults before you seed or delete
+
+Before you write a test that asserts an "empty" or "default" state, find out what a **genuinely fresh** workspace actually contains for that entity — don't infer it from what a long-lived local instance currently shows, and don't assume "I deleted it and now it's empty" proves the state is reachable elsewhere.
+
+Backend migrations can seed real per-workspace defaults that are visually indistinguishable from leftover test/dev artifacts:
+
+```bash
+grep -rl "INSERT" apps/opik-backend/src/main/resources/liquibase/**/*.sql | xargs grep -l "<table_name>"
+```
+
+What you find splits into two cases, and they need different handling:
+
+- **Hard-protected default (backend blocks deletion).** Some seeded rows are permanently undeletable by design — e.g. the "User feedback" feedback definition, guarded in `FeedbackDefinitionService.java` (`containsNameByIds(... USER_FEEDBACK)` → 409 on delete). If you hit a 409 trying to clear one, that "empty" screenshot is **not reachable** on any real Opik instance. Don't chase it by deleting whatever it's referencing (e.g. cascading into trace feedback scores to free it up) — drop that screenshot, tell the user why, and note the gap in the PR description. Confirm this with the user before dropping it; don't decide unilaterally.
+- **Deletable-but-still-a-default.** Other rows are seeded the same way (a migration backfills them for every workspace) but have no delete guard — e.g. `environments` gets `development`/`staging`/`production` from a real migration (`...seed_default_environments.sql`), not from anyone clicking around. Deleting these locally only fixes *your* machine. If your test's cleanup routine (`global-setup.ts`/`global-teardown.ts`) doesn't also delete these **known default names** on every run, the test only passes on the instance you personally vandalized — it fails on a teammate's clone, a fresh volume, or CI, either by rendering extra rows in a populated screenshot or by never reaching the empty state at all.
+
+Before deleting anything on a shared/long-lived local instance to "get to empty," ask whether it's a real default (migration-seeded, potentially relied on elsewhere) or actual scratch data (e.g. an old e2e run's leftover config) — check for the entity's name in `tests_end_to_end/e2e/**` seeding helpers too, since some things that *look* like defaults (e.g. a lone "openai" AI provider key on an otherwise-default instance) are really just residue from a different test suite (`ensureProviderConfigured`) rather than anything the backend seeds. If deleting something that turns out to matter beyond your own session (shared instance, other suites depending on it), stop and confirm with the user first rather than deleting and hoping it doesn't matter.
+
 ## Waiting: for content, not just structure
 
 `waitForReady()` methods should wait for the *specific value* you seeded to be visible (e.g. a known input string), not just a generic loading state. Many Opik tables don't render a "Name" column by default, so `waitFor({ hasText: entityName })` can time out even though the row is there — match on whatever text is actually visible in the default column set (e.g. the input/output preview), not the entity's name.
@@ -326,3 +345,5 @@ If a test in a `describe` block fails, Playwright restarts the worker process be
 | "I'll add my new span/row to the trace an earlier test in this file already screenshots" | Isolating new entities within a reused project — extending a shared entity shifts what an already-baselined screenshot in the same file renders (extra tree row, changed count), breaking it. Seed a new, separate entity instead. |
 | "I'll wrap this panel in `BasePage`" | The panel exception — a non-route panel takes just `Page` + a `root` testid locator, not the full `BasePage` constructor. |
 | "I stopped the test-helper-service, I'm done" | The rest of the cleanup checklist — config restore, a non-`SKIP_TEARDOWN` final run (server-side project deletion), and the local report/log directories (`test-results/`, `visual-report/`, `allure-results/`, `screenshots/comparison/`). |
+| "I deleted the leftover rows, now the tab is empty, ship it" | Checking whether what you deleted was a real per-workspace default (migration-seeded, e.g. `environments`' `development`/`staging`/`production`) rather than test residue — if it's a real default, your cleanup routine must delete it by name on *every* run, or the empty state only exists on the one instance you manually cleared. |
+| "The rebuild finished, the stack is fresh" | `--build` rebuilds images, not volumes — a "fresh" container can still be serving months of accumulated local data. Don't infer default/empty state from a long-lived instance's current contents; check the Liquibase migrations. |

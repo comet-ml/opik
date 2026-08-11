@@ -1700,29 +1700,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return validateSpans(workspaceId, normalizedItems)
                     .then(validateTraces(workspaceId, normalizedItems))
                     .then(Mono.defer(() -> {
-                        // Get existing item IDs to determine which are new vs updates
-                        return versionDao.getItemIdsAndHashes(datasetId, versionId)
-                                .collectList()
-                                .flatMap(existingItems -> {
-                                    Set<UUID> existingItemIds = existingItems.stream()
-                                            .map(DatasetItemIdAndHash::itemId)
-                                            .collect(Collectors.toSet());
+                        // Classify incoming items as new vs updates with a lookup bounded by the batch,
+                        // rather than reading the whole version out of ClickHouse (OPIK-7705).
+                        Set<UUID> incomingItemIds = normalizedItems.stream()
+                                .map(DatasetItem::datasetItemId)
+                                .collect(Collectors.toSet());
 
-                                    // Classify items as new or updates
-                                    int newItemsCount = 0;
-                                    int updatedItemsCount = 0;
-
-                                    for (DatasetItem item : normalizedItems) {
-                                        UUID stableId = item.datasetItemId();
-                                        if (existingItemIds.contains(stableId)) {
-                                            updatedItemsCount++;
-                                        } else {
-                                            newItemsCount++;
-                                        }
-                                    }
-
-                                    int finalNewItemsCount = newItemsCount;
-                                    int finalUpdatedItemsCount = updatedItemsCount;
+                        return versionDao.countExistingItemIds(datasetId, versionId, incomingItemIds)
+                                .flatMap(existingCount -> {
+                                    int finalUpdatedItemsCount = existingCount.intValue();
+                                    int finalNewItemsCount = incomingItemIds.size() - finalUpdatedItemsCount;
 
                                     log.info("Inserting into version '{}': new='{}', updated='{}'",
                                             versionId, finalNewItemsCount, finalUpdatedItemsCount);

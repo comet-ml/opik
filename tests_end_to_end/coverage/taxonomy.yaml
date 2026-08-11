@@ -148,6 +148,73 @@ rules:
   cloud_only_separate_view: true
   # Report one % per dimension per area. Never a blended figure.
   report_per_dimension: true
+  # What counts as PRODUCT SURFACE when attributing a release's changed files to
+  # areas (consumed by the release-coverage skill in comet-ml/qa-plugin).
+  # Declared here rather than in tooling because both lists are scope decisions
+  # this file already owns.
+  #
+  # The path->area mapping ITSELF is not here: it is derived by joining the V2
+  # router tree (routes resolved transitively through getParentRoute) with the
+  # `routes:` on each area below, so it follows a page rename automatically and
+  # is never hand-maintained.
+  #
+  # That join is NOT literal string equality — the two spellings diverge by
+  # design, and the resolver normalises both sides before comparing:
+  #   * `$param` -> `*`, so this file's `/annotation-queues/$id` matches the
+  #     router's `.../annotation-queues/$annotationQueueId`
+  #   * the query string is DROPPED, which is what lets one component serve two
+  #     areas: `/logs?type=traces` and `/logs?type=threads` are one route
+  #     (LogsPage) and two areas (traces, threads)
+  #   * the `/opik` basepath is stripped
+  #   * comparison is suffix-based, so a route written relative to a project
+  #     matches the router's workspace-prefixed form
+  # Measured against main: all 18 areas join to at least one component, and no
+  # component resolves to more than two areas.
+  release_surface:
+    # Never product surface. A change confined to these is not a coverage gap;
+    # counting them manufactures gaps and buries the real ones.
+    not_surface:
+      - .github/
+      - tests_end_to_end/
+      - .agents/
+      - apps/opik-documentation/
+      - sdks/code_generation/
+      - scripts/
+      - version.txt
+      - .pre-commit-config.yaml
+      - CONTRIBUTING.md
+      - README.md
+      - .gitignore
+      - Makefile
+    # Real product surface this taxonomy does not enumerate AS ITS OWN AREA — it
+    # covers 18 UI areas. Changes here are reported by name, never mapped to a UI
+    # area, and never scored as zero.
+    #
+    # "Not enumerated" is not the same as "not exercised". The e2e estate drives
+    # the SDKs and the API heavily as fixtures — 11 specs use the SDK or the
+    # backend client, and five capabilities are explicitly SDK-shaped
+    # (datasets.create-dataset-sdk, datasets.sdk-round-trip,
+    # test-suites.create-suite-sdk, test-suites.run-suite-sdk,
+    # prompts.sdk-seeded-visible), all covered. What is untracked is each of
+    # these as a product surface in ITS OWN RIGHT: SDK ergonomics and options
+    # (num_threads, retries, error handling), REST contract details, and
+    # deployment behaviour. Report those as **coverage not measured here**, and
+    # say what the estate does exercise incidentally rather than implying zero.
+    untracked:
+      - prefix: sdks/python
+        label: Python SDK
+      - prefix: sdks/typescript
+        label: TypeScript SDK
+      - prefix: apps/opik-backend/
+        label: Backend (Java API / internal)
+      - prefix: apps/opik-python-backend/
+        label: Python backend
+      - prefix: apps/opik-guardrails-backend/
+        label: Guardrails backend
+      - prefix: apps/opik-sandbox-executor-python/
+        label: Sandbox executor
+      - prefix: deployment/
+        label: Deployment / Helm
   # Tag-lint enforcement. All three are hard CI failures, not warnings.
   enforce:
     # every non-exempt e2e spec declares exactly one tier and one @area:
@@ -181,6 +248,8 @@ areas:
     specs:
       - trace-explore/trace-explore-smoke.spec.ts
       - trace-explore/trace-spans-depth.spec.ts
+      - trace-explore/trace-delete.spec.ts
+      - trace-explore/trace-filters.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -192,13 +261,14 @@ areas:
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
-      filter-traces:          { covered: false, note: "OQL / FiltersButton" }
+      filter-traces:          { covered: true,  tier: t2-cuj }
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       agent-graph-tab:        { covered: false }
       attachments-media:      { covered: false }
-      delete-traces:          { covered: false }
+      delete-traces:          { covered: true,  tier: t2-cuj }
+      delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
     # ---- visual dimension (opt-in; page/state-shaped) ----
@@ -545,6 +615,7 @@ areas:
     spec_dir: online-evaluation
     specs:
       - online-evaluation/online-evaluation-smoke.spec.ts
+      - online-evaluation/online-evaluation-delete-rule.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -558,7 +629,7 @@ areas:
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }
       enable-disable-rule:     { covered: false }
-      delete-rule:             { covered: false }
+      delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       automation-logs:         { covered: false }
 
     visual:
@@ -677,13 +748,13 @@ areas:
       members-change-role:      { covered: false, cloud_only: true }
 
     visual:
-      config-feedback-definitions: { covered: false, state: default }
+      config-feedback-definitions: { covered: true,  state: default }
       config-feedback-def-empty:   { covered: false, state: empty, note: "'No feedback definitions yet'" }
-      config-environments:         { covered: false, state: default }
-      config-environments-empty:   { covered: false, state: empty, note: "'No environments yet'" }
-      config-ai-providers:         { covered: false, state: default }
-      config-ai-providers-empty:   { covered: false, state: empty, note: "'No AI providers yet'" }
-      config-workspace-prefs:      { covered: false, state: default }
+      config-environments:         { covered: true,  state: default }
+      config-environments-empty:   { covered: true,  state: empty, note: "'No environments yet'" }
+      config-ai-providers:         { covered: true,  state: default }
+      config-ai-providers-empty:   { covered: true,  state: empty, note: "'No AI providers yet'" }
+      config-workspace-prefs:      { covered: true,  state: default }
 
   onboarding:
     label: Get started

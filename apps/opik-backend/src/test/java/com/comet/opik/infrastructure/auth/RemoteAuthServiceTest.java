@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.auth;
 
 import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.TestConfigUtils;
-import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -13,6 +12,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.dropwizard.client.JerseyClientBuilder;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -104,31 +104,18 @@ class RemoteAuthServiceTest {
     }
 
     static Stream<Arguments> successfulAuthArgs() {
-        return Stream.of(
-                arguments(true, null),
-                arguments(false, "VERSION_1"),
-                arguments(false, "version_2"),
-                arguments(false, "version_unknown"));
+        return Stream.of(arguments(true), arguments(false));
     }
 
     @ParameterizedTest
     @MethodSource("successfulAuthArgs")
-    void testAuthSuccessful(boolean workspaceViaHeader, String opikVersionStr)
-            throws JsonProcessingException {
-        var opikVersion = OpikVersion.fromValue(opikVersionStr);
-        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class).toBuilder()
-                .opikVersion(opikVersion)
-                .build();
+    void testAuthSuccessful(boolean workspaceViaHeader) throws JsonProcessingException {
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
         var apiKey = "apiKey-" + UUID.randomUUID();
         var workspaceName = "workspace-" + UUID.randomUUID();
 
-        // Serialize via Map to inject the raw opikVersionStr (e.g. "VERSION_1", "version_unknown")
-        // directly into JSON, bypassing @JsonValue which would normalize the casing
-        Map<String, Object> responseMap = OBJECT_MAPPER.readValue(
-                OBJECT_MAPPER.writeValueAsString(authResponse), Map.class);
-        responseMap.put("opikVersion", opikVersionStr);
-        var responseJson = OBJECT_MAPPER.writeValueAsString(responseMap);
-        WIRE_MOCK.server().stubFor(post("/opik/auth").willReturn(okJson(responseJson)));
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
 
         remoteAuthService.authenticate(
                 getHeadersMock(workspaceViaHeader ? workspaceName : null, apiKey), null,
@@ -144,7 +131,41 @@ class RemoteAuthServiceTest {
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(apiKey)
-                .opikVersion(opikVersion)
+                .quotas(authResponse.quotas())
+                .build();
+        assertThat(requestContext).isEqualTo(expectedRequestContext);
+    }
+
+    /**
+     * EM (or an older EM mid rolling-upgrade) may return fields the backend no longer models — e.g.
+     * the removed {@code opik_version}. {@code AuthResponse} is
+     * {@code @JsonIgnoreProperties(ignoreUnknown = true)}, so unknown fields must be ignored rather
+     * than failing every authenticated request.
+     */
+    @Test
+    void testAuth__whenResponseHasUnknownFields__thenIgnoredAndAuthSucceeds() throws JsonProcessingException {
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        var workspaceName = "workspace-" + UUID.randomUUID();
+
+        var responseBody = OBJECT_MAPPER.<ObjectNode>valueToTree(authResponse);
+        responseBody.put("opik_version", "version_1");
+        responseBody.put("some_unmodeled_future_field", "ignored");
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(responseBody))));
+
+        remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, apiKey), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build());
+
+        var expectedRequestContext = RequestContext.builder()
+                .userName(authResponse.user())
+                .workspaceId(authResponse.workspaceId())
+                .workspaceName(authResponse.workspaceName())
+                .apiKey(apiKey)
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
@@ -322,23 +343,14 @@ class RemoteAuthServiceTest {
 
     @ParameterizedTest
     @MethodSource("successfulAuthArgs")
-    void testSessionAuthSuccessful(boolean workspaceViaHeader, String opikVersionStr)
-            throws JsonProcessingException {
-        var opikVersion = OpikVersion.fromValue(opikVersionStr);
-        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class).toBuilder()
-                .opikVersion(opikVersion)
-                .build();
+    void testSessionAuthSuccessful(boolean workspaceViaHeader) throws JsonProcessingException {
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
         var sessionTokenValue = "session-" + UUID.randomUUID();
         var workspaceName = "workspace-" + UUID.randomUUID();
 
-        // Serialize via Map to inject raw opikVersionStr, bypassing @JsonValue normalization
-        Map<String, Object> responseMap = OBJECT_MAPPER.readValue(
-                OBJECT_MAPPER.writeValueAsString(authResponse), Map.class);
-        responseMap.put("opikVersion", opikVersionStr);
-        var responseJson = OBJECT_MAPPER.writeValueAsString(responseMap);
         WIRE_MOCK.server().stubFor(post("/opik/auth-session")
                 .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
-                .willReturn(okJson(responseJson)));
+                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
 
         remoteAuthService.authenticate(
                 getHeadersMock(workspaceViaHeader ? workspaceName : null, ""),
@@ -355,7 +367,6 @@ class RemoteAuthServiceTest {
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(sessionTokenValue)
-                .opikVersion(opikVersion)
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
@@ -683,7 +694,6 @@ class RemoteAuthServiceTest {
                 .userName(authResponse.user())
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
-                .opikVersion(authResponse.opikVersion())
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);

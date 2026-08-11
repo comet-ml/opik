@@ -33,12 +33,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     projectHomepageEnabled: core.serialization.boolean(),
     agenticToolsEnabled: core.serialization.boolean(),
     onlineScoringTracingEnabled: core.serialization.boolean(),
-    v2WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
-    v1WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
-    forceWorkspaceVersion: core.serialization.string(),
     defaultPageSize: core.serialization.number().optional(),
-    v2WorkspaceAllowlist: core.serialization.string().optional(),
-    v1WorkspaceAllowlist: core.serialization.string().optional(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -68,11 +63,6 @@ export declare namespace ServiceTogglesConfig {
         projectHomepageEnabled: boolean;
         agenticToolsEnabled: boolean;
         onlineScoringTracingEnabled: boolean;
-        v2WorkspaceAllowlistIds: string[];
-        v1WorkspaceAllowlistIds: string[];
-        forceWorkspaceVersion: string;
         defaultPageSize?: number | null;
-        v2WorkspaceAllowlist?: string | null;
-        v1WorkspaceAllowlist?: string | null;
     }
 }

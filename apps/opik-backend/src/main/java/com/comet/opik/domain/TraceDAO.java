@@ -5,6 +5,7 @@ import com.comet.opik.api.ExperimentItemReference;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
@@ -65,6 +66,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -147,7 +149,7 @@ public interface TraceDAO {
     Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId,
-            List<? extends Filter> filters);
+            List<? extends Filter> filters, Instant fromTime, Instant toTime);
 
     Mono<Set<UUID>> getTraceIdsByThreadIds(UUID projectId, List<String> threadIds, Connection connection);
 
@@ -483,10 +485,12 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_BY_IDS = """
             WITH target_spans AS (
                 SELECT id, trace_id, type
-                FROM spans FINAL
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, id
             ),
             feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -674,6 +678,20 @@ class TraceDAOImpl implements TraceDAO {
                     arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
                     arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
                 FROM span_feedback_scores_grouped
+            ), spans_deduped AS (
+                SELECT
+                    trace_id,
+                    id,
+                    type,
+                    usage,
+                    total_estimated_cost,
+                    provider
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND trace_id IN :ids
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, id
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -683,10 +701,7 @@ class TraceDAOImpl implements TraceDAO {
                     toInt64(countIf(type = 'llm')) AS llm_span_count,
                     countIf(type = 'tool') > 0 AS has_tool_spans,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans FINAL
-                WHERE workspace_id = :workspace_id
-                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                AND trace_id IN :ids
+                FROM spans_deduped
                 GROUP BY trace_id
             ), experiments_agg AS (
                 SELECT
@@ -1531,6 +1546,24 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * Total-row count behind the traces list page. Numbers in OPIK-7836; re-measure before changing either gate.
+     *
+     * <p>Two things this template must NOT do when nothing consumes them:
+     *
+     * <ul>
+     * <li>{@code guardrails_agg} is joined only under {@code guardrails_filters}, matching the other filter-side
+     * joins in this class. Nothing else in the count reads {@code gagg.guardrails_result}, and the join is also what
+     * makes {@code trace_id_prefilter} referenced - so leaving it in costs a second full scan of the project on
+     * every page load (measured 15.9M read rows on a 7.9M-row project). The gate cannot silently return a wrong
+     * count: {@code FilterUtils} sets {@code guardrails_filters} in exactly the cases that render the {@code gagg}
+     * alias into {@code filters}, so a mismatch fails to parse (see {@link #canDedupByArgMax}).</li>
+     * <li>The {@code ORDER BY} + {@code LIMIT 1 BY id} dedup of {@code ReplacingMergeTree} versions is kept only
+     * under {@code trace_aggregation_filters}, whose branch groups by {@code t.id} and so needs one row per version.
+     * Otherwise the count is {@code count(DISTINCT id)}: the {@code WHERE} is applied before dedup either way, so
+     * both forms count the ids where any version matched, but only one of them sorts every matching row.</li>
+     * </ul>
+     */
     private static final String COUNT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
@@ -1784,7 +1817,7 @@ class TraceDAOImpl implements TraceDAO {
             )
             <endif>
             SELECT
-                count(id) as count
+                <if(trace_aggregation_filters)>count(id)<else>count(DISTINCT id)<endif> as count
             FROM (
                 SELECT
                     t.id
@@ -1795,10 +1828,9 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                 FROM (
                     SELECT
-                        id,
-                        duration
+                        id
                     FROM traces
-                        LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                        <if(guardrails_filters)>LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id<endif>
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
@@ -1856,8 +1888,10 @@ class TraceDAOImpl implements TraceDAO {
                         LIMIT 1 BY id
                     )
                     <endif>
+                    <if(trace_aggregation_filters)>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
+                    <endif>
                 ) AS t
                 <if(trace_aggregation_filters)>
                 LEFT JOIN (
@@ -1870,7 +1904,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND trace_id IN (SELECT trace_id FROM target_spans)
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS s ON t.id = s.trace_id
                 GROUP BY
@@ -1897,7 +1931,7 @@ class TraceDAOImpl implements TraceDAO {
      * com.comet.opik.infrastructure.FilterUtils#ANALYTICS_DELETE_BATCH_SIZE}).
      */
     private static final String DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS = """
-            DELETE FROM traces
+            DELETE FROM <if(distributed_wrap)>traces_local<else>traces<endif>
             WHERE workspace_id = :workspace_id
             AND (project_id, id) IN arrayZip(:project_ids, :trace_ids)
             SETTINGS log_comment = '<log_comment>'
@@ -1914,7 +1948,7 @@ class TraceDAOImpl implements TraceDAO {
      * upper bound advances one week so rows sharing the cutoff's week stay in scope.
      */
     private static final String DELETE_FOR_RETENTION = """
-            DELETE FROM traces
+            DELETE FROM <if(distributed_wrap)>traces_local<else>traces<endif>
             WHERE workspace_id IN :workspace_ids
             AND id >= :lower_bound
             AND id \\< :cutoff_id
@@ -2230,13 +2264,11 @@ class TraceDAOImpl implements TraceDAO {
                     type,
                     workspace_id,
                     project_id
-                FROM spans
+                FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
              ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -2418,12 +2450,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      <if(uuid_from_time || uuid_to_time)>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                      <else>
                       AND entity_id IN (SELECT id FROM spans_data)
-                      <endif>
                     UNION ALL
                     <endif>
                     SELECT workspace_id,
@@ -2444,12 +2471,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      <if(uuid_from_time || uuid_to_time)>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                      <else>
                       AND entity_id IN (SELECT id FROM spans_data)
-                      <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -2824,12 +2846,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      <if(uuid_from_time || uuid_to_time)>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                      <else>
                       AND entity_id IN (SELECT id FROM spans_data)
-                      <endif>
                     UNION ALL
                     <endif>
                     SELECT workspace_id,
@@ -2844,12 +2861,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id IN :project_ids
-                      <if(uuid_from_time || uuid_to_time)>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
-                      <else>
                       AND entity_id IN (SELECT id FROM spans_data)
-                      <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -2990,11 +3002,27 @@ class TraceDAOImpl implements TraceDAO {
             <else>
             WITH
             <endif>
-            span_ids AS (
+            span_scores AS (
+                <if(has_legacy_scores)>
+                SELECT project_id, entity_id, name, value,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                UNION ALL
+                <endif>
+                SELECT project_id, entity_id, name, value, author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+            ), scored_span_ids AS (
                 SELECT id
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                AND id IN (SELECT entity_id FROM span_scores)
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 <if(filters_present)> AND trace_id IN (SELECT id FROM trace_final) <endif>
@@ -3033,22 +3061,9 @@ class TraceDAOImpl implements TraceDAO {
                 FROM trace_fs_per_project
                 GROUP BY project_id
             ), span_fs AS (
-                <if(has_legacy_scores)>
-                SELECT project_id, entity_id, name, value,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                  AND entity_id IN (SELECT id FROM span_ids)
-                UNION ALL
-                <endif>
                 SELECT project_id, entity_id, name, value, author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_ids
-                  AND entity_id IN (SELECT id FROM span_ids)
+                FROM span_scores
+                WHERE entity_id IN (SELECT id FROM scored_span_ids)
             ), span_fs_per_name AS (
                 SELECT project_id, entity_id, name, avg(value) AS value
                 FROM span_fs
@@ -3197,6 +3212,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull WorkspacesService workspacesService;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     /**
      * Sort mapping applied under {@code traceColumnsNonNullable}: {@code nullIf} restores an absent (epoch)
@@ -3303,6 +3319,41 @@ class TraceDAOImpl implements TraceDAO {
 
     private boolean traceColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
+    }
+
+    /**
+     * Whether the sharding-readiness wrap is live. When it is, {@code traces} is a {@code Distributed} table that
+     * rejects mutations (code 36 / 48), so every trace <b>mutation</b> ({@code DELETE} / {@code ALTER} /
+     * {@code OPTIMIZE}) must target the {@code traces_local} shard instead; while it is off {@code traces} is still a
+     * {@code MergeTree} where deletes work directly. Reads and inserts always route through {@code traces}. Each
+     * mutation query carries both table names in an {@code <if(distributed_wrap)>traces_local<else>traces<endif>}
+     * branch and passes this flag; a new mutation path must do the same. Liquibase migrations split by kind:
+     * {@code DELETE} / {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code traces_local}
+     * only (the Distributed {@code traces} rejects them), but {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must target
+     * <b>both</b> {@code traces_local} and {@code traces} — the wrapper takes them as metadata-only, and skipping it
+     * leaves reads unable to see the column (code 47).
+     * <p>
+     * The cluster is single-shard today and {@code traces_local} is a {@code ReplicatedMergeTree}, so a lightweight
+     * delete fans out to every replica via the replication log and reaches every matching row — no {@code ON CLUSTER}
+     * needed (no DAO uses it). Activating sharding is a separate, deferred effort with its own rebalance cutover; only
+     * then does a delete issued on one shard miss rows on the others and trace mutations need fanning across shards.
+     * That belongs to the activation work: adding {@code ON CLUSTER} now would not be a no-op (it would run the
+     * mutation on every replica node and stall on a down one), for no single-shard benefit.
+     */
+    private boolean tracesDistributedWrapEnabled() {
+        return configuration.getDatabaseAnalyticsDataModel().tracesDistributedWrapEnabled();
+    }
+
+    /**
+     * Selects the {@code <if(distributed_wrap)>traces_local<else>traces<endif>} branch on a mutation template by adding
+     * the {@code distributed_wrap} attribute when the wrap is live. The flag decision lives only here and in
+     * {@link #tracesDistributedWrapEnabled()}; every ST-based trace mutation routes its table through this method so the
+     * branches cannot drift apart.
+     */
+    private void selectTracesMutationTable(ST template) {
+        if (tracesDistributedWrapEnabled()) {
+            template.add("distributed_wrap", true);
+        }
     }
 
     /**
@@ -3473,6 +3524,7 @@ class TraceDAOImpl implements TraceDAO {
                     var template = getSTWithLogComment(DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS, "delete_traces",
                             workspaceId,
                             userName, "pairs_size=%s".formatted(batch.size()));
+                    selectTracesMutationTable(template);
 
                     var projectIds = batch.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
                     var traceIds = batch.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
@@ -4388,10 +4440,17 @@ class TraceDAOImpl implements TraceDAO {
      * {@code filters_present} so the template scopes feedback aggregates to filtered traces.
      */
     private Statement buildFeedbackStatementForProjects(Connection connection, List<UUID> projectIds,
-            String workspaceId, List<? extends Filter> filters, boolean hasLegacyScores) {
+            String workspaceId, List<? extends Filter> filters, boolean hasLegacyScores, String uuidFromTime,
+            String uuidToTime) {
         var logComment = getLogComment("get_trace_stats_feedback_scores", workspaceId, "", projectIds.size());
         var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORES_STATS).add("log_comment", logComment);
         template.add("has_legacy_scores", hasLegacyScores);
+        if (uuidFromTime != null) {
+            template.add("uuid_from_time", true);
+        }
+        if (uuidToTime != null) {
+            template.add("uuid_to_time", true);
+        }
         if (!CollectionUtils.isEmpty(filters)) {
             FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
                     .ifPresent(traceFilters -> {
@@ -4406,6 +4465,12 @@ class TraceDAOImpl implements TraceDAO {
         var statement = connection.createStatement(template.render())
                 .bind("project_ids", projectIds)
                 .bind("workspace_id", workspaceId);
+        if (uuidFromTime != null) {
+            statement.bind("uuid_from_time", uuidFromTime);
+        }
+        if (uuidToTime != null) {
+            statement.bind("uuid_to_time", uuidToTime);
+        }
         if (!CollectionUtils.isEmpty(filters)) {
             FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
         }
@@ -4521,16 +4586,25 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     public Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(@NonNull List<UUID> projectIds,
-            @NonNull String workspaceId, List<? extends Filter> filters) {
+            @NonNull String workspaceId, List<? extends Filter> filters, Instant fromTime, Instant toTime) {
 
         if (projectIds.isEmpty()) {
             return Mono.just(Map.of());
         }
 
-        // Each branch runs on its own connection from the pool — R2DBC connections do not
-        // tolerate two concurrent statements on the same connection. The legacy-scores flag is
-        // resolved once (sync JDBI) so both branches can skip the legacy feedback_scores UNION
-        // when no data exists there.
+        // Each branch runs on its own pooled connection — R2DBC forbids concurrent statements on one
+        // connection. The legacy-scores flag is resolved once (sync JDBI) so both branches can skip the
+        // legacy feedback_scores UNION when it's empty.
+        // Optional window: when the caller opts in (fromTime/toTime, e.g. the Projects table), every metric
+        // is scoped to [fromTime, toTime] via uuid_from_time/uuid_to_time on the UUIDv7 id, the upper bound
+        // excluding (ingestion-tolerated) future-dated ids. Bounds are independent; omitting both keeps the
+        // all-time semantics of the public getProjectStats API. The window is on TRACE time: only the traces
+        // scan carries the parallel toMonday(id_at) predicate, so only it prunes by partition once traces is
+        // partitioned; the spans scan is bounded by trace_id (correct — a span id may predate its trace) and
+        // will still read all partitions. Span feedback scores follow the trace window via scored_span_ids.
+        String uuidFromTime = Objects.toString(instantToUUIDMapper.toLowerBound(fromTime), null);
+        String uuidToTime = Objects.toString(instantToUUIDMapper.toUpperBound(toTime), null);
+
         return workspacesService.hasLegacyScores(workspaceId)
                 .flatMap(hasLegacyScores -> {
 
@@ -4541,6 +4615,12 @@ class TraceDAOImpl implements TraceDAO {
                                 "get_trace_stats_traces_spans_by_project_ids", workspaceId, "", projectIds.size());
                         template.add("project_stats", true);
                         template.add("has_legacy_scores", hasLegacyScores);
+                        if (uuidFromTime != null) {
+                            template.add("uuid_from_time", true);
+                        }
+                        if (uuidToTime != null) {
+                            template.add("uuid_to_time", true);
+                        }
                         if (!CollectionUtils.isEmpty(filters)) {
                             FilterQueryBuilder
                                     .toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
@@ -4549,6 +4629,12 @@ class TraceDAOImpl implements TraceDAO {
                         var statement = connection.createStatement(template.render())
                                 .bind("project_ids", projectIds)
                                 .bind("workspace_id", workspaceId);
+                        if (uuidFromTime != null) {
+                            statement.bind("uuid_from_time", uuidFromTime);
+                        }
+                        if (uuidToTime != null) {
+                            statement.bind("uuid_to_time", uuidToTime);
+                        }
                         if (!CollectionUtils.isEmpty(filters)) {
                             FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                         }
@@ -4565,7 +4651,7 @@ class TraceDAOImpl implements TraceDAO {
                         // trace filters we propagate them so the feedback aggregates are scoped to the
                         // same filtered trace set (filters_present path inside the template).
                         var statement = buildFeedbackStatementForProjects(connection, projectIds, workspaceId,
-                                filters, hasLegacyScores);
+                                filters, hasLegacyScores, uuidFromTime, uuidToTime);
 
                         return Mono.from(statement.execute())
                                 .flatMapMany(result -> result.map(
@@ -4993,6 +5079,7 @@ class TraceDAOImpl implements TraceDAO {
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null, "",
                 workspaceIds.size());
+        selectTracesMutationTable(template);
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
@@ -5038,7 +5125,8 @@ class TraceDAOImpl implements TraceDAO {
         var logComment = getLogComment("retention_delete_traces_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
-        var sb = new StringBuilder("DELETE FROM traces WHERE (");
+        var sb = new StringBuilder(
+                tracesDistributedWrapEnabled() ? "DELETE FROM traces_local WHERE (" : "DELETE FROM traces WHERE (");
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) sb.append(" OR ");
             sb.append("(workspace_id = :ws_").append(i)

@@ -30,7 +30,12 @@ class _FakeApi:
 
 def _patch(monkeypatch, fake_api):
     fake_client = types.SimpleNamespace(
-        config=types.SimpleNamespace(guardrails_backend_host="http://guardrails/")
+        config=types.SimpleNamespace(
+            guardrails_backend_host="http://guardrails/",
+            workspace="test-workspace",
+            api_key="test-api-key",
+            check_tls_certificate=True,
+        )
     )
     monkeypatch.setattr(
         custom_training.opik_client, "get_global_client", lambda: fake_client

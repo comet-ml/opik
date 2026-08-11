@@ -80,7 +80,7 @@ jobs:
         # be a workflow's first step — the repo isn't checked out yet, so the
         # composite's action.yml is not on the runner's filesystem. Keep the
         # checkout inline.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.IS_RELEASE == 'true' && format('refs/tags/{0}', inputs.version) || github.ref }}
           fetch-depth: 0

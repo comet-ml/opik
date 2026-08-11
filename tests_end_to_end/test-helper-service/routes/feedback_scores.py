@@ -87,7 +87,7 @@ def get_feedback_definition():
             "id": definition.id,
             "name": definition.name,
             "type": definition.type,
-            "details": definition.details,
+            "details": definition.details.dict() if definition.details else None,
         }
     )
 
