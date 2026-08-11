@@ -6,6 +6,7 @@ import com.comet.opik.domain.llm.langchain4j.OpikGeminiChatModel;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.domain.llm.langchain4j.VideoUrl;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
@@ -329,6 +330,30 @@ class GeminiVideoSupportTest {
             assertThat(processedImageContent.image().url()).hasToString(videoUrl);
 
             log.info("SUCCESS: Multimodal message converted for online scoring");
+        }
+
+        @Test
+        @DisplayName("Should keep AudioContent when the same message also carries video")
+        void shouldKeepAudioContentAlongsideVideo() {
+            var opikGeminiModel = new OpikGeminiChatModel(mockDelegate);
+
+            var audioUrl = "https://storage.googleapis.com/example-bucket/clip.mp3";
+            var videoUrl = "https://storage.googleapis.com/example-bucket/demo.mp4";
+            var userMessage = UserMessage.from(List.of(
+                    AudioContent.from(audioUrl),
+                    dev.langchain4j.data.message.VideoContent.from(videoUrl)));
+
+            when(mockDelegate.chat(any(ChatRequest.class))).thenReturn(mockChatResponse);
+            opikGeminiModel.chat(ChatRequest.builder().messages(List.of(userMessage)).build());
+
+            verify(mockDelegate).chat(chatRequestCaptor.capture());
+            var processedUserMessage = (UserMessage) chatRequestCaptor.getValue().messages().get(0);
+
+            assertThat(processedUserMessage.contents()).hasSize(2);
+            assertThat(processedUserMessage.contents().get(0)).isInstanceOf(AudioContent.class);
+            assertThat(((AudioContent) processedUserMessage.contents().get(0)).audio().url())
+                    .hasToString(audioUrl);
+            assertThat(processedUserMessage.contents().get(1)).isInstanceOf(ImageContent.class);
         }
 
         @Test

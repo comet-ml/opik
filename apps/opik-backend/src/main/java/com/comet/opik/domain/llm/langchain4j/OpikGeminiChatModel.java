@@ -4,7 +4,6 @@ import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
-import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.ChatModel;
@@ -79,11 +78,7 @@ public class OpikGeminiChatModel implements ChatModel {
         // Has video - convert VideoContent to ImageContent
         List<Content> convertedContents = new ArrayList<>();
         for (Content content : userMessage.contents()) {
-            if (content instanceof TextContent) {
-                convertedContents.add(content);
-            } else if (content instanceof ImageContent) {
-                convertedContents.add(content);
-            } else if (content instanceof VideoContent videoContent) {
+            if (content instanceof VideoContent videoContent) {
                 // Convert VideoContent to ImageContent (Gemini treats videos as images)
                 // Preserve mimeType if available
                 String videoUrlString = videoContent.video().url().toString();
@@ -94,8 +89,10 @@ public class OpikGeminiChatModel implements ChatModel {
                     imageBuilder.mimeType(videoContent.video().mimeType());
                 }
                 convertedContents.add(ImageContent.from(imageBuilder.build()));
+            } else {
+                // Audio, files and text are left untouched — dropping them would silently lose input
+                convertedContents.add(content);
             }
-            // Other content types are passed through as-is
         }
 
         return UserMessage.from(convertedContents);
