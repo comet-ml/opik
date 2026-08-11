@@ -64,8 +64,7 @@ const useRecentWorkspaces = (): UseRecentWorkspacesResult => {
   );
 
   const recentWorkspaces = useMemo(
-    () =>
-      Object.values(visits).sort((a, b) => b.visitedAt - a.visitedAt),
+    () => Object.values(visits).sort((a, b) => b.visitedAt - a.visitedAt),
     [visits],
   );
 

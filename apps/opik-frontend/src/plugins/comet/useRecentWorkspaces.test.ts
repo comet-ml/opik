@@ -9,8 +9,9 @@ const ws = (name: string, org = "org-1", id = `id-${name}`) => ({
   organizationId: org,
 });
 
-const names = (result: { current: { recentWorkspaces: { workspaceName: string }[] } }) =>
-  result.current.recentWorkspaces.map((w) => w.workspaceName);
+const names = (result: {
+  current: { recentWorkspaces: { workspaceName: string }[] };
+}) => result.current.recentWorkspaces.map((w) => w.workspaceName);
 
 describe("useRecentWorkspaces", () => {
   beforeEach(() => {

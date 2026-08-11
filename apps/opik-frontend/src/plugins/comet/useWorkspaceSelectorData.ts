@@ -46,7 +46,10 @@ const useWorkspaceSelectorData = () => {
   // Debounce the search term so each keystroke does not fire a server request.
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
-    const timeout = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    const timeout = setTimeout(
+      () => setDebouncedSearch(search),
+      SEARCH_DEBOUNCE_MS,
+    );
     return () => clearTimeout(timeout);
   }, [search]);
   const trimmedSearch = debouncedSearch.trim();

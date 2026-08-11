@@ -66,9 +66,24 @@ describe("useWorkspaceSelectorData", () => {
 
   it("scopes recents to the current organization and drops default / ai-spend", () => {
     recentWorkspaces = [
-      { workspaceId: "1", workspaceName: "keep-me", organizationId: "org-1", visitedAt: 3 },
-      { workspaceId: "2", workspaceName: "other-org", organizationId: "org-2", visitedAt: 2 },
-      { workspaceId: "3", workspaceName: "default", organizationId: "org-1", visitedAt: 1 },
+      {
+        workspaceId: "1",
+        workspaceName: "keep-me",
+        organizationId: "org-1",
+        visitedAt: 3,
+      },
+      {
+        workspaceId: "2",
+        workspaceName: "other-org",
+        organizationId: "org-2",
+        visitedAt: 2,
+      },
+      {
+        workspaceId: "3",
+        workspaceName: "default",
+        organizationId: "org-1",
+        visitedAt: 1,
+      },
     ];
 
     const { result } = renderHook(() => useWorkspaceSelectorData());
@@ -80,8 +95,28 @@ describe("useWorkspaceSelectorData", () => {
 
   it("flattens server pages into a single list", () => {
     pages = [
-      { data: [{ workspaceId: "a", workspaceName: "a", organizationId: "org-1", default: false }], total: 2 },
-      { data: [{ workspaceId: "b", workspaceName: "b", organizationId: "org-1", default: false }], total: 2 },
+      {
+        data: [
+          {
+            workspaceId: "a",
+            workspaceName: "a",
+            organizationId: "org-1",
+            default: false,
+          },
+        ],
+        total: 2,
+      },
+      {
+        data: [
+          {
+            workspaceId: "b",
+            workspaceName: "b",
+            organizationId: "org-1",
+            default: false,
+          },
+        ],
+        total: 2,
+      },
     ];
 
     const { result } = renderHook(() => useWorkspaceSelectorData());

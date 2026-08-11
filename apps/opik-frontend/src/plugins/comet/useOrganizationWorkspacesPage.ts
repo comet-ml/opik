@@ -70,7 +70,10 @@ export default function useOrganizationWorkspacesPage(
   options?: Options,
 ) {
   return useInfiniteQuery({
-    queryKey: ["organization-workspaces-page", { organizationId, search }] as QueryKey,
+    queryKey: [
+      "organization-workspaces-page",
+      { organizationId, search },
+    ] as QueryKey,
     queryFn: (ctx) =>
       getOrganizationWorkspacesPage(ctx, {
         organizationId,

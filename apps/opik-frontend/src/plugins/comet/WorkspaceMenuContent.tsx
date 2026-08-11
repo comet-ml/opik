@@ -143,8 +143,7 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
   );
 
   const shouldVirtualize =
-    isSearching &&
-    serverWorkspaces.length > WORKSPACE_VIRTUALIZATION_THRESHOLD;
+    isSearching && serverWorkspaces.length > WORKSPACE_VIRTUALIZATION_THRESHOLD;
 
   const virtualizer = useVirtualizer({
     count: shouldVirtualize ? serverWorkspaces.length : 0,
