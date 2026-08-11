@@ -81,7 +81,6 @@ public class OnlineScoringEngine {
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
 
-    private static final int MAX_REPORTED_RESPONSE_CHARS = 500;
     private static final int MAX_REPORTED_FIELD_NAMES = 10;
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
 
@@ -1052,16 +1051,25 @@ public class OnlineScoringEngine {
 
     /**
      * @param unreadableScoreNames scores whose value the judge gave in a form we cannot read
+     * @param undeclaredScoreNames scores the judge returned under a name the rule does not declare
      * @param problem              set when the answer as a whole yielded nothing; null otherwise
      */
     @Builder(toBuilder = true)
     public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames,
-            List<String> unreadableScoreNames, ResponseProblem problem) {
+            List<String> unreadableScoreNames, List<String> undeclaredScoreNames, ResponseProblem problem) {
+
+        public ParsedFeedbackScores {
+            scores = scores == null ? List.of() : List.copyOf(scores);
+            nullScoreNames = nullScoreNames == null ? List.of() : List.copyOf(nullScoreNames);
+            unreadableScoreNames = unreadableScoreNames == null ? List.of() : List.copyOf(unreadableScoreNames);
+            undeclaredScoreNames = undeclaredScoreNames == null ? List.of() : List.copyOf(undeclaredScoreNames);
+        }
 
         static ParsedFeedbackScores problem(ResponseProblem.Kind kind, String evidence, List<String> fields,
                 int omittedFields) {
-            return new ParsedFeedbackScores(List.of(), List.of(), List.of(),
-                    new ResponseProblem(kind, evidence, fields, omittedFields));
+            return ParsedFeedbackScores.builder()
+                    .problem(new ResponseProblem(kind, evidence, fields, omittedFields))
+                    .build();
         }
 
         /**
@@ -1074,25 +1082,33 @@ public class OnlineScoringEngine {
                 return this;
             }
             UnaryOperator<String> userFacing = name -> mapping.getOrDefault(name, name);
-            return new ParsedFeedbackScores(
-                    scores.stream()
+            return ParsedFeedbackScores.builder()
+                    .scores(scores.stream()
                             .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
                                     .name(userFacing.apply(item.name()))
                                     .build())
-                            .toList(),
-                    nullScoreNames.stream().map(userFacing).toList(),
-                    unreadableScoreNames.stream().map(userFacing).toList(),
-                    problem == null
+                            .toList())
+                    .nullScoreNames(nullScoreNames.stream().map(userFacing).toList())
+                    .unreadableScoreNames(unreadableScoreNames.stream().map(userFacing).toList())
+                    // Undeclared names are the judge's own, absent from the mapping, so they pass through.
+                    .undeclaredScoreNames(undeclaredScoreNames.stream().map(userFacing).toList())
+                    .problem(problem == null
                             ? null
                             : problem.toBuilder()
                                     .fields(problem.fields().stream().map(userFacing).toList())
-                                    .build());
+                                    .build())
+                    .build();
         }
     }
 
     @Builder(toBuilder = true)
     public record ResponseProblem(@NonNull Kind kind, @NonNull String evidence, @NonNull List<String> fields,
             int omittedFields) {
+        /** Snapshots the field names: this record is a diagnostic record of one answer, not a live view. */
+        public ResponseProblem {
+            fields = List.copyOf(fields);
+        }
+
         public enum Kind {
             NOT_JSON,
             NOT_A_JSON_OBJECT,
@@ -1119,6 +1135,11 @@ public class OnlineScoringEngine {
                             + " between {} and {}",
                     sanitizeAndQuote(parsed.unreadableScoreNames()), entityType, entityId,
                     ValidationUtils.MIN_FEEDBACK_SCORE_VALUE, ValidationUtils.MAX_FEEDBACK_SCORE_VALUE);
+        }
+        if (!parsed.undeclaredScoreNames().isEmpty()) {
+            userFacingLogger.warn(
+                    "Ignored {} on {} '{}' — the judge scored it but this rule does not declare that name",
+                    sanitizeAndQuote(parsed.undeclaredScoreNames()), entityType, entityId);
         }
         if (parsed.problem() != null) {
             userFacingLogger.warn("Nothing was scored for {} '{}': {}", entityType, entityId,
@@ -1148,14 +1169,13 @@ public class OnlineScoringEngine {
         try {
             structuredResponse = OBJECT_MAPPER.readTree(content);
             if (!structuredResponse.isObject()) {
-                log.warn("Judge answer was not a JSON object: size='{}' response='{}'", sizeOf(content),
-                        StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
+                log.warn("Judge answer was not a JSON object: size='{}'", sizeOf(content));
                 return ParsedFeedbackScores.problem(
                         ResponseProblem.Kind.NOT_A_JSON_OBJECT, sizeOf(content), List.of(), 0);
             }
         } catch (JsonProcessingException e) {
-            log.warn("Judge answer was not valid JSON: size='{}' error='{}' response='{}'", sizeOf(content),
-                    e.getOriginalMessage(), StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
+            log.warn("Judge answer was not valid JSON: size='{}' error='{}'", sizeOf(content),
+                    e.getOriginalMessage());
             return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content), List.of(), 0);
         }
         Map<String, String> declaredNames = schema.stream().collect(Collectors.toMap(
@@ -1171,7 +1191,7 @@ public class OnlineScoringEngine {
             }
             var declaredName = declaredNames.get(scoreName.toLowerCase(Locale.ROOT));
             if (declaredName == null) {
-                log.debug("Ignoring '{}': not a score declared by the rule", scoreName);
+                collected.ignoreUndeclared(scoreName);
                 return;
             }
             collected.accept(declaredName, scoreNested);
@@ -1192,9 +1212,8 @@ public class OnlineScoringEngine {
                         .toList();
                 var omittedFields = structuredResponse.size() - topLevelKeys.size();
                 // Not wrapped in quotes: each name is quoted by renderFields.
-                log.warn("Judge answer had no recognisable score fields: fields={} size='{}' response='{}'",
-                        renderFields(topLevelKeys, omittedFields), sizeOf(content),
-                        StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
+                log.warn("Judge answer had no recognisable score fields: fields={} size='{}'",
+                        renderFields(topLevelKeys, omittedFields), sizeOf(content));
                 return ParsedFeedbackScores.problem(
                         ResponseProblem.Kind.NO_SCORE_FIELDS, "", topLevelKeys, omittedFields);
             }
@@ -1206,7 +1225,14 @@ public class OnlineScoringEngine {
         private final List<FeedbackScoreBatchItem> scores = new ArrayList<>();
         private final List<String> nullScoreNames = new ArrayList<>();
         private final List<String> unreadableScoreNames = new ArrayList<>();
+        private final List<String> undeclaredScoreNames = new ArrayList<>();
         private final Set<String> claimedNames = new HashSet<>();
+
+        // A nested object carrying a score under a name the rule never declared: dropped, but reported.
+        void ignoreUndeclared(String scoreName) {
+            log.debug("Ignoring '{}': not a score declared by the rule", scoreName);
+            undeclaredScoreNames.add(scoreName);
+        }
 
         void accept(String declaredName, JsonNode scoreNode) {
             // Names match case-insensitively, so several keys in one answer can claim the same declared score.
@@ -1232,15 +1258,20 @@ public class OnlineScoringEngine {
                             () -> unreadableScoreNames.add(declaredName));
         }
 
-        // Nothing usable and nothing explicitly not-applicable — i.e. the pass did not recognise the shape
+        // Nothing usable and nothing explicitly not-applicable — i.e. the pass did not recognise the shape.
+        // Undeclared names deliberately do not count: an answer of only those should still reach the flat
+        // fallback and, failing that, be reported as having no recognisable score fields.
         boolean foundNothing() {
             return scores.isEmpty() && nullScoreNames.isEmpty() && unreadableScoreNames.isEmpty();
         }
 
-        /** Copies so a caller cannot mutate a parsed result through the lists this accumulator still holds. */
         ParsedFeedbackScores toParsed() {
-            return new ParsedFeedbackScores(List.copyOf(scores), List.copyOf(nullScoreNames),
-                    List.copyOf(unreadableScoreNames), null);
+            return ParsedFeedbackScores.builder()
+                    .scores(scores)
+                    .nullScoreNames(nullScoreNames)
+                    .unreadableScoreNames(unreadableScoreNames)
+                    .undeclaredScoreNames(undeclaredScoreNames)
+                    .build();
         }
     }
 

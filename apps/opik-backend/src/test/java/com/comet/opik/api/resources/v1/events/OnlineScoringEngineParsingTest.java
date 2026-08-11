@@ -297,6 +297,26 @@ class OnlineScoringEngineParsingTest {
     }
 
     @Test
+    @DisplayName("report an undeclared score the judge returned alongside a declared one")
+    void whenAnswerMixesDeclaredAndUndeclaredScores_thenReportsTheUndeclaredOne() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"Relevance\":{\"score\":4,\"reason\":\"r\"},"
+                        + "\"Wisdom\":{\"score\":5,\"reason\":\"r\"}}"),
+                singleScoreSchema("Relevance"));
+
+        // The declared score still stores, so the run looks successful -- the undeclared one would otherwise
+        // vanish with nothing on the rule's Logs page to say the judge scored something the user never gets.
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("Relevance");
+        assertThat(parsed.undeclaredScoreNames()).containsExactly("Wisdom");
+        assertThat(parsed.problem()).isNull();
+
+        var logger = Mockito.mock(Logger.class);
+        OnlineScoringEngine.logUnreadableResponse(logger, parsed, "traceId", "t-1");
+        Mockito.verify(logger).warn(Mockito.contains("does not declare that name"),
+                Mockito.eq("'Wisdom'"), Mockito.eq("traceId"), Mockito.eq("t-1"));
+    }
+
+    @Test
     @DisplayName("keep one score per declared name when case-variant keys claim the same one")
     void whenTwoKeysClaimTheSameDeclaredScore_thenOnlyTheFirstIsKept() {
         var parsed = OnlineScoringEngine.toFeedbackScores(
@@ -464,7 +484,7 @@ class OnlineScoringEngineParsingTest {
         var logger = Mockito.mock(Logger.class);
 
         OnlineScoringEngine.logUnreadableResponse(logger,
-                new OnlineScoringEngine.ParsedFeedbackScores(List.of(), List.of("Skipped"), List.of(), null),
+                OnlineScoringEngine.ParsedFeedbackScores.builder().nullScoreNames(List.of("Skipped")).build(),
                 "traceId", "t-1");
 
         Mockito.verifyNoInteractions(logger);
@@ -476,7 +496,7 @@ class OnlineScoringEngineParsingTest {
         var logger = Mockito.mock(Logger.class);
 
         OnlineScoringEngine.logUnreadableResponse(logger,
-                new OnlineScoringEngine.ParsedFeedbackScores(List.of(), List.of(), List.of("Tone"), null),
+                OnlineScoringEngine.ParsedFeedbackScores.builder().unreadableScoreNames(List.of("Tone")).build(),
                 "traceId", "t-1");
 
         // The message covers unreadable and out-of-range alike, and states the storable range.
@@ -494,7 +514,7 @@ class OnlineScoringEngineParsingTest {
                 OnlineScoringEngine.ResponseProblem.Kind.NOT_JSON, "Sure! Let me help.", List.of(), 0);
 
         OnlineScoringEngine.logUnreadableResponse(logger,
-                new OnlineScoringEngine.ParsedFeedbackScores(List.of(), List.of(), List.of(), problem),
+                OnlineScoringEngine.ParsedFeedbackScores.builder().problem(problem).build(),
                 "traceId", "t-1");
 
         Mockito.verify(logger).warn(Mockito.contains("Nothing was scored"), Mockito.eq("traceId"),
