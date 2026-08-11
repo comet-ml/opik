@@ -8,8 +8,10 @@ from .evaluator import (
     run_tests,
 )
 from .threads.evaluator import evaluate_threads
+from .types import ErrorTolerance
 
 __all__ = [
+    "ErrorTolerance",
     "evaluate",
     "evaluate_prompt",
     "evaluate_experiment",

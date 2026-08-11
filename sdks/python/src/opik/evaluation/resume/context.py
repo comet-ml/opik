@@ -29,6 +29,7 @@ from ...api_objects import opik_client
 from ...api_objects.dataset import dataset
 from ...api_objects.experiment import experiment as experiment_module
 from ...api_objects.experiment import experiment_item
+from .. import types
 from . import checkpoint as checkpoint_module
 from . import state as state_module
 
@@ -54,6 +55,9 @@ class ResumeContext:
     dataset_filter_string: Optional[str]
     nb_samples: Optional[int]
     candidate_dataset_item_ids: Optional[List[str]]
+    error_tolerance: types.ErrorTolerance
+    """Tolerance the original evaluation call ran with, so a resumed run does not
+    silently revert to the default."""
 
 
 def prepare_resume_context(
@@ -111,6 +115,7 @@ def prepare_resume_context(
         dataset_filter_string=persisted.dataset_filter_string,
         nb_samples=persisted.nb_samples,
         candidate_dataset_item_ids=candidate_ids,
+        error_tolerance=persisted.error_tolerance,
     )
 
 

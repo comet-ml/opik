@@ -447,13 +447,16 @@ navigation:
           - page: Overview
             path: ../docs-v2/guardrails/overview.mdx
             slug: overview
-          - page: Guardrails
+          - page: Policies
+            path: ../docs-v2/guardrails/policies.mdx
+            slug: policies
+          - page: Guards
             path: ../docs-v2/guardrails/guardrails.mdx
             slug: guardrails
           - page: Prompt injection model
             path: ../docs-v2/guardrails/prompt-injection-model.mdx
             slug: prompt-injection-model
-          - page: Custom guardrails
+          - page: Custom models
             path: ../docs-v2/guardrails/custom-guardrails.mdx
             slug: custom-guardrails
           - page: Guardrails server

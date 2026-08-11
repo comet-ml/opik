@@ -4,6 +4,7 @@ import jakarta.ws.rs.ProcessingException;
 import lombok.Getter;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.core5.http.NoHttpResponseException;
 import reactor.util.retry.Retry;
 import reactor.util.retry.RetryBackoffSpec;
 
@@ -95,10 +96,14 @@ public class RetryUtils {
 
     private static boolean isRetriableException(Throwable throwable) {
         return switch (throwable) {
+            // Network and timeout transient errors
             case SocketException ex -> true;
             case TimeoutException ex -> true;
             case InterruptedIOException ex -> true;
+            // HTTP client transient errors (server closes connection, temporary unavailability)
+            case NoHttpResponseException ex -> true;
             case RetryableHttpException ex -> true;
+            // Wrapped exceptions: check cause recursively for transient errors
             case ProcessingException ex -> {
                 var cause = ex.getCause();
                 yield cause != null && isRetriableException(cause);

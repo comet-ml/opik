@@ -155,10 +155,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Haiku 4.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
-      label: "Claude Opus 4.1",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
       label: "Claude Fable 5",
     },
@@ -366,6 +362,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-5-fast",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_5_BATCH,
+      label: "anthropic/claude-opus-5:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
@@ -380,6 +380,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6,
       label: "anthropic/claude-sonnet-4.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6_BATCH,
+      label: "anthropic/claude-sonnet-4.6:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5,
@@ -892,8 +896,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-2.6-flash:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH,
+      label: "inclusionai/ling-3.0-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_FREE,
       label: "inclusionai/ling-3.0-flash:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_TINY_FREE,
+      label: "inclusionai/ling-3.0-tiny:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
@@ -1046,6 +1058,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_1,
       label: "meta/muse-spark-1.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_2,
+      label: "meta/muse-spark-1.2",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
@@ -1340,6 +1356,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k2.7-code",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_7_CODE_BATCH,
+      label: "moonshotai/kimi-k2.7-code:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
       label: "moonshotai/kimi-k2:free",
     },
@@ -1449,6 +1469,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nvidia/nemotron-3-ultra-550b-a55b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_BATCH,
+      label: "nvidia/nemotron-3-ultra-550b-a55b:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE,
       label: "nvidia/nemotron-3-ultra-550b-a55b:free",
     },
@@ -1497,6 +1521,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-3.5-turbo-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_BATCH,
+      label: "openai/gpt-3.5-turbo:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4,
       label: "openai/gpt-4",
     },
@@ -1517,6 +1545,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-4-turbo-preview",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_TURBO_BATCH,
+      label: "openai/gpt-4-turbo:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1,
       label: "openai/gpt-4.1",
     },
@@ -1525,8 +1557,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-4.1-mini",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_MINI_BATCH,
+      label: "openai/gpt-4.1-mini:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_NANO,
       label: "openai/gpt-4.1-nano",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_NANO_BATCH,
+      label: "openai/gpt-4.1-nano:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1_BATCH,
+      label: "openai/gpt-4.1:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
@@ -1561,8 +1605,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-4o-mini-search-preview",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI_BATCH,
+      label: "openai/gpt-4o-mini:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_SEARCH_PREVIEW,
       label: "openai/gpt-4o-search-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_BATCH,
+      label: "openai/gpt-4o:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_EXTENDED,
@@ -1579,6 +1631,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CODEX,
       label: "openai/gpt-5-codex",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CODEX_BATCH,
+      label: "openai/gpt-5-codex:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_IMAGE,
@@ -1607,6 +1663,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_PRO,
       label: "openai/gpt-5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_PRO_BATCH,
+      label: "openai/gpt-5-pro:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1,
@@ -1653,6 +1713,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.2-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_PRO_BATCH,
+      label: "openai/gpt-5.2-pro:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_BATCH,
       label: "openai/gpt-5.2:batch",
     },
@@ -1693,6 +1757,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.4-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_PRO_BATCH,
+      label: "openai/gpt-5.4-pro:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_BATCH,
       label: "openai/gpt-5.4:batch",
     },
@@ -1703,6 +1771,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5_PRO,
       label: "openai/gpt-5.5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5_PRO_BATCH,
+      label: "openai/gpt-5.5-pro:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5_BATCH,
@@ -1717,6 +1789,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.6-luna-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA_PRO_BATCH,
+      label: "openai/gpt-5.6-luna-pro:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA_BATCH,
+      label: "openai/gpt-5.6-luna:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_SOL,
       label: "openai/gpt-5.6-sol",
     },
@@ -1725,12 +1805,28 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.6-sol-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_SOL_PRO_BATCH,
+      label: "openai/gpt-5.6-sol-pro:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_SOL_BATCH,
+      label: "openai/gpt-5.6-sol:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_TERRA,
       label: "openai/gpt-5.6-terra",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_TERRA_PRO,
       label: "openai/gpt-5.6-terra-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_TERRA_PRO_BATCH,
+      label: "openai/gpt-5.6-terra-pro:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_TERRA_BATCH,
+      label: "openai/gpt-5.6-terra:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_BATCH,
@@ -1781,6 +1877,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/o1-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_O1_PRO_BATCH,
+      label: "openai/o1-pro:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_O1_BATCH,
+      label: "openai/o1:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3,
       label: "openai/o3",
     },
@@ -1797,8 +1901,24 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/o3-mini-high",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH_BATCH,
+      label: "openai/o3-mini-high:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_BATCH,
+      label: "openai/o3-mini:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3_PRO,
       label: "openai/o3-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_O3_PRO_BATCH,
+      label: "openai/o3-pro:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_O3_BATCH,
+      label: "openai/o3:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI,
@@ -1811,6 +1931,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI_HIGH,
       label: "openai/o4-mini-high",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI_HIGH_BATCH,
+      label: "openai/o4-mini-high:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI_BATCH,
+      label: "openai/o4-mini:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENGVLAB_INTERNVL3_78B,
@@ -2313,6 +2441,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "thinkingmachines/inkling-small",
     },
     {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_BATCH,
+      label: "thinkingmachines/inkling:batch",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
       label: "thudm/glm-4.1v-9b-thinking",
     },
@@ -2483,6 +2615,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2,
       label: "z-ai/glm-5.2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2_BATCH,
+      label: "z-ai/glm-5.2:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,

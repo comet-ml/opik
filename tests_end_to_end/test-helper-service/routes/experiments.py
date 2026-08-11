@@ -162,6 +162,32 @@ def delete_experiment():
     return success_response({"id": experiment_id})
 
 
+@experiments_bp.route("/delete-by-name", methods=["DELETE"])
+def delete_experiments_by_name():
+    """Delete every experiment whose name matches exactly, regardless of how many
+    accumulated (e.g. a previous run's teardown never ran)."""
+    data = request.get_json()
+    validate_required_fields(data, ["name"])
+
+    name = data["name"]
+    client = get_opik_api_client()
+
+    ids = []
+    page = 1
+    page_size = 100
+    while True:
+        matches = client.experiments.find_experiments(name=name, page=page, size=page_size).content or []
+        ids.extend(experiment.id for experiment in matches if experiment.name == name)
+        if len(matches) < page_size:
+            break
+        page += 1
+
+    if ids:
+        client.experiments.delete_experiments_by_id(ids=ids)
+
+    return success_response({"deleted_count": len(ids)})
+
+
 @experiments_bp.route("/get-experiment-items", methods=["POST"])
 def get_experiment_items():
     data = request.get_json()
