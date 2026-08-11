@@ -100,10 +100,12 @@ fi
 #
 # The migrations URL is not a fixed shape across deployments — the packaged config default carries
 # a '/opik' path, helm and compose pass host:port bare, and a managed endpoint adds query
-# parameters and may be TLS. The driver's contract is only that 'jdbc:clickhouse:' prefixes the
-# rest ("'jdbc:clickhouse:' prefix is mandatory", ClickhouseJdbcUrlParser), so the remainder can be
-# either '//host:port' or an embedded-protocol 'https://host:port'. Handle both rather than
-# stripping a fixed '//' scheme, which would leave 'jdbc:clickhouse:https:' as the host.
+# parameters and TLS via '?ssl=true'. That last form is how the legacy migrations driver
+# (ru.yandex.clickhouse, pinned in config.yml) does TLS: it treats 'clickhouse' as the URI scheme,
+# so an embedded-protocol 'jdbc:clickhouse:https://host' is an opaque URI it rejects outright with
+# "port is missed or wrong". The modern com.clickhouse driver does accept that form, so parse the
+# prefix and an optional embedded protocol separately rather than stripping a fixed '//' — which
+# would otherwise leave 'jdbc:clickhouse:https:' as the host and silently probe nonsense.
 # Echo `-1` on anything unparseable or unreachable, so a probe that cannot answer never reads as
 # "0 tables" — the count is a safety gate, and an unknown must never look like an empty schema.
 analytics_table_count() {
