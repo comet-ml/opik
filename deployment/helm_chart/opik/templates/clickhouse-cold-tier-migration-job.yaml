@@ -9,12 +9,24 @@
   so recovery is far faster than the ~7 min/replica passive self-heal (the
   operator's own rebuild may still briefly restart the wedged pod). No-op when
   the cluster is already healthy.
+
+  Scope: readiness is detected from the cache VCT on the StatefulSet, which
+  assumes the chart's default pod template (where the cache VCT and its mount at
+  cachePath are coupled). A custom clickhouse.templates.podTemplate /
+  extraPodTemplates that adds the VCT without mounting it at cachePath is not
+  supported by this job.
 */ -}}
 {{- $cacheVct := .Values.clickhouse.tieredStorage.cold.cache.volumeName -}}
 {{- $cachePath := .Values.clickhouse.tieredStorage.cold.cache.path -}}
 {{- $chiName := printf "%s-clickhouse" (include "opik.name" $) -}}
 {{- $pollTimeout := int .Values.clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds -}}
 {{- $activeDeadline := int .Values.clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds -}}
+{{- /* pollTimeoutSeconds is the script's whole budget; a non-positive value makes
+       remaining() return 0 immediately, so the job would exit without bouncing the
+       operator or polling readiness. Require a positive integer. */ -}}
+{{- if le $pollTimeout 0 }}
+{{- fail (printf "clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds (%d) must be a positive integer" $pollTimeout) }}
+{{- end -}}
 {{- /* The Job's hard cap must outlast the script's own budget, else Kubernetes
        kills a legitimately-running migration. */ -}}
 {{- if le $activeDeadline $pollTimeout }}
@@ -27,6 +39,13 @@
 {{- $operatorValues := index .Values "altinity-clickhouse-operator" | default dict -}}
 {{- if $operatorValues.namespaceOverride }}
 {{- fail "clickhouse.tieredStorage.coldTierMigration is incompatible with altinity-clickhouse-operator.namespaceOverride (the migration job is namespace-scoped to the release namespace); set coldTierMigration.enabled=false or remove namespaceOverride" }}
+{{- end -}}
+{{- /* The operator pod is found by the subchart's default app.kubernetes.io/name
+       (altinity-clickhouse-operator). name/fullnameOverride change that label, so the
+       selector would match nothing and the bounce would be silently skipped — reject
+       at render time rather than degrade to passive self-heal without warning. */ -}}
+{{- if or $operatorValues.nameOverride $operatorValues.fullnameOverride }}
+{{- fail "clickhouse.tieredStorage.coldTierMigration is incompatible with altinity-clickhouse-operator.nameOverride/fullnameOverride (the migration job locates the operator by its default app.kubernetes.io/name); set coldTierMigration.enabled=false or remove the override" }}
 {{- end -}}
 {{- /* Effective SA name for the Job and the RoleBinding subject. When
        serviceAccountName is overridden the account is externally managed, so we

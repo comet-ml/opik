@@ -47,12 +47,40 @@ tests:
     asserts:
       - failedTemplate: {}
 
+  - it: fails the render when pollTimeoutSeconds is zero
+    set:
+      clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds (0) must be a positive integer"
+
+  - it: fails the render when pollTimeoutSeconds is negative
+    set:
+      clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds: -1
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds (-1) must be a positive integer"
+
+  - it: renders at the positive pollTimeoutSeconds boundary (1)
+    set:
+      clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds: 1
+    asserts:
+      - hasDocuments:
+          count: 4
+
   - it: fails the render when the operator is relocated via namespaceOverride
     set:
       altinity-clickhouse-operator.namespaceOverride: other-ns
     asserts:
       - failedTemplate:
           errorMessage: "clickhouse.tieredStorage.coldTierMigration is incompatible with altinity-clickhouse-operator.namespaceOverride (the migration job is namespace-scoped to the release namespace); set coldTierMigration.enabled=false or remove namespaceOverride"
+
+  - it: fails the render when the operator is renamed via nameOverride
+    set:
+      altinity-clickhouse-operator.nameOverride: my-ch-operator
+    asserts:
+      - failedTemplate:
+          errorMessage: "clickhouse.tieredStorage.coldTierMigration is incompatible with altinity-clickhouse-operator.nameOverride/fullnameOverride (the migration job locates the operator by its default app.kubernetes.io/name); set coldTierMigration.enabled=false or remove the override"
 
   # Identity: the account the Job runs as MUST be the RoleBinding subject, else the
   # Job has no Role permissions. Default (chart-created) SA path.
