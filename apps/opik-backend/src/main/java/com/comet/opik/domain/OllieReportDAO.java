@@ -53,7 +53,7 @@ interface OllieReportDAO {
     @SqlQuery("""
             SELECT * FROM ollie_reports
             WHERE workspace_id = :workspaceId AND project_id = :projectId
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id ASC
             LIMIT :limit OFFSET :offset
             """)
     List<OllieReport> findByProjectId(@Bind("workspaceId") String workspaceId,
