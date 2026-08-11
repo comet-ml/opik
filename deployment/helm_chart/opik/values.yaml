@@ -936,19 +936,22 @@ clickhouse:
         maxSize: "214748364800" # 200 GiB
         # Falls back to clickhouse.storageClassName when empty.
         storageClassName: ""
-    # Post-upgrade job that recreates any ClickHouse StatefulSet left without the
-    # cache volume when the cold tier is enabled, so all replicas mount it and go
-    # Ready. Runs whenever the cold tier is on; set enabled=false to opt out.
+    # Post-upgrade job that recovers any ClickHouse StatefulSet left without the
+    # cache volume when the cold tier is enabled — by bouncing the operator so it
+    # rebuilds each StatefulSet with the volume (never deletes StatefulSets/data),
+    # so all replicas mount it and go Ready. Runs whenever the cold tier is on;
+    # set enabled=false to opt out.
     coldTierMigration:
       enabled: true
       image: "alpine/kubectl:1.35.0"
-      # Total budget for the whole run (all replicas: orphan-delete + operator
-      # rebuild + reschedule + wait Ready), shared across migration and readiness.
+      # Total budget for the whole run (all replicas: operator bounce + rebuild +
+      # reschedule + wait Ready), shared across migration and readiness.
       pollTimeoutSeconds: 1200
       # Kubernetes hard cap on the Job: pollTimeoutSeconds plus startup/kubectl
       # overhead. Must exceed pollTimeoutSeconds.
       activeDeadlineSeconds: 1320
-      # SA with delete on statefulsets + pods (falls back to the chart-created SA).
+      # SA with get/list/watch on statefulsets and get/list/watch/delete on pods
+      # (falls back to the chart-created SA).
       serviceAccountName: ""
       nodeSelector: {}
       tolerations: []

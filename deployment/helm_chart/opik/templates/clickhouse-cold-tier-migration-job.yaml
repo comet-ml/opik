@@ -33,6 +33,10 @@
        reference it but do NOT render (and hook-delete) the chart's SA object. */ -}}
 {{- $saOverride := .Values.clickhouse.tieredStorage.coldTierMigration.serviceAccountName -}}
 {{- $sa := $saOverride | default (printf "%s-ch-cold-tier-migration-sa" (include "opik.fullname" .)) -}}
+{{- /* SA/Role/RoleBinding use BeforeHookCreation, not HookSucceeded: ArgoCD marks
+       non-Job hook resources succeeded immediately and would reap the SA out from
+       under the running Job. Trade-off: the delete-on-pods Role persists between
+       syncs — intended; do not switch to HookSucceeded. */ -}}
 {{- if not $saOverride }}
 ---
 apiVersion: v1
@@ -124,7 +128,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
     {{- end }}
 spec:
-  backoffLimit: 2
+  backoffLimit: 0
   # Kubernetes hard cap on the Job. The script bounds its own work by
   # pollTimeoutSeconds (a single shared budget across migration + readiness), so
   # this only needs a small buffer on top for startup/kubectl overhead.
@@ -181,8 +185,10 @@ spec:
 
               # Migration state of this CHI's StatefulSets:
               #   none    -> no CH StatefulSet exists yet (operator hasn't created it)
-              #   missing -> at least one StatefulSet lacks the cache VCT (needs fix)
-              #   ok      -> every StatefulSet carries the cache VCT
+              #   missing -> a StatefulSet lacks the cache VCT, or not all of its
+              #              replicas are Ready yet (rebuild still in progress)
+              #   ok      -> every StatefulSet carries the cache VCT and all its
+              #              replicas are Ready
               migration_state() {
                 stses=$(kubectl get sts -n "$NAMESPACE" -l "$CH_STS_SELECTOR" -o name) \
                   || die "listing ClickHouse StatefulSets failed"
@@ -195,15 +201,18 @@ spec:
                     *" ${CACHE_VCT} "*) : ;;
                     *) echo missing; return 0 ;;
                   esac
+                  desired=$(kubectl get "$sts" -n "$NAMESPACE" -o jsonpath='{.spec.replicas}') \
+                    || die "reading .spec.replicas of $sts failed"
+                  ready=$(kubectl get "$sts" -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}')
+                  [ "${ready:-0}" = "${desired:-0}" ] || { echo missing; return 0; }
                 done
                 echo ok
               }
 
               # The altinity operator pod, selected by the subchart's own release-scoped
-              # selector labels (passed in as OPERATOR_SELECTOR), and verified to be
-              # owned by a ReplicaSet (the operator Deployment) — so a bare/spoofed pod
-              # that merely carries the labels is never deleted. Fails loud unless
-              # exactly one owned pod matches.
+              # selector labels (OPERATOR_SELECTOR) and verified to be owned by a
+              # ReplicaSet — so a bare/spoofed pod carrying the labels is never deleted.
+              # Prints the one match, nothing on zero (caller falls back), dies on >1.
               operator_pod() {
                 pods=$(kubectl get pods -n "$NAMESPACE" -l "$OPERATOR_SELECTOR" -o name 2>/dev/null) \
                   || die "listing operator pods failed"
@@ -216,8 +225,8 @@ spec:
               "
                 done
                 n=$(printf '%s' "$match" | grep -c . || true)
-                [ "$n" -eq 1 ] || die "expected exactly 1 operator pod (${OPERATOR_SELECTOR}, owned by a ReplicaSet), found ${n}"
-                printf '%s' "$match" | grep .
+                [ "$n" -le 1 ] || die "expected at most 1 operator pod (${OPERATOR_SELECTOR}, owned by a ReplicaSet), found ${n}"
+                printf '%s' "$match" | grep . || true
               }
 
               # Bounce the operator so a fresh reconcile rebuilds every StatefulSet WITH
@@ -237,23 +246,30 @@ spec:
               done
 
               op="$(operator_pod)"
+              if [ -z "$op" ]; then
+                echo "WARNING: no ClickHouse operator pod found for ${OPERATOR_SELECTOR} — the operator is externally managed or renamed. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
+                exit 0
+              fi
               echo ">> bouncing operator ${op#pod/} so it rebuilds the StatefulSets with the cache volume"
               kubectl delete "$op" -n "$NAMESPACE" --grace-period=30
 
               # Wait until every CH pod is Ready and no StatefulSet is missing the VCT.
               echo ">> waiting for all ClickHouse pods to be Ready with ${CACHE_VCT}"
+              last_wait_err=""
               while :; do
                 left="$(remaining)"
                 if [ "$left" -eq 0 ]; then
                   echo "ERROR: cluster not healthy within ${POLL_TIMEOUT}s after bouncing the operator" >&2
+                  [ -n "$last_wait_err" ] && echo "last 'kubectl wait' error: ${last_wait_err}" >&2
                   kubectl get sts,pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
                   exit 1
                 fi
                 if [ "$(migration_state)" = "ok" ]; then
                   [ "$left" -gt 60 ] && left=60
-                  if kubectl wait --for=condition=Ready pod \
+                  # Capture stderr (drop stdout) so a final timeout can report the reason.
+                  if last_wait_err="$(kubectl wait --for=condition=Ready pod \
                         -n "$NAMESPACE" -l "$CH_STS_SELECTOR" \
-                        --timeout="${left}s" >/dev/null 2>&1; then
+                        --timeout="${left}s" 2>&1 >/dev/null)"; then
                     echo "=== Cold-tier migration complete — all replicas Ready with ${CACHE_VCT} ==="
                     exit 0
                   fi

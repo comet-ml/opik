@@ -105,13 +105,20 @@ tests:
           path: kind
           value: RoleBinding
 
-  - it: does not render a chart ServiceAccount when serviceAccountName is overridden
+  - it: renders only Role + RoleBinding + Job when serviceAccountName is overridden
     set:
       clickhouse.tieredStorage.coldTierMigration.serviceAccountName: my-custom-sa
     asserts:
-      # Only Role + RoleBinding + Job render — no ServiceAccount object for an
-      # externally-managed account (so the hook cleanup can't delete it).
       - hasDocuments:
           count: 3
-      - notMatchRegexRaw:
-          pattern: "kind: ServiceAccount"
+
+  - it: renders no chart ServiceAccount when serviceAccountName is overridden
+    set:
+      clickhouse.tieredStorage.coldTierMigration.serviceAccountName: my-custom-sa
+    documentSelector:
+      path: kind
+      value: ServiceAccount
+      skipEmptyTemplates: true
+    asserts:
+      - hasDocuments:
+          count: 0
