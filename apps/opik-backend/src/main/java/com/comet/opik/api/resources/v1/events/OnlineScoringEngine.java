@@ -82,6 +82,7 @@ public class OnlineScoringEngine {
 
     private static final int MAX_REPORTED_RESPONSE_CHARS = 500;
     private static final int MAX_REPORTED_FIELD_NAMES = 10;
+    private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
 
     private static final Map<String, Boolean> PASS_FAIL_SCORES = Map.of(
             "pass", true, "passed", true, "fail", false, "failed", false);
@@ -1055,9 +1056,10 @@ public class OnlineScoringEngine {
     public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames,
             List<String> unreadableScoreNames, ResponseProblem problem) {
 
-        static ParsedFeedbackScores problem(ResponseProblem.Kind kind, String evidence, List<String> fields) {
+        static ParsedFeedbackScores problem(ResponseProblem.Kind kind, String evidence, List<String> fields,
+                int omittedFields) {
             return new ParsedFeedbackScores(List.of(), List.of(), List.of(),
-                    new ResponseProblem(kind, evidence, fields));
+                    new ResponseProblem(kind, evidence, fields, omittedFields));
         }
 
         /**
@@ -1081,11 +1083,12 @@ public class OnlineScoringEngine {
                     problem == null
                             ? null
                             : new ResponseProblem(problem.kind(), problem.evidence(),
-                                    problem.fields().stream().map(userFacing).toList()));
+                                    problem.fields().stream().map(userFacing).toList(),
+                                    problem.omittedFields()));
         }
     }
 
-    public record ResponseProblem(Kind kind, String evidence, List<String> fields) {
+    public record ResponseProblem(Kind kind, String evidence, List<String> fields, int omittedFields) {
         public enum Kind {
             NOT_JSON,
             NOT_A_JSON_OBJECT,
@@ -1124,7 +1127,7 @@ public class OnlineScoringEngine {
                     .formatted(problem.evidence());
             case NO_SCORE_FIELDS -> ("the judge's answer had none of the expected score fields. Its fields were "
                     + "%s; expected { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }")
-                    .formatted(renderFields(problem.fields()));
+                    .formatted(renderFields(problem.fields(), problem.omittedFields()));
         };
     }
 
@@ -1142,12 +1145,12 @@ public class OnlineScoringEngine {
                 log.warn("Judge answer was not a JSON object: size='{}' response='{}'", sizeOf(content),
                         StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
                 return ParsedFeedbackScores.problem(
-                        ResponseProblem.Kind.NOT_A_JSON_OBJECT, sizeOf(content), List.of());
+                        ResponseProblem.Kind.NOT_A_JSON_OBJECT, sizeOf(content), List.of(), 0);
             }
         } catch (JsonProcessingException e) {
             log.warn("Judge answer was not valid JSON: size='{}' error='{}' response='{}'", sizeOf(content),
                     e.getOriginalMessage(), StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
-            return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content), List.of());
+            return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content), List.of(), 0);
         }
         Map<String, String> declaredNames = schema.stream().collect(Collectors.toMap(
                 definition -> definition.name().toLowerCase(), LlmAsJudgeOutputSchema::name, (first, dup) -> first));
@@ -1172,17 +1175,21 @@ public class OnlineScoringEngine {
             collectFlatSingleScore(structuredResponse, schema, collected);
 
             if (collected.foundNothing()) {
+                // Capped here rather than where it is rendered: the count comes from the judge's answer, so
+                // one reply would otherwise decide how much this error path allocates and carries.
                 var topLevelKeys = StreamSupport.stream(
                         Spliterators.spliteratorUnknownSize(structuredResponse.fieldNames(),
                                 Spliterator.ORDERED | Spliterator.NONNULL),
                         false)
+                        .limit(MAX_REPORTED_FIELD_NAMES)
                         .toList();
+                var omittedFields = structuredResponse.size() - topLevelKeys.size();
                 // Not wrapped in quotes: each name is quoted by renderFields.
                 log.warn("Judge answer had no recognisable score fields: fields={} size='{}' response='{}'",
-                        renderFields(topLevelKeys), sizeOf(content),
+                        renderFields(topLevelKeys, omittedFields), sizeOf(content),
                         StringTruncator.truncate(content, MAX_REPORTED_RESPONSE_CHARS, null));
                 return ParsedFeedbackScores.problem(
-                        ResponseProblem.Kind.NO_SCORE_FIELDS, "", topLevelKeys);
+                        ResponseProblem.Kind.NO_SCORE_FIELDS, "", topLevelKeys, omittedFields);
             }
         }
         return collected.toParsed();
@@ -1192,8 +1199,15 @@ public class OnlineScoringEngine {
         private final List<FeedbackScoreBatchItem> scores = new ArrayList<>();
         private final List<String> nullScoreNames = new ArrayList<>();
         private final List<String> unreadableScoreNames = new ArrayList<>();
+        private final Set<String> claimedNames = new HashSet<>();
 
         void accept(String scoreName, JsonNode scoreNode) {
+            // Names match case-insensitively, so several keys in one answer can claim the same declared score.
+            // Both would be inserted and collapse to whichever row wins on timestamp, so the first one wins.
+            if (!claimedNames.add(scoreName)) {
+                log.debug("Skipping a repeated '{}' score: the answer claimed it more than once", scoreName);
+                return;
+            }
             var actualScore = scoreNode.path(SCORE_FIELD_NAME);
             if (actualScore.isNull()) {
                 log.debug("Skipping '{}' score because the judge returned a null value", scoreName);
@@ -1224,20 +1238,20 @@ public class OnlineScoringEngine {
     }
 
     /** How a judge's field-name list is shown, wherever it is shown — the log and the user's message agree. */
-    private static String renderFields(List<String> names) {
-        return names.isEmpty() ? "(none)" : quoteAll(names);
+    private static String renderFields(List<String> names, int omitted) {
+        if (names.isEmpty()) {
+            return "(none)";
+        }
+        var shown = quoteAll(names);
+        return omitted == 0 ? shown : "%s and %,d more".formatted(shown, omitted);
     }
 
-    /** The names come from the judge's answer, so the count is capped to keep one reply off a huge log row. */
     private static String quoteAll(List<String> names) {
-        var shown = names.stream().limit(MAX_REPORTED_FIELD_NAMES)
+        return names.stream()
                 // The names come from the judge's answer and land in a persisted, user-visible log line, so
                 // control characters are stripped: a newline inside a name could otherwise forge a log entry.
-                .map(name -> "'%s'".formatted(name.replaceAll("\\p{Cntrl}", " ")))
+                .map(name -> "'%s'".formatted(CONTROL_CHARS.matcher(name).replaceAll(" ")))
                 .collect(Collectors.joining(", "));
-        return names.size() <= MAX_REPORTED_FIELD_NAMES
-                ? shown
-                : "%s and %,d more".formatted(shown, names.size() - MAX_REPORTED_FIELD_NAMES);
     }
 
     /**

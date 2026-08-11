@@ -36,13 +36,20 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class OnlineScoringEngineParsingTest {
 
     private static final List<LlmAsJudgeOutputSchema> THREE_SCORE_SCHEMA = List.of(
-            new LlmAsJudgeOutputSchema("Relevance", LlmAsJudgeOutputSchemaType.INTEGER, "Relevance of the summary"),
-            new LlmAsJudgeOutputSchema("Conciseness", LlmAsJudgeOutputSchemaType.DOUBLE, "Conciseness of the summary"),
-            new LlmAsJudgeOutputSchema("Technical Accuracy", LlmAsJudgeOutputSchemaType.BOOLEAN,
-                    "Technical accuracy of the summary"));
+            schema("Relevance", LlmAsJudgeOutputSchemaType.INTEGER, "Relevance of the summary"),
+            schema("Conciseness", LlmAsJudgeOutputSchemaType.DOUBLE, "Conciseness of the summary"),
+            schema("Technical Accuracy", LlmAsJudgeOutputSchemaType.BOOLEAN, "Technical accuracy of the summary"));
+
+    private static LlmAsJudgeOutputSchema schema(String name, LlmAsJudgeOutputSchemaType type, String description) {
+        return LlmAsJudgeOutputSchema.builder()
+                .name(name)
+                .type(type)
+                .description(description)
+                .build();
+    }
 
     private static List<LlmAsJudgeOutputSchema> singleScoreSchema(String name) {
-        return List.of(new LlmAsJudgeOutputSchema(name, LlmAsJudgeOutputSchemaType.BOOLEAN, "test"));
+        return List.of(schema(name, LlmAsJudgeOutputSchemaType.BOOLEAN, "test"));
     }
 
     /** The reason logUnreadableResponse writes for this result — i.e. what the user actually reads. */
@@ -280,10 +287,28 @@ class OnlineScoringEngineParsingTest {
 
         var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse(manyFields), singleScoreSchema("S"));
 
-        assertThat(parsed.problem().fields()).hasSize(500);
-        // What the user actually reads is capped, with the remainder counted.
+        // Only the reportable names are retained, so one reply cannot size this error path by its field count.
+        assertThat(parsed.problem().fields()).hasSize(10);
+        assertThat(parsed.problem().omittedFields()).isEqualTo(490);
+        // What the user actually reads is unchanged: ten names, with the remainder counted.
         assertThat(renderedWarning(parsed)).matches(
                 ".*Its fields were ('field_\\d+', ){9}'field_\\d+' and 490 more;.*");
+    }
+
+    @Test
+    @DisplayName("keep one score per declared name when case-variant keys claim the same one")
+    void whenTwoKeysClaimTheSameDeclaredScore_thenOnlyTheFirstIsKept() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"Relevance\":{\"score\":1,\"reason\":\"first\"},"
+                        + "\"relevance\":{\"score\":0,\"reason\":\"second\"}}"),
+                singleScoreSchema("Relevance"));
+
+        // Both keys resolve to the declared "Relevance"; storing both would leave the surviving value to the
+        // batch write, so the answer's first occurrence wins.
+        assertThat(parsed.scores()).hasSize(1);
+        assertThat(parsed.scores().getFirst().name()).isEqualTo("Relevance");
+        assertThat(parsed.scores().getFirst().value()).isEqualByComparingTo(BigDecimal.ONE);
+        assertThat(parsed.scores().getFirst().reason()).isEqualTo("first");
     }
 
     @Test
@@ -360,8 +385,8 @@ class OnlineScoringEngineParsingTest {
         var parsed = OnlineScoringEngine.toFeedbackScores(
                 chatResponse("{\"assertion_1\":{\"score\":true,\"reason\":\"r\"},"
                         + "\"assertion_2\":{\"score\":\"nonsense\",\"reason\":\"r\"}}"),
-                List.of(new LlmAsJudgeOutputSchema("assertion_1", LlmAsJudgeOutputSchemaType.BOOLEAN, "d"),
-                        new LlmAsJudgeOutputSchema("assertion_2", LlmAsJudgeOutputSchemaType.BOOLEAN, "d")))
+                List.of(schema("assertion_1", LlmAsJudgeOutputSchemaType.BOOLEAN, "d"),
+                        schema("assertion_2", LlmAsJudgeOutputSchemaType.BOOLEAN, "d")))
                 .withUserFacingNames(Map.of("assertion_1", "Answer mentions the refund window",
                         "assertion_2", "Answer cites a policy"));
 
@@ -377,8 +402,8 @@ class OnlineScoringEngineParsingTest {
         // through the problem rather than through unreadableScoreNames.
         var parsed = OnlineScoringEngine.toFeedbackScores(
                 chatResponse("{\"assertion_1\": \"not an object\"}"),
-                List.of(new LlmAsJudgeOutputSchema("assertion_1", LlmAsJudgeOutputSchemaType.BOOLEAN, "d"),
-                        new LlmAsJudgeOutputSchema("assertion_2", LlmAsJudgeOutputSchemaType.BOOLEAN, "d")))
+                List.of(schema("assertion_1", LlmAsJudgeOutputSchemaType.BOOLEAN, "d"),
+                        schema("assertion_2", LlmAsJudgeOutputSchemaType.BOOLEAN, "d")))
                 .withUserFacingNames(Map.of("assertion_1", "Answer mentions the refund window"));
 
         assertThat(parsed.problem().fields()).containsExactly("Answer mentions the refund window");
@@ -462,7 +487,7 @@ class OnlineScoringEngineParsingTest {
     void logUnreadableResponse_whenAnswerUnusable_thenWarnsWithTheReason() {
         var logger = Mockito.mock(Logger.class);
         var problem = new OnlineScoringEngine.ResponseProblem(
-                OnlineScoringEngine.ResponseProblem.Kind.NOT_JSON, "Sure! Let me help.", List.of());
+                OnlineScoringEngine.ResponseProblem.Kind.NOT_JSON, "Sure! Let me help.", List.of(), 0);
 
         OnlineScoringEngine.logUnreadableResponse(logger,
                 new OnlineScoringEngine.ParsedFeedbackScores(List.of(), List.of(), List.of(), problem),
