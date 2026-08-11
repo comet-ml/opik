@@ -427,13 +427,21 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * {@code OptimizationsResourceTest.GetOptimizerById}, each of which asserts the list and {@code getById}
      * report the same figure - change one copy and they fail.
      * <p>
-     * The spans read inside those CTEs keys its dedup on {@code id} and leaves {@code parent_span_id} out of
-     * both the sort tuple and the {@code LIMIT 1 BY}, matching every other spans read since OPIK-7750
-     * (#7764). That column is mutable across writes, so ahead of {@code last_updated_at} in the sort it picks
-     * the winner by largest parent rather than newest write, and inside the grouping a span re-ingested under
-     * a different parent survives as two rows and its cost enters this sum twice. {@code id} alone is unique
-     * per span. Both halves are pinned by
+     * The spans read inside those CTEs dedup on the logical span key {@code (workspace_id, project_id, id)},
+     * reading rows in storage sort-key order so the newest write per key wins. {@code parent_span_id} is
+     * deliberately excluded from both the sort tuple and the {@code LIMIT 1 BY}, matching every other spans
+     * read since OPIK-7750 (#7764). That column is mutable across writes, so ahead of
+     * {@code last_updated_at} in the sort it picks the winner by largest parent rather than newest write, and
+     * inside the grouping a span re-ingested under a different parent survives as two rows and its cost
+     * enters this sum twice. Both halves are pinned by
      * {@code findAndGetById__whenTaggedSpanIsRewrittenUnderAnotherParent__spendIsChargedOnce}.
+     * <p>
+     * Note the scope in that key: because {@code project_id} is part of it while the aggregation above keys on
+     * {@code trace_id} alone, one span id written under two projects survives the dedup twice and is summed
+     * twice. That exposure is pre-existing and shared with {@code experiment_durations} here and with
+     * {@code ExperimentDAO}; it is deliberately not fixed in this query alone, because deduping only the
+     * tagged half would leave the trial half double-charging and make the two halves of one figure disagree
+     * about what a canonical per-trace cost is. OPIK-7691 covers it across all sites.
      * <p>
      * No numeric column this query returns may ever be NaN/Inf: the row mapper reads them as
      * {@code BigDecimal}, {@code BigDecimal.valueOf(NaN)} throws, and the clickhouse-r2dbc driver
