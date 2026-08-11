@@ -22,10 +22,8 @@ type RecentWorkspaceIdentity = Pick<
 export type RecentWorkspacesMap = Record<string, RecentWorkspace>;
 
 interface UseRecentWorkspacesResult {
-  visits: RecentWorkspacesMap;
   recentWorkspaces: RecentWorkspace[];
   recordVisit: (workspace: RecentWorkspaceIdentity) => void;
-  getVisitedAt: (workspaceName: string) => number;
 }
 
 const STORAGE_KEY = "workspaces:recentlyVisited";
@@ -65,18 +63,13 @@ const useRecentWorkspaces = (): UseRecentWorkspacesResult => {
     [setVisits],
   );
 
-  const getVisitedAt = useCallback(
-    (workspaceName: string) => visits[workspaceName]?.visitedAt ?? 0,
-    [visits],
-  );
-
   const recentWorkspaces = useMemo(
     () =>
       Object.values(visits).sort((a, b) => b.visitedAt - a.visitedAt),
     [visits],
   );
 
-  return { visits, recentWorkspaces, recordVisit, getVisitedAt };
+  return { recentWorkspaces, recordVisit };
 };
 
 export default useRecentWorkspaces;

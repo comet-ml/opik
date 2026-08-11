@@ -86,5 +86,3 @@ export default function useOrganizationWorkspacesPage(
     enabled: Boolean(organizationId) && (options?.enabled ?? true),
   });
 }
-
-export { PAGE_SIZE };

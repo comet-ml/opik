@@ -9,6 +9,9 @@ const ws = (name: string, org = "org-1", id = `id-${name}`) => ({
   organizationId: org,
 });
 
+const names = (result: { current: { recentWorkspaces: { workspaceName: string }[] } }) =>
+  result.current.recentWorkspaces.map((w) => w.workspaceName);
+
 describe("useRecentWorkspaces", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -19,12 +22,10 @@ describe("useRecentWorkspaces", () => {
     vi.useRealTimers();
   });
 
-  it("starts with no visits", () => {
+  it("starts with no recents", () => {
     const { result } = renderHook(() => useRecentWorkspaces());
 
-    expect(result.current.visits).toEqual({});
     expect(result.current.recentWorkspaces).toEqual([]);
-    expect(result.current.getVisitedAt("workspace-a")).toBe(0);
   });
 
   it("records a visit with identity and timestamp", () => {
@@ -33,7 +34,6 @@ describe("useRecentWorkspaces", () => {
 
     act(() => result.current.recordVisit(ws("workspace-a")));
 
-    expect(result.current.getVisitedAt("workspace-a")).toBe(1000);
     expect(result.current.recentWorkspaces[0]).toMatchObject({
       workspaceId: "id-workspace-a",
       workspaceName: "workspace-a",
@@ -50,8 +50,8 @@ describe("useRecentWorkspaces", () => {
     vi.setSystemTime(new Date(5000));
     act(() => result.current.recordVisit(ws("workspace-a")));
 
-    expect(result.current.getVisitedAt("workspace-a")).toBe(5000);
     expect(result.current.recentWorkspaces).toHaveLength(1);
+    expect(result.current.recentWorkspaces[0].visitedAt).toBe(5000);
   });
 
   it("ignores an entry without a workspace name", () => {
@@ -59,7 +59,7 @@ describe("useRecentWorkspaces", () => {
 
     act(() => result.current.recordVisit(ws("")));
 
-    expect(result.current.visits).toEqual({});
+    expect(result.current.recentWorkspaces).toEqual([]);
   });
 
   it("orders recent workspaces most-recent first", () => {
@@ -70,11 +70,6 @@ describe("useRecentWorkspaces", () => {
     vi.setSystemTime(new Date(2000));
     act(() => result.current.recordVisit(ws("workspace-b")));
 
-    expect(result.current.recentWorkspaces.map((w) => w.workspaceName)).toEqual([
-      "workspace-b",
-      "workspace-a",
-    ]);
-    expect(result.current.getVisitedAt("workspace-a")).toBe(1000);
-    expect(result.current.getVisitedAt("workspace-b")).toBe(2000);
+    expect(names(result)).toEqual(["workspace-b", "workspace-a"]);
   });
 });
