@@ -100,18 +100,35 @@ fi
 #
 # The migrations URL is not a fixed shape across deployments — the packaged config default carries
 # a '/opik' path, helm and compose pass host:port bare, and a managed endpoint adds query
-# parameters and may be TLS. So strip the scheme, then the path and query, instead of assuming one
-# form. Echo `-1` on any failure so a probe that cannot answer never reads as "0 tables".
+# parameters and may be TLS. The driver's contract is only that 'jdbc:clickhouse:' prefixes the
+# rest ("'jdbc:clickhouse:' prefix is mandatory", ClickhouseJdbcUrlParser), so the remainder can be
+# either '//host:port' or an embedded-protocol 'https://host:port'. Handle both rather than
+# stripping a fixed '//' scheme, which would leave 'jdbc:clickhouse:https:' as the host.
+# Echo `-1` on anything unparseable or unreachable, so a probe that cannot answer never reads as
+# "0 tables" — the count is a safety gate, and an unknown must never look like an empty schema.
 analytics_table_count() {
-  local url="${ANALYTICS_DB_MIGRATIONS_URL:-}" scheme hostport count
+  local url="${ANALYTICS_DB_MIGRATIONS_URL:-}" scheme rest hostport count
   [[ -z "$url" ]] && { echo "-1"; return; }
 
-  scheme="http"
-  [[ "$url" == jdbc:clickhouses://* || "$url" == *"ssl=true"* ]] && scheme="https"
+  rest="${url#jdbc:}"
+  case "$rest" in
+    clickhouses:*) scheme="https"; rest="${rest#clickhouses:}" ;;
+    clickhouse:*) scheme="http"; rest="${rest#clickhouse:}" ;;
+    ch:*) scheme="http"; rest="${rest#ch:}" ;;
+    *) echo "-1"; return ;;
+  esac
 
-  hostport="${url#jdbc:clickhouse://}"
-  hostport="${hostport#jdbc:clickhouses://}"
-  hostport="${hostport%%/*}"
+  # After the driver prefix: an explicit protocol wins over the scheme implied above.
+  case "$rest" in
+    https://*) scheme="https"; rest="${rest#https://}" ;;
+    http://*) scheme="http"; rest="${rest#http://}" ;;
+    //*) rest="${rest#//}" ;;
+    *) echo "-1"; return ;;
+  esac
+
+  [[ "$url" == *"ssl=true"* ]] && scheme="https"
+
+  hostport="${rest%%/*}"
   hostport="${hostport%%\?*}"
   [[ -z "$hostport" ]] && { echo "-1"; return; }
 
@@ -249,9 +266,18 @@ java -jar "$JAR" "$DATABASE" status --verbose "$CONFIG"
 
 # changelogSync writes ledger rows only, so the schema must come out the other side identical. A
 # changed table count means something executed DDL — assert it rather than trusting the contract.
+#
+# A negative count is the probe failing, not a schema that shrank, and the two need different
+# messages: the ledger has already been written by this point, so telling an operator the schema
+# changed would send them hunting for DDL that never ran. Only compare two real counts.
 if [[ "$tables_before" -ge 0 ]]; then
   tables_after="$(analytics_table_count)"
-  if [[ "$tables_after" != "$tables_before" ]]; then
+  if [[ "$tables_after" -lt 0 ]]; then
+    echo
+    echo "⚠️  Could not re-read the table count after the sync, so the schema could not be confirmed" >&2
+    echo "   unchanged. The ledger rows have already been written — this is not a failure of the" >&2
+    echo "   re-baseline itself. Verify the schema before starting any replica against it." >&2
+  elif [[ "$tables_after" != "$tables_before" ]]; then
     echo >&2
     echo "❌ The table count changed across the re-baseline (${tables_before} → ${tables_after})." >&2
     echo "   changelogSync writes ledger rows only, so the schema should be untouched. Inspect the" >&2

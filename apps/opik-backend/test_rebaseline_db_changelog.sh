@@ -93,25 +93,35 @@ STUB
 chmod +x "$stub_dir/java"
 
 # `curl` stub returning $TABLE_COUNT, or failing when TABLE_COUNT is 'unreachable'. Once the sync
-# has run, TABLE_COUNT_AFTER (when set) takes over, so a test can simulate DDL having executed.
+# has run, TABLE_COUNT_AFTER (when set) takes over, so a test can simulate DDL having executed or
+# the post-sync probe failing ('unreachable'). Also records the URL it was asked for, so a test can
+# assert what the JDBC parser resolved to.
 cat >"$stub_dir/curl" <<'STUB'
 #!/usr/bin/env bash
-if [ "${TABLE_COUNT:-}" = "unreachable" ]; then
+for arg in "$@"; do
+	case "$arg" in
+	http://* | https://*) echo "$arg" >>"${STUB_CURL_URLS:?}" ;;
+	esac
+done
+after=""
+if [ -e "${STUB_JAVA_LOG:-}.synced" ] && [ -n "${TABLE_COUNT_AFTER:-}" ]; then
+	after="$TABLE_COUNT_AFTER"
+fi
+effective="${after:-${TABLE_COUNT:-0}}"
+if [ "$effective" = "unreachable" ]; then
 	echo "curl: (7) Failed to connect" >&2
 	exit 7
 fi
-if [ -e "${STUB_JAVA_LOG:-}.synced" ] && [ -n "${TABLE_COUNT_AFTER:-}" ]; then
-	echo "$TABLE_COUNT_AFTER"
-	exit 0
-fi
-echo "${TABLE_COUNT:-0}"
+echo "$effective"
 STUB
 chmod +x "$stub_dir/curl"
 
 reset_log() {
 	STUB_JAVA_LOG="$stub_dir/java.log"
-	export STUB_JAVA_LOG
+	STUB_CURL_URLS="$stub_dir/curl-urls.log"
+	export STUB_JAVA_LOG STUB_CURL_URLS
 	: >"$STUB_JAVA_LOG"
+	: >"$STUB_CURL_URLS"
 	rm -f "$STUB_JAVA_LOG.synced"
 }
 wrote_ledger() { grep -qE 'fast-forward --all [^-]' "$STUB_JAVA_LOG"; }
@@ -188,6 +198,37 @@ reset_log
 PENDING=149 TABLE_COUNT=0 expect "dry run surfaces the refusal" 1 "Refusing to re-baseline" -- --dry-run
 
 echo
+echo "migrations URL parsing"
+# The driver's only contract is that 'jdbc:clickhouse:' prefixes the rest, so the remainder is
+# either '//host:port' or an embedded-protocol 'https://host:port'. Both reach the probe, and a
+# fixed '//'-strip would turn the latter into a host of 'jdbc:clickhouse:https:'.
+# expect_url <name> <migrations-url> <expected-probe-url>
+expect_url() {
+	local name="$1" url="$2" want="$3" got
+	reset_log
+	ANALYTICS_DB_MIGRATIONS_URL="$url" PENDING=0 TABLE_COUNT=27 "$SCRIPT" --dry-run >/dev/null 2>&1 || true
+	got="$(head -1 "$STUB_CURL_URLS" 2>/dev/null || true)"
+	if [[ "$got" == "$want" ]]; then
+		pass "$name"
+	else
+		fail "$name" "expected probe URL: $want" "actual: ${got:-<none>}"
+	fi
+}
+expect_url "bare host:port (helm, compose)" "jdbc:clickhouse://clickhouse:8123" "http://clickhouse:8123/"
+expect_url "path suffix (packaged config default)" "jdbc:clickhouse://localhost:8123/opik" "http://localhost:8123/"
+expect_url "query parameters, no path" "jdbc:clickhouse://h:8123?compress=1" "http://h:8123/"
+expect_url "ssl=true implies https" "jdbc:clickhouse://h.example.com:8443/opik?ssl=true" "https://h.example.com:8443/"
+expect_url "clickhouses:// scheme" "jdbc:clickhouses://secure.example.com:9440/opik" "https://secure.example.com:9440/"
+expect_url "embedded https protocol" "jdbc:clickhouse:https://host:8443/opik" "https://host:8443/"
+expect_url "embedded http protocol" "jdbc:clickhouse:http://host:8123/opik" "http://host:8123/"
+expect_url "jdbc:ch alias" "jdbc:ch:https://host:8443" "https://host:8443/"
+
+# An unparseable URL must refuse, not probe a garbage host — the count gates a destructive write.
+reset_log
+ANALYTICS_DB_MIGRATIONS_URL="not-a-jdbc-url" PENDING=149 TABLE_COUNT=27 \
+	expect "refuses an unparseable migrations URL" 2 "Could not read the table count" -- --yes
+
+echo
 echo "post-sync verification"
 # `status` exits 0 whether or not changesets remain, so the script re-checks the fingerprint.
 # STICKY_PENDING holds the pending set nonzero across the write, simulating a sync that reported
@@ -200,6 +241,15 @@ PENDING=149 TABLE_COUNT=27 STICKY_PENDING=1 \
 reset_log
 PENDING=149 TABLE_COUNT=27 TABLE_COUNT_AFTER=31 \
 	expect "fails when the table count changed across the sync" 1 "table count changed" -- --yes
+
+# A post-sync probe that cannot connect is not a schema that shrank. The ledger is already written
+# by this point, so this must warn and complete rather than claiming DDL ran and failing.
+reset_log
+PENDING=149 TABLE_COUNT=27 TABLE_COUNT_AFTER=unreachable \
+	expect "a failed post-sync probe warns without claiming drift" 0 "could not be confirmed" -- --yes
+reset_log
+PENDING=149 TABLE_COUNT=27 TABLE_COUNT_AFTER=unreachable \
+	expect "a failed post-sync probe still reports completion" 0 "Re-baseline complete" -- --yes
 
 echo
 if [[ "$fails" -gt 0 ]]; then
