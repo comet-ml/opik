@@ -785,6 +785,8 @@ openrouter:
     label: "meta-llama/llama-guard-4-12b"
   - id: "meta-llama/llama-guard-4-12b:free"
     label: "meta-llama/llama-guard-4-12b:free"
+  - id: "meta/muse-glimmer-30b"
+    label: "meta/muse-glimmer-30b"
   - id: "meta/muse-spark-1.1"
     label: "meta/muse-spark-1.1"
     structuredOutput: true
@@ -1556,6 +1558,8 @@ openrouter:
     label: "undi95/remm-slerp-l2-13b"
   - id: "upstage/solar-pro-3"
     label: "upstage/solar-pro-3"
+  - id: "upstage/solar-pro4"
+    label: "upstage/solar-pro4"
   - id: "writer/palmyra-x5"
     label: "writer/palmyra-x5"
   - id: "x-ai/grok-3"
