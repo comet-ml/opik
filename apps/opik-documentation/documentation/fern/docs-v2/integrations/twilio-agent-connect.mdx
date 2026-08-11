@@ -78,12 +78,6 @@ tac.on_message_ready(handle_message_ready)
 
 That is the whole tracing setup. One caller turn is one trace, and one phone call is one thread.
 
-<Tip>
-  Any function you call from the handler can be traced too. Add `@opik.track` to your
-  retrieval step, your tools and your LLM calls, and they appear as nested spans on the
-  turn's trace.
-</Tip>
-
 You can also log useful call details as metadata:
 
 ```python
@@ -95,6 +89,111 @@ opik_context.update_current_trace(
     },
 )
 ```
+
+## Adding spans to a turn
+
+A voice agent usually does several things before it answers: it looks up the caller, searches a knowledge base, calls a few tools, then calls an LLM. Add `@opik.track` to each of those functions and they appear as nested spans under the turn's trace, so you can see where the time went and what each step returned.
+
+Use the `type` argument to tell Opik what kind of step it is. Opik shows `llm` and `tool` spans differently, and `llm` spans are where token usage and cost appear.
+
+```python title="agent.py"
+@opik.track(name="knowledge-search", type="general")
+def search_knowledge_base(query: str) -> list[str]:
+    return my_vector_store.search(query)
+
+
+@opik.track(name="account-lookup", type="tool")
+def account_lookup(phone: str) -> dict:
+    return billing_api.get_account(phone)
+
+
+@opik.track(name="generate-reply", type="llm")
+def generate_reply(messages: list[dict]) -> str:
+    ...
+
+
+@opik.track(name="voice-agent-turn")
+async def handle_message_ready(message, context, memory) -> str:
+    opik_context.update_current_trace(thread_id=context.conversation_id)
+
+    # Each call below becomes a span on this turn's trace
+    docs = search_knowledge_base(message)
+    account = account_lookup(context.author_info.address)
+    return generate_reply(build_messages(message, docs, account))
+```
+
+### Adding detail to a span
+
+Inside a tracked function, use `update_current_span` to record anything the arguments and return value do not already capture:
+
+```python
+from opik import opik_context
+
+
+@opik.track(name="knowledge-search", type="general")
+def search_knowledge_base(query: str) -> list[str]:
+    results = my_vector_store.search(query)
+
+    opik_context.update_current_span(
+        metadata={"index": "support-articles", "top_k": 5},
+        output={"documents": results, "hit_count": len(results)},
+    )
+    return results
+```
+
+<Tip>
+  For the full set of options, including how to log spans without a decorator, see the
+  [Log traces](/tracing/advanced/log_traces) guide.
+</Tip>
+
+### Tracking LLM calls automatically
+
+If you call an LLM provider directly, use the matching Opik integration instead of writing your own `llm` span. Token usage, cost and model parameters are then logged for you, and the spans still nest under the current turn:
+
+```python title="agent.py"
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = track_openai(OpenAI())
+
+
+@opik.track(name="voice-agent-turn")
+async def handle_message_ready(message, context, memory) -> str:
+    opik_context.update_current_trace(thread_id=context.conversation_id)
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=build_messages(message, context),
+    )
+    return response.choices[0].message.content
+```
+
+See the [OpenAI](/integrations/openai), [Anthropic](/integrations/anthropic) and [Gemini](/integrations/gemini) integrations, or browse [all integrations](/integrations/overview) for the framework you use.
+
+## Adding guardrails
+
+A phone call is a live, unattended channel, so it is a good place to check what the caller says and what the agent is about to say. Opik guardrails run in the same request, and each check appears on the turn's trace with its own pass or fail result.
+
+```python title="agent.py"
+from opik import exceptions
+from opik.guardrails import Guardrail, PII, PromptInjection
+
+inbound = Guardrail(guards=[PromptInjection(threshold=0.5), PII()])
+
+
+@opik.track(name="voice-agent-turn")
+async def handle_message_ready(message, context, memory) -> str:
+    opik_context.update_current_trace(thread_id=context.conversation_id)
+
+    try:
+        inbound.validate(message)
+    except exceptions.GuardrailValidationFailed:
+        return "Sorry, I can't help with that. Let me put you through to a colleague."
+
+    return await run_my_agent(message, context, memory)
+```
+
+See the [Guardrails overview](/guardrails/overview) for the available checks, and [Custom guardrails](/guardrails/custom-guardrails) if you need one trained on your own policy.
 
 ## Logging call recordings
 
@@ -175,7 +274,16 @@ With this setup, Opik records:
 - **Threads**: one per phone call, containing every turn in order
 - **Traces**: one per caller turn, with the caller's message and the agent's reply
 - **Spans**: your retrieval, tools and LLM calls, including token usage and cost
+- **Guardrail results**: the pass or fail result of each check you run on the turn
 - **Attachments**: the call recording, playable in the Opik UI
+
+## Next steps
+
+- [Log traces](/tracing/advanced/log_traces) — the full span and trace API
+- [Log media and attachments](/tracing/advanced/log_multimodal_traces) — attachment limits and supported types
+- [Guardrails](/guardrails/overview) — check inputs and outputs in the request path
+- [Online evaluation](/production/online-evaluation/rules) — score every call automatically once it is logged
+- [All integrations](/integrations/overview) — the LLM provider and framework you use
 
 ## Further improvements
 
