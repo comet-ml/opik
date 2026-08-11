@@ -464,15 +464,25 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * <p><b>{@code optimization_tagged_trace_ids}</b> is the candidate scan: every trace that has ever
      * carried one of these optimization ids as a tag. Deliberately a superset, because the authoritative
      * check runs in {@code optimization_tagged_traces} on the latest version of each trace, so a tag
-     * removed by a later update stops counting. The {@code project_id} bound keeps this off a
-     * workspace-wide scan of an unindexed array column by pruning on the second primary-key column, and
-     * it is sound because optimizer-internal traces are written to the project of the optimization
-     * itself. Trial traces may land in a different project (the dataset's) or in this same one depending
-     * on how the run was configured, so the two guards cover one topology each: this bound excludes them
-     * when the projects differ, the experiment-item filter when they do not. Both have a test. An
-     * optimization with no {@code project_id} predates that column, so its cost stays trial-only. There
-     * is deliberately no {@code created_at} bound: that column is not stable across re-writes of an
-     * optimization row, and a reset would silently drop optimizer-internal traces from the total.
+     * removed by a later update stops counting. There is deliberately no {@code created_at} bound: that
+     * column is not stable across re-writes of an optimization row, and a reset would silently drop
+     * optimizer-internal traces from the total. An optimization with no {@code project_id} predates that
+     * column, so its cost stays trial-only.
+     *
+     * <p>Two things it deliberately does <em>not</em> do, both measured on production rather than reasoned
+     * about. It does not {@code DISTINCT}: the CTE is consumed only as an {@code IN} set, which dedups on
+     * its own, so the distinct pass was pure overhead (list p50 1338 -> 1145 ms, CPU 2198 -> 1910 ms, peak
+     * memory flat). And it no longer bounds {@code project_id} to the optimizations in scope: at
+     * production shape that prune is free either way (534 vs 539 ms, same peak memory), so the
+     * {@code arrayExists} tag test is left as the single condition. Do not replace that test with
+     * {@code hasAny} against a {@code groupArray} of the ids, which measured 22x the latency and 38x the
+     * CPU.
+     *
+     * <p>Note for anyone reasoning about the cost of naming a CTE more than once: ClickHouse evaluates it
+     * <em>per reference</em>, and {@code EXPLAIN} cannot show that, because an {@code IN (SELECT ... FROM
+     * cte)} set is built eagerly and appears only as {@code trace_id in N-element set}. Counting plan
+     * nodes therefore understates the repeats. An isolated probe differing only in reference count went
+     * 2.45 M -> 4.90 M rows and 214 -> 398 MiB.
      *
      * <p><b>{@code optimization_tagged_traces}</b> selects traces tagged with the optimization id but
      * linked to no experiment item: the optimizer-internal LLM calls (GEPA reflection, candidate
@@ -733,10 +743,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 FROM candidate_metrics
                 GROUP BY optim_id
             ), optimization_tagged_trace_ids AS (
-                SELECT DISTINCT id, project_id
+                SELECT id, project_id
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
                 AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
             ), optimization_tagged_traces AS (
                 SELECT DISTINCT
@@ -886,10 +895,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
             ), optimization_tagged_trace_ids AS (
-                SELECT DISTINCT id, project_id
+                SELECT id, project_id
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
                 AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
             ), optimization_tagged_traces AS (
                 SELECT DISTINCT
