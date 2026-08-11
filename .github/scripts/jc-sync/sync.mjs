@@ -89,6 +89,39 @@ async function gh(path, init = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+/**
+ * Pull a readable message out of a Jira error body.
+ *
+ * Jira returns `errorMessages` / `errors` as JSON, and localises some of them
+ * to the account's language — a raw dump is close to useless in a log. Fall
+ * back to the status line when there's nothing quotable.
+ */
+function jiraError(status, path, body) {
+  let detail = '';
+  try {
+    const parsed = JSON.parse(body);
+    const parts = [
+      ...(parsed.errorMessages || []),
+      ...Object.entries(parsed.errors || {}).map(([k, v]) => `${k}: ${v}`),
+    ];
+    detail = parts.join('; ');
+  } catch {
+    detail = body.slice(0, 200);
+  }
+
+  // The common failures deserve a hint rather than a bare status code.
+  const hint =
+    status === 401
+      ? ' — check JC_JIRA_USER_EMAIL / JC_JIRA_API_TOKEN'
+      : status === 403
+        ? ' — the Jira account lacks permission on this project'
+        : status === 404 && path.includes('/remotelink')
+          ? ' — ticket not visible to this account (often a bad token rather than a missing ticket)'
+          : '';
+
+  return `Jira ${status} on ${path}${hint}${detail ? `: ${detail}` : ''}`;
+}
+
 async function jira(path, init = {}) {
   const res = await request(`${JIRA_BASE}${path}`, {
     ...init,
@@ -100,7 +133,7 @@ async function jira(path, init = {}) {
     },
   });
   if (!res.ok) {
-    throw new Error(`Jira ${res.status} ${path}: ${await res.text()}`);
+    throw new Error(jiraError(res.status, path, await res.text()));
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -134,18 +167,47 @@ async function findByJql(jql) {
   return { key: issues[0].key, related: issues.map((i) => i.key) };
 }
 
+/**
+ * Identifies this automation's failure notice so a retry updates the existing
+ * comment rather than posting another. Load-bearing — changing it strands old
+ * notices on issues.
+ */
+const FAILURE_MARKER = '<!-- jc-sync:failure -->';
+
 const summary = [];
 const note = (line) => {
   console.log(line);
   summary.push(line);
 };
 
+/** Remove a stale failure notice once a later run succeeds. */
+async function clearFailureNotice() {
+  if (DRY_RUN) return;
+  try {
+    const existing = await gh(
+      `/repos/${REPO_OWNER}/${REPO_NAME}/issues/${ISSUE_NUMBER}/comments?per_page=100`,
+    );
+    for (const c of existing.filter((c) => c.body?.includes(FAILURE_MARKER))) {
+      await gh(`/repos/${REPO_OWNER}/${REPO_NAME}/issues/comments/${c.id}`, {
+        method: 'DELETE',
+      });
+      note('Cleared a stale failure notice.');
+    }
+  } catch (err) {
+    console.error(`::warning::Could not clear failure notice: ${err.message}`);
+  }
+}
+
 async function writeSummary() {
   if (!process.env.GITHUB_STEP_SUMMARY) return;
   const { appendFile } = await import('node:fs/promises');
+  const issueUrl = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${REPO_OWNER}/${REPO_NAME}/issues/${ISSUE_NUMBER}`;
+  const heading = DRY_RUN
+    ? `### JC → Jira — [#${ISSUE_NUMBER}](${issueUrl}) (dry run)`
+    : `### JC → Jira — [#${ISSUE_NUMBER}](${issueUrl})`;
   await appendFile(
     process.env.GITHUB_STEP_SUMMARY,
-    `### JC → Jira sync — #${ISSUE_NUMBER}\n\n${summary.map((l) => `- ${l}`).join('\n')}\n`,
+    `${heading}\n\n${summary.map((l) => `- ${l}`).join('\n')}\n\n`,
   );
 }
 
@@ -264,6 +326,8 @@ async function main() {
     note(`Commented ${key} on #${issue.number}.`);
   }
 
+  await clearFailureNotice();
+
   if (process.env.GITHUB_OUTPUT) {
     const { appendFile } = await import('node:fs/promises');
     await appendFile(process.env.GITHUB_OUTPUT, `ticket=${key}\n`);
@@ -271,9 +335,66 @@ async function main() {
   await writeSummary();
 }
 
+/**
+ * Tell the labeller the sync failed, on the issue itself.
+ *
+ * The old flow failed silently, so maintainers learned to toggle the label as a
+ * retry — which is how issue #7000 ended up with two tickets. A visible failure
+ * plus a documented re-run path removes the reason to toggle.
+ *
+ * Best-effort and idempotent: keyed on FAILURE_MARKER so a retry loop replaces
+ * the previous notice instead of stacking notices, and any error posting it is
+ * swallowed so it can't mask the original failure.
+ */
+async function reportFailure(message) {
+  if (DRY_RUN || !Number.isInteger(ISSUE_NUMBER) || ISSUE_NUMBER <= 0) return;
+
+  const runUrl =
+    process.env.GITHUB_SERVER_URL && process.env.GITHUB_RUN_ID
+      ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+      : null;
+
+  const body = [
+    FAILURE_MARKER,
+    '',
+    'Automatic Jira ticket creation failed for this issue.',
+    '',
+    `> ${message}`,
+    '',
+    runUrl ? `[View the failed run](${runUrl})` : null,
+    '',
+    'The `JC` label has been left in place. Re-run the **JC Label to Jira** ' +
+      'workflow from the Actions tab once the cause is fixed — removing and ' +
+      're-adding the label is not needed, and risks creating a duplicate.',
+  ]
+    .filter((l) => l !== null)
+    .join('\n');
+
+  try {
+    const path = `/repos/${REPO_OWNER}/${REPO_NAME}/issues/${ISSUE_NUMBER}/comments`;
+    const existing = await gh(`${path}?per_page=100`);
+    const prior = existing.find((c) => c.body?.includes(FAILURE_MARKER));
+
+    if (prior) {
+      await gh(
+        `/repos/${REPO_OWNER}/${REPO_NAME}/issues/comments/${prior.id}`,
+        { method: 'PATCH', body: JSON.stringify({ body }) },
+      );
+      console.log('Updated the existing failure notice on the issue.');
+    } else {
+      await gh(path, { method: 'POST', body: JSON.stringify({ body }) });
+      console.log('Posted a failure notice on the issue.');
+    }
+  } catch (err) {
+    // Never let the notice hide the real error.
+    console.error(`::warning::Could not post failure notice: ${err.message}`);
+  }
+}
+
 main().catch(async (err) => {
   console.error(`::error::${err.message}`);
   summary.push(`**Failed:** ${err.message}`);
+  await reportFailure(err.message);
   await writeSummary().catch(() => {});
   process.exit(1);
 });

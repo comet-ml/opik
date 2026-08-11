@@ -6,8 +6,8 @@ ticket in the `OPIK` Jira project and comments the link back on the issue.
 This directory holds the resolution logic for that sync. See
 [OPIK-7833](https://comet-ml.atlassian.net/browse/OPIK-7833).
 
-> **Status: step 1 of 5 — read-only.** Nothing here writes to Jira or GitHub.
-> The create path, the workflow, and the n8n cutover come later.
+> **Status: steps 1–3 of 5.** The sync works end to end and is wired to the
+> label. Still to do: shadow-run against n8n, then switch n8n off.
 
 ## Files
 
@@ -15,7 +15,47 @@ This directory holds the resolution logic for that sync. See
 |---|---|
 | `resolve.mjs` | Pure logic: issue-type resolution, dedupe, Markdown→wiki. No I/O. |
 | `resolve.test.mjs` | Unit tests. `node --test .github/scripts/jc-sync/resolve.test.mjs` |
+| `sync.mjs` | The write path: ensure ticket, link, comment. Driven by the workflow. |
 | `dryrun.mjs` | Replays the resolver over every `JC`-labeled issue and reports what it *would* do. |
+
+The workflow is [`.github/workflows/jc_label_to_jira.yml`](../../workflows/jc_label_to_jira.yml).
+
+## Configuration
+
+| Name | Kind | Purpose |
+|---|---|---|
+| `JC_JIRA_BASE_URL` | variable | e.g. `https://comet-ml.atlassian.net` |
+| `JC_JIRA_USER_EMAIL` | secret | Jira account the tickets are created as |
+| `JC_JIRA_API_TOKEN` | secret | Atlassian API token for that account |
+
+Use a service account, not a personal token: the reporter on every synced ticket
+is whoever owns the credential, and a personal token breaks when it is rotated
+or the person leaves.
+
+## Idempotence
+
+Safe to run repeatedly — a re-label, a retry, or a resumed run converges rather
+than duplicating:
+
+- dedupe runs before any create;
+- the remote link is keyed on a deterministic `globalId`, and re-POSTing it
+  returns the same link;
+- the comment is skipped when that ticket is already announced;
+- the failure notice is updated in place, and deleted once a run succeeds.
+
+Order is **create → link → comment**. A process that dies midway leaves a ticket
+the next run finds via tier 2 or 3 and backfills.
+
+## When it fails
+
+The old flow failed silently, which is why maintainers learned to toggle the
+label as a retry — and how issue #7000 ended up with two tickets. Instead this:
+
+- fails the job (visible in the Actions tab);
+- posts a notice on the issue with the reason and a link to the run;
+- says explicitly to re-run the workflow rather than re-label.
+
+Re-run **JC Label to Jira** from the Actions tab with the issue number.
 
 ## The two decisions
 
