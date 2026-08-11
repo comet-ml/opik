@@ -176,7 +176,7 @@ function FailedRow({
     <BriefingRow>
       <span className="flex items-center gap-2 text-destructive">
         <AlertTriangle className="size-3.5" />
-        {outOfCredits ? "Out of credits" : "Briefing failed"}
+        {outOfCredits ? "Not enough credits" : "Briefing failed"}
       </span>
       <span className="flex items-center gap-3">
         {outOfCredits && BillingLink && (

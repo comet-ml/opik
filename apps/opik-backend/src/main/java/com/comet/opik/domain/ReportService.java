@@ -309,6 +309,8 @@ public class ReportService {
                     sweptByWorkspace.values().stream().mapToLong(Long::longValue).sum());
             // No reason on the metric: a sweep can only ever be a stale timeout, so stage=sweep already says it.
             // The row still records it, because ollie_reports has no stage column to carry that.
+            // workspace_name falls back to the ID: the sweep runs outside a request context and ollie_reports
+            // stores only IDs. Nothing queries sweeps by workspace name, so resolving it is not worth a lookup.
             sweptByWorkspace.forEach((workspaceId, count) -> finishedCounter.add(count,
                     failureAttributes(workspaceId, workspaceId, STAGE_SWEEP, null)));
         }
