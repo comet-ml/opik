@@ -181,6 +181,8 @@ Only do this when the schema genuinely matches the changelog. Re-baselining asse
 - For MySQL (`--database db`) there is no replication view to check — confirm instead that the tables and columns named by the pending changesets already exist, and that the deployment has not been upgraded past the schema you are recovering.
 
 If any of these is uncertain, stop and restore the changelog from a backup of the same version instead. `--yes` skips the prompt, not these checks — only use it in a runbook that has already performed them.
+
+For ClickHouse the script enforces the coarse version of this itself: it counts the tables in the analytics database and refuses when the schema is plainly not built (an empty or nearly empty database against a full pending list), including under `--yes`. That catches the worst case — re-baselining a database that has no schema at all — but it cannot judge the finer conditions above, such as a stale replica or a newer jar. Treat it as a backstop, not a substitute for the checklist.
 </Callout>
 
 <Steps>
@@ -251,7 +253,9 @@ If any of these is uncertain, stop and restore the changelog from a backup of th
   </Step>
 </Steps>
 
-Pass `--database db` to re-baseline the MySQL (state) changelog instead of the ClickHouse (analytics) one, and `--yes` to skip the confirmation prompt in an automated runbook.
+Pass `--yes` to skip the confirmation prompt in an automated runbook; the schema check still runs and still aborts.
+
+`--database db` re-baselines the MySQL (state) changelog instead of the ClickHouse (analytics) one. There is no MySQL client in the backend image, so the schema check cannot run there and the script refuses unless you add `--force-unverified`, which asserts you have confirmed the schema yourself. The same flag overrides a ClickHouse check that could not reach the server. Reach for it only after working through the checklist above — it turns a refusal back into the silent-bricking path.
 
 If you prefer to run the underlying commands directly, the script is a thin wrapper around Dropwizard's migration commands:
 

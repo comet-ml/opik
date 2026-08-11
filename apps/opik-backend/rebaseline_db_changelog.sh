@@ -10,8 +10,10 @@
 # ledger rows only; it never runs DDL and never touches your data.
 #
 # WARNING: this asserts "the schema already matches the changelog". If that is not true, the
-# missing migrations are marked applied and silently never run. Always inspect the status output
-# and confirm the schema is at head before answering yes.
+# missing migrations are marked applied and silently never run — the deployment can then never
+# build its schema, and no later run reports a problem. For ClickHouse that precondition is
+# checked below rather than left to the operator; for MySQL it cannot be (no client in the image),
+# which is why --database db refuses unless you force it.
 
 set -euo pipefail
 
@@ -19,6 +21,13 @@ DATABASE="dbAnalytics"
 ASSUME_YES="false"
 DRY_RUN="false"
 CONFIG="config.yml"
+FORCE_UNVERIFIED="false"
+
+# A recovered schema is at head, so its table count is on the order of the changeset count. A
+# handful of tables against ~150 pending changesets means the schema is not built, and syncing
+# would strand it there permanently. Ratio rather than an absolute floor: changesets outnumber
+# tables (many are ALTERs), so this only has to separate "roughly complete" from "nearly empty".
+MIN_TABLES_PER_PENDING_CHANGESET_PERCENT=10
 
 usage() {
   cat <<'USAGE'
@@ -32,19 +41,22 @@ Options:
                           or db (MySQL).
   -c, --config <path>     Dropwizard config file. Default: config.yml
   -n, --dry-run           Show what would be marked as applied, then exit without writing.
-  -y, --yes               Skip the confirmation prompt. For non-interactive runs only —
-                          you are asserting the schema is already at head.
+  -y, --yes               Skip the confirmation prompt. For non-interactive runs only.
+                          The schema-at-head check still runs and still aborts.
+      --force-unverified  Proceed even though the schema cannot be verified (MySQL, or an
+                          unreachable ClickHouse). You are asserting the schema is at head;
+                          if it is not, the missing migrations are permanently lost.
   -h, --help              Show this help.
 
 Examples:
   # Inspect what is pending, change nothing
   ./rebaseline_db_changelog.sh --dry-run
 
-  # Re-baseline the ClickHouse ledger after confirming the schema is at head
+  # Re-baseline the ClickHouse ledger (verifies the schema is built before writing)
   ./rebaseline_db_changelog.sh
 
-  # Re-baseline the MySQL ledger
-  ./rebaseline_db_changelog.sh --database db
+  # Re-baseline the MySQL ledger — unverifiable, so it must be forced
+  ./rebaseline_db_changelog.sh --database db --force-unverified
 USAGE
 }
 
@@ -54,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     -c|--config)   CONFIG="${2:-}"; shift 2 ;;
     -n|--dry-run)  DRY_RUN="true"; shift ;;
     -y|--yes)      ASSUME_YES="true"; shift ;;
+    --force-unverified) FORCE_UNVERIFIED="true"; shift ;;
     -h|--help)     usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -81,6 +94,37 @@ if [[ ! -f "$CONFIG" ]]; then
   exit 2
 fi
 
+# Count the tables in the analytics schema over ClickHouse's HTTP interface, using the same
+# connection details the migrations themselves run under. `curl` is in the image for the RDS cert
+# bundle, so this adds no dependency; there is no MySQL client, which is why 'db' has no probe.
+#
+# The migrations URL is not a fixed shape across deployments — the packaged config default carries
+# a '/opik' path, helm and compose pass host:port bare, and a managed endpoint adds query
+# parameters and may be TLS. So strip the scheme, then the path and query, instead of assuming one
+# form. Echo `-1` on any failure so a probe that cannot answer never reads as "0 tables".
+analytics_table_count() {
+  local url="${ANALYTICS_DB_MIGRATIONS_URL:-}" scheme hostport count
+  [[ -z "$url" ]] && { echo "-1"; return; }
+
+  scheme="http"
+  [[ "$url" == jdbc:clickhouses://* || "$url" == *"ssl=true"* ]] && scheme="https"
+
+  hostport="${url#jdbc:clickhouse://}"
+  hostport="${hostport#jdbc:clickhouses://}"
+  hostport="${hostport%%/*}"
+  hostport="${hostport%%\?*}"
+  [[ -z "$hostport" ]] && { echo "-1"; return; }
+
+  count="$(curl -sS -m 30 \
+    -u "${ANALYTICS_DB_MIGRATIONS_USER:-}:${ANALYTICS_DB_MIGRATIONS_PASS:-}" \
+    --data-urlencode "query=SELECT count() FROM system.tables WHERE database = {db:String}" \
+    --data-urlencode "param_db=${ANALYTICS_DB_DATABASE_NAME:-opik}" \
+    --get "${scheme}://${hostport}/" 2>/dev/null)" || { echo "-1"; return; }
+
+  [[ "$count" =~ ^[0-9]+$ ]] || { echo "-1"; return; }
+  echo "$count"
+}
+
 echo "🔍 Pending changesets for '${DATABASE}' — these are what would be marked as applied:"
 echo
 java -jar "$JAR" "$DATABASE" status --verbose "$CONFIG"
@@ -94,18 +138,72 @@ echo
 # (timestamps, ordering, Liquibase version banner). Comparing it verbatim would flag a change on
 # every capture, so reduce it to the changeset identities — the ID/AUTHOR/FILENAME triples in the
 # DATABASECHANGELOG inserts — which are stable for an unchanged pending set.
+#
+# On a clean ledger this still prints a substantial report (the changelog listing and Liquibase
+# banner, ~150 lines); what makes the fingerprint empty is that none of it matches the INSERT
+# pattern, not that the command falls silent. Anything that changes the grep must preserve that.
+#
 # `|| true` is scoped to grep alone: no match is the legitimate "nothing pending" case, and under
 # `set -o pipefail` its exit 1 would otherwise abort the script — including right after a
 # successful re-baseline, when a clean ledger is exactly what we expect. A failing java or sed
-# still propagates.
+# still propagates. stderr is captured rather than discarded: Liquibase and Dropwizard log to
+# stdout, so it is empty in normal operation and holds only a genuine JVM-level failure, which an
+# operator mid-recovery needs to see instead of a bare non-zero exit.
 pending_fingerprint() {
-  java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>/dev/null \
+  local stderr_file
+  stderr_file="$(mktemp)"
+  if ! java -jar "$JAR" "$DATABASE" fast-forward --all --dry-run "$CONFIG" 2>"$stderr_file" \
     | { grep -oiE "INSERT INTO [^(]*DATABASECHANGELOG[^(]*\\([^)]*\\) VALUES \\('[^']*', *'[^']*', *'[^']*'" || true; } \
     | sed -E "s/.*VALUES *\\('([^']*)', *'([^']*)', *'([^']*)'.*/\\1::\\2::\\3/" \
-    | sort
+    | sort; then
+    echo "❌ Could not determine the pending changesets for '${DATABASE}'." >&2
+    [[ -s "$stderr_file" ]] && cat "$stderr_file" >&2
+    rm -f "$stderr_file"
+    return 1
+  fi
+  rm -f "$stderr_file"
 }
 
 reviewed_pending="$(pending_fingerprint)"
+pending_count="$(printf '%s' "$reviewed_pending" | grep -c . || true)"
+
+tables_before="-1"
+if [[ "$DATABASE" == "dbAnalytics" ]]; then
+  tables_before="$(analytics_table_count)"
+fi
+
+# The precondition — "the schema is already at head" — is the only thing that makes this operation
+# safe, and it is the one thing the other checks cannot see. The post-sync clean check is trivially
+# satisfied once every changeset is marked applied, so a schema that is not built passes it while
+# being stranded permanently. Verify it here, before the prompt, so a refusal costs nothing.
+if [[ "$DATABASE" != "dbAnalytics" ]]; then
+  if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
+    echo "❌ The schema cannot be verified for '${DATABASE}': there is no MySQL client in this image," >&2
+    echo "   so the 'is the schema at head' precondition cannot be checked." >&2
+    echo "   Re-run with --force-unverified if you have confirmed the schema is at head yourself." >&2
+    exit 2
+  fi
+  echo "⚠️  Proceeding unverified for '${DATABASE}' — the schema-at-head precondition is yours to assert."
+elif [[ "$tables_before" -lt 0 ]]; then
+  if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
+    echo "❌ Could not read the table count from ClickHouse, so the schema cannot be verified as" >&2
+    echo "   built. Check ANALYTICS_DB_MIGRATIONS_URL / _USER / _PASS and that the server is" >&2
+    echo "   reachable, or re-run with --force-unverified to assert it yourself." >&2
+    exit 2
+  fi
+  echo "⚠️  Proceeding unverified — the ClickHouse table count could not be read."
+elif [[ "$pending_count" -gt 0 ]] \
+  && (( tables_before * 100 < pending_count * MIN_TABLES_PER_PENDING_CHANGESET_PERCENT )); then
+  echo "❌ Refusing to re-baseline: '${ANALYTICS_DB_DATABASE_NAME:-opik}' has only ${tables_before} table(s)," >&2
+  echo "   against ${pending_count} pending changeset(s). The schema is not built, so this is not a lost" >&2
+  echo "   ledger over an intact schema — it is an empty database." >&2
+  echo >&2
+  echo "   Re-baselining here would mark every migration applied without running it, and the" >&2
+  echo "   deployment could then never build its schema. Nothing was written." >&2
+  echo >&2
+  echo "   If the schema really is at head and this count is wrong, re-run with --force-unverified." >&2
+  exit 1
+fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "ℹ️  Dry run — nothing was changed."
@@ -148,6 +246,19 @@ java -jar "$JAR" "$DATABASE" fast-forward --all "$CONFIG"
 echo
 echo "🔍 Verifying '${DATABASE}' has nothing left pending..."
 java -jar "$JAR" "$DATABASE" status --verbose "$CONFIG"
+
+# changelogSync writes ledger rows only, so the schema must come out the other side identical. A
+# changed table count means something executed DDL — assert it rather than trusting the contract.
+if [[ "$tables_before" -ge 0 ]]; then
+  tables_after="$(analytics_table_count)"
+  if [[ "$tables_after" != "$tables_before" ]]; then
+    echo >&2
+    echo "❌ The table count changed across the re-baseline (${tables_before} → ${tables_after})." >&2
+    echo "   changelogSync writes ledger rows only, so the schema should be untouched. Inspect the" >&2
+    echo "   database before starting any replica against it." >&2
+    exit 1
+  fi
+fi
 
 # `status` reports but never fails — it exits 0 whether or not changesets are pending, so it
 # cannot gate on its own. Reuse the identity fingerprint: it is empty exactly when no changeset
