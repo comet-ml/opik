@@ -276,6 +276,72 @@ describe("mapOpenAIMessages", () => {
         expect(result.messages[1].role).toBe("assistant");
       }
     });
+
+    it("should safely ignore malformed choices without a message-list fallback", () => {
+      for (const choices of [
+        [null],
+        [{ message: { role: "assistant", content: "ok" } }, null],
+      ]) {
+        expect(() =>
+          mapOpenAIMessages({ choices }, { fieldType: "output" }),
+        ).not.toThrow();
+        expect(mapOpenAIMessages({ choices }, { fieldType: "output" })).toEqual(
+          { messages: [] },
+        );
+      }
+    });
+
+    it("should bound tool-call argument rendering", () => {
+      const oversizedArguments = "x".repeat(50_001);
+      const result = mapOpenAIMessages(
+        {
+          messages: [
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  function: {
+                    name: "large_tool",
+                    arguments: oversizedArguments,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        { fieldType: "output" },
+      );
+
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("code");
+      if (result.messages[0].blocks[0].blockType === "code") {
+        expect(result.messages[0].blocks[0].props.code).not.toContain(
+          oversizedArguments,
+        );
+        expect(result.messages[0].blocks[0].props.code).toContain(
+          "rendering limit",
+        );
+      }
+    });
+
+    it("should add a visible placeholder when message output is truncated", () => {
+      const result = mapOpenAIMessages(
+        {
+          messages: [
+            ...Array.from({ length: 100 }, (_, index) => ({
+              role: "assistant",
+              content: `message-${index}`,
+            })),
+            { role: "invalid", content: "ignored" },
+          ],
+        },
+        { fieldType: "output" },
+      );
+
+      expect(result.messages).toHaveLength(101);
+      expect(result.messages.at(-1)?.id).toBe("output-truncated");
+      expect(result.messages.at(-1)?.blocks[0].blockType).toBe("code");
+    });
   });
 
   describe("Edge cases", () => {

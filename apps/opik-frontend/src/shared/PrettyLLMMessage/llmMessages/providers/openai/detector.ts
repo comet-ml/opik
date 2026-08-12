@@ -1,4 +1,5 @@
 import { FormatDetector } from "../../types";
+import { OPENAI_RENDER_LIMITS } from "./limits";
 
 interface OpenAIMessage {
   role?: string;
@@ -19,19 +20,6 @@ interface OpenAIChoice {
   index?: number;
 }
 
-const isOpenAIToolCall = (toolCall: unknown): boolean => {
-  if (!toolCall || typeof toolCall !== "object") return false;
-
-  const functionCall = (toolCall as Record<string, unknown>).function;
-  if (!functionCall || typeof functionCall !== "object") return false;
-
-  const functionData = functionCall as Record<string, unknown>;
-  return (
-    typeof functionData.name === "string" &&
-    typeof functionData.arguments === "string"
-  );
-};
-
 /**
  * Checks if a message object has the OpenAI message format structure
  */
@@ -50,10 +38,10 @@ const isOpenAIMessage = (msg: unknown): msg is OpenAIMessage => {
   // Tool messages should have content
   if (m.role === "tool" && m.content === undefined) return false;
 
-  if (
-    m.tool_calls !== undefined &&
-    (!Array.isArray(m.tool_calls) || !m.tool_calls.every(isOpenAIToolCall))
-  ) {
+  // Keep the message detectable when an optional tool call is malformed. The
+  // mapper represents invalid entries safely so renderable message content is
+  // not hidden by the detector.
+  if (m.tool_calls !== undefined && !Array.isArray(m.tool_calls)) {
     return false;
   }
 
@@ -95,7 +83,9 @@ const hasOpenAIMessageListFormat = (data: unknown): boolean => {
   if (d.messages.length === 0) return false;
 
   // Check that all messages have valid OpenAI message structure
-  return d.messages.every(isOpenAIMessage);
+  return d.messages
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every(isOpenAIMessage);
 };
 
 /**
@@ -106,7 +96,7 @@ const isOpenAIMessageArray = (data: unknown): boolean => {
   if (data.length === 0) return false;
 
   // Check that all items are valid OpenAI messages
-  return data.every(isOpenAIMessage);
+  return data.slice(0, OPENAI_RENDER_LIMITS.messages).every(isOpenAIMessage);
 };
 
 /**
@@ -122,7 +112,9 @@ const hasCustomInputFormat = (data: unknown): boolean => {
   if (d.input.length === 0) return false;
 
   // Check that all messages have valid custom input message structure
-  return d.input.every(isCustomInputMessage);
+  return d.input
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every(isCustomInputMessage);
 };
 
 /**
@@ -138,11 +130,13 @@ const hasOpenAIOutputFormat = (data: unknown): boolean => {
   if (d.choices.length === 0) return false;
 
   // Check that all choices have a valid message
-  return d.choices.every((choice: unknown) => {
-    if (!choice || typeof choice !== "object") return false;
-    const c = choice as OpenAIChoice;
-    return c.message && isOpenAIMessage(c.message);
-  });
+  return d.choices
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every((choice: unknown) => {
+      if (!choice || typeof choice !== "object") return false;
+      const c = choice as OpenAIChoice;
+      return c.message && isOpenAIMessage(c.message);
+    });
 };
 
 /**

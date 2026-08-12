@@ -90,7 +90,7 @@ describe("detectOpenAIFormat", () => {
       expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
     });
 
-    it("should reject message-list output with malformed tool calls", () => {
+    it("should keep message-list output detectable with malformed tool calls", () => {
       for (const toolCall of [null, "invalid tool call", 42]) {
         const data = {
           messages: [
@@ -102,7 +102,7 @@ describe("detectOpenAIFormat", () => {
           ],
         };
 
-        expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);
+        expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
       }
     });
 
@@ -126,6 +126,17 @@ describe("detectOpenAIFormat", () => {
       };
 
       expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
+    });
+
+    it("should reject malformed choices without a valid message-list fallback", () => {
+      for (const choices of [
+        [null],
+        [{ message: { role: "assistant", content: "ok" } }, null],
+      ]) {
+        expect(detectOpenAIFormat({ choices }, { fieldType: "output" })).toBe(
+          false,
+        );
+      }
     });
 
     it("should reject invalid output format", () => {

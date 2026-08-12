@@ -1,5 +1,6 @@
 import PrettyLLMMessage from "@/shared/PrettyLLMMessage";
 import {
+  FormatCombiner,
   FormatMapper,
   LLMMessageDescriptor,
   LLMBlockDescriptor,
@@ -7,6 +8,7 @@ import {
 } from "../../types";
 import { MessageRole } from "@/shared/PrettyLLMMessage/types";
 import { isPlaceholder } from "../../utils";
+import { OPENAI_RENDER_LIMITS } from "./limits";
 
 /**
  * OpenAI message content item types
@@ -119,15 +121,19 @@ const isMappableOpenAIMessageList = (
   isRecord(data) &&
   Array.isArray(data.messages) &&
   data.messages.length > 0 &&
-  data.messages.every(isMappableOpenAIMessage);
+  data.messages
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every(isMappableOpenAIMessage);
 
 const isMappableOpenAIOutput = (data: unknown): data is OpenAIOutputData =>
   isRecord(data) &&
   Array.isArray(data.choices) &&
   data.choices.length > 0 &&
-  data.choices.every(
-    (choice) => isRecord(choice) && isMappableOpenAIMessage(choice.message),
-  );
+  data.choices
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every(
+      (choice) => isRecord(choice) && isMappableOpenAIMessage(choice.message),
+    );
 
 /**
  * Generates a deterministic ID for a message
@@ -264,47 +270,71 @@ const mapToolCalls = (
   toolCalls: unknown[],
   blocks: LLMBlockDescriptor[],
 ): void => {
-  toolCalls.forEach((toolCall) => {
-    const functionCall =
-      isRecord(toolCall) && isRecord(toolCall.function)
-        ? toolCall.function
-        : undefined;
-    const functionName = functionCall?.name;
-    const functionArguments = functionCall?.arguments;
+  let renderedArgumentsLength = 0;
+  toolCalls
+    .slice(0, OPENAI_RENDER_LIMITS.toolCallsPerMessage)
+    .forEach((toolCall) => {
+      const functionCall =
+        isRecord(toolCall) && isRecord(toolCall.function)
+          ? toolCall.function
+          : undefined;
+      const functionName = functionCall?.name;
+      const functionArguments = functionCall?.arguments;
 
-    if (
-      typeof functionName !== "string" ||
-      typeof functionArguments !== "string"
-    ) {
+      if (
+        typeof functionName !== "string" ||
+        typeof functionArguments !== "string"
+      ) {
+        blocks.push({
+          blockType: "code",
+          component: PrettyLLMMessage.CodeBlock,
+          props: {
+            code: "",
+            label:
+              typeof functionName === "string" ? functionName : "unknown tool",
+          },
+        });
+        return;
+      }
+
+      let formattedArgs = functionArguments;
+      const exceedsArgumentLimit =
+        functionArguments.length > OPENAI_RENDER_LIMITS.toolArgumentsLength ||
+        renderedArgumentsLength + functionArguments.length >
+          OPENAI_RENDER_LIMITS.toolArgumentsTotalLength;
+
+      if (exceedsArgumentLimit) {
+        formattedArgs = `[Tool arguments omitted: payload exceeds the ${OPENAI_RENDER_LIMITS.toolArgumentsLength.toLocaleString()}-character rendering limit]`;
+      } else {
+        renderedArgumentsLength += functionArguments.length;
+        try {
+          const parsed = JSON.parse(functionArguments);
+          formattedArgs = JSON.stringify(parsed, null, 2);
+        } catch {
+          // Keep original if not parseable
+        }
+      }
+
       blocks.push({
         blockType: "code",
         component: PrettyLLMMessage.CodeBlock,
         props: {
-          code: "",
-          label:
-            typeof functionName === "string" ? functionName : "unknown tool",
+          code: formattedArgs,
+          label: functionName,
         },
       });
-      return;
-    }
+    });
 
-    let formattedArgs = functionArguments;
-    try {
-      const parsed = JSON.parse(functionArguments);
-      formattedArgs = JSON.stringify(parsed, null, 2);
-    } catch {
-      // Keep original if not parseable
-    }
-
+  if (toolCalls.length > OPENAI_RENDER_LIMITS.toolCallsPerMessage) {
     blocks.push({
       blockType: "code",
       component: PrettyLLMMessage.CodeBlock,
       props: {
-        code: formattedArgs,
-        label: functionName,
+        code: `[${toolCalls.length - OPENAI_RENDER_LIMITS.toolCallsPerMessage} additional tool calls omitted]`,
+        label: "Tool calls truncated",
       },
     });
-  });
+  }
 };
 
 /**
@@ -495,6 +525,17 @@ const mapCustomInputMessage = (
   };
 };
 
+const buildOpenAIMessageFingerprint = (message: OpenAIMessage): string =>
+  JSON.stringify({
+    role: message.role,
+    content: message.content,
+    tool_calls: message.tool_calls,
+    tool_call_id: message.tool_call_id,
+    name: message.name,
+    refusal: message.refusal,
+    audio: message.audio,
+  });
+
 /**
  * Maps an OpenAI message to our normalized LLMMessageDescriptor structure
  */
@@ -518,7 +559,31 @@ const mapOpenAIMessage = (
     role,
     label,
     blocks,
+    contentFingerprint: buildOpenAIMessageFingerprint(message),
   };
+};
+
+const appendMessageLimitPlaceholder = (
+  messages: LLMMessageDescriptor[],
+  prefix: string,
+  omittedCount: number,
+): void => {
+  if (omittedCount <= 0) return;
+
+  messages.push({
+    id: `${prefix}-truncated`,
+    role: "assistant",
+    blocks: [
+      {
+        blockType: "code",
+        component: PrettyLLMMessage.CodeBlock,
+        props: {
+          code: `[${omittedCount} additional messages omitted]`,
+          label: "Messages truncated",
+        },
+      },
+    ],
+  });
 };
 
 /**
@@ -532,8 +597,13 @@ const mapOpenAIMessageList = (
     return { messages: [] };
   }
 
-  const messages = data.messages.map((msg, index) =>
-    mapOpenAIMessage(msg, index, prefix),
+  const messages = data.messages
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .map((msg, index) => mapOpenAIMessage(msg, index, prefix));
+  appendMessageLimitPlaceholder(
+    messages,
+    prefix,
+    data.messages.length - OPENAI_RENDER_LIMITS.messages,
   );
 
   return { messages };
@@ -550,16 +620,23 @@ const mapOpenAIOutput = (data: OpenAIOutputData): LLMMapperResult => {
     return { messages: [] };
   }
 
-  const messages = data.choices.map((choice, index) => {
-    const message = mapOpenAIMessage(choice.message, index, "output");
+  const messages = data.choices
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .map((choice, index) => {
+      const message = mapOpenAIMessage(choice.message, index, "output");
 
-    // Add finish reason to message if available
-    if (choice.finish_reason) {
-      message.finishReason = choice.finish_reason;
-    }
+      // Add finish reason to message if available
+      if (choice.finish_reason) {
+        message.finishReason = choice.finish_reason;
+      }
 
-    return message;
-  });
+      return message;
+    });
+  appendMessageLimitPlaceholder(
+    messages,
+    "output",
+    data.choices.length - OPENAI_RENDER_LIMITS.messages,
+  );
 
   return {
     messages,
@@ -575,8 +652,13 @@ const mapDirectArrayInput = (data: OpenAIDirectArrayInput): LLMMapperResult => {
     return { messages: [] };
   }
 
-  const messages = data.map((msg, index) =>
-    mapOpenAIMessage(msg, index, "input"),
+  const messages = data
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .map((msg, index) => mapOpenAIMessage(msg, index, "input"));
+  appendMessageLimitPlaceholder(
+    messages,
+    "input",
+    data.length - OPENAI_RENDER_LIMITS.messages,
   );
 
   return { messages };
@@ -592,8 +674,13 @@ const mapCustomInputFormat = (
     return { messages: [] };
   }
 
-  const messages = data.input.map((msg, index) =>
-    mapCustomInputMessage(msg, index, "input"),
+  const messages = data.input
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .map((msg, index) => mapCustomInputMessage(msg, index, "input"));
+  appendMessageLimitPlaceholder(
+    messages,
+    "input",
+    data.input.length - OPENAI_RENDER_LIMITS.messages,
   );
 
   return { messages };
@@ -636,6 +723,33 @@ const mapCustomOutputFormat = (
   return {
     messages: [message],
     usage: data.usage,
+  };
+};
+
+const isOutputSupersetOfInput = (
+  inputMsgs: LLMMessageDescriptor[],
+  outputMsgs: LLMMessageDescriptor[],
+): boolean => {
+  if (outputMsgs.length < inputMsgs.length) return false;
+
+  return inputMsgs.every(
+    (message, index) =>
+      message.contentFingerprint !== undefined &&
+      message.contentFingerprint === outputMsgs[index]?.contentFingerprint,
+  );
+};
+
+export const combineOpenAIMessages: FormatCombiner = (input, output) => {
+  if (isOutputSupersetOfInput(input.mapped.messages, output.mapped.messages)) {
+    return {
+      messages: output.mapped.messages,
+      usage: output.mapped.usage,
+    };
+  }
+
+  return {
+    messages: [...input.mapped.messages, ...output.mapped.messages],
+    usage: output.mapped.usage,
   };
 };
 
