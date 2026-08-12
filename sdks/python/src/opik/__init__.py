@@ -36,6 +36,7 @@ from .message_processing.data_loss import (
     FlushResult,
 )
 from .evaluation import (
+    ErrorTolerance,
     evaluate,
     evaluate_experiment,
     evaluate_on_dict_items,
@@ -69,6 +70,7 @@ __all__ = [
     "ThreadsAnnotationQueue",
     "Attachment",
     "Environment",
+    "ErrorTolerance",
     "evaluate",
     "evaluate_prompt",
     "evaluate_experiment",

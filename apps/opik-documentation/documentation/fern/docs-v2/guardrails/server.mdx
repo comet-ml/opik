@@ -1,9 +1,9 @@
 ---
 title: Guardrails server
-subtitle: Install, configure, and run the backend that powers PII and Topic guardrails
+subtitle: Install, configure, and run the backend that powers the model-based guards
 headline: Guardrails Server | Opik Documentation
 og:title: Guardrails Server - Opik
-og:description: How to install, configure, start, and call the Opik guardrails backend that runs the PII and Topic validation models.
+og:description: How to install, configure, start, and call the Opik guardrails backend that runs the PII, Topic, prompt injection, and custom classifier models.
 og:site_name: Opik Documentation
 ---
 
@@ -19,9 +19,9 @@ It powers these validation types:
 - **Topic** — a zero-shot classifier (`facebook/bart-large-mnli`) that checks whether text is on or off topic.
 - **PII** — named entity recognition (Microsoft Presidio with the spaCy `en_core_web_lg` model) that detects sensitive information such as names, emails, and credit card numbers.
 - **Prompt injection** — a fine-tuned classifier (a Qwen LoRA adapter) that detects prompt injection and jailbreak attempts. Its model lives in a private Hugging Face repository, so the server needs a Hugging Face token (see [Configuration](#configuration)).
-- **Custom guardrails** — binary classifiers you [train on your own labeled examples](/guardrails/custom-guardrails). The server loads them by name from its adapters directory.
+- **Custom models** — models [fine-tuned on your own labeled examples](/guardrails/custom-guardrails). Training runs on this server, and it loads the results by name from its adapters directory.
 
-The server is optional and disabled by default. You need it to run the built-in Topic, PII, or Prompt injection guardrails, or any custom guardrail. The [LLM judge guardrail](/guardrails/guardrails#llm-judge-guardrail) does not use this server: it calls the LLM provider configured in your workspace.
+The server is optional and disabled by default. You need it to run the built-in Topic, PII, or Prompt injection guardrails, or any custom model. The [LLM judge guardrail](/guardrails/guardrails#llm-judge) does not use this server: it calls the LLM provider configured in your workspace.
 
 ## Installation and startup
 
@@ -82,7 +82,7 @@ The server reads the following environment variables:
 | `HF_TOKEN` | — | Hugging Face token used to download the private prompt injection model. Required for the prompt injection guardrail; other guardrails do not need it. |
 | `OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL` | — | Hugging Face repository of the prompt injection LoRA adapter. Required for the prompt injection guardrail. |
 | `OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL` | — | Base model the adapter is applied to. Required for the prompt injection guardrail. |
-| `OPIK_GUARDRAILS_ADAPTERS_DIR` | `/adapters` | Directory the server loads [custom guardrail](/guardrails/custom-guardrails) models from. Must be the same directory training writes to. |
+| `OPIK_GUARDRAILS_ADAPTERS_DIR` | `/adapters` | Directory the server loads [custom models](/guardrails/custom-guardrails) from. Must be the same directory training writes to. |
 
 <Note>
   The prompt injection model is distributed privately by Comet. To use the prompt injection guardrail, reach out to
@@ -143,49 +143,55 @@ curl -X POST http://localhost:5000/api/v1/guardrails/validations \
   }'
 ```
 
-**Request fields:**
+The response reports an overall `validation_passed` flag plus per-validation results with the scores that drove each decision.
 
-- `text` (required) — the text to validate.
-- `validations` (required) — a list of validations to run. Each has a `type` (`TOPIC` or `PII`) and a `config`:
-  - **`TOPIC` config:**
-    - `topics` (required) — the list of topics to check against.
-    - `threshold` (default `0.5`) — confidence threshold for topic detection.
-    - `mode` (required) — `restrict` passes when none of the topics match (content filtering); `allow` passes when at least one matches (content classification).
-  - **`PII` config:**
-    - `entities` (optional) — entity types to detect. Defaults to `IP_ADDRESS`, `PHONE_NUMBER`, `PERSON`, `MEDICAL_LICENSE`, `URL`, `EMAIL_ADDRESS`, `IBAN_CODE`. See the [Presidio supported entities](https://microsoft.github.io/presidio/supported_entities/) for the full list.
-    - `language` (default `en`) — language of the text.
-    - `threshold` (default `0.5`) — confidence threshold for PII detection.
+<AccordionGroup>
+  <Accordion title="Request and response reference">
+    **Request fields:**
 
-The response reports an overall `validation_passed` flag plus per-validation results with the scores that drove each decision:
+    - `text` (required) — the text to validate.
+    - `validations` (required) — a list of validations to run. Each has a `type` (`TOPIC` or `PII`) and a `config`:
+      - **`TOPIC` config:**
+        - `topics` (required) — the list of topics to check against.
+        - `threshold` (default `0.5`) — confidence threshold for topic detection.
+        - `mode` (required) — `restrict` passes when none of the topics match (content filtering); `allow` passes when at least one matches (content classification).
+      - **`PII` config:**
+        - `entities` (optional) — entity types to detect. Defaults to `IP_ADDRESS`, `PHONE_NUMBER`, `PERSON`, `MEDICAL_LICENSE`, `URL`, `EMAIL_ADDRESS`, `IBAN_CODE`. See the [Presidio supported entities](https://microsoft.github.io/presidio/supported_entities/) for the full list.
+        - `language` (default `en`) — language of the text.
+        - `threshold` (default `0.5`) — confidence threshold for PII detection.
 
-```json
-{
-  "validation_passed": false,
-  "validations": [
+    **Example response:**
+
+    ```json
     {
       "validation_passed": false,
-      "type": "PII",
-      "validation_config": {
-        "entities": ["PERSON", "EMAIL_ADDRESS"],
-        "language": "en",
-        "threshold": 0.5
-      },
-      "validation_details": {
-        "detected_entities": {
-          "PERSON": [{ "start": 11, "end": 19, "score": 0.85, "text": "John Doe" }],
-          "EMAIL_ADDRESS": [{ "start": 36, "end": 56, "score": 1.0, "text": "john.doe@example.com" }]
+      "validations": [
+        {
+          "validation_passed": false,
+          "type": "PII",
+          "validation_config": {
+            "entities": ["PERSON", "EMAIL_ADDRESS"],
+            "language": "en",
+            "threshold": 0.5
+          },
+          "validation_details": {
+            "detected_entities": {
+              "PERSON": [{ "start": 11, "end": 19, "score": 0.85, "text": "John Doe" }],
+              "EMAIL_ADDRESS": [{ "start": 36, "end": 56, "score": 1.0, "text": "john.doe@example.com" }]
+            }
+          }
         }
-      }
+      ]
     }
-  ]
-}
-```
+    ```
+  </Accordion>
+</AccordionGroup>
 
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Guardrails" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
-    Configure PII, topic, and manual guardrails with the Python SDK.
+  <Card title="Guards" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
+    The five guard types and how to configure each one.
   </Card>
   <Card title="Guardrails overview" href="/guardrails/overview" icon="fa-regular fa-circle-info">
     Understand when to use guardrails versus online evaluation.

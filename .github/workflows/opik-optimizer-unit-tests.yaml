@@ -53,7 +53,7 @@ jobs:
           uses: astral-sh/setup-uv@v9.0.0
 
         - name: Cache HuggingFace datasets
-          uses: actions/cache@v4
+          uses: actions/cache@v6
           with:
             path: ~/.cache/huggingface
             key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
@@ -61,7 +61,7 @@ jobs:
               hf-datasets-
 
         - name: Cache LiteLLM cache
-          uses: actions/cache@v4
+          uses: actions/cache@v6
           with:
             path: ~/.litellm_cache
             key: litellm-cache-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') }}

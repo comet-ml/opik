@@ -92,6 +92,9 @@ component:
     metrics:
       enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-backend
       pullPolicy: IfNotPresent
     replicaCount: 1
@@ -232,6 +235,9 @@ component:
     metrics:
       enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
     replicaCount: 1
@@ -407,6 +413,9 @@ component:
     metrics:
       enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-frontend
       pullPolicy: IfNotPresent
     replicaCount: 1
