@@ -205,6 +205,63 @@ class ExperimentCompareSeedResponse(BaseModel):
     experiments: list[CompareExperimentResult]
 
 
+class ExperimentScoringErrorSeedRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    dataset_name: str
+    # One shared dataset, evaluated twice by the same metric pair: once at the
+    # default error tolerance (expected to abort) and once at
+    # ALL_SCORING_ERRORS (expected to complete with the failure tolerated).
+    # Both runs must see identical items, or the two outcomes aren't comparable.
+    items: list[ExperimentItemSeed]
+    aborting_experiment_name: str
+    tolerated_experiment_name: str
+    dataset_description: str | None = None
+    workspace: str | None = None
+
+
+class ScoringErrorItemResult(BaseModel):
+    dataset_item_id: str
+    trace_id: str | None
+    metric_name: str
+    value: float
+    scoring_failed: bool
+    # metadata["error_info"]["exception_type"] when the metric failed, else None.
+    error_exception_type: str | None
+
+
+class ToleratedRunResult(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    # Score names surviving into the aggregate. A tolerated failure must NOT
+    # appear here — that absence is the behaviour under test.
+    aggregate_score_names: list[str]
+    aggregate_means: dict[str, float]
+    item_results: list[ScoringErrorItemResult]
+
+
+class AbortingRunResult(BaseModel):
+    aborted: bool
+    exception_type: str | None
+    message: str | None
+    # evaluate() registers the experiment before scoring, so an aborted run
+    # still leaves one behind. Its id is not returned: creation is only flushed
+    # when the request-scoped client is ended, after this response is built.
+    # Callers that need to tear it down resolve it by name.
+    experiment_name: str
+
+
+class ExperimentScoringErrorSeedResponse(BaseModel):
+    dataset_id: str
+    dataset_name: str
+    item_count: int
+    passing_metric_name: str
+    failing_metric_name: str
+    aborting: AbortingRunResult
+    tolerated: ToleratedRunResult
+
+
 class TestSuiteItemSeed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

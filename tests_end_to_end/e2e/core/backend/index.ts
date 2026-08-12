@@ -5,6 +5,8 @@ export {
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
   type ExperimentRefDetail,
+  type ExperimentFeedbackScoreRef,
+  type SpanRef,
   type TestSuiteRef as BackendTestSuiteRef,
   type TestSuiteItemRef,
   type FeedbackScoreRef,

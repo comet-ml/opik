@@ -1,4 +1,4 @@
-export { test, expect } from './filterable-traces.fixture';
+export { test, expect } from './repointed-project-name.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -50,4 +50,14 @@ export type {
   FilterableTraceRef,
   FilterableTracesFixtures,
 } from './filterable-traces.fixture';
+export type {
+  RepointedProjectNameRef,
+  RepointedProjectNameFixtures,
+} from './repointed-project-name.fixture';
+export type {
+  ScoringErrorExperimentRef,
+  ScoringErrorExperimentFixtures,
+  ScoringErrorItemSeed,
+  ScoringErrorItemResult,
+} from './scoring-error-experiment.fixture';
 export type { ProjectRef } from '../core/backend';

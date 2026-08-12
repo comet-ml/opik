@@ -29,10 +29,29 @@ export interface DatasetItemRef {
   data: Record<string, unknown>;
 }
 
+export interface ExperimentFeedbackScoreRef {
+  name: string;
+  value: number;
+}
+
 export interface ExperimentRefDetail {
   id: string;
   name: string;
   datasetId: string | null;
+  /**
+   * Aggregated scores the backend persisted for this experiment. A metric that
+   * failed to score contributes no entry at all — the distinction between
+   * "absent" and "0" is what tells a tolerated scoring failure apart from a
+   * genuine zero score.
+   */
+  feedbackScores: ExperimentFeedbackScoreRef[];
+}
+
+export interface SpanRef {
+  id: string;
+  name: string;
+  parentSpanId: string | null;
+  errorInfo: { exceptionType: string; message: string | null } | null;
 }
 
 export interface TestSuiteRef {
@@ -238,7 +257,27 @@ export function makeBackendClient(apiKey: string | null = null) {
         id: String(match.id),
         name: match.name as string,
         datasetId: match.datasetId ? String(match.datasetId) : null,
+        feedbackScores: (match.feedbackScores ?? []).map((fs) => ({
+          name: fs.name,
+          value: Number(fs.value),
+        })),
       };
+    },
+
+    async listTraceSpans(projectId: string, traceId: string): Promise<SpanRef[]> {
+      const page = await opik.api.spans.getSpansByProject({ projectId, traceId, size: 200 });
+      const content = page.content ?? [];
+      return content.map((s) => ({
+        id: String(s.id),
+        name: s.name ?? '',
+        parentSpanId: s.parentSpanId ? String(s.parentSpanId) : null,
+        errorInfo: s.errorInfo
+          ? {
+              exceptionType: String(s.errorInfo.exceptionType),
+              message: s.errorInfo.message ?? null,
+            }
+          : null,
+      }));
     },
 
     async listExperimentsWithPrefix(prefix: string): Promise<ExperimentRefDetail[]> {
@@ -250,6 +289,10 @@ export function makeBackendClient(apiKey: string | null = null) {
           id: String(e.id),
           name: e.name as string,
           datasetId: e.datasetId ? String(e.datasetId) : null,
+          feedbackScores: (e.feedbackScores ?? []).map((fs) => ({
+            name: fs.name,
+            value: Number(fs.value),
+          })),
         }));
     },
 

@@ -32,6 +32,26 @@ export class ExperimentDetailPage {
     return value;
   }
 
+  /**
+   * A metric that failed to score renders no cell at all, which is a different
+   * thing from a cell reading 0. readItemScore() cannot express that difference
+   * (it requires the cell to be visible and parseable), so absence gets its own
+   * assertion.
+   */
+  async expectNoScoreForMetric(datasetItemId: string, metricName: string): Promise<void> {
+    await expect(
+      this.scoreCell(datasetItemId, metricName),
+      `score cell for metric ${metricName} on item ${datasetItemId} (expected absent, not 0)`,
+    ).toHaveCount(0);
+  }
+
+  /** Labels of the aggregated feedback-score chips, in render order. */
+  async aggregateScoreNames(): Promise<string[]> {
+    const labels = this.page.getByTestId('feedback-score-tag-label');
+    await expect(labels.first(), 'at least one aggregate score chip').toBeVisible();
+    return (await labels.allTextContents()).map((t) => t.trim());
+  }
+
   async readAggregateScore(): Promise<number> {
     const valueEl = this.page.getByTestId('feedback-score-tag-value').first();
     await expect(valueEl, 'aggregate score chip value').toBeVisible();

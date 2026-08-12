@@ -71,6 +71,47 @@ export interface PythonSdkClient {
       score_value: number;
     }>;
   }>;
+  /**
+   * Evaluate one dataset twice with a passing metric and a permanently-failing
+   * one: once at evaluate()'s default error tolerance (expected to abort) and
+   * once at ALL_SCORING_ERRORS (expected to complete with the failure recorded
+   * per item and kept out of the aggregate).
+   */
+  scoringErrorSeed(args: {
+    project_name: string;
+    dataset_name: string;
+    items: Array<Record<string, unknown>>;
+    aborting_experiment_name: string;
+    tolerated_experiment_name: string;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    dataset_id: string;
+    dataset_name: string;
+    item_count: number;
+    passing_metric_name: string;
+    failing_metric_name: string;
+    aborting: {
+      aborted: boolean;
+      exception_type: string | null;
+      message: string | null;
+      experiment_name: string;
+    };
+    tolerated: {
+      experiment_id: string;
+      experiment_name: string;
+      aggregate_score_names: string[];
+      aggregate_means: Record<string, number>;
+      item_results: Array<{
+        dataset_item_id: string;
+        trace_id: string | null;
+        metric_name: string;
+        value: number;
+        scoring_failed: boolean;
+        error_exception_type: string | null;
+      }>;
+    };
+  }>;
   compareSeed(args: {
     project_name: string;
     dataset_name: string;
@@ -173,6 +214,12 @@ export class PythonSdkBridgeError extends Error {
 
 const DEFAULT_BRIDGE_URL = 'http://localhost:5175';
 const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Routes that run more than one evaluate() per call need longer than the
+ * default: each evaluation is a full task + scoring pass against the backend,
+ * and 30s is a per-call budget sized for single-shot seeds.
+ */
+const MULTI_EVALUATION_TIMEOUT_MS = 120_000;
 
 export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSdkClient {
   const bridgeUrl = opts.bridgeUrl ?? process.env.OPIK_SDK_DRIVER_URL ?? DEFAULT_BRIDGE_URL;
@@ -181,10 +228,11 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     method: 'GET' | 'POST' | 'DELETE',
     path: string,
     body?: unknown,
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
   ): Promise<TResponse> {
     const endpoint = `${method} ${path}`;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const headers: Record<string, string> = {};
       if (body !== undefined) headers['content-type'] = 'application/json';
@@ -206,7 +254,7 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
             status: 0,
             endpoint,
             detail: 'client-timeout',
-            message: `opik-sdk-driver ${endpoint} aborted after ${REQUEST_TIMEOUT_MS}ms (client-side timeout — the bridge or backend did not respond in time)`,
+            message: `opik-sdk-driver ${endpoint} aborted after ${timeoutMs}ms (client-side timeout — the bridge or backend did not respond in time)`,
           });
         }
         throw err;
@@ -258,6 +306,35 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createDataset(args) {
       return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async scoringErrorSeed(args) {
+      return request<{
+        dataset_id: string;
+        dataset_name: string;
+        item_count: number;
+        passing_metric_name: string;
+        failing_metric_name: string;
+        aborting: {
+          aborted: boolean;
+          exception_type: string | null;
+          message: string | null;
+          experiment_name: string;
+        };
+        tolerated: {
+          experiment_id: string;
+          experiment_name: string;
+          aggregate_score_names: string[];
+          aggregate_means: Record<string, number>;
+          item_results: Array<{
+            dataset_item_id: string;
+            trace_id: string | null;
+            metric_name: string;
+            value: number;
+            scoring_failed: boolean;
+            error_exception_type: string | null;
+          }>;
+        };
+      }>('POST', '/experiments/scoring-error-seed', args, MULTI_EVALUATION_TIMEOUT_MS);
     },
     async compareSeed(args) {
       return request<{
