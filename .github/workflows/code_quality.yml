@@ -200,7 +200,7 @@ jobs:
 
       - name: Upload timing fragment
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.artifact.outputs.name }}
           path: /tmp/${{ steps.artifact.outputs.name }}.log
