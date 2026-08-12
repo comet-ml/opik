@@ -20,7 +20,8 @@ set -euo pipefail
 DATABASE="dbAnalytics"
 ASSUME_YES="false"
 DRY_RUN="false"
-CONFIG="config.yml"
+DEFAULT_CONFIG="config.yml"
+CONFIG="$DEFAULT_CONFIG"
 FORCE_UNVERIFIED="false"
 
 # A recovered schema is at head, so its table count is on the order of the changeset count. A
@@ -112,11 +113,12 @@ analytics_table_count() {
   local url="${ANALYTICS_DB_MIGRATIONS_URL:-}" scheme rest hostport count
   [[ -z "$url" ]] && { echo "-1"; return; }
 
-  rest="${url#jdbc:}"
-  case "$rest" in
-    clickhouses:*) scheme="https"; rest="${rest#clickhouses:}" ;;
-    clickhouse:*) scheme="http"; rest="${rest#clickhouse:}" ;;
-    ch:*) scheme="http"; rest="${rest#ch:}" ;;
+  # Only the exact 'jdbc:clickhouse:' prefix — that is all the legacy migrations driver accepts
+  # ("'jdbc:clickhouse:' prefix is mandatory"). 'jdbc:ch:' is the modern driver's alias and
+  # 'jdbc:clickhouses:' is not a driver prefix at all; both fail acceptsURL here, so a URL this
+  # probe accepted but Liquibase could not use would verify a database the write never reaches.
+  case "$url" in
+    jdbc:clickhouse:*) scheme="http"; rest="${url#jdbc:clickhouse:}" ;;
     *) echo "-1"; return ;;
   esac
 
@@ -133,6 +135,12 @@ analytics_table_count() {
   hostport="${rest%%/*}"
   hostport="${hostport%%\?*}"
   [[ -z "$hostport" ]] && { echo "-1"; return; }
+
+  # An explicit port is mandatory, matching the driver: the legacy parser throws "port is missed or
+  # wrong" when the URI carries none, and defines no default (no 8123, and no SSL-conditional 8443).
+  # Defaulting here would probe port 80/443 — quite possibly a different service — and report a
+  # table count for something that is not this ClickHouse.
+  [[ "$hostport" == *:* ]] || { echo "-1"; return; }
 
   count="$(curl -sS -m 30 \
     -u "${ANALYTICS_DB_MIGRATIONS_USER:-}:${ANALYTICS_DB_MIGRATIONS_PASS:-}" \
@@ -203,6 +211,22 @@ if [[ "$DATABASE" != "dbAnalytics" ]]; then
     exit 2
   fi
   echo "⚠️  Proceeding unverified for '${DATABASE}' — the schema-at-head precondition is yours to assert."
+elif [[ "$CONFIG" != "$DEFAULT_CONFIG" ]]; then
+  # The write goes through Liquibase, which resolves its connection from CONFIG. The probe reads the
+  # env vars instead, and the two only describe the same database because the packaged config.yml
+  # resolves from exactly those vars. A different config breaks that equivalence, so the probe could
+  # bless one database while the ledger is written to another — the guard failing open, which is
+  # worse than no guard. Refuse rather than verify something we may not be writing to.
+  if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
+    echo "❌ Cannot verify the schema when using a non-default config ('${CONFIG}')." >&2
+    echo "   The re-baseline connects through that file, while this check reads the" >&2
+    echo "   ANALYTICS_DB_MIGRATIONS_* environment variables — they agree only for the packaged" >&2
+    echo "   config.yml, which resolves from those same variables. With a different config the" >&2
+    echo "   check could verify a different database than the one being written." >&2
+    echo "   Re-run with --force-unverified if you have confirmed the schema is at head yourself." >&2
+    exit 2
+  fi
+  echo "⚠️  Proceeding unverified — '${CONFIG}' may describe a different database than this check reads."
 elif [[ "$tables_before" -lt 0 ]]; then
   if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
     echo "❌ Could not read the table count from ClickHouse, so the schema cannot be verified as" >&2

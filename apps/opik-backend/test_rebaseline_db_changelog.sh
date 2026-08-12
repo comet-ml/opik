@@ -218,15 +218,45 @@ expect_url "bare host:port (helm, compose)" "jdbc:clickhouse://clickhouse:8123" 
 expect_url "path suffix (packaged config default)" "jdbc:clickhouse://localhost:8123/opik" "http://localhost:8123/"
 expect_url "query parameters, no path" "jdbc:clickhouse://h:8123?compress=1" "http://h:8123/"
 expect_url "ssl=true implies https" "jdbc:clickhouse://h.example.com:8443/opik?ssl=true" "https://h.example.com:8443/"
-expect_url "clickhouses:// scheme" "jdbc:clickhouses://secure.example.com:9440/opik" "https://secure.example.com:9440/"
+expect_url "ssl=true with an embedded protocol" "jdbc:clickhouse:https://secure.example.com:9440/opik" "https://secure.example.com:9440/"
 expect_url "embedded https protocol" "jdbc:clickhouse:https://host:8443/opik" "https://host:8443/"
 expect_url "embedded http protocol" "jdbc:clickhouse:http://host:8123/opik" "http://host:8123/"
-expect_url "jdbc:ch alias" "jdbc:ch:https://host:8443" "https://host:8443/"
+
+# Prefixes the legacy migrations driver does NOT accept must refuse here too. Verifying a database
+# Liquibase cannot connect to would bless a schema the write never reaches.
+expect_url "rejects the jdbc:ch alias" "jdbc:ch:https://host:8443" ""
+expect_url "rejects jdbc:clickhouses:" "jdbc:clickhouses://secure.example.com:9440/opik" ""
+
+# The driver throws "port is missed or wrong" on a portless URL and defines no default, so probing
+# one would hit port 80/443 — a different service — and report a count for the wrong database.
+expect_url "rejects a portless URL" "jdbc:clickhouse://clickhouse/opik" ""
+expect_url "rejects a portless URL with ssl=true" "jdbc:clickhouse://host/opik?ssl=true" ""
 
 # An unparseable URL must refuse, not probe a garbage host — the count gates a destructive write.
 reset_log
 ANALYTICS_DB_MIGRATIONS_URL="not-a-jdbc-url" PENDING=149 TABLE_COUNT=27 \
 	expect "refuses an unparseable migrations URL" 2 "Could not read the table count" -- --yes
+
+echo
+echo "non-default config"
+# The write connects through CONFIG; the probe reads the ANALYTICS_DB_MIGRATIONS_* env vars. Those
+# describe the same database only because the packaged config.yml resolves from exactly those vars.
+# A different config breaks the equivalence, so verifying could bless a database the write never
+# touches — the guard failing open. It must refuse instead.
+touch "$work/custom.yml"
+reset_log
+PENDING=149 TABLE_COUNT=27 expect "refuses a non-default --config" 2 "non-default config" -- --config custom.yml --yes
+if wrote_ledger; then
+	fail "refuses a non-default --config before writing" "the script reached 'fast-forward --all'"
+else
+	pass "refuses a non-default --config before writing"
+fi
+reset_log
+PENDING=149 TABLE_COUNT=27 \
+	expect "--force-unverified allows a non-default --config" 0 "Proceeding unverified" -- --config custom.yml --yes --force-unverified
+# Passing the default path explicitly is still the packaged config, so it must not trip the guard.
+reset_log
+PENDING=149 TABLE_COUNT=27 expect "an explicit default --config still verifies" 0 "Re-baseline complete" -- --config config.yml --yes
 
 echo
 echo "post-sync verification"
