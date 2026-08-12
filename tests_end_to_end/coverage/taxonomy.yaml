@@ -424,6 +424,7 @@ areas:
     specs:
       - datasets/dataset-crud-smoke.spec.ts
       - datasets/dataset-items.spec.ts
+      - datasets/dataset-version-counters.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
@@ -434,7 +435,7 @@ areas:
       bulk-delete-items:      { covered: true,  tier: t3-nightly }
       search-items:           { covered: true,  tier: t3-nightly }
       sdk-round-trip:         { covered: true,  tier: t1-smoke }
-      version-history-view:   { covered: false }
+      version-history-view:   { covered: true,  tier: t2-cuj }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
@@ -629,9 +630,11 @@ areas:
     label: Projects
     nav_group: Workspace
     routes: ["/$workspaceName/projects", "/projects/$projectId/home"]
+    spec_dir: projects
     specs:
+      - projects/projects-list-stats.spec.ts
     capabilities:
-      list-projects:         { covered: false }
+      list-projects:         { covered: true,  tier: t2-cuj }
       create-project:        { covered: false }
       delete-project:        { covered: false }
       project-selector:      { covered: false }
