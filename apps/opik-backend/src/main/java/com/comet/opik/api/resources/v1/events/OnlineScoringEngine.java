@@ -1178,60 +1178,101 @@ public class OnlineScoringEngine {
                     e.getOriginalMessage());
             return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content), List.of(), 0);
         }
-        Map<String, String> declaredNames = schema.stream().collect(Collectors.toMap(
-                definition -> definition.name().toLowerCase(Locale.ROOT), LlmAsJudgeOutputSchema::name,
-                (first, dup) -> first));
-        var collected = new CollectedScores();
-        structuredResponse.properties().forEach(scoreMetric -> {
-            var scoreName = scoreMetric.getKey();
-            var scoreNested = scoreMetric.getValue();
-            if (scoreNested == null || scoreNested.isMissingNode() || !scoreNested.has(SCORE_FIELD_NAME)) {
-                log.debug("No score found for '{}' score in {}", scoreName, scoreNested);
-                return;
-            }
-            var declaredName = declaredNames.get(scoreName.toLowerCase(Locale.ROOT));
-            if (declaredName == null) {
-                collected.ignoreUndeclared(scoreName);
-                return;
-            }
-            collected.accept(declaredName, scoreNested);
-        });
-        // The nested shape recognised nothing, so fall back to the flat one; if that recognises nothing
-        // either, no pass understood the answer.
-        if (collected.foundNothing()) {
-            collectFlatSingleScore(structuredResponse, schema, collected);
+        // Each pass runs only while nothing has been recognised yet, so the order is the precedence.
+        var collected = new CollectedScores(schema);
 
-            if (collected.foundNothing()) {
-                // Capped here rather than where it is rendered: the count comes from the judge's answer, so
-                // one reply would otherwise decide how much this error path allocates and carries.
-                var topLevelKeys = StreamSupport.stream(
-                        Spliterators.spliteratorUnknownSize(structuredResponse.fieldNames(),
-                                Spliterator.ORDERED | Spliterator.NONNULL),
-                        false)
-                        .limit(MAX_REPORTED_FIELD_NAMES)
-                        .toList();
-                var omittedFields = structuredResponse.size() - topLevelKeys.size();
-                // Not wrapped in quotes: each name is quoted by renderFields.
-                log.warn("Judge answer had no recognisable score fields: fields=\"{}\" size='{}'",
-                        renderFields(topLevelKeys, omittedFields), sizeOf(content));
-                return ParsedFeedbackScores.problem(
-                        ResponseProblem.Kind.NO_SCORE_FIELDS, "", topLevelKeys, omittedFields);
-            }
+        // 1. The shape we ask for: every score the judge named as the rule declares it.
+        collected.collectDeclared(structuredResponse);
+
+        // 2. Nothing matched by name — read a flat {"score": ...} answer as the only declared score.
+        if (collected.foundNothing()) {
+            collected.collectFlatSingleScore(structuredResponse);
+        }
+
+        // 3. Still nothing — attribute a single differently-named score to the only declared one.
+        if (collected.foundNothing()) {
+            collected.collectRenamedSingleScore(structuredResponse);
+        }
+
+        // 4. No pass understood the answer.
+        if (collected.foundNothing()) {
+            return noRecognisableScoreFields(structuredResponse, content);
         }
         return collected.toParsed();
     }
 
+    /**
+     * Reads a judge's answer into scores, owning both the attribution passes and the state they build up.
+     */
     private static final class CollectedScores {
+        private final List<LlmAsJudgeOutputSchema> schema;
+        private final Map<String, String> declaredNames;
         private final List<FeedbackScoreBatchItem> scores = new ArrayList<>();
         private final List<String> nullScoreNames = new ArrayList<>();
         private final List<String> unreadableScoreNames = new ArrayList<>();
         private final List<String> undeclaredScoreNames = new ArrayList<>();
         private final Set<String> claimedNames = new HashSet<>();
 
-        // A nested object carrying a score under a name the rule never declared: dropped, but reported.
-        void ignoreUndeclared(String scoreName) {
-            log.debug("Ignoring '{}': not a score declared by the rule", scoreName);
-            undeclaredScoreNames.add(scoreName);
+        CollectedScores(List<LlmAsJudgeOutputSchema> schema) {
+            this.schema = schema;
+            this.declaredNames = schema.stream().collect(Collectors.toMap(
+                    definition -> definition.name().toLowerCase(Locale.ROOT), LlmAsJudgeOutputSchema::name,
+                    (first, dup) -> first));
+        }
+
+        /** Every top-level object carrying a score, in the order the judge wrote them. */
+        private static List<Map.Entry<String, JsonNode>> scoreCandidates(JsonNode structuredResponse) {
+            return structuredResponse.properties().stream()
+                    .filter(entry -> entry.getValue() != null && !entry.getValue().isMissingNode()
+                            && entry.getValue().has(SCORE_FIELD_NAME))
+                    .toList();
+        }
+
+        /**
+         * First pass, and the only one that can yield several scores. Names match case-insensitively.
+         */
+        void collectDeclared(JsonNode structuredResponse) {
+            for (var candidate : scoreCandidates(structuredResponse)) {
+                var scoreName = candidate.getKey();
+                // An empty schema declares nothing to match against, and nothing that could be hijacked.
+                var declaredName = declaredNames.isEmpty()
+                        ? scoreName
+                        : declaredNames.get(scoreName.toLowerCase(Locale.ROOT));
+                if (declaredName == null) {
+                    log.debug("Ignoring '{}': not a score declared by the rule", scoreName);
+                    undeclaredScoreNames.add(scoreName);
+                } else {
+                    accept(declaredName, candidate.getValue());
+                }
+            }
+        }
+
+        /** Second pass: a flat {@code {"score": ...}} answer belongs to the only declared score. */
+        void collectFlatSingleScore(JsonNode structuredResponse) {
+            if (schema.size() != 1 || !structuredResponse.has(SCORE_FIELD_NAME)) {
+                return;
+            }
+            log.debug("Reading '{}' score from a flat single-score response", schema.getFirst().name());
+            accept(schema.getFirst().name(), structuredResponse);
+        }
+
+        /**
+         * Third pass: the judge named its one score something the rule does not declare ({@code
+         * relevance_score} against a schema entry named {@code Relevance}). With one declared score there is
+         * only one thing it can mean. Runs after the flat pass, so a stray nested object cannot outrank it.
+         */
+        void collectRenamedSingleScore(JsonNode structuredResponse) {
+            var candidates = scoreCandidates(structuredResponse);
+            // Several candidates: report rather than guess.
+            if (schema.size() != 1 || candidates.size() != 1) {
+                return;
+            }
+            var declaredName = schema.getFirst().name();
+            var judgeName = candidates.getFirst().getKey();
+            // Attributed after all, so withdraw the "ignored" note the first pass recorded for it.
+            undeclaredScoreNames.remove(judgeName);
+            log.debug("Attributing '{}' to the only declared score '{}'", judgeName, declaredName);
+            accept(declaredName, candidates.getFirst().getValue());
         }
 
         void accept(String declaredName, JsonNode scoreNode) {
@@ -1313,13 +1354,20 @@ public class OnlineScoringEngine {
      * top of the schema-named nested shape. Single-score schemas only: a flat object carries no name, so with
      * several scores there is nothing to attribute it to.
      */
-    private static void collectFlatSingleScore(JsonNode structuredResponse, List<LlmAsJudgeOutputSchema> schema,
-            CollectedScores collected) {
-        if (schema.size() != 1 || !structuredResponse.has(SCORE_FIELD_NAME)) {
-            return;
-        }
-        log.debug("Reading '{}' score from a flat single-score response", schema.getFirst().name());
-        collected.accept(schema.getFirst().name(), structuredResponse);
+    private static ParsedFeedbackScores noRecognisableScoreFields(JsonNode structuredResponse, String content) {
+        // Capped here rather than where it is rendered: the count comes from the judge's answer, so one
+        // reply would otherwise decide how much this error path allocates and carries.
+        var topLevelKeys = StreamSupport.stream(
+                Spliterators.spliteratorUnknownSize(structuredResponse.fieldNames(),
+                        Spliterator.ORDERED | Spliterator.NONNULL),
+                false)
+                .limit(MAX_REPORTED_FIELD_NAMES)
+                .toList();
+        var omittedFields = structuredResponse.size() - topLevelKeys.size();
+        log.warn("Judge answer had no recognisable score fields: fields=\"{}\" size='{}'",
+                renderFields(topLevelKeys, omittedFields), sizeOf(content));
+        return ParsedFeedbackScores.problem(
+                ResponseProblem.Kind.NO_SCORE_FIELDS, "", topLevelKeys, omittedFields);
     }
 
     /**

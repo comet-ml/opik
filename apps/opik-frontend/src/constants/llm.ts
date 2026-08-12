@@ -729,12 +729,12 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
           'INPUT: "Who painted the Mona Lisa?"\n' +
           'GROUND_TRUTH: "Leonardo da Vinci"\n' +
           'OUTPUT: "It was painted by Leonardo da Vinci."\n' +
-          '→ {"{score_name}": {"score": true, "reason": "Output conveys the same factual answer as the ground truth."}}\n' +
+          '→ {"Meaning Match": {"score": true, "reason": "Output conveys the same factual answer as the ground truth."}}\n' +
           "\n" +
           'INPUT: "Who painted the Mona Lisa?"\n' +
           'GROUND_TRUTH: "Leonardo da Vinci"\n' +
           'OUTPUT: "Pablo Picasso"\n' +
-          '→ {"{score_name}": {"score": false, "reason": "Output names a different painter than the ground truth."}}\n' +
+          '→ {"Meaning Match": {"score": false, "reason": "Output names a different painter than the ground truth."}}\n' +
           "\n" +
           "----------------------------------------\n" +
           "\n" +

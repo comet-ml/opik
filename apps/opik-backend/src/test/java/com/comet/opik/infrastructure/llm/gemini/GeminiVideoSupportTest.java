@@ -333,6 +333,31 @@ class GeminiVideoSupportTest {
         }
 
         @Test
+        @DisplayName("Should carry inline base64 video through the conversion instead of throwing")
+        void shouldConvertBase64VideoWithoutDereferencingAUrl() {
+            var opikGeminiModel = new OpikGeminiChatModel(mockDelegate);
+
+            // MinIO-staged attachments arrive as base64 rather than a presigned URL, so url() is null.
+            var base64 = "AAAAIGZ0eXBpc29t";
+            var userMessage = UserMessage.from(List.of(
+                    TextContent.from("What happens in this video?"),
+                    dev.langchain4j.data.message.VideoContent.from(base64, "video/mp4")));
+
+            when(mockDelegate.chat(any(ChatRequest.class))).thenReturn(mockChatResponse);
+            opikGeminiModel.chat(ChatRequest.builder().messages(List.of(userMessage)).build());
+
+            verify(mockDelegate).chat(chatRequestCaptor.capture());
+            var processed = (UserMessage) chatRequestCaptor.getValue().messages().get(0);
+
+            assertThat(processed.contents()).hasSize(2);
+            assertThat(processed.contents().get(1)).isInstanceOf(ImageContent.class);
+            var image = ((ImageContent) processed.contents().get(1)).image();
+            assertThat(image.base64Data()).isEqualTo(base64);
+            assertThat(image.mimeType()).isEqualTo("video/mp4");
+            assertThat(image.url()).isNull();
+        }
+
+        @Test
         @DisplayName("Should keep AudioContent when the same message also carries video")
         void shouldKeepAudioContentAlongsideVideo() {
             var opikGeminiModel = new OpikGeminiChatModel(mockDelegate);

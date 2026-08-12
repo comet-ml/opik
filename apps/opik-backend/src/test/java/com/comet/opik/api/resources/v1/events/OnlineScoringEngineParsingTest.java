@@ -358,15 +358,55 @@ class OnlineScoringEngineParsingTest {
     }
 
     @Test
-    @DisplayName("a score name the rule does not declare is reported, not stored under its own name")
-    void whenTheJudgeInventsAScoreName_thenNothingIsStoredAndItIsReported() {
+    @DisplayName("attribute a renamed score to the only score the rule declares, rather than dropping it")
+    void whenTheJudgeRenamesTheOnlyScore_thenItIsAttributedToTheDeclaredName() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"relevance_score\": {\"score\": 4, \"reason\": \"r\"}}"),
+                singleScoreSchema("Relevance"));
+
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("Relevance");
+        assertThat(parsed.scores().getFirst().value()).isEqualByComparingTo(BigDecimal.valueOf(4));
+        // Attributed, so it must not also be reported as ignored.
+        assertThat(parsed.undeclaredScoreNames()).isEmpty();
+        assertThat(parsed.problem()).isNull();
+    }
+
+    @Test
+    @DisplayName("do not guess when several undeclared objects could be the score")
+    void whenSeveralUndeclaredObjectsCarryScores_thenNothingIsAttributed() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"relevance_score\": {\"score\": 4, \"reason\": \"r\"},"
+                        + "\"other_score\": {\"score\": 1, \"reason\": \"r\"}}"),
+                singleScoreSchema("Relevance"));
+
+        assertThat(parsed.scores()).isEmpty();
+        assertThat(parsed.problem().kind()).isEqualTo(OnlineScoringEngine.ResponseProblem.Kind.NO_SCORE_FIELDS);
+    }
+
+    @Test
+    @DisplayName("a score name the rule does not declare is reported, not stored, when the schema has several")
+    void whenTheJudgeInventsAScoreNameOnAMultiScoreSchema_thenItIsReported() {
+        // The rescue is limited to a single-entry schema: with several there is no unambiguous target.
         var parsed = OnlineScoringEngine.toFeedbackScores(
                 chatResponse("{\"Totally Wrong Name\": {\"score\": true, \"reason\": \"r\"}}"),
-                singleScoreSchema("Meaning Match"));
+                THREE_SCORE_SCHEMA);
 
         assertThat(parsed.scores()).isEmpty();
         assertThat(parsed.problem().kind()).isEqualTo(OnlineScoringEngine.ResponseProblem.Kind.NO_SCORE_FIELDS);
         assertThat(parsed.problem().fields()).containsExactly("Totally Wrong Name");
+    }
+
+    @Test
+    @DisplayName("store the judge's own names when the rule declares no schema at all")
+    void whenTheSchemaIsEmpty_thenTheJudgeOwnNamesAreKept() {
+        // schema is @NotNull but not @NotEmpty, and the test-suite path can produce [].
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"Helpfulness\": {\"score\": 3, \"reason\": \"r\"}}"),
+                List.of());
+
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("Helpfulness");
+        assertThat(parsed.scores().getFirst().value()).isEqualByComparingTo(BigDecimal.valueOf(3));
+        assertThat(parsed.problem()).isNull();
     }
 
     @Test
