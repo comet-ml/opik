@@ -1239,7 +1239,7 @@ public class OnlineScoringEngine {
                         ? scoreName
                         : declaredNames.get(scoreName.toLowerCase(Locale.ROOT));
                 if (declaredName == null) {
-                    log.debug("Ignoring '{}': not a score declared by the rule", scoreName);
+                    log.debug("Ignoring undeclared score field: '{}'", scoreName);
                     undeclaredScoreNames.add(scoreName);
                 } else {
                     accept(declaredName, candidate.getValue());
@@ -1252,7 +1252,7 @@ public class OnlineScoringEngine {
             if (schema.size() != 1 || !structuredResponse.has(SCORE_FIELD_NAME)) {
                 return;
             }
-            log.debug("Reading '{}' score from a flat single-score response", schema.getFirst().name());
+            log.debug("Reading flat single-score response as score: '{}'", schema.getFirst().name());
             accept(schema.getFirst().name(), structuredResponse);
         }
 
@@ -1271,7 +1271,8 @@ public class OnlineScoringEngine {
             var judgeName = candidates.getFirst().getKey();
             // Attributed after all, so withdraw the "ignored" note the first pass recorded for it.
             undeclaredScoreNames.remove(judgeName);
-            log.debug("Attributing '{}' to the only declared score '{}'", judgeName, declaredName);
+            log.debug("Attributing renamed score to the only declared one: '{}' -> '{}'", judgeName,
+                    declaredName);
             accept(declaredName, candidates.getFirst().getValue());
         }
 
@@ -1283,12 +1284,12 @@ public class OnlineScoringEngine {
             // Names match case-insensitively, so several keys in one answer can claim the same declared score.
             // Both would be inserted and collapse to whichever row wins on timestamp, so the first one wins.
             if (!claimedNames.add(declaredName)) {
-                log.debug("Skipping a repeated '{}' score: the answer claimed it more than once", declaredName);
+                log.debug("Skipping score claimed more than once: '{}'", declaredName);
                 return;
             }
             var actualScore = scoreNode.path(SCORE_FIELD_NAME);
             if (actualScore.isNull()) {
-                log.debug("Skipping '{}' score because the judge returned a null value", declaredName);
+                log.debug("Skipping score the judge returned as null: '{}'", declaredName);
                 nullScoreNames.add(declaredName);
                 return;
             }
@@ -1395,7 +1396,7 @@ public class OnlineScoringEngine {
         try {
             return Optional.of(new BigDecimal(text));
         } catch (NumberFormatException e) {
-            log.debug("Score value '{}' is neither a number nor a boolean", text);
+            log.debug("Score value is neither a number nor a boolean: '{}'", text);
             return Optional.empty();
         }
     }
@@ -1410,7 +1411,7 @@ public class OnlineScoringEngine {
         if (value.compareTo(MIN_SCORE_VALUE) >= 0 && value.compareTo(MAX_SCORE_VALUE) <= 0) {
             return true;
         }
-        log.debug("Score value '{}' is outside the storable range", value);
+        log.debug("Score value is outside the storable range: '{}'", value);
         return false;
     }
 
