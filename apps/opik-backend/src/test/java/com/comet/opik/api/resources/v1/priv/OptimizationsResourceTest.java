@@ -45,6 +45,8 @@ import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -117,6 +119,7 @@ class OptimizationsResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+    private static final TimeBasedEpochGenerator ID_GENERATOR = Generators.timeBasedEpochGenerator();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -919,6 +922,624 @@ class OptimizationsResourceTest {
                     });
         }
 
+        @Test
+        @DisplayName("Total optimization cost includes optimization-tagged traces outside experiment items")
+        void getById__whenOptimizationTaggedTracesExistOutsideTrials__totalCostIncludesThem() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "reflection-cost-test-" + UUID.randomUUID();
+            Dataset dataset = Dataset.builder()
+                    .name(datasetName)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
+            datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
+
+            // Production shape: the optimizer writes its internal traces to the
+            // optimization's own project, while trial traces land in the dataset's project.
+            Project optimizerProject = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Optimizer-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(optimizerProject, apiKey, workspaceName);
+
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName(objectiveName)
+                    .projectName(optimizerProject.name())
+                    .build();
+
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var trialScore = BigDecimal.valueOf(0.7);
+            var trialMetadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", UUID.randomUUID().toString())));
+
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(trialMetadata)
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(trialScore).build()))
+                    .build();
+
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Trial traces are tagged with the optimization id too - a real run tags every
+            // evaluation trace. In THIS topology they are kept out of the tagged-cost branch by
+            // the query's project bound, since they live in a different project from the
+            // optimization. The experiment-item exclusion is what protects the single-project
+            // topology instead, and it has its own test below.
+            var trialCostPerSpan = BigDecimal.valueOf(0.05);
+            List<Trace> trialTraces = createTracesSpansAndItems(
+                    experiment, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    trialCostPerSpan, optimizationId.toString());
+
+            // Precondition: the trial traces really are tagged with the optimization id.
+            // Without this the query's experiment-item exclusion would be trivially
+            // satisfied and this test could not detect the trial cost being counted twice.
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Trace storedTrial = traceResourceClient.getById(
+                                trialTraces.getFirst().id(), workspaceName, apiKey);
+                        assertThat(storedTrial.tags()).contains(optimizationId.toString());
+                    });
+
+            var expectedTrialCost = trialCostPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            // Cost is asserted with isEqualByComparingTo, not StatsUtils.bigDecimalComparator:
+            // that helper falls through to comparing only the integer parts, so for sub-dollar
+            // costs it returns "equal" for any two values (0.50 vs 0.25 included) and no cost
+            // assertion using it can fail.
+            //
+            // Phase 1, before any non-trial trace exists: the total is the trial cost, counted
+            // once. Asserting this separately is what makes the combined figure below meaningful
+            // - without it, a total that happens to match could be a partially-ingested state on
+            // the way to a wrong one.
+            //
+            // baseline_cost and num_trials are the independent signals that the experiment-item
+            // path is already live: both need the experiment items AND the spans, the same rows
+            // the tagged branch reads, and a single query sees one snapshot of both. So there is
+            // no window where the total is momentarily right for the wrong reason.
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var trialOnly = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(trialOnly.numTrials()).isEqualTo(1L);
+                        assertThat(trialOnly.baselineCost()).isNotNull();
+                        assertThat(trialOnly.totalOptimizationCost()).isEqualByComparingTo(expectedTrialCost);
+                    });
+
+            // Reflection trace as the optimizer SDK actually writes it (verified against a
+            // live GEPA run): named gepa_reflection, tagged [<optimization_id>, Reflection,
+            // GEPA], and linked to no experiment item (OPIK-7521). Its span cost must count
+            // into the run total. It lives in the optimization's own project, a DIFFERENT one
+            // from the trials' — so this also pins that the query scopes optimizer-internal
+            // traces to the optimization's project rather than the dataset's.
+            Project reflectionProject = optimizerProject;
+
+            var reflectionCost = BigDecimal.valueOf(0.07);
+            Trace reflectionTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(reflectionProject.id())
+                    .projectName(reflectionProject.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(reflectionTrace), apiKey, workspaceName);
+
+            Span reflectionSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(reflectionProject.id())
+                    .projectName(reflectionProject.name())
+                    .traceId(reflectionTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(reflectionCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(reflectionSpan), apiKey, workspaceName);
+
+            var expectedTotalCost = expectedTrialCost.add(reflectionCost);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization).isNotNull();
+
+                        // The run total includes the tagged non-trial trace's spend
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(expectedTotalCost);
+
+                        // best/baseline stay trial-scoped per-trace comparison metrics
+                        assertThat(actualOptimization.bestCost()).isEqualByComparingTo(trialCostPerSpan);
+                        assertThat(actualOptimization.baselineCost()).isEqualByComparingTo(trialCostPerSpan);
+                    });
+        }
+
+        /**
+         * The other topology, and the one that pins the {@code (toString(trace_id), tag) NOT IN (...)}
+         * exclusion: trials and optimizer-internal traces in the SAME project, which is what Studio produces
+         * when the run and its evaluations share a project. Here the query's project bound cannot separate
+         * them, so only the experiment-item exclusion stops the trial spend from being charged a second time
+         * as optimizer-internal. Delete that clause and the total settles at twice the trial cost - a stable
+         * wrong answer, which is why phase one asserts the trial-only figure before any non-trial trace exists
+         * rather than asserting the combined figure alone.
+         */
+        @Test
+        @DisplayName("Trials and internal traces in one project: trial cost is not charged twice")
+        void getById__whenTrialAndInternalTracesShareTheProject__trialCostIsNotCountedTwice() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "shared-project-cost-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            // One project for the run, its trials and its optimizer-internal traces.
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Shared-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var objectiveName = "accuracy";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(BigDecimal.valueOf(0.7)).build()))
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trialCostPerSpan = BigDecimal.valueOf(0.05);
+            createTracesSpansAndItems(experiment, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    trialCostPerSpan, optimizationId.toString());
+
+            var expectedTrialCost = trialCostPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var trialOnly = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(trialOnly.numTrials()).isEqualTo(1L);
+                        assertThat(trialOnly.baselineCost()).isNotNull();
+                        assertThat(trialOnly.totalOptimizationCost()).isEqualByComparingTo(expectedTrialCost);
+                    });
+
+            // Now an optimizer-internal trace in that same project: its spend is additive.
+            var reflectionCost = BigDecimal.valueOf(0.07);
+            Trace reflectionTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(reflectionTrace), apiKey, workspaceName);
+
+            spanResourceClient.batchCreateSpans(List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(reflectionTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(reflectionCost)
+                    .feedbackScores(null)
+                    .build()), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual.totalOptimizationCost())
+                                .isEqualByComparingTo(expectedTrialCost.add(reflectionCost));
+                    });
+        }
+
+        /**
+         * The experiment-item exclusion must be keyed on (trace, owning optimization), not on the trace alone.
+         * Here one trace is a trial of run Y and also carries run X's id as a tag. Excluding on trace_id alone
+         * drops it from X - and only when Y is in scope, which is true of the list (every optimization on the
+         * dataset) and false of {@code getById(X)} (just X). So the same run reads as free in the list and
+         * priced on the run page. Revert the exclusion to {@code id NOT IN (SELECT trace_id FROM
+         * experiment_items_final)} and the list assertion below fails at 0 while the detail one passes.
+         * <p>
+         * Y is asserted too, because the narrower exclusion must still fire for the run that owns the trial:
+         * if it stopped firing, Y's trial spend would be charged once through {@code experiment_durations} and
+         * again through the tagged branch.
+         */
+        @Test
+        @DisplayName("Trace tagged with another run: list and detail attribute it the same way")
+        void findAndGetById__whenTaggedTraceIsAnotherRunsTrial__attributionDoesNotDependOnScope() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "cross-run-tag-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            // One project for both runs, so the query's project bound cannot separate them and the
+            // experiment-item exclusion is the only thing deciding attribution.
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Shared-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var objectiveName = "accuracy";
+
+            // Run Y: a real trial run, tagging its evaluation traces the way the SDK does.
+            var optimizationYId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            Experiment experimentY = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationYId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(BigDecimal.valueOf(0.7)).build()))
+                    .build();
+            experimentResourceClient.create(experimentY, apiKey, workspaceName);
+
+            var costPerSpan = BigDecimal.valueOf(0.05);
+            List<Trace> trialTraces = createTracesSpansAndItems(experimentY, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    costPerSpan, optimizationYId.toString());
+
+            var expectedYCost = costPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            // Run X: same dataset and project, so the list returns both, but no experiment of its own.
+            var optimizationXId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var y = optimizationResourceClient.get(optimizationYId, apiKey, workspaceName, 200);
+
+                        assertThat(y.numTrials()).isEqualTo(1L);
+                        assertThat(y.totalOptimizationCost()).isEqualByComparingTo(expectedYCost);
+                    });
+
+            // Re-ingest one of Y's trial traces carrying X's id as well. The trace stays linked to Y's
+            // experiment item, so it must keep counting once for Y and start counting for X.
+            Trace crossTagged = trialTraces.getFirst();
+            traceResourceClient.batchCreateTraces(
+                    List.of(crossTagged.toBuilder()
+                            .tags(Set.of(optimizationYId.toString(), optimizationXId.toString(), "Evaluation"))
+                            .build()),
+                    apiKey, workspaceName);
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var x = optimizationResourceClient.get(optimizationXId, apiKey, workspaceName, 200);
+                        assertThat(x.totalOptimizationCost()).isEqualByComparingTo(costPerSpan);
+
+                        // The same figure through the paginated list, where Y is in scope too. This is the
+                        // assertion the trace_id-only exclusion fails.
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        var xFromList = page.content().stream()
+                                .filter(o -> o.id().equals(optimizationXId))
+                                .findFirst()
+                                .orElseThrow();
+                        assertThat(xFromList.totalOptimizationCost()).isEqualByComparingTo(costPerSpan);
+
+                        // Y is unchanged: still charged exactly once for the same trace.
+                        var yFromList = page.content().stream()
+                                .filter(o -> o.id().equals(optimizationYId))
+                                .findFirst()
+                                .orElseThrow();
+                        assertThat(yFromList.totalOptimizationCost()).isEqualByComparingTo(expectedYCost);
+                    });
+        }
+
+        /**
+         * This fixture has no experiment at all, which is what makes it cover both projections: the paginated
+         * list then takes the {@code FIND_WITHOUT_EXPERIMENTS} fast path while {@code getById} always takes
+         * {@code FIND}. They each carry their own copy of the tagged-cost pipeline, so this pins the two
+         * against each other - a run that died before its first experiment must not read as free in the list
+         * and priced on the run page - and pins that both apply the tag check after the per-trace dedup.
+         */
+        @Test
+        @DisplayName("Tagged cost without experiments: list and detail agree, and both follow the tag")
+        void findAndGetById__whenOptimizationHasNoExperiments__taggedCostAgreesAndFollowsTheTag() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "tag-removal-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Optimizer-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName("accuracy")
+                    .projectName(project.name())
+                    .build();
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            // A tagged, non-trial trace: counted while the tag is present.
+            Trace taggedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var cost = BigDecimal.valueOf(0.07);
+            Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(cost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(cost);
+                    });
+
+            // Same number from the list, which reaches this optimization through the
+            // no-experiments fast path rather than through FIND.
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        assertThat(page.content()).hasSize(1);
+                        assertThat(page.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(cost);
+                    });
+
+            // Re-ingest the same trace id without the optimization tag. The cost query must
+            // read each trace's LATEST version, so the spend stops counting; a tag filter
+            // applied before dedup would keep charging this run forever.
+            Trace untaggedVersion = taggedTrace.toBuilder()
+                    .tags(Set.of("Reflection", "GEPA"))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(untaggedVersion), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(BigDecimal.ZERO);
+
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        assertThat(page.content()).hasSize(1);
+                        assertThat(page.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(BigDecimal.ZERO);
+                    });
+        }
+
+        /**
+         * The tagged-cost branch must charge one span once, from its newest version, no matter how many
+         * physical rows it has. A span re-ingested under a different parent is the case that used to break
+         * both halves of that: {@code /v1/private/spans/batch} goes through {@code SpanDAO.BULK_INSERT},
+         * which binds {@code parent_span_id} straight from the request with no old-row merge, so the rewrite
+         * lands as a second row carrying a <em>different</em> parent. A dedup grouping that still contained
+         * that column then kept both rows and summed the cost twice, and a sort tuple that still contained it
+         * picked the winner by largest parent instead of newest write (OPIK-7750).
+         * <p>
+         * So the fixture makes the two versions differ in cost and gives the <em>stale</em> one the
+         * <em>larger</em> parent: both parents are v7 and minted in order, so the earlier-minted id is the
+         * smaller one and the relationship is deterministic rather than a coin flip. Each failure mode then
+         * lands on its own number - 0.08 correct (newest version, charged once, plus the companion), 0.10 if
+         * the sort picks the stale version by parent, 0.15 if the grouping keeps both rows.
+         * <p>
+         * The rewrite and the companion span go in ONE batch statement, so they become visible together: the
+         * total moves 0.07 -> 0.08 when the batch lands and never transits a wrong value, which is what makes
+         * waiting on 0.08 an edge rather than a value that is merely still stale.
+         */
+        @Test
+        @DisplayName("Tagged cost when a span is re-ingested under another parent, then it is charged once")
+        void findAndGetById__whenTaggedSpanIsRewrittenUnderAnotherParent__spendIsChargedOnce() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "parent-rewrite-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Optimizer-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName("accuracy")
+                    .projectName(project.name())
+                    .build();
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            Trace taggedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            // Parents must be v7 - the ingestion endpoint rejects anything else. Minted in order, so
+            // smallParent < largeParent holds by v7's time ordering; asserted rather than assumed.
+            var smallParent = ID_GENERATOR.generate();
+            var largeParent = ID_GENERATOR.generate();
+            assertThat(largeParent.toString()).isGreaterThan(smallParent.toString());
+
+            var staleCost = BigDecimal.valueOf(0.07);
+            Span original = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(largeParent)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(staleCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(original), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(staleCost);
+                    });
+
+            // Same span id, cheaper, under the SMALLER parent: newest by last_updated_at, oldest by parent.
+            var rewriteCost = BigDecimal.valueOf(0.05);
+            var companionCost = BigDecimal.valueOf(0.03);
+            Span companion = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(ID_GENERATOR.generate())
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(companionCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(
+                    List.of(original.toBuilder()
+                            .parentSpanId(smallParent)
+                            .totalEstimatedCost(rewriteCost)
+                            .build(), companion),
+                    apiKey, workspaceName);
+
+            var expected = rewriteCost.add(companionCost);
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(expected);
+
+                        // The list reaches this run through FIND_WITHOUT_EXPERIMENTS, which carries its own
+                        // copy of the same dedup - both copies have to agree.
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        assertThat(page.content()).hasSize(1);
+                        assertThat(page.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(expected);
+                    });
+        }
+
         /**
          * When two candidates tie on the objective score, the best duration and cost are taken from the
          * earliest-created candidate - the same candidate the baseline resolves to. So under a tie the best and
@@ -1025,15 +1646,29 @@ class OptimizationsResourceTest {
                     });
         }
 
-        private void createTracesSpansAndItems(Experiment experiment, List<DatasetItem> datasetItems,
+        private List<Trace> createTracesSpansAndItems(Experiment experiment, List<DatasetItem> datasetItems,
                 Project project, String apiKey, String workspaceName,
                 Instant traceStart, Instant traceEnd, BigDecimal costPerSpan) {
+            return createTracesSpansAndItems(experiment, datasetItems, project, apiKey, workspaceName, traceStart,
+                    traceEnd, costPerSpan, null);
+        }
+
+        /**
+         * @param optimizationIdTag when set, tags every trial trace with the optimization id the
+         *                          way a real run does (the SDK tags each evaluation trace), so the
+         *                          cost query's "exclude experiment-linked traces" guard is
+         *                          actually exercised instead of being trivially satisfied by
+         *                          podam's random tags.
+         */
+        private List<Trace> createTracesSpansAndItems(Experiment experiment, List<DatasetItem> datasetItems,
+                Project project, String apiKey, String workspaceName,
+                Instant traceStart, Instant traceEnd, BigDecimal costPerSpan, String optimizationIdTag) {
             Set<ExperimentItem> experimentItems = new HashSet<>();
             List<Trace> traces = new ArrayList<>();
             List<Span> spans = new ArrayList<>();
 
             for (DatasetItem datasetItem : datasetItems) {
-                Trace trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                Trace.TraceBuilder traceBuilder = podamFactory.manufacturePojo(Trace.class).toBuilder()
                         .projectId(project.id())
                         .projectName(project.name())
                         .startTime(traceStart)
@@ -1041,8 +1676,13 @@ class OptimizationsResourceTest {
                         .guardrailsValidations(null)
                         .threadId(null)
                         .feedbackScores(null)
-                        .usage(null)
-                        .build();
+                        .usage(null);
+
+                if (optimizationIdTag != null) {
+                    traceBuilder.tags(Set.of(optimizationIdTag, "Evaluation", "GEPA"));
+                }
+
+                Trace trace = traceBuilder.build();
 
                 ExperimentItem experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                         .experimentId(experiment.id())
@@ -1070,6 +1710,8 @@ class OptimizationsResourceTest {
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
             experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            return traces;
         }
 
     }
