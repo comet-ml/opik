@@ -82,6 +82,14 @@ describe("detectOpenAIFormat", () => {
       expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
     });
 
+    it("should detect an OpenWebUI response envelope", () => {
+      const data = {
+        chat_id: "chat-123",
+        messages: [{ role: "assistant", content: "Hello from OpenWebUI" }],
+      };
+      expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
+    });
+
     it("should reject invalid output format", () => {
       const data = { invalid: "format" };
       expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);

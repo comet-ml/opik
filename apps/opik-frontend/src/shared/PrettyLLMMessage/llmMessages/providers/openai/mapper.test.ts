@@ -185,6 +185,26 @@ describe("mapOpenAIMessages", () => {
         );
       }
     });
+
+    it("should map an OpenWebUI response envelope", () => {
+      const data = {
+        chat_id: "chat-123",
+        messages: [
+          { role: "user", content: "What is Opik?" },
+          { role: "assistant", content: "An observability platform." },
+        ],
+      };
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("user");
+      expect(result.messages[1].role).toBe("assistant");
+      if (result.messages[1].blocks[0].blockType === "text") {
+        expect(result.messages[1].blocks[0].props.children).toBe(
+          "An observability platform.",
+        );
+      }
+    });
   });
 
   describe("Edge cases", () => {

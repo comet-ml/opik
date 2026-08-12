@@ -66,7 +66,7 @@ const isCustomInputMessage = (
  * Checks if an object has OpenAI chat completion input format
  * (messages array with role/content objects)
  */
-const hasOpenAIInputFormat = (data: unknown): boolean => {
+const hasOpenAIMessageListFormat = (data: unknown): boolean => {
   if (!data || typeof data !== "object") return false;
   const d = data as Record<string, unknown>;
 
@@ -166,7 +166,7 @@ export const detectOpenAIFormat: FormatDetector = (data, prettifyConfig) => {
   // Check for input formats
   if (isInput) {
     // Standard format: { messages: [...] }
-    if (hasOpenAIInputFormat(data)) {
+    if (hasOpenAIMessageListFormat(data)) {
       return true;
     }
     // Direct array format: [{ role: "user", content: "..." }]
@@ -183,6 +183,10 @@ export const detectOpenAIFormat: FormatDetector = (data, prettifyConfig) => {
   if (isOutput) {
     // Standard format: { choices: [...] }
     if (hasOpenAIOutputFormat(data)) {
+      return true;
+    }
+    // OpenWebUI stores the completed conversation as { messages: [...] }
+    if (hasOpenAIMessageListFormat(data)) {
       return true;
     }
     // Custom output format: { text: "...", usage: {...}, finish_reason: "..." }

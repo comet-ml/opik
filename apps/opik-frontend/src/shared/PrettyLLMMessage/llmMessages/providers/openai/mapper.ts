@@ -82,6 +82,8 @@ interface OpenAIInputData {
   messages: OpenAIMessage[];
 }
 
+type OpenAIMessageListData = OpenAIInputData;
+
 interface OpenAIOutputData {
   choices: OpenAIChoice[];
   usage?: {
@@ -498,17 +500,23 @@ const mapOpenAIMessage = (
 /**
  * Maps OpenAI input format to LLMMapperResult
  */
-const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult => {
+const mapOpenAIMessageList = (
+  data: OpenAIMessageListData,
+  prefix: string,
+): LLMMapperResult => {
   if (!data.messages || !Array.isArray(data.messages)) {
     return { messages: [] };
   }
 
   const messages = data.messages.map((msg, index) =>
-    mapOpenAIMessage(msg, index, "input"),
+    mapOpenAIMessage(msg, index, prefix),
   );
 
   return { messages };
 };
+
+const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult =>
+  mapOpenAIMessageList(data, "input");
 
 /**
  * Maps OpenAI output format to LLMMapperResult
@@ -649,6 +657,11 @@ export const mapOpenAIMessages: FormatMapper = (data, prettifyConfig) => {
     // Standard format { choices: [...] }
     if (typeof data === "object" && "choices" in data) {
       return mapOpenAIOutput(data as OpenAIOutputData);
+    }
+
+    // OpenWebUI stores the completed conversation as { messages: [...] }
+    if (typeof data === "object" && "messages" in data) {
+      return mapOpenAIMessageList(data as OpenAIMessageListData, "output");
     }
   }
 
