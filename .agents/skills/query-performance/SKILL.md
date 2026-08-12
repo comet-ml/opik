@@ -100,7 +100,7 @@ mechanism yet, and the verdict is not ready.
 Whether you are reviewing a PR or opening one, justify every claim with a **before/after table** —
 one row per variant (or per revision), one column per measured dimension:
 
-| variant | p50 ms | p90 ms | p95 ms | CPU ms | peak MiB | parts | granules | rows read |
+| variant | p50 ms | p90 ms | p95 ms | CPU ms | peak MiB | parts | granules (marks) | rows read |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `main` | … | … | … | … | … | … | … | … |
 | candidate (before) | … | … | … | … | … | … | … | … |
