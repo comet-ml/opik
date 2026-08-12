@@ -6,10 +6,18 @@ ticket in the `OPIK` Jira project and comments the link back on the issue.
 This directory holds the resolution logic for that sync. See
 [OPIK-7833](https://comet-ml.atlassian.net/browse/OPIK-7833).
 
-> **Status: complete and verified, off by default.** The sync works end to end
-> and is wired to the `JC` label, but the job will not run until
-> `vars.JC_SYNC_ENABLED` is `'true'`. Merging is therefore safe while n8n is
-> still live; see the cutover checklist at the bottom.
+> **Status: off by default, not yet run on GitHub Actions.**
+>
+> The script's logic is verified — dedupe was replayed over the whole labelled
+> backlog, and create / idempotence / failure-recovery were exercised against
+> the real GitHub and Jira APIs. But every one of those runs invoked the script
+> directly. **The workflow itself has never executed on a runner**, so the
+> trigger, gating, checkout and secret wiring are unproven until a real label
+> event succeeds.
+>
+> The job will not run until `vars.JC_SYNC_ENABLED` is `'true'`, so merging is
+> safe while n8n is still live. Treat the first enabled run as the acceptance
+> test — see the cutover checklist at the bottom.
 
 ## Files
 
@@ -75,27 +83,43 @@ Re-run **JC Label to Jira** from the Actions tab with the issue number.
    at `n8n.dev.comet.com`; the deployment is in `comet-gitops`). Nothing in this
    repo can turn it off.
 4. Set `JC_SYNC_ENABLED` to `true`.
-5. Apply `JC` to one issue and confirm a single ticket, a single remote link, and
+5. Run the workflow manually with **dry run** ticked, against an
+   already-synced issue. This is the first execution on a runner, so it proves
+   the trigger, secrets and checkout while writing nothing. Expect it to report
+   the existing ticket and decline to create.
+6. Apply `JC` to one issue and confirm a single ticket, a single remote link, and
    one comment.
 5. Optionally backfill: run the workflow manually against previously-labeled
    issues to attach remote links to the ~50 legacy tickets, upgrading them to the
    tier 1 fast path. Idempotent, so it can be re-run freely.
 
-### Verified before handover
+### Verified — by invoking the script directly
 
 - Live create, then two re-runs: one ticket, one remote link, one comment. The
   second and third runs matched via tier 1.
 - Two consecutive failures left exactly one notice; the recovery run cleared it.
-- Replay across all 79 labeled issues: 65 matched, 14 correctly unmatched
+- A dry run against a legacy n8n ticket (issue #7516 → OPIK-7425, no remote
+  link) matched on tier 2 and declined to create.
+- An issue without the `JC` label is refused before any write.
+- Replay across all 79 labelled issues: 65 matched, 14 correctly unmatched
   (4 test issues, 4 with only a hand-written citing ticket, 6 never synced).
-- `actionlint` and `zizmor` (offline, high severity) clean; 28 unit tests pass.
+- `actionlint` and `zizmor` (offline, high severity) clean; 29 unit tests pass.
 
-### Not yet exercised
+### Unverified — the workflow on a runner
 
-The workflow has never run on GitHub's runners — it was driven directly. The
-`if:` gate, concurrency group and dry-run wiring were checked against
-representative event payloads, but the first real label event is still the first
-true test of the YAML itself.
+None of the above ran through GitHub Actions. The `if:` gate, concurrency group
+and dry-run wiring were checked against representative event payloads, and the
+repo label was confirmed to be exactly `JC` (the gate is case-sensitive), but
+these remain untested in a real run:
+
+- the `issues: labeled` trigger firing and passing the right issue number;
+- `vars.JC_SYNC_ENABLED` and the secrets resolving on the runner;
+- the sparse checkout providing the script;
+- the step summary and failure notice rendering from Actions.
+
+Watch the first enabled label event, and prefer a manual `workflow_dispatch`
+with **dry run** ticked as the very first exercise — it proves the wiring
+without writing anything.
 
 ## The two decisions
 
