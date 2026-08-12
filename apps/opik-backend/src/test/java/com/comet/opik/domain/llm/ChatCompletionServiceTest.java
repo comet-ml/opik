@@ -438,27 +438,27 @@ class ChatCompletionServiceTest {
         }
 
         @Test
-        @DisplayName("a synchronous BadRequestException is delivered in-stream rather than escaping as an HTTP status")
-        void createAndStreamResponse__whenGenerateStreamThrowsBadRequest__thenErrorDeliveredInStream() {
-            // Given — a provider that rejects up-front throws before it can invoke the error callback
+        @DisplayName("a synchronous BadRequestException still escapes as a real HTTP status")
+        void createAndStreamResponse__whenGenerateStreamThrowsBadRequest__thenPropagates() {
+            // Given — LlmProviderAnthropic.generateStream calls validateRequest inline and throws this before any
+            // provider I/O. Nothing upstream validates messages: ChatCompletionsResource only checks the model, and
+            // ChatCompletionRequest is langchain4j's class, so @Valid contributes no constraints. Swallowing it into
+            // the stream would turn a malformed request into an HTTP 200 for callers branching on status.
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
             var workspaceId = "test-workspace-id";
             var handlers = mock(ChunkedOutputHandlers.class);
 
             when(llmProviderFactory.getService(anyString(), anyString())).thenReturn(llmProviderService);
-            lenient().when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
-            doThrow(new BadRequestException("model rejected the request"))
+            doThrow(new BadRequestException(ChatCompletionService.ERROR_EMPTY_MESSAGES))
                     .when(llmProviderService).generateStream(any(), anyString(), any(), any(), any());
 
-            // When
-            chatCompletionService.createAndStreamResponse(request, workspaceId, handlers);
+            // When & Then — createAndStreamResponse runs before Response.ok() is built, so nothing is committed yet
+            // and this surfaces as a genuine 400
+            assertThatThrownBy(() -> chatCompletionService.createAndStreamResponse(request, workspaceId, handlers))
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessageContaining(ChatCompletionService.ERROR_EMPTY_MESSAGES);
 
-            // Then — the caller is told why, rather than being left on an open stream. handleError writes the error
-            // and then closes, so this single call covers both halves of "error event, then close".
-            var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);
-            verify(handlers).handleError(errorCaptor.capture());
-            assertThat(errorCaptor.getValue().getCode()).isEqualTo(400);
-            assertThat(errorCaptor.getValue().getMessage()).contains("model rejected the request");
+            verify(handlers, never()).handleError(any());
         }
 
         @Test

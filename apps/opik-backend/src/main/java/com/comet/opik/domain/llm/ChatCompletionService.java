@@ -99,16 +99,16 @@ public class ChatCompletionService {
                     handlers::handleMessage,
                     handlers::handleClose,
                     errorHandler);
-        } catch (BadRequestException | UnsupportedFeatureException clientError) {
+        } catch (UnsupportedFeatureException unsupportedFeature) {
             // Streaming clients get one contract: HTTP 200 with the error delivered in-stream. VertexAI and Gemini
             // already guarantee that by catching everything inside their own boundedElastic task, but
-            // OpenAiResponses, OpenAI, CustomLlm and Anthropic run inline, so a client-side rejection thrown before
+            // OpenAiResponses, OpenAI, CustomLlm and Anthropic run inline, so an unsupported feature raised before
             // the provider engages would otherwise escape as an HTTP status and break the contract for those
             // providers only. Caught by exact type rather than RuntimeException: no retry policy wraps this call, so
             // these arrive unwrapped, and everything else keeps propagating to the resource layer untouched.
-            // Request-level validation such as an unsupported model is unaffected — ChatCompletionsResource rejects
-            // that before this method is called, and it stays a real 400.
-            errorHandler.accept(clientError);
+            // BadRequestException is deliberately NOT caught: LlmProviderAnthropic.generateStream validates messages
+            // inline and throws it, and that must stay a real HTTP 400.
+            errorHandler.accept(unsupportedFeature);
             return;
         }
 
