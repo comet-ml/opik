@@ -177,7 +177,9 @@ class VertexAIClientGeneratorTest {
                 .configuration(configuredLocation == null ? Map.of() : Map.of("location", configuredLocation))
                 .build();
 
-        generator.generate(config, request).chat(UserMessage.from("hello"));
+        try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
+            client.chat(UserMessage.from("hello"));
+        }
     }
 
     private void assertCalledWithLocation(String expectedLocation) {
@@ -248,7 +250,9 @@ class VertexAIClientGeneratorTest {
                     .configuration(location == null ? Map.of() : Map.of("location", location))
                     .build();
 
-            return VertexAITestClients.apiEndpointOf(generator.generate(config, request));
+            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
+                return VertexAITestClients.apiEndpointOf(client);
+            }
         }
     }
 
@@ -267,15 +271,16 @@ class VertexAIClientGeneratorTest {
                     .configuration(Map.of("location", "global"))
                     .build();
 
-            var client = generator.generate(config, request);
-            VertexAI vertexAI = VertexAITestClients.vertexAiOf(client);
+            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
+                VertexAI vertexAI = VertexAITestClients.vertexAiOf(client);
 
-            var predictionClient = vertexAI.getPredictionServiceClient();
-            assertThat(predictionClient.isShutdown()).isFalse();
+                var predictionClient = vertexAI.getPredictionServiceClient();
+                assertThat(predictionClient.isShutdown()).isFalse();
 
-            ((AutoCloseable) client).close();
+                client.close();
 
-            assertThat(predictionClient.isShutdown()).isTrue();
+                assertThat(predictionClient.isShutdown()).isTrue();
+            }
         }
 
         @Test
@@ -288,15 +293,16 @@ class VertexAIClientGeneratorTest {
                     .configuration(Map.of("location", "global"))
                     .build();
 
-            var client = generator.newVertexAIStreamingClient(config, request);
-            VertexAI vertexAI = client.vertexAI();
+            try (var client = generator.newVertexAIStreamingClient(config, request)) {
+                VertexAI vertexAI = client.vertexAI();
 
-            var predictionClient = vertexAI.getPredictionServiceClient();
-            assertThat(predictionClient.isShutdown()).isFalse();
+                var predictionClient = vertexAI.getPredictionServiceClient();
+                assertThat(predictionClient.isShutdown()).isFalse();
 
-            client.close();
+                client.close();
 
-            assertThat(predictionClient.isShutdown()).isTrue();
+                assertThat(predictionClient.isShutdown()).isTrue();
+            }
         }
     }
 }
