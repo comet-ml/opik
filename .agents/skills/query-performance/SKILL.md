@@ -13,8 +13,10 @@ negative results so nobody retries them.
 
 1. **Measure, never infer.** Every claim needs a number that would differ if the claim were false.
 2. **Equivalence gate first.** No variant's cost is quotable until you have ensured it returns the
-   same result as the query it varies — same rows, same content, compared order-independently — on
-   every shape you measure. A faster query that answers a different question is not an optimization.
+   same result as the query it varies, on every shape you measure. Where the query defines an order —
+   anything with `ORDER BY`, and anything paginated, where order decides which rows land on the page —
+   the comparison must include that order; compare order-independently only when the result genuinely
+   has no defined order. A faster query that answers a different question is not an optimization.
    (Equivalence holds between the candidate and *its* variants. A candidate is often meant to change
    results versus `main`; `main` is the cost reference, not a result reference.)
 3. **Collect the whole picture per run**: latency, peak memory, CPU time, and what was scanned (parts,
@@ -24,7 +26,9 @@ negative results so nobody retries them.
 4. **Two data shapes minimum**, since rankings flip with density and skew. A win on one shape is a
    hypothesis.
 5. **One variable per variant**, including deleting a clause outright to see if it earns its keep.
-6. **≥5 runs; report p50, min and spread.** Differences smaller than the spread are not differences.
+6. **≥5 runs; report p50, p90, p95 and min.** Differences smaller than the spread are not
+   differences, and the tail is where a polled endpoint hurts. Tail quantiles are only as good as the
+   run count — if p90/p95 is what you are deciding on, run more than five.
 7. **Write down what you could not measure** — quotas, unreachable shapes, cache state. Those
    caveats bound the finding.
 
@@ -72,7 +76,7 @@ The failure mode of this work is a confident mechanism the engine does not imple
 
 ## Deciding: does the change stay or drop
 
-Put the four measured dimensions side by side — **latency** (p50, min, spread), **peak memory**,
+Put the four measured dimensions side by side — **latency** (p50, p90, p95, min), **peak memory**,
 **CPU time**, **scanned/read** (parts, granules, marks, rows) — for every shape and every call site,
 and decide from the whole set:
 
@@ -96,11 +100,14 @@ mechanism yet, and the verdict is not ready.
 Whether you are reviewing a PR or opening one, justify every claim with a **before/after table** —
 one row per variant (or per revision), one column per measured dimension:
 
-| variant | p50 ms | CPU ms | peak MiB | rows read |
-| --- | --- | --- | --- | --- |
-| `main` | … | … | … | … |
-| candidate (before) | … | … | … | … |
-| with the change (after) | … | … | … | … |
+| variant | p50 ms | p90 ms | p95 ms | CPU ms | peak MiB | parts | granules | rows read |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `main` | … | … | … | … | … | … | … | … |
+| candidate (before) | … | … | … | … | … | … | … | … |
+| with the change (after) | … | … | … | … | … | … | … | … |
+
+The scan columns are not optional: they are what makes the other three explainable, so carry the
+pruning evidence into the table rather than only the totals.
 
 One table per call site and per shape, with the shape named (entity counts, run count). A verdict
 without its table is an opinion, and prose alone hides exactly the trade a reviewer needs to see.

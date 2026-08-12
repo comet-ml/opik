@@ -30,15 +30,16 @@ it dies with the JVM. The flow:
    write the smallest one that does.
 3. **Attach to the surviving container** on its mapped native port (it changes per run) as `default`,
    database `opik` (`ClickHouseContainerUtils.DATABASE_NAME`). Being admin here unlocks what a real
-   environment refuses: log flushing, cache drops, stopping merges, and `INSERT`. The container also
-   provisions the production-shape read-only user from `src/test/resources/users.xml`, so quota and
-   `readonly` behaviour can be reproduced.
+   environment refuses: log flushing, cache drops, stopping merges, and `INSERT`.
 4. **Extrapolate to 20k / 500k / 1M** driving entities, each scale in **its own workspace id** so the
    ladders coexist and one rendering can be pointed at any of them. Derive the parameters from the
    fixtures rather than inventing them.
 5. **Validate the shape before trusting a number**: compare the container's `EXPLAIN indexes = 1`
-   against a real environment's — search algorithm, which conditions reached the index,
-   granule-to-total ratios. Timings will differ; the plan shape must not. If it does, fix the seeding.
+   against a real environment's and check that pruning *behaves* the same way — the same conditions
+   reach the index, the same key prefixes are hit, the same skip indexes engage or are ignored.
+   Absolute granule and mark counts will not match across different data volumes, so compare
+   behaviour, not ratios. Pruning that behaves differently means the seeding is wrong; fix it before
+   continuing.
 
 **What the extrapolation must preserve**, because each of these moves the plan: fanout (child rows per
 entity); rows per logical key, which is what dedup steps pay for; part count; cardinality of the

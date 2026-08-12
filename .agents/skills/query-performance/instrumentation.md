@@ -28,8 +28,9 @@ happened.
 **`EXPLAIN QUERY TREE` / `SYNTAX`** — how the analyzer rewrote the query, including what it did with
 your CTEs and predicates. Use it when a rewrite is not what you assumed.
 
-**`system.query_log`** — the cost record per run: duration, peak memory (first-class, not a footnote),
-rows read, and `ProfileEvents`. Worth knowing by name: `SelectedParts`/`SelectedRanges`/`SelectedMarks`
+**`system.query_log`** — the cost record per run: duration (aggregate it as p50, p90 and p95 across
+runs, plus min, since the tail is what a polled endpoint feels), peak memory (first-class, not a
+footnote), rows read, and `ProfileEvents`. Worth knowing by name: `SelectedParts`/`SelectedRanges`/`SelectedMarks`
 for pruning, user and system CPU time, and any non-zero `External*` event — spilling means memory
 pressure changed the algorithm, so the fix is memory, not wall time. Explore the rest of the event map
 when a number needs explaining.
