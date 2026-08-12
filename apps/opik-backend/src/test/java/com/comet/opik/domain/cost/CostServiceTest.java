@@ -1062,4 +1062,89 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Covers registering {@code hyperbolic} as a canonical provider so that the 16 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "hyperbolic"} are no longer silently dropped at load time. No Hyperbolic
+     * model publishes cache rates today, so all Hyperbolic requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesHyperbolicModels() {
+        // hyperbolic/Qwen/QwQ-32B: input 2e-07, output 2e-07
+        // 1000 * 2e-07 + 200 * 2e-07 = 0.00024
+        BigDecimal cost = CostService.calculateCost("hyperbolic/Qwen/QwQ-32B", "hyperbolic",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00024");
+    }
+
+    /**
+     * Covers registering {@code baseten} as a canonical provider so that the 11 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "baseten"} are no longer silently dropped at load time. No Baseten
+     * model publishes cache rates today, so all Baseten requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesBasetenModels() {
+        // baseten/zai-org/GLM-5: input 9.5e-07, output 3.15e-06
+        // 1000 * 9.5e-07 + 200 * 3.15e-06 = 0.00158
+        BigDecimal cost = CostService.calculateCost("baseten/zai-org/GLM-5", "baseten",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00158");
+    }
+
+    /**
+     * Covers registering {@code lambda_ai} as a canonical provider so that the 20 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "lambda_ai"} are no longer silently dropped at load time. No Lambda
+     * model publishes cache rates today, so all Lambda requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesLambdaModels() {
+        // lambda_ai/lfm-7b: input 2.5e-08, output 4e-08
+        // 1000 * 2.5e-08 + 200 * 4e-08 = 0.000033
+        BigDecimal cost = CostService.calculateCost("lambda_ai/lfm-7b", "lambda_ai",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.000033");
+    }
+
+    /**
+     * Covers registering {@code nscale} as a canonical provider so that the 14 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "nscale"} are no longer silently dropped at load time. No Nscale
+     * model publishes cache rates today, so all Nscale requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesNscaleModels() {
+        // nscale/Qwen/QwQ-32B: input 1.8e-07, output 2e-07
+        // 1000 * 1.8e-07 + 200 * 2e-07 = 0.00022
+        BigDecimal cost = CostService.calculateCost("nscale/Qwen/QwQ-32B", "nscale",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00022");
+    }
+
+    /**
+     * Covers registering {@code oci} as a canonical provider so that the 44 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "oci"} are no longer silently dropped at load time. No OCI
+     * model publishes cache rates today, so all OCI requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesOCIModels() {
+        // oci/xai.grok-3: input 3e-06, output 1.5e-05
+        // 1000 * 3e-06 + 200 * 1.5e-05 = 0.006
+        BigDecimal cost = CostService.calculateCost("oci/xai.grok-3", "oci",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.006");
+    }
 }
