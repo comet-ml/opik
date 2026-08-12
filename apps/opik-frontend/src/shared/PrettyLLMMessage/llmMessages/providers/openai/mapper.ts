@@ -583,6 +583,7 @@ const appendMessageLimitPlaceholder = (
         },
       },
     ],
+    contentFingerprint: `truncated:${omittedCount}`,
   });
 };
 
