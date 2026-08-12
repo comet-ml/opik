@@ -181,7 +181,7 @@ jobs:
 
       - name: Build and Push Docker Image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: apps/${{ inputs.image }}/
           platforms: linux/${{ matrix.platform }}
