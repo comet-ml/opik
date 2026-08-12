@@ -97,6 +97,14 @@ async function jira(path, init = {}) {
   return res.json();
 }
 
+async function jiraSearch(jql, maxResults = 10) {
+  const data = await jira('/rest/api/3/search/jql', {
+    method: 'POST',
+    body: JSON.stringify({ jql, maxResults, fields: ['key', 'labels'] }),
+  });
+  return data.issues || [];
+}
+
 /**
  * Tier 1 — exact remote-link lookup.
  *
@@ -107,13 +115,7 @@ async function jira(path, init = {}) {
  */
 async function findByRemoteLink(globalId) {
   if (!JIRA_READY) return null;
-  const body = JSON.stringify({
-    jql: remoteLinkJql(globalId),
-    maxResults: 2,
-    fields: ['key'],
-  });
-  const data = await jira('/rest/api/3/search/jql', { method: 'POST', body });
-  const issues = data.issues || [];
+  const issues = await jiraSearch(remoteLinkJql(globalId), 2);
   return issues.length ? issues[0].key : null;
 }
 
@@ -133,19 +135,11 @@ async function findByRemoteLink(globalId) {
  */
 async function findByJql(jql) {
   if (!JIRA_READY) return null;
-  const body = JSON.stringify({
-    jql,
-    maxResults: 10,
-    fields: ['key', 'labels'],
-  });
-  const data = await jira('/rest/api/3/search/jql', { method: 'POST', body });
-  const issues = data.issues || [];
-  if (!issues.length) return null;
 
-  const synced = issues.filter((i) =>
-    (i.fields?.labels || []).includes('github-sync'),
-  );
-
+  // Ask Jira for the synced tickets directly. Filtering a capped page
+  // client-side would let a synced ticket fall off the end of a heavily-cited
+  // issue and read as "none synced" — which downstream means "create".
+  const synced = await jiraSearch(`${jql} AND labels = "github-sync"`, 50);
   if (synced.length > 1) {
     return { key: synced[0].key, duplicates: synced.map((i) => i.key) };
   }
@@ -153,7 +147,9 @@ async function findByJql(jql) {
 
   // No sync-created ticket. Something references this issue, but the sync never
   // made one — report the reference so it can be triaged, not as a duplicate.
-  return { key: issues[0].key, related: issues.map((i) => i.key) };
+  const any = await jiraSearch(jql, 20);
+  if (!any.length) return null;
+  return { key: any[0].key, related: any.map((i) => i.key) };
 }
 
 async function main() {

@@ -22,10 +22,12 @@ import {
   COMMENT_MARKER,
   findExistingTicket,
   JIRA_PROJECT,
+  parseTicketKeys,
   remoteLinkGlobalId,
   remoteLinkJql,
   resolveIssueType,
   SYNCED_LABELS,
+  TRIGGER_LABEL,
 } from './resolve.mjs';
 
 const args = process.argv.slice(2);
@@ -153,18 +155,25 @@ async function findByRemoteLink(globalId) {
   return issues.length ? issues[0].key : null;
 }
 
-/** Tier 2 — text search on the GitHub URL, restricted to sync-created tickets. */
+/**
+ * Tier 2 — text search on the GitHub URL, restricted to sync-created tickets.
+ *
+ * Asks Jira for the synced tickets directly rather than fetching a capped page
+ * and filtering client-side: a popular issue can be cited by more tickets than
+ * one page holds, and a synced ticket falling off the end would read as "none
+ * synced" and create a duplicate. The unfiltered query runs only to report
+ * citing tickets, where truncation is cosmetic.
+ */
 async function findByJql(jql) {
-  const issues = await jiraSearch(jql);
-  if (!issues.length) return null;
-  const synced = issues.filter((i) =>
-    (i.fields?.labels || []).includes('github-sync'),
-  );
+  const synced = await jiraSearch(`${jql} AND labels = "github-sync"`, 50);
   if (synced.length > 1) {
     return { key: synced[0].key, duplicates: synced.map((i) => i.key) };
   }
   if (synced.length === 1) return synced[0].key;
-  return { key: issues[0].key, related: issues.map((i) => i.key) };
+
+  const any = await jiraSearch(jql, 20);
+  if (!any.length) return null;
+  return { key: any[0].key, related: any.map((i) => i.key) };
 }
 
 /**
@@ -173,6 +182,30 @@ async function findByJql(jql) {
  * notices on issues.
  */
 const FAILURE_MARKER = '<!-- jc-sync:failure -->';
+
+/**
+ * Every comment on the issue, across all pages.
+ *
+ * A single `per_page=100` read silently truncates on busy issues, and each of
+ * the three decisions that reads comments — recovery lookup, announcement
+ * check, failure-notice housekeeping — turns a missed marker into a duplicate.
+ * Cached per run because all three want the same list; pass `{fresh: true}`
+ * after posting.
+ */
+let commentCache = null;
+async function listAllComments({ fresh = false } = {}) {
+  if (commentCache && !fresh) return commentCache;
+  const all = [];
+  for (let page = 1; ; page += 1) {
+    const batch = await gh(
+      `/repos/${REPO_OWNER}/${REPO_NAME}/issues/${ISSUE_NUMBER}/comments?per_page=100&page=${page}`,
+    );
+    all.push(...batch);
+    if (batch.length < 100) break;
+  }
+  commentCache = all;
+  return all;
+}
 
 const summary = [];
 const note = (line) => {
@@ -184,9 +217,7 @@ const note = (line) => {
 async function clearFailureNotice() {
   if (DRY_RUN) return;
   try {
-    const existing = await gh(
-      `/repos/${REPO_OWNER}/${REPO_NAME}/issues/${ISSUE_NUMBER}/comments?per_page=100`,
-    );
+    const existing = await listAllComments();
     for (const c of existing.filter((c) => c.body?.includes(FAILURE_MARKER))) {
       await gh(`/repos/${REPO_OWNER}/${REPO_NAME}/issues/comments/${c.id}`, {
         method: 'DELETE',
@@ -222,6 +253,22 @@ async function main() {
     return;
   }
 
+  // The label is the authorisation to sync, so re-check it here rather than
+  // trusting the caller. workflow_dispatch takes an arbitrary issue number, and
+  // creating a ticket labelled `JC` for an unlabelled issue would retroactively
+  // invent the trigger. Also covers the label being removed between the event
+  // firing and this run.
+  const labelNames = (issue.labels || []).map((l) =>
+    typeof l === 'string' ? l : l?.name,
+  );
+  if (!labelNames.includes(TRIGGER_LABEL)) {
+    note(
+      `#${issue.number} does not carry the \`${TRIGGER_LABEL}\` label — nothing to do.`,
+    );
+    await writeSummary();
+    return;
+  }
+
   const globalId = remoteLinkGlobalId(repo.id, issue.number);
   const type = resolveIssueType({ labels: issue.labels, title: issue.title });
   note(
@@ -238,12 +285,8 @@ async function main() {
     {
       findByRemoteLink,
       findByJql,
-      listIssueComments: async () => {
-        const comments = await gh(
-          `/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issue.number}/comments?per_page=100`,
-        );
-        return comments.map((c) => c.body);
-      },
+      listIssueComments: async () =>
+        (await listAllComments()).map((c) => c.body),
     },
   );
 
@@ -306,11 +349,13 @@ async function main() {
 
   // Comment back only if this exact ticket isn't already announced, so a
   // re-label doesn't add a second identical comment.
-  const comments = await gh(
-    `/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issue.number}/comments?per_page=100`,
-  );
+  // Compare parsed keys, not substrings: `includes('OPIK-12')` is also true of
+  // a comment announcing OPIK-123, which would suppress a genuinely needed
+  // announcement.
+  const comments = await listAllComments();
   const announced = comments.some(
-    (c) => c.body?.includes(COMMENT_MARKER) && c.body.includes(key),
+    (c) =>
+      c.body?.includes(COMMENT_MARKER) && parseTicketKeys(c.body).includes(key),
   );
 
   if (announced) {
@@ -372,7 +417,7 @@ async function reportFailure(message) {
 
   try {
     const path = `/repos/${REPO_OWNER}/${REPO_NAME}/issues/${ISSUE_NUMBER}/comments`;
-    const existing = await gh(`${path}?per_page=100`);
+    const existing = await listAllComments({ fresh: true });
     const prior = existing.find((c) => c.body?.includes(FAILURE_MARKER));
 
     if (prior) {

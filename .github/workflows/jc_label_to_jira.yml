@@ -33,10 +33,20 @@ permissions:
 
 jobs:
   sync:
-    # Only the JC label triggers a sync; every other label event is a no-op.
+    # Two gates:
+    #
+    #  - `vars.JC_SYNC_ENABLED` must be 'true'. Merging this while the n8n
+    #    workflow still reacts to the same label would have both producers
+    #    create their own ticket, and GitHub concurrency cannot serialise an
+    #    external system. The variable is the cutover switch: set it only once
+    #    n8n is confirmed off. It gates the manual path too, so a dispatch
+    #    cannot bypass it.
+    #  - the label must be exactly `JC` (case-sensitive, matching the repo
+    #    label); every other label event is a no-op.
     if: >-
-      github.event_name == 'workflow_dispatch'
-      || github.event.label.name == 'JC'
+      vars.JC_SYNC_ENABLED == 'true'
+      && (github.event_name == 'workflow_dispatch'
+          || github.event.label.name == 'JC')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

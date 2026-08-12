@@ -138,6 +138,15 @@ test('parseTicketKeys returns every distinct key in order', () => {
   assert.deepEqual(parseTicketKeys(''), []);
 });
 
+test('parseTicketKeys does not match a shorter key by prefix', () => {
+  // The announcement check keys off this. A substring test would treat a
+  // comment announcing OPIK-123 as announcing OPIK-12 and skip a needed post.
+  const body = '**Jira Ticket Created:** [OPIK-123](https://x/browse/OPIK-123)';
+  assert.ok(body.includes('OPIK-12'), 'substring match is the trap');
+  assert.deepEqual(parseTicketKeys(body), ['OPIK-123']);
+  assert.ok(!parseTicketKeys(body).includes('OPIK-12'));
+});
+
 // --- dedupe ---------------------------------------------------------------
 
 const ISSUE = {

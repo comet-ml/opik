@@ -6,13 +6,10 @@ ticket in the `OPIK` Jira project and comments the link back on the issue.
 This directory holds the resolution logic for that sync. See
 [OPIK-7833](https://comet-ml.atlassian.net/browse/OPIK-7833).
 
-> **Status: complete and verified, not yet enabled.** The sync works end to end
-> and is wired to the `JC` label. Two things are needed to turn it on, both
-> outside this repo: the three config values below, and switching off the
-> existing n8n workflow that reacts to the same label.
->
-> **Do not merge this while n8n is still live** — both would react to the same
-> label and each would create its own ticket.
+> **Status: complete and verified, off by default.** The sync works end to end
+> and is wired to the `JC` label, but the job will not run until
+> `vars.JC_SYNC_ENABLED` is `'true'`. Merging is therefore safe while n8n is
+> still live; see the cutover checklist at the bottom.
 
 ## Files
 
@@ -29,9 +26,16 @@ The workflow is [`.github/workflows/jc_label_to_jira.yml`](../../workflows/jc_la
 
 | Name | Kind | Purpose |
 |---|---|---|
+| `JC_SYNC_ENABLED` | variable | Must be `'true'` or the job does not run. The cutover switch. |
 | `JC_JIRA_BASE_URL` | variable | e.g. `https://comet-ml.atlassian.net` |
 | `JC_JIRA_USER_EMAIL` | secret | Jira account the tickets are created as |
 | `JC_JIRA_API_TOKEN` | secret | Atlassian API token for that account |
+
+`JC_SYNC_ENABLED` exists because merging cannot be the thing that turns this on:
+while the n8n workflow still reacts to the same label, both producers would
+create their own ticket, and GitHub's concurrency group cannot serialise an
+external system. Set it only once n8n is confirmed off. It gates the manual path
+too, so a `workflow_dispatch` cannot bypass it.
 
 Use a service account, not a personal token: the reporter on every synced ticket
 is whoever owns the credential, and a personal token breaks when it is rotated
@@ -64,12 +68,14 @@ Re-run **JC Label to Jira** from the Actions tab with the issue number.
 
 ## Cutover checklist
 
-1. Create the Jira service account and add the three config values above.
-2. Disable the n8n workflow that currently reacts to the `JC` label (n8n lives
+1. Create the Jira service account and add the config values above, leaving
+   `JC_SYNC_ENABLED` unset.
+2. Merge this. With the switch off, nothing runs — merging is safe on its own.
+3. Disable the n8n workflow that currently reacts to the `JC` label (n8n lives
    at `n8n.dev.comet.com`; the deployment is in `comet-gitops`). Nothing in this
    repo can turn it off.
-3. Merge this.
-4. Apply `JC` to one issue and confirm a single ticket, a single remote link, and
+4. Set `JC_SYNC_ENABLED` to `true`.
+5. Apply `JC` to one issue and confirm a single ticket, a single remote link, and
    one comment.
 5. Optionally backfill: run the workflow manually against previously-labeled
    issues to attach remote links to the ~50 legacy tickets, upgrading them to the
