@@ -34,19 +34,10 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         this.clientConfig = clientConfig;
     }
 
-    // Fresh VertexAI per call, owned by the returned wrapper which closes it — reclaiming the GAX threads it holds.
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-
-        VertexAI vertexAI = buildVertexAI(apiKey);
-        try {
-            GenerationConfig generationConfig = getGenerationConfig(request);
-            GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
-            return new CloseableVertexAiChatModel(new VertexAiGeminiChatModel(generativeModel, generationConfig),
-                    vertexAI);
-        } catch (RuntimeException e) {
-            closeSuppressing(vertexAI, e);
-            throw e;
-        }
+        return buildOwnedClient(apiKey, request,
+                (generativeModel, generationConfig, vertexAI) -> new CloseableVertexAiChatModel(
+                        new VertexAiGeminiChatModel(generativeModel, generationConfig), vertexAI));
     }
 
     private GenerativeModel getGenerativeModel(ChatCompletionRequest request, VertexAI vertexAI,
@@ -60,17 +51,28 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     CloseableVertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
+        return buildOwnedClient(apiKey, request,
+                (generativeModel, generationConfig, vertexAI) -> new CloseableVertexAiStreamingChatModel(
+                        new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig), vertexAI));
+    }
 
+    // Fresh VertexAI per call, handed to the wrapper that owns and closes it; closed here if setup fails first.
+    private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
+            OwnedClientFactory<T> factory) {
         VertexAI vertexAI = buildVertexAI(apiKey);
         try {
             GenerationConfig generationConfig = getGenerationConfig(request);
             GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
-            return new CloseableVertexAiStreamingChatModel(
-                    new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig), vertexAI);
+            return factory.create(generativeModel, generationConfig, vertexAI);
         } catch (RuntimeException e) {
             closeSuppressing(vertexAI, e);
             throw e;
         }
+    }
+
+    @FunctionalInterface
+    private interface OwnedClientFactory<T> {
+        T create(GenerativeModel generativeModel, GenerationConfig generationConfig, VertexAI vertexAI);
     }
 
     private InternalServerErrorException failWithError(Exception e) {
