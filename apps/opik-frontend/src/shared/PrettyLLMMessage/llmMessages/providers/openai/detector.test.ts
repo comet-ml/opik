@@ -90,6 +90,44 @@ describe("detectOpenAIFormat", () => {
       expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
     });
 
+    it("should reject message-list output with malformed tool calls", () => {
+      for (const toolCall of [null, "invalid tool call", 42]) {
+        const data = {
+          messages: [
+            {
+              role: "assistant",
+              content: "The response is still renderable",
+              tool_calls: [toolCall],
+            },
+          ],
+        };
+
+        expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);
+      }
+    });
+
+    it("should detect message-list output with valid tool calls", () => {
+      const data = {
+        messages: [
+          {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: {
+                  name: "get_weather",
+                  arguments: '{"city":"Paris"}',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
+    });
+
     it("should reject invalid output format", () => {
       const data = { invalid: "format" };
       expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);

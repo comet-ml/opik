@@ -19,6 +19,19 @@ interface OpenAIChoice {
   index?: number;
 }
 
+const isOpenAIToolCall = (toolCall: unknown): boolean => {
+  if (!toolCall || typeof toolCall !== "object") return false;
+
+  const functionCall = (toolCall as Record<string, unknown>).function;
+  if (!functionCall || typeof functionCall !== "object") return false;
+
+  const functionData = functionCall as Record<string, unknown>;
+  return (
+    typeof functionData.name === "string" &&
+    typeof functionData.arguments === "string"
+  );
+};
+
 /**
  * Checks if a message object has the OpenAI message format structure
  */
@@ -36,6 +49,13 @@ const isOpenAIMessage = (msg: unknown): msg is OpenAIMessage => {
   // Content can be string, array, null, or undefined (for tool_calls)
   // Tool messages should have content
   if (m.role === "tool" && m.content === undefined) return false;
+
+  if (
+    m.tool_calls !== undefined &&
+    (!Array.isArray(m.tool_calls) || !m.tool_calls.every(isOpenAIToolCall))
+  ) {
+    return false;
+  }
 
   return true;
 };

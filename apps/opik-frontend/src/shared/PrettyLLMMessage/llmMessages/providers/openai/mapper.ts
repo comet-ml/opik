@@ -33,9 +33,7 @@ interface OpenAIInputAudioContent {
 }
 
 type OpenAIContentItem =
-  | OpenAITextContent
-  | OpenAIImageContent
-  | OpenAIInputAudioContent;
+  OpenAITextContent | OpenAIImageContent | OpenAIInputAudioContent;
 
 interface OpenAIToolCall {
   id: string;
@@ -108,6 +106,28 @@ interface OpenAICustomOutputFormat {
 }
 
 type OpenAIDirectArrayInput = OpenAIMessage[];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object";
+
+const isMappableOpenAIMessage = (message: unknown): message is OpenAIMessage =>
+  isRecord(message) && typeof message.role === "string";
+
+const isMappableOpenAIMessageList = (
+  data: unknown,
+): data is OpenAIMessageListData =>
+  isRecord(data) &&
+  Array.isArray(data.messages) &&
+  data.messages.length > 0 &&
+  data.messages.every(isMappableOpenAIMessage);
+
+const isMappableOpenAIOutput = (data: unknown): data is OpenAIOutputData =>
+  isRecord(data) &&
+  Array.isArray(data.choices) &&
+  data.choices.length > 0 &&
+  data.choices.every(
+    (choice) => isRecord(choice) && isMappableOpenAIMessage(choice.message),
+  );
 
 /**
  * Generates a deterministic ID for a message
@@ -241,32 +261,36 @@ const processMultimodalContent = (
  * Maps tool calls to code block descriptors with formatted JSON arguments.
  */
 const mapToolCalls = (
-  toolCalls: OpenAIToolCall[],
+  toolCalls: unknown[],
   blocks: LLMBlockDescriptor[],
 ): void => {
   toolCalls.forEach((toolCall) => {
-    // Guard: skip if function is missing or invalid
+    const functionCall =
+      isRecord(toolCall) && isRecord(toolCall.function)
+        ? toolCall.function
+        : undefined;
+    const functionName = functionCall?.name;
+    const functionArguments = functionCall?.arguments;
+
     if (
-      !toolCall.function ||
-      typeof toolCall.function !== "object" ||
-      !toolCall.function.name ||
-      typeof toolCall.function.arguments !== "string"
+      typeof functionName !== "string" ||
+      typeof functionArguments !== "string"
     ) {
-      // Use safe fallback
       blocks.push({
         blockType: "code",
         component: PrettyLLMMessage.CodeBlock,
         props: {
           code: "",
-          label: toolCall.function?.name ?? `unknown tool`,
+          label:
+            typeof functionName === "string" ? functionName : "unknown tool",
         },
       });
       return;
     }
 
-    let formattedArgs = toolCall.function.arguments;
+    let formattedArgs = functionArguments;
     try {
-      const parsed = JSON.parse(toolCall.function.arguments);
+      const parsed = JSON.parse(functionArguments);
       formattedArgs = JSON.stringify(parsed, null, 2);
     } catch {
       // Keep original if not parseable
@@ -277,7 +301,7 @@ const mapToolCalls = (
       component: PrettyLLMMessage.CodeBlock,
       props: {
         code: formattedArgs,
-        label: toolCall.function.name,
+        label: functionName,
       },
     });
   });
@@ -391,7 +415,7 @@ const buildContentBlocks = (
   }
 
   // Handle tool calls (assistant requesting tools)
-  if (toolCalls && toolCalls.length > 0) {
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
     mapToolCalls(toolCalls, blocks);
   }
 
@@ -504,7 +528,7 @@ const mapOpenAIMessageList = (
   data: OpenAIMessageListData,
   prefix: string,
 ): LLMMapperResult => {
-  if (!data.messages || !Array.isArray(data.messages)) {
+  if (!isMappableOpenAIMessageList(data)) {
     return { messages: [] };
   }
 
@@ -522,7 +546,7 @@ const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult =>
  * Maps OpenAI output format to LLMMapperResult
  */
 const mapOpenAIOutput = (data: OpenAIOutputData): LLMMapperResult => {
-  if (!data.choices || !Array.isArray(data.choices)) {
+  if (!isMappableOpenAIOutput(data)) {
     return { messages: [] };
   }
 
@@ -645,23 +669,18 @@ export const mapOpenAIMessages: FormatMapper = (data, prettifyConfig) => {
   }
 
   if (isOutput) {
+    if (isMappableOpenAIMessageList(data)) {
+      return mapOpenAIMessageList(data, "output");
+    }
+
     // Check for custom output format { text: "...", usage: {...}, ... }
-    if (
-      typeof data === "object" &&
-      "text" in data &&
-      typeof (data as OpenAICustomOutputFormat).text === "string"
-    ) {
-      return mapCustomOutputFormat(data as OpenAICustomOutputFormat);
+    if (isRecord(data) && "text" in data && typeof data.text === "string") {
+      return mapCustomOutputFormat(data as unknown as OpenAICustomOutputFormat);
     }
 
     // Standard format { choices: [...] }
-    if (typeof data === "object" && "choices" in data) {
-      return mapOpenAIOutput(data as OpenAIOutputData);
-    }
-
-    // OpenWebUI stores the completed conversation as { messages: [...] }
-    if (typeof data === "object" && "messages" in data) {
-      return mapOpenAIMessageList(data as OpenAIMessageListData, "output");
+    if (isMappableOpenAIOutput(data)) {
+      return mapOpenAIOutput(data);
     }
   }
 

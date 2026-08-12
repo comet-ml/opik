@@ -205,6 +205,77 @@ describe("mapOpenAIMessages", () => {
         );
       }
     });
+
+    it("should keep rendering messages with malformed tool calls", () => {
+      for (const toolCall of [null, "invalid tool call", 42]) {
+        const data = {
+          messages: [
+            {
+              role: "assistant",
+              content: "The response is still renderable",
+              tool_calls: [toolCall],
+            },
+          ],
+        };
+
+        expect(() =>
+          mapOpenAIMessages(data, { fieldType: "output" }),
+        ).not.toThrow();
+
+        const result = mapOpenAIMessages(data, { fieldType: "output" });
+        expect(result.messages).toHaveLength(1);
+        expect(result.messages[0].blocks[0].blockType).toBe("text");
+      }
+    });
+
+    it("should preserve valid tool-call rendering", () => {
+      const data = {
+        messages: [
+          {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: {
+                  name: "get_weather",
+                  arguments: '{"city":"Paris"}',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("code");
+      if (result.messages[0].blocks[0].blockType === "code") {
+        expect(result.messages[0].blocks[0].props.label).toBe("get_weather");
+        expect(result.messages[0].blocks[0].props.code).toContain('"city"');
+      }
+    });
+
+    it("should prioritize a valid message list over text or choices", () => {
+      const messages = [
+        { role: "user", content: "What is Opik?" },
+        { role: "assistant", content: "An observability platform." },
+      ];
+      const payloads = [
+        { messages, text: "Summary only" },
+        { messages, choices: [] },
+        { messages, choices: [null] },
+      ];
+
+      for (const data of payloads) {
+        const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+        expect(result.messages).toHaveLength(2);
+        expect(result.messages[0].role).toBe("user");
+        expect(result.messages[1].role).toBe("assistant");
+      }
+    });
   });
 
   describe("Edge cases", () => {
