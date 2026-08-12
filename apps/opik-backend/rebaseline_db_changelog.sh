@@ -95,6 +95,20 @@ if [[ ! -f "$CONFIG" ]]; then
   exit 2
 fi
 
+# Connection details for the probe. These MUST mirror what the packaged config.yml resolves for
+# `databaseAnalyticsMigrations`, because that is the datasource Liquibase writes through — and the
+# defaults are per-variable, not all-or-nothing. Omitting just ANALYTICS_DB_MIGRATIONS_PASS, say,
+# leaves Liquibase authenticating as 'opik' while a probe reading the bare variable would send an
+# empty password. A default-only deployment sets none of them and Liquibase still connects fine, so
+# a probe without these fallbacks would refuse a recovery that is perfectly safe.
+#
+# Keep these in lockstep with config.yml. If they drift, the check verifies one database while the
+# re-baseline writes to another, which is the guard failing open.
+PROBE_URL="${ANALYTICS_DB_MIGRATIONS_URL:-jdbc:clickhouse://localhost:8123/opik}"
+PROBE_USER="${ANALYTICS_DB_MIGRATIONS_USER:-opik}"
+PROBE_PASS="${ANALYTICS_DB_MIGRATIONS_PASS:-opik}"
+PROBE_DATABASE="${ANALYTICS_DB_DATABASE_NAME:-opik}"
+
 # Count the tables in the analytics schema over ClickHouse's HTTP interface, using the same
 # connection details the migrations themselves run under. `curl` is in the image for the RDS cert
 # bundle, so this adds no dependency; there is no MySQL client, which is why 'db' has no probe.
@@ -110,7 +124,7 @@ fi
 # Echo `-1` on anything unparseable or unreachable, so a probe that cannot answer never reads as
 # "0 tables" — the count is a safety gate, and an unknown must never look like an empty schema.
 analytics_table_count() {
-  local url="${ANALYTICS_DB_MIGRATIONS_URL:-}" scheme rest hostport count
+  local url="$PROBE_URL" scheme rest hostport count
   [[ -z "$url" ]] && { echo "-1"; return; }
 
   # Only the exact 'jdbc:clickhouse:' prefix — that is all the legacy migrations driver accepts
@@ -143,9 +157,9 @@ analytics_table_count() {
   [[ "$hostport" == *:* ]] || { echo "-1"; return; }
 
   count="$(curl -sS -m 30 \
-    -u "${ANALYTICS_DB_MIGRATIONS_USER:-}:${ANALYTICS_DB_MIGRATIONS_PASS:-}" \
+    -u "${PROBE_USER}:${PROBE_PASS}" \
     --data-urlencode "query=SELECT count() FROM system.tables WHERE database = {db:String}" \
-    --data-urlencode "param_db=${ANALYTICS_DB_DATABASE_NAME:-opik}" \
+    --data-urlencode "param_db=${PROBE_DATABASE}" \
     --get "${scheme}://${hostport}/" 2>/dev/null)" || { echo "-1"; return; }
 
   [[ "$count" =~ ^[0-9]+$ ]] || { echo "-1"; return; }
@@ -237,7 +251,7 @@ elif [[ "$tables_before" -lt 0 ]]; then
   echo "⚠️  Proceeding unverified — the ClickHouse table count could not be read."
 elif [[ "$pending_count" -gt 0 ]] \
   && (( tables_before * 100 < pending_count * MIN_TABLES_PER_PENDING_CHANGESET_PERCENT )); then
-  echo "❌ Refusing to re-baseline: '${ANALYTICS_DB_DATABASE_NAME:-opik}' has only ${tables_before} table(s)," >&2
+  echo "❌ Refusing to re-baseline: '${PROBE_DATABASE}' has only ${tables_before} table(s)," >&2
   echo "   against ${pending_count} pending changeset(s). The schema is not built, so this is not a lost" >&2
   echo "   ledger over an intact schema — it is an empty database." >&2
   echo >&2

@@ -259,12 +259,16 @@ Pass `--yes` to skip the confirmation prompt in an automated runbook; the schema
 
 The same applies to `--config`. The re-baseline connects through the config file you pass, while the schema check reads the `ANALYTICS_DB_MIGRATIONS_*` environment variables — these describe the same database only for the packaged `config.yml`, which resolves from exactly those variables. With any other config the check could verify a different database than the one being written, so the script refuses unless you add `--force-unverified`.
 
-If you prefer to run the underlying commands directly, the script is a thin wrapper around Dropwizard's migration commands:
+If you prefer to run the underlying commands directly, these are the Dropwizard migration commands the script drives:
 
 ```bash
 java -jar opik-backend-$OPIK_VERSION.jar dbAnalytics status --verbose config.yml
 java -jar opik-backend-$OPIK_VERSION.jar dbAnalytics fast-forward --all config.yml
 ```
+
+<Callout intent="warning">
+  The second command is an **unguarded write**. Run on its own it performs the re-baseline with none of the script's safeguards: no schema check (so it will happily mark every migration applied against an empty database), no confirmation prompt, no re-check that the pending set did not move while you were reading it, and no verification afterwards that the ledger is actually clean and the schema untouched. Prefer the script; reach for these only when you cannot run it, and work through the checklist above first.
+</Callout>
 
 <Callout intent="info">
 `fast-forward --all` is Liquibase's `changelogSync` — it marks every pending changeset as applied without running it. Restoring the changelog from a backup of a **same-version** deployment also works, but the re-baseline avoids needing one, and avoids the risk of importing a ledger from a different schema version.

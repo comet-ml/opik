@@ -98,10 +98,13 @@ chmod +x "$stub_dir/java"
 # assert what the JDBC parser resolved to.
 cat >"$stub_dir/curl" <<'STUB'
 #!/usr/bin/env bash
+prev=""
 for arg in "$@"; do
 	case "$arg" in
 	http://* | https://*) echo "$arg" >>"${STUB_CURL_URLS:?}" ;;
 	esac
+	[ "$prev" = "-u" ] && echo "$arg" >>"${STUB_CURL_CREDS:?}"
+	prev="$arg"
 done
 after=""
 if [ -e "${STUB_JAVA_LOG:-}.synced" ] && [ -n "${TABLE_COUNT_AFTER:-}" ]; then
@@ -119,9 +122,11 @@ chmod +x "$stub_dir/curl"
 reset_log() {
 	STUB_JAVA_LOG="$stub_dir/java.log"
 	STUB_CURL_URLS="$stub_dir/curl-urls.log"
-	export STUB_JAVA_LOG STUB_CURL_URLS
+	STUB_CURL_CREDS="$stub_dir/curl-creds.log"
+	export STUB_JAVA_LOG STUB_CURL_URLS STUB_CURL_CREDS
 	: >"$STUB_JAVA_LOG"
 	: >"$STUB_CURL_URLS"
+	: >"$STUB_CURL_CREDS"
 	rm -f "$STUB_JAVA_LOG.synced"
 }
 wrote_ledger() { grep -qE 'fast-forward --all [^-]' "$STUB_JAVA_LOG"; }
@@ -224,18 +229,86 @@ expect_url "embedded http protocol" "jdbc:clickhouse:http://host:8123/opik" "htt
 
 # Prefixes the legacy migrations driver does NOT accept must refuse here too. Verifying a database
 # Liquibase cannot connect to would bless a schema the write never reaches.
-expect_url "rejects the jdbc:ch alias" "jdbc:ch:https://host:8443" ""
-expect_url "rejects jdbc:clickhouses:" "jdbc:clickhouses://secure.example.com:9440/opik" ""
+# expect_rejected_url <name> <migrations-url>
+# An empty curl log alone would also be satisfied by the script dying for an unrelated reason, so
+# assert the whole boundary: no probe attempted, AND the guard's own exit 2 and message.
+expect_rejected_url() {
+	local name="$1" url="$2" out status probed
+	reset_log
+	set +e
+	out="$(ANALYTICS_DB_MIGRATIONS_URL="$url" PENDING=149 TABLE_COUNT=27 "$SCRIPT" --yes 2>&1)"
+	status=$?
+	set -e
+	probed="$(head -1 "$STUB_CURL_URLS" 2>/dev/null || true)"
+	if [[ -n "$probed" ]]; then
+		fail "$name" "expected no probe to be attempted" "probed: $probed"
+	elif [[ "$status" != 2 ]]; then
+		fail "$name" "expected exit 2 from the unverifiable guard, got $status" "output: $out"
+	elif ! printf '%s' "$out" | grep -qF "Could not read the table count"; then
+		fail "$name" "expected the 'Could not read the table count' refusal" "output: $out"
+	elif wrote_ledger; then
+		fail "$name" "the script reached 'fast-forward --all'"
+	else
+		pass "$name"
+	fi
+}
 
-# The driver throws "port is missed or wrong" on a portless URL and defines no default, so probing
-# one would hit port 80/443 — a different service — and report a count for the wrong database.
-expect_url "rejects a portless URL" "jdbc:clickhouse://clickhouse/opik" ""
-expect_url "rejects a portless URL with ssl=true" "jdbc:clickhouse://host/opik?ssl=true" ""
+# Prefixes the legacy migrations driver does not accept, and portless URLs it rejects with "port is
+# missed or wrong" — probing either would verify a database the write never reaches.
+expect_rejected_url "rejects the jdbc:ch alias" "jdbc:ch:https://host:8443"
+expect_rejected_url "rejects jdbc:clickhouses:" "jdbc:clickhouses://secure.example.com:9440/opik"
+expect_rejected_url "rejects a portless URL" "jdbc:clickhouse://clickhouse/opik"
+expect_rejected_url "rejects a portless URL with ssl=true" "jdbc:clickhouse://host/opik?ssl=true"
 
 # An unparseable URL must refuse, not probe a garbage host — the count gates a destructive write.
 reset_log
 ANALYTICS_DB_MIGRATIONS_URL="not-a-jdbc-url" PENDING=149 TABLE_COUNT=27 \
 	expect "refuses an unparseable migrations URL" 2 "Could not read the table count" -- --yes
+
+# A default-only deployment sets none of the ANALYTICS_DB_MIGRATIONS_* variables, and Liquibase
+# still connects through config.yml's per-variable fallbacks. The probe must resolve the same ones,
+# or it refuses a recovery that is perfectly safe. Each variable falls back independently, so an
+# omitted password must not leave the probe authenticating as empty while Liquibase uses 'opik'.
+reset_log
+(
+	unset ANALYTICS_DB_MIGRATIONS_URL
+	PENDING=0 TABLE_COUNT=27 "$SCRIPT" --dry-run >/dev/null 2>&1 || true
+)
+got="$(head -1 "$STUB_CURL_URLS" 2>/dev/null || true)"
+if [[ "$got" == "http://localhost:8123/" ]]; then
+	pass "unset URL falls back to the config.yml default"
+else
+	fail "unset URL falls back to the config.yml default" \
+		"expected probe URL: http://localhost:8123/" "actual: ${got:-<none>}"
+fi
+
+reset_log
+(
+	unset ANALYTICS_DB_MIGRATIONS_USER ANALYTICS_DB_MIGRATIONS_PASS ANALYTICS_DB_DATABASE_NAME
+	PENDING=0 TABLE_COUNT=27 "$SCRIPT" --dry-run >/dev/null 2>&1 || true
+)
+creds="$(head -1 "$STUB_CURL_CREDS" 2>/dev/null || true)"
+if [[ "$creds" == "opik:opik" ]]; then
+	pass "unset credentials fall back to the config.yml defaults"
+else
+	fail "unset credentials fall back to the config.yml defaults" \
+		"expected -u opik:opik" "actual: ${creds:-<none>}"
+fi
+
+reset_log
+set +e
+(
+	unset ANALYTICS_DB_MIGRATIONS_URL ANALYTICS_DB_MIGRATIONS_USER ANALYTICS_DB_MIGRATIONS_PASS ANALYTICS_DB_DATABASE_NAME
+	PENDING=149 TABLE_COUNT=27 "$SCRIPT" --yes >/dev/null 2>&1
+)
+default_only_status=$?
+set -e
+if [[ "$default_only_status" == 0 ]]; then
+	pass "a default-only deployment recovers without --force-unverified"
+else
+	fail "a default-only deployment recovers without --force-unverified" \
+		"expected exit 0, got $default_only_status"
+fi
 
 echo
 echo "non-default config"
