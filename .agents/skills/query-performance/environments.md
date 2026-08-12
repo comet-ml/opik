@@ -33,15 +33,22 @@ it dies with the JVM. The flow:
    environment refuses: log flushing, cache drops, stopping merges, and `INSERT`.
 4. **Extrapolate to 20k / 500k / 1M** driving entities, each scale in **its own workspace id** so the
    ladders coexist and one rendering can be pointed at any of them. Derive the parameters from the
-   fixtures rather than inventing them.
-5. **Validate the shape before trusting a number**: compare the container's `EXPLAIN indexes = 1`
-   against a real environment's and check that pruning *behaves* the same way — the same conditions
-   reach the index, the same key prefixes are hit, the same skip indexes engage or are ignored.
-   Absolute granule and mark counts will not match across different data volumes, so compare
-   behaviour, not ratios. Pruning that behaves differently means the seeding is wrong; fix it before
-   continuing.
+   fixtures rather than inventing them. Seed each scale **once**: the container is reused across runs,
+   so a repeated seed does not overwrite anything — with deterministic ids it appends another row per
+   id, which the queries read as another *version of the same logical key*, silently inflating the
+   dedup depth you were trying to hold fixed. Re-running the test adds fixture rows the same way. If a
+   scale needs rebuilding, seed it into a new workspace id rather than repeating it, and do not clear
+   the query tables — the fixtures the extrapolation is derived from live there.
+5. **Validate the data, then the shape.** First confirm the fixture is what you intended — entity
+   count, rows per logical key, part count — because a drifted fixture is otherwise invisible and
+   every number after it is wrong. Then compare the container's `EXPLAIN indexes = 1` against a real
+   environment's and check that pruning *behaves* the same way — the same conditions reach the index,
+   the same key prefixes are hit, the same skip indexes engage or are ignored. Absolute granule and
+   mark counts will not match across different data volumes, so compare behaviour, not ratios.
+   Pruning that behaves differently means the seeding is wrong; fix it before continuing.
 
 **What the extrapolation must preserve**, because each of these moves the plan: fanout (child rows per
 entity); rows per logical key, which is what dedup steps pay for; part count; cardinality of the
 columns used as prunes; skew, so the worst-case entity exists; array and string density; and insert
-order relative to the primary key. Ids must be unique and, ideally, reproducible across re-seeds.
+order relative to the primary key. Ids must be unique and, ideally, reproducible, so a scale can be
+rebuilt from scratch in a fresh workspace id.
