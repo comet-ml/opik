@@ -275,15 +275,11 @@ public class ChatCompletionService {
      * @return a detailed error message combining the base message with exception details
      */
     private String buildDetailedErrorMessage(Throwable throwable) {
-        return buildDetailedErrorMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
-    }
-
-    private String buildDetailedErrorMessage(String baseMessage, Throwable throwable) {
         String exceptionDetails = extractErrorDetails(throwable);
         if (StringUtils.isNotBlank(exceptionDetails)) {
-            return baseMessage + ": " + exceptionDetails;
+            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": " + exceptionDetails;
         }
-        return baseMessage;
+        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
     }
 
     /**
