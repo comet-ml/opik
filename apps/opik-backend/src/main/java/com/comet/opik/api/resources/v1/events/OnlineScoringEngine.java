@@ -1127,7 +1127,7 @@ public class OnlineScoringEngine {
      * Surfaces a judge answer we could not read on the rule's logs. Without it a failed parse looked like a
      * successful run to the user: no score, no explanation (OPIK-7354).
      */
-    public static void logUnreadableResponse(
+    public static void logResponseIssues(
             Logger userFacingLogger, ParsedFeedbackScores parsed, String entityType, Object entityId) {
         if (!parsed.unreadableScoreNames().isEmpty()) {
             userFacingLogger.warn(
@@ -1212,7 +1212,7 @@ public class OnlineScoringEngine {
                         .toList();
                 var omittedFields = structuredResponse.size() - topLevelKeys.size();
                 // Not wrapped in quotes: each name is quoted by renderFields.
-                log.warn("Judge answer had no recognisable score fields: fields={} size='{}'",
+                log.warn("Judge answer had no recognisable score fields: fields=\"{}\" size='{}'",
                         renderFields(topLevelKeys, omittedFields), sizeOf(content));
                 return ParsedFeedbackScores.problem(
                         ResponseProblem.Kind.NO_SCORE_FIELDS, "", topLevelKeys, omittedFields);
@@ -1235,6 +1235,10 @@ public class OnlineScoringEngine {
         }
 
         void accept(String declaredName, JsonNode scoreNode) {
+            if (StringUtils.isBlank(declaredName)) {
+                log.warn("Skipping a score the rule declares with a blank name");
+                return;
+            }
             // Names match case-insensitively, so several keys in one answer can claim the same declared score.
             // Both would be inserted and collapse to whichever row wins on timestamp, so the first one wins.
             if (!claimedNames.add(declaredName)) {

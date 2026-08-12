@@ -30,7 +30,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Parsing of a judge's answer into feedback scores. Split from {@link OnlineScoringEngineTest} because
- * {@code toFeedbackScores} and {@code logUnreadableResponse} are pure static functions: that class starts
+ * {@code toFeedbackScores} and {@code logResponseIssues} are pure static functions: that class starts
  * MySQL, ClickHouse and Zookeeper for its end-to-end tests, which these assertions do not need.
  */
 @DisplayName("OnlineScoringEngine parsing")
@@ -53,12 +53,12 @@ class OnlineScoringEngineParsingTest {
         return List.of(schema(name, LlmAsJudgeOutputSchemaType.BOOLEAN, "test"));
     }
 
-    /** The reason logUnreadableResponse writes for this result — i.e. what the user actually reads. */
+    /** The reason logResponseIssues writes for this result — i.e. what the user actually reads. */
     private static String renderedWarning(OnlineScoringEngine.ParsedFeedbackScores parsed) {
         var logger = Mockito.mock(Logger.class);
-        OnlineScoringEngine.logUnreadableResponse(logger, parsed, "traceId", "t-1");
+        OnlineScoringEngine.logResponseIssues(logger, parsed, "traceId", "t-1");
         var reason = ArgumentCaptor.forClass(Object.class);
-        // Matched on the message: logUnreadableResponse also warns about unusable values.
+        // Matched on the message: logResponseIssues also warns about unusable values.
         Mockito.verify(logger).warn(Mockito.contains("Nothing was scored"), Mockito.any(), Mockito.any(),
                 reason.capture());
         return String.valueOf(reason.getValue());
@@ -296,6 +296,19 @@ class OnlineScoringEngineParsingTest {
                 ".*Its fields were ('field_\\d+', ){9}'field_\\d+' and 490 more;.*");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   "})
+    @DisplayName("never store a score under a blank name the rule declared")
+    void whenTheRuleDeclaresABlankScoreName_thenNothingIsStored(String blankName) {
+        // The schema validates @NotNull but not @NotBlank, and an item built in code skips bean validation,
+        // so without a guard the flat fallback would copy a blank name onto a stored score.
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"score\": true, \"reason\": \"r\"}"),
+                List.of(schema(blankName, LlmAsJudgeOutputSchemaType.BOOLEAN, "d")));
+
+        assertThat(parsed.scores()).isEmpty();
+    }
+
     @Test
     @DisplayName("report an undeclared score the judge returned alongside a declared one")
     void whenAnswerMixesDeclaredAndUndeclaredScores_thenReportsTheUndeclaredOne() {
@@ -311,7 +324,7 @@ class OnlineScoringEngineParsingTest {
         assertThat(parsed.problem()).isNull();
 
         var logger = Mockito.mock(Logger.class);
-        OnlineScoringEngine.logUnreadableResponse(logger, parsed, "traceId", "t-1");
+        OnlineScoringEngine.logResponseIssues(logger, parsed, "traceId", "t-1");
         Mockito.verify(logger).warn(Mockito.contains("does not declare that name"),
                 Mockito.eq("'Wisdom'"), Mockito.eq("traceId"), Mockito.eq("t-1"));
     }
@@ -480,10 +493,10 @@ class OnlineScoringEngineParsingTest {
 
     @Test
     @DisplayName("say nothing to the user when the judge's answer was fully readable")
-    void logUnreadableResponse_whenNothingIsWrong_thenSaysNothing() {
+    void logResponseIssues_whenNothingIsWrong_thenSaysNothing() {
         var logger = Mockito.mock(Logger.class);
 
-        OnlineScoringEngine.logUnreadableResponse(logger,
+        OnlineScoringEngine.logResponseIssues(logger,
                 OnlineScoringEngine.ParsedFeedbackScores.builder().nullScoreNames(List.of("Skipped")).build(),
                 "traceId", "t-1");
 
@@ -492,10 +505,10 @@ class OnlineScoringEngineParsingTest {
 
     @Test
     @DisplayName("warn the user naming the score whose value could not be read")
-    void logUnreadableResponse_whenValueUnusable_thenWarnsNamingTheScore() {
+    void logResponseIssues_whenValueUnusable_thenWarnsNamingTheScore() {
         var logger = Mockito.mock(Logger.class);
 
-        OnlineScoringEngine.logUnreadableResponse(logger,
+        OnlineScoringEngine.logResponseIssues(logger,
                 OnlineScoringEngine.ParsedFeedbackScores.builder().unreadableScoreNames(List.of("Tone")).build(),
                 "traceId", "t-1");
 
@@ -508,12 +521,12 @@ class OnlineScoringEngineParsingTest {
 
     @Test
     @DisplayName("warn the user with the reason when nothing could be scored")
-    void logUnreadableResponse_whenAnswerUnusable_thenWarnsWithTheReason() {
+    void logResponseIssues_whenAnswerUnusable_thenWarnsWithTheReason() {
         var logger = Mockito.mock(Logger.class);
         var problem = new OnlineScoringEngine.ResponseProblem(
                 OnlineScoringEngine.ResponseProblem.Kind.NOT_JSON, "Sure! Let me help.", List.of(), 0);
 
-        OnlineScoringEngine.logUnreadableResponse(logger,
+        OnlineScoringEngine.logResponseIssues(logger,
                 OnlineScoringEngine.ParsedFeedbackScores.builder().problem(problem).build(),
                 "traceId", "t-1");
 

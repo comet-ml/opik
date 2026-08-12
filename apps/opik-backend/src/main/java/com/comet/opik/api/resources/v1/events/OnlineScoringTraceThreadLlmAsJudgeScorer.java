@@ -371,7 +371,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                         }
                         var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse, message.code().schema());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "threadId", threadId);
-                        OnlineScoringEngine.logUnreadableResponse(userFacingLogger, parsed, "threadId", threadId);
+                        OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "threadId", threadId);
                         return parsed.scores().stream()
                                 .map(item -> FeedbackScoresMapper.INSTANCE.map(
                                         item.toBuilder()

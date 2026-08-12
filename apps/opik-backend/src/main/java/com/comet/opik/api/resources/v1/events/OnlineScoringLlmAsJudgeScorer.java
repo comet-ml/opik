@@ -382,7 +382,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 .toFeedbackScores(chatResponse, message.llmAsJudgeCode().schema())
                                 .withUserFacingNames(message.scoreNameMapping());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "traceId", trace.id());
-                        OnlineScoringEngine.logUnreadableResponse(userFacingLogger, parsed, "traceId", trace.id());
+                        OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "traceId", trace.id());
                         return parsed.scores().stream()
                                 .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
                                         .categoryName(message.categoryName())

@@ -220,7 +220,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                         var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse,
                                 message.llmAsJudgeCode().schema());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "spanId", span.id());
-                        OnlineScoringEngine.logUnreadableResponse(userFacingLogger, parsed, "spanId", span.id());
+                        OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "spanId", span.id());
                         return parsed.scores().stream()
                                 .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
                                         .id(span.id())
