@@ -39,9 +39,17 @@ it dies with the JVM. The flow:
    dedup depth you were trying to hold fixed. Re-running the test adds fixture rows the same way. If a
    scale needs rebuilding, seed it into a new workspace id rather than repeating it, and do not clear
    the query tables — the fixtures the extrapolation is derived from live there.
+   Note what the workspace id does and does not isolate: it separates results and lets a prefix prune
+   work, but coexisting scales still share parts, partitions and merge history, so physical numbers are
+   measured against a table holding every scale at once. Absolute parts and granule totals are
+   therefore comparable only within one seeded state. When the growth curve *across* scales is the
+   point, give each scale its own rig — a separate database or container — rather than reading
+   cross-scale physical costs off a shared one.
 5. **Validate the data, then the shape.** First confirm the fixture is what you intended — entity
-   count, rows per logical key, part count — because a drifted fixture is otherwise invisible and
-   every number after it is wrong. Then compare the container's `EXPLAIN indexes = 1` against a real
+   count, rows per logical key, active part count — because a drifted fixture is otherwise invisible
+   and every number after it is wrong. Count **raw stored rows**, scoped to the workspace you seeded:
+   a deduplicated count is blind to precisely the extra version a repeated seed creates, so it would
+   pass a drifted fixture as clean. Then compare the container's `EXPLAIN indexes = 1` against a real
    environment's and check that pruning *behaves* the same way — the same conditions reach the index,
    the same key prefixes are hit, the same skip indexes engage or are ignored. Absolute granule and
    mark counts will not match across different data volumes, so compare behaviour, not ratios.
