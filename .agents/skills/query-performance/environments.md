@@ -36,7 +36,10 @@ it dies with the JVM. The flow:
    fixtures rather than inventing them. Seed each scale **once**: the container is reused across runs,
    so a repeated seed does not overwrite anything — with deterministic ids it appends another row per
    id, which the queries read as another *version of the same logical key*, silently inflating the
-   dedup depth you were trying to hold fixed. Re-running the test adds fixture rows the same way. If a
+   dedup depth you were trying to hold fixed. Re-running the *test* is a different hazard: fixture
+   helpers usually mint a fresh workspace and fresh ids per run, so a rerun adds volume and parts to
+   the shared tables rather than versions of an existing key. Both distort a measurement; only the
+   first distorts dedup depth, so know which one you are looking at. If a
    scale needs rebuilding, seed it into a new workspace id rather than repeating it, and do not clear
    the query tables — the fixtures the extrapolation is derived from live there.
    Note what the workspace id does and does not isolate: it separates results and lets a prefix prune
@@ -49,7 +52,9 @@ it dies with the JVM. The flow:
    count, rows per logical key, active part count — because a drifted fixture is otherwise invisible
    and every number after it is wrong. Count **raw stored rows**, scoped to the workspace you seeded:
    a deduplicated count is blind to precisely the extra version a repeated seed creates, so it would
-   pass a drifted fixture as clean. Then compare the container's `EXPLAIN indexes = 1` against a real
+   pass a drifted fixture as clean. Row counts and version depth are exact; part count is not, because
+   background merges and insert ordering move it — hold merges while measuring, or read it as a
+   magnitude rather than an equality. Then compare the container's `EXPLAIN indexes = 1` against a real
    environment's and check that pruning *behaves* the same way — the same conditions reach the index,
    the same key prefixes are hit, the same skip indexes engage or are ignored. Absolute granule and
    mark counts will not match across different data volumes, so compare behaviour, not ratios.
