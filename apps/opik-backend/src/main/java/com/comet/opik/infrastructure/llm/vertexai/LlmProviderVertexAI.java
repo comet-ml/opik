@@ -53,27 +53,32 @@ public class LlmProviderVertexAI implements LlmProviderService {
                         return;
                     }
 
-                    // Async: close once the stream terminates (onComplete/onError), exactly once — not when this returns.
+                    // Release the client's GAX threads exactly once, once the stream terminates
+                    // (onComplete/onError) — never when this task returns, which is before the first token.
                     var closed = new AtomicBoolean(false);
                     Runnable closeOnce = () -> {
                         if (closed.compareAndSet(false, true)) {
-                            try {
-                                client.close();
-                            } catch (RuntimeException e) {
-                                log.warn("Failed to close Vertex AI streaming client", e);
-                            }
+                            client.close();
                         }
                     };
+                    // The consumer gets exactly one terminal; a handler that throws is logged, not propagated.
+                    var terminalReached = new AtomicBoolean(false);
                     Runnable handleCloseAndRelease = () -> {
+                        terminalReached.set(true);
                         try {
                             handleClose.run();
+                        } catch (Exception e) {
+                            log.warn("Vertex AI stream close handler failed", e);
                         } finally {
                             closeOnce.run();
                         }
                     };
                     Consumer<Throwable> handleErrorAndRelease = throwable -> {
+                        terminalReached.set(true);
                         try {
                             handleError.accept(throwable);
+                        } catch (Exception e) {
+                            log.warn("Vertex AI stream error handler failed", e);
                         } finally {
                             closeOnce.run();
                         }
@@ -85,8 +90,22 @@ public class LlmProviderVertexAI implements LlmProviderService {
                                 new ChunkedResponseHandler(handleMessage, handleCloseAndRelease, handleErrorAndRelease,
                                         request.model()));
                     } catch (Exception e) {
-                        handleErrorAndRelease.accept(e);
-                        handleCloseAndRelease.run();
+                        if (terminalReached.compareAndSet(false, true)) {
+                            // Synchronous failure before any terminal — deliver the error and close the stream.
+                            try {
+                                handleError.accept(e);
+                            } catch (Exception ex) {
+                                log.warn("Vertex AI stream error handler failed", ex);
+                            }
+                            try {
+                                handleClose.run();
+                            } catch (Exception ex) {
+                                log.warn("Vertex AI stream close handler failed", ex);
+                            }
+                        } else {
+                            log.warn("Vertex AI stream failed after a terminal callback had already run", e);
+                        }
+                        closeOnce.run();
                     }
                 });
     }

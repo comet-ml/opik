@@ -38,12 +38,15 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
 
         VertexAI vertexAI = buildVertexAI(apiKey);
-
-        GenerationConfig generationConfig = getGenerationConfig(request);
-
-        GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
-
-        return new CloseableVertexAiChatModel(new VertexAiGeminiChatModel(generativeModel, generationConfig), vertexAI);
+        try {
+            GenerationConfig generationConfig = getGenerationConfig(request);
+            GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
+            return new CloseableVertexAiChatModel(new VertexAiGeminiChatModel(generativeModel, generationConfig),
+                    vertexAI);
+        } catch (RuntimeException e) {
+            closeSuppressing(vertexAI, e);
+            throw e;
+        }
     }
 
     private GenerativeModel getGenerativeModel(ChatCompletionRequest request, VertexAI vertexAI,
@@ -59,17 +62,28 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             @NonNull ChatCompletionRequest request) {
 
         VertexAI vertexAI = buildVertexAI(apiKey);
-
-        GenerationConfig generationConfig = getGenerationConfig(request);
-
-        GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
-
-        return new CloseableVertexAiStreamingChatModel(
-                new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig), vertexAI);
+        try {
+            GenerationConfig generationConfig = getGenerationConfig(request);
+            GenerativeModel generativeModel = getGenerativeModel(request, vertexAI, generationConfig);
+            return new CloseableVertexAiStreamingChatModel(
+                    new VertexAiGeminiStreamingChatModel(generativeModel, generationConfig), vertexAI);
+        } catch (RuntimeException e) {
+            closeSuppressing(vertexAI, e);
+            throw e;
+        }
     }
 
     private InternalServerErrorException failWithError(Exception e) {
         return new InternalServerErrorException("Failed to create GoogleCredentials", e);
+    }
+
+    // Close a client we built but couldn't hand to a wrapping owner, so it can't outlive the failure.
+    private static void closeSuppressing(VertexAI vertexAI, RuntimeException failure) {
+        try {
+            vertexAI.close();
+        } catch (Exception e) {
+            failure.addSuppressed(e);
+        }
     }
 
     private GenerationConfig getGenerationConfig(ChatCompletionRequest request) {

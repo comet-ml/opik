@@ -8,10 +8,12 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
 // Streaming counterpart to CloseableVertexAiChatModel: owns the VertexAI and closes it (caller closes on stream terminal).
+@Slf4j
 class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoCloseable {
 
     private final @NonNull StreamingChatModel delegate;
@@ -42,9 +44,14 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
         return delegate.supportedCapabilities();
     }
 
+    // Best-effort: a close failure must never surface on an otherwise-successful call.
     @Override
     public void close() {
-        vertexAI.close();
+        try {
+            vertexAI.close();
+        } catch (Exception e) {
+            log.warn("Failed to close Vertex AI streaming client", e);
+        }
     }
 
     VertexAI vertexAI() {

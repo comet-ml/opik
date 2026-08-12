@@ -8,10 +8,12 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
 // Owns the VertexAI and closes it; the langchain4j model can't (its two-arg ctor nulls its handle, so its close() is a no-op).
+@Slf4j
 class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
 
     private final @NonNull ChatModel delegate;
@@ -42,9 +44,14 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
         return delegate.supportedCapabilities();
     }
 
+    // Best-effort: a close failure must never surface on an otherwise-successful call.
     @Override
     public void close() {
-        vertexAI.close();
+        try {
+            vertexAI.close();
+        } catch (Exception e) {
+            log.warn("Failed to close Vertex AI client", e);
+        }
     }
 
     VertexAI vertexAI() {
