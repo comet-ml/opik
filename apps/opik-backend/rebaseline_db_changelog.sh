@@ -208,8 +208,17 @@ pending_fingerprint() {
 reviewed_pending="$(pending_fingerprint)"
 pending_count="$(printf '%s' "$reviewed_pending" | grep -c . || true)"
 
+# Whether the probe's connection details can be trusted to describe the database Liquibase writes
+# to. Decided BEFORE probing: the probe authenticates with PROBE_USER/PROBE_PASS against the
+# endpoint the env vars name, so running it under a config we are about to reject would send
+# migration credentials to a host this invocation was never entitled to contact.
+PROBE_TRUSTED="false"
+if [[ "$DATABASE" == "dbAnalytics" && "$CONFIG" == "$DEFAULT_CONFIG" ]]; then
+  PROBE_TRUSTED="true"
+fi
+
 tables_before="-1"
-if [[ "$DATABASE" == "dbAnalytics" ]]; then
+if [[ "$PROBE_TRUSTED" == "true" ]]; then
   tables_before="$(analytics_table_count)"
 fi
 
@@ -230,7 +239,8 @@ elif [[ "$CONFIG" != "$DEFAULT_CONFIG" ]]; then
   # env vars instead, and the two only describe the same database because the packaged config.yml
   # resolves from exactly those vars. A different config breaks that equivalence, so the probe could
   # bless one database while the ledger is written to another — the guard failing open, which is
-  # worse than no guard. Refuse rather than verify something we may not be writing to.
+  # worse than no guard. Refuse rather than verify something we may not be writing to. No probe has
+  # run at this point, so nothing was sent anywhere.
   if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
     echo "❌ Cannot verify the schema when using a non-default config ('${CONFIG}')." >&2
     echo "   The re-baseline connects through that file, while this check reads the" >&2

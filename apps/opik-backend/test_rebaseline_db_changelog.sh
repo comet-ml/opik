@@ -99,13 +99,35 @@ chmod +x "$stub_dir/java"
 cat >"$stub_dir/curl" <<'STUB'
 #!/usr/bin/env bash
 prev=""
+query="" param_db=""
 for arg in "$@"; do
 	case "$arg" in
 	http://* | https://*) echo "$arg" >>"${STUB_CURL_URLS:?}" ;;
+	query=*) query="${arg#query=}" ;;
+	param_db=*) param_db="${arg#param_db=}" ;;
 	esac
 	[ "$prev" = "-u" ] && echo "$arg" >>"${STUB_CURL_CREDS:?}"
 	prev="$arg"
 done
+
+# Assert the probe's contract with ClickHouse, not just that some request happened: the count must
+# be scoped to a bound database parameter. A probe that dropped param_db, inlined the name, or
+# counted something other than system.tables would otherwise pass every test in this suite.
+{
+	printf 'query=%s\n' "$query"
+	printf 'param_db=%s\n' "$param_db"
+} >>"${STUB_CURL_QUERY:?}"
+case "$query" in
+*"system.tables"*"database = {db:String}"*) ;;
+*)
+	echo "STUB-CONTRACT-VIOLATION: query did not count system.tables by bound db param: $query" >&2
+	exit 90
+	;;
+esac
+if [ -z "$param_db" ]; then
+	echo "STUB-CONTRACT-VIOLATION: param_db was not sent" >&2
+	exit 90
+fi
 after=""
 if [ -e "${STUB_JAVA_LOG:-}.synced" ] && [ -n "${TABLE_COUNT_AFTER:-}" ]; then
 	after="$TABLE_COUNT_AFTER"
@@ -123,10 +145,12 @@ reset_log() {
 	STUB_JAVA_LOG="$stub_dir/java.log"
 	STUB_CURL_URLS="$stub_dir/curl-urls.log"
 	STUB_CURL_CREDS="$stub_dir/curl-creds.log"
-	export STUB_JAVA_LOG STUB_CURL_URLS STUB_CURL_CREDS
+	STUB_CURL_QUERY="$stub_dir/curl-query.log"
+	export STUB_JAVA_LOG STUB_CURL_URLS STUB_CURL_CREDS STUB_CURL_QUERY
 	: >"$STUB_JAVA_LOG"
 	: >"$STUB_CURL_URLS"
 	: >"$STUB_CURL_CREDS"
+	: >"$STUB_CURL_QUERY"
 	rm -f "$STUB_JAVA_LOG.synced"
 }
 wrote_ledger() { grep -qE 'fast-forward --all [^-]' "$STUB_JAVA_LOG"; }
@@ -311,6 +335,28 @@ else
 fi
 
 echo
+echo "probe contract"
+# The stub fails the run outright on a malformed probe (see STUB-CONTRACT-VIOLATION), so every
+# passing test above already depends on this. Assert it directly too, including that the database
+# is sent as a bound parameter rather than inlined, and that it tracks ANALYTICS_DB_DATABASE_NAME.
+reset_log
+PENDING=0 TABLE_COUNT=27 ANALYTICS_DB_DATABASE_NAME="custom_db" \
+	"$SCRIPT" --dry-run >/dev/null 2>&1 || true
+sent_query="$(grep '^query=' "$STUB_CURL_QUERY" | head -1 || true)"
+sent_db="$(grep '^param_db=' "$STUB_CURL_QUERY" | head -1 || true)"
+if [[ "$sent_query" == *"count() FROM system.tables"* && "$sent_query" == *"database = {db:String}"* ]]; then
+	pass "probe counts system.tables via a bound db parameter"
+else
+	fail "probe counts system.tables via a bound db parameter" "actual: ${sent_query:-<none>}"
+fi
+if [[ "$sent_db" == "param_db=custom_db" ]]; then
+	pass "probe scopes the count to ANALYTICS_DB_DATABASE_NAME"
+else
+	fail "probe scopes the count to ANALYTICS_DB_DATABASE_NAME" \
+		"expected param_db=custom_db" "actual: ${sent_db:-<none>}"
+fi
+
+echo
 echo "non-default config"
 # The write connects through CONFIG; the probe reads the ANALYTICS_DB_MIGRATIONS_* env vars. Those
 # describe the same database only because the packaged config.yml resolves from exactly those vars.
@@ -323,6 +369,26 @@ if wrote_ledger; then
 	fail "refuses a non-default --config before writing" "the script reached 'fast-forward --all'"
 else
 	pass "refuses a non-default --config before writing"
+fi
+# The probe authenticates with the migration credentials against the endpoint the env vars name.
+# Under a config we are about to reject, that endpoint is not necessarily one this invocation is
+# entitled to contact, so the refusal has to come first — nothing may be sent before it.
+if [[ -s "$STUB_CURL_CREDS" || -s "$STUB_CURL_URLS" ]]; then
+	fail "sends no credentials before refusing a non-default --config" \
+		"probed: $(head -1 "$STUB_CURL_URLS" 2>/dev/null)" \
+		"credentials: $(head -1 "$STUB_CURL_CREDS" 2>/dev/null)"
+else
+	pass "sends no credentials before refusing a non-default --config"
+fi
+# Forcing past the refusal must not re-enable the probe either — the config is still untrusted.
+reset_log
+PENDING=149 TABLE_COUNT=27 \
+	"$SCRIPT" --config custom.yml --yes --force-unverified >/dev/null 2>&1 || true
+if [[ -s "$STUB_CURL_CREDS" ]]; then
+	fail "sends no credentials under a forced non-default --config" \
+		"credentials: $(head -1 "$STUB_CURL_CREDS")"
+else
+	pass "sends no credentials under a forced non-default --config"
 fi
 reset_log
 PENDING=149 TABLE_COUNT=27 \
