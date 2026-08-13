@@ -40,7 +40,17 @@ name: PR Test Radar (trigger)
 # does not apply: this job checks out nothing and runs nothing from the PR. It
 # reads event metadata and makes one API call.
 on:
-  pull_request_target:
+  # Suppressed with a rationale, following labeler.yml in this repo, whose
+  # justification is the same: no job here checks out or executes PR-controlled
+  # code. This one reads event metadata and makes a single API call
+  # (`gh workflow run`) — it never touches the PR's file contents.
+  #
+  # zizmor is right in general — pull_request_target with a checkout of the PR is
+  # a well-known RCE — but for this workflow `pull_request` is the LESS safe
+  # option, since it would run a PR-editable `run:` block with a cross-repo PAT in
+  # scope. See the dangerous-triggers audit rationale:
+  # https://docs.zizmor.sh/audits/#dangerous-triggers
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, synchronize, ready_for_review]
 
 # Read-only here: everything that writes (the PR comment, the label) is done by
