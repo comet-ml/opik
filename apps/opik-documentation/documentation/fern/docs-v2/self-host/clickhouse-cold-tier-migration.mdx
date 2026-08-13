@@ -9,8 +9,6 @@ title: ClickHouse Cold-Tier Migration
 
 > **Important:** If you're using or considering the enterprise version of Opik or Comet, reach out to Sales@comet.com to access the enterprise deployment documentation.
 
-# ClickHouse Cold-Tier Migration
-
 Opik's ClickHouse can use a tiered storage policy: hot data on a local disk and cold data on S3, fronted by a local read-through cache. When you enable the cold tier, the Helm chart runs a migration job that makes the transition safe and automatic. This matters most on a cluster running **more than one ClickHouse replica**, where enabling the cold tier can otherwise wedge a replica for several minutes.
 
 <Note>
