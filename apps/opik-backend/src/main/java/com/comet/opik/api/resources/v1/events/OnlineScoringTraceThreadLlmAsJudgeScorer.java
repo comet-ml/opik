@@ -369,8 +369,9 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                             + "stopped investigating and wrapped up with the scores gathered so far.",
                                     costGuard.limitUsd(), threadId, costGuard.spentUsd());
                         }
-                        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
+                        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse, message.code().schema());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "threadId", threadId);
+                        OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "threadId", threadId);
                         return parsed.scores().stream()
                                 .map(item -> FeedbackScoresMapper.INSTANCE.map(
                                         item.toBuilder()

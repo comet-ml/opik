@@ -10,6 +10,10 @@ import { loadEnvConfig } from '../config/env.config';
  * `source=sdk`), and marks every column that carries that scope with a
  * "(30d)" suffix in its header. Columns describing the project itself (Name,
  * Last updated, Created) are unscoped and carry no suffix.
+ *
+ * The list is also paginated at 10 rows and a real workspace runs to dozens of
+ * projects, so a spec must `search()` down to its own namespace before
+ * asserting on rows — otherwise its rows may simply be on another page.
  */
 export class ProjectsPage {
   constructor(private readonly page: Page) {}
@@ -59,6 +63,16 @@ export class ProjectsPage {
       .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
   }
 
+  /**
+   * A row addressed by project id (the DataTable's `data-row-id`) rather than
+   * by name. Preferred when the spec already holds the id from a seeded
+   * fixture: it survives a rename and cannot match a second project whose name
+   * merely contains this one.
+   */
+  projectRowById(projectId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${projectId}"]`);
+  }
+
   columnHeader(label: string): Locator {
     return this.page.getByRole('columnheader', { name: label, exact: true });
   }
@@ -73,5 +87,34 @@ export class ProjectsPage {
    */
   statCell(name: string, columnId: string): Locator {
     return this.projectRow(name).locator(`[data-cell-id$="_${columnId}"]`);
+  }
+
+  /**
+   * Deletes via the row's actions menu and confirms. The confirm dialog's
+   * heading and its confirm button share the accessible name "Delete project",
+   * so the dialog is scoped by heading first (ConfirmDialog is a generic shared
+   * component with no data-testid of its own).
+   */
+  async deleteProjectById(projectId: string): Promise<void> {
+    return test.step(`Delete project "${projectId}" via row actions`, async () => {
+      const row = this.projectRowById(projectId);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+
+      const confirm = this.deleteProjectConfirmDialog;
+      await confirm.waitFor({ state: 'visible' });
+      await confirm.getByRole('button', { name: 'Delete project' }).click();
+
+      await confirm.waitFor({ state: 'hidden' });
+      await row.waitFor({ state: 'detached' });
+    });
+  }
+
+  /** The destructive confirm dialog raised by the row's Delete action. */
+  get deleteProjectConfirmDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Delete project' }),
+    });
   }
 }

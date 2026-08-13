@@ -184,6 +184,16 @@ export function makeBackendClient(apiKey: string | null = null) {
       }
     },
 
+    async getProject(id: string): Promise<ProjectRef | null> {
+      try {
+        const p = await opik.api.projects.getProjectById(id);
+        return { id: String(p.id), name: p.name as string };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
     async listProjectsWithPrefix(prefix: string): Promise<ProjectRef[]> {
       const page = await opik.api.projects.findProjects({ name: prefix, size: 500 });
       const content = page.content ?? [];
