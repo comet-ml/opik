@@ -14,11 +14,21 @@ import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
 import {
   EXPERIMENT_TAB,
+  ExperimentTabId,
   getAvailableExperimentTabs,
+  isExperimentTabId,
   isTestSuiteExperiment,
 } from "@/lib/experiments";
 import CompareExperimentsDetails from "@/v2/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExperimentLogsTab from "@/v2/pages/CompareExperimentsPage/ExperimentLogsTab/ExperimentLogsTab";
+
+const EXPERIMENT_TAB_LABELS: Record<ExperimentTabId, string> = {
+  [EXPERIMENT_TAB.items]: "Results",
+  [EXPERIMENT_TAB.insights]: "Insights",
+  [EXPERIMENT_TAB.config]: "Configuration",
+  [EXPERIMENT_TAB.scores]: "Feedback scores",
+  [EXPERIMENT_TAB.logs]: "Logs",
+};
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
@@ -51,13 +61,10 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     [memorizedExperiments],
   );
 
-  const showScoresTab = availableTabs.includes(EXPERIMENT_TAB.scores);
-
-  const effectiveTab = availableTabs.includes(
-    tab as (typeof availableTabs)[number],
-  )
-    ? (tab as string)
-    : EXPERIMENT_TAB.items;
+  const effectiveTab =
+    isExperimentTabId(tab) && availableTabs.includes(tab)
+      ? tab
+      : EXPERIMENT_TAB.items;
 
   const renderContent = () => {
     return (
@@ -69,48 +76,38 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
       >
         <PageBodyStickyContainer direction="horizontal" limitWidth>
           <TabsList variant="segmented-primary">
-            <TabsTrigger variant="segmented-primary" value="items">
-              Results
-            </TabsTrigger>
-            {!isTestSuite && (
-              <TabsTrigger variant="segmented-primary" value="insights">
-                Insights
+            {availableTabs.map((tabId) => (
+              <TabsTrigger
+                key={tabId}
+                variant="segmented-primary"
+                value={tabId}
+              >
+                {EXPERIMENT_TAB_LABELS[tabId]}
               </TabsTrigger>
-            )}
-            <TabsTrigger variant="segmented-primary" value="config">
-              Configuration
-            </TabsTrigger>
-            {showScoresTab && (
-              <TabsTrigger variant="segmented-primary" value="scores">
-                Feedback scores
-              </TabsTrigger>
-            )}
-            <TabsTrigger variant="segmented-primary" value="logs">
-              Logs
-            </TabsTrigger>
+            ))}
           </TabsList>
         </PageBodyStickyContainer>
-        <TabsContent value="items">
+        <TabsContent value={EXPERIMENT_TAB.items}>
           <ExperimentItemsTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
             isTestSuite={isTestSuite}
           />
         </TabsContent>
-        {!isTestSuite && (
-          <TabsContent value="insights">
+        {availableTabs.includes(EXPERIMENT_TAB.insights) && (
+          <TabsContent value={EXPERIMENT_TAB.insights}>
             <ExperimentInsightsTab experimentsIds={experimentsIds} />
           </TabsContent>
         )}
-        <TabsContent value="config">
+        <TabsContent value={EXPERIMENT_TAB.config}>
           <ConfigurationTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
             isPending={isPending}
           />
         </TabsContent>
-        {showScoresTab && (
-          <TabsContent value="scores">
+        {availableTabs.includes(EXPERIMENT_TAB.scores) && (
+          <TabsContent value={EXPERIMENT_TAB.scores}>
             <ExperimentFeedbackScoresTab
               experimentsIds={experimentsIds}
               experiments={memorizedExperiments}
@@ -118,7 +115,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             />
           </TabsContent>
         )}
-        <TabsContent value="logs">
+        <TabsContent value={EXPERIMENT_TAB.logs}>
           <ExperimentLogsTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
