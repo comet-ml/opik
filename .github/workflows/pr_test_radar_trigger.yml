@@ -28,8 +28,19 @@ name: PR Test Radar (trigger)
 # seconds and a radar problem cannot mark anything on the PR red. (A `uses:` job
 # also cannot carry `continue-on-error` — GitHub rejects the file outright.)
 
+# `pull_request_target`, NOT `pull_request`. Dispatching to another repository
+# needs a PAT (GITHUB_TOKEN is scoped to this repo), and on a same-repo
+# `pull_request` run the workflow FILE is whatever the PR says it is — so a PR
+# could edit this `run:` block and use that PAT for anything. Flagged by review as
+# high severity, and correctly.
+#
+# `pull_request_target` runs the workflow definition from the BASE branch instead,
+# so the PR cannot alter what executes here. The usual danger of
+# pull_request_target — checking out and running PR code with secrets in scope —
+# does not apply: this job checks out nothing and runs nothing from the PR. It
+# reads event metadata and makes one API call.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
 
 # Read-only here: everything that writes (the PR comment, the label) is done by
@@ -68,19 +79,45 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
           PR: ${{ github.event.pull_request.number }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
         run: |
           # Cheap pre-filter, before spending even the radar's triage job. The
           # radar rejects these too (pr_surface.py sees no product surface), but
           # dependabot alone was 27 of 95 PRs in one week — not worth a runner
           # each. Anything subtler is the radar's judgement, not this file's.
+          # Two checks, because an exact-match allowlist silently misses any bot
+          # nobody thought of — review flagged `github-actions[bot]` specifically.
+          #   * the author TYPE GitHub itself reports ("Bot"), which needs no list
+          #   * the `[bot]` suffix, which catches App accounts either way
+          # CometActions is a normal user account that only opens generated PRs, so
+          # it still needs naming explicitly.
+          if [ "$AUTHOR_TYPE" = "Bot" ] || case "$AUTHOR" in *'[bot]') true ;; *) false ;; esac; then
+            echo "$AUTHOR is a bot account — skipping"
+            exit 0
+          fi
           case "$AUTHOR" in
-            dependabot|dependabot\[bot\]|app/dependabot|CometActions|renovate\[bot\])
-              echo "$AUTHOR is a bot that does not ship product behaviour — skipping"
+            dependabot|app/dependabot|CometActions)
+              echo "$AUTHOR opens only generated PRs — skipping"
               exit 0 ;;
           esac
 
           if [ -z "$GH_TOKEN" ]; then
             echo "::warning::GH_PAT_TO_ACCESS_GITHUB_API not available — the radar was not asked"
+            exit 0
+          fi
+
+          # The event payload is a snapshot from when the event fired. A PR can be
+          # converted back to draft, or closed, between then and now — and the
+          # radar's side effects (a label that deploys an environment, a comment)
+          # should not land on either. Re-read the live state; the radar re-reads
+          # it again itself before labelling.
+          STATE=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state,isDraft 2>/dev/null || echo '{}')
+          if [ "$(printf '%s' "$STATE" | jq -r '.isDraft // false')" = "true" ]; then
+            echo "opik#${PR} is a draft now — not asking the radar"
+            exit 0
+          fi
+          if [ "$(printf '%s' "$STATE" | jq -r '.state // empty')" != "OPEN" ]; then
+            echo "opik#${PR} is no longer open — not asking the radar"
             exit 0
           fi
 
