@@ -970,63 +970,68 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     </div>
   );
 
-  const filterRow =
-    selectedRows.length > 0 ? (
-      <SelectionActionBar
-        selectedCount={selectedRows.length}
-        onDeselectAll={() => setRowSelection({})}
-      >
-        <TracesActionsPanel
-          projectId={projectId}
-          projectName={projectName}
-          getDataForExport={getDataForExport}
-          selectedRows={selectedRows}
-          columnsToExport={columnsToExport}
-          type={type}
-          hideEvaluate
-          buttonVariant="ghostInverted"
-          buttonSize="2xs"
-        />
-      </SelectionActionBar>
-    ) : (
-      <FilterChipBar
-        chipsPinned={chipsPinned}
-        chipsUnpinned={chipsUnpinned}
-        values={chipValues}
-        managerOpen={chipManagerOpen}
-        onManagerOpenChange={setChipManagerOpen}
-        onApplyValue={applyChipValue}
-        onClearValue={clearChipValue}
-        onPinChip={pinChip}
-        onUnpinChip={unpinChip}
-        onClearAll={clearAllChips}
-        openChipId={openChipId}
-        onOpenChipIdChange={setOpenChipId}
-        prefix={
-          <div className="flex shrink-0 items-center gap-2">
-            <SearchInput
-              searchText={search as string}
-              setSearchText={setSearch}
-              placeholder="Search by anything"
-              className="w-[200px] shrink-0"
-              dimension="xs"
-            />
-            {scopeLabel && (
-              <TooltipWrapper content={scopeTooltip}>
-                <Tag
-                  size="md"
-                  variant="gray"
-                  className="flex max-w-[260px] items-center gap-1"
-                >
-                  <Lock className="size-3 shrink-0" />
-                  <span className="truncate">{scopeLabel}</span>
-                </Tag>
-              </TooltipWrapper>
-            )}
-          </div>
-        }
+  const hasSelection = selectedRows.length > 0;
+
+  const selectionBar = (
+    <SelectionActionBar
+      selectedCount={selectedRows.length}
+      onDeselectAll={() => setRowSelection({})}
+    >
+      <TracesActionsPanel
+        projectId={projectId}
+        projectName={projectName}
+        getDataForExport={getDataForExport}
+        selectedRows={selectedRows}
+        columnsToExport={columnsToExport}
+        type={type}
+        hideEvaluate
+        buttonVariant="ghostInverted"
+        buttonSize="2xs"
       />
-    );
+    </SelectionActionBar>
+  );
+
+  const chipBar = (
+    <FilterChipBar
+      chipsPinned={chipsPinned}
+      chipsUnpinned={chipsUnpinned}
+      values={chipValues}
+      managerOpen={chipManagerOpen}
+      onManagerOpenChange={setChipManagerOpen}
+      onApplyValue={applyChipValue}
+      onClearValue={clearChipValue}
+      onPinChip={pinChip}
+      onUnpinChip={unpinChip}
+      onClearAll={clearAllChips}
+      openChipId={openChipId}
+      onOpenChipIdChange={setOpenChipId}
+      prefix={
+        <div className="flex shrink-0 items-center gap-2">
+          <SearchInput
+            searchText={search as string}
+            setSearchText={setSearch}
+            placeholder="Search by anything"
+            className="w-[200px] shrink-0"
+            dimension="xs"
+          />
+          {scopeLabel && (
+            <TooltipWrapper content={scopeTooltip}>
+              <Tag
+                size="md"
+                variant="gray"
+                className="flex max-w-[260px] items-center gap-1"
+              >
+                <Lock className="size-3 shrink-0" />
+                <span className="truncate">{scopeLabel}</span>
+              </Tag>
+            </TooltipWrapper>
+          )}
+        </div>
+      }
+    />
+  );
+
+  const filterRow = hasSelection ? selectionBar : chipBar;
 
   const metricsSummary = viewConfig.showMetricsSummary ? (
     <MetricsSummary
@@ -1113,19 +1118,21 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
             {metricsSummary}
           </PageBodyStickyContainer>
         )}
+        {/* One row directly under the tabs, per the design: filters left, table controls right.
+            The negative top margin cancels TabsContent's own gap, the way the sibling tabs do. */}
         <PageBodyStickyContainer
-          className="flex flex-wrap items-center justify-end gap-x-8 gap-y-2 pt-4"
-          direction="horizontal"
-          limitWidth
-        >
-          {controls}
-        </PageBodyStickyContainer>
-        <PageBodyStickyContainer
-          className="py-3"
+          className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
           direction="bidirectional"
           limitWidth
         >
-          {filterRow}
+          {hasSelection ? (
+            <div className="w-full">{selectionBar}</div>
+          ) : (
+            <>
+              {chipBar}
+              {controls}
+            </>
+          )}
         </PageBodyStickyContainer>
         {renderTable({
           TableWrapper: PageBodyStickyTableWrapper,
