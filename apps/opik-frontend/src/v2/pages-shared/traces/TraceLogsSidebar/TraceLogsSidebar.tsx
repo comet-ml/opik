@@ -10,9 +10,6 @@ import TraceLogsView, {
   TraceLogsViewConfig,
 } from "@/v2/pages-shared/traces/TraceLogsView/TraceLogsView";
 
-export type { TraceLogsViewConfig };
-export { DEFAULT_TRACE_LOGS_VIEW_CONFIG, TLS_QUERY_PREFIX };
-
 type TraceLogsSidebarProps = {
   open: boolean;
   onClose: () => void;
@@ -44,7 +41,10 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     null,
   );
 
-  const [scopeFilters] = useQueryParam(`${TLS_QUERY_PREFIX}scope`, JsonParam);
+  const [scopeFilters] = useQueryParam<Filter[] | undefined>(
+    `${TLS_QUERY_PREFIX}scope`,
+    JsonParam,
+  );
   const [scopeLabel] = useQueryParam(
     `${TLS_QUERY_PREFIX}scopeLabel`,
     StringParam,
@@ -74,7 +74,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
           projectName={projectName}
           logsSource={logsSource}
           viewConfig={viewConfig}
-          scopeFilters={(scopeFilters ?? undefined) as Filter[] | undefined}
+          scopeFilters={scopeFilters ?? undefined}
           scopeLabel={scopeLabel ?? undefined}
           scopeTooltip={scopeTooltip}
           container={sheetContentRef}
