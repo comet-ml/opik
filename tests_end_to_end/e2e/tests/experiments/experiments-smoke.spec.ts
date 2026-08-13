@@ -2,7 +2,7 @@ import { test, expect } from '@e2e/fixtures';
 import { ExperimentsPage } from '@e2e/pom/experiments.page';
 
 test.describe('Experiments — smoke', { tag: ['@t1-smoke', '@area:experiments'] }, () => {
-  test('SDK-seeded experiment renders in list and shows per-item deterministic scores', { tag: ['@cap:experiments.list-experiments', '@cap:experiments.per-item-scores', '@cap:experiments.logs-tab', '@cap:experiments.copy-experiment-id'] }, async ({
+  test('SDK-seeded experiment renders in list, scores its items, and exposes its traces and ID', { tag: ['@cap:experiments.list-experiments', '@cap:experiments.per-item-scores', '@cap:experiments.logs-tab', '@cap:experiments.copy-experiment-id'] }, async ({
     experiment,
     project,
     page,
@@ -54,7 +54,8 @@ test.describe('Experiments — smoke', { tag: ['@t1-smoke', '@area:experiments']
       await expect(detail.logsTab, 'Logs tab is present').toBeVisible();
 
       await detail.openLogsTab();
-      await detail.waitForLogsTraceRow();
+      // Exactly one trace per seeded item — more would mean the experiment scope leaked.
+      await detail.waitForLogsTraceRows(experiment.items.length);
     });
   });
 });
