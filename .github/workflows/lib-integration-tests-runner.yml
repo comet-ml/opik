@@ -25,6 +25,7 @@ on:
           - haystack
           # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
           - dspy
+          - pydantic_ai
           - crewai_v0
           - crewai_v1
           - genai
@@ -170,6 +171,12 @@ jobs:
     uses: ./.github/workflows/lib-dspy-tests.yml
     secrets: inherit
 
+  pydantic_ai_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["pydantic_ai", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-pydantic-ai-tests.yml
+    secrets: inherit
+
   crewai_v0_tests:
     needs: [init_environment]
     if: contains(fromJSON('["crewai_v0", "all"]'), needs.init_environment.outputs.LIBS)
@@ -245,6 +252,7 @@ jobs:
       - haystack_tests
       # - guardrails_tests  # disabled: guardrails-ai is on PyPI quarantine
       - dspy_tests
+      - pydantic_ai_tests
       - crewai_v0_tests
       - crewai_v1_tests
       - genai_tests
@@ -293,6 +301,7 @@ jobs:
               "AISuite": "${{ needs.aisuite_tests.result }}",
               "Haystack": "${{ needs.haystack_tests.result }}",
               "DSPy": "${{ needs.dspy_tests.result }}",
+              "Pydantic AI": "${{ needs.pydantic_ai_tests.result }}",
               "CrewAI v0": "${{ needs.crewai_v0_tests.result }}",
               "CrewAI v1": "${{ needs.crewai_v1_tests.result }}",
               "GenAI": "${{ needs.genai_tests.result }}",

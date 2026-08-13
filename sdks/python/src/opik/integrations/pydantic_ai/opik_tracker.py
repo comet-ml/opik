@@ -1,19 +1,41 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeVar, overload
 
 from opentelemetry.sdk.trace import TracerProvider
-from pydantic_ai import Agent
-from pydantic_ai.models.instrumented import InstrumentationSettings
+from pydantic_ai import Agent, InstrumentationSettings
 
 from .opik_span_processor import OpikSpanProcessor
 
+AgentDepsT = TypeVar("AgentDepsT")
+OutputDataT = TypeVar("OutputDataT")
 
+
+@overload
 def track_pydantic_ai(
-    agent: Optional[Any] = None,
+    agent: Agent[AgentDepsT, OutputDataT],
     *,
     project_name: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
-) -> Optional[Any]:
+) -> Agent[AgentDepsT, OutputDataT]: ...
+
+
+@overload
+def track_pydantic_ai(
+    agent: None = None,
+    *,
+    project_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    tags: Optional[List[str]] = None,
+) -> None: ...
+
+
+def track_pydantic_ai(
+    agent: Optional[Agent[AgentDepsT, OutputDataT]] = None,
+    *,
+    project_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    tags: Optional[List[str]] = None,
+) -> Optional[Agent[AgentDepsT, OutputDataT]]:
     """Enable Opik tracing for Pydantic AI agents.
 
     Args:

@@ -134,25 +134,17 @@ result = agent.run_sync(
 
 More information on logging chat conversations can be found in the [Log conversations](/tracing/advanced/log_chat_conversations) section.
 
-## Enriching traces with metadata and prompts
+## Enriching traces with metadata
 
-The same `metadata` argument accepts a few reserved `opik.*` keys that Opik maps onto the trace and root span:
+The same `metadata` argument accepts reserved `opik.*` keys that Opik maps onto the trace and root span:
 
 - `opik.metadata` — a dictionary of custom metadata.
 - `opik.provider` — override the provider recorded on the run.
-- `opik.prompts` — a list of Opik prompts used for this run, to link the trace to your [prompt library](/prompt_engineering/managing_prompts_in_code).
 
 ```python
-import opik
-
-prompt = opik.Prompt(name="assistant", prompt="Be concise, reply with one sentence.")
-
 result = agent.run_sync(
     'Where does "hello world" come from?',
-    metadata={
-        "opik.metadata": {"experiment": "baseline"},
-        "opik.prompts": [prompt.__internal_api__to_info_dict__()],
-    },
+    metadata={"opik.metadata": {"experiment": "baseline"}},
 )
 ```
 
