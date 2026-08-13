@@ -654,7 +654,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
@@ -665,8 +665,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             placeholder={
               isTestSuite ? "Search test suite items" : "Search dataset items"
             }
-            className="w-[320px]"
-            dimension="sm"
+            className="w-[200px] shrink-0"
+            dimension="xs"
           />
           <FiltersButton
             columns={filterColumns}
@@ -674,6 +674,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             filters={filters}
             onChange={setFilters}
             layout="icon"
+            size="icon-2xs"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -683,10 +684,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             columnsToExport={columnsToExport}
             experiments={experiments}
           />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          <Separator orientation="vertical" className="mx-[2px] h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
+            size="icon-2xs"
           />
           <ColumnsButton
             columns={datasetColumnsData}
@@ -695,6 +697,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
+            layout="labeled"
+            size="2xs"
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
