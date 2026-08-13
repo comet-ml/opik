@@ -103,24 +103,38 @@ export class AnnotationQueuePage {
     return this.page.getByRole('tab', { name: 'Queue items' });
   }
 
-  /** Asserts the browser is on this queue's detail route. */
+  /**
+   * Asserts the browser is on this queue's detail route.
+   *
+   * Anchored on the full origin + workspace-scoped pathname, not a substring:
+   * an unanchored match would also accept a different workspace, an extra path
+   * prefix, or another host entirely, none of which mean navigation landed on
+   * the requested queue. Query strings are allowed (the page writes `tab=`).
+   */
   async expectOnQueueRoute(projectId: string, queueId: string): Promise<void> {
     return test.step(`Assert URL is the detail route for queue ${queueId}`, async () => {
-      await expect(this.page).toHaveURL(
-        new RegExp(`/projects/${projectId}/annotation-queues/${queueId}(\\?|$)`),
-      );
+      const env = loadEnvConfig();
+      const expected = `${env.baseUrl}/${env.workspace}/projects/${projectId}/annotation-queues/${queueId}`;
+      await expect(this.page).toHaveURL((url) => {
+        const actual = `${url.origin}${url.pathname}`.replace(/\/$/, '');
+        return actual === expected.replace(/\/$/, '');
+      });
     });
   }
 
   /**
    * A not-found signal for a queue that doesn't exist, matched on intent rather
    * than exact copy: any acceptable fix must say the queue is unavailable, but
-   * is free to word it differently from the SME route's NoDataView. Keep this
-   * broad so a correct fix flips the assertion green whatever wording it picks.
+   * is free to word it differently from the SME route's NoDataView.
+   *
+   * Deliberately excludes generic load-failure copy ("unable to load", "failed
+   * to load"): an items-fetch error would satisfy that while the queue itself is
+   * fine, so it would let an unrelated failure masquerade as the not-found state.
+   * Every alternative below asserts something about the QUEUE's existence.
    */
   get notFoundState(): Locator {
     return this.page
-      .getByText(/not available|not found|no longer exists|may not exist|unable to load/i)
+      .getByText(/queue (is )?not available|queue not found|no longer exists|may not exist/i)
       .first();
   }
 
