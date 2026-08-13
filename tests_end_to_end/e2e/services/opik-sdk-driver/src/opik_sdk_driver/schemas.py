@@ -85,6 +85,13 @@ class NestedTraceCreate(BaseModel):
     # and end_time unset, which the UI renders as Duration "NA" — the same shape
     # as the SDK's own not-yet-ended traces.
     duration_seconds: float | None = None
+    # Ages the whole trace by this many days: it gets a client-supplied UUIDv7
+    # id stamped at that instant, and its timestamps move back with it. Time
+    # windows on the read paths (notably GET /v1/private/projects/stats) are
+    # applied to the timestamp embedded in the id, not to start_time, so this
+    # is what places a trace deterministically inside or outside a rolling
+    # window. None keeps the SDK's own behaviour: a server-fresh id stamped now.
+    age_days: float | None = None
 
 
 class NestedTraceResponse(BaseModel):
@@ -124,6 +131,26 @@ class DatasetCreate(BaseModel):
 class DatasetResponse(BaseModel):
     id: str
     name: str
+
+
+class DatasetInsertItemsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    items: list[dict[str, Any]]
+    # Worker threads Dataset.insert uses to upload this call's batches. 1 (the
+    # SDK default) uploads them sequentially; >1 uploads them in parallel, and
+    # both paths must land in ONE dataset version with identical counters.
+    # Parallel upload needs a backend >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
+    # (2.2.8); against an older one the SDK silently falls back to sequential.
+    num_threads: int = 1
+    workspace: str | None = None
+
+
+class DatasetInsertItemsResponse(BaseModel):
+    dataset_id: str
+    inserted: int
 
 
 class ExperimentItemSeed(BaseModel):

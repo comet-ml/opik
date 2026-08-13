@@ -29,6 +29,25 @@ export interface DatasetItemRef {
   data: Record<string, unknown>;
 }
 
+/** One row of the dataset's Version history tab. */
+export interface DatasetVersionRef {
+  versionName: string;
+  itemsTotal: number;
+  itemsAdded: number;
+  itemsModified: number;
+  itemsDeleted: number;
+  isLatest: boolean;
+}
+
+/** The windowed stats one row of the Projects table renders. */
+export interface ProjectStatsRef {
+  projectId: string;
+  traceCount: number | null;
+  threadCount: number | null;
+  errorCount: number | null;
+  feedbackScores: Record<string, number>;
+}
+
 export interface ExperimentRefDetail {
   id: string;
   name: string;
@@ -236,6 +255,100 @@ export function makeBackendClient(apiKey: string | null = null) {
       return content.map((item) => ({
         id: String(item.id),
         data: (item.data ?? {}) as Record<string, unknown>,
+      }));
+    },
+
+    /**
+     * Versions of a dataset, newest first — the rows the Version history tab
+     * renders, including the item counters it shows in "Item count".
+     */
+    async getDatasetVersions(datasetId: string): Promise<DatasetVersionRef[]> {
+      const page = await opik.api.datasets.listDatasetVersions(datasetId, { size: 100 });
+      const content = page.content ?? [];
+      return content.map((v) => ({
+        versionName: String(v.versionName ?? ''),
+        itemsTotal: Number(v.itemsTotal ?? 0),
+        itemsAdded: Number(v.itemsAdded ?? 0),
+        itemsModified: Number(v.itemsModified ?? 0),
+        itemsDeleted: Number(v.itemsDeleted ?? 0),
+        isLatest: Boolean(v.isLatest),
+      }));
+    },
+
+    /**
+     * Every item id actually stored in the dataset, paged out in full. This is
+     * the ground truth a version's `items_total` is supposed to agree with, so
+     * it must not be capped at a page — hence the loop. `truncate` drops the
+     * item payloads we don't need, keeping a few-thousand-item read cheap.
+     */
+    async listDatasetItemIds(datasetId: string): Promise<string[]> {
+      const pageSize = 1000;
+      const ids: string[] = [];
+      for (let page = 1; ; page++) {
+        const result = await opik.api.datasets.getDatasetItems(datasetId, {
+          page,
+          size: pageSize,
+          truncate: true,
+        });
+        const content = result.content ?? [];
+        ids.push(...content.map((item) => String(item.id)));
+        if (content.length < pageSize) return ids;
+      }
+    },
+
+    /**
+     * Stats for the projects whose name matches `name`, optionally scoped to a
+     * time window — the exact call the v2 Projects table makes to fill its
+     * "(30d)" columns.
+     *
+     * Raw fetch rather than `opik.api.projects.getProjectStats`: the pinned TS
+     * SDK's request type has no from_time/to_time, and the window is the whole
+     * point here. Switch to the typed call once the SDK exposes them.
+     */
+    async getProjectStats(args: {
+      name: string;
+      fromTime?: Date;
+      toTime?: Date;
+    }): Promise<ProjectStatsRef[]> {
+      const params = new URLSearchParams({ name: args.name, size: '100' });
+      if (args.fromTime) params.set('from_time', args.fromTime.toISOString());
+      if (args.toTime) params.set('to_time', args.toTime.toISOString());
+
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'Comet-Workspace': env.workspace,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      const res = await fetch(`${env.apiBaseUrl}/v1/private/projects/stats?${params}`, {
+        headers,
+      });
+      if (!res.ok) {
+        throw new Error(
+          `GET /v1/private/projects/stats -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+        );
+      }
+      const body = (await res.json()) as {
+        content?: Array<{
+          project_id?: string;
+          trace_count?: number | null;
+          thread_count?: number | null;
+          error_count?: { count?: number | null } | null;
+          feedback_scores?: Array<{ name: string; value: number }> | null;
+        }>;
+      };
+      return (body.content ?? []).map((item) => ({
+        projectId: String(item.project_id ?? ''),
+        // Outside every seeded window the backend answers 200 with the metrics
+        // absent rather than zeroed, so null and 0 are genuinely different
+        // answers here and must not be collapsed.
+        traceCount: item.trace_count ?? null,
+        threadCount: item.thread_count ?? null,
+        errorCount: item.error_count?.count ?? null,
+        feedbackScores: Object.fromEntries(
+          (item.feedback_scores ?? []).map((s) => [s.name, Number(s.value)]),
+        ),
       }));
     },
 

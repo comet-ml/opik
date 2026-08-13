@@ -36,9 +36,10 @@ test.describe('Project deletion', { tag: ['@t2-cuj', '@area:projects'] }, () => 
 
     await test.step('Both projects are listed before the deletion', async () => {
       await projects.goto();
-      await projects.searchByName(testNamespace);
-      await expect(projects.projectRow(project.id)).toBeVisible();
-      await expect(projects.projectRow(control.id)).toBeVisible();
+      await projects.waitForReady();
+      await projects.search(testNamespace);
+      await expect(projects.projectRowById(project.id)).toBeVisible();
+      await expect(projects.projectRowById(control.id)).toBeVisible();
     });
 
     await test.step('The target project is readable and owns its trace', async () => {
@@ -50,19 +51,21 @@ test.describe('Project deletion', { tag: ['@t2-cuj', '@area:projects'] }, () => 
 
     await test.step('Delete the target project from the list', async () => {
       await projects.deleteProjectById(project.id);
-      await expect(projects.projectRow(project.id)).toHaveCount(0);
+      await expect(projects.projectRowById(project.id)).toHaveCount(0);
       await expect(
-        projects.projectRow(control.id),
+        projects.projectRowById(control.id),
         'deleting one project must not remove the others',
       ).toBeVisible();
     });
 
+    // The search term lives in the URL (`?search=`), so the reload comes back
+    // already filtered — no second search() call, which would wait forever for
+    // a refetch that an unchanged input never triggers.
     await test.step('The deleted project survives a reload (not just a stale table)', async () => {
       await page.reload();
       await projects.waitForReady();
-      await projects.searchByName(testNamespace);
-      await expect(projects.projectRow(project.id)).toHaveCount(0);
-      await expect(projects.projectRow(control.id)).toBeVisible();
+      await expect(projects.projectRowById(control.id)).toBeVisible();
+      await expect(projects.projectRowById(project.id)).toHaveCount(0);
     });
 
     await test.step('The project and its traces are unreadable through the API', async () => {

@@ -267,6 +267,8 @@ areas:
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       agent-graph-tab:        { covered: false }
       attachments-media:      { covered: false }
+      set-guardrail:          { covered: false, note: "SetGuardrailDialog — GUARDRAILS_ENABLED flag" }
+      guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
@@ -492,6 +494,7 @@ areas:
     specs:
       - datasets/dataset-crud-smoke.spec.ts
       - datasets/dataset-items.spec.ts
+      - datasets/dataset-version-counters.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
@@ -502,7 +505,7 @@ areas:
       bulk-delete-items:      { covered: true,  tier: t3-nightly }
       search-items:           { covered: true,  tier: t3-nightly }
       sdk-round-trip:         { covered: true,  tier: t1-smoke }
-      version-history-view:   { covered: false }
+      version-history-view:   { covered: true,  tier: t2-cuj }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
@@ -701,8 +704,9 @@ areas:
     spec_dir: projects
     specs:
       - projects/project-delete.spec.ts
+      - projects/projects-list-stats.spec.ts
     capabilities:
-      list-projects:         { covered: false }
+      list-projects:         { covered: true,  tier: t2-cuj }
       create-project:        { covered: false }
       delete-project:        { covered: true,  tier: t2-cuj, note: "asserts the project and its traces are gone; deliberately silent on orphaned project-scoped datasets/experiments pending a product decision" }
       project-selector:      { covered: false }
