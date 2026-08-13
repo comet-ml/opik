@@ -1,0 +1,95 @@
+name: PR Test Radar (trigger)
+
+# Asks the QA test radar, on every PR: is this change worth a test, and does one
+# already exist? The radar itself lives in comet-ml/comet-automation-tests
+# (pr_test_radar.yml) beside the rest of the QA tooling; this file only dispatches
+# it.
+#
+# What the radar does, for anyone arriving here from a PR comment:
+#
+#   1. triage  — reads the diff against the capability-coverage map and decides
+#   2. explore — for a test-worthy PR, applies `test-environment` (which deploys
+#      pr-<N>.dev.comet.com via trigger_test_env_on_label.yaml) and drives the
+#      change there
+#   3. propose — opens a DRAFT PR with a permanent spec
+#
+# Only PRs from branches on THIS repo: a fork cannot get a test environment, so
+# the radar skips them entirely.
+#
+# ADVISORY. It comments; it never requests changes, never fails a required check,
+# and everything it writes is a draft. A bot that can block a merge is a bot that
+# gets removed.
+#
+# WHY DISPATCH RATHER THAN `uses:`
+#
+# The radar can take an hour once it deploys an environment and writes specs. A
+# `uses:` job would keep this workflow alive for all of it and make its failure
+# this workflow's failure. Dispatch is fire-and-forget: this run finishes in
+# seconds and a radar problem cannot mark anything on the PR red. (A `uses:` job
+# also cannot carry `continue-on-error` — GitHub rejects the file outright.)
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+# Read-only here: everything that writes (the PR comment, the label) is done by
+# the radar with its own token, in the other repo.
+permissions:
+  contents: read
+
+concurrency:
+  # A new push supersedes the previous radar dispatch for this PR, never another
+  # PR's. The radar has its own matching per-PR group.
+  group: pr-test-radar-trigger-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    name: Ask the QA test radar
+    # Two exclusions, both deliberate:
+    #   * drafts — the point is to catch a missing test before review, and a draft
+    #     is still being written. `ready_for_review` above picks it up later.
+    #   * forks — no test environment can be deployed for one
+    #     (trigger_test_env_on_label.yaml resolves head.ref, which does not exist
+    #     for a fork's branch), so there is nothing actionable the radar could do.
+    #     Scope is our own repo and our own team for now. 23 of 60 open PRs were
+    #     forks when measured, so this is also most of the saved runner time.
+    if: >-
+      ${{ !github.event.pull_request.draft
+          && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch the radar
+        # Every failure path is swallowed. QA is advisory, and a dispatch problem
+        # must never show up as a red mark on somebody's PR.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # Cheap pre-filter, before spending even the radar's triage job. The
+          # radar rejects these too (pr_surface.py sees no product surface), but
+          # dependabot alone was 27 of 95 PRs in one week — not worth a runner
+          # each. Anything subtler is the radar's judgement, not this file's.
+          case "$AUTHOR" in
+            dependabot|dependabot\[bot\]|app/dependabot|CometActions|renovate\[bot\])
+              echo "$AUTHOR is a bot that does not ship product behaviour — skipping"
+              exit 0 ;;
+          esac
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::GH_PAT_TO_ACCESS_GITHUB_API not available — the radar was not asked"
+            exit 0
+          fi
+
+          echo "Asking the radar about opik#${PR}"
+          gh workflow run pr_test_radar.yml \
+            --repo comet-ml/comet-automation-tests \
+            --ref master \
+            -f pr="$PR" \
+            -f comment=true \
+            -f apply_label=true \
+            -f propose_tests=true \
+            || echo "::warning::could not dispatch the QA test radar — this PR is unaffected"
