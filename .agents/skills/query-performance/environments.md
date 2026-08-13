@@ -41,8 +41,11 @@ it dies with the JVM. The flow:
 
    Derive the parameters from the fixtures rather than inventing them, and seed each scale **once**:
    the container is reused across runs, so a repeated seed does not overwrite anything — with
-   deterministic ids it appends another row per id, which the queries read as another *version of the
-   same logical key*, silently inflating the dedup depth you were trying to hold fixed. Re-running the
+   deterministic ids it appends another row per id. What that row becomes depends on the whole key the
+   dedup step groups on, not on the id alone: repeat the full key and the query sees another *version*,
+   inflating the dedup depth you were holding fixed; vary any other dimension of that key and you get a
+   *distinct* key instead, inflating entity count. Both are drift, they need different fixes, and the
+   count check in step 5 is what tells them apart. Re-running the
    *test* is a different hazard: fixture helpers usually mint a fresh workspace and fresh ids per run,
    so a rerun adds volume and parts to the shared tables rather than versions of an existing key. Both
    distort a measurement; only the first distorts dedup depth, so know which one you are looking at. If
