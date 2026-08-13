@@ -12,8 +12,13 @@ import ExperimentInsightsTab from "@/v2/pages/CompareExperimentsPage/ExperimentI
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
-import { isTestSuiteExperiment } from "@/lib/experiments";
+import {
+  EXPERIMENT_TAB,
+  getAvailableExperimentTabs,
+  isTestSuiteExperiment,
+} from "@/lib/experiments";
 import CompareExperimentsDetails from "@/v2/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
+import ExperimentLogsTab from "@/v2/pages/CompareExperimentsPage/ExperimentLogsTab/ExperimentLogsTab";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
@@ -41,18 +46,18 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
 
   const isTestSuite = isTestSuiteExperiment(memorizedExperiments[0]);
 
-  const showScoresTab = memorizedExperiments.length > 0 && !isTestSuite;
+  const availableTabs = useMemo(
+    () => getAvailableExperimentTabs(memorizedExperiments),
+    [memorizedExperiments],
+  );
 
-  const availableTabs = useMemo(() => {
-    const tabs = new Set(["items", "config"]);
-    if (!isTestSuite) tabs.add("insights");
-    if (showScoresTab) tabs.add("scores");
-    return tabs;
-  }, [isTestSuite, showScoresTab]);
+  const showScoresTab = availableTabs.includes(EXPERIMENT_TAB.scores);
 
-  const effectiveTab = availableTabs.has(tab as string)
+  const effectiveTab = availableTabs.includes(
+    tab as (typeof availableTabs)[number],
+  )
     ? (tab as string)
-    : "items";
+    : EXPERIMENT_TAB.items;
 
   const renderContent = () => {
     return (
@@ -80,6 +85,9 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
                 Feedback scores
               </TabsTrigger>
             )}
+            <TabsTrigger variant="segmented-primary" value="logs">
+              Logs
+            </TabsTrigger>
           </TabsList>
         </PageBodyStickyContainer>
         <TabsContent value="items">
@@ -110,6 +118,12 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             />
           </TabsContent>
         )}
+        <TabsContent value="logs">
+          <ExperimentLogsTab
+            experimentsIds={experimentsIds}
+            experiments={memorizedExperiments}
+          />
+        </TabsContent>
       </Tabs>
     );
   };
