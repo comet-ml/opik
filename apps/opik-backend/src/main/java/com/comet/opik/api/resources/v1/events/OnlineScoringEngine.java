@@ -82,6 +82,7 @@ public class OnlineScoringEngine {
     static final String REASON_FIELD_NAME = "reason";
 
     private static final int MAX_REPORTED_FIELD_NAMES = 10;
+    private static final int MAX_LOGGED_VALUE_CHARS = 100;
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
 
     private static final Map<String, Boolean> PASS_FAIL_SCORES = Map.of(
@@ -1133,13 +1134,13 @@ public class OnlineScoringEngine {
             userFacingLogger.warn(
                     "Could not use the score value for {} on {} '{}' — expected a boolean or a number"
                             + " between {} and {}",
-                    sanitizeAndQuote(parsed.unreadableScoreNames()), entityType, entityId,
+                    renderNames(parsed.unreadableScoreNames(), 0), entityType, entityId,
                     ValidationUtils.MIN_FEEDBACK_SCORE_VALUE, ValidationUtils.MAX_FEEDBACK_SCORE_VALUE);
         }
         if (!parsed.undeclaredScoreNames().isEmpty()) {
             userFacingLogger.warn(
                     "Ignored {} on {} '{}' — the judge scored it but this rule does not declare that name",
-                    sanitizeAndQuote(parsed.undeclaredScoreNames()), entityType, entityId);
+                    renderNames(parsed.undeclaredScoreNames(), 0), entityType, entityId);
         }
         if (parsed.problem() != null) {
             userFacingLogger.warn("Nothing was scored for {} '{}': {}", entityType, entityId,
@@ -1154,7 +1155,7 @@ public class OnlineScoringEngine {
                     .formatted(problem.evidence());
             case NO_SCORE_FIELDS -> ("the judge's answer had none of the expected score fields. Its fields were "
                     + "%s; expected { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }")
-                    .formatted(renderFields(problem.fields(), problem.omittedFields()));
+                    .formatted(renderNames(problem.fields(), problem.omittedFields()));
         };
     }
 
@@ -1239,7 +1240,7 @@ public class OnlineScoringEngine {
                         ? scoreName
                         : declaredNames.get(scoreName.toLowerCase(Locale.ROOT));
                 if (declaredName == null) {
-                    log.debug("Ignoring undeclared score field: '{}'", scoreName);
+                    log.debug("Ignoring undeclared score field: '{}'", sanitize(scoreName));
                     undeclaredScoreNames.add(scoreName);
                 } else {
                     accept(declaredName, candidate.getValue());
@@ -1271,8 +1272,8 @@ public class OnlineScoringEngine {
             var judgeName = candidates.getFirst().getKey();
             // Attributed after all, so withdraw the "ignored" note the first pass recorded for it.
             undeclaredScoreNames.remove(judgeName);
-            log.debug("Attributing renamed score to the only declared one: '{}' -> '{}'", judgeName,
-                    declaredName);
+            log.debug("Attributing renamed score to the only declared one: '{}' -> '{}'",
+                    sanitize(judgeName), sanitize(declaredName));
             accept(declaredName, candidates.getFirst().getValue());
         }
 
@@ -1284,12 +1285,12 @@ public class OnlineScoringEngine {
             // Names match case-insensitively, so several keys in one answer can claim the same declared score.
             // Both would be inserted and collapse to whichever row wins on timestamp, so the first one wins.
             if (!claimedNames.add(declaredName)) {
-                log.debug("Skipping score claimed more than once: '{}'", declaredName);
+                log.debug("Skipping score claimed more than once: '{}'", sanitize(declaredName));
                 return;
             }
             var actualScore = scoreNode.path(SCORE_FIELD_NAME);
             if (actualScore.isNull()) {
-                log.debug("Skipping score the judge returned as null: '{}'", declaredName);
+                log.debug("Skipping score the judge returned as null: '{}'", sanitize(declaredName));
                 nullScoreNames.add(declaredName);
                 return;
             }
@@ -1321,21 +1322,23 @@ public class OnlineScoringEngine {
         }
     }
 
-    /** How a judge's field-name list is shown, wherever it is shown — the log and the user's message agree. */
-    private static String renderFields(List<String> names, int omitted) {
+    /** How a list of judge-supplied names is shown, wherever it is shown — logs and user messages agree. */
+    private static String renderNames(List<String> names, int omitted) {
         if (names.isEmpty()) {
             return "(none)";
         }
-        var shown = sanitizeAndQuote(names);
+        var shown = names.stream()
+                .map(name -> "'%s'".formatted(sanitize(name)))
+                .collect(Collectors.joining(", "));
         return omitted == 0 ? shown : "%s and %,d more".formatted(shown, omitted);
     }
 
-    private static String sanitizeAndQuote(List<String> names) {
-        return names.stream()
-                // The names come from the judge's answer and land in a persisted, user-visible log line, so
-                // control characters are stripped: a newline inside a name could otherwise forge a log entry.
-                .map(name -> "'%s'".formatted(CONTROL_CHARS.matcher(name).replaceAll(" ")))
-                .collect(Collectors.joining(", "));
+    /** Judge-chosen text headed for a log line: a newline must not forge an entry, nor a huge value flood one. */
+    private static String sanitize(String value) {
+        var stripped = CONTROL_CHARS.matcher(value).replaceAll(" ");
+        return stripped.length() <= MAX_LOGGED_VALUE_CHARS
+                ? stripped
+                : stripped.substring(0, MAX_LOGGED_VALUE_CHARS) + "…";
     }
 
     /**
@@ -1366,7 +1369,7 @@ public class OnlineScoringEngine {
                 .toList();
         var omittedFields = structuredResponse.size() - topLevelKeys.size();
         log.warn("Judge answer had no recognisable score fields: fields=\"{}\" size='{}'",
-                renderFields(topLevelKeys, omittedFields), sizeOf(content));
+                renderNames(topLevelKeys, omittedFields), sizeOf(content));
         return ParsedFeedbackScores.problem(
                 ResponseProblem.Kind.NO_SCORE_FIELDS, "", topLevelKeys, omittedFields);
     }
@@ -1396,7 +1399,7 @@ public class OnlineScoringEngine {
         try {
             return Optional.of(new BigDecimal(text));
         } catch (NumberFormatException e) {
-            log.debug("Score value is neither a number nor a boolean: '{}'", text);
+            log.debug("Score value is neither a number nor a boolean: '{}'", sanitize(text));
             return Optional.empty();
         }
     }
@@ -1426,7 +1429,9 @@ public class OnlineScoringEngine {
             return reason.asText();
         }
         return StreamSupport.stream(reason.spliterator(), false)
-                .map(JsonNode::asText)
+                // asText() is empty for an object or array, which the blank filter would then drop, losing
+                // whatever the judge put there. Serialise those instead so the reason keeps its content.
+                .map(element -> element.isContainerNode() ? element.toString() : element.asText())
                 .filter(StringUtils::isNotBlank)
                 .collect(Collectors.joining(", "));
     }

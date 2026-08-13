@@ -310,6 +310,31 @@ class OnlineScoringEngineParsingTest {
     }
 
     @Test
+    @DisplayName("bound and neutralise a judge-supplied name before it reaches a user-facing message")
+    void whenAJudgeNameCarriesControlCharsOrIsHuge_thenTheReportedNameIsSanitised() {
+        // \n and \t here are JSON escapes, so Jackson hands back a key holding real control characters.
+        var hostileKey = "a\\nb\\tc" + "x".repeat(300);
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"" + hostileKey + "\":{\"score\":1,\"reason\":\"r\"}}"),
+                THREE_SCORE_SCHEMA);
+
+        var rendered = renderedWarning(parsed);
+        assertThat(rendered).doesNotContain("\n").doesNotContain("\t");
+        assertThat(rendered).doesNotContain("x".repeat(150));
+    }
+
+    @Test
+    @DisplayName("keep structured elements of an array reason instead of dropping them")
+    void whenAnArrayReasonHoldsObjects_thenTheirContentSurvives() {
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"S\":{\"score\":1,\"reason\":[{\"detail\":\"nuance\"},\"plain\"]}}"),
+                singleScoreSchema("S"));
+
+        var reason = parsed.scores().getFirst().reason();
+        assertThat(reason).contains("nuance").contains("plain");
+    }
+
+    @Test
     @DisplayName("report an undeclared score the judge returned alongside a declared one")
     void whenAnswerMixesDeclaredAndUndeclaredScores_thenReportsTheUndeclaredOne() {
         var parsed = OnlineScoringEngine.toFeedbackScores(
