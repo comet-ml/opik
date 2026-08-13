@@ -1164,7 +1164,8 @@ public class OnlineScoringEngine {
     }
 
     public static ParsedFeedbackScores toFeedbackScores(@NonNull ChatResponse chatResponse,
-            @NonNull List<LlmAsJudgeOutputSchema> schema) {
+            List<LlmAsJudgeOutputSchema> schema) {
+        var declaredScores = Objects.requireNonNullElse(schema, List.<LlmAsJudgeOutputSchema>of());
         var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
         try {
@@ -1180,7 +1181,7 @@ public class OnlineScoringEngine {
             return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content), List.of(), 0);
         }
         // Each pass runs only while nothing has been recognised yet, so the order is the precedence.
-        var collected = new CollectedScores(schema);
+        var collected = new CollectedScores(declaredScores);
 
         // 1. The shape we ask for: every score the judge named as the rule declares it.
         collected.collectDeclared(structuredResponse);

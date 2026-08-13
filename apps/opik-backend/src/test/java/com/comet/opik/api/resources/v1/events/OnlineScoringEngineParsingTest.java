@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -318,9 +319,17 @@ class OnlineScoringEngineParsingTest {
                 chatResponse("{\"" + hostileKey + "\":{\"score\":1,\"reason\":\"r\"}}"),
                 THREE_SCORE_SCHEMA);
 
-        var rendered = renderedWarning(parsed);
-        assertThat(rendered).doesNotContain("\n").doesNotContain("\t");
-        assertThat(rendered).doesNotContain("x".repeat(150));
+        // Anchored on the surrounding text: the message itself contains "judge's", so an unanchored
+        // quote match captures from that apostrophe instead of the reported name.
+        var quoted = Pattern.compile("Its fields were '([^']*)'").matcher(renderedWarning(parsed));
+        assertThat(quoted.find()).as("the message must report the offending name").isTrue();
+        var reported = quoted.group(1);
+
+        // Control characters became spaces, and the value was cut at the bound with an ellipsis appended,
+        // so both halves of the sanitiser are pinned rather than merely "something was shortened".
+        assertThat(reported).isEqualTo("a b c" + "x".repeat(95) + "…");
+        assertThat(reported).hasSize(101);
+        assertThat(reported).doesNotContainPattern("\\p{Cntrl}");
     }
 
     @Test
@@ -332,6 +341,18 @@ class OnlineScoringEngineParsingTest {
 
         var reason = parsed.scores().getFirst().reason();
         assertThat(reason).contains("nuance").contains("plain");
+    }
+
+    @Test
+    @DisplayName("treat a missing schema like an empty one instead of throwing")
+    void whenTheSchemaIsNull_thenTheJudgeOwnNamesAreKept() {
+        // TestSuiteEvaluatorMapper guards for a null schema in three places, so a test-suite config with no
+        // schema reaches the scorer and is handed straight to this method.
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"Helpfulness\":{\"score\":3,\"reason\":\"r\"}}"), null);
+
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("Helpfulness");
+        assertThat(parsed.problem()).isNull();
     }
 
     @Test
