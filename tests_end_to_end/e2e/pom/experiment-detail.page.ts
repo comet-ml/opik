@@ -1,10 +1,58 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 export class ExperimentDetailPage {
   constructor(
     private readonly page: Page,
     private readonly experimentId: string,
   ) {}
+
+  /** The "Logs" tab trigger, which replaced the old "Go to logs" tag (OPIK-6739). */
+  get logsTab(): Locator {
+    return this.page.getByRole('tab', { name: 'Logs' });
+  }
+
+  /** The removed "Go to logs" tag — kept as a locator so tests can assert it is gone. */
+  get goToLogsTag(): Locator {
+    return this.page.getByText('Go to logs');
+  }
+
+  /** Open the Logs tab and wait for the URL to reflect it. */
+  async openLogsTab(): Promise<void> {
+    return test.step('open the Logs tab', async () => {
+      await this.logsTab.click();
+      await this.page.waitForURL((url) => url.searchParams.get('tab') === 'logs');
+    });
+  }
+
+  /** The "Copy ID" action in the page header. */
+  get copyIdButton(): Locator {
+    return this.page.getByRole('button', { name: 'Copy ID' });
+  }
+
+  /** Click "Copy ID" and return what landed on the clipboard. */
+  async copyExperimentId(): Promise<string> {
+    return test.step('copy the experiment ID', async () => {
+      await this.copyIdButton.click();
+      return this.page.evaluate(() => navigator.clipboard.readText());
+    });
+  }
+
+  /** Trace rows inside the Logs tab. The items table unmounts when the tab is inactive. */
+  get logsTraceRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  /** Poll until at least one trace row appears (traces land asynchronously after a run). */
+  async waitForLogsTraceRow(timeoutMs = 30_000): Promise<void> {
+    return test.step('wait for a trace row in the Logs tab', async () => {
+      await expect
+        .poll(async () => this.logsTraceRows.count(), {
+          timeout: timeoutMs,
+          intervals: [500, 1000, 2000],
+        })
+        .toBeGreaterThan(0);
+    });
+  }
 
   async waitForReady(): Promise<void> {
     // The page renders the experiment name as the h1.
