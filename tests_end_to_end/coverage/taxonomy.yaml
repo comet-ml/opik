@@ -707,11 +707,12 @@ areas:
     routes: ["/$workspaceName/projects", "/projects/$projectId/home"]
     spec_dir: projects
     specs:
+      - projects/project-delete.spec.ts
       - projects/projects-list-stats.spec.ts
     capabilities:
       list-projects:         { covered: true,  tier: t2-cuj }
       create-project:        { covered: false }
-      delete-project:        { covered: false }
+      delete-project:        { covered: true,  tier: t2-cuj, note: "asserts the project and its traces are gone; deliberately silent on orphaned project-scoped datasets/experiments pending a product decision" }
       project-selector:      { covered: false }
       pin-unpin-project:     { covered: false }
       project-home:          { covered: false }
