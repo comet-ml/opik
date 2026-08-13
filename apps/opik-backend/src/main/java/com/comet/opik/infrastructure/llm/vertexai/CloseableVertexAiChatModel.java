@@ -52,6 +52,14 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
         } catch (Exception e) {
             log.warn("Failed to close Vertex AI client", e);
         }
+        // Symmetry: a no-op today, but the delegate is the only thing that can release resources it may own.
+        try {
+            if (delegate instanceof AutoCloseable closeable) {
+                closeable.close();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to close the delegate Vertex AI model", e);
+        }
     }
 
     VertexAI vertexAI() {

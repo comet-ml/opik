@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.google.cloud.vertexai.VertexAI;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
@@ -22,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
 
 @DisplayName("Vertex AI provider")
 class LlmProviderVertexAITest {
@@ -88,5 +90,29 @@ class LlmProviderVertexAITest {
         assertThat(errors.get()).isEqualTo(1);
         assertThat(closes.get()).isEqualTo(1);
         verify(vertexAI, timeout(2_000)).close();
+    }
+
+    @Test
+    @DisplayName("closing the streaming wrapper closes the VertexAI and the delegate")
+    void streamingWrapperCloseClosesBoth() throws Exception {
+        var vertexAI = mock(VertexAI.class);
+        var delegate = mock(StreamingChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
+
+        new CloseableVertexAiStreamingChatModel(delegate, vertexAI).close();
+
+        verify(vertexAI).close();
+        verify((AutoCloseable) delegate).close();
+    }
+
+    @Test
+    @DisplayName("closing the chat wrapper closes the VertexAI and the delegate")
+    void chatWrapperCloseClosesBoth() throws Exception {
+        var vertexAI = mock(VertexAI.class);
+        var delegate = mock(ChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
+
+        new CloseableVertexAiChatModel(delegate, vertexAI).close();
+
+        verify(vertexAI).close();
+        verify((AutoCloseable) delegate).close();
     }
 }

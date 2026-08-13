@@ -52,6 +52,14 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
         } catch (Exception e) {
             log.warn("Failed to close Vertex AI streaming client", e);
         }
+        // The streaming delegate owns a per-instance executor; only its close() shuts it down.
+        try {
+            if (delegate instanceof AutoCloseable closeable) {
+                closeable.close();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to close the delegate Vertex AI streaming model", e);
+        }
     }
 
     VertexAI vertexAI() {
