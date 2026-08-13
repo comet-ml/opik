@@ -42,5 +42,19 @@ test.describe('Experiments — smoke', { tag: ['@t1-smoke', '@area:experiments']
       expect(experiment.scores.filter((s) => s.scoreValue === 1.0), 'pass rows').toHaveLength(2);
       expect(experiment.scores.filter((s) => s.scoreValue === 0.0), 'fail rows').toHaveLength(1);
     });
+
+    await test.step('Header copies the experiment ID to the clipboard', async () => {
+      await expect(detail.copyIdButton, '"Copy ID" action is present').toBeVisible();
+      expect(await detail.copyExperimentId(), 'clipboard holds the experiment ID')
+        .toBe(experiment.experimentId);
+    });
+
+    await test.step('Logs tab replaces the "Go to logs" tag and shows the run traces', async () => {
+      await expect(detail.goToLogsTag, 'old "Go to logs" tag is gone').toHaveCount(0);
+      await expect(detail.logsTab, 'Logs tab is present').toBeVisible();
+
+      await detail.openLogsTab();
+      await detail.waitForLogsTraceRow();
+    });
   });
 });
