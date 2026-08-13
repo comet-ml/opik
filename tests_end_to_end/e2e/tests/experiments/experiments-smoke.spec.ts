@@ -2,7 +2,7 @@ import { test, expect } from '@e2e/fixtures';
 import { ExperimentsPage } from '@e2e/pom/experiments.page';
 
 test.describe('Experiments — smoke', { tag: ['@t1-smoke', '@area:experiments'] }, () => {
-  test('SDK-seeded experiment renders in list and shows per-item deterministic scores', { tag: ['@cap:experiments.list-experiments', '@cap:experiments.per-item-scores'] }, async ({
+  test('SDK-seeded experiment renders in list and shows per-item deterministic scores', { tag: ['@cap:experiments.list-experiments', '@cap:experiments.per-item-scores', '@cap:experiments.logs-tab', '@cap:experiments.copy-experiment-id'] }, async ({
     experiment,
     project,
     page,

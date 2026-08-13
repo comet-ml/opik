@@ -51,6 +51,12 @@ export const EXPERIMENT_TAB = {
 export type ExperimentTabId =
   (typeof EXPERIMENT_TAB)[keyof typeof EXPERIMENT_TAB];
 
+const EXPERIMENT_TAB_IDS: readonly string[] = Object.values(EXPERIMENT_TAB);
+
+/** Narrows an arbitrary URL value to a known tab id, so the page can fall back when it isn't one. */
+export const isExperimentTabId = (value: unknown): value is ExperimentTabId =>
+  typeof value === "string" && EXPERIMENT_TAB_IDS.includes(value);
+
 /**
  * Which tabs the experiment page exposes, in display order.
  *
