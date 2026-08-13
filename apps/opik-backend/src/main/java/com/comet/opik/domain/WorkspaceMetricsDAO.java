@@ -83,9 +83,11 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     // (workspace, project, entity, name, author, source), then collapse to one value per
     // (workspace, project, entity, name). The mutable `name` filter is applied AFTER the LIMIT 1 BY dedup in
     // feedback_scores_final (per .agents/skills/opik-backend/clickhouse.md "Mutable column filtering with
-    // LIMIT 1 BY"); the immutable `project_id` filter is on each UNION leg so the dedup scans a smaller
-    // row set. Each query constant below inlines the full CTE preamble with StringTemplate conditionals for
-    // the project_ids / name predicates (no `%s` slots, no `.formatted(...)`); callers enable each
+    // LIMIT 1 BY"); the immutable `entity_id` time bound and `project_id` filter are on each UNION leg so
+    // the dedup scans a smaller row set. The LIMIT 1 BY ORDER BY also has the full dedup key as a stable
+    // tie-breaker after `last_updated_at` so metric values are deterministic when duplicate physical rows
+    // share a timestamp. Each query constant below inlines the full CTE preamble with StringTemplate
+    // conditionals for the project_ids predicate (no `%s` slots, no `.formatted(...)`); callers enable each
     // conditional at render time via `template.add("project_ids", ...)` and bind the value via
     // `statement.bind("project_ids", ...)`.
 
@@ -111,6 +113,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
+                      AND entity_id >= :id_prior_start
+                      AND entity_id \\<= :id_end
                       <if(project_ids)> AND project_id IN :project_ids <endif>
                     UNION ALL
                     SELECT workspace_id,
@@ -124,9 +128,17 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
+                      AND entity_id >= :id_prior_start
+                      AND entity_id \\<= :id_end
                       <if(project_ids)> AND project_id IN :project_ids <endif>
                 )
-                ORDER BY last_updated_at DESC
+                ORDER BY last_updated_at DESC,
+                         workspace_id DESC,
+                         project_id DESC,
+                         entity_id DESC,
+                         name DESC,
+                         author DESC,
+                         source_queue_id DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
@@ -196,6 +208,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
+                      AND entity_id >= :id_start
+                      AND entity_id <= :id_end
                       AND project_id IN :project_ids
                     UNION ALL
                     SELECT workspace_id,
@@ -209,9 +223,17 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
+                      AND entity_id >= :id_start
+                      AND entity_id <= :id_end
                       AND project_id IN :project_ids
                 )
-                ORDER BY last_updated_at DESC
+                ORDER BY last_updated_at DESC,
+                         workspace_id DESC,
+                         project_id DESC,
+                         entity_id DESC,
+                         name DESC,
+                         author DESC,
+                         source_queue_id DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
@@ -281,6 +303,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
+                      AND entity_id >= :id_start
+                      AND entity_id <= :id_end
                     UNION ALL
                     SELECT workspace_id,
                            project_id,
@@ -293,8 +317,16 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
+                      AND entity_id >= :id_start
+                      AND entity_id <= :id_end
                 )
-                ORDER BY last_updated_at DESC
+                ORDER BY last_updated_at DESC,
+                         workspace_id DESC,
+                         project_id DESC,
+                         entity_id DESC,
+                         name DESC,
+                         author DESC,
+                         source_queue_id DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
