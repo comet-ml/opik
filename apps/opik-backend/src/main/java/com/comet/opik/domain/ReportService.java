@@ -4,6 +4,7 @@ import com.comet.opik.api.OllieReport;
 import com.comet.opik.api.OllieReport.OllieReportPage;
 import com.comet.opik.api.OllieReport.ReportStatus;
 import com.comet.opik.api.ReportPreference;
+import com.comet.opik.domain.OllieReportDAO.WorkspacePendingCount;
 import com.comet.opik.infrastructure.ReportGenerationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -60,6 +62,8 @@ public class ReportService {
     private final ReportGenerationConfig reportGenerationConfig;
 
     private final LongCounter triggeredCounter;
+    private final AtomicReference<Map<String, Long>> pendingByWorkspace = new AtomicReference<>(Map.of());
+
     private final LongCounter finishedCounter;
     private final LongHistogram endToEndDuration;
 
@@ -100,21 +104,27 @@ public class ReportService {
                 .build();
 
         meter.gaugeBuilder("opik.daily_report.pending")
-                .setDescription("Reports currently pending, per workspace. Every replica reports the same "
-                        + "database-wide count, so deduplicate replicas with max by (workspace_id) before summing "
-                        + "across workspaces")
+                .setDescription("Reports currently pending, per workspace, as of the last snapshot refresh. Every "
+                        + "replica reports the same database-wide count, so deduplicate replicas with "
+                        + "max by (workspace_id) before summing across workspaces")
                 .ofLongs()
                 .buildWithCallback(this::recordPendingReports);
     }
 
     private void recordPendingReports(ObservableLongMeasurement measurement) {
+        pendingByWorkspace.get().forEach((workspaceId, count) -> measurement
+                .record(count, Attributes.of(WORKSPACE_ID_KEY, workspaceId)));
+    }
+
+    public void refreshPendingReports() {
         try {
-            transactionTemplate.inTransaction(READ_ONLY,
+            pendingByWorkspace.set(transactionTemplate.inTransaction(READ_ONLY,
                     handle -> handle.attach(OllieReportDAO.class).countPendingByWorkspace())
-                    .forEach(row -> measurement
-                            .record(row.pendingCount(), Attributes.of(WORKSPACE_ID_KEY, row.workspaceId())));
+                    .stream()
+                    .collect(Collectors.toMap(WorkspacePendingCount::workspaceId,
+                            WorkspacePendingCount::pendingCount)));
         } catch (Exception e) {
-            log.warn("Failed to read pending report count for metrics", e);
+            log.warn("Failed to refresh pending report count for metrics; keeping the previous snapshot", e);
         }
     }
 
