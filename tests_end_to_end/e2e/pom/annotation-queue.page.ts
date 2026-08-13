@@ -114,10 +114,18 @@ export class AnnotationQueuePage {
   async expectOnQueueRoute(projectId: string, queueId: string): Promise<void> {
     return test.step(`Assert URL is the detail route for queue ${queueId}`, async () => {
       const env = loadEnvConfig();
-      const expected = `${env.baseUrl}/${env.workspace}/projects/${projectId}/annotation-queues/${queueId}`;
+      // Both sides go through URL so the comparison is on canonical form. Without
+      // it, a baseUrl that carries a trailing slash, an explicit default port
+      // (:80/:443), mixed-case host, or a workspace needing percent-encoding
+      // would fail a perfectly valid navigation — env-provided baseUrls (cloud,
+      // self-hosted) legitimately arrive in any of those shapes.
+      const expected = new URL(
+        `${env.workspace}/projects/${projectId}/annotation-queues/${queueId}`,
+        env.baseUrl.endsWith('/') ? env.baseUrl : `${env.baseUrl}/`,
+      );
       await expect(this.page).toHaveURL((url) => {
-        const actual = `${url.origin}${url.pathname}`.replace(/\/$/, '');
-        return actual === expected.replace(/\/$/, '');
+        const strip = (p: string) => p.replace(/\/+$/, '');
+        return url.origin === expected.origin && strip(url.pathname) === strip(expected.pathname);
       });
     });
   }
