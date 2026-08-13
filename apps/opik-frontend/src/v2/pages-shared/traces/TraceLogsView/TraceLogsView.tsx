@@ -928,12 +928,17 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     setMetadataColumnsOrder,
   ]);
 
+  // The overlay is a denser surface than a page, so its controls follow the optimization studio's
+  // sidebar (24px) rather than the Logs page's (28px).
+  const controlSize = isPageLayout ? "xs" : "2xs";
+  const iconControlSize = isPageLayout ? "icon-xs" : "icon-2xs";
+
   const controls = (
-    <div className="flex items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2">
       <DataTableRowHeightSelector
         type={height as ROW_HEIGHT}
         setType={setHeight}
-        size="icon-xs"
+        size={iconControlSize}
       />
       <ColumnsButton
         columns={COLUMN_DATA}
@@ -943,7 +948,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         onOrderChange={setColumnsOrder}
         sections={columnSections}
         layout="labeled"
-        size="xs"
+        size={controlSize}
         excludeFromSelectAll={
           metadataColumnsData.length > 0
             ? metadataColumnsData.map((col) => col.id)
@@ -956,11 +961,12 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         onChangeValue={handleDateRangeChange}
         minDate={minDate}
         maxDate={maxDate}
+        triggerClassName={isPageLayout ? undefined : "h-6"}
       />
       <Separator orientation="vertical" className="mx-2 h-6" />
       <RefreshButton
         tooltip="Refresh traces list"
-        size="icon-xs"
+        size={iconControlSize}
         isFetching={isFetching}
         onRefresh={() => {
           refetch();
@@ -1030,8 +1036,6 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       }
     />
   );
-
-  const filterRow = hasSelection ? selectionBar : chipBar;
 
   const metricsSummary = viewConfig.showMetricsSummary ? (
     <MetricsSummary
@@ -1154,10 +1158,17 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     <>
       <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
         {metricsSummary && <div className="px-6 pt-4">{metricsSummary}</div>}
-        <div className="flex flex-wrap items-center justify-end gap-x-8 gap-y-2 px-6 pt-4">
-          {controls}
+        {/* Same single row as the page layout: filters left, table controls right. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-4">
+          {hasSelection ? (
+            <div className="w-full">{selectionBar}</div>
+          ) : (
+            <>
+              {chipBar}
+              {controls}
+            </>
+          )}
         </div>
-        <div className="px-6 py-3">{filterRow}</div>
         <div className="min-h-0 flex-1 overflow-auto border-b px-6">
           {renderTable()}
         </div>
