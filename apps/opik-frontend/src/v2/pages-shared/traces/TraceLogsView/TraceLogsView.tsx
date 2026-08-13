@@ -1034,6 +1034,15 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     />
   );
 
+  const toolbarRow = hasSelection ? (
+    <div className="w-full">{selectionBar}</div>
+  ) : (
+    <>
+      <div className="min-w-0 flex-1">{chipBar}</div>
+      {controls}
+    </>
+  );
+
   const metricsSummary = viewConfig.showMetricsSummary ? (
     <MetricsSummary
       projectId={projectId}
@@ -1128,14 +1137,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
           direction="bidirectional"
           limitWidth
         >
-          {hasSelection ? (
-            <div className="w-full">{selectionBar}</div>
-          ) : (
-            <>
-              <div className="min-w-0 flex-1">{chipBar}</div>
-              {controls}
-            </>
-          )}
+          {toolbarRow}
         </PageBodyStickyContainer>
         {renderTable({
           TableWrapper: PageBodyStickyTableWrapper,
@@ -1158,16 +1160,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
         {metricsSummary && <div className="px-6 pt-4">{metricsSummary}</div>}
         {/* Same single row as the page layout. */}
-        <div className="flex items-start gap-2 px-6 py-4">
-          {hasSelection ? (
-            <div className="w-full">{selectionBar}</div>
-          ) : (
-            <>
-              <div className="min-w-0 flex-1">{chipBar}</div>
-              {controls}
-            </>
-          )}
-        </div>
+        <div className="flex items-start gap-2 px-6 py-4">{toolbarRow}</div>
         <div className="min-h-0 flex-1 overflow-auto border-b px-6">
           {renderTable()}
         </div>
