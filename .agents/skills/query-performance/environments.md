@@ -31,23 +31,23 @@ it dies with the JVM. The flow:
 3. **Attach to the surviving container** on its mapped native port (it changes per run) as `default`,
    database `opik` (`ClickHouseContainerUtils.DATABASE_NAME`). Being admin here unlocks what a real
    environment refuses: log flushing, cache drops, stopping merges, and `INSERT`.
-4. **Extrapolate to 20k / 500k / 1M** driving entities, each scale in **its own workspace id** so the
-   ladders coexist and one rendering can be pointed at any of them. Derive the parameters from the
-   fixtures rather than inventing them. Seed each scale **once**: the container is reused across runs,
-   so a repeated seed does not overwrite anything — with deterministic ids it appends another row per
-   id, which the queries read as another *version of the same logical key*, silently inflating the
-   dedup depth you were trying to hold fixed. Re-running the *test* is a different hazard: fixture
-   helpers usually mint a fresh workspace and fresh ids per run, so a rerun adds volume and parts to
-   the shared tables rather than versions of an existing key. Both distort a measurement; only the
-   first distorts dedup depth, so know which one you are looking at. If a
-   scale needs rebuilding, seed it into a new workspace id rather than repeating it, and do not clear
+4. **Extrapolate to 20k / 500k / 1M** driving entities, choosing the layout by the question first. For
+   *per-scale* plan shape, put each scale in **its own workspace id** so the ladders coexist and one
+   rendering can be pointed at any of them. For the growth curve *across* scales, give each scale its
+   own rig — a separate database or container. The reason is what a workspace id does not isolate: it
+   separates results and lets a prefix prune work, but coexisting scales still share parts, partitions
+   and merge history, so physical numbers are measured against a table holding every scale at once, and
+   absolute parts and granule totals are comparable only within one seeded state.
+
+   Derive the parameters from the fixtures rather than inventing them, and seed each scale **once**:
+   the container is reused across runs, so a repeated seed does not overwrite anything — with
+   deterministic ids it appends another row per id, which the queries read as another *version of the
+   same logical key*, silently inflating the dedup depth you were trying to hold fixed. Re-running the
+   *test* is a different hazard: fixture helpers usually mint a fresh workspace and fresh ids per run,
+   so a rerun adds volume and parts to the shared tables rather than versions of an existing key. Both
+   distort a measurement; only the first distorts dedup depth, so know which one you are looking at. If
+   a scale needs rebuilding, seed it into a new workspace id rather than repeating it, and do not clear
    the query tables — the fixtures the extrapolation is derived from live there.
-   Note what the workspace id does and does not isolate: it separates results and lets a prefix prune
-   work, but coexisting scales still share parts, partitions and merge history, so physical numbers are
-   measured against a table holding every scale at once. Absolute parts and granule totals are
-   therefore comparable only within one seeded state. When the growth curve *across* scales is the
-   point, give each scale its own rig — a separate database or container — rather than reading
-   cross-scale physical costs off a shared one.
 5. **Validate the data, then the shape.** First confirm the fixture is what you intended — entity
    count, rows per logical key, active part count — because a drifted fixture is otherwise invisible
    and every number after it is wrong. Count **raw stored rows**, scoped to the workspace you seeded:
