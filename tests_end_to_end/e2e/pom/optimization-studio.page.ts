@@ -206,6 +206,84 @@ export class OptimizationStudioPage {
     });
   }
 
+  /** Open the project's runs list and wait for the given run's row to render. */
+  async gotoList(optimizationId: string): Promise<void> {
+    return test.step('Open the optimization runs list', async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations`,
+      );
+      await this.runRow(optimizationId).waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Read the "Opt. cost" column for one run in the list, as rendered.
+   *
+   * This is the aggregate reached through the list's query path, which is not
+   * the one the detail page uses — hence a text read rather than an assertion
+   * helper, so a spec can compare the two surfaces itself.
+   */
+  async runListCost(optimizationId: string): Promise<string> {
+    return test.step('Read the run\'s "Opt. cost" cell', async () => {
+      const cell = this.runRow(optimizationId).locator('[data-cell-id$="_opt_cost"]');
+      await expect(cell).toBeVisible();
+      return (await cell.innerText()).trim();
+    });
+  }
+
+  /** Read the run page's "Optimization cost" KPI card figure, as rendered. */
+  async optimizationCostCardValue(): Promise<string> {
+    return test.step('Read the Optimization cost card', async () => {
+      const value = this.costCardValue();
+      await expect(value).toBeVisible();
+      return (await value.innerText()).trim();
+    });
+  }
+
+  /**
+   * Hover the cost figure and assert its tooltip explains where the number came
+   * from. The card can legitimately read more than the trials below it add up
+   * to, so the tooltip naming optimizer-internal spend is the difference
+   * between a figure a user trusts and one that reads as an arithmetic error.
+   */
+  async expectCostTooltip(pattern: RegExp): Promise<void> {
+    return test.step('Assert the cost card tooltip names its source', async () => {
+      await this.costCardValue().hover();
+      await expect(
+        this.page.getByRole('tooltip').filter({ hasText: pattern }).first(),
+      ).toBeVisible();
+    });
+  }
+
+  /** One row of the runs list. `getRowId` is the optimization id, so this is exact. */
+  private runRow(optimizationId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${optimizationId}"]`);
+  }
+
+  /**
+   * The "Optimization cost" KPI card. `StatCard` carries no testid, so the card
+   * is addressed as the innermost element holding both the card's label and a
+   * currency figure — the header holds the label without a figure and the value
+   * holds a figure without the label, so only the card itself matches both, and
+   * `.last()` picks it over its ancestors.
+   */
+  private costCard(): Locator {
+    return this.page
+      .locator('div')
+      .filter({ has: this.page.getByText('Optimization cost', { exact: true }) })
+      .filter({ hasText: /\$\d/ })
+      .last();
+  }
+
+  /**
+   * The card's figure. Anchored to a whole-cell currency match so it can't drift
+   * onto the card's caption (the run's total duration) or its label.
+   */
+  private costCardValue(): Locator {
+    return this.costCard().getByText(/^\$[\d.]+$/);
+  }
+
   /** Wait for the detail header status tag to read the given status (case-insensitive). */
   async expectStatus(
     status: 'completed' | 'running' | 'error',
