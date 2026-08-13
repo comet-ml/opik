@@ -82,6 +82,19 @@ tests:
       - failedTemplate:
           errorMessage: "clickhouse.tieredStorage.coldTierMigration is incompatible with altinity-clickhouse-operator.nameOverride/fullnameOverride (the migration job locates the operator by its default app.kubernetes.io/name); set coldTierMigration.enabled=false or remove the override"
 
+  # The Job is allowed to fail, and its name is fixed. Without BeforeHookCreation a
+  # Failed Job survives and wedges the PostSync phase of every subsequent sync.
+  - it: the ArgoCD Job hook is deleted before re-creation so a failed run cannot wedge later syncs
+    set:
+      global.argocd: true
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/hook-delete-policy"]
+          value: BeforeHookCreation,HookSucceeded
+
   # Identity: the account the Job runs as MUST be the RoleBinding subject, else the
   # Job has no Role permissions. Default (chart-created) SA path.
   - it: binds the default chart ServiceAccount to the Job and RoleBinding

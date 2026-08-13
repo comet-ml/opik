@@ -71,7 +71,7 @@ The migration runs as a post-upgrade hook (or ArgoCD `PostSync` hook) and is **d
 
 <Steps>
 <Step title="Detect">
-Check whether any ClickHouse StatefulSet is still missing the cold-tier cache volume. If none are, the job exits as a no-op.
+Check whether any ClickHouse StatefulSet is still missing the cold-tier cache volume. If none are, the job exits as a no-op — replicas that are merely mid-roll do not count as missing, so a routine upgrade of an already-migrated release never bounces the operator.
 </Step>
 <Step title="Bounce the operator">
 Delete the altinity ClickHouse operator pod. A fresh operator re-reconciles from scratch.
