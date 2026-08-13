@@ -1165,7 +1165,7 @@ public class OnlineScoringEngine {
 
     public static ParsedFeedbackScores toFeedbackScores(@NonNull ChatResponse chatResponse,
             List<LlmAsJudgeOutputSchema> schema) {
-        var declaredScores = Objects.requireNonNullElse(schema, List.<LlmAsJudgeOutputSchema>of());
+        var declaredSchemas = Objects.requireNonNullElse(schema, List.<LlmAsJudgeOutputSchema>of());
         var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
         try {
@@ -1181,7 +1181,7 @@ public class OnlineScoringEngine {
             return ParsedFeedbackScores.problem(ResponseProblem.Kind.NOT_JSON, sizeOf(content), List.of(), 0);
         }
         // Each pass runs only while nothing has been recognised yet, so the order is the precedence.
-        var collected = new CollectedScores(declaredScores);
+        var collected = new CollectedScores(declaredSchemas);
 
         // 1. The shape we ask for: every score the judge named as the rule declares it.
         collected.collectDeclared(structuredResponse);
@@ -1215,9 +1215,11 @@ public class OnlineScoringEngine {
         private final List<String> undeclaredScoreNames = new ArrayList<>();
         private final Set<String> claimedNames = new HashSet<>();
 
-        CollectedScores(List<LlmAsJudgeOutputSchema> schema) {
-            this.schema = schema;
-            this.declaredNames = schema.stream().collect(Collectors.toMap(
+        CollectedScores(List<LlmAsJudgeOutputSchema> schemas) {
+            this.schema = schemas.stream()
+                    .filter(definition -> definition != null && StringUtils.isNotBlank(definition.name()))
+                    .toList();
+            this.declaredNames = this.schema.stream().collect(Collectors.toMap(
                     definition -> definition.name().toLowerCase(Locale.ROOT), LlmAsJudgeOutputSchema::name,
                     (first, dup) -> first));
         }

@@ -17,6 +17,7 @@ import org.mockito.Mockito;
 import org.slf4j.Logger;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -351,8 +352,34 @@ class OnlineScoringEngineParsingTest {
         var parsed = OnlineScoringEngine.toFeedbackScores(
                 chatResponse("{\"Helpfulness\":{\"score\":3,\"reason\":\"r\"}}"), null);
 
-        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("Helpfulness");
+        assertThat(parsed.scores()).hasSize(1);
+        var score = parsed.scores().getFirst();
+        assertThat(score.name()).isEqualTo("Helpfulness");
+        assertThat(score.value()).isEqualByComparingTo(BigDecimal.valueOf(3));
+        assertThat(score.reason()).isEqualTo("r");
+        assertThat(score.source()).isEqualTo(ScoreSource.ONLINE_SCORING);
         assertThat(parsed.problem()).isNull();
+    }
+
+    @ParameterizedTest
+    @MethodSource("unusableSchemaEntries")
+    @DisplayName("ignore a schema entry that is null or unnamed instead of throwing")
+    void whenASchemaEntryIsUnusable_thenItIsIgnored(List<LlmAsJudgeOutputSchema> schema) {
+        // Nothing cascades bean validation into the list elements, so a config can carry a null entry or one
+        // with no name at all, and both reach this method.
+        var parsed = OnlineScoringEngine.toFeedbackScores(
+                chatResponse("{\"Helpfulness\":{\"score\":3,\"reason\":\"r\"}}"), schema);
+
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("Helpfulness");
+    }
+
+    private static Stream<Arguments> unusableSchemaEntries() {
+        return Stream.of(
+                arguments(Collections.singletonList((LlmAsJudgeOutputSchema) null)),
+                arguments(List.of(LlmAsJudgeOutputSchema.builder()
+                        .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                        .description("no name at all")
+                        .build())));
     }
 
     @Test
