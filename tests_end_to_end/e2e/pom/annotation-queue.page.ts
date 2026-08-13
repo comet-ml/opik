@@ -94,11 +94,6 @@ export class AnnotationQueuePage {
     });
   }
 
-  /** The tab-body loading placeholder. */
-  get loadingIndicator(): Locator {
-    return this.page.getByText('Loading', { exact: true });
-  }
-
   /**
    * A not-found signal for a queue that doesn't exist, matched on intent rather
    * than exact copy: any acceptable fix must say the queue is unavailable, but
