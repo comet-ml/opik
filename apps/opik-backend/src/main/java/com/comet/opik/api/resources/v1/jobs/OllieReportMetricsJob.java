@@ -6,7 +6,7 @@ import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
 
@@ -17,18 +17,13 @@ import org.quartz.JobExecutionContext;
  * <p>Every replica keeps its own snapshot and reports the same database-wide count, so no lock is needed;
  * the dashboard deduplicates with {@code max by (workspace_id)}.
  */
-@Slf4j
 @Singleton
 @DisallowConcurrentExecution
 @Every("1m")
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OllieReportMetricsJob extends Job {
 
-    private final ReportService reportService;
-
-    @Inject
-    public OllieReportMetricsJob(@NonNull ReportService reportService) {
-        this.reportService = reportService;
-    }
+    private final @NonNull ReportService reportService;
 
     @Override
     public void doJob(JobExecutionContext context) {
