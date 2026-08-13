@@ -928,17 +928,14 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     setMetadataColumnsOrder,
   ]);
 
-  // The overlay is a denser surface than a page, so its controls follow the optimization studio's
-  // sidebar (24px) rather than the Logs page's (28px).
-  const controlSize = isPageLayout ? "xs" : "2xs";
-  const iconControlSize = isPageLayout ? "icon-xs" : "icon-2xs";
-
+  // 24px controls throughout, matching the optimization pages (runs list and trial sidebar) — the
+  // house size for a chip-bar toolbar on both page and overlay surfaces.
   const controls = (
     <div className="flex shrink-0 items-center gap-2">
       <DataTableRowHeightSelector
         type={height as ROW_HEIGHT}
         setType={setHeight}
-        size={iconControlSize}
+        size="icon-2xs"
       />
       <ColumnsButton
         columns={COLUMN_DATA}
@@ -948,25 +945,25 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         onOrderChange={setColumnsOrder}
         sections={columnSections}
         layout="labeled"
-        size={controlSize}
+        size="2xs"
         excludeFromSelectAll={
           metadataColumnsData.length > 0
             ? metadataColumnsData.map((col) => col.id)
             : []
         }
       ></ColumnsButton>
-      <Separator orientation="vertical" className="mx-2 h-6" />
+      <Separator orientation="vertical" className="mx-[2px] h-4" />
       <MetricDateRangeSelect
         value={dateRange}
         onChangeValue={handleDateRangeChange}
         minDate={minDate}
         maxDate={maxDate}
-        triggerClassName={isPageLayout ? undefined : "h-6"}
+        triggerClassName="h-6"
       />
-      <Separator orientation="vertical" className="mx-2 h-6" />
+      <Separator orientation="vertical" className="mx-[2px] h-4" />
       <RefreshButton
         tooltip="Refresh traces list"
-        size={iconControlSize}
+        size="icon-2xs"
         isFetching={isFetching}
         onRefresh={() => {
           refetch();
@@ -1122,10 +1119,12 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
             {metricsSummary}
           </PageBodyStickyContainer>
         )}
-        {/* One row directly under the tabs, per the design: filters left, table controls right.
-            The negative top margin cancels TabsContent's own gap, the way the sibling tabs do. */}
+        {/* One row directly under the tabs, laid out like the optimization runs toolbar: the chip
+            bar takes the remaining width and wraps within itself, so the controls stay right- and
+            top-aligned rather than being pushed onto a second line. The negative top margin
+            cancels TabsContent's own gap, the way the sibling tabs do. */}
         <PageBodyStickyContainer
-          className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+          className="-mt-4 flex items-start gap-2 py-4"
           direction="bidirectional"
           limitWidth
         >
@@ -1133,7 +1132,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
             <div className="w-full">{selectionBar}</div>
           ) : (
             <>
-              {chipBar}
+              <div className="min-w-0 flex-1">{chipBar}</div>
               {controls}
             </>
           )}
@@ -1158,13 +1157,13 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     <>
       <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
         {metricsSummary && <div className="px-6 pt-4">{metricsSummary}</div>}
-        {/* Same single row as the page layout: filters left, table controls right. */}
-        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-4">
+        {/* Same single row as the page layout. */}
+        <div className="flex items-start gap-2 px-6 py-4">
           {hasSelection ? (
             <div className="w-full">{selectionBar}</div>
           ) : (
             <>
-              {chipBar}
+              <div className="min-w-0 flex-1">{chipBar}</div>
               {controls}
             </>
           )}
