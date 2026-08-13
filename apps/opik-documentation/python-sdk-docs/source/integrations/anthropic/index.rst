@@ -10,7 +10,7 @@ Opik integrates with Anthropic to allow you to log your Anthropic calls to the O
     openai_client = track_openai(openai_client)
 
     response = anthropic_client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         messages=[
             {"role": "user", "content": PROMPT}
