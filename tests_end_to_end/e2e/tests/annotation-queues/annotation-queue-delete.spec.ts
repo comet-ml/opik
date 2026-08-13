@@ -8,11 +8,11 @@ test.describe('Annotation queue — delete', { tag: ['@t2-cuj', '@area:annotatio
    * prefix sweep in global-teardown, so a test that fails mid-way would
    * otherwise orphan them permanently.
    */
-  const queuesToClean: string[] = [];
+  const queueIdsToClean: string[] = [];
 
   test.afterEach(async ({ backendClient }) => {
-    while (queuesToClean.length) {
-      const id = queuesToClean.pop()!;
+    while (queueIdsToClean.length) {
+      const id = queueIdsToClean.pop()!;
       try {
         await backendClient.deleteAnnotationQueue(id);
       } catch (err) {
@@ -38,7 +38,7 @@ test.describe('Annotation queue — delete', { tag: ['@t2-cuj', '@area:annotatio
         trace_ids: annotationQueue.traces.map((t) => t.id),
         feedback_definition_names: [annotationQueue.feedbackDefinitionName],
       });
-      queuesToClean.push(created.id);
+      queueIdsToClean.push(created.id);
       return created;
     });
 
@@ -110,10 +110,8 @@ test.describe('Annotation queue — delete', { tag: ['@t2-cuj', '@area:annotatio
     const detailPage = new AnnotationQueuePage(page);
     await detailPage.goto(annotationQueue.projectId, annotationQueue.id);
 
-    await expect(page).toHaveURL(
-      new RegExp(`/projects/${annotationQueue.projectId}/annotation-queues/${annotationQueue.id}(\\?|$)`),
-    );
-    await expect(page.getByRole('tab', { name: 'Queue items' })).toBeVisible();
+    await detailPage.expectOnQueueRoute(annotationQueue.projectId, annotationQueue.id);
+    await expect(detailPage.queueItemsTab).toBeVisible();
   });
 
   /**

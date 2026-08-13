@@ -1,4 +1,4 @@
-import { test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 
@@ -90,7 +90,25 @@ export class AnnotationQueuePage {
 
   async waitForReady(): Promise<void> {
     return test.step('Wait for annotation queue page ready', async () => {
-      await this.page.getByRole('tab', { name: 'Queue items' }).waitFor({ state: 'visible' });
+      await this.queueItemsTab.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * The detail shell's items tab. Present for ANY queue id, valid or not — the
+   * tabs render independently of the queue fetch — so it confirms the shell
+   * mounted, never that the queue exists.
+   */
+  get queueItemsTab(): Locator {
+    return this.page.getByRole('tab', { name: 'Queue items' });
+  }
+
+  /** Asserts the browser is on this queue's detail route. */
+  async expectOnQueueRoute(projectId: string, queueId: string): Promise<void> {
+    return test.step(`Assert URL is the detail route for queue ${queueId}`, async () => {
+      await expect(this.page).toHaveURL(
+        new RegExp(`/projects/${projectId}/annotation-queues/${queueId}(\\?|$)`),
+      );
     });
   }
 
