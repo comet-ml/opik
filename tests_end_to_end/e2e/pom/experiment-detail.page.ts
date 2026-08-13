@@ -29,28 +29,65 @@ export class ExperimentDetailPage {
     return this.page.getByRole('button', { name: 'Copy ID' });
   }
 
-  /** Click "Copy ID" and return what landed on the clipboard. */
+  /**
+   * Click "Copy ID" and return what landed on the clipboard.
+   *
+   * Reads through a stub rather than `navigator.clipboard.readText()`: the suite grants no
+   * clipboard permission, and Chromium rejects a read without one. Stubbing `writeText` also keeps
+   * the assertion on what the app tried to copy, which is the behaviour under test.
+   */
   async copyExperimentId(): Promise<string> {
     return test.step('copy the experiment ID', async () => {
+      await this.page.evaluate(() => {
+        const w = window as unknown as { __copied?: string };
+        w.__copied = undefined;
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: (text: string) => {
+              w.__copied = text;
+              return Promise.resolve();
+            },
+          },
+        });
+      });
       await this.copyIdButton.click();
-      return this.page.evaluate(() => navigator.clipboard.readText());
+      await expect
+        .poll(
+          async () =>
+            this.page.evaluate(
+              () => (window as unknown as { __copied?: string }).__copied,
+            ),
+          { timeout: 5_000 },
+        )
+        .toBeTruthy();
+      return this.page.evaluate(
+        () => (window as unknown as { __copied?: string }).__copied ?? '',
+      );
     });
   }
 
-  /** Trace rows inside the Logs tab. The items table unmounts when the tab is inactive. */
+  /** Trace rows inside the Logs tab, scoped to the tab so they can't match the items table. */
   get logsTraceRows(): Locator {
-    return this.page.locator('tbody tr[data-row-id]');
+    return this.page
+      .getByRole('tabpanel')
+      .locator('tbody tr[data-row-id]');
   }
 
-  /** Poll until at least one trace row appears (traces land asynchronously after a run). */
-  async waitForLogsTraceRow(timeoutMs = 30_000): Promise<void> {
-    return test.step('wait for a trace row in the Logs tab', async () => {
+  /**
+   * Poll until the Logs tab settles on exactly `expected` trace rows.
+   *
+   * An exact count, not a lower bound: the experiment scope is the point of the tab, so a run of
+   * N items must show N traces. More would mean the scope leaked and the whole project is listed.
+   */
+  async waitForLogsTraceRows(expected: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`wait for ${expected} trace rows in the Logs tab`, async () => {
       await expect
         .poll(async () => this.logsTraceRows.count(), {
           timeout: timeoutMs,
           intervals: [500, 1000, 2000],
         })
-        .toBeGreaterThan(0);
+        .toBe(expected);
     });
   }
 

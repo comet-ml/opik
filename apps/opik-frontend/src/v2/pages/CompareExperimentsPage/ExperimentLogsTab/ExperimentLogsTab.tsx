@@ -2,6 +2,9 @@ import React, { useMemo } from "react";
 
 import { Experiment } from "@/types/datasets";
 import { generateExperimentIdsFilter } from "@/lib/filters";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import emptyLogsLightUrl from "/images/empty-logs-light.svg";
+import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import TraceLogsView from "@/v2/pages-shared/traces/TraceLogsView/TraceLogsView";
 
 type ExperimentLogsTabProps = {
@@ -30,7 +33,22 @@ const ExperimentLogsTab: React.FunctionComponent<ExperimentLogsTabProps> = ({
   // loaded experiment is what tells us which one.
   const projectId = experiments.find((e) => e.project_id)?.project_id;
 
-  if (!projectId) return null;
+  // Nothing to render before the experiment loads. Once it has, a missing project means the run
+  // never produced traces — say so rather than leaving the tab blank.
+  if (!projectId) {
+    if (experiments.length === 0) return null;
+
+    return (
+      <div className="py-8">
+        <DataTableEmptyContent
+          title="There are no traces yet"
+          description="Traces will appear here once this experiment records them."
+          lightImageUrl={emptyLogsLightUrl}
+          darkImageUrl={emptyLogsDarkUrl}
+        />
+      </div>
+    );
+  }
 
   return (
     <TraceLogsView
