@@ -1,13 +1,10 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isNumber from "lodash/isNumber";
-import copy from "clipboard-copy";
-import { CircleCheck, Copy, GitCommitVertical } from "lucide-react";
+import { CircleCheck, GitCommitVertical } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import BackButton from "@/shared/BackButton/BackButton";
-import { Button } from "@/ui/button";
-import { useToast } from "@/ui/use-toast";
 import CompareExperimentsButton from "@/v2/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import { Experiment } from "@/types/datasets";
 import { Tag } from "@/ui/tag";
@@ -36,20 +33,10 @@ const CompareExperimentsDetails: React.FunctionComponent<
   CompareExperimentsDetailsProps
 > = ({ experiments, experimentsIds }) => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
-  const { toast } = useToast();
 
   const isCompare = experimentsIds.length > 1;
 
   const experiment = experiments[0];
-
-  // SDK features that act on an existing run (resuming one, for instance) need the experiment id,
-  // which was previously only recoverable from the page URL or an opt-in column in the experiments
-  // table. Hidden while comparing, where "the" experiment id would be ambiguous (OPIK-6739).
-  const copyIdClickHandler = useCallback(() => {
-    if (!experiment?.id) return;
-    copy(experiment.id);
-    toast({ description: "ID successfully copied to clipboard" });
-  }, [toast, experiment?.id]);
 
   const title = !isCompare
     ? experiment?.name
@@ -111,15 +98,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
           />
           <h1 className="comet-body-accented truncate break-words">{title}</h1>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {!isCompare && experiment?.id && (
-            <Button size="2xs" variant="outline" onClick={copyIdClickHandler}>
-              <Copy className="mr-1 size-3.5" />
-              Copy ID
-            </Button>
-          )}
-          <CompareExperimentsButton />
-        </div>
+        <CompareExperimentsButton />
       </div>
       <div className="mb-1 flex gap-1.5 overflow-x-auto">
         {!isCompare && (
