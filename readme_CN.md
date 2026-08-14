@@ -376,7 +376,7 @@ Opik 允许你在开发阶段通过[数据集](https://www.comet.com/docs/opik/v
 
 如果你觉得 Opik 有用，请考虑给我们点个 star！你的支持将帮助我们壮大社区并持续改进产品。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+[![Star History Chart](https://star-history.dera.page/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
 
 <a id="-contributing"></a>
 ## 🤝 参与贡献
