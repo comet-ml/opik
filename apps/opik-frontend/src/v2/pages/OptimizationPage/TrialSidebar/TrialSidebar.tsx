@@ -80,6 +80,13 @@ const TrialSidebar: React.FC<TrialSidebarProps> = ({
               sourceFilters={generateExperimentIdsFilter(
                 trialExperiments.map((e) => e.id),
               )}
+              // Locked, not seeded: these are this optimization's trial logs, so the scope has to
+              // hold. Seeding it into the editable filter bar no longer works — the chip bar owns
+              // that key and drops any filter without a matching chip, which there is none for
+              // experiment ids, so the overlay would fall back to the whole project. The label is
+              // what keeps the lock visible: without it the narrowing is silent.
+              lockScope
+              scopeLabel={title}
               variant="nav"
               label="Logs"
               textSize="xs"
