@@ -6,6 +6,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.utils.ValidationUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.output.FinishReason;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -296,6 +297,34 @@ class OnlineScoringEngineParsingTest {
         // What the user actually reads is unchanged: ten names, with the remainder counted.
         assertThat(renderedWarning(parsed)).matches(
                 ".*Its fields were ('field_\\d+', ){9}'field_\\d+' and 490 more;.*");
+    }
+
+    @Test
+    @DisplayName("report a judge that answered with no text instead of failing the scoring message")
+    void whenTheAnswerHasNoText_thenReportsItAsNoAnswer() {
+        // A provider can return a message carrying no text — a content filter, or a reasoning model that emits
+        // none. Parsing it used to throw NPE, which killed the Redis message: the trace was silently never scored.
+        var noText = ChatResponse.builder()
+                .aiMessage(AiMessage.builder().build())
+                .finishReason(FinishReason.CONTENT_FILTER)
+                .build();
+
+        var parsed = OnlineScoringEngine.toFeedbackScores(noText, singleScoreSchema("S"));
+
+        assertThat(parsed.scores()).isEmpty();
+        assertThat(parsed.problem().kind()).isEqualTo(OnlineScoringEngine.ResponseProblem.Kind.NO_ANSWER);
+        // The user is told why nothing was scored, and the finish reason says which way the answer came back empty.
+        assertThat(renderedWarning(parsed)).contains("no answer", "CONTENT_FILTER");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   "})
+    @DisplayName("treat a blank judge answer as no answer rather than as unreadable JSON")
+    void whenTheAnswerIsBlank_thenReportsItAsNoAnswer(String blankAnswer) {
+        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse(blankAnswer), singleScoreSchema("S"));
+
+        assertThat(parsed.scores()).isEmpty();
+        assertThat(parsed.problem().kind()).isEqualTo(OnlineScoringEngine.ResponseProblem.Kind.NO_ANSWER);
     }
 
     @ParameterizedTest
