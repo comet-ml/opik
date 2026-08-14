@@ -24,48 +24,6 @@ export class ExperimentDetailPage {
     });
   }
 
-  /** The "Copy ID" action in the page header. */
-  get copyIdButton(): Locator {
-    return this.page.getByRole('button', { name: 'Copy ID' });
-  }
-
-  /**
-   * Click "Copy ID" and return what landed on the clipboard.
-   *
-   * Reads through a stub rather than `navigator.clipboard.readText()`: the suite grants no
-   * clipboard permission, and Chromium rejects a read without one. Stubbing `writeText` also keeps
-   * the assertion on what the app tried to copy, which is the behaviour under test.
-   */
-  async copyExperimentId(): Promise<string> {
-    return test.step('copy the experiment ID', async () => {
-      await this.page.evaluate(() => {
-        const w = window as unknown as { __copied?: string };
-        w.__copied = undefined;
-        Object.defineProperty(navigator, 'clipboard', {
-          configurable: true,
-          value: {
-            writeText: (text: string) => {
-              w.__copied = text;
-              return Promise.resolve();
-            },
-          },
-        });
-      });
-      await this.copyIdButton.click();
-      await expect
-        .poll(
-          async () =>
-            this.page.evaluate(
-              () => (window as unknown as { __copied?: string }).__copied,
-            ),
-          { timeout: 5_000 },
-        )
-        .toBeTruthy();
-      return this.page.evaluate(
-        () => (window as unknown as { __copied?: string }).__copied ?? '',
-      );
-    });
-  }
 
   /** Trace rows inside the Logs tab, scoped to the tab so they can't match the items table. */
   get logsTraceRows(): Locator {

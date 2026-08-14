@@ -5,7 +5,18 @@ import { generateExperimentIdsFilter } from "@/lib/filters";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
 import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
-import TraceLogsView from "@/v2/pages-shared/traces/TraceLogsView/TraceLogsView";
+import TraceLogsView, {
+  DEFAULT_TRACE_LOGS_VIEW_CONFIG,
+  TraceLogsViewConfig,
+} from "@/v2/pages-shared/traces/TraceLogsView/TraceLogsView";
+
+// Per design, the tab's toolbar carries the columns selector and nothing else — no row-height, date
+// range or refresh. Dropping the date control also drops date filtering entirely, so the tab always
+// spans the experiment's whole life.
+const EXPERIMENT_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
+  ...DEFAULT_TRACE_LOGS_VIEW_CONFIG,
+  showTableControls: false,
+};
 
 type ExperimentLogsTabProps = {
   experimentsIds: string[];
@@ -54,6 +65,7 @@ const ExperimentLogsTab: React.FunctionComponent<ExperimentLogsTabProps> = ({
     <TraceLogsView
       projectId={projectId}
       scopeFilters={scopeFilters}
+      viewConfig={EXPERIMENT_LOGS_VIEW_CONFIG}
       layout="page"
     />
   );
