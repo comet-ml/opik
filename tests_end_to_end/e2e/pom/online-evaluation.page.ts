@@ -1,13 +1,40 @@
 import { test, type Page, type Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { AutomationLogsPage } from './automation-logs.page';
+
+/**
+ * Template labels the dialog offers. The trace-scope set and the thread-scope
+ * set are disjoint — the Scope select swaps the template list — so picking a
+ * thread template requires `scope: 'Thread'`.
+ */
+export type RuleTemplate =
+  | 'Moderation'
+  | 'Hallucination'
+  | 'AnswerRelevance'
+  | 'Structured Output Compliance'
+  | 'Meaning Match'
+  | 'Custom LLM-as-judge'
+  | 'Conversational coherence'
+  | 'User frustration'
+  | 'Custom LLM-as-judge (thread)';
 
 export interface CreateRuleDialogLLMJudgeFields {
   name: string;
   /** Canned-template label as shown in the dialog. */
-  template: 'Moderation' | 'Hallucination' | 'AnswerRelevance' | 'Custom LLM-as-judge';
+  template: RuleTemplate;
   /** Model display name as shown in the model picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
+  /** Evaluation scope. Defaults to Trace, the dialog's own default. */
+  scope?: 'Trace' | 'Thread';
+  /**
+   * Variable-mapping overrides, keyed by the template variable name. Templates
+   * ship a default mapping for some variables and leave others blank (e.g.
+   * Meaning Match's `ground_truth`); a blank one must be filled or the rule
+   * renders the prompt with an empty value. Pass `{}` (or omit) to keep the
+   * `output → output.output` default the trace templates need.
+   */
+  variableMappings?: Record<string, string>;
 }
 
 export interface CreateRuleDialogPythonEqualsFields {
@@ -146,10 +173,18 @@ export class OnlineEvaluationPage {
     const d = this.dialog;
     await d.getByRole('textbox', { name: 'Rule name' }).fill(fields.name);
 
+    // Scope BEFORE the template: changing it resets the whole rule (the FE
+    // warns as much) and swaps the template list for the scope's own set.
+    if (fields.scope && fields.scope !== 'Trace') {
+      await this.scopeCombobox.click();
+      await this.page.getByRole('option', { name: fields.scope, exact: true }).click();
+      await expect(this.scopeCombobox).toContainText(fields.scope);
+    }
+
     // Pick the template FIRST — selecting it rebuilds the prompt + variable
     // mapping section, so any prior tweaks would be wiped out.
     const promptCombobox = d.getByRole('combobox').filter({
-      hasText: /^(Custom LLM-as-judge|Hallucination|Moderation|AnswerRelevance|Structured Output Compliance|Meaning Match)$/,
+      hasText: /^(Custom LLM-as-judge|Hallucination|Moderation|AnswerRelevance|Structured Output Compliance|Meaning Match|Conversational coherence|User frustration)$/,
     });
     await promptCombobox.click();
     await this.page.getByRole('option', { name: fields.template, exact: true }).click();
@@ -179,10 +214,42 @@ export class OnlineEvaluationPage {
     // so the engine extracts the bare string (per the JsonPath semantics in
     // OnlineScoringEngine.toVariableMapping — dot-containing paths get
     // `$.output`, bare paths get `$` which yields the whole JSON node).
-    await this.setVariableMapping('output', 'output.output');
+    // Thread templates have no per-trace variables to remap: their single
+    // `{{context}}` is the conversation the engine injects itself.
+    const mappings = fields.variableMappings ?? { output: 'output.output' };
+    for (const [variableName, pathValue] of Object.entries(mappings)) {
+      await this.setVariableMapping(variableName, pathValue);
+    }
 
     await d.getByTestId('add-edit-rule-dialog-submit').click();
     await d.waitFor({ state: 'hidden' });
+  }
+
+  /**
+   * The Scope select. It carries no testid, so it's identified by the only
+   * value it can hold — the scope labels — which no other combobox in the
+   * dialog renders.
+   */
+  private get scopeCombobox(): Locator {
+    return this.dialog.getByRole('combobox').filter({ hasText: /^(Trace|Thread|Span)$/ });
+  }
+
+  /**
+   * Open a rule's "Show logs" action and return the Automation logs page it
+   * lands on. The link targets a new tab, so the popup is awaited rather than
+   * the current page navigated.
+   */
+  async openLogsForRule(name: string): Promise<AutomationLogsPage> {
+    return test.step(`open logs for rule "${name}"`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      const [popup] = await Promise.all([
+        this.page.context().waitForEvent('page'),
+        row.getByRole('link', { name: 'Show logs' }).click(),
+      ]);
+      await popup.waitForLoadState('domcontentloaded');
+      return new AutomationLogsPage(popup);
+    });
   }
 
   /**
@@ -227,12 +294,20 @@ export class OnlineEvaluationPage {
     // Locate the cmdk-input by its surrounding row's label. Variable-mapping
     // rows look like:  <label>output</label> ... <input cmdk-input ... />
     // so we find the row by label text, then the cmdk-input inside it.
+    //
+    // `.last()`, not `.first()`: `has:` matches every *ancestor* of the label
+    // too, and with more than one variable the outermost match is the section
+    // wrapping all the rows — which holds every row's cmdk-input. Elements come
+    // back in document order, so the last match is the innermost div holding
+    // both this label and an input, i.e. the row itself. A single-variable
+    // template hides this (section and row hold the same one input).
     const row = this.dialog
       .locator('div')
       .filter({ has: this.page.locator(`text=/^${variableName}$/`) })
       .filter({ has: this.page.locator('input[cmdk-input]') })
-      .first();
+      .last();
     const input = row.locator('input[cmdk-input]');
+    await expect(input, `variable "${variableName}" resolves to exactly one mapping input`).toHaveCount(1);
     await input.waitFor({ state: 'visible' });
     await input.click();
     await this.page.keyboard.press('ControlOrMeta+A');

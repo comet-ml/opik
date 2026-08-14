@@ -3,6 +3,44 @@ import { test } from '@e2e/fixtures';
 import { ConfigurationPage } from '@e2e/pom/configuration.page';
 
 /**
+ * `data-provider` value → the model display name to pick in a model combobox,
+ * for providers we can drive a judge with. Keyed on the provider type the
+ * AI Providers table renders, so it can be matched against an already
+ * configured workspace without holding the provider's key.
+ */
+const MODEL_FOR_CONFIGURED_PROVIDER: Record<string, string> = {
+  anthropic: 'Claude Haiku 4.5',
+  openai: 'GPT 4o Mini',
+};
+
+/**
+ * Resolve a model display name for tests that need a working LLM judge,
+ * preferring a provider the target workspace has **already** configured.
+ *
+ * `ensureModelAvailable` self-provisions from the runner's env keys and skips
+ * the test when none is set — correct for a fresh deployment, wrong for a
+ * long-lived environment (staging) whose provider keys live in the workspace
+ * and were never handed to the runner. Checking the AI Providers table first
+ * means a judge test runs wherever a judge can actually run, and still falls
+ * back to env-based provisioning everywhere else.
+ */
+export async function resolveJudgeModel(page: Page): Promise<string> {
+  return test.step('resolve a model for the LLM judge', async () => {
+    const cfg = new ConfigurationPage(page);
+    await cfg.gotoAiProviders();
+    const configured = await cfg.listConfiguredProviders();
+    for (const [providerType, modelDisplayName] of Object.entries(
+      MODEL_FOR_CONFIGURED_PROVIDER,
+    )) {
+      if (configured.includes(providerType)) return modelDisplayName;
+    }
+    // Nothing usable is configured on the workspace — fall back to adding a
+    // provider from the runner's own keys (or skipping, if it has none).
+    return ensureModelAvailable(page);
+  });
+}
+
+/**
  * Provision an LLM provider for tests that drive the Playground / LLM-judge UI,
  * and return the model display name to select.
  *

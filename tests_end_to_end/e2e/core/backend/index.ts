@@ -11,7 +11,11 @@ export {
   type TestSuiteItemRef,
   type FeedbackScoreRef,
   type TraceDetail,
+  type SpanDetail,
+  type ThreadDetail,
   type AutomationRuleRef,
+  type AutomationRuleScoreSchemaRef,
+  type AutomationRuleLogRef,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
 } from './client';

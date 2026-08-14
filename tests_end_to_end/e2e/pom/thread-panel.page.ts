@@ -65,4 +65,49 @@ export class ThreadPanelPage {
   turnOutput(traceId: string, output: string): Locator {
     return this.turn(traceId).getByText(output, { exact: true });
   }
+
+  // --- Feedback scores tab ---
+  // The panel renders the same score table as the trace panel (Key | Score |
+  // Reason), behind a "Feedback scores" tab next to "Messages".
+
+  get feedbackScoresTab(): Locator {
+    return this.root.getByRole('tab', { name: 'Feedback scores' });
+  }
+
+  get feedbackScoresTabPanel(): Locator {
+    return this.root.getByRole('tabpanel', { name: 'Feedback scores' });
+  }
+
+  /** Switch to the Feedback scores tab. Idempotent if already selected. */
+  async openFeedbackScoresTab(): Promise<void> {
+    return test.step('Open the thread Feedback scores tab', async () => {
+      await this.feedbackScoresTab.click();
+      await this.feedbackScoresTabPanel.waitFor({ state: 'visible' });
+    });
+  }
+
+  /** Row in the Thread scores table matching the given score name. */
+  feedbackScoreRow(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.getByRole('row').filter({ hasText: scoreName });
+  }
+
+  /**
+   * Read the numeric value rendered in the Score column for the given thread
+   * score. Requires the Feedback scores tab to be open. Throws when the cell
+   * isn't a parseable number, so a blank or truncated render fails loudly
+   * rather than reading as zero.
+   */
+  async readFeedbackScoreValue(scoreName: string): Promise<number> {
+    const row = this.feedbackScoreRow(scoreName);
+    await row.waitFor({ state: 'visible' });
+    // Columns are: Key | Score | Reason | <actions>
+    const cellText = (await row.getByRole('cell').nth(1).textContent()) ?? '';
+    const parsed = Number(cellText.trim());
+    if (Number.isNaN(parsed)) {
+      throw new Error(
+        `ThreadPanelPage.readFeedbackScoreValue: cell text "${cellText}" for score "${scoreName}" is not a number`,
+      );
+    }
+    return parsed;
+  }
 }

@@ -240,4 +240,18 @@ export class TracePanelPage {
     }
     return parsed;
   }
+
+  /**
+   * Read the Reason column for the given score name. Requires the Feedback
+   * scores tab to be open. An LLM-judge score with no reason is a real defect
+   * (the judge's justification is the only thing that makes a score
+   * actionable), so this returns the raw text for the caller to assert on
+   * rather than tolerating an empty cell.
+   */
+  async readFeedbackScoreReason(scoreName: string): Promise<string> {
+    const row = this.feedbackScoreRow(scoreName);
+    await row.waitFor({ state: 'visible' });
+    // Columns are: Key | Score | Reason | <actions>
+    return ((await row.getByRole('cell').nth(2).textContent()) ?? '').trim();
+  }
 }

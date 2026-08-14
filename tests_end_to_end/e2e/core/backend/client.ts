@@ -77,12 +77,54 @@ export interface TraceDetail {
   name: string;
   projectId: string;
   feedbackScores: FeedbackScoreRef[];
+  /**
+   * The trace-level cost roll-up. Null when the backend priced nothing —
+   * genuinely different from 0, which means "priced, and it came to zero".
+   */
+  totalEstimatedCost: number | null;
+}
+
+/** One span of a trace, with the fields the backend computes rather than stores verbatim. */
+export interface SpanDetail {
+  id: string;
+  name: string;
+  type: string;
+  model: string | null;
+  provider: string | null;
+  usage: Record<string, number>;
+  /** Backend-computed cost. Null when the model/provider pair carries no price. */
+  totalEstimatedCost: number | null;
+}
+
+/** One entry of a rule's declared output schema (the score it promises to emit). */
+export interface AutomationRuleScoreSchemaRef {
+  name: string;
+  /** BOOLEAN | INTEGER | DOUBLE — the type the judge's answer is coerced into. */
+  type: string;
 }
 
 export interface AutomationRuleRef {
   id: string;
   name: string;
   projectIds: string[];
+  /** Discriminator: llm_as_judge, trace_thread_llm_as_judge, user_defined_metric_python, ... */
+  type: string;
+  /** Declared scores, empty for rule types that don't carry an output schema. */
+  schema: AutomationRuleScoreSchemaRef[];
+}
+
+/** One line of a rule's evaluation log, as the rule's Logs surface renders it. */
+export interface AutomationRuleLogRef {
+  level: string;
+  message: string;
+}
+
+/** A conversation thread as the Threads surface reads it. */
+export interface ThreadDetail {
+  id: string;
+  status: string;
+  numberOfMessages: number;
+  feedbackScores: FeedbackScoreRef[];
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -160,6 +202,7 @@ export function makeBackendClient(apiKey: string | null = null) {
           reason: fs.reason ?? null,
           source: String(fs.source),
         })),
+        totalEstimatedCost: t.totalEstimatedCost ?? null,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -437,6 +480,32 @@ export function makeBackendClient(apiKey: string | null = null) {
 
     getTrace: localGetTrace,
 
+    /**
+     * The spans of one trace. `totalEstimatedCost` is surfaced because it is a
+     * *derived* field: when a span is logged with usage but no explicit cost,
+     * the backend prices it from the shipped model price table, and that
+     * computation is what cost tests assert against.
+     */
+    async listSpansForTrace(args: {
+      traceId: string;
+      projectId: string;
+    }): Promise<SpanDetail[]> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        traceId: args.traceId,
+        size: 500,
+      });
+      return (page.content ?? []).map((s) => ({
+        id: String(s.id ?? ''),
+        name: s.name ?? '',
+        type: String(s.type ?? ''),
+        model: s.model ?? null,
+        provider: s.provider ?? null,
+        usage: (s.usage ?? {}) as Record<string, number>,
+        totalEstimatedCost: s.totalEstimatedCost ?? null,
+      }));
+    },
+
     async deleteTraces(ids: string[]): Promise<void> {
       await opik.api.traces.deleteTraces({ ids });
     },
@@ -459,7 +528,65 @@ export function makeBackendClient(apiKey: string | null = null) {
         id: String(r.id),
         name: r.name,
         projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
+        type: String(r.type ?? ''),
+        // Only the LLM-as-judge shapes carry `code.schema`; Python rules and
+        // any future type simply report no declared scores.
+        schema: ((r as { code?: { schema?: Array<{ name: string; type: string }> } }).code?.schema ??
+          []).map((s) => ({ name: s.name, type: String(s.type) })),
       }));
+    },
+
+    /**
+     * The rule's own evaluation log — the lines the "Show logs" surface
+     * renders. Emitted by the scoring engine (not the judge), so their shape
+     * is deterministic even when the score value isn't.
+     */
+    async getAutomationRuleLogs(ruleId: string): Promise<AutomationRuleLogRef[]> {
+      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
+        size: 500,
+      });
+      return (page.content ?? []).map((l) => ({
+        level: String(l.level ?? ''),
+        message: l.message ?? '',
+      }));
+    },
+
+    /**
+     * Force a thread inactive instead of waiting out the project's inactivity
+     * timeout. Thread-scoped rules only fire on close, so this is what makes a
+     * thread-scoping test bounded rather than a sleep.
+     */
+    async closeThread(args: { projectName: string; threadId: string }): Promise<void> {
+      await opik.api.traces.closeTraceThread({
+        projectName: args.projectName,
+        threadId: args.threadId,
+      });
+    },
+
+    async getThread(args: {
+      projectName: string;
+      threadId: string;
+    }): Promise<ThreadDetail | null> {
+      try {
+        const t = await opik.api.traces.getTraceThread({
+          projectName: args.projectName,
+          threadId: args.threadId,
+        });
+        return {
+          id: String(t.id ?? ''),
+          status: String(t.status ?? ''),
+          numberOfMessages: Number(t.numberOfMessages ?? 0),
+          feedbackScores: (t.feedbackScores ?? []).map((fs) => ({
+            name: fs.name,
+            value: Number(fs.value),
+            reason: fs.reason ?? null,
+            source: String(fs.source),
+          })),
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
