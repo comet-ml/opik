@@ -32,7 +32,7 @@ const getTracesStatistic = async (
     fromTime,
     toTime,
     logsSource,
-    visibilityMode = TRACE_VISIBILITY_MODE.default,
+    visibilityMode,
   }: UseTracesStatisticParams,
 ) => {
   const { data } = await api.get<UseTracesStatisticResponse>(
@@ -41,7 +41,9 @@ const getTracesStatistic = async (
       signal,
       params: {
         project_id: projectId,
-        ...generateVisibilityFilters(visibilityMode),
+        // Opt-in, unlike useTracesList: this hook has never sent a visibility filter, and defaulting
+        // one would silently drop hidden traces from every existing caller's aggregates.
+        ...(visibilityMode ? generateVisibilityFilters(visibilityMode) : {}),
         ...processFilters(
           filters,
           logsSource ? generateLogsSourceFilter(logsSource) : undefined,

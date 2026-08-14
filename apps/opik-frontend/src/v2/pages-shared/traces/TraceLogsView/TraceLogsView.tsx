@@ -109,11 +109,14 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { Filter } from "@/types/filters";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
+import {
+  TLS_QUERY_PREFIX,
+  TLS_STORAGE_PREFIX,
+} from "@/v2/pages-shared/traces/TraceLogsView/constants";
+
+export { TLS_QUERY_PREFIX };
 
 const getRowId = (d: Trace) => d.id;
-
-const TLS_STORAGE_PREFIX = "tls-traces-";
-export const TLS_QUERY_PREFIX = "tls_";
 
 export const DEFAULT_SCOPE_TOOLTIP =
   "These traces are locked to this scope and can't be changed via filters";
@@ -835,10 +838,11 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       throw new Error("Failed to fetch data");
     }
 
-    const allRows = result.data.content;
-    const selectedIds = Object.keys(rowSelection);
+    const selectedIds = new Set(Object.keys(rowSelection));
 
-    return allRows.filter((row) => selectedIds.includes(row.id)) as Trace[];
+    return result.data.content.filter((row) =>
+      selectedIds.has(row.id),
+    ) as Trace[];
   }, [refetchExportData, rowSelection]);
 
   const { traceId, handleRowClick, panels } = useTraceThreadPanelsState<Trace>({
