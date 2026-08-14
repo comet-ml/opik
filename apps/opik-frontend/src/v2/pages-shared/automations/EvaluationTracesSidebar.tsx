@@ -1,9 +1,9 @@
 import React from "react";
 
-import TraceLogsSidebar, {
-  TraceLogsViewConfig,
-} from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebar";
+import TraceLogsSidebar from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebar";
+import { TraceLogsViewConfig } from "@/v2/pages-shared/traces/TraceLogsView/TraceLogsView";
 import { useTraceLogsSidebarControls } from "@/v2/pages-shared/traces/TraceLogsSidebar/useTraceLogsSidebarControls";
+import { DATE_RANGE_PRESET_ALLTIME } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_SOURCE, TRACE_VISIBILITY_MODE } from "@/types/traces";
 
 // Evaluation-traces variant of the logs sidebar: a KPI dashboard on top, hidden-visibility
@@ -23,6 +23,8 @@ export const EVALUATION_TRACES_VIEW_CONFIG: TraceLogsViewConfig = {
   autoSelectScoreColumns: false,
   showMetricsSummary: true,
   visibilityMode: TRACE_VISIBILITY_MODE.hidden,
+  defaultDateRangePreset: DATE_RANGE_PRESET_ALLTIME,
+  showTableControls: true,
 };
 
 /**
@@ -44,6 +46,7 @@ export const EvaluationTracesSidebar: React.FunctionComponent<{
       logsSource={LOGS_SOURCE.evaluator}
       title="Evaluation traces"
       viewConfig={EVALUATION_TRACES_VIEW_CONFIG}
+      scopeTooltip="These traces are locked to this evaluator and can't be changed via filters"
     />
   );
 };
