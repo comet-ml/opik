@@ -204,14 +204,17 @@ export const buildSharedDynamicChips = ({
   scoreOptions,
   feedbackScoresLabel,
   isGuardrailsEnabled,
-  logsSource = LOGS_SOURCE.sdk,
+  logsSource,
 }: {
   projectId: string;
   type: TRACE_DATA_TYPE;
   scoreOptions: ChipOptionsResult;
   feedbackScoresLabel: string;
   isGuardrailsEnabled: boolean;
-  logsSource?: LOGS_SOURCE;
+  // Required, though it may be undefined: a default would silently scope a new surface's tag,
+  // error-type and metadata-path options to the SDK source, which is the footgun this parameter
+  // exists to remove. Undefined means "no source filter".
+  logsSource: LOGS_SOURCE | undefined;
 }): Record<string, ChipDefinition> => {
   const entityType: "spans" | "traces" =
     type === TRACE_DATA_TYPE.spans ? "spans" : "traces";
@@ -342,7 +345,7 @@ export const buildTraceChipDefinitions = ({
   traceScoreOptions: ChipOptionsResult;
   spanScoreOptions: ChipOptionsResult;
   isGuardrailsEnabled: boolean;
-  logsSource?: LOGS_SOURCE;
+  logsSource: LOGS_SOURCE | undefined;
 }): ChipDefinition[] => {
   const dynamicChips: Record<string, ChipDefinition> = {
     ...buildSharedDynamicChips({

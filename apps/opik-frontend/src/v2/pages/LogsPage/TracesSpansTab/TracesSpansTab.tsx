@@ -699,6 +699,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         traceScoreOptions,
         spanScoreOptions,
         isGuardrailsEnabled,
+        logsSource: LOGS_SOURCE.sdk,
       }),
     [isGuardrailsEnabled, projectId, traceScoreOptions, spanScoreOptions],
   );
@@ -720,6 +721,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         scoreOptions: spanScoreOptions,
         feedbackScoresLabel: "Feedback scores",
         isGuardrailsEnabled,
+        logsSource: LOGS_SOURCE.sdk,
       }),
     };
     const byId: Record<string, ChipDefinition> = {
