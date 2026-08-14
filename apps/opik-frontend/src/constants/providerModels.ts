@@ -486,6 +486,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "bytedance-seed/seed-1.6-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_2_1_TURBO,
+      label: "bytedance-seed/seed-2-1-turbo",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_2_0_CODE,
       label: "bytedance-seed/seed-2.0-code",
     },
@@ -648,6 +652,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO_0813,
+      label: "deepseek/deepseek-v4-pro-0813",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ELEUTHERAI_LLEMMA_7B,
       label: "eleutherai/llemma_7b",
     },
@@ -790,6 +798,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH_BATCH,
       label: "google/gemini-3.6-flash:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_7_FLASH,
+      label: "google/gemini-3.7-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_7_FLASH_BATCH,
+      label: "google/gemini-3.7-flash:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
@@ -2337,6 +2353,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.7-plus",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_2_4T_A95B,
+      label: "qwen/qwen3.8-2.4t-a95b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_MAX,
       label: "qwen/qwen3.8-max",
     },
@@ -2561,6 +2581,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_6,
+      label: "x-ai/grok-4.6",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
       label: "x-ai/grok-build-0.1",
     },
@@ -2699,6 +2723,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      label: "Gemini 3.7 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
       label: "Gemini 3.6 Flash",
