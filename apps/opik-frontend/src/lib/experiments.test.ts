@@ -4,6 +4,7 @@ import {
   EXPERIMENT_TAB,
   formatPromptVersionLabel,
   getAvailableExperimentTabs,
+  isExperimentTabId,
 } from "./experiments";
 import { EVALUATION_METHOD, Experiment } from "@/types/datasets";
 
@@ -20,6 +21,27 @@ const testSuiteExperiment = () =>
   experiment({ evaluation_method: EVALUATION_METHOD.TEST_SUITE });
 
 describe("experiments utilities", () => {
+  // The page reads `tab` straight off the URL, so this guard is what stands between an arbitrary
+  // query value and the tab state.
+  describe("isExperimentTabId", () => {
+    it("accepts every known tab id", () => {
+      Object.values(EXPERIMENT_TAB).forEach((id) =>
+        expect(isExperimentTabId(id)).toBe(true),
+      );
+    });
+
+    it("rejects an unknown tab name", () => {
+      expect(isExperimentTabId("traces")).toBe(false);
+      expect(isExperimentTabId("")).toBe(false);
+    });
+
+    it("rejects values a URL parser can hand back that aren't strings", () => {
+      [undefined, null, 0, 42, true, {}, ["items"]].forEach((value) =>
+        expect(isExperimentTabId(value)).toBe(false),
+      );
+    });
+  });
+
   describe("getAvailableExperimentTabs", () => {
     it("exposes every tab for a regular experiment", () => {
       expect(getAvailableExperimentTabs([experiment()])).toEqual([
