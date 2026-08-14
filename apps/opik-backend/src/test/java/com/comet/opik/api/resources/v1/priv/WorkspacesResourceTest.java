@@ -79,6 +79,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -765,6 +766,20 @@ class WorkspacesResourceTest {
 
             try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, API_KEY, WORKSPACE_NAME)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        void nullFilterElement_returnsUnprocessableEntity() {
+            // Bean validation has to reject a null element: validateFilter would dereference it and 500.
+            var startTime = Instant.now().minus(Duration.ofDays(1));
+            var request = spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, Instant.now(), null)
+                    .toBuilder()
+                    .filters(Collections.singletonList(null))
+                    .build();
+
+            try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
             }
         }
 
