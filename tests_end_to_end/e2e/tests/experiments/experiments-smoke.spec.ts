@@ -43,7 +43,6 @@ test.describe('Experiments — smoke', { tag: ['@t1-smoke', '@area:experiments']
       expect(experiment.scores.filter((s) => s.scoreValue === 0.0), 'fail rows').toHaveLength(1);
     });
 
-
     await test.step('Logs tab replaces the "Go to logs" tag and shows the run traces', async () => {
       await expect(detail.goToLogsTag, 'old "Go to logs" tag is gone').toHaveCount(0);
       await expect(detail.logsTab, 'Logs tab is present').toBeVisible();
