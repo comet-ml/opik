@@ -376,23 +376,20 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                             + "stopped investigating and wrapped up with the scores gathered so far.",
                                     costGuard.limitUsd(), trace.id(), costGuard.spentUsd());
                         }
-                        // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
-                        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
+                        // Re-keyed before logging so the rule's logs name the score the user configured, not
+                        // the internal assertion_N key. Empty mapping (regular online scoring) is a no-op.
+                        var parsed = OnlineScoringEngine
+                                .toFeedbackScores(chatResponse, message.llmAsJudgeCode().schema())
+                                .withUserFacingNames(message.scoreNameMapping());
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "traceId", trace.id());
+                        OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "traceId", trace.id());
                         return parsed.scores().stream()
-                                .map(item -> {
-                                    String scoreName = item.name();
-                                    if (message.scoreNameMapping().containsKey(scoreName)) {
-                                        scoreName = message.scoreNameMapping().get(scoreName);
-                                    }
-                                    return (FeedbackScoreBatchItem) item.toBuilder()
-                                            .name(scoreName)
-                                            .categoryName(message.categoryName())
-                                            .id(trace.id())
-                                            .projectId(trace.projectId())
-                                            .projectName(trace.projectName())
-                                            .build();
-                                })
+                                .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
+                                        .categoryName(message.categoryName())
+                                        .id(trace.id())
+                                        .projectId(trace.projectId())
+                                        .projectName(trace.projectName())
+                                        .build())
                                 .toList();
                     }
                 });
