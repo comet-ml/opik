@@ -1,4 +1,6 @@
 import React, { useMemo } from "react";
+import isString from "lodash/isString";
+import uniq from "lodash/uniq";
 
 import { Experiment } from "@/types/datasets";
 import { generateExperimentIdsFilter } from "@/lib/filters";
@@ -13,8 +15,13 @@ import TraceLogsView, {
 // Per design, the tab's toolbar carries the columns selector and nothing else — no row-height, date
 // range or refresh. Dropping the date control also drops date filtering entirely, so the tab always
 // spans the experiment's whole life.
+//
+// Its own storage namespace, so the columns, sort, page size and pinned chips a user sets here
+// don't overwrite the ones they set in the playground or trial overlays, which take the default
+// config. Without this every host shares one arrangement.
 const EXPERIMENT_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
   ...DEFAULT_TRACE_LOGS_VIEW_CONFIG,
+  storageNamespace: "experiment-",
   showTableControls: false,
 };
 
@@ -36,19 +43,40 @@ const ExperimentLogsTab: React.FunctionComponent<ExperimentLogsTabProps> = ({
   experiments,
 }) => {
   const scopeFilters = useMemo(
-    () => generateExperimentIdsFilter(experimentsIds),
+    // JsonParam yields whatever the URL parsed to, so a malformed link could otherwise put a number
+    // or object through join(",") and emit a filter like "[object Object]".
+    () => generateExperimentIdsFilter(experimentsIds.filter(isString)),
     [experimentsIds],
   );
 
-  // Compared experiments can only be compared within a dataset, so they share a project; the first
-  // loaded experiment is what tells us which one.
-  const projectId = experiments.find((e) => e.project_id)?.project_id;
+  // Traces are queried per project, so comparing experiments that live in different ones cannot be
+  // served by a single request. That happens: an experiment's project resolves from its own
+  // project_name, independently of the dataset, and the dataset lookup itself is project-agnostic.
+  const projectIds = useMemo(
+    () => uniq(experiments.map((e) => e.project_id).filter(isString)),
+    [experiments],
+  );
+  const projectId = projectIds[0];
 
-  // Nothing to render before the experiment loads. Once it has, a missing project means the run
-  // never produced traces — say so rather than leaving the tab blank.
+  // Nothing to render before the experiment loads.
+  if (experiments.length === 0) return null;
+
+  if (projectIds.length > 1) {
+    return (
+      <div className="py-8">
+        <DataTableEmptyContent
+          title="These experiments live in different projects"
+          description="Logs are read per project, so they can't be listed together. Open an experiment on its own to see its traces."
+          lightImageUrl={emptyLogsLightUrl}
+          darkImageUrl={emptyLogsDarkUrl}
+        />
+      </div>
+    );
+  }
+
+  // A loaded experiment with no project never produced traces — say so rather than leaving the tab
+  // blank.
   if (!projectId) {
-    if (experiments.length === 0) return null;
-
     return (
       <div className="py-8">
         <DataTableEmptyContent

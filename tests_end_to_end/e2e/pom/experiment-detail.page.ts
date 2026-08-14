@@ -39,12 +39,9 @@ export class ExperimentDetailPage {
    */
   async waitForLogsTraceRows(expected: number, timeoutMs = 30_000): Promise<void> {
     return test.step(`wait for ${expected} trace rows in the Logs tab`, async () => {
-      await expect
-        .poll(async () => this.logsTraceRows.count(), {
-          timeout: timeoutMs,
-          intervals: [500, 1000, 2000],
-        })
-        .toBe(expected);
+      await expect(this.logsTraceRows).toHaveCount(expected, {
+        timeout: timeoutMs,
+      });
     });
   }
 
