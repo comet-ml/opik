@@ -486,6 +486,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "bytedance-seed/seed-1.6-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_2_1_TURBO,
+      label: "bytedance-seed/seed-2-1-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_2_0_CODE,
+      label: "bytedance-seed/seed-2.0-code",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_2_0_LITE,
       label: "bytedance-seed/seed-2.0-lite",
     },
@@ -644,6 +652,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO_0813,
+      label: "deepseek/deepseek-v4-pro-0813",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ELEUTHERAI_LLEMMA_7B,
       label: "eleutherai/llemma_7b",
     },
@@ -786,6 +798,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH_BATCH,
       label: "google/gemini-3.6-flash:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_7_FLASH,
+      label: "google/gemini-3.7-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_7_FLASH_BATCH,
+      label: "google/gemini-3.7-flash:batch",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
@@ -960,6 +980,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "liquid/lfm-2.5-1.2b-thinking:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_2_5_2_6B_FREE,
+      label: "liquid/lfm-2.5-2.6b:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.LIQUID_LFM2_8B_A1B,
       label: "liquid/lfm2-8b-a1b",
     },
@@ -1054,6 +1078,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B_FREE,
       label: "meta-llama/llama-guard-4-12b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_GLIMMER_30B,
+      label: "meta/muse-glimmer-30b",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_1,
@@ -1479,6 +1507,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
       label: "nvidia/nemotron-3.5-content-safety:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_LIGHTNING,
+      label: "nvidia/nemotron-3.5-lightning",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_LIGHTNING_FREE,
+      label: "nvidia/nemotron-3.5-lightning:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_NANO_12B_V2_VL,
@@ -2317,6 +2353,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.7-plus",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_2_4T_A95B,
+      label: "qwen/qwen3.8-2.4t-a95b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_MAX,
       label: "qwen/qwen3.8-max",
     },
@@ -2351,6 +2391,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_ULTRA,
       label: "sakana/fugu-ultra",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.SAKANA_SAKANA_NAMAZU,
+      label: "sakana/sakana-namazu",
     },
     {
       value: PROVIDER_MODEL_TYPE.SAO10K_L3_EURYALE_70B,
@@ -2473,6 +2517,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "upstage/solar-pro-3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO4,
+      label: "upstage/solar-pro4",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.WRITER_PALMYRA_X5,
       label: "writer/palmyra-x5",
     },
@@ -2531,6 +2579,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_5,
       label: "x-ai/grok-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_6,
+      label: "x-ai/grok-4.6",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
@@ -2671,6 +2723,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
+      label: "Gemini 3.7 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
       label: "Gemini 3.6 Flash",
