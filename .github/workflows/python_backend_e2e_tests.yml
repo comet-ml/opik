@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload BE logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-be-e2e-be-logs
           path: |
