@@ -24,7 +24,6 @@ export class ExperimentDetailPage {
     });
   }
 
-
   /** Trace rows inside the Logs tab, scoped to the tab so they can't match the items table. */
   get logsTraceRows(): Locator {
     return this.page
