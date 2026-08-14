@@ -7,7 +7,7 @@ import {
 } from "use-query-params";
 
 import { Filter } from "@/types/filters";
-import { TLS_QUERY_PREFIX } from "@/v2/pages-shared/traces/TraceLogsView/TraceLogsView";
+import { TLS_QUERY_PREFIX } from "@/v2/pages-shared/traces/TraceLogsView/constants";
 
 /**
  * Open/close + filter wiring for the trace-logs sidebar, backed by the shared `tls_*` query params.
