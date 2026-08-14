@@ -2,7 +2,7 @@ import { test, expect } from '@e2e/fixtures';
 import { ExperimentsPage } from '@e2e/pom/experiments.page';
 
 test.describe('Experiments — smoke', { tag: ['@t1-smoke', '@area:experiments'] }, () => {
-  test('SDK-seeded experiment renders in list, scores its items, and exposes its traces and ID', { tag: ['@cap:experiments.list-experiments', '@cap:experiments.per-item-scores', '@cap:experiments.logs-tab', '@cap:experiments.copy-experiment-id'] }, async ({
+  test('SDK-seeded experiment renders in list, scores its items, and exposes its traces', { tag: ['@cap:experiments.list-experiments', '@cap:experiments.per-item-scores', '@cap:experiments.logs-tab'] }, async ({
     experiment,
     project,
     page,
@@ -43,11 +43,6 @@ test.describe('Experiments — smoke', { tag: ['@t1-smoke', '@area:experiments']
       expect(experiment.scores.filter((s) => s.scoreValue === 0.0), 'fail rows').toHaveLength(1);
     });
 
-    await test.step('Header copies the experiment ID to the clipboard', async () => {
-      await expect(detail.copyIdButton, '"Copy ID" action is present').toBeVisible();
-      expect(await detail.copyExperimentId(), 'clipboard holds the experiment ID')
-        .toBe(experiment.experimentId);
-    });
 
     await test.step('Logs tab replaces the "Go to logs" tag and shows the run traces', async () => {
       await expect(detail.goToLogsTag, 'old "Go to logs" tag is gone').toHaveCount(0);

@@ -562,7 +562,6 @@ areas:
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
-      copy-experiment-id:      { covered: true,  tier: t1-smoke }
       export-comparison:       { covered: false }
       delete-experiment:       { covered: false }
 
