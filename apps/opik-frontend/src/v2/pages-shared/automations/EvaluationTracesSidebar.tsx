@@ -24,6 +24,7 @@ export const EVALUATION_TRACES_VIEW_CONFIG: TraceLogsViewConfig = {
   showMetricsSummary: true,
   visibilityMode: TRACE_VISIBILITY_MODE.hidden,
   defaultDateRangePreset: DATE_RANGE_PRESET_ALLTIME,
+  showTableControls: true,
 };
 
 /**
