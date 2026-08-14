@@ -567,6 +567,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         AND thread_id IN (SELECT thread_id FROM traces_final_ids)
                     <endif>
                 <endif>
+                <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
