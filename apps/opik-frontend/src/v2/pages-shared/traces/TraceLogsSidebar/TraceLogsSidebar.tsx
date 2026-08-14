@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import { LOGS_SOURCE } from "@/types/traces";
 import { Filter } from "@/types/filters";
+import { COLUMN_EXPERIMENT_IDS } from "@/types/shared";
 import TraceLogsView, {
   DEFAULT_TRACE_LOGS_VIEW_CONFIG,
   TLS_QUERY_PREFIX,
@@ -45,6 +46,21 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     `${TLS_QUERY_PREFIX}scope`,
     JsonParam,
   );
+  const [seededFilters] = useQueryParam<Filter[] | undefined>(
+    `${TLS_QUERY_PREFIX}filters`,
+    JsonParam,
+  );
+
+  // Links minted before the scope existed carry the experiment constraint in the editable filter
+  // key. No chip can express experiment ids, so the chip bar drops it — and a bookmarked trial-log
+  // URL would quietly widen to the whole project. Lift those filters into the scope instead.
+  const effectiveScope = useMemo(() => {
+    const scope = Array.isArray(scopeFilters) ? scopeFilters : [];
+    const legacy = (Array.isArray(seededFilters) ? seededFilters : []).filter(
+      (f) => f?.field === COLUMN_EXPERIMENT_IDS,
+    );
+    return scope.length || legacy.length ? [...scope, ...legacy] : undefined;
+  }, [scopeFilters, seededFilters]);
   const [scopeLabel] = useQueryParam(
     `${TLS_QUERY_PREFIX}scopeLabel`,
     StringParam,
@@ -74,9 +90,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
           projectName={projectName}
           logsSource={logsSource}
           viewConfig={viewConfig}
-          // JsonParam hands back whatever the URL parsed to, annotation notwithstanding, so a
-          // malformed link could otherwise spread a non-array and take the sidebar down.
-          scopeFilters={Array.isArray(scopeFilters) ? scopeFilters : undefined}
+          scopeFilters={effectiveScope}
           scopeLabel={scopeLabel ?? undefined}
           scopeTooltip={scopeTooltip}
           container={sheetContentRef}
