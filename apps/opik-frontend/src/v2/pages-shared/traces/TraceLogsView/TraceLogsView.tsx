@@ -676,6 +676,9 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       fromTime: intervalStart,
       toTime: intervalEnd,
       logsSource,
+      // Same visibility as the table, or the KPI cards would aggregate a different set of traces
+      // than the rows beneath them.
+      visibilityMode: viewConfig.visibilityMode,
     },
     {
       enabled,
