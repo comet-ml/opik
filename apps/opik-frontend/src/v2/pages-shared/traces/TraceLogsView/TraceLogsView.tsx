@@ -270,6 +270,11 @@ export type TraceLogsViewConfig = {
   // anything older than it — an experiment run two months ago would open on an empty table. A range
   // the user picks explicitly still wins over this.
   defaultDateRangePreset: DateRangePreset;
+  // Row-height, date-range and refresh controls. The experiment Logs tab shows only the columns
+  // selector per its design; the overlay hosts keep the full set they have today. Turning the date
+  // range off also stops the view constraining by date at all — an invisible window would be the
+  // very trap the all-time default exists to avoid.
+  showTableControls: boolean;
 };
 
 export const DEFAULT_TRACE_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
@@ -279,6 +284,7 @@ export const DEFAULT_TRACE_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
   showMetricsSummary: false,
   visibilityMode: TRACE_VISIBILITY_MODE.all,
   defaultDateRangePreset: DATE_RANGE_PRESET_ALLTIME,
+  showTableControls: true,
 };
 
 // Stable empty reference for the "don't auto-select score columns" case (keeps hook deps steady).
@@ -425,8 +431,8 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   const {
     dateRange,
     handleDateRangeChange,
-    intervalStart,
-    intervalEnd,
+    intervalStart: rawIntervalStart,
+    intervalEnd: rawIntervalEnd,
     minDate,
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage({
@@ -436,6 +442,13 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     // changed the range there. The URL key stays shared, so existing deep links keep working.
     localStorageKey: `${storagePrefix}date-range`,
   });
+
+  // With the date control hidden the view spans all time: a window nobody can see or change is
+  // worse than no window at all.
+  const intervalStart = viewConfig.showTableControls
+    ? rawIntervalStart
+    : undefined;
+  const intervalEnd = viewConfig.showTableControls ? rawIntervalEnd : undefined;
 
   const [search = "", setSearch] = useQueryParam(
     `${TLS_QUERY_PREFIX}search`,
@@ -932,11 +945,13 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   // house size for a chip-bar toolbar on both page and overlay surfaces.
   const controls = (
     <div className="flex shrink-0 items-center gap-2">
-      <DataTableRowHeightSelector
-        type={height as ROW_HEIGHT}
-        setType={setHeight}
-        size="icon-2xs"
-      />
+      {viewConfig.showTableControls && (
+        <DataTableRowHeightSelector
+          type={height as ROW_HEIGHT}
+          setType={setHeight}
+          size="icon-2xs"
+        />
+      )}
       <ColumnsButton
         columns={COLUMN_DATA}
         selectedColumns={selectedColumns}
@@ -952,24 +967,28 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
             : []
         }
       ></ColumnsButton>
-      <Separator orientation="vertical" className="mx-[2px] h-4" />
-      <MetricDateRangeSelect
-        value={dateRange}
-        onChangeValue={handleDateRangeChange}
-        minDate={minDate}
-        maxDate={maxDate}
-        triggerClassName="h-6"
-      />
-      <Separator orientation="vertical" className="mx-[2px] h-4" />
-      <RefreshButton
-        tooltip="Refresh traces list"
-        size="icon-2xs"
-        isFetching={isFetching}
-        onRefresh={() => {
-          refetch();
-          refetchStatistic();
-        }}
-      />
+      {viewConfig.showTableControls && (
+        <>
+          <Separator orientation="vertical" className="mx-[2px] h-4" />
+          <MetricDateRangeSelect
+            value={dateRange}
+            onChangeValue={handleDateRangeChange}
+            minDate={minDate}
+            maxDate={maxDate}
+            triggerClassName="h-6"
+          />
+          <Separator orientation="vertical" className="mx-[2px] h-4" />
+          <RefreshButton
+            tooltip="Refresh traces list"
+            size="icon-2xs"
+            isFetching={isFetching}
+            onRefresh={() => {
+              refetch();
+              refetchStatistic();
+            }}
+          />
+        </>
+      )}
     </div>
   );
 
