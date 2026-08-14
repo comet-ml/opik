@@ -439,8 +439,13 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     defaultValue: viewConfig.defaultDateRangePreset,
     // Namespaced storage so the all-time default actually applies: the key is otherwise shared with
     // the main Logs page, whose stored trailing window would override it for anyone who has ever
-    // changed the range there. The URL key stays shared, so existing deep links keep working.
+    // changed the range there. The URL key stays shared where the control is visible, so existing
+    // deep links keep working — and is namespaced where it isn't, since the hook always writes it
+    // and a shared param nothing reads back would just be litter.
     localStorageKey: `${storagePrefix}date-range`,
+    ...(viewConfig.showTableControls
+      ? {}
+      : { key: `${TLS_QUERY_PREFIX}time_range` }),
   });
 
   // With the date control hidden the view spans all time: a window nobody can see or change is
