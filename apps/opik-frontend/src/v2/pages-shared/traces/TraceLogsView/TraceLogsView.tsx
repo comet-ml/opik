@@ -443,9 +443,11 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     // deep links keep working — and is namespaced where it isn't, since the hook always writes it
     // and a shared param nothing reads back would just be litter.
     localStorageKey: `${storagePrefix}date-range`,
-    ...(viewConfig.showTableControls
-      ? {}
-      : { key: `${TLS_QUERY_PREFIX}time_range` }),
+    // Namespaced URL key too. On the shared `time_range` the query value wins over storage, so a
+    // stray time_range in the host page's URL silently defeated the all-time default; and the hook
+    // writes its key on mount, so opening an overlay stamped time_range into the host URL and left
+    // it there. Every other param this view owns is tls_-prefixed; this one now matches.
+    key: `${TLS_QUERY_PREFIX}time_range`,
   });
 
   // With the date control hidden the view spans all time: a window nobody can see or change is
@@ -462,7 +464,9 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       updateType: "replaceIn",
     },
   );
-  const trimmedSearch = (search as string).trim().toLowerCase();
+  // The param default only covers undefined; useQueryParam can hand back null.
+  const searchText = search ?? "";
+  const trimmedSearch = searchText.trim().toLowerCase();
 
   const [page = 1, setPage] = useQueryParam(
     `${TLS_QUERY_PREFIX}page`,
@@ -647,7 +651,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       filters: effectiveFilters,
       page: page as number,
       size: size as number,
-      search: search as string,
+      search: searchText,
       truncate: false,
       fromTime: intervalStart,
       toTime: intervalEnd,
@@ -669,6 +673,9 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       fromTime: intervalStart,
       toTime: intervalEnd,
       logsSource,
+      // Same visibility as the table, or the KPI cards would aggregate a different set of traces
+      // than the rows beneath them.
+      visibilityMode: viewConfig.visibilityMode,
     },
     {
       enabled,
@@ -677,7 +684,10 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
 
   const isTableLoading = isPending || isFeedbackScoresPending;
 
-  const noData = !search && chipFilters.length === 0;
+  // A scope narrows the result set just as filters do, so an empty scoped table means "nothing
+  // matched", not "nothing recorded yet" — the illustration would be misleading.
+  const noData =
+    !searchText && chipFilters.length === 0 && scopeFilters.length === 0;
 
   const handleClearFilters = useCallback(() => {
     setSearch("");
@@ -1035,7 +1045,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
       prefix={
         <div className="flex shrink-0 items-center gap-2">
           <SearchInput
-            searchText={search as string}
+            searchText={searchText}
             setSearchText={setSearch}
             placeholder="Search by anything"
             className="w-[200px] shrink-0"

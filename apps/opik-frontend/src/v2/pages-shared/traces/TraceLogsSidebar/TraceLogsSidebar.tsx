@@ -74,7 +74,9 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
           projectName={projectName}
           logsSource={logsSource}
           viewConfig={viewConfig}
-          scopeFilters={scopeFilters ?? undefined}
+          // JsonParam hands back whatever the URL parsed to, annotation notwithstanding, so a
+          // malformed link could otherwise spread a non-array and take the sidebar down.
+          scopeFilters={Array.isArray(scopeFilters) ? scopeFilters : undefined}
           scopeLabel={scopeLabel ?? undefined}
           scopeTooltip={scopeTooltip}
           container={sheetContentRef}
