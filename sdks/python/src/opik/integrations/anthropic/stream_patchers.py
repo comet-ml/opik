@@ -88,7 +88,7 @@ def patch_sync_stream(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from anthropic.Stream.",
+                    "Exception raised from anthropic.Stream: %s",
                     str(exception),
                     exc_info=True,
                 )
@@ -150,7 +150,7 @@ def patch_async_stream(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from anthropic.AsyncStream.",
+                    "Exception raised from anthropic.AsyncStream: %s",
                     str(exception),
                     exc_info=True,
                 )
@@ -222,7 +222,7 @@ def patch_sync_message_stream_manager(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from anthropic.MessageStream.",
+                    "Exception raised from anthropic.MessageStream: %s",
                     str(exception),
                     exc_info=True,
                 )
@@ -312,7 +312,7 @@ def patch_async_message_stream_manager(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from anthropic.AsyncMessageStream.",
+                    "Exception raised from anthropic.AsyncMessageStream: %s",
                     str(exception),
                     exc_info=True,
                 )
