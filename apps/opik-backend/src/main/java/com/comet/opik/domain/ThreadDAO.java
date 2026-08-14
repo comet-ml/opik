@@ -495,7 +495,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
-    private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
+    @VisibleForTesting
+    static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
                 SELECT DISTINCT id, thread_id
                 FROM (
@@ -1014,7 +1015,8 @@ class ThreadDAOImpl implements ThreadDAO {
      * 1. First level: Uses the same thread aggregation as SELECT_TRACES_THREADS_BY_PROJECT_IDS (reusing the exact CTEs and aggregation logic)
      * 2. Second level: Wraps the thread results and calculates stats across all threads (AVG, SUM, quantiles)
      ***/
-    private static final String SELECT_TRACE_THREADS_STATS = """
+    @VisibleForTesting
+    static final String SELECT_TRACE_THREADS_STATS = """
             SELECT
                 threads.workspace_id as workspace_id,
                 threads.project_id as project_id,

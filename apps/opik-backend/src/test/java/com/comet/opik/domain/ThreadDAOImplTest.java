@@ -8,12 +8,16 @@ import com.comet.opik.infrastructure.FilterUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -148,6 +152,65 @@ class ThreadDAOImplTest {
         }
 
         private record Rendered(ST template, boolean gateOpen) {
+        }
+    }
+
+    @Nested
+    @DisplayName("thread_id pushdown across the templates that share it")
+    class ThreadIdPushdownTemplateSync {
+
+        private static final String THREAD_ID_PUSHDOWN = "AND thread_id = :thread_id_pushdown";
+        private static final String TRACES_FINAL_IDS_IN = "thread_id IN (SELECT thread_id FROM traces_final_ids)";
+        private static final String SEARCH_CLAUSE = "ilike(thread_id, :search_text)";
+
+        static Stream<Arguments> templatesSharingThePushdown() {
+            return Stream.of(
+                    Arguments.of("list", ThreadDAOImpl.SELECT_TRACES_THREADS_BY_PROJECT_IDS),
+                    Arguments.of("count", ThreadDAOImpl.SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS),
+                    Arguments.of("stats", ThreadDAOImpl.SELECT_TRACE_THREADS_STATS));
+        }
+
+        /**
+         * OPIK-7919: on the uuid_from_time branch trace_threads_final skips the traces_final_ids IN, so the
+         * thread_id equality is the only predicate left that prunes — and trace_threads is
+         * ORDER BY (workspace_id, project_id, thread_id, id), so it prunes on the primary key while
+         * {@code id >= :uuid_from_time} cannot. The count template was missing this line while the list and
+         * stats templates had it, which left countThreadTotal scanning every trace_threads row of the
+         * project. This pins all three templates to emit it identically.
+         */
+        @ParameterizedTest(name = "{0} template")
+        @MethodSource("templatesSharingThePushdown")
+        @DisplayName("trace_threads_final emits the thread_id pushdown on the uuid_from_time branch")
+        void traceThreadsFinalEmitsThreadIdPushdownOnUuidBranch(String name, String query) {
+            var criteria = TraceSearchCriteria.builder()
+                    .projectId(UUID.randomUUID())
+                    .uuidFromTime(UUID.randomUUID())
+                    .filters(List.of(TraceThreadFilter.builder()
+                            .field(TraceThreadField.ID)
+                            .operator(Operator.EQUAL)
+                            .value("thread-1")
+                            .build()))
+                    .build();
+
+            var template = FilterUtils.newTraceThreadFindTemplate(query, criteria, SEARCH_CLAUSE, true);
+            if (ThreadDAOImpl.shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+                template.add("traces_final_ids", true);
+            }
+
+            var traceThreadsFinal = traceThreadsFinalCte(template.render());
+
+            assertThat(traceThreadsFinal).contains("AND id >= :uuid_from_time");
+            assertThat(traceThreadsFinal).doesNotContain(TRACES_FINAL_IDS_IN);
+            assertThat(traceThreadsFinal).contains(THREAD_ID_PUSHDOWN);
+        }
+
+        /** The trace_threads_final CTE body, up to its ORDER BY — so the assertions cannot match another CTE. */
+        private static String traceThreadsFinalCte(String sql) {
+            int start = sql.indexOf("trace_threads_final AS (");
+            assertThat(start).isNotNegative();
+            int end = sql.indexOf("ORDER BY (workspace_id, project_id, thread_id, id)", start);
+            assertThat(end).isGreaterThan(start);
+            return sql.substring(start, end);
         }
     }
 }
