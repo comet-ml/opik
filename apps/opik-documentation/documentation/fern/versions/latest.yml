@@ -974,6 +974,9 @@ navigation:
           - page: LLM model registry
             path: ../docs-v2/self-host/configure/llm-model-registry.mdx
             slug: llm-model-registry
+          - page: Redis Sentinel
+            path: ../docs-v2/self-host/configure/redis-sentinel.mdx
+            slug: redis-sentinel
   - tab: reference
     layout:
       - page: Overview
