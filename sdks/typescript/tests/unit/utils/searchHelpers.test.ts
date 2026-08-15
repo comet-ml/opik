@@ -69,7 +69,7 @@ describe("searchHelpers", () => {
       });
 
       const feedbackResult = parseFilterString(
-        'feedback_scores."Answer Relevance" < 0.8'
+        'feedback_scores."Answer Relevance" < 0.8',
       );
       expect(feedbackResult![0]).toMatchObject({
         field: "feedback_scores",
@@ -81,7 +81,7 @@ describe("searchHelpers", () => {
 
     it("should parse complex queries with multiple conditions", () => {
       const result = parseFilterString(
-        'name = "test" and duration > 100 and thread_id = "thread-123"'
+        'name = "test" and duration > 100 and thread_id = "thread-123"',
       );
 
       expect(result).toHaveLength(3);
@@ -93,7 +93,7 @@ describe("searchHelpers", () => {
     it("should throw error for invalid OQL syntax", () => {
       expect(() => parseFilterString("invalid syntax ===")).toThrow();
       expect(() => parseFilterString('invalid_field = "test"')).toThrow(
-        /is not supported/
+        /is not supported/,
       );
     });
   });
@@ -168,6 +168,26 @@ describe("searchHelpers", () => {
       await promise;
     });
 
+    it("should not sleep past the timeout when the poll interval is longer", async () => {
+      const mockSearchFn = vi.fn().mockResolvedValue([]);
+      const promise = searchAndWaitForDone(mockSearchFn, 1, 100, 5000);
+      let settled = false;
+      const trackedPromise = promise.then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      try {
+        expect(settled).toBe(true);
+        await expect(trackedPromise).resolves.toEqual([]);
+        expect(mockSearchFn).toHaveBeenCalledTimes(2);
+      } finally {
+        await vi.runAllTimersAsync();
+      }
+    });
+
     it("should propagate search function errors", async () => {
       const mockSearchFn = vi
         .fn()
@@ -205,7 +225,7 @@ describe("searchHelpers", () => {
 
       const mockStream = {} as AsyncIterable<Uint8Array>;
       vi.spyOn(mockApiClient.traces, "searchTraces").mockResolvedValue(
-        mockStream as never
+        mockStream as never,
       );
 
       const filters: OpikApi.TraceFilterPublic[] = [
@@ -217,7 +237,7 @@ describe("searchHelpers", () => {
         "test-project",
         filters,
         100,
-        true
+        true,
       );
 
       expect(mockApiClient.traces.searchTraces).toHaveBeenCalledWith({
@@ -232,7 +252,7 @@ describe("searchHelpers", () => {
     it("should handle null filters and pass as undefined to API", async () => {
       const mockStream = {} as AsyncIterable<Uint8Array>;
       vi.spyOn(mockApiClient.traces, "searchTraces").mockResolvedValue(
-        mockStream as never
+        mockStream as never,
       );
 
       await searchTracesWithFilters(
@@ -240,20 +260,20 @@ describe("searchHelpers", () => {
         "test-project",
         null,
         100,
-        true
+        true,
       );
 
       expect(mockApiClient.traces.searchTraces).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: undefined,
-        })
+        }),
       );
     });
 
     it("should handle complex filters with metadata and feedback keys", async () => {
       const mockStream = {} as AsyncIterable<Uint8Array>;
       vi.spyOn(mockApiClient.traces, "searchTraces").mockResolvedValue(
-        mockStream as never
+        mockStream as never,
       );
 
       const filters: OpikApi.TraceFilterPublic[] = [
@@ -276,7 +296,7 @@ describe("searchHelpers", () => {
         "test-project",
         filters,
         100,
-        true
+        true,
       );
 
       const call = (
@@ -333,7 +353,7 @@ describe("searchHelpers", () => {
       });
 
       const feedbackResult = parseSpanFilterString(
-        'feedback_scores."quality" > 0.8'
+        'feedback_scores."quality" > 0.8',
       );
       expect(feedbackResult![0]).toMatchObject({
         field: "feedback_scores",
@@ -345,7 +365,7 @@ describe("searchHelpers", () => {
 
     it("should parse complex queries with multiple conditions", () => {
       const result = parseSpanFilterString(
-        'model = "gpt-4" and provider = "openai" and type = "llm"'
+        'model = "gpt-4" and provider = "openai" and type = "llm"',
       );
 
       expect(result).toHaveLength(3);
@@ -396,7 +416,7 @@ describe("searchHelpers", () => {
 
       const mockStream = {} as AsyncIterable<Uint8Array>;
       vi.spyOn(mockApiClient.spans, "searchSpans").mockResolvedValue(
-        mockStream as never
+        mockStream as never,
       );
 
       const filters: OpikApi.SpanFilterPublic[] = [
@@ -408,7 +428,7 @@ describe("searchHelpers", () => {
         "test-project",
         filters,
         100,
-        true
+        true,
       );
 
       expect(mockApiClient.spans.searchSpans).toHaveBeenCalledWith({
@@ -423,7 +443,7 @@ describe("searchHelpers", () => {
     it("should handle null filters and pass as undefined to API", async () => {
       const mockStream = {} as AsyncIterable<Uint8Array>;
       vi.spyOn(mockApiClient.spans, "searchSpans").mockResolvedValue(
-        mockStream as never
+        mockStream as never,
       );
 
       await searchSpansWithFilters(
@@ -431,20 +451,20 @@ describe("searchHelpers", () => {
         "test-project",
         null,
         100,
-        true
+        true,
       );
 
       expect(mockApiClient.spans.searchSpans).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: undefined,
-        })
+        }),
       );
     });
 
     it("should handle complex filters with metadata and feedback keys", async () => {
       const mockStream = {} as AsyncIterable<Uint8Array>;
       vi.spyOn(mockApiClient.spans, "searchSpans").mockResolvedValue(
-        mockStream as never
+        mockStream as never,
       );
 
       const filters: OpikApi.SpanFilterPublic[] = [
@@ -472,12 +492,11 @@ describe("searchHelpers", () => {
         "test-project",
         filters,
         100,
-        true
+        true,
       );
 
-      const call = (
-        mockApiClient.spans.searchSpans as ReturnType<typeof vi.fn>
-      ).mock.calls[0][0];
+      const call = (mockApiClient.spans.searchSpans as ReturnType<typeof vi.fn>)
+        .mock.calls[0][0];
       expect(call.filters).toEqual(filters);
     });
   });
