@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapOpenAIMessages } from "./mapper";
+import { combineOpenAIMessages, mapOpenAIMessages } from "./mapper";
 
 describe("mapOpenAIMessages", () => {
   describe("Input formats", () => {
@@ -814,5 +814,57 @@ describe("mapOpenAIMessages", () => {
       expect(result.messages).toHaveLength(1);
       expect(result.messages[0].blocks).toHaveLength(0);
     });
+  });
+});
+
+describe("combineOpenAIMessages with truncation", () => {
+  const manyMessages = (count: number, prefix: string) =>
+    Array.from({ length: count }, (_, index) => ({
+      role: "assistant" as const,
+      content: prefix + "-" + index,
+    }));
+
+  it("uses the output once when both views are truncated at the same point", () => {
+    const input = mapOpenAIMessages(
+      { messages: manyMessages(60, "m") },
+      { fieldType: "input" },
+    );
+    const output = mapOpenAIMessages(
+      { messages: manyMessages(62, "m") },
+      { fieldType: "output" },
+    );
+
+    const combined = combineOpenAIMessages(
+      { raw: undefined, mapped: input },
+      { raw: undefined, mapped: output },
+    );
+
+    // Input and output are truncated with different omitted counts, but the
+    // placeholder fingerprint is stable, so the output is recognized as a
+    // superset and rendered once instead of duplicating the history.
+    expect(combined.messages.length).toBeLessThan(
+      input.messages.length + output.messages.length,
+    );
+    expect(combined.messages).toEqual(output.messages);
+  });
+
+  it("keeps concatenation when the output is not a superset", () => {
+    const input = mapOpenAIMessages(
+      { messages: [{ role: "user" as const, content: "hello" }] },
+      { fieldType: "input" },
+    );
+    const output = mapOpenAIMessages(
+      { messages: [{ role: "assistant" as const, content: "hi there" }] },
+      { fieldType: "output" },
+    );
+
+    const combined = combineOpenAIMessages(
+      { raw: undefined, mapped: input },
+      { raw: undefined, mapped: output },
+    );
+
+    expect(combined.messages).toHaveLength(
+      input.messages.length + output.messages.length,
+    );
   });
 });

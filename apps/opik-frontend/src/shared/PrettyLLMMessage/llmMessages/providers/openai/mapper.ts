@@ -35,7 +35,9 @@ interface OpenAIInputAudioContent {
 }
 
 type OpenAIContentItem =
-  OpenAITextContent | OpenAIImageContent | OpenAIInputAudioContent;
+  | OpenAITextContent
+  | OpenAIImageContent
+  | OpenAIInputAudioContent;
 
 interface OpenAIToolCall {
   id: string;
@@ -330,7 +332,9 @@ const mapToolCalls = (
       blockType: "code",
       component: PrettyLLMMessage.CodeBlock,
       props: {
-        code: `[${toolCalls.length - OPENAI_RENDER_LIMITS.toolCallsPerMessage} additional tool calls omitted]`,
+        code: `[${
+          toolCalls.length - OPENAI_RENDER_LIMITS.toolCallsPerMessage
+        } additional tool calls omitted]`,
         label: "Tool calls truncated",
       },
     });
@@ -525,16 +529,53 @@ const mapCustomInputMessage = (
   };
 };
 
-const buildOpenAIMessageFingerprint = (message: OpenAIMessage): string =>
-  JSON.stringify({
-    role: message.role,
-    content: message.content,
-    tool_calls: message.tool_calls,
-    tool_call_id: message.tool_call_id,
-    name: message.name,
-    refusal: message.refusal,
-    audio: message.audio,
-  });
+// Placeholder marker for truncated message lists. The count is deliberately
+// not part of the fingerprint: the input and output views of the same
+// conversation can be truncated at different points, and the superset check
+// only cares whether the output contains the input's real messages.
+const TRUNCATED_PLACEHOLDER_FINGERPRINT = "truncated";
+
+// Cap each serialized part so the fingerprint stays bounded on very large
+// payloads (the Messages tab renders limited blocks, but the raw message can
+// still carry unbounded content and tool arguments).
+const FINGERPRINT_PART_MAX_LENGTH = 1000;
+
+const buildOpenAIMessageFingerprint = (message: OpenAIMessage): string => {
+  const parts: string[] = [
+    message.role,
+    message.name ?? "",
+    message.tool_call_id ?? "",
+    message.refusal ?? "",
+  ];
+
+  if (typeof message.content === "string") {
+    parts.push(message.content);
+  } else if (Array.isArray(message.content)) {
+    for (const block of message.content) {
+      if (typeof block === "string") {
+        parts.push("text:" + block);
+      } else if (block && typeof block === "object") {
+        const text = (block as OpenAITextContent).text;
+        if (typeof text === "string") {
+          parts.push("text:" + text);
+        } else {
+          parts.push((block as { type?: string }).type ?? "block");
+        }
+      }
+    }
+  }
+
+  for (const call of message.tool_calls ?? []) {
+    if (!call || typeof call !== "object") continue;
+    parts.push(
+      "call:" + call.function?.name + ":" + (call.function?.arguments ?? ""),
+    );
+  }
+
+  return parts
+    .map((part) => part.slice(0, FINGERPRINT_PART_MAX_LENGTH))
+    .join("\u0000");
+};
 
 /**
  * Maps an OpenAI message to our normalized LLMMessageDescriptor structure
@@ -583,7 +624,7 @@ const appendMessageLimitPlaceholder = (
         },
       },
     ],
-    contentFingerprint: `truncated:${omittedCount}`,
+    contentFingerprint: TRUNCATED_PLACEHOLDER_FINGERPRINT,
   });
 };
 
@@ -731,12 +772,23 @@ const isOutputSupersetOfInput = (
   inputMsgs: LLMMessageDescriptor[],
   outputMsgs: LLMMessageDescriptor[],
 ): boolean => {
-  if (outputMsgs.length < inputMsgs.length) return false;
+  // Truncation placeholders are not real messages: the input and output views
+  // of the same conversation can be truncated at different points, so compare
+  // only the actual messages positionally.
+  const inputReal = inputMsgs.filter(
+    (message) =>
+      message.contentFingerprint !== TRUNCATED_PLACEHOLDER_FINGERPRINT,
+  );
+  const outputReal = outputMsgs.filter(
+    (message) =>
+      message.contentFingerprint !== TRUNCATED_PLACEHOLDER_FINGERPRINT,
+  );
+  if (outputReal.length < inputReal.length) return false;
 
-  return inputMsgs.every(
+  return inputReal.every(
     (message, index) =>
       message.contentFingerprint !== undefined &&
-      message.contentFingerprint === outputMsgs[index]?.contentFingerprint,
+      message.contentFingerprint === outputReal[index]?.contentFingerprint,
   );
 };
 
