@@ -85,7 +85,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
-    model = run_dict["extra"].get("metadata", {}).get("ls_model_name")
+    model = (run_dict.get("extra") or {}).get("metadata", {}).get("ls_model_name")
     if model is not None:
         model = model.split("/")[-1]
 

@@ -62,6 +62,6 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
-    if invocation_params := run_dict["extra"].get("invocation_params"):
+    if invocation_params := (run_dict.get("extra") or {}).get("invocation_params"):
         return invocation_params.get("model_name")
     return None
