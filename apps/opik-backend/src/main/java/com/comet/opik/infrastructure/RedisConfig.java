@@ -107,8 +107,8 @@ public class RedisConfig {
             redisUrl.username().ifPresent(sentinelServersConfig::setUsername);
             redisUrl.password().ifPresent(sentinelServersConfig::setPassword);
         }
-        log.info("Built redis sentinel config with master name '{}', sentinel addresses '{}', database '{}'",
-                sentinel.getMasterName(), sentinelAddresses, redisUrl.database());
+        log.info("Built redis sentinel config with master name '{}', sentinel address count '{}', database '{}'",
+                sentinel.getMasterName(), sentinelAddresses.size(), redisUrl.database());
     }
 
     /**
