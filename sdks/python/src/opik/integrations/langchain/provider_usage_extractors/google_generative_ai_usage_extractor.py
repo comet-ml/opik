@@ -27,7 +27,9 @@ class GoogleGenerativeAIUsageExtractor(
                     return True
 
             if (
-                invocation_params := run_dict["extra"].get("invocation_params")
+                invocation_params := (run_dict.get("extra") or {}).get(
+                    "invocation_params"
+                )
             ) is not None:
                 if _is_invocation_param_of_google_gen_ai_type(
                     invocation_params.get("_type").lower()

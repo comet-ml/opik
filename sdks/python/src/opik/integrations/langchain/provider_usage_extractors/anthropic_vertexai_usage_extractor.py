@@ -22,7 +22,9 @@ class AnthropicVertexAIUsageExtractor(
             if run_dict.get("serialized") is None:
                 return False
 
-            invocation_params = run_dict["extra"].get("invocation_params", {})
+            invocation_params = (run_dict.get("extra") or {}).get("invocation_params")
+            if not isinstance(invocation_params, dict):
+                return False
             provider = invocation_params.get("_type", "").lower()
             is_anthropic_vertexai = (
                 "vertexai" in provider.lower() and "anthropic" in provider.lower()

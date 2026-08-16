@@ -52,10 +52,9 @@ class OpenAIUsageExtractor(
         provider = self.PROVIDER
 
         # Check base URL to detect custom providers
-        if (
-            base_url := (run_dict.get("extra") or {})
-            .get("invocation_params", {})
-            .get("base_url")
+        invocation_params = (run_dict.get("extra") or {}).get("invocation_params")
+        if isinstance(invocation_params, dict) and (
+            base_url := invocation_params.get("base_url")
         ):
             if base_url.host != "api.openai.com":
                 provider = base_url.host
@@ -112,7 +111,8 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     model = None
 
     # Get model from metadata
-    if metadata := (run_dict.get("extra") or {}).get("metadata"):
+    metadata = (run_dict.get("extra") or {}).get("metadata")
+    if isinstance(metadata, dict):
         model = metadata.get("ls_model_name")
 
     # Try to detect model+version more precise way if possible

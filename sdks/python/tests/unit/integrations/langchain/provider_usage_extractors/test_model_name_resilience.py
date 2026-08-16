@@ -64,3 +64,30 @@ def test_openai_usage_survives_missing_extra():
     assert info.usage is not None
     assert info.usage.prompt_tokens == 10
     assert info.model is None
+
+
+def _openai_run_with_null_metadata() -> dict:
+    """OpenAI run where extra.metadata and extra.invocation_params are explicit None."""
+    return {
+        "serialized": {"kwargs": {"openai_api_key": "sk-test"}},
+        "extra": {"metadata": None, "invocation_params": None},
+        "outputs": {
+            "llm_output": {
+                "token_usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                }
+            }
+        },
+    }
+
+
+def test_openai_usage_survives_explicit_null_metadata():
+    info = usage_extractor.try_extract_provider_usage_data(
+        _openai_run_with_null_metadata()
+    )
+    assert info is not None, "usage must survive explicit None metadata fields"
+    assert info.usage is not None
+    assert info.usage.prompt_tokens == 10
+    assert info.model is None
