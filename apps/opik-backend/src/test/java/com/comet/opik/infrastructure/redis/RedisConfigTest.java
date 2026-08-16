@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.infrastructure.RedisConfig;
+import io.dropwizard.jersey.validation.Validators;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -168,6 +169,22 @@ class RedisConfigTest {
         }
 
         @Test
+        @DisplayName("Should accept the maximum Redisson duration")
+        void shouldAcceptMaximumRedissonDuration() {
+            var redisConfig = newSentinelConfig("redis://localhost:26379/0");
+            var maximumDuration = Duration.milliseconds(Integer.MAX_VALUE);
+            redisConfig.getSentinel().setConnectTimeout(maximumDuration);
+            redisConfig.getSentinel().setTimeout(maximumDuration);
+            redisConfig.getSentinel().setScanInterval(maximumDuration);
+
+            var config = redisConfig.build();
+
+            assertThat(config.useSentinelServers().getConnectTimeout()).isEqualTo(Integer.MAX_VALUE);
+            assertThat(config.useSentinelServers().getTimeout()).isEqualTo(Integer.MAX_VALUE);
+            assertThat(config.useSentinelServers().getScanInterval()).isEqualTo(Integer.MAX_VALUE);
+        }
+
+        @Test
         @DisplayName("Should allow relaxing the minimum sentinel quorum check")
         void shouldAllowRelaxingMinimumSentinelQuorumCheck() {
             var redisConfig = newSentinelConfig("redis://localhost:26379/0");
@@ -176,6 +193,46 @@ class RedisConfigTest {
             var config = redisConfig.build();
 
             assertThat(config.useSentinelServers().isCheckSentinelsList()).isFalse();
+        }
+
+        @Test
+        @DisplayName("Should reject Sentinel durations above the Redisson integer limit")
+        void shouldRejectSentinelDurationsAboveRedissonIntegerLimit() {
+            var sentinel = new RedisConfig.SentinelConfig();
+            var oversizedDuration = Duration.milliseconds((long) Integer.MAX_VALUE + 1);
+            sentinel.setConnectTimeout(oversizedDuration);
+            sentinel.setTimeout(oversizedDuration);
+            sentinel.setScanInterval(oversizedDuration);
+
+            var violations = Validators.newValidator().validate(sentinel);
+
+            assertThat(violations)
+                    .extracting(violation -> violation.getPropertyPath().toString())
+                    .containsExactlyInAnyOrder("connectTimeout", "timeout", "scanInterval");
+        }
+
+        @Test
+        @DisplayName("Should reject Sentinel duration overflow during direct builds")
+        void shouldRejectSentinelDurationOverflowDuringDirectBuilds() {
+            var oversizedDuration = Duration.milliseconds((long) Integer.MAX_VALUE + 1);
+
+            var connectTimeoutConfig = newSentinelConfig("redis://localhost:26379/0");
+            connectTimeoutConfig.getSentinel().setConnectTimeout(oversizedDuration);
+            assertThatThrownBy(connectTimeoutConfig::build)
+                    .isInstanceOf(ArithmeticException.class)
+                    .hasMessage("integer overflow");
+
+            var timeoutConfig = newSentinelConfig("redis://localhost:26379/0");
+            timeoutConfig.getSentinel().setTimeout(oversizedDuration);
+            assertThatThrownBy(timeoutConfig::build)
+                    .isInstanceOf(ArithmeticException.class)
+                    .hasMessage("integer overflow");
+
+            var scanIntervalConfig = newSentinelConfig("redis://localhost:26379/0");
+            scanIntervalConfig.getSentinel().setScanInterval(oversizedDuration);
+            assertThatThrownBy(scanIntervalConfig::build)
+                    .isInstanceOf(ArithmeticException.class)
+                    .hasMessage("integer overflow");
         }
     }
 

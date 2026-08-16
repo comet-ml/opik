@@ -97,9 +97,9 @@ public class RedisConfig {
                 .setDatabase(redisUrl.database())
                 .setRetryAttempts(sentinel.getRetryAttempts())
                 .setCheckSentinelsList(sentinel.isCheckSentinelsList())
-                .setConnectTimeout((int) sentinel.getConnectTimeout().toMilliseconds())
-                .setTimeout((int) sentinel.getTimeout().toMilliseconds())
-                .setScanInterval((int) sentinel.getScanInterval().toMilliseconds());
+                .setConnectTimeout(Math.toIntExact(sentinel.getConnectTimeout().toMilliseconds()))
+                .setTimeout(Math.toIntExact(sentinel.getTimeout().toMilliseconds()))
+                .setScanInterval(Math.toIntExact(sentinel.getScanInterval().toMilliseconds()));
         setSentinelCredentials(sentinelServersConfig);
         if (awsIamAuth.isEnabled()) {
             sentinelServersConfig.setCredentialsResolver(new AwsIamCredentialsResolver(awsIamAuth));
@@ -181,14 +181,17 @@ public class RedisConfig {
 
         @Valid @JsonProperty
         @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = Integer.MAX_VALUE, unit = TimeUnit.MILLISECONDS)
         private Duration connectTimeout = Duration.seconds(10);
 
         @Valid @JsonProperty
         @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = Integer.MAX_VALUE, unit = TimeUnit.MILLISECONDS)
         private Duration timeout = Duration.seconds(5);
 
         @Valid @JsonProperty
         @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = Integer.MAX_VALUE, unit = TimeUnit.MILLISECONDS)
         private Duration scanInterval = Duration.seconds(2);
 
         /**
