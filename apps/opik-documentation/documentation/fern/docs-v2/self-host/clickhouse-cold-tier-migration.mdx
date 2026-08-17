@@ -61,6 +61,8 @@ clickhouse:
 
 <Warning>
 The migration job is namespace-scoped to the release namespace, so it is **incompatible with `altinity-clickhouse-operator.namespaceOverride`** — with the cold tier on (and `coldTierMigration.enabled` defaulting to `true`), the chart will hard-fail at render if both are set. Either remove `namespaceOverride`, or set `coldTierMigration.enabled: false` and recover manually.
+
+The same applies to **`altinity-clickhouse-operator.nameOverride` / `fullnameOverride`**: the job locates the operator by its default `app.kubernetes.io/name`, so a renamed subchart would leave the bounce silently skipped. The chart hard-fails at render instead — remove the override, or set `coldTierMigration.enabled: false`.
 </Warning>
 
 ### How the Migration Works

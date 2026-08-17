@@ -249,11 +249,18 @@ spec:
                 done
               }
 
+              # Below this, there's no time left to observe a recovery, so bouncing would
+              # only turn a self-healing cluster into a failed release.
+              BOUNCE_RESERVE=120
+
               # Poll for exactly one operator pod: the operator Deployment rolls on any
-              # image/ConfigMap change in the same upgrade, so >1 is transient. On
-              # timeout print nothing — the caller falls back to passive self-heal.
+              # image/ConfigMap change in the same upgrade, so >1 is transient. Prints
+              # nothing once the budget drops below BOUNCE_RESERVE — caller falls back.
               resolve_operator_pod() {
                 while :; do
+                  if [ "$(remaining)" -le "$BOUNCE_RESERVE" ]; then
+                    return 0
+                  fi
                   if found="$(operator_pods)"; then
                     n=$(printf '%s\n' "$found" | grep -c . || true)
                     if [ "$n" -eq 1 ]; then
@@ -263,9 +270,6 @@ spec:
                     echo "   ${n} Ready operator pods — waiting for exactly one..." >&2
                   else
                     echo "   transient error listing operator pods — retrying..." >&2
-                  fi
-                  if [ "$(remaining)" -eq 0 ]; then
-                    return 0
                   fi
                   sleep 10
                 done
@@ -294,11 +298,13 @@ spec:
 
               op="$(resolve_operator_pod)"
               if [ -z "$op" ]; then
-                echo "WARNING: could not resolve exactly one Ready ClickHouse operator pod for ${OPERATOR_SELECTOR} within the remaining budget — the operator is externally managed, renamed, or still rolling. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
+                echo "WARNING: could not resolve exactly one Ready ClickHouse operator pod for ${OPERATOR_SELECTOR} with at least ${BOUNCE_RESERVE}s of budget left — the operator is externally managed, renamed, still rolling, or too little time remains to observe a bounce. Skipping it; the cluster will self-heal passively (~7 min/replica)." >&2
                 exit 0
               fi
               echo ">> bouncing operator ${op#pod/} so it rebuilds the StatefulSets with the cache volume"
-              kubectl delete "$op" -n "$NAMESPACE" --grace-period=30
+              # --ignore-not-found: the pod may terminate mid-roll before this lands, which
+              # means a fresh operator is already coming up — effectively already bounced.
+              kubectl delete "$op" -n "$NAMESPACE" --grace-period=30 --ignore-not-found
 
               # Wait until every CH pod is Ready and no StatefulSet is missing the VCT.
               echo ">> waiting for all ClickHouse pods to be Ready with ${CACHE_VCT}"

@@ -28,6 +28,15 @@ tests:
       - hasDocuments:
           count: 0
 
+  # Without clickhouse there is nothing to migrate; rendering would create a Role
+  # granting namespace-wide pod delete and a Job that can only fail.
+  - it: renders nothing when clickhouse is disabled
+    set:
+      clickhouse.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: renders SA + Role + RoleBinding + Job when enabled
     asserts:
       - hasDocuments:

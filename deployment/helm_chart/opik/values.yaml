@@ -942,6 +942,10 @@ clickhouse:
     # so all replicas mount it and go Ready. Runs whenever the cold tier is on;
     # set enabled=false to opt out.
     coldTierMigration:
+      # Renders only when clickhouse.enabled and tieredStorage.enabled are also true.
+      # Hard-fails at render if altinity-clickhouse-operator sets namespaceOverride,
+      # nameOverride or fullnameOverride: the job is namespace-scoped and finds the
+      # operator by its default app.kubernetes.io/name, so it could not bounce it.
       enabled: true
       image: "alpine/kubectl:1.35.0"
       # Total budget for the whole run (all replicas: operator bounce + rebuild +
