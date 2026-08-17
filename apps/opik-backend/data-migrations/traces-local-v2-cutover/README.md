@@ -341,6 +341,14 @@ independent controls keep each statement safe:
   so peak insert memory is a small multiple of ~256 MB regardless of the window size — the statement does not load the
   window into memory. Lower this (or `min_insert_block_size_bytes`) on a memory-constrained data node.
 
+- **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
+  max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is
+  weekly-partitioned, so a block spans as many partitions as the ids in it imply; ClickHouse's default of 100 aborts the
+  INSERT (`throw_on_max_partitions_per_insert_block = 1`) rather than degrading, and far-future UUIDv7 ids reach that on
+  real data. Neither of the two bounds above can prevent it. **`delta_replay.sh` takes the same flag and needs the same
+  value** — the delta INSERT writes into the same partitioned shadow. See "Far-future partitions from
+  far-future-timestamp ids".
+
 **Throttle** with `--pause-seconds` (recommended 30–60s at peak): it sleeps after each inserted window so background
 merges consolidate the new parts before the next window piles on more.
 
@@ -356,8 +364,12 @@ For an exact figure, time one real window with `backfill.sh` and feed its rows/s
 It is a planning ballpark — real throughput varies with concurrent load, merges and cold-tier reads.
 
 The **delta-insert** (step 2) covers only writes during the backfill window, not the whole table, so it is normally one
-statement (with the same block-size bound); `000002` documents how to split it into two batched passes if a long backfill
-made it large. The **deletion replay** is a lightweight `DELETE`, and with retention disabled it is user-scale — a single
+statement (with the same block-size **and partition** bounds); `000002` documents how to split it into two batched passes
+if a long backfill made it large. If you do split it, **carry the whole `SETTINGS` block onto both passes**: the driver
+does not implement the split, so those statements are hand-written, and the second arm
+(`last_updated_at >= backfill_start AND created_at < backfill_start`) is the updates-to-old-rows arm that carries
+far-future ids, so it is the pass that most needs `max_partitions_per_insert_block` and the easiest one to write without
+it. The **deletion replay** is a lightweight `DELETE`, and with retention disabled it is user-scale — a single
 mutation; `000002` / `000004` note how to bound it by partition if it is ever large.
 
 ## Why slice by `created_at` (and not `id` or workspace)
@@ -398,8 +410,71 @@ customer data — a valid UUIDv7 that merely carries a future timestamp — so t
 ([OPIK-7456](https://comet-ml.atlassian.net/browse/OPIK-7456): `toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))`),
 and its `id_at` is a `DateTime64` (honest to 2299), so each such row lands in its **own honest ~2201 (`22010601`-shaped)
 weekly partition**, isolated from real recent weeks — a per-week `DROP PARTITION` / retention / tiering operation never
-touches them by accident, and vice versa. The extra partitions are bounded (few distinct
-far-future timestamps → few extra weeks) and harmless (they never tier to cold and are skipped by time-bounded reads).
+touches them by accident, and vice versa. Once written, the extra partitions are benign at rest: they never tier to cold
+and are skipped by time-bounded reads.
+
+> **They are NOT few, and they break the backfill unless `max_partitions_per_insert_block` is raised.** An earlier
+> version of this section claimed the extra partitions were "bounded (few distinct far-future timestamps → few extra
+> weeks) and harmless". The first half is wrong on real data and the second half is only true *after* the copy
+> succeeds. Measured on a production-shape environment (2026-08-17, 269.2 M rows):
+>
+> | Measure | Value |
+> |---|---|
+> | Far-future rows | **11,128,875** — 4.1% of the table, not a handful |
+> | Distinct far-future weekly partitions | **1,517**, spanning ~2194 → 2299-12-31 |
+> | Result of running `backfill.sh` unmodified | **`Code: 252 … TOO_MANY_PARTS`** on week `2025-06-16` |
+>
+> This is reproduced, not projected: the driver was run against the real cluster and aborted with
+> `Too many partitions for single INSERT block (more than 100)`.
+>
+> **What drives it is the tail, not the volume.** In the failing window:
+>
+> | Measure | Value |
+> |---|---|
+> | Far-future partitions in the window | 275 |
+> | …holding ≤ 5 rows each | **268** — about 635 rows in total |
+> | Head partitions | 7, holding 125,553 of the window's 126,188 far-future rows |
+> | Primary-key footprint of that rare tail | **12 projects** |
+> | Worst single block: total destination partitions | **333** (269 far-future, the rest ordinary weeks it touched) |
+>
+> So the mechanism is: the byte cap `min_insert_block_size_bytes` (256 MB) binds long before
+> `max_insert_block_size`, so for ~54 KiB trace rows a block holds only ~4,841 rows; and because the rare tail occupies
+> a narrow primary-key range, one such block picks up most of those 268 partitions at once. ClickHouse caps partitions
+> per block at **100** by default and, with `throw_on_max_partitions_per_insert_block = 1`, **aborts the INSERT**
+> instead of degrading.
+>
+> **This survives parallelism, which is the counter-intuitive part.** The statement has no `ORDER BY` and the read is
+> parallel (`max_insert_threads = 0`, `max_threads = auto(48)`), so it is tempting to assume 48 interleaved streams
+> scatter the tail across many blocks and keep every block under the limit. They do not — the abort above happened
+> under exactly that configuration. Do not reason your way past this one; measure it.
+>
+> **The abort is not all-or-nothing.** In the run above, 511,328 rows had already committed as 119 parts before the
+> offending block threw. The destination is a `ReplacingMergeTree` keyed on `(workspace_id, project_id, id)`, so
+> re-running the window converges rather than duplicating — but a failed window leaves partial data behind, and
+> prerequisite #2 ("`traces_local_v2` is empty") no longer holds until it is cleared with `rollback.sh --stage A`.
+>
+> **No batching flag avoids this.** `backfill.sh` splits a week only by `created_at`, to respect
+> `--max-rows-per-insert`; a week already under that bound is one unsplit INSERT however many partitions it spans (two
+> such weeks failed in the measurement above). Lowering `--max-insert-block-size` does not help either, since the byte
+> cap already binds. So the fix belongs in the setting: `backfill.sh --max-partitions-per-insert-block` defaults to
+> **2000**. Pass the same value to `delta_replay.sh`, which needs it for the same reason: the delta writes into the same
+> partitioned shadow, and its `last_updated_at` arm re-copies updates to old rows, so a far-future-id row touched during
+> the window is pulled in. Where the migration user has a settings profile, set it there too, so the value does not
+> depend on the invocation.
+>
+> **Why 2000 is sound, and it is not the simulation below that establishes it.** A block cannot span more partitions
+> than the table has, so **the destination's total distinct partition count is a hard upper bound** on partitions per
+> block. Size the setting above that total and it can never be exceeded, whatever the read order or thread count turns
+> out to be. In the measurement above that total is about 1,616 (1,517 far-future plus roughly 99 real weeks), so 2000
+> clears it with margin. Derive your own number the same way, from `far_future_weeks` plus the real week count, rather
+> than from any per-block estimate.
+>
+> The observed worst block is consistent with that bound and shows why the far-future count alone is not the right input:
+> its 333 partitions are 269 far-future plus 64 of the 99 real weeks, so a block's spread mixes both and lands well
+> under the 1,616 ceiling. Sizing from `far_future_weeks` alone would have undercounted it by 64.
+>
+> The cost of raising it is a larger part count per insert — one part per partition touched — which background merges
+> then compact. That is strictly better than the alternative, which is the backfill not running.
 
 Quantify them in the **source** before the cutover so their scale is known. The source `traces.id_at` is a 32-bit
 `DateTime` (migration 000091) that overflows for far-future values, so derive the timestamp from `id` via
@@ -419,8 +494,45 @@ WHERE ts > now() + INTERVAL 1 DAY;   -- outside the 24h validation window
 ```
 
 `far_future_weeks` uses the destination's honest partition expression, so it equals the number of extra weekly partitions
-`traces_local_v2` will hold. If the count is material, remediate the source `id`s at their origin; otherwise no action is
-needed — they partition honestly on their own.
+`traces_local_v2` will hold. **This is the number that sizes `--max-partitions-per-insert-block`**, not merely a
+curiosity: add it to the real week count and set the limit above the total, which is the hard bound argued above. If
+`far_future_weeks` alone exceeds the default 100, the copy needs the raised setting or it will abort. Remediating the
+source `id`s at their origin is the only thing that removes the extra partitions; short of that they partition honestly
+on their own and the setting is what lets the copy through.
+
+Because the failure is per **block**, not per week, the row count alone does not tell you whether a given window is
+anywhere near the limit. The query below is an **approximate locality heuristic, not a preflight gate**: it answers "is
+this window's far-future tail concentrated enough to be a risk at all", and nothing stronger. Read it with two
+limitations in mind, or it will mislead you:
+
+- It imposes `ORDER BY workspace_id, project_id, id` and chunks on `rowNumberInAllBlocks()`. The real `INSERT ... SELECT`
+  has **no `ORDER BY`** and reads in parallel (`max_threads`, with `max_insert_threads` governing the sink), so its block
+  composition is not this ordering and the numbers here are not the blocks ClickHouse will actually form.
+- It does not reproduce the production INSERT's settings.
+
+So use it to decide whether you are exposed, and use the total-partition-count bound above to decide the value. Do not
+read `worst_partitions_per_block` as the minimum safe setting.
+
+```sql
+-- APPROXIMATE: is this window's far-future tail concentrated enough to be a risk?
+-- Not a safe-value calculation — see the two limitations above.
+SELECT max(p) AS worst_partitions_per_block, countIf(p > 100) AS blocks_over_default
+FROM (
+    SELECT intDiv(rn, 4841) AS b, uniqExact(part) AS p
+    FROM (
+        SELECT toYYYYMMDD(toDate32(UUIDv7ToDateTime(toUUID(id))) -
+                          toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(id)), 1))) AS part,
+               rowNumberInAllBlocks() AS rn
+        FROM ( SELECT id FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
+               WHERE created_at >= toDateTime64('<WINDOW_LO>', 9, 'UTC')
+                 AND created_at <  toDateTime64('<WINDOW_HI>', 9, 'UTC')
+               ORDER BY workspace_id, project_id, id )
+    ) GROUP BY b
+);
+```
+
+Derive the `4841` from your own data (`min_insert_block_size_bytes` ÷ uncompressed bytes per row, both readable from
+`system.parts`) rather than reusing it — it is a property of row width, not a constant.
 
 **No explicit `ORDER BY` on the `INSERT ... SELECT`.** Not needed for correctness or reproducibility: the final table
 state is a `ReplacingMergeTree` reduction keyed on `(workspace_id, project_id, id)` with `last_updated_at` as the version
@@ -891,7 +1003,14 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 - [ ] **Final-delta→EXCHANGE gap fits inside the buffer hold with margin** — the binding invariant is the gap between
       the final delta and the EXCHANGE completing (≈ replay wall time + EXCHANGE), staying within the buffer hold and
       accounting for size-triggered flushes — **not** "replay < buffer window" alone (see "The final cutover window").
-- [ ] **Far-future partitions quantified** — run the bad-`id` audit query above; remediated or explicitly accepted.
+- [ ] **Far-future partitions quantified — and `max_partitions_per_insert_block` sized from the result.** Run the
+      bad-`id` audit query above; remediated or explicitly accepted. The count is not just informational: if
+      `far_future_weeks` exceeds the ClickHouse default of 100, the backfill **aborts** without a raised
+      `--max-partitions-per-insert-block` (driver default 2000), because the far-future rows cluster into a single insert
+      block. Size the value from `far_future_weeks` plus the real week count, which is a hard upper bound on partitions
+      per block, and pass the same value to **both `backfill.sh` and `delta_replay.sh`** — the delta writes into the same
+      partitioned shadow and aborts the same way, immediately before the EXCHANGE. Set it on the migration user's
+      settings profile too, so it does not depend on the invocation.
 - [ ] **`EXCHANGE TABLES ... ON CLUSTER` works end-to-end** — or the fallback `RENAME` sequence is documented for the
       variant that needs it.
 - [ ] **Async-insert ceiling confirmed** — raising `asyncInsertBusyTimeoutMaxMs` demonstrably widens the adaptive buffer
