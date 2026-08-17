@@ -301,7 +301,17 @@ class PromptServiceImpl implements PromptService {
 
         return EntityConstraintHandler
                 .handle(() -> savePrompt(workspaceId, newPrompt))
-                .onErrorDo(() -> findByNameScoped(workspaceId, name, projectId));
+                .onErrorDo(() -> {
+                    // The violation means a row with this exact (workspace, project, name) exists, so the
+                    // scoped re-read normally finds it. If it does not, the conflict came from a constraint
+                    // we cannot recover from — surface it rather than returning null for the caller to
+                    // dereference.
+                    Prompt existing = findByNameScoped(workspaceId, name, projectId);
+                    if (existing == null) {
+                        throw newPromptConflict();
+                    }
+                    return existing;
+                });
     }
 
     private Prompt findByNameScoped(String workspaceId, String name, UUID projectId) {
