@@ -42,6 +42,11 @@
 --   (a) created_at >= backfill_start                                  -- batch by created_at sub-windows
 --   (b) last_updated_at >= backfill_start AND created_at < backfill_start  -- the updates-to-old-rows arm; batch by
 --       last_updated_at sub-windows. (a) ∪ (b) equals the OR below, with no overlap.
+-- CARRY THE FULL SETTINGS BLOCK BELOW ONTO BOTH PASSES, max_partitions_per_insert_block included. The driver does not
+-- implement this split, so these two statements are hand-written, and arm (b) is precisely the updates-to-old-rows arm
+-- named above as the far-future carrier — so the pass that most needs the partition bound is the one an operator writes
+-- by hand. Omitting it there reintroduces the TOO_MANY_PARTS abort immediately before the EXCHANGE, which is exactly
+-- what the setting on the single-statement form exists to prevent.
 -- >>> BEGIN delta-insert
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,

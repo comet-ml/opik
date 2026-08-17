@@ -53,9 +53,12 @@
 #                             defaults this to 100 and, with throw_on_max_partitions_per_insert_block = 1, ABORTS the
 #                             INSERT rather than degrading. Far-future UUIDv7 ids (litellm BerriAI/litellm#31294) make
 #                             that reachable on real data: measured on a production-shape table, one block spanned 333
-#                             partitions. Raising it trades a larger part count per insert (one part per partition
-#                             touched, compacted by background merges) for the INSERT completing at all. See the
-#                             runbook's "Far-future partitions from far-future-timestamp ids".
+#                             destination partitions in total, 269 of them far-future (the rest ordinary weeks the same
+#                             block touched), against a window holding 275 far-future partitions. Note the implication
+#                             for sizing: a block's spread is NOT just the far-future count, so size from the table's
+#                             TOTAL distinct partition count. Raising it trades a larger part count per insert (one part
+#                             per partition touched, compacted by background merges) for the INSERT completing at all.
+#                             See the runbook's "Far-future partitions from far-future-timestamp ids".
 #   --divergence P            max tolerated |src-dst|/src per window before aborting. Default 0.0001 (0.01%).
 #   --pause-seconds S         sleep S seconds after each inserted window, to let destination merges catch up and bound
 #                             the part count / IO pressure. Default 0. Recommended 30-60 on a large table at peak.

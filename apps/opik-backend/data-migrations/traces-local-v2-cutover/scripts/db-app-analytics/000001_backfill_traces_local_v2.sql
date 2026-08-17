@@ -30,8 +30,10 @@
 --     partitions (see the ORDER BY note), and the destination is weekly-partitioned on id_at, a block spans as many
 --     partitions as the ids in it imply. ClickHouse's default is 100 and throw_on_max_partitions_per_insert_block = 1,
 --     so exceeding it ABORTS the INSERT. Far-future UUIDv7 ids (litellm BerriAI/litellm#31294) put real tables well
---     past it: measured on a production-shape table, one block spanned 333 partitions while every other block in the
---     same window spanned <= 7. The driver's default (2000) is sized to clear the total partition count with margin.
+--     past it: measured on a production-shape table, one block spanned 333 destination partitions in total (269 of them
+--     far-future, the rest ordinary weeks the same block touched) while every other block in that window spanned <= 7.
+--     The driver's default (2000) is sized to clear the table's TOTAL distinct partition count with margin -- not just
+--     the far-future count, which the 333-vs-269 gap shows is an undercount of a block's real spread.
 
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,

@@ -364,8 +364,12 @@ For an exact figure, time one real window with `backfill.sh` and feed its rows/s
 It is a planning ballpark — real throughput varies with concurrent load, merges and cold-tier reads.
 
 The **delta-insert** (step 2) covers only writes during the backfill window, not the whole table, so it is normally one
-statement (with the same block-size bound); `000002` documents how to split it into two batched passes if a long backfill
-made it large. The **deletion replay** is a lightweight `DELETE`, and with retention disabled it is user-scale — a single
+statement (with the same block-size **and partition** bounds); `000002` documents how to split it into two batched passes
+if a long backfill made it large. If you do split it, **carry the whole `SETTINGS` block onto both passes**: the driver
+does not implement the split, so those statements are hand-written, and the second arm
+(`last_updated_at >= backfill_start AND created_at < backfill_start`) is the updates-to-old-rows arm that carries
+far-future ids, so it is the pass that most needs `max_partitions_per_insert_block` and the easiest one to write without
+it. The **deletion replay** is a lightweight `DELETE`, and with retention disabled it is user-scale — a single
 mutation; `000002` / `000004` note how to bound it by partition if it is ever large.
 
 ## Why slice by `created_at` (and not `id` or workspace)
@@ -428,6 +432,7 @@ and are skipped by time-bounded reads.
 > | Measure | Value |
 > |---|---|
 > | Far-future partitions in the window | 275 |
+> | Worst single block: total destination partitions | **333** (269 far-future, the rest ordinary weeks it touched) |
 > | …holding ≤ 5 rows each | **268** — about 635 rows in total |
 > | Head partitions | 7, holding 125,553 of the window's 126,188 far-future rows |
 > | Primary-key footprint of that rare tail | **12 projects** |
@@ -463,6 +468,10 @@ and are skipped by time-bounded reads.
 > out to be. In the measurement above that total is about 1,616 (1,517 far-future plus roughly 99 real weeks), so 2000
 > clears it with margin. Derive your own number the same way, from `far_future_weeks` plus the real week count, rather
 > than from any per-block estimate.
+>
+> The observed worst block is consistent with that bound and shows why the far-future count alone is not the right input:
+> its 333 partitions are 269 far-future plus 64 of the 99 real weeks, so a block's spread mixes both and lands well
+> under the 1,616 ceiling. Sizing from `far_future_weeks` alone would have undercounted it by 64.
 >
 > The cost of raising it is a larger part count per insert — one part per partition touched — which background merges
 > then compact. That is strictly better than the alternative, which is the backfill not running.
