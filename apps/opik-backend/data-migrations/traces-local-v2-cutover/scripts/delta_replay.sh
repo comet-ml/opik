@@ -23,6 +23,16 @@
 #                             the password out of argv).
 #   --backfill-start TS        the anchor printed by backfill.sh ("RECORD backfill_start=..."). Required.
 #   --max-insert-block-size N  SETTINGS max_insert_block_size for the delta INSERT. Default 1048576.
+#   --max-partitions-per-insert-block N
+#                             partitions one insert block of the delta INSERT may span (SETTINGS
+#                             max_partitions_per_insert_block). Default 2000; 0 = unlimited. Same correctness gate as in
+#                             backfill.sh, and it applies here too: the delta writes into the same weekly-partitioned
+#                             shadow, and its `last_updated_at` arm re-copies UPDATES TO OLD ROWS, so a far-future-id row
+#                             updated during the window is pulled in and lands in its far-future partition. ClickHouse
+#                             defaults this to 100 and aborts the INSERT rather than degrading
+#                             (throw_on_max_partitions_per_insert_block = 1). An abort here is worse than in the
+#                             backfill: the final delta runs immediately before the EXCHANGE, inside the window the
+#                             runbook asks you to keep short. Pass the SAME value used for the backfill.
 
 set -euo pipefail
 
@@ -34,12 +44,14 @@ CH_HOST=""                # host; empty = clickhouse-client default/env. See --h
 CH_PORT=""                # native port; empty = clickhouse-client default (9000). See --port.
 BACKFILL_START=""
 MAX_INSERT_BLOCK_SIZE=1048576
+MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions per block for the delta INSERT; see the option docs above. 0 = unlimited.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --database) DATABASE="${2:?"$1 requires a value"}"; shift 2 ;;
         --backfill-start) BACKFILL_START="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -54,6 +66,10 @@ done
 [[ -n "$BACKFILL_START" ]] || { echo "ERROR: --backfill-start is required (printed by backfill.sh)" >&2; exit 2; }
 [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --backfill-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 [[ "$MAX_INSERT_BLOCK_SIZE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-insert-block-size must be a positive integer." >&2; exit 2; }
+# 0 is meaningful (ClickHouse reads it as "unlimited"), so allow it — unlike the bound above. Upper-bounded at 6 digits:
+# the setting counts partitions, no real table approaches that, and an out-of-range value would otherwise be rendered
+# into the SQL and rejected by the server mid-run instead of here.
+[[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 
 echo "Reminder: raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs before this step (backend config, not SQL) and"
@@ -63,6 +79,7 @@ sql="$(cat "$SQL_FILE")"
 sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
 sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
 sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
+sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
 # --time makes clickhouse-client print each statement's elapsed seconds to stderr (it prints nothing under a bare
 # --query). The SECOND number is the deletion replay's wall time — a Go/No-Go acceptance criterion (it must fit inside
 # the buffer hold with margin), so without this the operator has no way to record it short of digging in query_log.

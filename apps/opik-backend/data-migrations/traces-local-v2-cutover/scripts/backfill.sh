@@ -46,6 +46,19 @@
 #                             memory is a small multiple of the smaller of this and min_insert_block_size_bytes (256 MB
 #                             default), so for wide trace rows the byte bound usually dominates. Default 1048576 (the
 #                             ClickHouse default); lower it on a memory-constrained data node. Applied to the INSERT.
+#   --max-partitions-per-insert-block N
+#                             partitions one insert block may span (SETTINGS max_partitions_per_insert_block).
+#                             Default 2000; 0 = unlimited. The destination is weekly-partitioned on the honest Monday
+#                             of id_at, so a block spans as many partitions as the ids in it imply — NOT one. ClickHouse
+#                             defaults this to 100 and, with throw_on_max_partitions_per_insert_block = 1, ABORTS the
+#                             INSERT rather than degrading. Far-future UUIDv7 ids (litellm BerriAI/litellm#31294) make
+#                             that reachable on real data: measured on a production-shape table, one block spanned 333
+#                             destination partitions in total, 269 of them far-future (the rest ordinary weeks the same
+#                             block touched), against a window holding 275 far-future partitions. Note the implication
+#                             for sizing: a block's spread is NOT just the far-future count, so size from the table's
+#                             TOTAL distinct partition count. Raising it trades a larger part count per insert (one part
+#                             per partition touched, compacted by background merges) for the INSERT completing at all.
+#                             See the runbook's "Far-future partitions from far-future-timestamp ids".
 #   --divergence P            max tolerated |src-dst|/src per window before aborting. Default 0.0001 (0.01%).
 #   --pause-seconds S         sleep S seconds after each inserted window, to let destination merges catch up and bound
 #                             the part count / IO pressure. Default 0. Recommended 30-60 on a large table at peak.
@@ -84,6 +97,10 @@ MAX_ROWS=2000000          # rows: per-statement bound; a week over this is halve
 MAX_INSERT_BLOCK_SIZE=1048576  # rows: SETTINGS max_insert_block_size for the INSERT. Peak memory is a small multiple of
                           # the smaller of this and min_insert_block_size_bytes (256 MB default), which dominates for wide
                           # trace rows; lower it on a memory-constrained node. 1048576 is the ClickHouse default.
+MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions: SETTINGS max_partitions_per_insert_block for the INSERT. The
+                          # destination is weekly-partitioned, so one block can span many partitions; ClickHouse's
+                          # default of 100 THROWS (throw_on_max_partitions_per_insert_block=1). Far-future UUIDv7 ids
+                          # make this reachable in practice — see the runbook's far-future section. 0 = unlimited.
 DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled window before aborting (0.01%).
 PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 for a large table at peak.
 MIN_FREE_FACTOR="2.0"     # multiple of the current traces on-disk size that node free space must clear before starting.
@@ -102,6 +119,7 @@ while [[ $# -gt 0 ]]; do
         --to-week) TO_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-rows-per-insert) MAX_ROWS="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
         --divergence) DIVERGENCE="${2:?"$1 requires a value"}"; shift 2 ;;
         --pause-seconds) PAUSE_SECONDS="${2:?"$1 requires a value"}"; shift 2 ;;
         --min-free-factor) MIN_FREE_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -124,6 +142,11 @@ done
 # Numeric args flow into the reference SQL / window arithmetic; require sane numeric shapes so none can alter the query.
 [[ "$MAX_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-rows-per-insert must be a positive integer." >&2; exit 2; }
 [[ "$MAX_INSERT_BLOCK_SIZE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-insert-block-size must be a positive integer." >&2; exit 2; }
+# 0 is meaningful here (ClickHouse reads it as "unlimited"), so allow it — unlike the bounds above. Upper-bounded at 6
+# digits: the setting counts partitions, no real table approaches that, and an out-of-range value would otherwise be
+# rendered into the SQL and rejected by the server on the first INSERT — after the capacity preflight has passed and the
+# backfill_start anchor has been minted, which is a far more expensive place to discover a typo.
+[[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
@@ -216,6 +239,7 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_LO}'/$lo}"
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
+    sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 
