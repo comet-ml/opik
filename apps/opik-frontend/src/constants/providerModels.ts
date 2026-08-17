@@ -656,6 +656,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-pro-0813",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE,
+      label: "dots-studio/dots-3-note-preview:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ELEUTHERAI_LLEMMA_7B,
       label: "eleutherai/llemma_7b",
     },
@@ -2357,6 +2361,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.8-2.4t-a95b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_27B,
+      label: "qwen/qwen3.8-27b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_MAX,
       label: "qwen/qwen3.8-max",
     },
@@ -2673,6 +2681,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "z-ai/glm-5.2:batch",
     },
     {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2_FREE,
+      label: "z-ai/glm-5.2:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
     },
@@ -2748,10 +2760,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.1 Flash Lite",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,
-      label: "Gemini 3.1 Flash Lite Preview",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
       label: "Gemini 3 Flash Preview",
     },
@@ -2790,6 +2798,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
+      label: "Gemini 3.7 Flash",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
       label: "Gemini 3.6 Flash",
