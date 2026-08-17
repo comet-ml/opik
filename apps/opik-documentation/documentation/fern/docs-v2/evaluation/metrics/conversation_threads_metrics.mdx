@@ -211,6 +211,40 @@ print(result.value)
 print(result.reason)
 ```
 
+### Grounding answers in retrieved context
+
+When the agent messages carry the documents they were generated from, `ConversationalCoherenceMetric` additionally
+judges whether each answer is **supported by those documents**, and returns a second
+`conversational_groundedness_score` alongside the coherence score. Populate the documents with the
+`trace_context_transform` argument of [`evaluate_threads`](/evaluation/evaluate_threads), or attach them directly to the agent
+messages under a `context` key:
+
+```python title="Groundedness example"
+from opik.evaluation.metrics import ConversationalCoherenceMetric
+
+conversation = [
+    {
+        "role": "user",
+        "content": "What is the fee for going overdrawn?",
+    },
+    {
+        "role": "assistant",
+        "content": "Overdrafts are completely free.",
+        "context": ["The overdraft fee is 5% of the overdrawn amount, charged monthly."],
+    },
+]
+
+metric = ConversationalCoherenceMetric(model="gpt-5-nano")
+coherence, groundedness = metric.score(conversation)
+
+print(coherence.value)     # answers the question -> high
+print(groundedness.value)  # contradicts the document -> low
+```
+
+Turns whose agent message has no documents are judged for coherence only, and are left out of the groundedness score.
+When no message carries documents at all, the metric returns a single coherence score and uses exactly the same prompt
+as before, so existing scores are unaffected.
+
 ## Next steps
 
 - Read more about [conversational threads evaluation](/evaluation/evaluate_threads)

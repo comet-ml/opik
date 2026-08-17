@@ -1,8 +1,29 @@
-from typing import Dict, List, Literal, Optional
+import sys
+from typing import List, Optional
 
 import pydantic
+from typing_extensions import TypedDict
 
-ConversationDict = Dict[Literal["role", "content"], str]
+if sys.version_info < (3, 11):
+    from typing_extensions import Required
+else:
+    from typing import Required
+
+
+class ConversationDict(TypedDict, total=False):
+    """A single message of a conversation thread.
+
+    ``role`` and ``content`` are always set. ``context`` is present only for
+    conversations built with a ``trace_context_transform`` (see
+    ``opik.evaluation.evaluate_threads``) and is delivered exclusively to metrics
+    that declare ``uses_message_context = True``.
+    """
+
+    role: Required[str]
+    content: Required[str]
+    context: List[str]
+
+
 Conversation = List[ConversationDict]
 
 

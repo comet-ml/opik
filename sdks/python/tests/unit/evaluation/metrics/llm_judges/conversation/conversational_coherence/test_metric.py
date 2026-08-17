@@ -315,3 +315,91 @@ async def test_score__no_user_assistant_turns__raises_MetricComputationError__as
     )
     with pytest.raises(exceptions.MetricComputationError):
         await metric.ascore(conversation=conversation)
+
+
+@pytest.fixture
+def grounded_conversation():
+    return [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {
+            "role": "assistant",
+            "content": "It is 5% of the overdrawn amount.",
+            "context": ["The overdraft fee is 5% of the overdrawn amount."],
+        },
+        {"role": "user", "content": "How long do I have to repay?"},
+        {
+            "role": "assistant",
+            "content": "You can repay whenever you like.",
+            "context": ["Customers must repay an overdraft within 30 days."],
+        },
+    ]
+
+
+def _make_with_documents_side_effect():
+    """First window grounded, second one not."""
+    grounded_verdicts = iter(["yes", "no"])
+
+    def side_effect(*args, **kwargs):
+        response_format = kwargs.get("response_format")
+        if response_format == schema.EvaluateConversationCoherenceWithDocumentsResponse:
+            grounded = next(grounded_verdicts)
+            return _assistant_message(
+                json.dumps(
+                    {
+                        "verdict": "yes",
+                        "grounded_verdict": grounded,
+                        "reason": None
+                        if grounded == "yes"
+                        else "Contradicts the documents.",
+                    }
+                )
+            )
+        elif response_format == schema.ScoreReasonResponse:
+            return _assistant_message(
+                json.dumps({"reason": "Because of the documents."})
+            )
+        return _assistant_message("{}")
+
+    return side_effect
+
+
+def test_score__messages_with_context__returns_coherence_and_groundedness(
+    mock_model, grounded_conversation
+):
+    """Messages carrying retrieved documents produce an extra groundedness score."""
+    mock_model.generate_chat_completion.side_effect = _make_with_documents_side_effect()
+
+    metric = ConversationalCoherenceMetric(model=mock_model, track=False)
+    results = metric.score(grounded_conversation)
+
+    assert isinstance(results, list)
+    assert [result.name for result in results] == [
+        "conversational_coherence_score",
+        "conversational_groundedness_score",
+    ]
+    assert results[0].value == 1.0  # both windows relevant
+    assert results[1].value == 0.5  # one of two windows grounded
+
+
+def test_score__messages_without_context__single_score_and_original_prompt(
+    mock_model, simple_conversation
+):
+    """Without documents the metric behaves exactly as before."""
+    mock_model.generate_chat_completion.side_effect = (
+        _all_relevant_responses_side_effect
+    )
+
+    metric = ConversationalCoherenceMetric(model=mock_model, track=False)
+    result = metric.score(simple_conversation)
+
+    assert not isinstance(result, list)
+    assert result.name == "conversational_coherence_score"
+    used_formats = {
+        call.kwargs.get("response_format")
+        for call in mock_model.generate_chat_completion.call_args_list
+    }
+    assert schema.EvaluateConversationCoherenceWithDocumentsResponse not in used_formats
+
+
+def test_score__context_aware_flag_declared():
+    assert ConversationalCoherenceMetric.uses_message_context is True

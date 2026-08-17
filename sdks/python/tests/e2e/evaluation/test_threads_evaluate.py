@@ -119,6 +119,80 @@ def test_evaluate_threads__happy_path(
     )
 
 
+def test_evaluate_threads__with_context_transform__context_passed_to_opted_in_metrics_only(
+    opik_client, temporary_project_name
+):
+    """E2E test verifying that trace context reaches the metrics that ask for it.
+
+    A trace logs its retrieved documents as metadata; `trace_context_transform` extracts
+    them and they must be attached to the assistant message of the conversation - but
+    only for metrics declaring `uses_message_context`.
+    """
+    thread_id = str(uuid.uuid4())[-6:]
+    retrieved_docs = ["The overdraft fee is 5% of the overdrawn amount."]
+
+    opik_client.trace(
+        name=f"rag-trace:{thread_id}",
+        input={"input": "What is the overdraft fee?"},
+        output={"output": "It is 5% of the overdrawn amount."},
+        metadata={"retrieved_docs": retrieved_docs},
+        project_name=temporary_project_name,
+        thread_id=thread_id,
+    )
+    opik_client.flush()
+
+    if not synchronization.until(
+        lambda: _one_thread_is_active(temporary_project_name, opik_client),
+        max_try_seconds=30,
+    ):
+        raise AssertionError(
+            f"Failed to create thread in project '{temporary_project_name}'"
+        )
+
+    class ConversationCapturingMetric(
+        metrics.conversation.conversation_thread_metric.ConversationThreadMetric
+    ):
+        def __init__(self, name: str, uses_message_context: bool):
+            super().__init__(name=name, track=False)
+            self.uses_message_context = uses_message_context
+            self.received_conversation = None
+
+        def score(self, conversation, **ignored_kwargs):
+            self.received_conversation = conversation
+            return metrics.score_result.ScoreResult(name=self.name, value=1.0)
+
+    context_aware_metric = ConversationCapturingMetric(
+        name="context_aware_metric", uses_message_context=True
+    )
+    regular_metric = ConversationCapturingMetric(
+        name="regular_metric", uses_message_context=False
+    )
+
+    evaluator.evaluate_threads(
+        project_name=temporary_project_name,
+        filter_string=f'id = "{thread_id}"',
+        metrics=[context_aware_metric, regular_metric],
+        eval_project_name=temporary_project_name,
+        trace_input_transform=lambda x: x["input"],
+        trace_output_transform=lambda x: x["output"],
+        trace_context_transform=lambda trace: trace.metadata["retrieved_docs"],
+        verbose=0,
+    )
+
+    assert context_aware_metric.received_conversation == [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {
+            "role": "assistant",
+            "content": "It is 5% of the overdrawn amount.",
+            "context": retrieved_docs,
+        },
+    ]
+    assert regular_metric.received_conversation == [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {"role": "assistant", "content": "It is 5% of the overdrawn amount."},
+    ]
+
+
 def test_evaluate_threads__no_truncation_for_long_traces(
     opik_client, temporary_project_name
 ):
