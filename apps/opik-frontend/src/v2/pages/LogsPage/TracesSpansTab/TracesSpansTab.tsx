@@ -25,6 +25,7 @@ import {
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
 
 import useTracesOrSpansExist from "@/hooks/useTracesOrSpansExist";
@@ -524,6 +525,7 @@ type TracesSpansTabProps = {
   projectName: string;
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
+  dateRangeConfig: ProjectDateRangeConfig;
 };
 
 export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
@@ -532,6 +534,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   onLogsTypeChange,
   projectId,
   projectName,
+  dateRangeConfig,
 }) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
@@ -545,6 +548,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage({
     excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+    ...dateRangeConfig,
   });
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,
