@@ -902,7 +902,7 @@ class TracesLocalV2CutoverTest {
                 FROM traces
                 WHERE created_at >= toDateTime64(:week_lo, 9, 'UTC')
                   AND created_at < toDateTime64(:week_hi, 9, 'UTC')
-                SETTINGS max_insert_block_size = 100000
+                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("week_lo", weekLo).bind("week_hi", weekHi));
     }
@@ -922,7 +922,7 @@ class TracesLocalV2CutoverTest {
                 FROM traces
                 WHERE created_at >= toDateTime64(:backfill_start, 6)
                    OR last_updated_at >= toDateTime64(:backfill_start, 6)
-                SETTINGS max_insert_block_size = 100000
+                SETTINGS max_insert_block_size = 100000, max_partitions_per_insert_block = 2000
                 """.formatted(COPIED_COLUMNS, COPIED_SELECT),
                 statement -> statement.bind("backfill_start", backfillStart));
     }

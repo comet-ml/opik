@@ -411,6 +411,38 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     /**
+     * The queries in this file carry no SQL comments; the reasoning lives here, keyed by CTE name, as it
+     * does in the other DAOs. Keep it that way, and not only for consistency: a line containing only
+     * {@code --} inside a query breaks the r2dbc driver's placeholder scanner
+     * ({@code ClickHouseParameterizedQuery}), which from that line on stops recognising {@code :params}, so
+     * every later one reaches ClickHouse literally and the statement fails with
+     * {@code Code: 62 Syntax error ... :workspace_id} - a 500 on every request, from a comment-only edit.
+     * {@code -- } with any character after the dashes is safe, but a trailing space is one formatter away
+     * from vanishing. Documenting outside the query removes the hazard rather than tiptoeing around it.
+     * <p>
+     * The tagged-cost CTEs ({@code optimization_tagged_trace_ids} onwards) are deliberately duplicated in
+     * {@link #FIND_WITHOUT_EXPERIMENTS} rather than shared through one templated constant: sharing would need a
+     * flag every call site must remember to set, and forgetting it silently double-counts trial spend. The two
+     * copies are held in step by the {@code findAndGetById__*} tests in
+     * {@code OptimizationsResourceTest.GetOptimizerById}, each of which asserts the list and {@code getById}
+     * report the same figure - change one copy and they fail.
+     * <p>
+     * The spans read inside those CTEs dedup on the logical span key {@code (workspace_id, project_id, id)},
+     * reading rows in storage sort-key order so the newest write per key wins. {@code parent_span_id} is
+     * deliberately excluded from both the sort tuple and the {@code LIMIT 1 BY}, matching every other spans
+     * read since OPIK-7750 (#7764). That column is mutable across writes, so ahead of
+     * {@code last_updated_at} in the sort it picks the winner by largest parent rather than newest write, and
+     * inside the grouping a span re-ingested under a different parent survives as two rows and its cost
+     * enters this sum twice. Both halves are pinned by
+     * {@code findAndGetById__whenTaggedSpanIsRewrittenUnderAnotherParent__spendIsChargedOnce}.
+     * <p>
+     * Note the scope in that key: because {@code project_id} is part of it while the aggregation above keys on
+     * {@code trace_id} alone, one span id written under two projects survives the dedup twice and is summed
+     * twice. That exposure is pre-existing and shared with {@code experiment_durations} here and with
+     * {@code ExperimentDAO}; it is deliberately not fixed in this query alone, because deduping only the
+     * tagged half would leave the trial half double-charging and make the two halves of one figure disagree
+     * about what a canonical per-trace cost is. OPIK-7691 covers it across all sites.
+     * <p>
      * No numeric column this query returns may ever be NaN/Inf: the row mapper reads them as
      * {@code BigDecimal}, {@code BigDecimal.valueOf(NaN)} throws, and the clickhouse-r2dbc driver
      * swallows mapper exceptions and silently drops the row — the run then 404s in getById and
@@ -428,6 +460,67 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * {@code Map(String, Float64)}: {@code getScoresAggregation} calls {@code doubleValue()} on each
      * value, and a nullable map value would reintroduce exactly the swallowed-mapper-exception row loss
      * this javadoc is about. The {@code WHERE} already guarantees the value is non-null.
+     *
+     * <p><b>{@code optimization_tagged_trace_ids}</b> is the candidate scan: every trace that has ever
+     * carried one of these optimization ids as a tag. Deliberately a superset, because the authoritative
+     * check runs in {@code optimization_tagged_traces} on the latest version of each trace, so a tag
+     * removed by a later update stops counting. There is deliberately no {@code created_at} bound: that
+     * column is not stable across re-writes of an optimization row, and a reset would silently drop
+     * optimizer-internal traces from the total. An optimization with no {@code project_id} predates that
+     * column, so its cost stays trial-only.
+     *
+     * <p>Two things it deliberately does <em>not</em> do, both measured on production rather than reasoned
+     * about. It does not {@code DISTINCT}: the CTE is consumed only as an {@code IN} set, which dedups on
+     * its own, so the distinct pass was pure overhead (list p50 1338 -> 1145 ms, CPU 2198 -> 1910 ms, peak
+     * memory flat). And it no longer bounds {@code project_id} to the optimizations in scope: at
+     * production shape that prune is free either way (534 vs 539 ms, same peak memory), so the
+     * {@code arrayExists} tag test is left as the single condition. Do not replace that test with
+     * {@code hasAny} against a {@code groupArray} of the ids, which measured 22x the latency and 38x the
+     * CPU.
+     *
+     * <p>Note for anyone reasoning about the cost of naming a CTE more than once: ClickHouse evaluates it
+     * <em>per reference</em>, and {@code EXPLAIN} cannot show that, because an {@code IN (SELECT ... FROM
+     * cte)} set is built eagerly and appears only as {@code trace_id in N-element set}. Counting plan
+     * nodes therefore understates the repeats. An isolated probe differing only in reference count went
+     * 2.45 M -> 4.90 M rows and 214 -> 398 MiB.
+     *
+     * <p><b>{@code optimization_tagged_traces}</b> selects traces tagged with the optimization id but
+     * linked to no experiment item: the optimizer-internal LLM calls (GEPA reflection, candidate
+     * generation) whose spend belongs to the run's total even though it belongs to no trial (OPIK-7521).
+     * A trial trace whose {@code experiment_item} row is not visible yet is counted through this branch
+     * rather than through {@code experiment_durations}, and moves over once the link lands; either way it
+     * is counted exactly once, so the ingestion race cannot double-charge a run.
+     *
+     * <p>Its experiment-item exclusion is keyed on {@code (trace, owning optimization)}, not on the trace
+     * alone. It exists to stop a trial trace that also carries its run's id as a tag from being charged
+     * twice, once through {@code experiment_durations} and once here, so it must only fire for the run
+     * that owns the trial. Excluding on {@code trace_id} alone would drop a trace tagged with run X
+     * because it happens to be a trial of run Y, and since the set of experiments in scope differs
+     * between the list (every optimization matching the filters) and {@code getById} (one), the two would
+     * report different totals for the same run. That is why the tuple test sits after the
+     * {@code ARRAY JOIN}, where {@code tag} is available, rather than as a cheaper {@code trace_id}
+     * prefilter in the subquery.
+     *
+     * <p>{@code project_id} is deliberately not projected out of that CTE: it would split one trace into
+     * one row per project it was ever written to, and the cost join keys on {@code trace_id} alone, so
+     * that would charge the same spend twice. One scope-dependence is left in the candidate CTE as a
+     * result: it prunes to the projects of the optimizations in scope, so a trace tagged with run X but
+     * stored in another run's project is found by the list and not by {@code getById}. The optimizer does
+     * not produce that shape, and dropping the project bound would turn the candidate scan
+     * workspace-wide. A dedicated attribution column (OPIK-7691) is what settles it.
+     *
+     * <p><b>{@code optimization_tagged_costs}</b> prunes the spans scan on {@code project_id} because
+     * {@code trace_id} is only the third primary-key column. That project set comes from
+     * {@code optimization_final} rather than from either trace CTE: ClickHouse substitutes CTEs
+     * textually, so naming a trace CTE there would re-run its tags scan. Reading {@code optimizations} is
+     * cheap by comparison, and a superset of the candidate projects is all a prefix prune needs; the
+     * authoritative filter is the {@code trace_id IN} beside it.
+     *
+     * <p>In {@link #FIND_WITHOUT_EXPERIMENTS} the same two trace CTEs appear without the experiment-item
+     * exclusion, which is unnecessary there because that projection is only chosen when nothing in scope
+     * has an experiment, and its final {@code ifNull} yields a non-nullable zero when nothing is
+     * attributed, matching {@code FIND}, where {@code sum()} over an empty group returns 0 rather than
+     * NULL. The {@code ifNull} covers both {@code join_use_nulls} modes.
      */
     private static final String FIND = """
             WITH optimization_final AS (
@@ -649,13 +742,66 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     argMin(per_trace_cost, earliest_created_at) AS baseline_cost
                 FROM candidate_metrics
                 GROUP BY optim_id
+            ), optimization_tagged_trace_ids AS (
+                SELECT id, project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
+            ), optimization_tagged_traces AS (
+                SELECT DISTINCT
+                    tag AS optimization_id_str,
+                    trace_id
+                FROM (
+                    SELECT id AS trace_id, project_id, tags
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT id FROM optimization_tagged_trace_ids)
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, id
+                )
+                ARRAY JOIN tags AS tag
+                WHERE tag IN (SELECT toString(id) FROM optimization_final)
+                AND (toString(trace_id), tag) NOT IN (
+                    SELECT toString(ei.trace_id), ef.optimization_id
+                    FROM experiment_items_final ei
+                    INNER JOIN experiments_final ef ON ei.experiment_id = ef.id
+                )
+            ), optimization_tagged_costs AS (
+                SELECT
+                    ott.optimization_id_str AS optimization_id_str,
+                    sum(s.total_estimated_cost) AS total_estimated_cost
+                FROM optimization_tagged_traces ott
+                INNER JOIN (
+                    SELECT trace_id, sum(total_estimated_cost) AS total_estimated_cost
+                    FROM (
+                        SELECT workspace_id, project_id, trace_id, id, total_estimated_cost, last_updated_at
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                        AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY workspace_id, project_id, id
+                    )
+                    GROUP BY trace_id
+                ) AS s ON s.trace_id = ott.trace_id
+                GROUP BY ott.optimization_id_str
             ), optimization_costs AS (
                 SELECT
-                    ef2.optimization_id AS optimization_id,
-                    sum(ed2.total_estimated_cost) AS total_optimization_cost
-                FROM experiments_final ef2
-                LEFT JOIN experiment_durations ed2 ON ef2.id = ed2.experiment_id
-                GROUP BY ef2.optimization_id
+                    optimization_id,
+                    sum(cost) AS total_optimization_cost
+                FROM (
+                    SELECT
+                        ef2.optimization_id AS optimization_id,
+                        ed2.total_estimated_cost AS cost
+                    FROM experiments_final ef2
+                    LEFT JOIN experiment_durations ed2 ON ef2.id = ed2.experiment_id
+                    UNION ALL
+                    SELECT
+                        otc.optimization_id_str AS optimization_id,
+                        otc.total_estimated_cost AS cost
+                    FROM optimization_tagged_costs otc
+                )
+                GROUP BY optimization_id
             )
             SELECT
                 o.*,
@@ -712,10 +858,21 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * on the next request rather than needing a shared read boundary.
      * <p>
      * The {@link #FIND} projection for the case where no optimization in scope has an experiment. Every
-     * aggregate in {@link #FIND} is derived from {@code experiments_final}, so with no experiments they all
-     * collapse to their empty-input values and the fifteen-CTE pipeline reads nothing useful. The literals below
-     * reproduce those values and their exact declared types - note {@code total_optimization_cost} is a
-     * non-nullable zero, because {@code sum()} over an empty group returns 0 rather than NULL.
+     * aggregate in {@link #FIND} except {@code total_optimization_cost} is derived from
+     * {@code experiments_final}, so with no experiments they all collapse to their empty-input values and the
+     * fifteen-CTE pipeline reads nothing useful. The literals below reproduce those values and their exact
+     * declared types.
+     * <p>
+     * {@code total_optimization_cost} is the exception and must be computed for real (OPIK-7521): it also sums
+     * optimizer-internal traces attributed by tag, which exist without any experiment. A run that died during
+     * candidate generation has zero experiments and non-zero spend, and hardcoding a zero here would make the
+     * runs list disagree with the run page - {@link #getById(UUID)} always takes the {@link #FIND} path. The
+     * three CTEs below are {@link #FIND}'s tagged-cost pipeline minus the experiment-item exclusion, which is
+     * unnecessary here because this projection is only chosen when no experiment exists to link a trace to.
+     * Keep them in step with {@link #FIND} - see that field's note on why they are duplicated and which test
+     * fails when they drift.
+     * They read nothing when no optimization in scope carries a {@code project_id}, which is every row written
+     * before that column existed.
      */
     private static final String FIND_WITHOUT_EXPERIMENTS = """
             WITH optimization_final AS (
@@ -737,6 +894,44 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
+            ), optimization_tagged_trace_ids AS (
+                SELECT id, project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
+            ), optimization_tagged_traces AS (
+                SELECT DISTINCT
+                    tag AS optimization_id_str,
+                    trace_id
+                FROM (
+                    SELECT id AS trace_id, project_id, tags
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT id FROM optimization_tagged_trace_ids)
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, id
+                )
+                ARRAY JOIN tags AS tag
+                WHERE tag IN (SELECT toString(id) FROM optimization_final)
+            ), optimization_costs AS (
+                SELECT
+                    ott.optimization_id_str AS optimization_id,
+                    sum(s.total_estimated_cost) AS total_optimization_cost
+                FROM optimization_tagged_traces ott
+                INNER JOIN (
+                    SELECT trace_id, sum(total_estimated_cost) AS total_estimated_cost
+                    FROM (
+                        SELECT workspace_id, project_id, trace_id, id, total_estimated_cost, last_updated_at
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                        AND trace_id IN (SELECT trace_id FROM optimization_tagged_traces)
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY workspace_id, project_id, id
+                    )
+                    GROUP BY trace_id
+                ) AS s ON s.trace_id = ott.trace_id
+                GROUP BY ott.optimization_id_str
             )
             SELECT
                 o.*,
@@ -750,8 +945,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 CAST(NULL, 'Nullable(Decimal(38, 12))') AS best_cost,
                 CAST(NULL, 'Nullable(Float64)') AS baseline_duration,
                 CAST(NULL, 'Nullable(Decimal(38, 12))') AS baseline_cost,
-                CAST(0, 'Decimal(38, 12)') AS total_optimization_cost
+                CAST(ifNull(oc.total_optimization_cost, toDecimal128(0, 12)), 'Decimal(38, 12)') AS total_optimization_cost
             FROM optimization_final AS o
+            LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
             SETTINGS log_comment = '<log_comment>'

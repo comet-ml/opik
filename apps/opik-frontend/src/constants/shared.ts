@@ -8,6 +8,15 @@ import {
 } from "@/types/shared";
 
 export const DEMO_PROJECT_NAME = "Opik Demo Agent Observability";
+
+/**
+ * Every project name that counts as a seeded demo project.
+ *
+ * A list rather than a single constant so a rename, a legacy name still in the wild, or a second
+ * seeded demo can be added here without touching the consumers that branch on it.
+ */
+export const DEMO_PROJECT_NAMES: readonly string[] = [DEMO_PROJECT_NAME];
+
 export const SNIPPET_PROJECT_NAME = "my-ai-project";
 export const PROJECT_NAME_PLACEHOLDER = "PROJECT_NAME_PLACEHOLDER";
 export const PLAYGROUND_PROJECT_NAME = "playground";
