@@ -11,7 +11,13 @@ test.describe('Online Evaluation — enable/disable rule', { tag: ['@t2-cuj', '@
     testNamespace,
     page,
   }) => {
-    test.setTimeout(420_000);
+    // Budget sits above the sum of the inner waits (3x90s polls + 40s/20s
+    // settles + UI steps ~= 590s worst case) on purpose: every async wait here
+    // throws a diagnostic naming the trace and the scores it actually saw, and
+    // that is far more useful than an opaque "test timeout exceeded". The test
+    // finishes in ~40-55s in practice; this ceiling only governs which error
+    // you get on a genuine stall.
+    test.setTimeout(660_000);
 
     // Two deterministic Python rules: one gets toggled, the other stays enabled
     // as a control. The control is what turns "no score from the target" into a
@@ -104,7 +110,14 @@ test.describe('Online Evaluation — enable/disable rule', { tag: ['@t2-cuj', '@
       // The control's score arriving does not mean every rule is done with this
       // trace — the sampler enqueues rules in parallel onto async streams — so
       // wait for the score set to stop changing before asserting an absence.
-      const trace = await backendClient.waitForTraceScoresSettled(disabledTrace.id);
+      // The control score is already in hand, so a short quiet period is enough
+      // to cover the parallel-dispatch skew; the timeout is bounded well below
+      // the test budget so a stall fails here, with this helper's diagnostic,
+      // rather than blowing the whole test's timeout.
+      const trace = await backendClient.waitForTraceScoresSettled(disabledTrace.id, {
+        quietPeriodMs: 8_000,
+        timeoutMs: 40_000,
+      });
       const scoreNames = trace.feedbackScores.map((fs) => fs.name);
       expect(
         scoreNames,
@@ -141,7 +154,12 @@ test.describe('Online Evaluation — enable/disable rule', { tag: ['@t2-cuj', '@
     });
 
     await test.step('The trace seeded while disabled is still unscored by the target rule', async () => {
-      const trace = await backendClient.waitForTraceScoresSettled(disabledTrace.id);
+      // This trace already settled in the step above; re-confirm nothing has
+      // been backfilled since the rule was re-enabled, so a short wait is enough.
+      const trace = await backendClient.waitForTraceScoresSettled(disabledTrace.id, {
+        quietPeriodMs: 4_000,
+        timeoutMs: 20_000,
+      });
       const scoreNames = trace.feedbackScores.map((fs) => fs.name);
       expect(
         scoreNames,

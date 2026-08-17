@@ -5,6 +5,14 @@ export interface WaitForScoresSettledOpts {
   quietPeriodMs?: number;
   timeoutMs?: number;
   pollIntervalMs?: number;
+  /**
+   * Minimum number of feedback scores required before the quiet period is
+   * allowed to start. Defaults to 1: an empty score set is treated as "the
+   * evaluators have not produced anything yet", not as settled, so a slow
+   * evaluator cannot be mistaken for a rule that correctly declined to score.
+   * Set to 0 only when a genuinely empty result is the expected end state.
+   */
+  minScores?: number;
 }
 
 /**
@@ -30,6 +38,7 @@ export async function waitForTraceScoresSettled(
   const quietPeriodMs = opts.quietPeriodMs ?? 10_000;
   const timeoutMs = opts.timeoutMs ?? 90_000;
   const pollIntervalMs = opts.pollIntervalMs ?? 2_000;
+  const minScores = opts.minScores ?? 1;
 
   const start = Date.now();
   let lastFingerprint: string | null = null;
@@ -53,16 +62,28 @@ export async function waitForTraceScoresSettled(
     if (fingerprint !== lastFingerprint) {
       lastFingerprint = fingerprint;
       lastChangeAt = Date.now();
-    } else if (Date.now() - lastChangeAt >= quietPeriodMs) {
+    } else if (
+      lastTrace.feedbackScores.length >= minScores &&
+      Date.now() - lastChangeAt >= quietPeriodMs
+    ) {
       return lastTrace;
     }
 
-    await new Promise((r) => setTimeout(r, pollIntervalMs));
+    // Never sleep past the deadline — otherwise the effective timeout overruns
+    // by up to one poll interval, which matters when a caller has sized this
+    // wait to fit inside a larger test budget.
+    const remaining = timeoutMs - (Date.now() - start);
+    if (remaining <= 0) break;
+    await new Promise((r) => setTimeout(r, Math.min(pollIntervalMs, remaining)));
   }
 
+  const observedCount = lastTrace?.feedbackScores.length ?? 0;
+  const reason =
+    observedCount < minScores
+      ? `only ${observedCount} feedback score(s) ever appeared (need at least ${minScores})`
+      : `feedback scores never stayed unchanged for ${quietPeriodMs}ms`;
   throw new Error(
     `waitForTraceScoresSettled timed out after ${Date.now() - start}ms on trace ${traceId}: ` +
-      `feedback scores never stayed unchanged for ${quietPeriodMs}ms. ` +
-      `Last observed: [${lastFingerprint ?? '<none>'}]`,
+      `${reason}. Last observed: [${lastFingerprint ?? '<none>'}]`,
   );
 }
