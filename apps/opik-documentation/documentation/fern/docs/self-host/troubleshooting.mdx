@@ -256,7 +256,7 @@ For ClickHouse the script enforces the coarse version of this itself: it counts 
 
 Pass `--yes` to skip the confirmation prompt in an automated runbook; the schema check still runs and still aborts.
 
-`--database db` re-baselines the MySQL (state) changelog instead of the ClickHouse (analytics) one. There is no MySQL client in the backend image, so the schema check cannot run there and the script refuses unless you add `--force-unverified`, which asserts you have confirmed the schema yourself. The same flag overrides a ClickHouse check that could not reach the server. Reach for it only after working through the checklist above — it turns a refusal back into the silent-bricking path.
+`--database db` re-baselines the MySQL (state) changelog instead of the ClickHouse (analytics) one. There is no MySQL client in the backend image, so the schema check cannot run there and the script refuses unless you add `--force-unverified`, which asserts you have confirmed the schema yourself. The same flag overrides every one of the ClickHouse checks: a probe that could not reach the server, and a probe that reports an implausibly low table count against a schema you have confirmed is at head. Reach for it only after working through the checklist above — it turns a refusal back into the silent-bricking path.
 
 The same applies to `--config`. The re-baseline connects through the config file you pass, while the schema check reads the `ANALYTICS_DB_MIGRATIONS_*` environment variables — these describe the same database only for the packaged `config.yml`, which resolves from exactly those variables. With any other config the check could verify a different database than the one being written, so the script refuses unless you add `--force-unverified`.
 

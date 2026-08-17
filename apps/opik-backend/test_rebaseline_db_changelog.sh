@@ -182,6 +182,22 @@ PENDING=149 TABLE_COUNT=5 expect "refuses a nearly empty schema" 1 "Refusing to 
 reset_log
 PENDING=149 TABLE_COUNT=0 expect "--yes does not bypass the guard" 1 "Refusing to re-baseline" -- --yes
 
+# The refusal above tells the operator to re-run with --force-unverified, so the flag must actually
+# work on THIS branch — dbAnalytics, default config, a real (low) count. The two forced cases
+# elsewhere in this file exit on earlier branches (unreachable probe, --database db) and so never
+# reach it; without this case the flag was inert here while the message advertised it.
+reset_log
+PENDING=149 TABLE_COUNT=0 \
+	expect "--force-unverified overrides a low table count" 0 "Proceeding unverified" -- --yes --force-unverified
+if wrote_ledger; then
+	pass "--force-unverified past a low count writes the ledger"
+else
+	fail "--force-unverified past a low count writes the ledger" "never reached 'fast-forward --all'"
+fi
+reset_log
+PENDING=149 TABLE_COUNT=0 \
+	expect "--force-unverified past a low count completes" 0 "Re-baseline complete" -- --yes --force-unverified
+
 echo
 echo "the verified happy path still completes"
 # The reviewer's measured good case: intact schema (27 tables), wiped ledger (149 pending).
@@ -207,6 +223,15 @@ if wrote_ledger; then
 	fail "refuses --database db before writing" "the script reached 'fast-forward --all'"
 else
 	pass "refuses --database db before writing"
+fi
+# An unverifiable setup is a property of the invocation, not the schema, so it must refuse before any
+# database call — otherwise an unreachable server produces a connect stack trace from `status`
+# instead of this refusal, and the guard's intent is not what the operator sees.
+if [[ -s "$STUB_JAVA_LOG" ]]; then
+	fail "refuses --database db before contacting the database" \
+		"java was invoked: $(head -1 "$STUB_JAVA_LOG")"
+else
+	pass "refuses --database db before contacting the database"
 fi
 reset_log
 PENDING=149 TABLE_COUNT=0 expect "--database db proceeds when forced" 0 "Re-baseline complete" -- --database db --yes --force-unverified

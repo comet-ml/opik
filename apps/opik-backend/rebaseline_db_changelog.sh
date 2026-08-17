@@ -166,6 +166,28 @@ analytics_table_count() {
   echo "$count"
 }
 
+# Refuse an unverifiable setup before touching the database at all. Both conditions below are
+# properties of the invocation, not of the schema, so they need neither the pending set nor the
+# probe — and deciding them here means an operator whose database is unreachable sees this refusal
+# instead of a connection stack trace from the `status` call.
+if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
+  if [[ "$DATABASE" != "dbAnalytics" ]]; then
+    echo "❌ The schema cannot be verified for '${DATABASE}': there is no MySQL client in this image," >&2
+    echo "   so the 'is the schema at head' precondition cannot be checked." >&2
+    echo "   Re-run with --force-unverified if you have confirmed the schema is at head yourself." >&2
+    exit 2
+  fi
+  if [[ "$CONFIG" != "$DEFAULT_CONFIG" ]]; then
+    echo "❌ Cannot verify the schema when using a non-default config ('${CONFIG}')." >&2
+    echo "   The re-baseline connects through that file, while this check reads the" >&2
+    echo "   ANALYTICS_DB_MIGRATIONS_* environment variables — they agree only for the packaged" >&2
+    echo "   config.yml, which resolves from those same variables. With a different config the" >&2
+    echo "   check could verify a different database than the one being written." >&2
+    echo "   Re-run with --force-unverified if you have confirmed the schema is at head yourself." >&2
+    exit 2
+  fi
+fi
+
 echo "🔍 Pending changesets for '${DATABASE}' — these are what would be marked as applied:"
 echo
 java -jar "$JAR" "$DATABASE" status --verbose "$CONFIG"
@@ -226,30 +248,13 @@ fi
 # safe, and it is the one thing the other checks cannot see. The post-sync clean check is trivially
 # satisfied once every changeset is marked applied, so a schema that is not built passes it while
 # being stranded permanently. Verify it here, before the prompt, so a refusal costs nothing.
+# The two configuration-only cases already refused above unless forced, so reaching them here means
+# --force-unverified was passed: warn and continue rather than re-deciding.
 if [[ "$DATABASE" != "dbAnalytics" ]]; then
-  if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
-    echo "❌ The schema cannot be verified for '${DATABASE}': there is no MySQL client in this image," >&2
-    echo "   so the 'is the schema at head' precondition cannot be checked." >&2
-    echo "   Re-run with --force-unverified if you have confirmed the schema is at head yourself." >&2
-    exit 2
-  fi
   echo "⚠️  Proceeding unverified for '${DATABASE}' — the schema-at-head precondition is yours to assert."
 elif [[ "$CONFIG" != "$DEFAULT_CONFIG" ]]; then
-  # The write goes through Liquibase, which resolves its connection from CONFIG. The probe reads the
-  # env vars instead, and the two only describe the same database because the packaged config.yml
-  # resolves from exactly those vars. A different config breaks that equivalence, so the probe could
-  # bless one database while the ledger is written to another — the guard failing open, which is
-  # worse than no guard. Refuse rather than verify something we may not be writing to. No probe has
-  # run at this point, so nothing was sent anywhere.
-  if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
-    echo "❌ Cannot verify the schema when using a non-default config ('${CONFIG}')." >&2
-    echo "   The re-baseline connects through that file, while this check reads the" >&2
-    echo "   ANALYTICS_DB_MIGRATIONS_* environment variables — they agree only for the packaged" >&2
-    echo "   config.yml, which resolves from those same variables. With a different config the" >&2
-    echo "   check could verify a different database than the one being written." >&2
-    echo "   Re-run with --force-unverified if you have confirmed the schema is at head yourself." >&2
-    exit 2
-  fi
+  # The write goes through Liquibase, which resolves its connection from CONFIG, while the probe
+  # reads the env vars — they describe the same database only for the packaged config.yml.
   echo "⚠️  Proceeding unverified — '${CONFIG}' may describe a different database than this check reads."
 elif [[ "$tables_before" -lt 0 ]]; then
   if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
@@ -261,15 +266,23 @@ elif [[ "$tables_before" -lt 0 ]]; then
   echo "⚠️  Proceeding unverified — the ClickHouse table count could not be read."
 elif [[ "$pending_count" -gt 0 ]] \
   && (( tables_before * 100 < pending_count * MIN_TABLES_PER_PENDING_CHANGESET_PERCENT )); then
-  echo "❌ Refusing to re-baseline: '${PROBE_DATABASE}' has only ${tables_before} table(s)," >&2
-  echo "   against ${pending_count} pending changeset(s). The schema is not built, so this is not a lost" >&2
-  echo "   ledger over an intact schema — it is an empty database." >&2
-  echo >&2
-  echo "   Re-baselining here would mark every migration applied without running it, and the" >&2
-  echo "   deployment could then never build its schema. Nothing was written." >&2
-  echo >&2
-  echo "   If the schema really is at head and this count is wrong, re-run with --force-unverified." >&2
-  exit 1
+  # Like the three guards above, --force-unverified overrides this one. The message below tells the
+  # operator to re-run with it, so the flag has to actually work here; the legitimate case is a
+  # probe reporting an implausibly low count against a schema that really is at head.
+  if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
+    echo "❌ Refusing to re-baseline: '${PROBE_DATABASE}' has only ${tables_before} table(s)," >&2
+    echo "   against ${pending_count} pending changeset(s). The schema is not built, so this is not a lost" >&2
+    echo "   ledger over an intact schema — it is an empty database." >&2
+    echo >&2
+    echo "   Re-baselining here would mark every migration applied without running it, and the" >&2
+    echo "   deployment could then never build its schema. Nothing was written." >&2
+    echo >&2
+    echo "   If the schema really is at head and this count is wrong, re-run with --force-unverified." >&2
+    exit 1
+  fi
+  echo "⚠️  Proceeding unverified — '${PROBE_DATABASE}' reports only ${tables_before} table(s) against" \
+    "${pending_count} pending changeset(s), which normally means the schema is not built."
+  echo "   You are asserting it is at head; if it is not, the missing migrations are permanently lost."
 fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
