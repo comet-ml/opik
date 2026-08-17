@@ -77,9 +77,19 @@ case "$args" in
 	if [ -e "$synced_flag" ] && [ "${STICKY_PENDING:-0}" != "1" ]; then
 		pending=0
 	fi
+	# DRIFT=1 models the ledger being modified by something else between the set the operator
+	# reviewed and the re-check immediately before the write: the identities shift on every dry-run
+	# after the first, so the two fingerprints differ without the count changing.
+	offset=0
+	if [ "${DRIFT:-0}" = "1" ]; then
+		dry_count_flag="${STUB_JAVA_LOG}.dryruns"
+		echo x >>"$dry_count_flag"
+		runs=$(wc -l <"$dry_count_flag")
+		[ "$runs" -gt 1 ] && offset=1000
+	fi
 	i=1
 	while [ "$i" -le "$pending" ]; do
-		echo "INSERT INTO default.DATABASECHANGELOG (ID, AUTHOR, FILENAME) VALUES ('$i', 'someone', 'migration_$i.sql');"
+		echo "INSERT INTO default.DATABASECHANGELOG (ID, AUTHOR, FILENAME) VALUES ('$((i + offset))', 'someone', 'migration_$((i + offset)).sql');"
 		i=$((i + 1))
 	done
 	;;
@@ -151,7 +161,7 @@ reset_log() {
 	: >"$STUB_CURL_URLS"
 	: >"$STUB_CURL_CREDS"
 	: >"$STUB_CURL_QUERY"
-	rm -f "$STUB_JAVA_LOG.synced"
+	rm -f "$STUB_JAVA_LOG.synced" "$STUB_JAVA_LOG.dryruns"
 }
 wrote_ledger() { grep -qE 'fast-forward --all [^-]' "$STUB_JAVA_LOG"; }
 
@@ -421,6 +431,32 @@ PENDING=149 TABLE_COUNT=27 \
 # Passing the default path explicitly is still the packaged config, so it must not trip the guard.
 reset_log
 PENDING=149 TABLE_COUNT=27 expect "an explicit default --config still verifies" 0 "Re-baseline complete" -- --config config.yml --yes
+
+echo
+echo "pending-set drift"
+# The operator confirms against the set they were shown, so the script re-fingerprints immediately
+# before writing and aborts if the ledger moved underneath — another recovery, or a deployment
+# applying migrations. Without these cases the comparison could be deleted outright and the suite
+# would stay green, since every other test leaves the pending set identical across both dry-runs.
+reset_log
+DRIFT=1 PENDING=149 TABLE_COUNT=27 \
+	expect "aborts when the pending set changed while waiting" 1 "pending changesets changed" -- --yes
+if wrote_ledger; then
+	fail "drift aborts before writing" "the script reached 'fast-forward --all'"
+else
+	pass "drift aborts before writing"
+fi
+
+# --force-unverified asserts the schema is at head; it says nothing about the ledger holding still,
+# so drift must abort on that path too.
+reset_log
+DRIFT=1 PENDING=149 TABLE_COUNT=0 \
+	expect "drift aborts even under --force-unverified" 1 "pending changesets changed" -- --yes --force-unverified
+if wrote_ledger; then
+	fail "drift aborts before writing when forced" "the script reached 'fast-forward --all'"
+else
+	pass "drift aborts before writing when forced"
+fi
 
 echo
 echo "post-sync verification"
