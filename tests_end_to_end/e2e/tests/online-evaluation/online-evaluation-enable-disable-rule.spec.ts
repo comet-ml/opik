@@ -11,7 +11,7 @@ test.describe('Online Evaluation — enable/disable rule', { tag: ['@t2-cuj', '@
     testNamespace,
     page,
   }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(420_000);
 
     // Two deterministic Python rules: one gets toggled, the other stays enabled
     // as a control. The control is what turns "no score from the target" into a
@@ -101,8 +101,11 @@ test.describe('Online Evaluation — enable/disable rule', { tag: ['@t2-cuj', '@
       );
       expect(controlScore.value, 'control rule still scores new traces').toBe(1.0);
 
-      const trace = await backendClient.getTrace(disabledTrace.id);
-      const scoreNames = (trace?.feedbackScores ?? []).map((fs) => fs.name);
+      // The control's score arriving does not mean every rule is done with this
+      // trace — the sampler enqueues rules in parallel onto async streams — so
+      // wait for the score set to stop changing before asserting an absence.
+      const trace = await backendClient.waitForTraceScoresSettled(disabledTrace.id);
+      const scoreNames = trace.feedbackScores.map((fs) => fs.name);
       expect(
         scoreNames,
         'a disabled rule must not score traces created while it was disabled',
@@ -138,8 +141,8 @@ test.describe('Online Evaluation — enable/disable rule', { tag: ['@t2-cuj', '@
     });
 
     await test.step('The trace seeded while disabled is still unscored by the target rule', async () => {
-      const trace = await backendClient.getTrace(disabledTrace.id);
-      const scoreNames = (trace?.feedbackScores ?? []).map((fs) => fs.name);
+      const trace = await backendClient.waitForTraceScoresSettled(disabledTrace.id);
+      const scoreNames = trace.feedbackScores.map((fs) => fs.name);
       expect(
         scoreNames,
         're-enabling must not backfill scores onto traces seen while disabled',

@@ -6,6 +6,10 @@ import {
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
 import {
+  waitForTraceScoresSettled,
+  type WaitForScoresSettledOpts,
+} from './wait-for-scores-settled';
+import {
   pollOptimizationStatus,
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
@@ -448,6 +452,13 @@ export function makeBackendClient(apiKey: string | null = null) {
       opts: PollFeedbackScoreOpts = {},
     ): Promise<FeedbackScoreRef> {
       return pollTraceForFeedbackScore(localGetTrace, traceId, scoreName, opts);
+    },
+
+    async waitForTraceScoresSettled(
+      traceId: string,
+      opts: WaitForScoresSettledOpts = {},
+    ): Promise<TraceDetail> {
+      return waitForTraceScoresSettled(localGetTrace, traceId, opts);
     },
 
     async listAutomationRulesForProject(projectId: string): Promise<AutomationRuleRef[]> {
