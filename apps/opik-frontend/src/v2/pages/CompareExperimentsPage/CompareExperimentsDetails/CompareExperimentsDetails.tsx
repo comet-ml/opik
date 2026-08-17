@@ -23,6 +23,7 @@ import {
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { isTestSuiteExperiment } from "@/lib/experiments";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
+import ExperimentIdButton from "@/v2/pages/CompareExperimentsPage/ExperimentIdButton";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -106,6 +107,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
             date={experiment?.created_at}
             resource={RESOURCE_TYPE.experiment}
           />
+        )}
+        {!isCompare && experiment?.id && (
+          <ExperimentIdButton experimentId={experiment.id} />
         )}
         {experiment?.dataset_id && (
           <NavigationTag
