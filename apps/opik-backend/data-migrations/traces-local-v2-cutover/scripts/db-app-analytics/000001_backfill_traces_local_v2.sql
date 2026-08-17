@@ -2,9 +2,16 @@
 -- The gate test TracesLocalV2CutoverTest reimplements this statement inline; keep the two in step (see its Javadoc).
 --
 -- This file is the SINGLE source of the backfill INSERT; ../backfill.sh reads it, substitutes the ${...} placeholders
--- (database, window bounds, block size) and runs it once per time sub-window — so the script and this reference never
+-- and runs it once per time sub-window — so the script and this reference never
 -- drift. Run the migration through backfill.sh, never this file by hand. WINDOW_LO/WINDOW_HI are a created_at half-open
 -- range the driver picks so each INSERT stays under its --max-rows-per-insert bound (see README "Batching and throttling").
+--
+-- ALL FIVE placeholders the driver substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the
+-- server as a literal and the INSERT fails):
+--   ${ANALYTICS_DB_DATABASE_NAME}          the analytics database
+--   ${WINDOW_LO} / ${WINDOW_HI}            the created_at half-open window bounds
+--   ${MAX_INSERT_BLOCK_SIZE}               rows per part-forming block
+--   ${MAX_PARTITIONS_PER_INSERT_BLOCK}     partitions one block may span (required; see the note below)
 --
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:

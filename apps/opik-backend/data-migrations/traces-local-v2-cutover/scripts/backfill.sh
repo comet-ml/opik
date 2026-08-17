@@ -139,8 +139,11 @@ done
 # Numeric args flow into the reference SQL / window arithmetic; require sane numeric shapes so none can alter the query.
 [[ "$MAX_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-rows-per-insert must be a positive integer." >&2; exit 2; }
 [[ "$MAX_INSERT_BLOCK_SIZE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-insert-block-size must be a positive integer." >&2; exit 2; }
-# 0 is meaningful here (ClickHouse reads it as "unlimited"), so allow it — unlike the bounds above.
-[[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^[0-9]+$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be a non-negative integer (0 = unlimited)." >&2; exit 2; }
+# 0 is meaningful here (ClickHouse reads it as "unlimited"), so allow it — unlike the bounds above. Upper-bounded at 6
+# digits: the setting counts partitions, no real table approaches that, and an out-of-range value would otherwise be
+# rendered into the SQL and rejected by the server on the first INSERT — after the capacity preflight has passed and the
+# backfill_start anchor has been minted, which is a far more expensive place to discover a typo.
+[[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
