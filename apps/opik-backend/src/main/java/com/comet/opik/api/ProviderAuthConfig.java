@@ -45,7 +45,7 @@ public record ProviderAuthConfig(
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @Size(max = 250) @Schema(description = "Field holding the token lifetime in seconds in the reply; dot-path for nested replies", example = "expires_in") String expiresField,
         @JsonView({ProviderApiKey.View.Public.class,
-                ProviderApiKey.View.Write.class}) @Min(0) @Schema(description = "Lifetime in seconds assumed when the reply doesn't state one; 0 forces a fetch per call") Long fallbackTtlSeconds) {
+                ProviderApiKey.View.Write.class}) @Min(0) @Schema(description = "Lifetime in seconds assumed when the reply doesn't state one; 0 means such tokens are not cached (fetched per call)") Long fallbackTtlSeconds) {
 
     public static final String SECRET_SENTINEL = "__SECRET__";
 
