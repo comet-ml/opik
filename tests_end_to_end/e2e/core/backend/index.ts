@@ -14,5 +14,9 @@ export {
   type AutomationRuleRef,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
+  type ThreadRowRef,
+  type BackendFilter,
+  type ReadWindow,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
+export { uuid7 } from './uuid7';

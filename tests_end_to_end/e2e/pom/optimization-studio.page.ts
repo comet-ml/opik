@@ -1,6 +1,7 @@
 import type { Page, Locator } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
 
@@ -240,6 +241,47 @@ export class OptimizationStudioPage {
         this.trialsTable().getByText('Best', { exact: true }).first(),
       ).toBeVisible();
     });
+  }
+
+  /**
+   * Open a trial row by the label its "Trial" column renders — "Baseline" for
+   * the run's step-0 candidate, "Trial #N" for the numbered ones. Addressed by
+   * label rather than row index because the table's sort order is a product
+   * decision this POM should not encode.
+   *
+   * Returns the trial side panel's locator so callers can scope to it.
+   */
+  async openTrialByLabel(label: string): Promise<Locator> {
+    return test.step(`Open trial "${label}"`, async () => {
+      await this.trialsTable()
+        .locator('tbody tr')
+        .filter({ hasText: label })
+        .first()
+        .click();
+      const panel = this.trialSidebar();
+      await expect(panel, `trial side panel for "${label}"`).toBeVisible();
+      return panel;
+    });
+  }
+
+  /**
+   * Click "Logs" in the open trial side panel and hand back the shared logs
+   * overlay. It is a clickable `Tag`, not a button, so it is addressed by text
+   * within the panel rather than by role.
+   */
+  async openTrialLogs(): Promise<TraceLogsSidebarPage> {
+    return test.step('Open the trial\'s Logs overlay', async () => {
+      await this.trialSidebar().getByText('Logs', { exact: true }).first().click();
+      const overlay = new TraceLogsSidebarPage(this.page);
+      await overlay.waitForReady();
+      return overlay;
+    });
+  }
+
+  /** The trial side panel. `ResizableSidePanel` renders its `panelId` as a
+   *  data-testid, which is the one purpose-built hook on it. */
+  private trialSidebar(): Locator {
+    return this.page.locator('[data-testid="optimization-trial-sidebar"]');
   }
 
   /**
