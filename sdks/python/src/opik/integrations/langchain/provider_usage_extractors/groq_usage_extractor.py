@@ -40,8 +40,18 @@ class GroqUsageExtractor(
             return False
 
     def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
+        # A failure in model-name resolution must not drop an already-extracted
+        # usage payload; continue with model=None.
         opik_usage = _try_get_token_usage(run_dict)
-        model = _try_get_model_name(run_dict)
+        try:
+            model = _try_get_model_name(run_dict)
+        except Exception:
+            LOGGER.debug(
+                "Failed to extract model name from presumably Groq LLM langchain run, "
+                "continuing with model=None.",
+                exc_info=True,
+            )
+            model = None
 
         return llm_usage.LLMUsageInfo(
             provider=self.PROVIDER, model=model, usage=opik_usage
@@ -85,7 +95,9 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
-    model = run_dict["extra"].get("metadata", {}).get("ls_model_name")
+    # Use .get() with a default dict so a missing "extra" key returns None
+    # instead of raising into the orchestrator and dropping the usage payload.
+    model = (run_dict.get("extra") or {}).get("metadata", {}).get("ls_model_name")
     if model is not None:
         model = model.split("/")[-1]
 

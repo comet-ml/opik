@@ -51,8 +51,18 @@ class VertexAIUsageExtractor(
         self,
         run_dict: Dict[str, Any],
     ) -> llm_usage.LLMUsageInfo:
+        # A failure in model-name resolution must not drop an already-extracted
+        # usage payload; continue with model=None.
         usage_dict = _try_get_token_usage(run_dict)
-        model = _try_get_model_name(run_dict)
+        try:
+            model = _try_get_model_name(run_dict)
+        except Exception:
+            LOGGER.debug(
+                "Failed to extract model name from presumably VertexAI LLM langchain run, "
+                "continuing with model=None.",
+                exc_info=True,
+            )
+            model = None
 
         return llm_usage.LLMUsageInfo(
             provider=self.PROVIDER, model=model, usage=usage_dict
@@ -99,7 +109,11 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     if (ls_metadata := langchain_run_helpers.try_get_ls_metadata(run_dict)) is not None:
         model = ls_metadata.model
 
-    elif (invocation_params := run_dict["extra"].get("invocation_params")) is not None:
+    # Use .get() with a default dict so a missing "extra" key returns None
+    # instead of raising into the orchestrator and dropping the usage payload.
+    elif (
+        invocation_params := (run_dict.get("extra") or {}).get("invocation_params")
+    ) is not None:
         model = invocation_params.get("model_name")
 
     if model is not None:
