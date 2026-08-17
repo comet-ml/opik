@@ -432,10 +432,10 @@ and are skipped by time-bounded reads.
 > | Measure | Value |
 > |---|---|
 > | Far-future partitions in the window | 275 |
-> | Worst single block: total destination partitions | **333** (269 far-future, the rest ordinary weeks it touched) |
 > | …holding ≤ 5 rows each | **268** — about 635 rows in total |
 > | Head partitions | 7, holding 125,553 of the window's 126,188 far-future rows |
 > | Primary-key footprint of that rare tail | **12 projects** |
+> | Worst single block: total destination partitions | **333** (269 far-future, the rest ordinary weeks it touched) |
 >
 > So the mechanism is: the byte cap `min_insert_block_size_bytes` (256 MB) binds long before
 > `max_insert_block_size`, so for ~54 KiB trace rows a block holds only ~4,841 rows; and because the rare tail occupies
