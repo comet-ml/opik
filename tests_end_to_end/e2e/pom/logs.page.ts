@@ -2,6 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
+import { MetricDateRangeControl } from './metric-date-range.control';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
@@ -249,6 +250,17 @@ export class LogsPage {
     return test.step('continue the Ollie explain conversation in the sidebar', async () => {
       await this.continueConversationButton().click();
     });
+  }
+
+  // --- Date range ---
+
+  /**
+   * The date-range select in the Logs toolbar. All three Logs tabs (Traces,
+   * Spans, Threads) read one date-range key, so this is the same control
+   * whichever tab is active.
+   */
+  get dateRange(): MetricDateRangeControl {
+    return new MetricDateRangeControl(this.page);
   }
 
   // --- Filter chips ---
