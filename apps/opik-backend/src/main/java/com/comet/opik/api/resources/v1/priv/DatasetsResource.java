@@ -369,14 +369,16 @@ public class DatasetsResource {
                 .build();
 
         log.info("Batch updating dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
-                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
+                emptyIfNull(validatedBatchUpdate.ids()).size(),
+                emptyIfNull(validatedBatchUpdate.filters()).size());
 
         itemService.batchUpdate(validatedBatchUpdate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info("Batch updated dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
-                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
+                emptyIfNull(validatedBatchUpdate.ids()).size(),
+                emptyIfNull(validatedBatchUpdate.filters()).size());
 
         return Response.noContent().build();
     }
