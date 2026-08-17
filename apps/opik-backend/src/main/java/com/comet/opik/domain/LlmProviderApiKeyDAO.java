@@ -2,7 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
+import com.comet.opik.infrastructure.db.ProviderAuthConfigArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
@@ -21,14 +23,15 @@ import java.util.UUID;
 @RegisterRowMapper(ProviderApiKeyRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(MapFlatArgumentFactory.class)
+@RegisterArgumentFactory(ProviderAuthConfigArgumentFactory.class)
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
 public interface LlmProviderApiKeyDAO {
 
     String NULL_SENTINEL = "__NULL__";
 
-    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, provider_name, created_by, last_updated_by, headers, base_url, configuration) "
+    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, provider_name, created_by, last_updated_by, headers, base_url, configuration, auth_config) "
             +
-            "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :providerName, :bean.createdBy, :bean.lastUpdatedBy, :bean.headers, :bean.baseUrl, :bean.configuration)")
+            "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :providerName, :bean.createdBy, :bean.lastUpdatedBy, :bean.headers, :bean.baseUrl, :bean.configuration, :bean.authConfig)")
     void saveInternal(@Bind("workspaceId") String workspaceId,
             @Bind("providerName") String providerName,
             @BindMethods("bean") ProviderApiKey providerApiKey);
@@ -50,12 +53,17 @@ public interface LlmProviderApiKeyDAO {
             "headers = CASE WHEN :bean.headers IS NULL THEN headers ELSE :bean.headers END, " +
             "base_url = CASE WHEN :bean.baseUrl IS NULL THEN base_url ELSE :bean.baseUrl END, " +
             "configuration = CASE WHEN :bean.configuration IS NULL THEN configuration ELSE :bean.configuration END, " +
+            "auth_config = CASE WHEN :clearAuthConfig THEN NULL " +
+            "WHEN :authConfig IS NULL THEN auth_config " +
+            "ELSE :authConfig END, " +
             "last_updated_by = :lastUpdatedBy " +
             "WHERE id = :id AND workspace_id = :workspaceId")
     void update(@Bind("id") UUID id,
             @Bind("workspaceId") String workspaceId,
             @Bind("lastUpdatedBy") String lastUpdatedBy,
-            @BindMethods("bean") ProviderApiKeyUpdate providerApiKeyUpdate);
+            @BindMethods("bean") ProviderApiKeyUpdate providerApiKeyUpdate,
+            @Bind("clearAuthConfig") boolean clearAuthConfig,
+            @Bind("authConfig") ProviderAuthConfig authConfig);
 
     @SqlQuery("SELECT * FROM llm_provider_api_key WHERE id = :id AND workspace_id = :workspaceId")
     ProviderApiKey findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);

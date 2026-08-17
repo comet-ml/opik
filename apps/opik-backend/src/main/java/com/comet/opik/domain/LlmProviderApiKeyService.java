@@ -3,17 +3,21 @@ package com.comet.opik.domain;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -23,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.FreeModelConfig.FREE_MODEL_PROVIDER_ID;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -147,13 +153,90 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             ProviderApiKey providerApiKey = repository.fetch(id, workspaceId)
                     .orElseThrow(this::createNotFoundError);
 
+            var authConfigUpdate = resolveAuthConfigUpdate(providerApiKeyUpdate, providerApiKey);
+
             repository.update(providerApiKey.id(),
                     workspaceId,
                     userName,
-                    providerApiKeyUpdate);
+                    providerApiKeyUpdate,
+                    authConfigUpdate.clear(),
+                    authConfigUpdate.authConfig());
 
             return null;
         });
+    }
+
+    private record AuthConfigUpdate(boolean clear, ProviderAuthConfig authConfig) {
+    }
+
+    /**
+     * Maps the update's auth_config to the DAO binds: absent -> keep (null value, no clear),
+     * empty object -> clear, otherwise validate + resolve {@code __SECRET__} sentinels against
+     * the stored recipe -> set.
+     */
+    private AuthConfigUpdate resolveAuthConfigUpdate(ProviderApiKeyUpdate update, ProviderApiKey stored) {
+        ProviderAuthConfig incoming = update.authConfig();
+        if (incoming == null) {
+            validateNoStaticKeyConflict(
+                    update.apiKey() != null ? update.apiKey() : stored.apiKey(), stored.authConfig());
+            return new AuthConfigUpdate(false, null);
+        }
+        if (incoming.isEmpty()) {
+            return new AuthConfigUpdate(true, null);
+        }
+        if (!stored.provider().supportsProviderName()) {
+            throw new BadRequestException("auth_config is only supported for providers with provider_name");
+        }
+        var errors = incoming.validationErrors();
+        if (!errors.isEmpty()) {
+            throw new BadRequestException(String.join("; ", errors));
+        }
+        validateNoStaticKeyConflict(update.apiKey() != null ? update.apiKey() : stored.apiKey(), incoming);
+        var merged = mergeSecretSentinels(incoming, stored.authConfig());
+        return new AuthConfigUpdate(false, merged);
+    }
+
+    private void validateNoStaticKeyConflict(String encryptedApiKey, ProviderAuthConfig authConfig) {
+        if (authConfig != null && encryptedApiKey != null
+                && StringUtils.isNotBlank(EncryptionUtils.decrypt(encryptedApiKey))) {
+            throw new BadRequestException(
+                    "api_key and auth_config cannot both be set; clear one of them (send auth_config as an empty object to clear it)");
+        }
+    }
+
+    /**
+     * Resolves {@code __SECRET__} sentinel values ("keep the stored secret") and enforces that a
+     * secret flag can never be unset once saved. Sentinels are only accepted where the stored
+     * recipe holds a secret under the same key — so a literal password that happens to look masked
+     * can never be confused with "unchanged".
+     */
+    private ProviderAuthConfig mergeSecretSentinels(ProviderAuthConfig incoming, ProviderAuthConfig stored) {
+        Map<String, ProviderAuthConfig.Credential> storedByKey = stored == null || stored.credentials() == null
+                ? Map.of()
+                : stored.credentials().stream()
+                        .collect(Collectors.toMap(
+                                ProviderAuthConfig.Credential::key, Function.identity(), (first, second) -> second));
+
+        var mergedCredentials = incoming.credentials().stream()
+                .map(credential -> {
+                    var storedCredential = storedByKey.get(credential.key());
+                    boolean lockedInStore = storedCredential != null && storedCredential.secret();
+                    if (ProviderAuthConfig.SECRET_SENTINEL.equals(credential.value())) {
+                        if (!lockedInStore) {
+                            throw new BadRequestException(
+                                    "credential '%s' uses the secret sentinel but no stored secret exists under that key; provide the value"
+                                            .formatted(credential.key()));
+                        }
+                        return credential.toBuilder().value(storedCredential.value()).secret(true).build();
+                    }
+                    // once saved as secret, a credential stays secret
+                    return lockedInStore && !credential.secret()
+                            ? credential.toBuilder().secret(true).build()
+                            : credential;
+                })
+                .toList();
+
+        return incoming.toBuilder().credentials(mergedCredentials).build();
     }
 
     @Override

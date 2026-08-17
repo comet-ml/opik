@@ -71,6 +71,9 @@ public class LlmProviderApiKeyResource {
                         .apiKey(providerApiKey.apiKey() != null
                                 ? maskApiKey(decrypt(providerApiKey.apiKey()))
                                 : "null")
+                        .authConfig(providerApiKey.authConfig() != null
+                                ? providerApiKey.authConfig().mask()
+                                : null)
                         .build())
                 .toList();
 
@@ -101,6 +104,7 @@ public class LlmProviderApiKeyResource {
 
         return Response.ok().entity(providerApiKey.toBuilder()
                 .apiKey(providerApiKey.apiKey() != null ? maskApiKey(decrypt(providerApiKey.apiKey())) : null)
+                .authConfig(providerApiKey.authConfig() != null ? providerApiKey.authConfig().mask() : null)
                 .build()).build();
     }
 
