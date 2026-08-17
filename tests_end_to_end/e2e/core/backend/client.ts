@@ -83,6 +83,7 @@ export interface AutomationRuleRef {
   id: string;
   name: string;
   projectIds: string[];
+  enabled: boolean;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -459,6 +460,7 @@ export function makeBackendClient(apiKey: string | null = null) {
         id: String(r.id),
         name: r.name,
         projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
+        enabled: r.enabled ?? true,
       }));
     },
 
