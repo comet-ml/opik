@@ -238,6 +238,7 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_V4_FLASH_FREE = "deepseek/deepseek-v4-flash:free",
   DEEPSEEK_DEEPSEEK_V4_PRO = "deepseek/deepseek-v4-pro",
   DEEPSEEK_DEEPSEEK_V4_PRO_0813 = "deepseek/deepseek-v4-pro-0813",
+  DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE = "dots-studio/dots-3-note-preview:free",
   ELEUTHERAI_LLEMMA_7B = "eleutherai/llemma_7b",
   ESSENTIALAI_RNJ_1_INSTRUCT = "essentialai/rnj-1-instruct",
   GOOGLE_GEMINI_2_0_FLASH_001 = "google/gemini-2.0-flash-001",
@@ -664,6 +665,7 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN3_7_MAX = "qwen/qwen3.7-max",
   QWEN_QWEN3_7_PLUS = "qwen/qwen3.7-plus",
   QWEN_QWEN3_8_2_4T_A95B = "qwen/qwen3.8-2.4t-a95b",
+  QWEN_QWEN3_8_27B = "qwen/qwen3.8-27b",
   QWEN_QWEN3_8_MAX = "qwen/qwen3.8-max",
   QWEN_QWQ_32B = "qwen/qwq-32b",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
@@ -743,6 +745,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_1 = "z-ai/glm-5.1",
   Z_AI_GLM_5_2 = "z-ai/glm-5.2",
   Z_AI_GLM_5_2_BATCH = "z-ai/glm-5.2:batch",
+  Z_AI_GLM_5_2_FREE = "z-ai/glm-5.2:free",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
   ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
@@ -781,6 +784,7 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_5_FLASH = "gemini-3.5-flash",
   GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite",
   GEMINI_3_6_FLASH = "gemini-3.6-flash",
+  GEMINI_3_7_FLASH = "gemini-3.7-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
   GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
@@ -789,7 +793,6 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_3_7_FLASH = "gemini-3.7-flash",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
@@ -809,6 +812,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_5_FLASH = "vertex_ai/gemini-3.5-flash",
   VERTEX_AI_GEMINI_3_5_FLASH_LITE = "vertex_ai/gemini-3.5-flash-lite",
   VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
+  VERTEX_AI_GEMINI_3_7_FLASH = "vertex_ai/gemini-3.7-flash",
 }
 
 export interface ProviderModelsMap {
