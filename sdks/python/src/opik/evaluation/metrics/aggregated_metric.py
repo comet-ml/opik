@@ -70,7 +70,18 @@ class AggregatedMetric(
     def score(self, **kwargs: Any) -> score_result.ScoreResult:
         score_results: List[score_result.ScoreResult] = []
         for metric in self.metrics:
-            metric_result = metric.score(**kwargs)
+            # Narrow per sub-metric, exactly as the engine does when it dispatches
+            # directly: this metric accepts `**kwargs`, so without this a wrapped
+            # metric that declares only what it needs would get every dataset key
+            # and fail with an `unexpected keyword argument` TypeError.
+            positional_arguments, keyword_arguments = (
+                arguments_helpers.select_score_arguments(
+                    score_function=metric.score,
+                    kwargs=kwargs,
+                    score_name=metric.name,
+                )
+            )
+            metric_result = metric.score(*positional_arguments, **keyword_arguments)
             if isinstance(metric_result, list):
                 score_results.extend(metric_result)
             else:

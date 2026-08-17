@@ -360,15 +360,15 @@ public class ExperimentDAO {
                         sumMap(usage) as usage,
                         sum(total_estimated_cost) as total_estimated_cost
                     FROM (
-                        SELECT workspace_id, project_id, trace_id, parent_span_id, id, usage, total_estimated_cost, last_updated_at
+                        SELECT workspace_id, project_id, trace_id, id, usage, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>
                         AND project_id IN :target_project_ids
                         <endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
-                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
                     )
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON t.id = s.trace_id
@@ -1296,15 +1296,15 @@ public class ExperimentDAO {
                         trace_id,
                         sum(total_estimated_cost) as total_estimated_cost
                     FROM (
-                        SELECT workspace_id, project_id, trace_id, parent_span_id, id, total_estimated_cost, last_updated_at
+                        SELECT workspace_id, project_id, trace_id, id, total_estimated_cost, last_updated_at
                         FROM spans
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>
                         AND project_id IN :target_project_ids
                         <endif>
                         AND trace_id IN (SELECT trace_id FROM experiment_items_final)
-                        ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                        ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                        <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
                     )
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON t.id = s.trace_id
@@ -1661,6 +1661,17 @@ public class ExperimentDAO {
             ;
             """;
 
+    /**
+     * Partial update as a new {@code ReplacingMergeTree} row version: every column not being written is
+     * copied forward from the latest existing version.
+     *
+     * <p>{@code created_at} is one of those carried-forward columns and must stay that way — the stalled-run
+     * reaper reads {@code experiments.created_at} as its trial-level liveness signal
+     * ({@code OptimizationDAO#FIND_STALLED_STUDIO_OPTIMIZATIONS}, OPIK-7459), and it reads raw row versions
+     * rather than deduped ones. Re-stamping it here (or in {@link #BATCH_SET_PROJECT_ID}, which preserves it
+     * via {@code SELECT * REPLACE}) would make an update to any long-finished trial register as fresh
+     * progress and pin a dead run alive up to the reaper's hard ceiling.
+     */
     private static final String UPDATE = """
             INSERT INTO experiments (
                 id,

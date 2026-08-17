@@ -56,6 +56,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -582,11 +583,24 @@ class DatasetsResourceCreateFromTracesTest {
          * artifact being addressed separately under the hyperscale work, not a state the read path should
          * preserve and double-count.
          * <p>
-         * Note which row survives: the {@code ORDER BY} still leads with the table's sort key, so the
-         * winner is the one with the greater {@code parent_span_id}, not the most recently written.
-         * {@code last_updated_at} only breaks ties once the whole tuple matches. That is a deliberate
-         * trade — leading with the sort key is what lets ClickHouse read in order — and it is only
-         * observable for rows that are already inconsistent.
+         * Note that two versions of one span id are not supposed to disagree on {@code trace_id} or
+         * {@code parent_span_id} in the first place — those identify the span, they are not per-version
+         * state. An update carries the parent forward untouched and {@code SpanService} rejects a changed
+         * parent with a 409; the batch endpoint is the one path that does not validate it, a deliberate
+         * trade for ingestion throughput. The pair of rows below is therefore corrupt data rather than a
+         * legitimate version history.
+         * <p>
+         * Which row survives is fully determined. Both the current layout and the post-cutover one assume
+         * {@code (workspace_id, project_id, id)} is unique, and that is what the dedup groups on, so these
+         * two rows are treated as two versions of a single span and {@code last_updated_at} picks between
+         * them: the latest write wins. {@code parent_span_id} is still part of the table's physical sort
+         * key and only leaves at the cutover — what changed here is that the query no longer sorts on it,
+         * which is what stops it from overriding recency.
+         * <p>
+         * The test has to pin {@code last_updated_at} to exercise that. It is on the write view, so the
+         * value the client sends is the value stored, and podam would otherwise give each manufactured
+         * span an independent random instant — leaving the assertion undetermined, though not the
+         * behaviour.
          * <p>
          * Two batch calls rather than one batch of two spans, because a single batch deduplicates by id
          * before insert.
@@ -610,30 +624,35 @@ class DatasetsResourceCreateFromTracesTest {
             int firstUsage = RandomUtils.secure().randomInt(1, 100);
             int secondUsage = RandomUtils.secure().randomInt(100, 200);
 
-            // Which of the two rows survives is decided by parent_span_id order, not by recency: the
-            // ORDER BY leads with the table's sort key so ClickHouse can still read in order, and
-            // last_updated_at only breaks ties once that whole tuple matches — which it does not here.
-            // Pin the two parents so the outcome is deterministic rather than dependent on which random
-            // UUID happens to sort higher.
+            // The stale row is written under the greater parent_span_id on purpose: that is the row the
+            // old five-column sort tuple would have picked, so this fails if that tiebreaker returns.
             var parents = Stream.of(GENERATOR.generate(), GENERATOR.generate())
                     .sorted(Comparator.comparing(UUID::toString))
                     .toList();
             var lowerParent = parents.getFirst();
             var higherParent = parents.getLast();
 
+            // Pin last_updated_at too: it is what selects the surviving version, and podam would
+            // otherwise give each of these two spans an independent random instant.
+            var staleWrittenAt = Instant.now().minusSeconds(60);
+            var freshWrittenAt = staleWrittenAt.plusSeconds(30);
+
             spanResourceClient.batchCreateSpans(List.of(
                     buildSpan(spanId, projectName, trace.id(), higherParent,
-                            Map.of(USAGE_KEY, firstUsage))),
+                            Map.of(USAGE_KEY, firstUsage))
+                            .toBuilder().lastUpdatedAt(staleWrittenAt).build()),
                     apiKey, workspaceName);
 
             spanResourceClient.batchCreateSpans(List.of(
                     buildSpan(spanId, projectName, trace.id(), lowerParent,
-                            Map.of(USAGE_KEY, secondUsage))),
+                            Map.of(USAGE_KEY, secondUsage))
+                            .toBuilder().lastUpdatedAt(freshWrittenAt).build()),
                     apiKey, workspaceName);
 
-            // One version, not the sum — the span is counted once despite being stored twice.
+            // One version, not the sum — the span is counted once despite being stored twice, and the
+            // version that counts is the latest write, not the one with the greater parent.
             assertThat(aggregatedUsage(datasetId, trace.id(), apiKey, workspaceName))
-                    .isEqualTo(Map.of(USAGE_KEY, (long) firstUsage));
+                    .isEqualTo(Map.of(USAGE_KEY, (long) secondUsage));
         }
 
         private Trace createTrace(String projectName, String apiKey, String workspaceName) {

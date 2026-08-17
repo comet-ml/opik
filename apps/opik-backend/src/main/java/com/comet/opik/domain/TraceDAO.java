@@ -489,7 +489,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, id
             ),
             feedback_scores_deduped AS (
@@ -690,7 +690,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, id
             ), spans_agg AS (
                 SELECT
@@ -1546,6 +1546,24 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /**
+     * Total-row count behind the traces list page. Numbers in OPIK-7836; re-measure before changing either gate.
+     *
+     * <p>Two things this template must NOT do when nothing consumes them:
+     *
+     * <ul>
+     * <li>{@code guardrails_agg} is joined only under {@code guardrails_filters}, matching the other filter-side
+     * joins in this class. Nothing else in the count reads {@code gagg.guardrails_result}, and the join is also what
+     * makes {@code trace_id_prefilter} referenced - so leaving it in costs a second full scan of the project on
+     * every page load (measured 15.9M read rows on a 7.9M-row project). The gate cannot silently return a wrong
+     * count: {@code FilterUtils} sets {@code guardrails_filters} in exactly the cases that render the {@code gagg}
+     * alias into {@code filters}, so a mismatch fails to parse (see {@link #canDedupByArgMax}).</li>
+     * <li>The {@code ORDER BY} + {@code LIMIT 1 BY id} dedup of {@code ReplacingMergeTree} versions is kept only
+     * under {@code trace_aggregation_filters}, whose branch groups by {@code t.id} and so needs one row per version.
+     * Otherwise the count is {@code count(DISTINCT id)}: the {@code WHERE} is applied before dedup either way, so
+     * both forms count the ids where any version matched, but only one of them sorts every matching row.</li>
+     * </ul>
+     */
     private static final String COUNT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
@@ -1799,7 +1817,7 @@ class TraceDAOImpl implements TraceDAO {
             )
             <endif>
             SELECT
-                count(id) as count
+                <if(trace_aggregation_filters)>count(id)<else>count(DISTINCT id)<endif> as count
             FROM (
                 SELECT
                     t.id
@@ -1810,10 +1828,9 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                 FROM (
                     SELECT
-                        id,
-                        duration
+                        id
                     FROM traces
-                        LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                        <if(guardrails_filters)>LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id<endif>
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
@@ -1871,8 +1888,10 @@ class TraceDAOImpl implements TraceDAO {
                         LIMIT 1 BY id
                     )
                     <endif>
+                    <if(trace_aggregation_filters)>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
+                    <endif>
                 ) AS t
                 <if(trace_aggregation_filters)>
                 LEFT JOIN (
@@ -1885,7 +1904,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND trace_id IN (SELECT trace_id FROM target_spans)
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS s ON t.id = s.trace_id
                 GROUP BY

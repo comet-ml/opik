@@ -1,25 +1,132 @@
 ---
-title: Custom guardrails
-subtitle: Train a binary guardrail on your own labeled examples and serve it like a built-in one
-headline: Custom Guardrails | Opik Documentation
-og:title: Custom Guardrails - Opik
-og:description: Train a custom binary guardrail classifier from your own labeled examples and run it on the Opik guardrails server.
+title: Custom models
+subtitle: Fine-tune a language model for a check the built-in guards do not cover
+headline: Custom Guardrail Models | Opik Documentation
+og:title: Custom Guardrail Models — Opik
+og:description: Fine-tune a language model on your own labeled examples to create a custom guardrail in Opik, then run it from a policy. Opik hosts the training and serves the model for you.
 og:site_name: Opik Documentation
 ---
 
-When the built-in guardrails do not cover a check you need, you can train your own. You provide labeled examples and a short description of what you want to catch, and Opik fine-tunes a small classifier (the same architecture as the built-in [prompt injection](/guardrails/guardrails#prompt-injection-guardrail) guardrail) that runs on the [guardrails server](/guardrails/server).
+The built-in guards cover checks that most applications share — personal data, topics, prompt injection. When you need something specific to your product, **fine-tune your own model**: give Opik a labeled dataset and a description of what to catch, and it trains a language model into a check that answers one yes-or-no question about a piece of text, such as "does this reply read as off-brand?" or "is this abusive?".
 
-This is the trained counterpart to the [LLM judge](/guardrails/guardrails#llm-judge-guardrail): use the LLM judge to prototype a check with a natural-language policy, and once it matters, train a custom guardrail so it runs fast and cheap inline at high volume. It's also the trained counterpart to a [manual guardrail](/guardrails/guardrails#manual-guardrail): reach for a manual guardrail for a one-off heuristic, and train a custom guardrail once you want a real model backing that same check.
+Opik runs the whole loop for you. There is no training infrastructure to set up and nothing to deploy: you supply the examples, Opik fine-tunes the model on its GPUs, reports how accurate it turned out, and serves it inline from that point on. You can do it [from the UI](#create-a-model-in-the-ui) or [from the SDK](#fine-tune-from-the-sdk).
 
-## How it works
+Once created, a model behaves like any other guard: select it in the **custom classifier** guard of a [policy](/guardrails/policies), or reference it by name from code.
 
-1. You call `create_custom_guardrail` with labeled examples and a description of the metric.
-2. The guardrails server trains a small LoRA adapter on its GPU and stores it under the name you chose.
-3. You reference that name from the `CustomGuardrail` guard, and the same server runs it.
+## When to fine-tune
 
-## Train the guardrail
+A fine-tuned model is not the only way to cover a check the built-in guards miss, and it is not always the right one:
 
-Pass your labeled examples and a description to `create_custom_guardrail`. Each example is `text` plus a binary `label`, where `1` means the metric holds (the guardrail should fail) and `0` means it does not. The `description` completes the sentence "Determine whether it ...".
+- An [LLM judge](/guardrails/guardrails#llm-judge) needs no model of your own — you write the rule in plain language and a model from your workspace's providers judges it. Fastest to get running, most expensive per call.
+- A [manual guardrail](/guardrails/guardrails#manual-guardrails) suits a one-off heuristic or a business rule that is genuinely just code, like a list of competitor names.
+- A **fine-tuned model** is what those two graduate into. Once a check has to run on every request and be right, training a small model on your labels is both cheaper per call than prompting a general model and more accurate than a heuristic.
+
+## Fine-tuned or prompt-only
+
+Opik can also stand a model up from a description alone, with no training at all. The two options differ in what you prepare and in what you get back.
+
+| | Fine-tuned | Prompt only |
+| --- | --- | --- |
+| **What you provide** | A labeled dataset | A description, and optionally a few examples |
+| **How it decides** | A language model trained on your examples | Your description becomes a prompt a general model judges with |
+| **Ready in** | GPU minutes | Seconds |
+| **Quality signal** | Accuracy measured on held-out data | None — you judge it yourself |
+| **Best for** | A check that runs on every request and has to be right | Prototyping the check, and low-volume use |
+
+Reach for **fine-tuned** whenever the check matters: a trained model is faster and cheaper to run at high volume than prompting a general model on every request, it learns the edge cases your labels encode, and it comes with a number you can judge before trusting it.
+
+**Prompt only** is the cheap first draft. Creating one costs nothing, so it is a quick way to confirm your description says what you meant — and to collect the disagreements that become your training labels — before booking GPU minutes on it.
+
+## Create a model in the UI
+
+Open **Guardrails** in the sidebar, switch to the **Models** tab, and choose **Create model**. The tab lists every model available to the workspace, including Opik's own built-in detectors, so you can tell at a glance which are prompt-only, which are fine-tuned, and which came with the platform.
+
+<Frame>
+  <img src="/img/guardrails/model-create.png" />
+</Frame>
+
+<Steps>
+  <Step title="Name it">
+    Lowercase letters, digits, and hyphens — between 3 and 63 characters.
+
+    <Warning>
+      A model cannot be renamed. Policies reference it by this name, so choose one you can live with.
+    </Warning>
+  </Step>
+  <Step title="Describe what it should flag">
+    Write what a violation looks like, in plain language — for example, "the reply reads as off-brand for a calm, plain-spoken support voice."
+
+    This text is the model's prompt: it is what the model judges with, both while training and at inference time. Be specific about the edge you care about, since that is the part a short description usually leaves ambiguous.
+  </Step>
+  <Step title="Choose how it decides">
+    Pick **Fine-tuned** and attach your training dataset — Opik trains the model on it.
+
+    If you pick **Prompt only** instead, there is no dataset. You can add examples it should flag and examples it should let through — one per line, both optional — which are folded into the prompt and are usually the quickest way to fix a model that is judging the wrong edge.
+  </Step>
+  <Step title="Start it">
+    **Start training** queues the fine-tuning job; the model shows as **Training** until it finishes and becomes **Active** when it does. A prompt-only model is ready to use immediately.
+  </Step>
+</Steps>
+
+### The training dataset
+
+Fine-tuning takes a `.jsonl` file — one JSON object per line — of up to 50 MB:
+
+```json
+{"text": "Get lost, nobody wants you around here.", "label": true}
+{"text": "Thanks so much for your help today!", "label": false}
+```
+
+Label a row `true` when the text violates the guardrail and `false` when it does not.
+
+<Tip>
+  Aim for a balanced set with enough examples of each class to represent your production traffic. Below 30 rows there is not enough data to hold any back for measurement, so the model trains but its accuracy is left unmeasured.
+</Tip>
+
+### While it trains, and if it fails
+
+Training takes GPU minutes and cannot be stopped once it starts. The **Models** tab shows the model's status as it goes, and a model cannot be deleted until the job has finished or failed.
+
+If training fails, it cannot be retried — check that the dataset has enough rows in both classes and no conflicting labels, then create a new model from the corrected file. The row menu's **Reuse settings** action reopens the form with the name and description prefilled, so you only need to attach the file again.
+
+### Inspect a model
+
+Opening a model shows its status and type, the description you gave it, and — for a fine-tuned model — what the training job produced: how many rows it learned from, how many epochs it ran, the final training loss, and its accuracy on data held back from training.
+
+<Frame>
+  <img src="/img/guardrails/model-details.png" />
+</Frame>
+
+**Held-out accuracy** is the number to look at. It is the only one measured on text the model has not seen, which makes it the only one that says anything about production. Opik does not block a weak model from being used, so this judgement is yours to make: if accuracy is low, the usual causes are too few examples, an unbalanced set, or a description that does not match how the rows were actually labeled.
+
+The **System prompt** section shows the exact text the model judges with, built from your description. It is worth expanding — a model that flags the wrong thing is usually a prompt that says something slightly different from what you meant, and this is where you can see it.
+
+The panel also lists which policies currently use the model, so you can see what you would affect before deleting it.
+
+## Use it in a guardrail
+
+Add the model to a [policy](/guardrails/policies): switch on the **custom classifier** guard, select your model, and set a threshold. Only models that are ready can be selected.
+
+The guard fails when the model's score is at or above the threshold. Lower it to be stricter, raise it to be more permissive.
+
+From then on, any application that references the policy runs your model along with the policy's other checks — no application change needed to roll it out:
+
+```python
+from opik.guardrails import Guardrail
+
+guardrail = Guardrail.from_stored_policies(names=["support-tone"])
+```
+
+<Note>
+  A model can also be referenced directly in code with the `CustomGuardrail` guard, which takes `model_name` and
+  `threshold`. See [defining guards in code](/guardrails/guardrails#defining-guards-in-code).
+</Note>
+
+## Fine-tune from the SDK
+
+Fine-tuning is also a single SDK call, which is what you want when the dataset lives in version control or the training runs as part of a pipeline. Pass your labeled examples to `create_custom_guardrail` and Opik trains the model and serves it under the name you chose.
+
+Each example is `text` plus a binary `label`, where `1` means the check holds and the guardrail should fail. The `description` completes the sentence "Determine whether it ...".
 
 ```python
 from opik.guardrails import create_custom_guardrail
@@ -37,64 +144,38 @@ result = create_custom_guardrail(
 print(result["eval_metrics"])
 ```
 
-Training runs on the guardrails server and can take a few minutes. By default the call blocks until it finishes and returns evaluation metrics (accuracy, precision, recall, F1, AUROC) on held-out validation and test splits, so you can judge quality before using it. Pass `wait=False` to return immediately instead.
+By default the call blocks until training finishes and returns evaluation metrics on held-out validation and test splits, so you can judge quality before using the model. Pass `wait=False` to return immediately instead, and `overwrite=True` to retrain under a name that already exists.
 
-Retraining under a name that already exists is rejected unless you pass `overwrite=True`, so you don't clobber an existing guardrail by accident.
+<AccordionGroup>
+  <Accordion title="Following a training run as it progresses">
+    Pass a `callback` to be called on each poll with the current status. The status carries a `progress` dict — percent complete, epoch, latest training loss, and the latest validation metrics:
 
-### Track progress
+    ```python
+    def on_progress(status):
+        p = status.get("progress", {})
+        print(
+            f"{status['status']} {p.get('percent', 0)}% "
+            f"epoch={p.get('epoch')} "
+            f"val_f1={p.get('latest_eval', {}).get('eval_validation_f1')}"
+        )
 
-Pass a `callback` to follow the run as it trains. It is called on each poll with the current status, which carries a `progress` dict (percent complete, epoch, latest training loss, and the latest validation metrics):
-
-```python
-def on_progress(status):
-    p = status.get("progress", {})
-    print(
-        f"{status['status']} {p.get('percent', 0)}% "
-        f"epoch={p.get('epoch')} "
-        f"val_f1={p.get('latest_eval', {}).get('eval_validation_f1')}"
+    create_custom_guardrail(
+        name="toxicity-v1",
+        description="contains toxic or abusive language",
+        examples=[...],
+        callback=on_progress,
     )
-
-create_custom_guardrail(
-    name="toxicity-v1",
-    description="contains toxic or abusive language",
-    examples=[...],
-    callback=on_progress,
-)
-```
-
-<Tip>
-  Aim for a balanced set with enough examples of each class to represent your production traffic.
-</Tip>
-
-## Use it in a guardrail
-
-Reference the model name in a `CustomGuardrail` guard:
-
-```python
-from opik.guardrails import Guardrail, CustomGuardrail
-from opik import exceptions
-
-guardrail = Guardrail(
-    guards=[
-        CustomGuardrail(model_name="toxicity-v1", threshold=0.5),
-    ]
-)
-
-try:
-    guardrail.validate("Get lost, nobody wants you around here.")
-except exceptions.GuardrailValidationFailed as e:
-    print(e)
-```
-
-The guard fails when the model's score is at or above `threshold`. Lower it to be stricter, raise it to be more permissive. If the named model is not found in the server's adapters directory, validation fails closed with a clear error.
+    ```
+  </Accordion>
+</AccordionGroup>
 
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Guardrails" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
-    The built-in PII, Topic, prompt injection, and LLM judge guardrails.
+  <Card title="Policies" href="/guardrails/policies" icon="fa-regular fa-list-check">
+    Group your guards into a named policy your application references.
   </Card>
   <Card title="Guardrails server" href="/guardrails/server" icon="fa-regular fa-server">
-    Configure the adapters directory and run the server.
+    Configuration and deployment options for self-hosted Opik.
   </Card>
 </CardGroup>

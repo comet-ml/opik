@@ -249,6 +249,7 @@ areas:
       - trace-explore/trace-explore-smoke.spec.ts
       - trace-explore/trace-spans-depth.spec.ts
       - trace-explore/trace-delete.spec.ts
+      - trace-explore/trace-filters.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -260,12 +261,14 @@ areas:
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
-      filter-traces:          { covered: false, note: "OQL / FiltersButton" }
+      filter-traces:          { covered: true,  tier: t2-cuj }
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       agent-graph-tab:        { covered: false }
       attachments-media:      { covered: false }
+      set-guardrail:          { covered: false, note: "SetGuardrailDialog — GUARDRAILS_ENABLED flag" }
+      guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
@@ -491,6 +494,7 @@ areas:
     specs:
       - datasets/dataset-crud-smoke.spec.ts
       - datasets/dataset-items.spec.ts
+      - datasets/dataset-version-counters.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
@@ -501,7 +505,7 @@ areas:
       bulk-delete-items:      { covered: true,  tier: t3-nightly }
       search-items:           { covered: true,  tier: t3-nightly }
       sdk-round-trip:         { covered: true,  tier: t1-smoke }
-      version-history-view:   { covered: false }
+      version-history-view:   { covered: true,  tier: t2-cuj }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
@@ -557,6 +561,7 @@ areas:
       compare-row-detail:      { covered: true,  tier: t2-cuj }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
+      logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: false }
       delete-experiment:       { covered: false }
 
@@ -586,6 +591,7 @@ areas:
     tag_aliases: [annotation-queue]
     specs:
       - annotation-queues/annotation-queue-scoring.spec.ts
+      - annotation-queues/annotation-queue-delete.spec.ts
     capabilities:
       score-queue-item:        { covered: true,  tier: t2-cuj }
       score-with-reason:       { covered: true,  tier: t2-cuj }
@@ -594,7 +600,10 @@ areas:
       list-queues:             { covered: false }
       create-queue:            { covered: false }
       edit-queue:              { covered: false }
-      delete-queue:            { covered: false }
+      # Second case in this spec is a test.fail() known failure for OPIK-7903
+      # (deleted-queue URL loads forever instead of showing a not-found state).
+      # Fixing that bug turns the run red until the annotation is removed.
+      delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
       queue-configuration-tab: { covered: false }
       add-traces-to-queue:     { covered: false }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
@@ -614,6 +623,7 @@ areas:
     spec_dir: online-evaluation
     specs:
       - online-evaluation/online-evaluation-smoke.spec.ts
+      - online-evaluation/online-evaluation-delete-rule.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -627,7 +637,7 @@ areas:
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }
       enable-disable-rule:     { covered: false }
-      delete-rule:             { covered: false }
+      delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       automation-logs:         { covered: false }
 
     visual:
@@ -696,11 +706,14 @@ areas:
     label: Projects
     nav_group: Workspace
     routes: ["/$workspaceName/projects", "/projects/$projectId/home"]
+    spec_dir: projects
     specs:
+      - projects/project-delete.spec.ts
+      - projects/projects-list-stats.spec.ts
     capabilities:
-      list-projects:         { covered: false }
+      list-projects:         { covered: true,  tier: t2-cuj }
       create-project:        { covered: false }
-      delete-project:        { covered: false }
+      delete-project:        { covered: true,  tier: t2-cuj, note: "asserts the project and its traces are gone; deliberately silent on orphaned project-scoped datasets/experiments pending a product decision" }
       project-selector:      { covered: false }
       pin-unpin-project:     { covered: false }
       project-home:          { covered: false }
@@ -746,13 +759,13 @@ areas:
       members-change-role:      { covered: false, cloud_only: true }
 
     visual:
-      config-feedback-definitions: { covered: false, state: default }
+      config-feedback-definitions: { covered: true,  state: default }
       config-feedback-def-empty:   { covered: false, state: empty, note: "'No feedback definitions yet'" }
-      config-environments:         { covered: false, state: default }
-      config-environments-empty:   { covered: false, state: empty, note: "'No environments yet'" }
-      config-ai-providers:         { covered: false, state: default }
-      config-ai-providers-empty:   { covered: false, state: empty, note: "'No AI providers yet'" }
-      config-workspace-prefs:      { covered: false, state: default }
+      config-environments:         { covered: true,  state: default }
+      config-environments-empty:   { covered: true,  state: empty, note: "'No environments yet'" }
+      config-ai-providers:         { covered: true,  state: default }
+      config-ai-providers-empty:   { covered: true,  state: empty, note: "'No AI providers yet'" }
+      config-workspace-prefs:      { covered: true,  state: default }
 
   onboarding:
     label: Get started

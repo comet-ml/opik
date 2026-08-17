@@ -941,7 +941,6 @@ class FindSpansResourceTest {
                     .sorted(stream
                             ? Comparator.comparing(Span::id).reversed()
                             : Comparator.comparing(Span::traceId)
-                                    .thenComparing(Span::parentSpanId)
                                     .thenComparing(Span::id)
                                     .reversed())
                     .toList();
@@ -5191,8 +5190,7 @@ class FindSpansResourceTest {
             return Stream.of(
                     Arguments.of("/spans/stats", statsTestAssertion, Comparator.comparing(Span::id).reversed()),
                     Arguments.of("/spans", spansTestAssertion,
-                            Comparator.comparing(Span::traceId).thenComparing(Span::parentSpanId)
-                                    .thenComparing(Span::id).reversed()),
+                            Comparator.comparing(Span::traceId).thenComparing(Span::id).reversed()),
                     Arguments.of("/spans/search", spanStreamTestAssertion, Comparator.comparing(Span::id).reversed()));
         }
 

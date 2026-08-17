@@ -2,6 +2,7 @@ from unittest import mock
 
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation.resume import context, iteration
+from opik.evaluation.types import ErrorTolerance
 
 
 def _make_context(completed: dict = None, default: int = 1) -> context.ResumeContext:
@@ -13,6 +14,7 @@ def _make_context(completed: dict = None, default: int = 1) -> context.ResumeCon
         dataset_filter_string=None,
         nb_samples=None,
         candidate_dataset_item_ids=None,
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
 
 
