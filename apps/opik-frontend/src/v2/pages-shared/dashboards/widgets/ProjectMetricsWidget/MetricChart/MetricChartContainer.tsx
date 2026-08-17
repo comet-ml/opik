@@ -74,7 +74,10 @@ interface MetricContainerChartProps {
   hideYAxis?: boolean;
 }
 
-const customColorMap = {
+// Fixed colors for metric sub-series (trace counts, cost, duration percentiles, token kinds).
+// Only valid when no breakdown is applied — with a breakdown the line names are group values,
+// not metric names, so these keys would hijack a group that happens to share a name.
+const metricColorMap = {
   traces: COLOR_VARIANTS_MAP.purple.css,
   cost: COLOR_VARIANTS_MAP.purple.css,
   "duration.p50": COLOR_VARIANTS_MAP.turquoise.css,
@@ -198,7 +201,11 @@ const MetricContainerChart = ({
     );
   }, [data, lines, isPending]);
 
-  const config = useChartConfig(lines, labelsMap, colorMap ?? customColorMap);
+  const config = useChartConfig(
+    lines,
+    labelsMap,
+    colorMap ?? (breakdown ? undefined : metricColorMap),
+  );
 
   const labelActions = useMemo(() => {
     if (!getLabelAction) return undefined;
