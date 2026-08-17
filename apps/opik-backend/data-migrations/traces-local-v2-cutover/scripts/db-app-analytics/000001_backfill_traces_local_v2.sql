@@ -19,6 +19,12 @@
 --     in sort-key order — do not rely on it (see README "Why slice by created_at").
 --   * SETTINGS max_insert_block_size bounds the rows per part-forming block; peak insert memory is a small multiple of
 --     the smaller of that and min_insert_block_size_bytes (256 MB default), which dominates for wide trace rows.
+--   * SETTINGS max_partitions_per_insert_block is REQUIRED, not a tuning knob. Because the blocks above may span
+--     partitions (see the ORDER BY note), and the destination is weekly-partitioned on id_at, a block spans as many
+--     partitions as the ids in it imply. ClickHouse's default is 100 and throw_on_max_partitions_per_insert_block = 1,
+--     so exceeding it ABORTS the INSERT. Far-future UUIDv7 ids (litellm BerriAI/litellm#31294) put real tables well
+--     past it: measured on a production-shape table, one block spanned 333 partitions while every other block in the
+--     same window spanned <= 7. The driver's default (2000) is sized to clear the total partition count with margin.
 
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,
@@ -73,6 +79,7 @@ FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
 WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
   AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
+         max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
          log_comment = 'traces_local_v2_backfill:${WINDOW_LO}:${WINDOW_HI}';
 
 -- Per-window reconciliation is automated by backfill.sh (uniqExact of the dedup key, aborting on > 0.01% divergence);
