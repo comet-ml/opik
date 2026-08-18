@@ -32,6 +32,7 @@ class NovaAggregator(ChunkAggregator):
         stop_reason = None
         input_tokens = 0
         output_tokens = 0
+        reported_usage: Dict[str, Any] = {}
 
         for item in items:
             if "chunk" not in item:
@@ -53,9 +54,9 @@ class NovaAggregator(ChunkAggregator):
 
                 elif "metadata" in chunk_data:
                     if "usage" in chunk_data["metadata"]:
-                        metadata_usage = chunk_data["metadata"]["usage"]
-                        input_tokens = metadata_usage.get("inputTokens", 0)
-                        output_tokens = metadata_usage.get("outputTokens", 0)
+                        reported_usage = chunk_data["metadata"]["usage"]
+                        input_tokens = reported_usage.get("inputTokens", 0)
+                        output_tokens = reported_usage.get("outputTokens", 0)
                         LOGGER.debug(
                             "Nova metadata usage: input=%d, output=%d",
                             input_tokens,
@@ -86,7 +87,11 @@ class NovaAggregator(ChunkAggregator):
 
         # Convert to Bedrock usage format using shared converter
         bedrock_usage = usage_converters.nova_to_bedrock_usage(
-            {"inputTokens": input_tokens, "outputTokens": output_tokens}
+            {
+                **reported_usage,
+                "inputTokens": input_tokens,
+                "outputTokens": output_tokens,
+            }
         )
 
         # Return Nova's native output format with Bedrock usage
