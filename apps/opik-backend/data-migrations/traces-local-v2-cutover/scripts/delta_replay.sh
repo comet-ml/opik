@@ -34,8 +34,8 @@
 #                             backfill: the final delta runs immediately before the EXCHANGE, inside the window the
 #                             runbook asks you to keep short. Pass the SAME value used for the backfill.
 #   --max-insert-threads N    threads for the delta INSERT SELECT pipeline (SETTINGS max_insert_threads).
-#                             Default 0, which ClickHouse documents as "INSERT SELECT no parallel
-#                             execution". Same knob, same caveats and same two costs (memory, part
+#                             OMITTED BY DEFAULT = INHERIT the server's setting (the line is stripped from
+#                             the SQL); an explicit 0 FORCES "INSERT SELECT no parallel execution". Same knob, same caveats and same two costs (memory, part
 #                             count) as in backfill.sh -- see its option docs for the full diagnosis.
 #                             PASS THE SAME VALUE USED FOR THE BACKFILL: the delta writes into the
 #                             same table through the same insert path.
@@ -51,8 +51,8 @@ CH_PORT=""                # native port; empty = clickhouse-client default (9000
 BACKFILL_START=""
 MAX_INSERT_BLOCK_SIZE=1048576
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions per block for the delta INSERT; see the option docs above. 0 = unlimited.
-MAX_INSERT_THREADS=0                  # threads for the delta INSERT SELECT; 0 = ClickHouse default, i.e. no parallel
-                                      # INSERT SELECT execution.
+MAX_INSERT_THREADS=""                 # threads for the delta INSERT SELECT. EMPTY = inherit the server's setting (the
+                                      # line is stripped from the SQL). Explicit 0 FORCES no parallel execution.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -79,7 +79,7 @@ done
 # the setting counts partitions, no real table approaches that, and an out-of-range value would otherwise be rendered
 # into the SQL and rejected by the server mid-run instead of here.
 [[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
-[[ "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (ClickHouse default: no parallel INSERT SELECT execution) or 1..99." >&2; exit 2; }
+[[ -z "$MAX_INSERT_THREADS" || "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (force no parallel INSERT SELECT execution) or 1..99; omit it entirely to inherit the server's setting." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 
 echo "Reminder: raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs before this step (backend config, not SQL) and"
@@ -90,7 +90,14 @@ sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
 sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
 sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
 sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
-sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
+if [[ -z "$MAX_INSERT_THREADS" ]]; then
+    # Unset means INHERIT: strip the whole setting line so the server's profile (or ClickHouse Cloud's
+    # non-zero default) applies. Rendering an explicit 0 here would OVERRIDE that and force the insert
+    # serial -- a silent slowdown on any deployment that already sets the setting.
+    sql="$(grep -vF 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql")"
+else
+    sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
+fi
 # --time makes clickhouse-client print each statement's elapsed seconds to stderr (it prints nothing under a bare
 # --query). The SECOND number is the deletion replay's wall time — a Go/No-Go acceptance criterion (it must fit inside
 # the buffer hold with margin), so without this the operator has no way to record it short of digging in query_log.

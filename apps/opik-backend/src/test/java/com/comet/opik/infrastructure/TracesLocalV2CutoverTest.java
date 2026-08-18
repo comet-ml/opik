@@ -105,16 +105,25 @@ import static org.assertj.core.api.Assertions.assertThat;
  * OPIK-6901 staging dry-run, not by this test (which runs the SQL those scripts wrap, directly). This test asserts the
  * logic is correct when invoked; the staging rehearsal asserts the scripts invoke it safely.
  *
- * <p><b>Tuning settings are deliberately NOT mirrored from the drivers, and that is not drift.</b> The statements
- * below hardcode {@code max_insert_block_size = 100000} and carry neither {@code max_partitions_per_insert_block}
- * nor {@code max_insert_threads}, while {@code backfill.sh} / {@code delta_replay.sh} make all three configurable.
- * The omissions are intentional: an absent {@code SETTINGS} key is exactly the ClickHouse default, so leaving a
- * pacing knob out changes no behaviour this gate asserts, and pinning a value here would assert an operator's
- * tuning choice rather than the SQL's logic. The block size is fixed only to keep CI memory predictable. Note the
- * standing gap this implies: because the values are hardcoded rather than read from the scripts, this gate cannot
- * catch a driver whose configured value is invalid — that belongs to the staging dry-run. If a future setting
- * changes RESULTS rather than pacing, it must be mirrored here; {@code 000002}'s header asks that the SQL and this
- * test be kept in step, and tuning settings are the documented exception to that.
+ * <p><b>On the {@code SETTINGS} these statements carry.</b> They hardcode {@code max_insert_block_size = 100000}
+ * and {@code max_partitions_per_insert_block = 2000}, and omit {@code max_insert_threads} — while
+ * {@code backfill.sh} / {@code delta_replay.sh} make all three configurable. The split is deliberate and follows
+ * what each setting can do:
+ *
+ * <ul>
+ * <li>{@code max_partitions_per_insert_block} is <b>mirrored because it is a correctness gate, not pacing</b>: a
+ * value below the number of partitions a block spans aborts the INSERT outright ({@code TOO_MANY_PARTS}), which is
+ * exactly the failure the runbook's far-future section exists for. It is pinned at the drivers' own default.</li>
+ * <li>{@code max_insert_threads} is <b>omitted because it is pacing</b>, and because omitting it is meaningful
+ * here in the same way it is in the drivers: an absent key inherits whatever the server sets, so this gate asserts
+ * the SQL's logic rather than an operator's tuning choice.</li>
+ * <li>{@code max_insert_block_size} is fixed only to keep CI memory predictable.</li>
+ * </ul>
+ *
+ * <p>The standing gap this implies: because the mirrored values are hardcoded rather than read from the scripts,
+ * this gate cannot catch a driver configured with an invalid value — that belongs to the staging dry-run. A future
+ * setting that changes RESULTS rather than pacing must be mirrored here; {@code 000002}'s header asks that the SQL
+ * and this test be kept in step, and pacing settings are the documented exception to that.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)

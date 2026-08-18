@@ -60,9 +60,15 @@
 #                             per partition touched, compacted by background merges) for the INSERT completing at all.
 #                             See the runbook's "Far-future partitions from far-future-timestamp ids".
 #   --max-insert-threads N    threads for the INSERT SELECT pipeline (SETTINGS max_insert_threads).
-#                             Default 0. ClickHouse documents 0 (or 1) as "INSERT SELECT no parallel
-#                             execution", so the copy runs its insert side single-threaded unless this
-#                             is raised. NOTE the setting is scoped to INSERT SELECT, which is what
+#                             OMITTED BY DEFAULT, and omitted means INHERIT: the setting line is stripped
+#                             from the SQL, so whatever the server profile sets applies. This matters --
+#                             rendering an explicit 0 would OVERRIDE a profile that sets it and force the
+#                             insert serial, which is a silent slowdown rather than a no-op. ClickHouse
+#                             Cloud ships non-zero defaults (1/2/4 by node memory), and a self-managed
+#                             cluster may set it in a profile too.
+#                             Pass an explicit 0 to FORCE "INSERT SELECT no parallel execution"; pass N to
+#                             request N. Where nothing sets it, ClickHouse's own default is 0, so the
+#                             insert side runs single-threaded unless raised. NOTE the setting is scoped to INSERT SELECT, which is what
 #                             this backfill issues; it is not a general INSERT knob. NOTE ALSO that
 #                             ClickHouse CLOUD does not default it to 0 -- upstream documents 1 / 2 / 4
 #                             by node memory -- so on Cloud you may already have parallelism here.
@@ -168,8 +174,9 @@ MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions: SETTINGS max_partitions_per_
                           # destination is weekly-partitioned, so one block can span many partitions; ClickHouse's
                           # default of 100 THROWS (throw_on_max_partitions_per_insert_block=1). Far-future UUIDv7 ids
                           # make this reachable in practice — see the runbook's far-future section. 0 = unlimited.
-MAX_INSERT_THREADS=0      # threads: SETTINGS max_insert_threads for the INSERT SELECT. 0 is the ClickHouse default and
-                          # means "INSERT SELECT no parallel execution", which is usually the throughput ceiling here.
+MAX_INSERT_THREADS=""     # threads: SETTINGS max_insert_threads for the INSERT SELECT. EMPTY = inherit whatever the
+                          # server profile sets (the setting line is stripped from the SQL entirely). An explicit 0
+                          # is ClickHouse's own default and means "INSERT SELECT no parallel execution".
                           # Raising it trades memory and destination part count for copy speed — see the
                           # --max-insert-threads option docs above for the full diagnosis and both costs.
 DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled window before aborting (0.01%).
@@ -222,7 +229,7 @@ done
 # 0 is meaningful (ClickHouse default, no parallel INSERT SELECT execution), so allow it. Bounded at 2 digits:
 # this is
 # a share of cores, and a value beyond the machine's core count buys nothing while multiplying parts.
-[[ "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (ClickHouse default: no parallel INSERT SELECT execution) or 1..99." >&2; exit 2; }
+[[ -z "$MAX_INSERT_THREADS" || "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (force no parallel INSERT SELECT execution) or 1..99; omit it entirely to inherit the server's setting." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
@@ -316,7 +323,14 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
     sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
-    sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
+    if [[ -z "$MAX_INSERT_THREADS" ]]; then
+        # Unset means INHERIT: strip the whole setting line so the server's profile (or ClickHouse Cloud's
+        # non-zero default) applies. Rendering an explicit 0 here would OVERRIDE that and force the insert
+        # serial -- a silent slowdown on any deployment that already sets the setting.
+        sql="$(grep -vF 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql")"
+    else
+        sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
+    fi
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 

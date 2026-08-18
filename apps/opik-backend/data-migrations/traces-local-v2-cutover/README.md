@@ -341,11 +341,18 @@ independent controls keep each statement safe:
   so peak insert memory is a small multiple of ~256 MB regardless of the window size — the statement does not load the
   window into memory. Lower this (or `min_insert_block_size_bytes`) on a memory-constrained data node.
 
-- **Insert pipeline threads (`--max-insert-threads`, default 0 → `SETTINGS max_insert_threads`).**
-  **This is often the throughput ceiling, and the default hides it.** ClickHouse documents the value `0`
-  (the default) as *"`INSERT SELECT` no parallel execution"*, so the insert side of this copy runs
-  serialised until you raise it. Raising it lets you control how much of the machine the backfill may
-  consume, and can speed the copy up substantially.
+- **Insert pipeline threads (`--max-insert-threads`, omitted by default → `SETTINGS max_insert_threads`).**
+  **This is often the throughput ceiling, and ClickHouse's own default hides it.** Where nothing sets the
+  setting, ClickHouse documents `0` as *"`INSERT SELECT` no parallel execution"*, so the insert side of this
+  copy runs serialised. Passing a value lets you control how much of the machine the backfill may consume,
+  and can speed the copy up substantially.
+
+  **Omitting the flag means *inherit*, not zero.** The drivers strip the setting line from the SQL entirely
+  when the flag is not passed, so whatever the server profile sets applies. That distinction is load-bearing:
+  rendering an explicit `0` would **override** a profile that sets the setting and force the insert serial —
+  a silent slowdown, not a no-op. ClickHouse Cloud ships non-zero defaults (`1`/`2`/`4` by node memory), and a
+  self-managed cluster may set it in a profile too. Pass an explicit `0` when you actually want to *force*
+  serial execution.
 
   Two scope caveats worth knowing before you reach for it:
   - The setting applies to **`INSERT SELECT`** — which is what this backfill issues — not to INSERTs
