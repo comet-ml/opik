@@ -14,5 +14,7 @@ export {
   type AutomationRuleRef,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
+  type DashboardRef,
+  type ProjectMetricSeriesRef,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';

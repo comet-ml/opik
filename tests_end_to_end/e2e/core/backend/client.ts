@@ -97,6 +97,21 @@ export interface AnnotationQueueDetail {
   reviewers: AnnotationQueueReviewerRef[];
 }
 
+export interface DashboardRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * One series of a project-metrics response — the shape a chart widget turns
+ * into a line. `name` is the metric sub-series (`traces`, `duration.p50`) or,
+ * when the request carries a breakdown, the group value (a tag, a trace name).
+ */
+export interface ProjectMetricSeriesRef {
+  name: string;
+  points: Array<{ time: string; value: number | null }>;
+}
+
 export interface OptimizationRef {
   id: string;
   name: string;
@@ -123,6 +138,37 @@ export function makeBackendClient(apiKey: string | null = null) {
     workspaceName: env.workspace,
     apiUrl: env.apiBaseUrl,
   });
+
+  /**
+   * A raw call to a private REST endpoint the pinned TS SDK does not model.
+   * Everything the SDK *does* expose goes through `opik.api.*` — this is only
+   * for the gaps (dashboards, the windowed/breakdown metric requests).
+   */
+  const privateFetch = async (
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    body?: unknown,
+  ): Promise<Response> => {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Comet-Workspace': env.workspace,
+    };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const key = apiKey ?? env.apiKey;
+    if (key) headers['Authorization'] = key;
+
+    const res = await fetch(`${env.apiBaseUrl}${path}`, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    if (!res.ok) {
+      throw new Error(
+        `${method} ${path} -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+      );
+    }
+    return res;
+  };
 
   // Hoisted so the poll helpers (free functions) can call it without depending
   // on the not-yet-constructed return object.
@@ -314,21 +360,7 @@ export function makeBackendClient(apiKey: string | null = null) {
       if (args.fromTime) params.set('from_time', args.fromTime.toISOString());
       if (args.toTime) params.set('to_time', args.toTime.toISOString());
 
-      const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'Comet-Workspace': env.workspace,
-      };
-      const key = apiKey ?? env.apiKey;
-      if (key) headers['Authorization'] = key;
-
-      const res = await fetch(`${env.apiBaseUrl}/v1/private/projects/stats?${params}`, {
-        headers,
-      });
-      if (!res.ok) {
-        throw new Error(
-          `GET /v1/private/projects/stats -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
-        );
-      }
+      const res = await privateFetch('GET', `/v1/private/projects/stats?${params}`);
       const body = (await res.json()) as {
         content?: Array<{
           project_id?: string;
@@ -350,6 +382,87 @@ export function makeBackendClient(apiKey: string | null = null) {
           (item.feedback_scores ?? []).map((s) => [s.name, Number(s.value)]),
         ),
       }));
+    },
+
+    /**
+     * The series a project-metrics chart widget would draw — the exact call
+     * `useProjectMetric` makes, so a spec can check the data really groups the
+     * way it expects before opening a browser to look at the chart.
+     *
+     * `breakdownField` is a `BREAKDOWN_FIELD` value (`tags`, `name`, …).
+     * Omitting it requests the ungrouped series, where `name` is the metric
+     * sub-series rather than a group value.
+     */
+    async getProjectMetricSeries(args: {
+      projectId: string;
+      metricType: string;
+      interval: 'HOURLY' | 'DAILY' | 'WEEKLY' | 'TOTAL';
+      intervalStart: Date;
+      intervalEnd: Date;
+      breakdownField?: string;
+    }): Promise<ProjectMetricSeriesRef[]> {
+      const res = await privateFetch(
+        'POST',
+        `/v1/private/projects/${args.projectId}/metrics`,
+        {
+          metric_type: args.metricType,
+          interval: args.interval,
+          interval_start: args.intervalStart.toISOString(),
+          interval_end: args.intervalEnd.toISOString(),
+          ...(args.breakdownField ? { breakdown: { field: args.breakdownField } } : {}),
+        },
+      );
+      const body = (await res.json()) as {
+        results?: Array<{ name?: string; data?: Array<{ time: string; value: number | null }> }>;
+      };
+      return (body.results ?? []).map((r) => ({
+        name: String(r.name ?? ''),
+        points: r.data ?? [],
+      }));
+    },
+
+    /**
+     * Creates a dashboard from a full config document — the same payload the
+     * FE's `useDashboardCreateMutation` posts, so a widget can be seeded
+     * already configured instead of being assembled through the editor UI.
+     *
+     * The id only comes back in the `Location` header (the endpoint answers
+     * 201 with an empty body), which is what `extractIdFromLocation` reads.
+     */
+    async createDashboard(args: {
+      name: string;
+      type: 'multi_project' | 'experiments';
+      config: unknown;
+      description?: string;
+    }): Promise<DashboardRef> {
+      const res = await privateFetch('POST', '/v1/private/dashboards', {
+        name: args.name,
+        type: args.type,
+        config: args.config,
+        ...(args.description ? { description: args.description } : {}),
+      });
+      const location = res.headers.get('location');
+      const id = location?.split('/').pop();
+      if (!id) {
+        throw new Error(
+          `POST /v1/private/dashboards returned no usable Location header: ${location}`,
+        );
+      }
+      return { id, name: args.name };
+    },
+
+    /**
+     * Dashboards are not swept by `global-teardown` (it only knows
+     * experiments, datasets and projects) and do not cascade with the project
+     * their widgets point at, so whatever creates one must delete it.
+     */
+    async deleteDashboard(id: string): Promise<void> {
+      try {
+        await privateFetch('DELETE', `/v1/private/dashboards/${id}`);
+      } catch (err) {
+        if (isNotFoundMessage(err)) return;
+        throw err;
+      }
     },
 
     async findExperimentByName(name: string): Promise<ExperimentRefDetail | null> {
@@ -551,6 +664,15 @@ export function makeBackendClient(apiKey: string | null = null) {
       }
     },
   };
+}
+
+/**
+ * The 404 check for `privateFetch`, which throws a plain Error carrying the
+ * status rather than the SDK's structured `statusCode` — used so a delete of
+ * an already-deleted entity stays a no-op, exactly as the SDK-backed deletes do.
+ */
+function isNotFoundMessage(err: unknown): boolean {
+  return err instanceof Error && / -> 404:/.test(err.message);
 }
 
 function isNotFoundError(err: unknown): boolean {
