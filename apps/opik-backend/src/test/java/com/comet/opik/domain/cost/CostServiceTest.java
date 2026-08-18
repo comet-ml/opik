@@ -973,4 +973,38 @@ class CostServiceTest {
                 // custom-llm hits the same fallback, as it does for perplexity and moonshot.
                 Arguments.of("z-ai/glm-4.5", "custom-llm", "0.00104"));
     }
+
+    /**
+     * Covers registering {@code novita} as a canonical provider so that the 85 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "novita"} (the {@code novita/<org>/<model>} catalog) are no
+     * longer silently dropped at load time. No Novita model publishes cache rates today, so all
+     * Novita requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesNovitaModels() {
+        // novita/deepseek/deepseek-r1-distill-llama-70b: input 8e-7, output 8e-7
+        // 1000 * 8e-7 + 200 * 8e-7 = 0.0008 + 0.00016 = 0.00096
+        BigDecimal cost = CostService.calculateCost("novita/deepseek/deepseek-r1-distill-llama-70b",
+                "novita", Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00096");
+    }
+
+    /**
+     * Covers registering {@code databricks} as a canonical provider so that the 28 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "databricks"} (Databricks Foundation Model API models) are no
+     * longer silently dropped at load time. No Databricks model publishes cache rates today, so
+     * all Databricks requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesDatabricksModels() {
+        // Any non-zero cost proves that databricks entries loaded; exact per-token values carry
+        // floating-point imprecision from the price file so a strict equality would be fragile.
+        BigDecimal cost = CostService.calculateCost("databricks/databricks-gpt-oss-120b",
+                "databricks", Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
 }
