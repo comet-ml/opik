@@ -327,23 +327,44 @@ run_backfill_window() {
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
     sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
     if [[ -z "$MAX_INSERT_THREADS" ]]; then
-        # Unset means INHERIT: strip the whole setting line so the server's profile (or ClickHouse Cloud's
-        # non-zero default) applies. Rendering an explicit 0 here would OVERRIDE that and force the insert
-        # serial -- a silent slowdown on any deployment that already sets the setting.
+        # Unset means INHERIT: drop the whole setting line so the server's own value applies. Rendering an
+        # explicit 0 would OVERRIDE it and force the insert serial -- a silent slowdown, not a no-op.
+        #
+        # The strip matches ONE exact spelling of a SETTINGS line that lives in ANOTHER file, so it is guarded on
+        # both sides. BEFORE: the setting must sit alone on its line, because deleting a shared line would take its
+        # neighbours (log_comment, the partition bound) with it and the after-check would still pass. AFTER: no
+        # executable line may still carry the placeholder, because a reformatted line makes the strip a silent
+        # no-op and sends ${MAX_INSERT_THREADS} to the server as a literal. `--` lines are skipped: both SQL
+        # headers legitimately quote the placeholder. This is the default path, so either failure aborts.
+        #
+        # Note the deliberate absence of a pipe into `grep -q`: it exits on first match, the upstream grep takes
+        # SIGPIPE, and `set -o pipefail` then reports 141 -- so the guard would skip its own failure branch.
+        hits="$(grep -F 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql" || true)"
+        shared="$(grep -vE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},?[[:space:]]*$' <<<"$hits" || true)"
+        if [[ -n "${shared//[[:space:]]/}" ]]; then
+            echo "ERROR: max_insert_threads shares a SETTINGS line with another setting in $BACKFILL_SQL:" >&2
+            echo "       $shared" >&2
+            echo "       Dropping that line would silently drop its neighbours. Put the setting on its own line." >&2
+            exit 2
+        fi
         sql="$(grep -vF 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql")"
-        # The strip is a whitespace-exact match on a SETTINGS line in ANOTHER file. If that line is ever
-        # reformatted the match silently no-ops and the placeholder reaches the server as a literal -- the exact
-        # failure that file's own header warns about. This is the DEFAULT path, so fail loudly here instead.
-        # The strip matches ONE exact spelling of a SETTINGS line that lives in ANOTHER file. Reformat that line
-        # -- even one extra space -- and the strip silently no-ops, leaving the placeholder to reach the server
-        # as a literal. So assert on the OUTCOME, whitespace-agnostically, and skip `--` comment lines, which
-        # legitimately keep the placeholder text in the file headers. This is the DEFAULT path; fail loudly.
-        if grep -v '^[[:space:]]*--' <<<"$sql" | grep -qF '${MAX_INSERT_THREADS}'; then
+        executable="$(grep -v '^[[:space:]]*--' <<<"$sql" || true)"
+        if grep -qF '${MAX_INSERT_THREADS}' <<<"$executable"; then
             echo "ERROR: max_insert_threads strip failed -- the SETTINGS line in $BACKFILL_SQL no longer matches the" >&2
             echo "       pattern above (was it reformatted?). Refusing to send SQL with a literal placeholder." >&2
             exit 2
         fi
     else
+            # Symmetry with the inherit path: a substitution that matches nothing is also a silent failure -- the
+        # requested value would simply not appear and the server would quietly use its own. Check for an
+        # EXECUTABLE occurrence specifically: both SQL headers mention the placeholder in `--` comments, so a
+        # substitution can "change something" while rendering no actual setting.
+        executable="$(grep -v '^[[:space:]]*--' <<<"$sql" || true)"
+        if ! grep -qF '${MAX_INSERT_THREADS}' <<<"$executable"; then
+            echo "ERROR: --max-insert-threads $MAX_INSERT_THREADS was requested, but $BACKFILL_SQL has no" >&2
+            echo "       \${MAX_INSERT_THREADS} in any executable line, so the setting would be silently dropped." >&2
+            exit 2
+        fi
         sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
     fi
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"

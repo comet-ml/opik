@@ -49,7 +49,9 @@
 --
 --     TWO COSTS. Upstream warns "higher values will lead to higher memory usage", which on this table compounds
 --     with oversized `output` documents, so move max_memory_usage with it. And part count per partition grows,
---     to be watched against parts_to_throw_insert. The value is a capacity decision about what share of cores the cutover may take
+--     to be watched against THIS cluster's parts_to_throw_insert and parts_to_delay_insert (read them from
+--     system.merge_tree_settings; do not assume ClickHouse's 300/150 defaults -- deployments routinely raise
+--     them, and throttling at the delay limit is what an operator meets first). The value is a capacity decision about what share of cores the cutover may take
 --     while serving traffic -- not a benchmark to maximise.
 --   * SETTINGS max_insert_block_size bounds the rows per part-forming block; peak insert memory is a small multiple of
 --     the smaller of that and min_insert_block_size_bytes (256 MB default), which dominates for wide trace rows.
