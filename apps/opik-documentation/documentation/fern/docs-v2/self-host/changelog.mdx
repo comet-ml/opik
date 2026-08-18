@@ -13,6 +13,12 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   If you are upgrading from Opik 1.x to Opik 2.x, follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration).
 </Tip>
 
+## Release 2.0.3 (Opik 2.0), 2026-04-20
+
+### Backward Incompatible Change
+
+Opik 2.0 organizes all data around **projects**. Data created on Opik 1.x — datasets, prompts, experiments, optimizations, automation rules, and alerts — is not visible in the Opik 2.0 UI until you run the background migration jobs that assign each item to a project. Follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration) for the step-by-step instructions, including the required job order and the database backups to take first.
+
 ## Release 1.7.15, 2025-05-05
 
 ### Critical Changes
