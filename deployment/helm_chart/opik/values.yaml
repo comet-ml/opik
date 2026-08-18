@@ -941,23 +941,6 @@ clickhouse:
       enabled: false
     username: opik
     password: opik
-  # -- Agent Insights read-only free-form SQL user. When enabled, a post-install/post-upgrade
-  # Job creates the user, its settings profile, SELECT grants and per-workspace/project
-  # RESTRICTIVE row policies -- the Kubernetes equivalent of the
-  # provision_agent_insights_readonly_user.sh step docker-compose runs. Requires
-  # ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS in the backend env (component.backend.envFrom).
-  freeformSql:
-    enabled: false
-    # -- Tables the free-form SQL user may read. Each gets a SELECT grant plus a
-    # workspace+project RESTRICTIVE row policy.
-    tables:
-      - spans
-      - traces
-      - authored_feedback_scores
-    # -- Image for the grants Job; needs clickhouse-client. Defaults to clickhouse.image.
-    image: ""
-    # -- Resource requests/limits for the grants Job.
-    resources: {}
   serviceAccount:
     annotations: {}
     create: false
