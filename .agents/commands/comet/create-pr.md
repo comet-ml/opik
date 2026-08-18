@@ -14,6 +14,7 @@ This workflow will:
 - Extract branch ticket key (`OPIK-<number>`, `issue-<number>`, or `NA`)
 - Check for pending changes and remote branch status
 - Run quality checks to ensure code quality
+- Flag verbose cipx / Cost Intelligence / ai-cost comments only (see `.agents/rules/oss-comment-hygiene.mdc`)
 - Pre-fill PR template with extracted information
 - Validate PR title and description against pr-lint rules before submission
 - Create GitHub draft PR using GitHub CLI (fallback to GitHub MCP only when CLI is unavailable)
@@ -160,6 +161,21 @@ This workflow will:
 - **Check feature toggles**: Specifically analyze configuration files for added/removed feature toggles
 - **Extract commit history**: Review commit messages for context
 - **Generate summary**: Create meaningful description of what was implemented
+
+---
+
+### 6b. OSS Comment Hygiene — cipx / Cost Intelligence only (attention)
+
+Follow `.agents/rules/oss-comment-hygiene.mdc`.
+
+**Gate first.** Scan `git diff origin/main...HEAD` for **added or expanded** comments (`//`, `/* */`, `#`, `--`, docstrings/Javadocs). The rule applies if **either**:
+
+1. **Comment text** matches a private-project naming (case-insensitive): `cipx`, `cost intelligence` / `cost-intelligence` / `CostIntelligence`, `ai-cost` / `ai-spend` / `AI-Spend`, `cost-intelligence-proxy` (incl. `-internal`), **or**
+2. **Enclosing identity** matches those namings — file path/name, type/class, method, field, parameter, or local variable (e.g. comment inside `CipxSpendDAO` / on `getCipxSpend` / next to a `cipxSpan` param), even when the comment text has no keyword
+
+No match on text **and** enclosing identity → **continue silently**. Do not judge, trim, or mention ordinary Opik comments.
+
+**When the gate matches:** flag comments that are more than minimal for public Opik — private pricing, prod stats, agent/client/proxy wire-path essays (any coding agent or IDE client), private-repo links, sister-service billing narratives. Show file paths / hunks; continue. Do not block. Do not rewrite unless asked.
 
 ---
 
