@@ -94,6 +94,22 @@ describe("automatic palette invariants", () => {
     expect(tooClose).toEqual([]);
   });
 
+  it("keeps the palette at ten entries", () => {
+    // The automatic color is `hash % TAG_VARIANTS.length`. The golden test below samples four
+    // labels, which would not notice a length change that only moves labels it does not sample,
+    // so the length is pinned separately. Changing it re-colors every label in the product.
+    expect(TAG_VARIANTS).toHaveLength(10);
+  });
+
+  it("pins the design-approved hex for the entry excused from the contrast check", () => {
+    // `purpleDark` is skipped by the contrast assertion below, so without this the approved value
+    // could drift to something the check would otherwise have rejected.
+    expect(COLOR_VARIANTS_MAP.purpleDark.hex.toLowerCase()).toBe("#491b7e");
+    expect(resolveHexColor(COLOR_VARIANTS_MAP.purpleDark.css)).toBe(
+      COLOR_VARIANTS_MAP.purpleDark.hex,
+    );
+  });
+
   it("never assigns the indigo that was confusable with purple and blue", () => {
     const indigo = COLOR_VARIANTS_MAP.primary.hex.toLowerCase();
 
@@ -215,6 +231,22 @@ describe("resolveChartColorMap", () => {
     const map = resolveChartColorMap(labels);
 
     expect(Object.keys(map).sort()).toEqual(labels.sort());
+  });
+
+  it("returns an empty map for an empty label list", () => {
+    expect(resolveChartColorMap([])).toEqual({});
+  });
+
+  it("resolves an empty-string label to a palette color rather than undefined", () => {
+    // Group-by values can be empty strings; a missing color makes recharts fall back to black.
+    expect(resolveChartColorMap([""])[""]).toMatch(/^var\(--color-/);
+  });
+
+  it("leaves a value that is already hex untouched and passes unknown values through", () => {
+    expect(resolveHexColor("#123abc")).toBe("#123abc");
+    expect(resolveHexColor("var(--color-not-a-real-token)")).toBe(
+      "var(--color-not-a-real-token)",
+    );
   });
 
   it("pins only the labels the caller names, leaving the rest automatic", () => {

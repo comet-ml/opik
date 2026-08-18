@@ -77,7 +77,7 @@ interface MetricContainerChartProps {
 // Fixed colors for metric sub-series (trace counts, cost, duration percentiles, token kinds).
 // Only valid when no breakdown is applied — with a breakdown the line names are group values,
 // not metric names, so these keys would hijack a group that happens to share a name.
-const metricColorMap = {
+const METRIC_COLOR_MAP = {
   traces: COLOR_VARIANTS_MAP.purple.css,
   cost: COLOR_VARIANTS_MAP.purple.css,
   "duration.p50": COLOR_VARIANTS_MAP.turquoise.css,
@@ -204,7 +204,7 @@ const MetricContainerChart = ({
   const config = useChartConfig(
     lines,
     labelsMap,
-    colorMap ?? (breakdown ? undefined : metricColorMap),
+    colorMap ?? (breakdown ? undefined : METRIC_COLOR_MAP),
   );
 
   const labelActions = useMemo(() => {
