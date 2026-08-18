@@ -19,12 +19,14 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.http.HttpClient;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 @RequiredArgsConstructor
 @Slf4j
 public class CustomLlmClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull AuthTokenProvider authTokenProvider;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
         var baseUrl = Optional.ofNullable(config.baseUrl())
@@ -126,7 +128,27 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         if (!requiresInterceptingBuilder(config)) {
             return jdkHttpClientBuilder;
         }
-        return new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(), config.apiKey());
+        return new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(), config.apiKey(),
+                bearerSupplier(config), tokenInvalidator(config));
+    }
+
+    /**
+     * Per-request bearer source for token-auth providers. The supplier form matters: clients are
+     * rebuilt per call but requests are what carry auth, so the interceptor asks the shared cache
+     * on every request and refresh/rotation need no client rebuild.
+     */
+    private Supplier<String> bearerSupplier(LlmProviderClientApiConfig config) {
+        if (config.authConfig() == null) {
+            return null;
+        }
+        return () -> authTokenProvider.bearer(config.workspaceId(), config.providerId(), config.authConfig());
+    }
+
+    private Runnable tokenInvalidator(LlmProviderClientApiConfig config) {
+        if (config.authConfig() == null) {
+            return null;
+        }
+        return () -> authTokenProvider.invalidate(config.providerId(), config.authConfig());
     }
 
     /**
@@ -144,6 +166,6 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                                         configuration.get(InterceptingHttpClient.SUPPRESS_DEFAULT_AUTH_CONFIG_KEY))));
         boolean hasModelPlaceholder = config.baseUrl() != null
                 && config.baseUrl().contains(InterceptingHttpClient.MODEL_PLACEHOLDER);
-        return hasNewConfigKeys || hasModelPlaceholder;
+        return hasNewConfigKeys || hasModelPlaceholder || config.authConfig() != null;
     }
 }
