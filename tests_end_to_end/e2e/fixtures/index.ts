@@ -1,4 +1,4 @@
-export { test, expect } from './filterable-traces.fixture';
+export { test, expect } from './series-colors-dashboard.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -50,4 +50,13 @@ export type {
   FilterableTraceRef,
   FilterableTracesFixtures,
 } from './filterable-traces.fixture';
+export type {
+  SeriesColorsDashboardRef,
+  SeriesColorsDashboardFixtures,
+} from './series-colors-dashboard.fixture';
+export {
+  SERIES_COLORS_TAGS,
+  SERIES_COLORS_TIME_RANGE,
+  SERIES_COLORS_WIDGETS,
+} from './series-colors-dashboard.fixture';
 export type { ProjectRef } from '../core/backend';

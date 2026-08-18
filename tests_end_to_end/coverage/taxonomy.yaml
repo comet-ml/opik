@@ -363,7 +363,9 @@ areas:
     label: Dashboards
     nav_group: Observability
     routes: ["/$workspaceName/dashboards", "/dashboards/$dashboardId", "/projects/$projectId/dashboards"]
+    spec_dir: dashboards
     specs:
+      - dashboards/chart-series-colors.spec.ts
     capabilities:
       list-dashboards:      { covered: false }
       create-dashboard:     { covered: false }
@@ -371,7 +373,7 @@ areas:
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
       add-widget:           { covered: false }
-      configure-widget:     { covered: false }
+      configure-widget:     { covered: true,  tier: t2-cuj, note: "grouped vs ungrouped series colours; the widget is configured through the API, the editor UI itself is still uncovered" }
       widget-filters:       { covered: false }
       metric-date-range:    { covered: false }
 
