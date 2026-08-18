@@ -141,7 +141,12 @@ mit_require_one_assignment() {
 # Comments are masked before matching. A line-anchored match is NOT by itself a check that the assignment is
 # executable: an identical line inside a /* */ block carries a trailing comma too, and would otherwise be
 # treated as the assignment.
-mit_line="$(mit_assignment_lines "$sql")"
+# `|| true` is load-bearing: mit_assignment_lines ends in a pipeline whose grep exits 1 when there is no
+# match, so under `set -euo pipefail` this assignment would fail and `set -e` would kill the script HERE --
+# before the count check below could call mit_require_one_assignment. The zero case would exit 1 mutely,
+# which is the one case that most needs the diagnostic. The >=2 case never had this exposure, because grep
+# succeeds there.
+mit_line="$(mit_assignment_lines "$sql" || true)"
 if [[ "$(grep -c . <<<"$mit_line" || true)" -ne 1 ]]; then
     mit_require_one_assignment "$sql" "$SQL_FILE" || exit 2
     exit 2
