@@ -10,6 +10,7 @@ from .routes import (
     health,
     projects,
     prompts, test_suites,
+    threads,
     traces,
 )
 
@@ -33,3 +34,4 @@ app.include_router(experiments.router)
 app.include_router(prompts.router)
 app.include_router(test_suites.router)
 app.include_router(annotation_queues.router)
+app.include_router(threads.router)

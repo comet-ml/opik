@@ -319,14 +319,15 @@ areas:
     specs:
       - trace-explore/thread-logging-smoke.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
+      - trace-explore/thread-evaluation.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
       open-thread-panel:       { covered: true,  tier: t1-smoke }
       turn-order-io:           { covered: true,  tier: t1-smoke }
-      thread-feedback-score:   { covered: false }
+      thread-feedback-score:   { covered: true,  tier: t2-cuj }
       thread-actions-panel:    { covered: false }
-      thread-level-metrics:    { covered: false, note: "conversational metrics" }
+      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; covered with a fixed-score metric, LLM judges unexercised" }
 
     visual:
       logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }

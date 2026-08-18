@@ -174,6 +174,33 @@ export interface PythonSdkClient {
     feedback_definition_names?: string[];
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
+  /**
+   * `opik.evaluation.evaluate_threads` over the threads of `project_name`
+   * matching `filter_string`, scored by a fixed-value conversation metric.
+   *
+   * The score is supplied rather than judged: every conversation metric the SDK
+   * ships is an LLM judge, so a real one would make the flow unreachable
+   * without a provider key and its result unassertable. `eval_project_name` is
+   * created implicitly by the evaluation and is the caller's to delete.
+   */
+  evaluateThreads(args: {
+    project_name: string;
+    eval_project_name: string;
+    metric_name: string;
+    score: number;
+    filter_string?: string;
+    reason?: string;
+    trace_input_key?: string;
+    trace_output_key?: string;
+    workspace?: string;
+  }): Promise<{
+    results: Array<{
+      thread_id: string;
+      scores: Array<{ name: string; value: number; reason: string | null }>;
+    }>;
+    eval_project_id: string;
+    eval_trace_ids: string[];
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -366,6 +393,20 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createAnnotationQueue(args) {
       return request<{ id: string; name: string }>('POST', '/annotation-queues', args);
+    },
+    async evaluateThreads(args) {
+      // Fetches every trace of every matched thread, scores it and writes the
+      // evaluation trace back, then blocks on the write being searchable — more
+      // round-trips than a plain seed, so it gets the same enlarged budget as
+      // the other multi-step SDK flows rather than the default 30s.
+      return request<{
+        results: Array<{
+          thread_id: string;
+          scores: Array<{ name: string; value: number; reason: string | null }>;
+        }>;
+        eval_project_id: string;
+        eval_trace_ids: string[];
+      }>('POST', '/threads/evaluate', args, { timeoutMs: 90_000 });
     },
   };
 }

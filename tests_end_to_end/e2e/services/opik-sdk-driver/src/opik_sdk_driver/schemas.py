@@ -330,3 +330,46 @@ class AnnotationQueueCreate(BaseModel):
 class AnnotationQueueResponse(BaseModel):
     id: str
     name: str
+
+
+class ThreadEvaluateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # OQL selecting the threads to evaluate, e.g. 'id = "<thread_id>"'. None
+    # evaluates every thread in the project.
+    filter_string: str | None = None
+    eval_project_name: str
+    # The metric scores from a constant instead of an LLM judge, so the flow is
+    # reachable without a provider key and the score is exactly assertable.
+    metric_name: str
+    score: float
+    reason: str | None = None
+    # Keys the transforms read the turn's user message and agent answer out of.
+    # Trace input/output shapes are framework-specific, so `evaluate_threads`
+    # takes transforms rather than assuming one — the caller owns the shape it
+    # seeded. `POST /traces` logs through `@opik.track`, which stores the
+    # tracked function's argument under `_input_value` and its return under
+    # `output`.
+    trace_input_key: str = "_input_value"
+    trace_output_key: str = "output"
+    workspace: str | None = None
+
+
+class ThreadScore(BaseModel):
+    name: str
+    value: float
+    reason: str | None = None
+
+
+class ThreadEvaluationResult(BaseModel):
+    thread_id: str
+    scores: list[ThreadScore]
+
+
+class ThreadEvaluateResponse(BaseModel):
+    results: list[ThreadEvaluationResult]
+    # Resolved from the evaluation traces themselves: `evaluate_threads`
+    # creates the eval project implicitly and returns no handle to it.
+    eval_project_id: str
+    eval_trace_ids: list[str]

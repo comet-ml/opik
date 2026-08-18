@@ -81,6 +81,10 @@ export interface TraceDetail {
   name: string;
   projectId: string;
   feedbackScores: FeedbackScoreRef[];
+  /** The stored payloads, as written. `null` when the trace carries none — a
+   *  trace with no input is a different answer from one with an empty object. */
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
 }
 
 export interface AutomationRuleRef {
@@ -119,6 +123,9 @@ export interface ThreadRowRef {
   startTime: string | null;
   endTime: string | null;
   status: string | null;
+  /** Thread-level scores, e.g. what `evaluate_threads` writes back. Empty when
+   *  the thread has none — the endpoint omits the key rather than sending []. */
+  feedbackScores: FeedbackScoreRef[];
 }
 
 /** Percentile bucket a `PERCENTAGE` stat item carries instead of a scalar. */
@@ -237,6 +244,8 @@ export function makeBackendClient(apiKey: string | null = null) {
           reason: fs.reason ?? null,
           source: String(fs.source),
         })),
+        input: (t.input as Record<string, unknown> | undefined) ?? null,
+        output: (t.output as Record<string, unknown> | undefined) ?? null,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -592,6 +601,12 @@ export function makeBackendClient(apiKey: string | null = null) {
           startTime: t.startTime ? new Date(t.startTime).toISOString() : null,
           endTime: t.endTime ? new Date(t.endTime).toISOString() : null,
           status: t.status ? String(t.status) : null,
+          feedbackScores: (t.feedbackScores ?? []).map((fs) => ({
+            name: fs.name,
+            value: Number(fs.value),
+            reason: fs.reason ?? null,
+            source: String(fs.source),
+          })),
         })),
       };
     },

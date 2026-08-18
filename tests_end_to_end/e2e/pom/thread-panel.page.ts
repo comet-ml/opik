@@ -65,4 +65,44 @@ export class ThreadPanelPage {
   turnOutput(traceId: string, output: string): Locator {
     return this.turn(traceId).getByText(output, { exact: true });
   }
+
+  // --- Feedback scores tab: thread-level scores ---
+
+  /** The panel's Feedback scores tab trigger, beside Messages. */
+  get feedbackScoresTab(): Locator {
+    return this.root.getByRole('tab', { name: 'Feedback scores' });
+  }
+
+  /** The Feedback scores tab's content area (the scores table). */
+  get feedbackScoresTabPanel(): Locator {
+    return this.root.getByRole('tabpanel', { name: 'Feedback scores' });
+  }
+
+  /** Switch to the Feedback scores tab. Idempotent if already selected. */
+  async openFeedbackScoresTab(): Promise<void> {
+    return test.step('Open the thread panel Feedback scores tab', async () => {
+      await this.feedbackScoresTab.click();
+      await this.feedbackScoresTabPanel.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * A row of the thread's scores table, keyed by score name. The shared
+   * DataTable stamps the score name as `data-row-id`, so this addresses the row
+   * by identity — the Key cell truncates with a CSS ellipsis and the columns are
+   * user-reorderable, which rules out both text and position.
+   */
+  feedbackScoreRow(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(`tr[data-row-id="${scoreName}"]`);
+  }
+
+  /** The Score cell of a named score's row. */
+  feedbackScoreValueCell(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(`[data-cell-id="${scoreName}_value"]`);
+  }
+
+  /** The Reason cell of a named score's row. */
+  feedbackScoreReasonCell(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(`[data-cell-id="${scoreName}_reason"]`);
+  }
 }
