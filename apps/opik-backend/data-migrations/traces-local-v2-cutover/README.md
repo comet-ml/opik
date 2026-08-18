@@ -417,7 +417,13 @@ It is a planning ballpark — real throughput varies with concurrent load, merge
 
 The **delta-insert** (step 2) covers only writes during the backfill window, not the whole table, so it is normally one
 statement (with the same block-size **and partition** bounds); `000002` documents how to split it into two batched passes
-if a long backfill made it large. If you do split it, **carry the whole `SETTINGS` block onto both passes**: the driver
+if a long backfill made it large. If you do split it, **carry the whole `SETTINGS` block onto both passes — but carry
+the settings, not the placeholders.** Hand-written statements bypass the driver, so nothing substitutes `${...}` and
+none of the driver's guards apply; substitute every placeholder concretely first, and note that
+`${MAX_INSERT_THREADS}` has no substitutable "default" — its unset state means *inherit*, which the driver expresses by
+removing the line, and `0` is not equivalent (it forces serial execution). Either put the same concrete thread count on
+both passes, or delete that one line, comma and all, keeping `max_partitions_per_insert_block` and `log_comment`. Then
+check what you are about to run — `grep -n '\${' <your-statements>.sql` must print nothing. The driver
 does not implement the split, so those statements are hand-written, and the second arm
 (`last_updated_at >= backfill_start AND created_at < backfill_start`) is the updates-to-old-rows arm that carries
 far-future ids, so it is the pass that most needs `max_partitions_per_insert_block` and the easiest one to write without
