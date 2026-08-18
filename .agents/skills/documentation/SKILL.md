@@ -7,16 +7,15 @@ description: Feature documentation and release notes patterns. Use when document
 
 ## PR Description
 
-```markdown
-## Summary
-- What this PR does (bullet points)
+Use the repository template at `.github/pull_request_template.md` — read the FULL file before drafting (the required sections continue past the first screen). CI (`.github/workflows/pr-lint.yml`) fails any PR whose description is missing one of these exact headings:
 
-## Test Plan
-- How to verify it works
+- `## Details`
+- `## Change checklist`
+- `## Issues`
+- `## Testing`
+- `## Documentation`
 
-## Related Issues
-- Resolves #123
-```
+Also fill in the template's `## AI-WATERMARK` section (yes/no; if yes: Tools, Model(s), Scope, Human verification). Never invent a different structure such as `## Summary` / `## Test Plan`.
 
 ## Changelog Entry
 
