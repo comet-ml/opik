@@ -350,6 +350,11 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       );
     },
     async runTestSuite(args) {
+      // Runs real LLM judge calls across every item/run in the suite, which
+      // routinely outlives the default 30s budget on a loaded cloud
+      // workspace. Aborting early would turn a slow run into a red test.
+      // Capped at 90s, not the caller's full test.setTimeout(120_000), to
+      // leave headroom for the UI verification steps that follow this call.
       return request<{
         experiment_id: string | null;
         experiment_name: string | null;
@@ -357,7 +362,7 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         items_passed: number;
         items_failed: number;
         items_total: number;
-      }>('POST', '/test-suites/run', args);
+      }>('POST', '/test-suites/run', args, { timeoutMs: 90_000 });
     },
     async createAnnotationQueue(args) {
       return request<{ id: string; name: string }>('POST', '/annotation-queues', args);

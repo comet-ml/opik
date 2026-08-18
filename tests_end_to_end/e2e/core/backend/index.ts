@@ -23,3 +23,4 @@ export {
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
 export { uuid7 } from './uuid7';
+export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';

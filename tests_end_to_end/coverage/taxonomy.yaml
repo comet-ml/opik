@@ -627,6 +627,7 @@ areas:
     specs:
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-delete-rule.spec.ts
+      - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -639,7 +640,7 @@ areas:
       sampling-rate:           { covered: false }
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }
-      enable-disable-rule:     { covered: false }
+      enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       automation-logs:         { covered: false }
 
