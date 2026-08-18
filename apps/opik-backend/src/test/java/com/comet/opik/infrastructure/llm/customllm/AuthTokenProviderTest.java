@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -132,8 +133,13 @@ class AuthTokenProviderTest {
         opikConfiguration.getEncryption().setKey("0123456789abcdef");
         EncryptionUtils.setConfig(opikConfiguration);
 
-        provider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE,
-                new LlmProviderTokenAuthConfig());
+        provider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
+    }
+
+    private static LlmProviderTokenAuthConfig relaxedConfig() {
+        var config = new LlmProviderTokenAuthConfig();
+        config.setDestinationGuard(DestinationGuard.Mode.RELAXED);
+        return config;
     }
 
     @AfterAll
@@ -382,6 +388,19 @@ class AuthTokenProviderTest {
     }
 
     @Test
+    @DisplayName("a strict destination guard refuses the token URL before any request is made")
+    void strictGuardRefusesNonPublicTokenUrl() {
+        var strictConfig = new LlmProviderTokenAuthConfig();
+        strictConfig.setDestinationGuard(DestinationGuard.Mode.STRICT);
+        var strictProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, strictConfig);
+
+        assertThatThrownBy(() -> strictProvider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+                .isInstanceOf(AuthTokenException.class)
+                .hasMessageContaining("only https");
+        wireMock.verify(exactly(0), postRequestedFor(urlEqualTo(TOKEN_PATH)));
+    }
+
+    @Test
     @DisplayName("a Redis outage degrades to a direct fetch instead of failing the call")
     void redisOutageDegradesToDirectFetch() {
         var flakyRedis = RedisContainerUtils.newRedisContainer();
@@ -395,7 +414,7 @@ class AuthTokenProviderTest {
         var flakyRedisson = Redisson.create(flakyConfig);
         try {
             var flakyProvider = new AuthTokenProvider(new StringRedisClient(flakyRedisson),
-                    PASSTHROUGH_LOCK_SERVICE, new LlmProviderTokenAuthConfig());
+                    PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
             flakyRedis.stop();
 
             stubToken("{\"access_token\": \"tok-degraded\", \"expires_in\": 3600}");

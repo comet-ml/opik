@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
@@ -40,4 +41,13 @@ public class LlmProviderTokenAuthConfig {
 
     @JsonProperty
     @Min(1) private int maxResponseChars = 1_000_000;
+
+    /**
+     * SSRF guard on the token URL: {@code strict} refuses non-HTTPS and private/internal
+     * destinations; {@code relaxed} allows internal gateways. Strict by default so a missing
+     * override fails loudly instead of exposing the deployment; the self-hosted distributions
+     * can ship {@code relaxed} explicitly.
+     */
+    @JsonProperty
+    @NotNull private DestinationGuard.Mode destinationGuard = DestinationGuard.Mode.STRICT;
 }

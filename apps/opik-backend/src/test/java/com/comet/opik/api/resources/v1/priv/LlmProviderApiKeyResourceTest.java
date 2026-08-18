@@ -4,6 +4,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.api.ProviderAuthCheck;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -840,6 +841,186 @@ class LlmProviderApiKeyResourceTest {
                     .build();
             llmProviderApiKeyResourceClient.createProviderApiKey(withBadUrl, apiKey, workspaceName,
                     HttpStatus.SC_UNPROCESSABLE_CONTENT);
+        }
+    }
+
+    @Nested
+    @DisplayName("Auth config check endpoint:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AuthConfigCheckEndpoint {
+
+        private static final String SECRET_VALUE = "endpoint-s3cr3t";
+
+        /** unique path per test: the wiremock server is shared with the auth mocks, never reset here */
+        private String stubTokenEndpoint(String body, int status) {
+            String tokenPath = "/provider-auth-token/" + UUID.randomUUID();
+            wireMock.server().stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(urlPathEqualTo(tokenPath))
+                    .willReturn(com.github.tomakehurst.wiremock.client.WireMock.aResponse()
+                            .withStatus(status)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(body)));
+            return tokenPath;
+        }
+
+        /** plain-http base: baseUrl() prefers the https port, whose self-signed cert the fetcher rejects */
+        private String tokenUrl(String tokenPath) {
+            return "http://localhost:" + wireMock.server().port() + tokenPath;
+        }
+
+        private ProviderAuthConfig recipe(String tokenUrl, String secretValue) {
+            return ProviderAuthConfig.builder()
+                    .tokenUrl(tokenUrl)
+                    .credentials(List.of(
+                            credential("grant_type", "client_credentials", false),
+                            credential("client_id", "opik-prod", false),
+                            credential("client_secret", secretValue, true)))
+                    .build();
+        }
+
+        private ProviderAuthConfig.Credential credential(String key, String value, boolean secret) {
+            return ProviderAuthConfig.Credential.builder().key(key).value(value).secret(secret).build();
+        }
+
+        private ProviderApiKey createCustomProvider(ProviderAuthConfig authConfig, String apiKey,
+                String workspaceName) {
+            var provider = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(UUID.randomUUID().toString())
+                    .apiKey(null)
+                    .authConfig(authConfig)
+                    .build();
+            return llmProviderApiKeyResourceClient.createProviderApiKey(provider, apiKey, workspaceName,
+                    HttpStatus.SC_CREATED);
+        }
+
+        @Test
+        @DisplayName("submitted values are tested and the lifetime is reported, never the token")
+        void testWithSubmittedAuthConfig() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String tokenPath = stubTokenEndpoint("{\"access_token\": \"tok-endpoint\", \"expires_in\": 1800}", 200);
+            var request = ProviderAuthCheck.builder()
+                    .authConfig(recipe(tokenUrl(tokenPath), SECRET_VALUE))
+                    .build();
+
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                String body = response.readEntity(String.class);
+                var result = JsonUtils.readValue(body, ProviderAuthCheck.Result.class);
+                assertThat(result.lifetimeSeconds()).isEqualTo(1800);
+                assertThat(body).doesNotContain("tok-endpoint");
+            }
+        }
+
+        @Test
+        @DisplayName("by provider id, the stored recipe is used with its real secrets, server-side")
+        void testWithStoredAuthConfig() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String tokenPath = stubTokenEndpoint("{\"access_token\": \"tok\", \"expires_in\": 60}", 200);
+            var created = createCustomProvider(recipe(tokenUrl(tokenPath), SECRET_VALUE), apiKey, workspaceName);
+
+            var request = ProviderAuthCheck.builder().providerId(created.id()).build();
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            wireMock.server().verify(postRequestedFor(urlPathEqualTo(tokenPath))
+                    .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock
+                            .containing("client_secret=" + SECRET_VALUE)));
+        }
+
+        @Test
+        @DisplayName("sentinels in submitted values resolve against the stored recipe when the id is given")
+        void testResolvesSentinelsAgainstStoredConfig() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String tokenPath = stubTokenEndpoint("{\"access_token\": \"tok\", \"expires_in\": 60}", 200);
+            var created = createCustomProvider(recipe(tokenUrl(tokenPath), SECRET_VALUE), apiKey, workspaceName);
+
+            var request = ProviderAuthCheck.builder()
+                    .providerId(created.id())
+                    .authConfig(recipe(tokenUrl(tokenPath), ProviderAuthConfig.SECRET_SENTINEL))
+                    .build();
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            wireMock.server().verify(postRequestedFor(urlPathEqualTo(tokenPath))
+                    .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock
+                            .containing("client_secret=" + SECRET_VALUE)));
+        }
+
+        @Test
+        @DisplayName("sentinels without a provider id are rejected: there is nothing stored to resolve against")
+        void testSentinelWithoutIdIsRejected() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var request = ProviderAuthCheck.builder()
+                    .authConfig(recipe("https://auth.example.com/token", ProviderAuthConfig.SECRET_SENTINEL))
+                    .build();
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class).getMessage()).contains("client_secret");
+            }
+        }
+
+        @Test
+        @DisplayName("upstream auth failures surface status and body with credential values redacted")
+        void testSurfacesUpstreamErrorsRedacted() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String tokenPath = stubTokenEndpoint(
+                    "{\"error\": \"invalid_client\", \"echo\": \"%s\"}".formatted(SECRET_VALUE), 401);
+            var request = ProviderAuthCheck.builder()
+                    .authConfig(recipe(tokenUrl(tokenPath), SECRET_VALUE))
+                    .build();
+
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                String message = response.readEntity(ErrorMessage.class).getMessage();
+                assertThat(message).contains("401").contains("invalid_client").doesNotContain(SECRET_VALUE);
+            }
+        }
+
+        @Test
+        @DisplayName("a request with neither id nor auth config, or an id without a stored recipe, is rejected")
+        void testInvalidRequestsAreRejected() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(
+                    ProviderAuthCheck.builder().build(), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class).getMessage())
+                        .contains("either provider_id or auth_config");
+            }
+
+            var staticProvider = llmProviderApiKeyResourceClient.createProviderApiKey(
+                    createProviderApiKey(), apiKey, workspaceName, HttpStatus.SC_CREATED);
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(
+                    ProviderAuthCheck.builder().providerId(staticProvider.id()).build(),
+                    apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class).getMessage()).contains("no auth_config");
+            }
         }
     }
 

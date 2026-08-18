@@ -4,6 +4,8 @@ import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardException;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -80,10 +82,14 @@ public class AuthTokenProvider {
 
     private static final AttributeKey<String> OUTCOME = AttributeKey.stringKey("outcome");
     private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> ORIGIN = AttributeKey.stringKey("origin");
+    private static final String ORIGIN_REQUEST = "request";
+    private static final String ORIGIN_TEST = "test";
 
     private final @NonNull StringRedisClient redisClient;
     private final @NonNull LockService lockService;
     private final @NonNull LlmProviderTokenAuthConfig config;
+    private final DestinationGuard destinationGuard;
     private final HttpClient httpClient;
     private final LongCounter tokenRequests;
     private final LongHistogram fetchDurationMs;
@@ -94,6 +100,7 @@ public class AuthTokenProvider {
         this.redisClient = redisClient;
         this.lockService = lockService;
         this.config = config;
+        this.destinationGuard = new DestinationGuard(config.getDestinationGuard());
         // Same posture as the LLM clients: HTTP/1.1 and no redirect following (a token endpoint
         // redirecting elsewhere is a misconfiguration or an attack, never a flow to honor).
         this.httpClient = HttpClient.newBuilder()
@@ -227,32 +234,54 @@ public class AuthTokenProvider {
         }
     }
 
+    /**
+     * Runs the recipe once for the test-connection endpoint. Returns the resolved token lifetime —
+     * never the token itself.
+     *
+     * @throws AuthTokenException with a redacted, user-facing message when the fetch fails
+     */
+    public long testFetch(@NonNull ProviderAuthConfig authConfig) {
+        return fetchToken(authConfig, ORIGIN_TEST).ttlSeconds();
+    }
+
     // --- recipe execution ---
 
     FetchedToken fetchToken(@NonNull ProviderAuthConfig authConfig) {
-        HttpRequest request = buildRequest(authConfig);
+        return fetchToken(authConfig, ORIGIN_REQUEST);
+    }
+
+    private FetchedToken fetchToken(ProviderAuthConfig authConfig, String origin) {
         long startNanos = System.nanoTime();
+        try {
+            destinationGuard.validate(authConfig.tokenUrl());
+        } catch (DestinationGuardException exception) {
+            recordFetchMetric(startNanos, "destination_refused", origin);
+            throw new AuthTokenException(exception.getMessage()
+                    + " (self-hosted deployments with internal auth services can set LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed)",
+                    exception);
+        }
+        HttpRequest request = buildRequest(authConfig);
         HttpResponse<String> response;
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (IOException exception) {
-            recordFetchMetric(startNanos, "unreachable");
+            recordFetchMetric(startNanos, "unreachable", origin);
             throw new AuthTokenException("token fetch failed: could not reach '%s': %s"
                     .formatted(authConfig.tokenUrl(), redact(authConfig, exception.getMessage())), exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            recordFetchMetric(startNanos, "interrupted");
+            recordFetchMetric(startNanos, "interrupted", origin);
             throw new AuthTokenException("token fetch was interrupted", exception);
         }
 
         String body = Optional.ofNullable(response.body()).orElse("");
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            recordFetchMetric(startNanos, "upstream_error");
+            recordFetchMetric(startNanos, "upstream_error", origin);
             throw new AuthTokenException("token fetch failed with status '%d' from '%s': %s"
                     .formatted(response.statusCode(), authConfig.tokenUrl(), redact(authConfig, body)));
         }
         if (body.length() > config.getMaxResponseChars()) {
-            recordFetchMetric(startNanos, "oversized_reply");
+            recordFetchMetric(startNanos, "oversized_reply", origin);
             throw new AuthTokenException("token reply from '%s' exceeds the maximum accepted size"
                     .formatted(authConfig.tokenUrl()));
         }
@@ -261,7 +290,7 @@ public class AuthTokenProvider {
         try {
             root = JsonUtils.getJsonNodeFromString(body);
         } catch (UncheckedIOException exception) {
-            recordFetchMetric(startNanos, "non_json_reply");
+            recordFetchMetric(startNanos, "non_json_reply", origin);
             throw new AuthTokenException("token endpoint at '%s' returned a non-JSON reply (status '%d')"
                     .formatted(authConfig.tokenUrl(), response.statusCode()));
         }
@@ -269,14 +298,14 @@ public class AuthTokenProvider {
         String tokenField = defaultIfBlank(authConfig.tokenField(), DEFAULT_TOKEN_FIELD);
         JsonNode tokenNode = atDotPath(root, tokenField);
         if (!tokenNode.isTextual() || isBlank(tokenNode.asText())) {
-            recordFetchMetric(startNanos, "token_field_missing");
+            recordFetchMetric(startNanos, "token_field_missing", origin);
             // field names are safe to surface; values never are
             throw new AuthTokenException("field '%s' not found in the token reply; top-level fields: %s"
                     .formatted(tokenField, root.properties().stream().map(Map.Entry::getKey).toList()));
         }
 
-        long ttlSeconds = resolveTtlSeconds(root, authConfig, startNanos);
-        recordFetchMetric(startNanos, "success");
+        long ttlSeconds = resolveTtlSeconds(root, authConfig, startNanos, origin);
+        recordFetchMetric(startNanos, "success", origin);
         return new FetchedToken(tokenNode.asText(), ttlSeconds);
     }
 
@@ -323,7 +352,7 @@ public class AuthTokenProvider {
      * a non-positive value is an error), else the recipe's fallback (where 0 meansthe token is
      * served uncached), else an error naming the missing field.
      */
-    private long resolveTtlSeconds(JsonNode root, ProviderAuthConfig authConfig, long startNanos) {
+    private long resolveTtlSeconds(JsonNode root, ProviderAuthConfig authConfig, long startNanos, String origin) {
         String expiresField = defaultIfBlank(authConfig.expiresField(), DEFAULT_EXPIRES_FIELD);
         JsonNode expiresNode = atDotPath(root, expiresField);
 
@@ -339,7 +368,7 @@ public class AuthTokenProvider {
         }
         if (ttlSeconds != null) {
             if (ttlSeconds <= 0) {
-                recordFetchMetric(startNanos, "lifetime_invalid");
+                recordFetchMetric(startNanos, "lifetime_invalid", origin);
                 throw new AuthTokenException("token reply states a non-positive lifetime of '%d' seconds"
                         .formatted(ttlSeconds));
             }
@@ -347,7 +376,7 @@ public class AuthTokenProvider {
         }
         // the configured fallback may legitimately be 0: the fetch-per-call convention
         if (authConfig.fallbackTtlSeconds() == null) {
-            recordFetchMetric(startNanos, "lifetime_missing");
+            recordFetchMetric(startNanos, "lifetime_missing", origin);
             throw new AuthTokenException(
                     "token reply has no lifetime field '%s' and no fallback lifetime is configured"
                             .formatted(expiresField));
@@ -411,8 +440,8 @@ public class AuthTokenProvider {
         tokenRequests.add(1, Attributes.of(OUTCOME, outcome, WORKSPACE_ID, workspaceId));
     }
 
-    private void recordFetchMetric(long startNanos, String outcome) {
+    private void recordFetchMetric(long startNanos, String outcome, String origin) {
         fetchDurationMs.record((System.nanoTime() - startNanos) / 1_000_000,
-                Attributes.of(OUTCOME, outcome));
+                Attributes.of(OUTCOME, outcome, ORIGIN, origin));
     }
 }

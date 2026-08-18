@@ -554,6 +554,10 @@ datasetExport:
   cleanupLockWaitTime: 1s
   cleanupBatchSize: 100
 
+# Dynamic token auth for custom LLM providers: tests hit localhost token endpoints over http
+llmProviderTokenAuth:
+  destinationGuard: "relaxed"
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 60s
