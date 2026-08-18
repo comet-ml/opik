@@ -433,6 +433,65 @@ def test_meteor_rejects_empty_inputs():
         metric.score(output="hyp", reference="   ")
 
 
+def test_meteor__default_scorer__passes_tokenized_inputs_to_nltk(monkeypatch):
+    """The built-in scorer must hand NLTK pre-tokenized inputs.
+
+    NLTK's ``meteor_score`` requires ``references`` as ``Iterable[Iterable[str]]``
+    and ``hypothesis`` as ``Iterable[str]``; passing raw strings raises ``TypeError``.
+    Asserting only the (stubbed) return value would not catch this regression,
+    since the stub ignores its arguments — so we also assert the inputs were
+    tokenized before the NLTK call.
+    """
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    captured = {}
+
+    def fake_meteor_score(references, hypothesis, **kwargs):
+        captured["references"] = references
+        captured["hypothesis"] = hypothesis
+        return 0.5
+
+    # Stub the NLTK scorer and WordNet loader so the test needs no corpora/network.
+    # Replace the whole ``wordnet`` object rather than setattr on it: touching the
+    # real NLTK LazyCorpusLoader forces a corpus load, raising LookupError in CI.
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        meteor_module, "wordnet", SimpleNamespace(ensure_loaded=lambda: None)
+    )
+    monkeypatch.setattr(
+        meteor_module.nltk_meteor_score, "meteor_score", fake_meteor_score
+    )
+
+    result = METEOR(track=False).score(output="the cat sat", reference="the cat sat")
+
+    assert result.value == pytest.approx(0.5)
+    assert captured["hypothesis"] == ["the", "cat", "sat"]
+    assert captured["references"] == [["the", "cat", "sat"]]
+
+
+def test_meteor__default_scorer__real_nltk_score():
+    """Exercise the real default scorer end-to-end (no mocking).
+
+    Complements the tokenization test above by catching regressions in the
+    actual NLTK integration. Requires the WordNet corpora, so it is skipped
+    when they are unavailable (e.g. a CI environment without the NLTK data).
+    """
+    pytest.importorskip("nltk")
+    try:
+        result = METEOR(track=False).score(
+            output="the cat sat on the mat",
+            reference="the cat sat on the mat",
+        )
+    except (LookupError, ImportError) as exc:
+        # Only skip when the NLTK corpora are genuinely unavailable. A
+        # MetricComputationError from a valid input is a real regression and
+        # must surface as a failure, not be skipped.
+        pytest.skip(f"NLTK WordNet corpora not available: {exc}")
+
+    assert result.value == pytest.approx(0.9977, abs=1e-3)
+
+
 def test_gleu_metric_with_custom_fn():
     def gleu_fn(references, hypothesis):
         return 0.5
