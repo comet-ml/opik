@@ -141,8 +141,15 @@ export type ThreadStatValue = number | StatPercentiles | null;
  * casting: the percentile case is a real shape from this endpoint, not a
  * type-system inconvenience. Throws rather than asserting so this module stays
  * free of test-runner imports.
+ *
+ * Accepts `undefined` so a *missing* stat fails here, loudly and named, rather
+ * than being silently tested into an `if` at the callsite — an absent aggregate
+ * is a regression, not a reason to skip a comparison.
  */
-export function numericStat(value: ThreadStatValue, name: string): number {
+export function numericStat(value: ThreadStatValue | undefined, name: string): number {
+  if (value === undefined) {
+    throw new Error(`stat "${name}" is absent from the stats response`);
+  }
   if (typeof value !== 'number') {
     throw new Error(
       `stat "${name}" is not scalar (got ${JSON.stringify(value)}) — ` +
@@ -598,10 +605,15 @@ export function makeBackendClient(apiKey: string | null = null) {
      * rather than a number. The value type says so, so a caller reading
      * `duration` as a number has to narrow first instead of silently computing
      * on an object. `numericStat()` below is the narrowing helper.
+     *
+     * `Partial` because the endpoint returns only the stats it has: a plain
+     * `Record` would claim every key is present and let a caller read a missing
+     * aggregate as though the endpoint had answered. Callers that require a stat
+     * must assert it is present rather than testing it into an `if`.
      */
     async getThreadsStats(
       args: { projectId: string; filters?: BackendFilter[] } & ReadWindow,
-    ): Promise<Record<string, ThreadStatValue>> {
+    ): Promise<Partial<Record<string, ThreadStatValue>>> {
       const stats = await opik.api.traces.getTraceThreadStats({
         projectId: args.projectId,
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),

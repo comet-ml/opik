@@ -37,6 +37,53 @@ const TRIAL_ONE_TRACE_COUNT = 2;
 const DECOY_TRACE_COUNT = 7;
 
 test.describe('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optimization-studio'] }, () => {
+  /**
+   * Seeded inside the test, cleaned up after it whatever the outcome.
+   *
+   * A trailing cleanup `test.step` is skipped the moment an earlier step throws,
+   * so a mid-test failure used to orphan this run. The prefix sweep in
+   * global-teardown does catch the dataset and the experiments (every name here
+   * starts with `testNamespace`, i.e. the swept `cuj-<runId>-` prefix), but it
+   * does not know about optimizations, and deleting the project does NOT delete
+   * traces — so both are removed explicitly here.
+   *
+   * Same shape as `annotation-queue-delete.spec.ts`: collectors filled as the
+   * fixture is built, drained here, and every failure logged rather than thrown
+   * so teardown cannot fail a passing test or mask the real error.
+   */
+  const experimentIdsToClean: string[] = [];
+  const traceIdsToClean: string[] = [];
+  const optimizationIdsToClean: string[] = [];
+  const datasetIdsToClean: string[] = [];
+
+  test.afterEach(async ({ backendClient }) => {
+    const safe = async (what: string, fn: () => Promise<unknown>): Promise<void> => {
+      try {
+        await fn();
+      } catch (err) {
+        console.warn(`[optimization-trial-logs] cleanup warning for ${what}:`, err);
+      }
+    };
+    // Experiments before the optimization they belong to, traces before the
+    // dataset, so nothing is deleted out from under a still-referencing parent.
+    while (experimentIdsToClean.length) {
+      const id = experimentIdsToClean.pop()!;
+      await safe(`experiment ${id}`, () => backendClient.deleteExperiment(id));
+    }
+    while (optimizationIdsToClean.length) {
+      const id = optimizationIdsToClean.pop()!;
+      await safe(`optimization ${id}`, () => backendClient.deleteOptimization(id));
+    }
+    if (traceIdsToClean.length) {
+      const ids = traceIdsToClean.splice(0, traceIdsToClean.length);
+      await safe(`${ids.length} traces`, () => backendClient.deleteTraces(ids));
+    }
+    while (datasetIdsToClean.length) {
+      const id = datasetIdsToClean.pop()!;
+      await safe(`dataset ${id}`, () => backendClient.deleteDataset(id));
+    }
+  });
+
   test('each trial\'s Logs overlay lists exactly that trial\'s traces', { tag: ['@cap:optimization-studio.trial-detail'] }, async ({
     sdkClient,
     backendClient,
@@ -58,6 +105,7 @@ test.describe('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optim
         description: 'optimization trial logs scoping',
         items: DATASET_ITEMS as unknown as Array<Record<string, unknown>>,
       }));
+    datasetIdsToClean.push(dataset.id);
 
     const datasetItemIds = await test.step('Read the dataset item ids back', async () => {
       const items = await backendClient.getDatasetItems(dataset.id);
@@ -74,6 +122,7 @@ test.describe('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optim
         objectiveName: OBJECTIVE,
         status: 'completed',
       });
+      optimizationIdsToClean.push(optimizationId);
     });
 
     /** Traces must carry `source=optimization`: the overlay passes
@@ -92,6 +141,7 @@ test.describe('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optim
           output: { label: `${prefix} output ${i + 1}` },
         });
         ids.push(id);
+        traceIdsToClean.push(id);
       }
       return ids;
     };
@@ -126,6 +176,7 @@ test.describe('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optim
           parent_candidate_ids: [],
         },
       });
+      experimentIdsToClean.push(baselineExperimentId);
       await backendClient.createExperimentItems(
         baselineTraceIds.map((traceId, i) => ({
           experimentId: baselineExperimentId,
@@ -147,6 +198,7 @@ test.describe('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optim
           parent_candidate_ids: [`${testNamespace}-cand-baseline`],
         },
       });
+      experimentIdsToClean.push(trialOneExperimentId);
       await backendClient.createExperimentItems(
         trialOneTraceIds.map((traceId, i) => ({
           experimentId: trialOneExperimentId,
@@ -219,13 +271,6 @@ test.describe('Optimization trial logs — CUJ', { tag: ['@t2-cuj', '@area:optim
 
       await expect(overlay.scopeChip('Trial #1'), 'the locked-scope chip names the trial')
         .toBeVisible();
-    });
-
-    await test.step('Cleanup: the run, its experiments and the dataset', async () => {
-      await backendClient.deleteExperiment(baselineExperimentId);
-      await backendClient.deleteExperiment(trialOneExperimentId);
-      await backendClient.deleteOptimization(optimizationId);
-      await backendClient.deleteDataset(dataset.id);
     });
   });
 });

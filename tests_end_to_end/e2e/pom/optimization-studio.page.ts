@@ -259,15 +259,21 @@ export class OptimizationStudioPage {
    */
   async openTrialByLabel(label: string): Promise<Locator> {
     return test.step(`Open trial "${label}"`, async () => {
-      // Match the "Trial #" cell EXACTLY, not the row's text. A substring match
-      // on the whole row makes "Trial #1" also select "Trial #10" (and any other
-      // row sharing the prefix), and the label can collide with unrelated cell
-      // text elsewhere in the row. `TrialNumberCell` renders the label as the
-      // full text of the first cell, so an anchored match there is unambiguous.
+      // Match the Trial cell EXACTLY, and identify that cell by COLUMN rather
+      // than by position. Two failure modes to avoid:
+      //   * a substring match over the row's text makes "Trial #1" also select
+      //     "Trial #10", and collides with the label appearing in another cell;
+      //   * a positional match (`td:first-child`) inspects the wrong cell once a
+      //     user reorders columns — the Trial column is offered in the column
+      //     selector and is not pinned, so it does move.
+      // `DataTable` stamps each cell `data-cell-id="<rowId>_<columnId>"`, and the
+      // Trial column's id is `COLUMN_NAME_ID` ("name"), so a `_name` suffix
+      // match follows the column wherever it sits. `TrialNumberCell` renders the
+      // label as that cell's full text, so the anchored match is exact.
       const row = this.trialsTable()
         .locator('tbody tr[data-row-id]')
         .filter({
-          has: this.page.locator('td:first-child').filter({
+          has: this.page.locator('td[data-cell-id$="_name"]').filter({
             hasText: new RegExp(`^\\s*${escapeForRegExp(label)}\\s*$`),
           }),
         });

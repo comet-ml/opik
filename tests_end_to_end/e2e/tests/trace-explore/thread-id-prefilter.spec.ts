@@ -177,12 +177,28 @@ test.describe('Thread id prefilter — CUJ', { tag: ['@t2-cuj', '@area:threads']
         ).toBe(1);
 
         const row = unfiltered.get(threadId)!;
-        if (stats.total_estimated_cost_sum != null && row.totalEstimatedCost !== null) {
-          expect(
-            numericStat(stats.total_estimated_cost_sum, 'total_estimated_cost_sum'),
-            `stats cost sum for ${threadId} agrees with the row's cost`,
-          ).toBeCloseTo(row.totalEstimatedCost, 6);
-        }
+        // Required, not conditional. The seed-shape step above already asserted
+        // `totalEstimatedCost` is non-null on every seeded row, so an absent
+        // cost aggregate here is a real regression in the stats endpoint — and
+        // skipping the comparison when it goes missing would silently retire the
+        // cost half of this differential, which is the half most likely to break
+        // under a query rewrite.
+        expect(
+          stats.total_estimated_cost_sum,
+          `stats must report a cost sum for ${threadId} — a missing aggregate is a regression, not a reason to skip the check`,
+        ).not.toBeUndefined();
+        expect(
+          stats.total_estimated_cost_sum,
+          `stats cost sum for ${threadId} must not be null`,
+        ).not.toBeNull();
+        expect(
+          row.totalEstimatedCost,
+          `the unfiltered row for ${threadId} must carry a cost to compare against`,
+        ).not.toBeNull();
+        expect(
+          numericStat(stats.total_estimated_cost_sum, 'total_estimated_cost_sum'),
+          `stats cost sum for ${threadId} agrees with the row's cost`,
+        ).toBeCloseTo(row.totalEstimatedCost!, 6);
       }
     });
 
