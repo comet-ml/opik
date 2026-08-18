@@ -2,4 +2,4 @@
 
 import typing
 
-GetWebhookExamplesRequestAlertType = typing.Union[typing.Literal["general", "slack", "pagerduty"], typing.Any]
+GetWebhookExamplesRequestAlertType = typing.Union[typing.Literal["general", "slack", "pagerduty", "feishu"], typing.Any]

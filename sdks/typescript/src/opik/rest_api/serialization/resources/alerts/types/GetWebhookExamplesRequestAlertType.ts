@@ -7,8 +7,8 @@ import type * as serializers from "../../../index.js";
 export const GetWebhookExamplesRequestAlertType: core.serialization.Schema<
     serializers.GetWebhookExamplesRequestAlertType.Raw,
     OpikApi.GetWebhookExamplesRequestAlertType
-> = core.serialization.enum_(["general", "slack", "pagerduty"]);
+> = core.serialization.enum_(["general", "slack", "pagerduty", "feishu"]);
 
 export declare namespace GetWebhookExamplesRequestAlertType {
-    export type Raw = "general" | "slack" | "pagerduty";
+    export type Raw = "general" | "slack" | "pagerduty" | "feishu";
 }
