@@ -17,8 +17,6 @@ from . import schema, templates
 
 LOGGER = logging.getLogger(__name__)
 
-GROUNDEDNESS_SCORE_NAME = "conversational_groundedness_score"
-
 
 class ConversationalCoherenceMetric(ConversationThreadMetric):
     """
@@ -37,12 +35,16 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
     accommodate the model's operation type. It returns a score between `0.0` and `1.0`,
     where `0.0` indicates a low coherence score and `1.0` indicates a high coherence score.
 
-    When the agent messages carry the documents they were generated from - see the
-    ``trace_context_transform`` argument of :func:`opik.evaluation.evaluate_threads` -
-    the metric additionally judges whether each answer is supported by its documents,
-    and returns a second ``conversational_groundedness_score`` result alongside the
-    coherence one. Without those documents it behaves exactly as before, returning a
-    single score.
+    The metric is **context aware**: when an agent message carries the documents it was
+    generated from - the ``context`` key, populated by the ``trace_context_transform``
+    argument of :func:`opik.evaluation.evaluate_threads` - the judge is shown those
+    documents and a turn counts towards the score only when the answer is both relevant
+    to the conversation *and* supported by them. Turns without documents are judged on
+    relevance alone, using the original prompt, so conversations carrying no context
+    score exactly as they did before.
+
+    Note this makes the score stricter once you supply context: an answer that is
+    perfectly relevant but contradicts its documents no longer counts as coherent.
 
     Args:
         model: The model to use for
@@ -123,20 +125,20 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         self,
         conversation: conversation_types.Conversation,
         **ignored_kwargs: Any,
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult:
         return self._calculate_score(conversation=conversation)
 
     async def ascore(
         self,
         conversation: conversation_types.Conversation,
         **ignored_kwargs: Any,
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult:
         return await self._a_calculate_score(conversation=conversation)
 
     def _calculate_score(
         self,
         conversation: conversation_types.Conversation,
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult:
         try:
             turns_windows = (
                 conversation_helpers.extract_turns_windows_from_conversation(
@@ -150,27 +152,12 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
             ]
 
             score = _score_from_verdicts(verdicts=verdicts)
-            grounded = _grounded_verdicts(verdicts)
-
-            coherence_reason = None
-            groundedness_reason = None
-            if self._include_reason:
-                coherence_reason = self._reason_from_verdicts(
-                    score=score, verdicts=verdicts
-                )
-                if grounded:
-                    groundedness_reason = self._groundedness_reason_from_verdicts(
-                        score=_score_from_grounded_verdicts(grounded),
-                        verdicts=grounded,
-                    )
-
-            return _build_results(
-                name=self.name,
-                score=score,
-                coherence_reason=coherence_reason,
-                grounded_verdicts=grounded,
-                groundedness_reason=groundedness_reason,
+            reason = (
+                self._reason_from_verdicts(score=score, verdicts=verdicts)
+                if self._include_reason
+                else None
             )
+            return score_result.ScoreResult(name=self.name, value=score, reason=reason)
         except Exception as e:
             LOGGER.error(f"Failed to calculate conversational coherence score: {e}")
             raise exceptions.MetricComputationError(
@@ -180,7 +167,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
     async def _a_calculate_score(
         self,
         conversation: conversation_types.Conversation,
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult:
         try:
             turns_windows = (
                 conversation_helpers.extract_turns_windows_from_conversation(
@@ -198,29 +185,12 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
             )
 
             score = _score_from_verdicts(verdicts=verdicts)
-            grounded = _grounded_verdicts(verdicts)
-
-            coherence_reason = None
-            groundedness_reason = None
-            if self._include_reason:
-                coherence_reason = await self._a_reason_from_verdicts(
-                    score=score, verdicts=verdicts
-                )
-                if grounded:
-                    groundedness_reason = (
-                        await self._a_groundedness_reason_from_verdicts(
-                            score=_score_from_grounded_verdicts(grounded),
-                            verdicts=grounded,
-                        )
-                    )
-
-            return _build_results(
-                name=self.name,
-                score=score,
-                coherence_reason=coherence_reason,
-                grounded_verdicts=grounded,
-                groundedness_reason=groundedness_reason,
+            reason = (
+                await self._a_reason_from_verdicts(score=score, verdicts=verdicts)
+                if self._include_reason
+                else None
             )
+            return score_result.ScoreResult(name=self.name, value=score, reason=reason)
         except Exception as e:
             LOGGER.error(f"Failed to calculate conversational coherence score: {e}")
             raise exceptions.MetricComputationError(
@@ -311,63 +281,31 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         self,
         conversation_sliding_window: conversation_types.Conversation,
         retrieved_documents: List[str],
-    ) -> schema.EvaluateConversationCoherenceWithDocumentsResponse:
+    ) -> schema.EvaluateConversationCoherenceResponse:
         messages = templates.build_evaluate_conversation_with_documents_messages(
             sliding_window=conversation_sliding_window,
             retrieved_documents=retrieved_documents,
         )
         message = self._model.generate_chat_completion(
             messages=messages,
-            response_format=schema.EvaluateConversationCoherenceWithDocumentsResponse,
+            response_format=schema.EvaluateConversationCoherenceResponse,
         )
-        return _evaluate_with_documents_from_model_output(
-            model_output=message["content"]
-        )
+        return _evaluate_conversation_from_model_output(model_output=message["content"])
 
     async def _a_evaluate_conversation_with_documents(
         self,
         conversation_sliding_window: conversation_types.Conversation,
         retrieved_documents: List[str],
-    ) -> schema.EvaluateConversationCoherenceWithDocumentsResponse:
+    ) -> schema.EvaluateConversationCoherenceResponse:
         messages = templates.build_evaluate_conversation_with_documents_messages(
             sliding_window=conversation_sliding_window,
             retrieved_documents=retrieved_documents,
         )
         message = await self._model.agenerate_chat_completion(
             messages=messages,
-            response_format=schema.EvaluateConversationCoherenceWithDocumentsResponse,
+            response_format=schema.EvaluateConversationCoherenceResponse,
         )
-        return _evaluate_with_documents_from_model_output(
-            model_output=message["content"]
-        )
-
-    def _groundedness_reason_from_verdicts(
-        self,
-        score: float,
-        verdicts: List[schema.EvaluateConversationCoherenceWithDocumentsResponse],
-    ) -> str:
-        messages = templates.build_groundedness_reason_messages(
-            score=score,
-            ungrounded_statements=_extract_ungrounded_from_verdicts(verdicts),
-        )
-        message = self._model.generate_chat_completion(
-            messages=messages, response_format=schema.ScoreReasonResponse
-        )
-        return _generate_reason_from_model_output(model_output=message["content"])
-
-    async def _a_groundedness_reason_from_verdicts(
-        self,
-        score: float,
-        verdicts: List[schema.EvaluateConversationCoherenceWithDocumentsResponse],
-    ) -> str:
-        messages = templates.build_groundedness_reason_messages(
-            score=score,
-            ungrounded_statements=_extract_ungrounded_from_verdicts(verdicts),
-        )
-        message = await self._model.agenerate_chat_completion(
-            messages=messages, response_format=schema.ScoreReasonResponse
-        )
-        return _generate_reason_from_model_output(model_output=message["content"])
+        return _evaluate_conversation_from_model_output(model_output=message["content"])
 
 
 def _generate_reason_from_model_output(model_output: str) -> str:
@@ -424,76 +362,3 @@ def _retrieved_documents(
         if message["role"] == "assistant":
             return list(message.get("context") or [])
     return []
-
-
-def _grounded_verdicts(
-    verdicts: List[Any],
-) -> List[schema.EvaluateConversationCoherenceWithDocumentsResponse]:
-    return [
-        verdict
-        for verdict in verdicts
-        if isinstance(
-            verdict, schema.EvaluateConversationCoherenceWithDocumentsResponse
-        )
-    ]
-
-
-def _score_from_grounded_verdicts(
-    verdicts: List[schema.EvaluateConversationCoherenceWithDocumentsResponse],
-) -> float:
-    if len(verdicts) == 0:
-        return 0.0
-
-    grounded_count = sum(v.grounded_verdict.strip().lower() != "no" for v in verdicts)
-    return grounded_count / len(verdicts)
-
-
-def _extract_ungrounded_from_verdicts(
-    verdicts: List[schema.EvaluateConversationCoherenceWithDocumentsResponse],
-) -> List[Dict[str, str]]:
-    return [
-        {"message_number": f"{index + 1}", "reason": verdict.reason}
-        for index, verdict in enumerate(verdicts)
-        if verdict.grounded_verdict.strip().lower() == "no"
-        and verdict.reason is not None
-    ]
-
-
-def _evaluate_with_documents_from_model_output(
-    model_output: str,
-) -> schema.EvaluateConversationCoherenceWithDocumentsResponse:
-    try:
-        dict_content = parsing_helpers.extract_json_content_or_raise(model_output)
-        return schema.EvaluateConversationCoherenceWithDocumentsResponse.model_validate(
-            dict_content
-        )
-    except pydantic.ValidationError as e:
-        LOGGER.warning(
-            f"Failed to parse conversation groundedness evaluation results from the LLM output: {model_output}, reason: {e}",
-            exc_info=True,
-        )
-        raise e
-
-
-def _build_results(
-    name: str,
-    score: float,
-    coherence_reason: Optional[str],
-    grounded_verdicts: List[schema.EvaluateConversationCoherenceWithDocumentsResponse],
-    groundedness_reason: Optional[str],
-) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
-    """Coherence for every window, plus groundedness when documents were supplied."""
-    coherence = score_result.ScoreResult(
-        name=name, value=score, reason=coherence_reason
-    )
-    if not grounded_verdicts:
-        return coherence
-
-    return [
-        coherence,
-        score_result.ScoreResult(
-            name=GROUNDEDNESS_SCORE_NAME,
-            value=_score_from_grounded_verdicts(grounded_verdicts),
-            reason=groundedness_reason,
-        ),
-    ]

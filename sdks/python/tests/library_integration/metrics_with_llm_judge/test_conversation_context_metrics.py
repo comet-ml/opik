@@ -48,15 +48,11 @@ def test_conversational_coherence__with_documents__grounded_answers(
     metric = conversational_coherence.ConversationalCoherenceMetric(
         track=False, reasoning_effort="minimal"
     )
-    results = metric.score(grounded_conversation)
+    result = metric.score(grounded_conversation)
 
-    assert isinstance(results, list)
-    assert [result.name for result in results] == [
-        "conversational_coherence_score",
-        "conversational_groundedness_score",
-    ]
-    for result in results:
-        assert_helpers.assert_score_result(result)
+    assert not isinstance(result, list)
+    assert result.name == "conversational_coherence_score"
+    assert_helpers.assert_score_result(result)
     # We don't assert specific values since the real model's output may vary
 
 
@@ -67,22 +63,17 @@ def test_conversational_coherence__with_documents__contradicting_answer(
     metric = conversational_coherence.ConversationalCoherenceMetric(
         track=False, reasoning_effort="minimal"
     )
-    results = metric.score(ungrounded_conversation)
+    result = metric.score(ungrounded_conversation)
 
-    groundedness = next(
-        r for r in results if r.name == "conversational_groundedness_score"
-    )
-    assert_helpers.assert_score_result(groundedness)
-    # We don't assert specific values since the real model's output may vary. Which
-    # answers the judge calls grounded is covered deterministically by the unit tests
-    # in tests/unit/.../conversational_coherence/test_metric.py; this test exists to
-    # prove the real-model path produces both scores.
+    assert not isinstance(result, list)
+    assert_helpers.assert_score_result(result)
+    # We don't assert specific values since the real model's output may vary
 
 
-def test_conversational_coherence__without_documents__single_score(
+def test_conversational_coherence__without_documents__unchanged_behaviour(
     grounded_conversation,
 ):
-    """Without documents the metric still returns exactly one score."""
+    """Without documents the metric returns the same single score it always did."""
     plain = [
         {key: value for key, value in message.items() if key != "context"}
         for message in grounded_conversation
@@ -93,4 +84,5 @@ def test_conversational_coherence__without_documents__single_score(
     result = metric.score(plain)
 
     assert not isinstance(result, list)
+    assert result.name == "conversational_coherence_score"
     assert_helpers.assert_score_result(result)

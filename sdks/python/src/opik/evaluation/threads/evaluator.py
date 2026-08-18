@@ -79,8 +79,9 @@ def evaluate_threads(
             use: lambda trace: trace.metadata["retrieved_docs"]
 
             The extracted context is attached to the agent message of the same trace.
-            `ConversationalCoherenceMetric` uses it to additionally report a
-            `conversational_groundedness_score`; metrics that don't need it ignore it.
+            `ConversationalCoherenceMetric` is context aware: it shows the documents to
+            the judge, so a turn scores only when the answer is both relevant and
+            supported by them. Metrics that don't need the context ignore it.
         verbose: Verbosity level for progress reporting (0=silent, 1=progress).
             Default is 1.
         num_workers: Number of concurrent workers for thread evaluation.
@@ -117,8 +118,8 @@ def evaluate_threads(
         >>> )
 
     Example:
-        >>> # Evaluating a RAG agent: ConversationalCoherenceMetric additionally reports
-        >>> # a `conversational_groundedness_score` when the context is provided.
+        >>> # Evaluating a RAG agent: ConversationalCoherenceMetric additionally checks
+        >>> # each answer against the documents it was generated from.
         >>> from opik.evaluation import evaluate_threads
         >>> from opik.evaluation.metrics import ConversationalCoherenceMetric
         >>>

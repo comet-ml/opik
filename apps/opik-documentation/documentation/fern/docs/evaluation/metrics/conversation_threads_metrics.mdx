@@ -214,13 +214,12 @@ print(result.reason)
 
 ### Grounding answers in retrieved context
 
-When the agent messages carry the documents they were generated from, `ConversationalCoherenceMetric` additionally
-judges whether each answer is **supported by those documents**, and returns a second
-`conversational_groundedness_score` alongside the coherence score. Populate the documents with the
-`trace_context_transform` argument of [`evaluate_threads`](/v1/evaluation/evaluate_threads), or attach them directly to the agent
-messages under a `context` key:
+`ConversationalCoherenceMetric` is **context aware**. When an agent message carries the documents it was generated
+from, the judge is shown those documents and the turn counts towards the score only when the answer is both relevant
+to the conversation **and** supported by them. Populate the documents with the `trace_context_transform` argument of
+[`evaluate_threads`](/v1/evaluation/evaluate_threads), or attach them directly to the agent messages under a `context` key:
 
-```python title="Groundedness example"
+```python title="Context-aware coherence example"
 from opik.evaluation.metrics import ConversationalCoherenceMetric
 
 conversation = [
@@ -236,15 +235,15 @@ conversation = [
 ]
 
 metric = ConversationalCoherenceMetric(model="gpt-5-nano")
-coherence, groundedness = metric.score(conversation)
+result = metric.score(conversation)
 
-print(coherence.value)     # answers the question -> high
-print(groundedness.value)  # contradicts the document -> low
+# The answer addresses the question, but contradicts its document -> low score
+print(result.value)
 ```
 
-Turns whose agent message has no documents are judged for coherence only, and are left out of the groundedness score.
-When no message carries documents at all, the metric returns a single coherence score and uses exactly the same prompt
-as before, so existing scores are unaffected.
+Turns whose agent message has no documents are judged on relevance alone, using the original prompt, so a conversation
+carrying no context scores exactly as it did before. Note the score becomes stricter once you supply context: an answer
+that is perfectly relevant but unsupported by its documents no longer counts as coherent.
 
 ## Next steps
 

@@ -338,20 +338,19 @@ def grounded_conversation():
 
 
 def _make_with_documents_side_effect():
-    """First window grounded, second one not."""
-    grounded_verdicts = iter(["yes", "no"])
+    """First window relevant+supported, second one not."""
+    verdicts = iter(["yes", "no"])
 
     def side_effect(*args, **kwargs):
         response_format = kwargs.get("response_format")
-        if response_format == schema.EvaluateConversationCoherenceWithDocumentsResponse:
-            grounded = next(grounded_verdicts)
+        if response_format == schema.EvaluateConversationCoherenceResponse:
+            verdict = next(verdicts)
             return _assistant_message(
                 json.dumps(
                     {
-                        "verdict": "yes",
-                        "grounded_verdict": grounded,
+                        "verdict": verdict,
                         "reason": None
-                        if grounded == "yes"
+                        if verdict == "yes"
                         else "Contradicts the documents.",
                     }
                 )
@@ -365,25 +364,50 @@ def _make_with_documents_side_effect():
     return side_effect
 
 
-def test_score__messages_with_context__returns_coherence_and_groundedness(
+def test_score__messages_with_context__documents_folded_into_the_single_score(
     mock_model, grounded_conversation
 ):
-    """Messages carrying retrieved documents produce an extra groundedness score."""
+    """Documents make the verdict stricter, but the metric still returns one score."""
     mock_model.generate_chat_completion.side_effect = _make_with_documents_side_effect()
 
     metric = ConversationalCoherenceMetric(model=mock_model, track=False)
-    results = metric.score(grounded_conversation)
+    result = metric.score(grounded_conversation)
 
-    assert isinstance(results, list)
-    assert [result.name for result in results] == [
-        "conversational_coherence_score",
-        "conversational_groundedness_score",
+    assert not isinstance(result, list)
+    assert result.name == "conversational_coherence_score"
+    assert result.value == 0.5  # one of two windows judged relevant AND supported
+
+    used_formats = {
+        call.kwargs.get("response_format")
+        for call in mock_model.generate_chat_completion.call_args_list
+    }
+    assert schema.EvaluateConversationCoherenceResponse in used_formats
+
+
+def test_score__messages_with_context__uses_the_with_documents_prompt(
+    mock_model, grounded_conversation
+):
+    """The documents have to actually reach the judge."""
+    mock_model.generate_chat_completion.side_effect = _make_with_documents_side_effect()
+
+    ConversationalCoherenceMetric(model=mock_model, track=False).score(
+        grounded_conversation
+    )
+
+    prompts = [
+        call.kwargs["messages"][1]["content"]
+        for call in mock_model.generate_chat_completion.call_args_list
+        if call.kwargs.get("response_format")
+        == schema.EvaluateConversationCoherenceResponse
     ]
-    assert results[0].value == 1.0  # both windows relevant
-    assert results[1].value == 0.5  # one of two windows grounded
+    assert any("Retrieved documents" in prompt for prompt in prompts)
+    assert any(
+        "The overdraft fee is 5% of the overdrawn amount." in prompt
+        for prompt in prompts
+    )
 
 
-def test_score__messages_without_context__single_score_and_original_prompt(
+def test_score__messages_without_context__uses_the_original_prompt(
     mock_model, simple_conversation
 ):
     """Without documents the metric behaves exactly as before."""
@@ -396,11 +420,11 @@ def test_score__messages_without_context__single_score_and_original_prompt(
 
     assert not isinstance(result, list)
     assert result.name == "conversational_coherence_score"
-    used_formats = {
-        call.kwargs.get("response_format")
+    prompts = [
+        call.kwargs["messages"][0]["content"]
         for call in mock_model.generate_chat_completion.call_args_list
-    }
-    assert schema.EvaluateConversationCoherenceWithDocumentsResponse not in used_formats
+    ]
+    assert not any("RETRIEVED DOCUMENTS" in prompt for prompt in prompts)
 
 
 def test_prompts__never_leak_context_into_the_turns():

@@ -14,15 +14,6 @@ class EvaluateConversationCoherenceResponse(pydantic.BaseModel):
     __hash__ = object.__hash__
 
 
-class EvaluateConversationCoherenceWithDocumentsResponse(pydantic.BaseModel):
-    verdict: str
-    grounded_verdict: str
-    # See the note above: no default, nullable, to keep strict mode enabled.
-    reason: Optional[str]
-
-    __hash__ = object.__hash__
-
-
 class ScoreReasonResponse(pydantic.BaseModel):
     reason: str
 
