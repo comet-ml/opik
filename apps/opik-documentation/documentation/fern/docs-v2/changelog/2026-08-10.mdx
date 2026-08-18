@@ -1,0 +1,41 @@
+## `evaluate()` Surfaces Metric Failures Instead of Dropping Them
+
+Three cases that previously produced no score and no actionable error are now reported: a metric that doesn't declare `**kwargs` no longer fails on every item with a confusing "unexpected keyword argument" error (inputs are narrowed to what the metric's signature actually accepts), an item-level evaluator with an unsupported type now produces a failed score explaining why instead of being silently skipped, and a `scoring_key_mapping` value that matches nothing is now logged as a warning instead of at debug level.
+
+A new `error_tolerance` argument lets you opt into recording pre-scoring failures — a missing required score argument, or an item-level evaluator that can't be built — as failed score results instead of aborting the whole run and discarding every metric that already succeeded:
+
+```python
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import ErrorTolerance
+
+evaluate(..., error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS)
+```
+
+The default behavior is unchanged. Tolerated failures show up on their own span in the trace, and the chosen tolerance is preserved when resuming an interrupted evaluation.
+
+## Bug Fixes & Improvements
+
+- **`Experiment.batch_upload_items` for bulk experiment creation** — A new method uploads experiment items together with their traces, spans, and feedback scores in a single call, instead of creating traces first and linking them afterward. Items are validated up front, batched to respect backend limits, and retried automatically on rate limiting.
+
+
+- **Stuck optimization runs are detected within minutes instead of hours** — Following up on the stalled-run detection shipped previously, the reaper now derives liveness from actual trial and item progress rather than only the run's last status change, catching a run orphaned by a worker restart in around an hour instead of up to eight. A run that's still legitimately evaluating items is never mistaken for stalled, a wrongly-flagged run recovers automatically once its worker reports back, and it can now be cancelled instead of being stuck.
+
+- **Nebius and SambaNova model costs now load correctly** — Both providers were missing from the internal provider list used to load pricing data, so calls through Nebius or SambaNova models (including their DeepSeek, Qwen, and Llama catalogs) were costed at $0. Pricing now loads correctly for both.
+
+- **Project lookups no longer leak across workspaces** — Looking up a project by name cached the result under a key that didn't account for the workspace, so switching organizations in the UI without a full page reload could keep resolving a project name to the previous organization's project.
+
+- **Python UDF metric evaluation retries on transient connection drops** — When the Python scoring backend closed its connection before responding, the error wasn't recognized as retriable, so a transient connection drop failed the evaluation outright. These are now retried automatically.
+
+- **More accurate cost and usage on experiments with re-sent spans** — A span re-sent under a different parent span could be counted twice when computing usage and cost rollups for experiments and optimizations. Spans are now deduplicated by their own id, so each span is counted once regardless of how it was re-sent.
+
+## Performance Improvements
+
+- **Faster trace loading for traces with many spans** — Looking up traces by id no longer forces a full deduplication pass (`FINAL`) over the spans table; the query now filters to the relevant trace first and deduplicates only what's left, cutting CPU cost by over 90% on traces with hundreds of spans.
+
+- **Faster project-level trace stats** — The query behind trace statistics on the projects list no longer performs a full blocking sort over every span in a project's history to deduplicate them, so project pages with long-running, high-volume projects load faster.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.0...2.2.23)
+
+_Releases_: `2.2.19`, `2.2.20`, `2.2.21`, `2.2.22`, `2.2.23`
