@@ -19,7 +19,8 @@ const tagVariants = cva("inline-block truncate rounded-sm transition-colors", {
       turquoise:
         "bg-[var(--tag-turquoise-bg)] text-[var(--tag-turquoise-text)]",
       blue: "bg-[var(--tag-blue-bg)] text-[var(--tag-blue-text)]",
-      ochre: "bg-[var(--tag-ochre-bg)] text-[var(--tag-ochre-text)]",
+      purpleDark:
+        "bg-[var(--tag-purple-dark-bg)] text-[var(--tag-purple-dark-text)]",
       lavender: "bg-[var(--tag-lavender-bg)] text-[var(--tag-lavender-text)]",
       white:
         "border border-gray-200 bg-white text-muted-slate dark:border-gray-600 dark:bg-gray-800 dark:text-foreground",
@@ -72,12 +73,14 @@ Tag.displayName = "Tag";
  *   re-maps only the labels that resolved to that slot.
  *
  * `primary` is deliberately absent: it is too close to both `purple` and `blue` for chart series.
+ * The tenth entry is design-owned (`purple-dark`, from the product palette); see colorVariants.test.ts
+ * for the invariants any replacement must still satisfy.
  */
 export const TAG_VARIANTS: Exclude<
   TagProps["variant"],
   "red" | "transparent" | "white" | "lavender"
 >[] = [
-  "ochre",
+  "purpleDark",
   "gray",
   "purple",
   "burgundy",
@@ -107,7 +110,7 @@ export const TAG_VARIANTS_COLOR_MAP: Record<
   green: "var(--color-green)",
   turquoise: "var(--color-turquoise)",
   blue: "var(--color-blue)",
-  ochre: "var(--color-ochre)",
+  purpleDark: "var(--color-purple-dark)",
 };
 
 export { Tag, tagVariants };

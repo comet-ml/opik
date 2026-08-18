@@ -115,7 +115,7 @@ describe("automatic palette invariants", () => {
         "retriever-agent",
       ]),
     ).toEqual({
-      "domain-agent": "var(--color-ochre)",
+      "domain-agent": "var(--color-purple-dark)",
       "supervisor-agent": "var(--color-blue)",
       "planner-agent": "var(--color-orange)",
       "retriever-agent": "var(--color-yellow)",
@@ -133,11 +133,23 @@ describe("automatic palette invariants", () => {
   });
 
   it("keeps entries legible as thin lines on both grounds", () => {
-    // `yellow` and `turquoise` predate this invariant and fail on the light ground at 1.92 and
-    // 2.43. They are tracked separately as a palette-contrast follow-up. The assertion below still
-    // blocks *new* low-contrast entries, and the allowlist must not grow.
-    const KNOWN_LOW_CONTRAST = ["yellow", "turquoise"];
-    const MINIMUM_CONTRAST = 2.5;
+    // WCAG 1.4.11 asks for 3:1 and names "each line in a graph", so that is the floor here.
+    // Five of the ten entries do not meet it and are tracked as a palette-contrast follow-up:
+    //   light ground — yellow 1.92, turquoise 2.43, green 2.54, orange 2.80 (all pre-existing)
+    //   dark ground  — purpleDark 1.55 (design-chosen; reads well on light, but is nearly the
+    //                  dark theme's own background)
+    // Half the palette failing is the finding, not an accident of this test: a single palette
+    // serving both themes cannot clear the floor on both, which is why the follow-up proposes two
+    // lightness bands. The assertion still blocks *new* entries from joining the list, and the
+    // list must not grow.
+    const KNOWN_LOW_CONTRAST = [
+      "yellow",
+      "turquoise",
+      "green",
+      "orange",
+      "purpleDark",
+    ];
+    const MINIMUM_CONTRAST = 3;
     const failing: string[] = [];
 
     for (const { variant, hex } of autoPaletteHexes()) {

@@ -17,7 +17,7 @@ export type ColorVariant = (typeof COLOR_VARIANTS)[number];
 export type ExtendedColorVariant =
   | ColorVariant
   | "primary"
-  | "ochre"
+  | "purpleDark"
   | "default";
 
 export const COLOR_VARIANTS_MAP: Record<
@@ -35,7 +35,7 @@ export const COLOR_VARIANTS_MAP: Record<
   turquoise: { css: "var(--color-turquoise)", hex: "#06b6d4" },
   blue: { css: "var(--color-blue)", hex: "#3b82f6" },
   primary: { css: "var(--color-primary)", hex: "#6366f1" },
-  ochre: { css: "var(--color-ochre)", hex: "#8c683f" },
+  purpleDark: { css: "var(--color-purple-dark)", hex: "#491b7e" },
   default: { css: "var(--color-gray)", hex: "#64748b" },
 };
 
@@ -45,10 +45,10 @@ export const PRESET_HEX_COLORS = COLOR_VARIANTS.map(
 
 export const DEFAULT_HEX_COLOR = COLOR_VARIANTS_MAP.blue.hex;
 
-// `primary` and `ochre` are not in COLOR_VARIANTS (they are not picker presets) but are still
+// `primary` and `purpleDark` are not in COLOR_VARIANTS (they are not picker presets) but are still
 // reachable as resolved colors, so their css vars must round-trip to hex for the color picker.
 export const CSS_VAR_TO_HEX: Record<string, string> = Object.fromEntries(
-  [...COLOR_VARIANTS, "primary" as const, "ochre" as const].map((v) => [
+  [...COLOR_VARIANTS, "primary" as const, "purpleDark" as const].map((v) => [
     COLOR_VARIANTS_MAP[v].css,
     COLOR_VARIANTS_MAP[v].hex,
   ]),
