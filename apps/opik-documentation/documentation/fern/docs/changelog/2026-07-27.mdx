@@ -1,0 +1,49 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog/2026-07-27
+---
+
+## Guardrails: LLM Judge, Prompt Injection, and Custom Trained Classifiers
+
+Guardrails gain three new validation types alongside the existing PII and Topic guardrails: an **LLM judge** guardrail that scores content against a custom rubric, a **prompt injection** guardrail that flags injection attempts, and **custom trained classifiers** — train a lightweight guardrail on your own labeled examples via a new in-server training endpoint, then use it like any other guardrail. All three are available now via the Python SDK (`LLMJudge`, `PromptInjection`, `CustomGuardrail`, and `create_custom_guardrail(...)`), and each raises a `GuardrailValidationError` on failure so you can fail closed. The in-app "Set a guardrail" quick-config dialog still only covers PII/Topic — configure the new types from code for now.
+
+Guardrail results also show up more broadly across the product: the "Failed guardrails" dashboard chart can be broken down by guardrail name, alerts can be filtered by guardrail type, and self-hosted deployments without a GPU can run guardrails validation using a new CPU-only Docker image (`--guardrails-cpu`).
+
+## Evaluation Rules Can Now Trigger on Experiment Traces
+
+Online evaluation rules (LLM-as-judge and Python scorers) gained a **Trigger scope** setting — Production traces, Experiment traces, or Both — so a rule can score experiment runs in addition to, or instead of, live production traffic. Existing rules keep scoring production traces only, unchanged.
+
+## Bug Fixes & Improvements
+
+- **Python and TypeScript SDKs now truncate oversized trace/span payloads automatically** — Input/output fields larger than a configurable limit (`max_payload_size_mb` in Python, `maxPayloadSizeMb` in TypeScript; both default to 20MB, set to 0 or less to disable) are now truncated client-side with a clear `omitted_due_to_size` marker and a logged warning, instead of failing to send or being rejected by the backend. The TypeScript SDK also gains the base64 attachment extraction Python already had: inline base64 images/PDFs/JSON over roughly 256KB are pulled out of trace/span data and uploaded as attachments instead of bloating the payload.
+
+- **Server now rejects oversized ingestion payloads cleanly** — Requests over the configured size limit are now rejected with a **413** before the body is read, and malformed or oversized JSON documents return a clear **400**/**413** instead of an opaque server error.
+
+- **Ingest now rejects non-UUIDv7 referenced ids** — IDs referenced during ingestion via the trace/span REST API (for example a span's `traceId`), as well as on feedback scores, comments, attachments, dataset items, and annotation queue items, must now be valid UUIDv7 values; a non-v7 id now returns a 400 instead of being silently accepted. This doesn't apply to OpenTelemetry ingestion's `opik.trace_id`/`opik.parent_span_id` override attributes, which still ignore invalid values with a warning rather than rejecting them.
+
+- **Online scoring rules on Anthropic adaptive-thinking models now run reliably** — Rules using models like `claude-sonnet-5` or `claude-opus-4-7`/`4-8` as an LLM judge no longer fail or return empty output because of those models' `temperature` restrictions.
+
+- **Fixed a memory leak in the LangChain integration** — Reusing a single `OpikTracer` instance across many `invoke()` calls (the documented pattern) no longer accumulates per-run prompt/completion data in memory.
+
+- **Fixed dropped URL path prefixes with custom SDK URLs** — An `Opik(url_override=...)` pointing at a path without a trailing slash (for example behind a reverse proxy) no longer loses that path prefix when the SDK builds internal URLs.
+
+- **`evaluate()` no longer mutates your `scoring_metrics` list** — Reusing the same metrics list across multiple `evaluate()` calls used to make each call run scorers multiple times; each call now gets its own copy.
+
+- **Clearer errors from the OQL filter parser** — Incomplete filter strings, negative numbers, and unterminated quoted values now raise a specific, readable error instead of a generic or misleading one.
+
+- **Metadata filter autocomplete keeps the value you picked** — Selecting an option from the metadata filter key dropdown in the filter panel no longer gets silently overwritten back to whatever you'd typed.
+
+- **Mobile onboarding gains swipe navigation and bigger tap targets** — Following up on last week's new mobile walkthrough: steps can now be swiped through directly, and call-to-action buttons are larger and easier to tap.
+
+- **Fixed a heap OOM crash-loop in trace-thread online scoring** — Agentic/tool-based online scorers on trace threads could preload an unbounded number of spans and exhaust memory; preload size is now capped (configurable via `onlineScoring.agenticToolsMaxPreloadMb`, default 32MB).
+
+- **Ollie reports no longer show false "failed" statuses** — Reports that legitimately took longer than 10 minutes to generate (for example while an orchestrator pod was still provisioning) were being marked failed too early; the stale-report threshold is now 30 minutes.
+
+- **Self-hosted: fixed a ClickHouse 26.3 startup failure for tiered-storage deployments** — Following up on last week's ClickHouse 26.3 LTS upgrade, deployments with tiered (hot/cold) storage enabled would fail to start because a custom disk conflicted with CH 26.x's own configuration; the hot volume now points at ClickHouse's built-in default disk.
+
+- **Integration reference docs restored, plus a new MiniMax guide** — Several Python SDK integration reference pages (OpenAI, Anthropic, CrewAI, DSPy, Guardrails, LlamaIndex, Haystack, Bedrock, Google GenAI) were rendering empty due to a docs build error and are now fixed, along with broken argument-list rendering on `evaluate`/`evaluate_experiment`. A new guide covers configuring the MiniMax integration.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.0...2.2.6)
+
+_Releases_: `2.2.1`, `2.2.2`, `2.2.3`, `2.2.4`, `2.2.5`, `2.2.6`
