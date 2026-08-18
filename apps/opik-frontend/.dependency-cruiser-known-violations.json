@@ -660,32 +660,6 @@
     }
   },
   {
-    "type": "cycle",
-    "from": "src/plugins/ai-spend/api/useAiSpendAllBreakdowns.ts",
-    "to": "src/plugins/ai-spend/api/useAiSpendLaneBreakdown.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-circular"
-    },
-    "cycle": [
-      {
-        "name": "src/plugins/ai-spend/api/useAiSpendLaneBreakdown.ts",
-        "dependencyTypes": [
-          "local",
-          "type-only",
-          "import"
-        ]
-      },
-      {
-        "name": "src/plugins/ai-spend/api/useAiSpendAllBreakdowns.ts",
-        "dependencyTypes": [
-          "local",
-          "import"
-        ]
-      }
-    ]
-  },
-  {
     "type": "dependency",
     "from": "src/v2/pages-shared/onboarding/IntegrationExplorer/components/IntegrationDetailsDialog.tsx",
     "to": "src/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext.tsx",
