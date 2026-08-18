@@ -6,7 +6,8 @@ const env = loadEnvConfig();
 
 // Storage state minted by global-setup at .auth/user.json. For cloud/self-
 // hosted deployments it carries the auth cookies + storage from the login
-// round-trip; for OSS it's a minimal file. Never checked in.
+// round-trip; for OSS it's an empty state file, written so context creation has
+// something to read. Never checked in.
 const storageState = path.resolve(__dirname, '.auth/user.json');
 
 export default defineConfig({
