@@ -27,7 +27,13 @@ dependencies = [
     # - Exclude 1.92.*: core completion() eagerly imports litellm.proxy modules that require
     #   fastapi/orjson (proxy-only extras), so any completion crashes without litellm[proxy].
     #   Reverted in 1.93. See litellm/main.py -> responses.mcp.litellm_proxy_mcp_handler.
-    "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*",
+    # - Exclude 1.97.* on Python 3.10 only: Message cannot be constructed there -- the nested
+    #   forward reference ChatCompletionReasoningSummaryTextBlock never resolves, so every
+    #   completion() raises PydanticUserError. 3.11+ evaluate the annotations natively and are
+    #   unaffected, so they stay unrestricted and keep tracking latest litellm.
+    #   See: https://github.com/BerriAI/litellm/issues/36384
+    "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,!=1.97.*; python_version < '3.11'",
+    "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*; python_version >= '3.11'",
     "mcp>=1.0.0",
     "opik>=1.9.7",
     "optuna",

@@ -28,7 +28,13 @@ setup(
         #   affects 1.81.16-1.83.6, fixed in 1.83.7).
         #   See: https://docs.litellm.ai/blog/cve-2026-42208-litellm-proxy-sql-injection
         # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
-        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6",
+        # - Exclude 1.97.* on Python 3.10 only: Message cannot be constructed there -- the nested
+        #   forward reference ChatCompletionReasoningSummaryTextBlock never resolves, so every
+        #   completion() raises PydanticUserError. 3.11+ evaluate the annotations natively and are
+        #   unaffected, so they stay unrestricted and keep tracking latest litellm.
+        #   See: https://github.com/BerriAI/litellm/issues/36384
+        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,!=1.97.*; python_version < '3.11'",
+        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*; python_version >= '3.11'",
         "opik>=1.7.17",
         "optuna",
         "pandas",
