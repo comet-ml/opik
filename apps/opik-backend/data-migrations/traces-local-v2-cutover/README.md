@@ -383,15 +383,20 @@ independent controls keep each statement safe:
 
   **If you edit the rendering, re-validate it by hand — nothing in this repo checks it for you.** The drivers
   render this setting by requiring exactly one line-anchored `max_insert_threads = ${MAX_INSERT_THREADS},` in
-  `000001`/`000002` and then either stripping it (inherit) or substituting it. Every way that can go wrong is
+  `000001`/`000002` and then either stripping it (inherit) or substituting it. The trailing comma is **required**: it is
+  what makes removing the line safe, so the assignment must not be the last entry in the `SETTINGS` clause. A line
+  ending in `;`, or in nothing with the `;` on the next line, carries the clause terminator — stripping it would
+  leave a dangling comma and no terminator, so both spellings are refused rather than rendered. Every way that can go wrong is
   silent: a reformatted or shared line, a missing assignment, a duplicate one, or a placeholder that survives
   into an executable line. The drivers' own guards abort on each of those, but there is deliberately **no
   committed harness** here — this directory holds operator drivers only — so after changing either driver or the
   `SETTINGS` clause of `000001`/`000002`, exercise those cases manually against corrupted copies before a
   cutover window. Each driver fences its rendering block with `>>> BEGIN max_insert_threads rendering` /
-  `<<< END` so it can be extracted verbatim rather than reimplemented; run whatever you extract it into from
-  inside `scripts/`, since the block resolves `000001`/`000002` by relative path and from elsewhere reads
-  nothing and fails every case for the wrong reason.
+  `<<< END` so it can be extracted verbatim rather than reimplemented. The
+  block reads no files: it operates on a `$sql` variable the caller must populate, and names the SQL path only in
+  its two error messages, so whatever you extract it into has to load the file itself. It is otherwise
+  CWD-independent, as are the drivers (`SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"`), so it can be
+  run from anywhere.
 
 - **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
   max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is

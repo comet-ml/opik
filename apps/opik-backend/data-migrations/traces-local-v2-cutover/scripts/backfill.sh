@@ -333,16 +333,19 @@ run_backfill_window() {
     # proceed with no setting rendered at all. Anchoring also catches the two layout hazards in one check: a
     # shared line (which cannot be removed without dropping its neighbours) and a reformatted one (which the
     # fixed-string strip would silently miss).
-    assignments="$(grep -cE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},?[[:space:]]*$' <<<"$sql" || true)"
+    assignments="$(grep -cE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},[[:space:]]*$' <<<"$sql" || true)"
     if [[ "$assignments" -ne 1 ]]; then
-        echo "ERROR: expected exactly ONE line holding nothing but 'max_insert_threads = \${MAX_INSERT_THREADS}'" >&2
-        echo "       (trailing comma optional) in $BACKFILL_SQL; found $assignments. It must sit alone on its own line." >&2
+        echo "ERROR: expected exactly ONE line holding nothing but 'max_insert_threads = \${MAX_INSERT_THREADS},'" >&2
+        echo "       -- trailing comma REQUIRED -- in $BACKFILL_SQL; found $assignments. It must sit alone on its" >&2
+        echo "       own line and must not be the last entry in the SETTINGS clause: the comma is what makes" >&2
+        echo "       removing the line safe. A line ending in ';' or in nothing carries the clause terminator," >&2
+        echo "       so stripping it would leave a dangling comma and no ';'." >&2
         exit 2
     fi
     if [[ -z "$MAX_INSERT_THREADS" ]]; then
         # Unset means INHERIT: drop the line so the server's own value applies. Rendering an explicit 0 would
         # OVERRIDE it and force the insert serial -- a silent slowdown, not a no-op.
-        sql="$(grep -vE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},?[[:space:]]*$' <<<"$sql")"
+        sql="$(grep -vE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},[[:space:]]*$' <<<"$sql")"
     else
         sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
     fi
