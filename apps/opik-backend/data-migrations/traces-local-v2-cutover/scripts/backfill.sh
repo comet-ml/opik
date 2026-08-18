@@ -219,7 +219,8 @@ done
 # rendered into the SQL and rejected by the server on the first INSERT — after the capacity preflight has passed and the
 # backfill_start anchor has been minted, which is a far more expensive place to discover a typo.
 [[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
-# 0 is meaningful (ClickHouse default, single-threaded sink), so allow it. Bounded at 2 digits: this is
+# 0 is meaningful (ClickHouse default, no parallel INSERT SELECT execution), so allow it. Bounded at 2 digits:
+# this is
 # a share of cores, and a value beyond the machine's core count buys nothing while multiplying parts.
 [[ "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (ClickHouse default: no parallel INSERT SELECT execution) or 1..99." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }

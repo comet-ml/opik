@@ -51,7 +51,8 @@ CH_PORT=""                # native port; empty = clickhouse-client default (9000
 BACKFILL_START=""
 MAX_INSERT_BLOCK_SIZE=1048576
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions per block for the delta INSERT; see the option docs above. 0 = unlimited.
-MAX_INSERT_THREADS=0                  # threads for the delta INSERT SELECT; 0 = ClickHouse default (single-threaded sink).
+MAX_INSERT_THREADS=0                  # threads for the delta INSERT SELECT; 0 = ClickHouse default, i.e. no parallel
+                                      # INSERT SELECT execution.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

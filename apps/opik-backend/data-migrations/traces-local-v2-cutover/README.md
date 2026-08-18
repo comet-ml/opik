@@ -387,8 +387,12 @@ independent controls keep each statement safe:
 
   **Two costs, both real:**
   - **Memory.** Upstream is explicit: *"Higher values will lead to higher memory usage."* On this table that
-    compounds with a known hazard — a single oversized `output` document can dominate insert memory by itself
-    (see the memory section below) — so raise this together with `max_memory_usage`, or narrow the window,
+    compounds with this table's row width, and in a way the block bullet above does **not** cover. That bullet's
+    rule — peak insert memory is a small multiple of the 256 MB byte cap — holds for ordinary wide rows. It does
+    not hold for a single very large `output` document: materialising `output_keys` over one of those is a
+    **per-row** cost that no block cap bounds, so neither `max_insert_block_size` nor `min_insert_block_size_bytes`
+    constrains it. That is precisely why the lever here is the ceiling: raise this together with
+    `max_memory_usage`, or narrow the window,
     rather than raising threads alone into a fixed ceiling.
   - **Parts.** Each insert thread writes its own parts, so parts per partition grows. Watch it against
     `parts_to_throw_insert` (ClickHouse default 300) rather than assuming headroom.
