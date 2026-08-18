@@ -177,15 +177,21 @@ Pick by intent, not aesthetics:
 
 ## Cross-links
 
-Absolute, slug-based paths only. No relative paths (`../foo`).
+Root-relative, slug-based paths only (`/section/page`).
+
+- **Never** link internal docs pages with full `https://www.comet.com/docs/opik/...` URLs. Full URLs bypass the Fern preview build, and they 404 in the link checker when the target page ships in the same PR. Use the root-relative slug path instead.
+- No file-relative paths (`../foo`) either.
+- Build the path from the version YAML (`fern/versions/latest.yml`), including every nested `section:` slug. Example: the "Manage datasets" page sits inside an `advanced` section, so the path is `/evaluation/advanced/manage_datasets`, not `/evaluation/manage_datasets`.
 
 ```mdx
 [Python SDK](/reference/python-sdk/overview)
-[Log traces](/tracing/log_traces)
+[Log traces](/tracing/advanced/log_traces)
 [Integrations overview](/integrations/overview)
 ```
 
 In-page anchors use the heading slug: `[Concepts](#concepts)`.
+
+Exception: a v1 page (`fern/docs/`) that must point to a latest-only page cannot use a root-relative path — the slug does not exist in the v1 build. Use the full production URL there, and confirm the target page is already deployed.
 
 ## Routing: adding a page to `latest.yml`
 
