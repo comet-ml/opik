@@ -28,6 +28,10 @@ const useProviderKeysUpdateMutation = () => {
             configuration: providerKey.configuration,
           }),
           ...(providerKey?.headers && { headers: providerKey.headers }),
+          // {} clears the stored recipe, so the check is on undefined, not truthiness
+          ...(providerKey.auth_config !== undefined && {
+            auth_config: providerKey.auth_config,
+          }),
         },
       );
       return data;
