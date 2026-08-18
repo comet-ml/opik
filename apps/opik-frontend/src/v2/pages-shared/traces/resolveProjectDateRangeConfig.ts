@@ -68,7 +68,11 @@ export const resolveProjectDateRangeConfig = (
  * boundaries a caller outside this repo can reach — `useLogsType` and `LogsTab`. Those callers live
  * in plugin repos checked out at build time and are type-checked against whatever `main` holds, so
  * making the config *required* there breaks their build with no signal in this repo. Both default to
- * this instead; see LogsTab.tsx for the guard that keeps it that way.
+ * this instead; pluginBoundaryProps.test.ts is the guard that keeps it that way.
+ *
+ * The value matches what those two boundaries resolved to before the config existed at all — the
+ * hook's own `defaultValue = DEFAULT_DATE_PRESET` and `storageKeySuffix = ""` — so an omitted config
+ * is indistinguishable from the call they used to make.
  */
 export const DEFAULT_PROJECT_DATE_RANGE_CONFIG: ProjectDateRangeConfig =
   resolveProjectDateRangeConfig(undefined);
