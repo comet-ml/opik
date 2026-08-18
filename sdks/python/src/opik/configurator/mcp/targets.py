@@ -126,7 +126,14 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     ] + server_spec.to_claude_add_args()
 
     # Let `claude mcp add` print its own output so the user sees the result.
-    result = subprocess.run(command)
+    try:
+        result = subprocess.run(command, timeout=60)
+    except subprocess.TimeoutExpired:
+        return InstallResult(
+            target_display_name="Claude Code",
+            succeeded=False,
+            detail="`claude mcp add` timed out after 60s",
+        )
     if result.returncode == 0:
         return InstallResult(
             target_display_name="Claude Code",
