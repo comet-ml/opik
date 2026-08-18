@@ -7,6 +7,7 @@ import { GoogleColabCardCoreProps } from "@/types/shared";
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
+import { BillingLinkProps } from "@/plugins/comet/BillingLink";
 import { BridgeSurface, ExplainButtonProps } from "@/types/assistant-sidebar";
 import {
   type PluginManifest,
@@ -41,7 +42,7 @@ type PluginStore = {
   AssistantPrewarmer: React.ComponentType | null;
   AssistantDebugInfo: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
-  BillingLink: React.ComponentType | null;
+  BillingLink: React.ComponentType<BillingLinkProps> | null;
   sendOnboardingEmail: ((email: string) => Promise<void>) | null;
   init: unknown;
   collectRoutes: (parents: PluginRouteParents) => AnyRoute[];

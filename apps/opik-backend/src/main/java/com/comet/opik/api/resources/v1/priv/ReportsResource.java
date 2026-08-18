@@ -18,6 +18,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -76,16 +77,17 @@ public class ReportsResource {
     @Path("/{reportId}/complete")
     @Operation(operationId = "completeReport", summary = "Complete report generation", description = "Callback from Ollie to update report status and content after generation.", responses = {
             @ApiResponse(responseCode = "204", description = "Report updated"),
+            @ApiResponse(responseCode = "400", description = "Status is not terminal"),
             @ApiResponse(responseCode = "404", description = "Report not found")
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response completeReport(
             @PathParam("projectId") UUID projectId,
             @PathParam("reportId") UUID reportId,
-            @Valid ReportCompleteRequest request) {
+            @NotNull @Valid ReportCompleteRequest request) {
 
         reportService.updateReport(projectId, reportId, request.status(), request.content(),
-                request.sessionId(), request.recommendedActions())
+                request.sessionId(), request.recommendedActions(), request.failureReason())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

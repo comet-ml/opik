@@ -16,9 +16,11 @@ import useReports from "@/api/projects/useReports";
 import useReportPreference from "@/api/projects/useReportPreference";
 import useGenerateReportMutation from "@/api/projects/useGenerateReportMutation";
 import useUpdateReportPreferenceMutation from "@/api/projects/useUpdateReportPreferenceMutation";
+import usePluginsStore from "@/store/PluginsStore";
 import {
   OllieReport,
   RecommendedAction,
+  OUT_OF_CREDITS_FAILURE_REASON,
   ReportPreferenceSettings,
   ReportStatus,
 } from "@/types/ollie-reports";
@@ -160,22 +162,36 @@ function ScheduledRow({
   );
 }
 
-function FailedRow({ onRetry }: { onRetry: () => void }) {
+function FailedRow({
+  failureReason,
+  onRetry,
+}: {
+  failureReason?: string;
+  onRetry: () => void;
+}) {
+  const BillingLink = usePluginsStore((state) => state.BillingLink);
+  const outOfCredits = failureReason === OUT_OF_CREDITS_FAILURE_REASON;
+
   return (
     <BriefingRow>
       <span className="flex items-center gap-2 text-destructive">
         <AlertTriangle className="size-3.5" />
-        Briefing failed
+        {outOfCredits ? "Not enough credits" : "Briefing failed"}
       </span>
-      <Button
-        variant="ghost"
-        size="2xs"
-        className="h-auto gap-1 p-0"
-        onClick={onRetry}
-      >
-        <Play className="size-3" />
-        Run again
-      </Button>
+      <span className="flex items-center gap-3">
+        {outOfCredits && BillingLink && (
+          <BillingLink label="Add credits" variant="action" />
+        )}
+        <Button
+          variant="ghost"
+          size="2xs"
+          className="h-auto gap-1 p-0"
+          onClick={onRetry}
+        >
+          <Play className="size-3" />
+          Run again
+        </Button>
+      </span>
     </BriefingRow>
   );
 }
@@ -370,7 +386,12 @@ export default function DailyBriefingSection() {
 
           {isEnabled && hasRunning && <RunningRow />}
 
-          {isEnabled && hasFailed && <FailedRow onRetry={handleRunNow} />}
+          {isEnabled && hasFailed && (
+            <FailedRow
+              failureReason={latestReport?.failure_reason}
+              onRetry={handleRunNow}
+            />
+          )}
 
           {isEnabled && !hasRunning && !hasFailed && (
             <ScheduledRow nextRunLabel={nextRunLabel} onRunNow={handleRunNow} />
