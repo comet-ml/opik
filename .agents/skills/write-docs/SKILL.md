@@ -177,15 +177,21 @@ Pick by intent, not aesthetics:
 
 ## Cross-links
 
-Absolute, slug-based paths only. No relative paths (`../foo`).
+Root-relative, slug-based paths only (`/section/page`).
+
+- **Never** link internal docs pages with full `https://www.comet.com/docs/opik/...` URLs. Full URLs bypass the Fern preview build, and they 404 in the link checker when the target page ships in the same PR. Use the root-relative slug path instead.
+- No file-relative paths (`../foo`) either.
+- Build the path from the version YAML (`fern/versions/latest.yml`), including every nested `section:` slug. Example: the "Manage datasets" page sits inside an `advanced` section, so the path is `/evaluation/advanced/manage_datasets`, not `/evaluation/manage_datasets`.
 
 ```mdx
 [Python SDK](/reference/python-sdk/overview)
-[Log traces](/tracing/log_traces)
+[Log traces](/tracing/advanced/log_traces)
 [Integrations overview](/integrations/overview)
 ```
 
 In-page anchors use the heading slug: `[Concepts](#concepts)`.
+
+Exception: a v1 page (`fern/docs/`) that must point to a latest-only page cannot use a root-relative path — the slug does not exist in the v1 build. Use the full production URL there, and confirm the target page is already deployed.
 
 ## Routing: adding a page to `latest.yml`
 
@@ -220,9 +226,9 @@ Open the rendered page and confirm:
 
 ## Changelog routing
 
-Pick the changelog target by scope — do not default everything to the root `CHANGELOG.md`.
+Pick the changelog target by scope — do not default everything to one surface.
 
-- `CHANGELOG.md` (repo root) — self-hosted deployment changelog. Breaking, critical, or security-impacting changes only.
+- `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` — self-hosted deployment changelog shown at `/docs/opik/self-host/changelog`. Breaking, critical, or security-impacting changes only. (The former repo-root `CHANGELOG.md` was removed; its content lives on this page now.)
 - `apps/opik-documentation/documentation/fern/docs/changelog/*.mdx` — general product release notes shown at `/docs/opik/changelog`. One dated `.mdx` per entry.
 - `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` — Agent Optimizer version updates (e.g. `sdks/opik_optimizer` releases like `3.1.0`).
 - Liquibase `changelog.xml` files are migration manifests, not user-facing release notes. Do not put prose there.
@@ -258,16 +264,15 @@ Keep it user-facing: avoid implementation detail unless it affects how someone u
 
 ## PR description template
 
-```markdown
-## Summary
-- What this PR does (bullet points)
+Use the repository template at `.github/pull_request_template.md` — read the FULL file before drafting (the required sections continue past the first screen). CI (`.github/workflows/pr-lint.yml`) fails any PR whose description is missing one of these exact headings:
 
-## Test Plan
-- How to verify it works
+- `## Details`
+- `## Change checklist`
+- `## Issues`
+- `## Testing`
+- `## Documentation`
 
-## Related Issues
-- Resolves #123
-```
+Also fill in the template's `## AI-WATERMARK` section (yes/no; if yes: Tools, Model(s), Scope, Human verification). Never invent a different structure such as `## Summary` / `## Test Plan`.
 
 ## Internationalized READMEs
 

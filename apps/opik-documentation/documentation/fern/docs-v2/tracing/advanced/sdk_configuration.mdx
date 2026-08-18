@@ -121,6 +121,8 @@ Both SDKs support environment variables for configuration. Here's a comparison o
 | Track Disable       | `OPIK_TRACK_DISABLE`         | `OPIK_TRACK_DISABLE`    | Disable tracing of traces and spans            |
 | Flush Timeout       | `OPIK_DEFAULT_FLUSH_TIMEOUT` | N/A                     | Default flush timeout (Python only)            |
 | TLS Certificate     | `OPIK_CHECK_TLS_CERTIFICATE` | N/A                     | Check TLS certificates (Python only)           |
+| Suppress Batching Warning | `OPIK_SUPPRESS_BATCHING_UPDATE_WARNING` | N/A | Suppress the batching update warning (Python only) |
+| Prompt Cache TTL    | `OPIK_PROMPT_CACHE_TTL_SECONDS` | N/A                  | TTL in seconds for cached prompts (Python only) |
 | Batch Delay         | N/A                          | `OPIK_BATCH_DELAY_MS`   | Batching delay in ms (TypeScript only)         |
 | Hold Until Flush    | N/A                          | `OPIK_HOLD_UNTIL_FLUSH` | Hold data until manual flush (TypeScript only) |
 | Console Log Level   | `OPIK_CONSOLE_LOGGING_LEVEL` | N/A                     | Console log level (Python only)                |
@@ -443,6 +445,8 @@ await flushAll();
 | console_logging_level      | `OPIK_CONSOLE_LOGGING_LEVEL` | Console logging level - Defaults to `INFO`                                |
 | file_logging_level         | `OPIK_FILE_LOGGING_LEVEL`    | File logging level - Not configured by default                            |
 | logging_file               | `OPIK_LOGGING_FILE`          | File to write logs to - Defaults to `opik.log`                            |
+| suppress_batching_update_warning | `OPIK_SUPPRESS_BATCHING_UPDATE_WARNING` | Suppress the warning about potential data loss when calling `.end()` or `.update()` on spans or traces with batching enabled - Defaults to `false` |
+| prompt_cache_ttl_seconds   | `OPIK_PROMPT_CACHE_TTL_SECONDS` | How long, in seconds, unpinned prompts are cached before they are refreshed from the backend - Defaults to `300` |
 
 ### TypeScript SDK Configuration Values
 

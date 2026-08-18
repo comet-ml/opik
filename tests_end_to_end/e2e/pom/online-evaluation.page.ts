@@ -122,6 +122,52 @@ export class OnlineEvaluationPage {
     });
   }
 
+  /**
+   * The read-only Status cell for a rule row ("Enabled" / "Disabled"), rendered
+   * by RuleEnabledCell. There is no row-level toggle — the only control that
+   * changes `enabled` is the switch inside the edit dialog (see
+   * `setRuleEnabledByName`).
+   */
+  ruleStatusCell(name: string, status: 'Enabled' | 'Disabled'): Locator {
+    return this.ruleRow(name).getByRole('cell', { name: status, exact: true });
+  }
+
+  /** The "Enable rule" switch inside the add/edit dialog. */
+  get enableRuleSwitch(): Locator {
+    return this.dialog.getByRole('switch', { name: 'Enable rule' });
+  }
+
+  /**
+   * Flip a rule's enabled state through the row's kebab → Edit → "Enable rule"
+   * switch → submit. Resolves once the dialog has closed and the row's Status
+   * cell reflects the new state.
+   *
+   * The switch is asserted into the expected starting state before clicking, so
+   * a UI regression that hydrates the dialog from the wrong value fails here
+   * rather than silently toggling the rule the wrong way.
+   */
+  async setRuleEnabledByName(name: string, enabled: boolean): Promise<void> {
+    return test.step(`set rule "${name}" enabled=${enabled} via edit dialog`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+
+      await this.dialog.waitFor({ state: 'visible' });
+      const toggle = this.enableRuleSwitch;
+      await expect(toggle, 'edit dialog hydrates the switch from the persisted value').toBeChecked({
+        checked: !enabled,
+      });
+      await toggle.click();
+      await expect(toggle).toBeChecked({ checked: enabled });
+
+      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await this.dialog.waitFor({ state: 'hidden' });
+
+      await expect(this.ruleStatusCell(name, enabled ? 'Enabled' : 'Disabled')).toBeVisible();
+    });
+  }
+
   /** The destructive confirm dialog raised by the row's Delete action. */
   get deleteRuleConfirmDialog(): Locator {
     return this.page.getByRole('dialog').filter({

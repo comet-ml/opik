@@ -6,6 +6,10 @@ import {
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
 import {
+  waitForTraceScoresSettled,
+  type WaitForScoresSettledOpts,
+} from './wait-for-scores-settled';
+import {
   pollOptimizationStatus,
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
@@ -83,6 +87,7 @@ export interface AutomationRuleRef {
   id: string;
   name: string;
   projectIds: string[];
+  enabled: boolean;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -95,6 +100,78 @@ export interface AnnotationQueueDetail {
   name: string;
   itemsCount: number;
   reviewers: AnnotationQueueReviewerRef[];
+}
+
+/**
+ * One row of `GET /v1/private/traces/threads` — the aggregate the Threads view
+ * renders per conversation. Every field a wrong `traces` prefilter would corrupt
+ * is carried through, because the aggregates are the part no page shows as an
+ * error: a thread with the right id but a wrong message count or cost still
+ * renders as a perfectly ordinary row.
+ */
+export interface ThreadRowRef {
+  id: string;
+  numberOfMessages: number | null;
+  totalEstimatedCost: number | null;
+  usage: Record<string, number> | null;
+  duration: number | null;
+  /** ISO strings, not Dates — these are compared for byte-identity across reads. */
+  startTime: string | null;
+  endTime: string | null;
+  status: string | null;
+}
+
+/** Percentile bucket a `PERCENTAGE` stat item carries instead of a scalar. */
+export interface StatPercentiles {
+  p50?: number;
+  p90?: number;
+  p99?: number;
+}
+
+/**
+ * One value from the threads-stats endpoint. `COUNT` and `AVG` items are
+ * scalar; a `PERCENTAGE` item (today, `duration`) is a percentile object. Kept
+ * as a union so a caller cannot read a percentile object as though it were a
+ * number.
+ */
+export type ThreadStatValue = number | StatPercentiles | null;
+
+/**
+ * Narrow a stat to a number, or throw naming the stat. Use this instead of
+ * casting: the percentile case is a real shape from this endpoint, not a
+ * type-system inconvenience. Throws rather than asserting so this module stays
+ * free of test-runner imports.
+ *
+ * Accepts `undefined` so a *missing* stat fails here, loudly and named, rather
+ * than being silently tested into an `if` at the callsite — an absent aggregate
+ * is a regression, not a reason to skip a comparison.
+ */
+export function numericStat(value: ThreadStatValue | undefined, name: string): number {
+  if (value === undefined) {
+    throw new Error(`stat "${name}" is absent from the stats response`);
+  }
+  if (typeof value !== 'number') {
+    throw new Error(
+      `stat "${name}" is not scalar (got ${JSON.stringify(value)}) — ` +
+        'a percentile object here means the endpoint changed shape',
+    );
+  }
+  return value;
+}
+
+/** A backend filter as the REST layer serialises it (the `filters` query param). */
+export interface BackendFilter {
+  field: string;
+  operator: string;
+  value: string;
+  type?: string;
+  key?: string;
+}
+
+/** Optional rolling window applied to a windowed read (`from_time`/`to_time`). */
+export interface ReadWindow {
+  fromTime?: Date;
+  toTime?: Date;
 }
 
 export interface OptimizationRef {
@@ -449,6 +526,13 @@ export function makeBackendClient(apiKey: string | null = null) {
       return pollTraceForFeedbackScore(localGetTrace, traceId, scoreName, opts);
     },
 
+    async waitForTraceScoresSettled(
+      traceId: string,
+      opts: WaitForScoresSettledOpts = {},
+    ): Promise<TraceDetail> {
+      return waitForTraceScoresSettled(localGetTrace, traceId, opts);
+    },
+
     async listAutomationRulesForProject(projectId: string): Promise<AutomationRuleRef[]> {
       const page = await opik.api.automationRuleEvaluators.findEvaluators({
         projectId,
@@ -459,6 +543,7 @@ export function makeBackendClient(apiKey: string | null = null) {
         id: String(r.id),
         name: r.name,
         projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
+        enabled: r.enabled ?? true,
       }));
     },
 
@@ -472,6 +557,192 @@ export function makeBackendClient(apiKey: string | null = null) {
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * One page of `GET /v1/private/traces/threads` — the exact read the Threads
+     * view issues, including its `filters` and time window.
+     *
+     * `filters` is passed through verbatim rather than built here: the whole
+     * point of the thread-prefilter tests is to drive a *specific* field and
+     * operator (an EQUAL on `id` takes a different backend branch than a
+     * CONTAINS), so the caller must own that choice.
+     */
+    async listThreads(
+      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+    ): Promise<{ total: number; threads: ThreadRowRef[] }> {
+      const page = await opik.api.traces.getTraceThreads({
+        projectId: args.projectId,
+        size: args.size ?? 100,
+        page: 1,
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+        ...(args.toTime ? { toTime: args.toTime } : {}),
+      });
+      return {
+        total: Number(page.total ?? 0),
+        threads: (page.content ?? []).map((t) => ({
+          id: String(t.id ?? ''),
+          // null and 0 are different answers from this endpoint (an absent
+          // aggregate is not a zero one), so they must not be collapsed.
+          numberOfMessages: t.numberOfMessages ?? null,
+          totalEstimatedCost: t.totalEstimatedCost ?? null,
+          usage: t.usage ?? null,
+          duration: t.duration ?? null,
+          startTime: t.startTime ? new Date(t.startTime).toISOString() : null,
+          endTime: t.endTime ? new Date(t.endTime).toISOString() : null,
+          status: t.status ? String(t.status) : null,
+        })),
+      };
+    },
+
+    /**
+     * `GET /v1/private/traces/threads/stats` under the same filters — the
+     * numbers the Threads view's count card shows, flattened to name -> value.
+     *
+     * Not every stat is scalar: the endpoint's items are a tagged union, and a
+     * `PERCENTAGE` one (today, `duration`) carries a `{p50, p90, p99}` object
+     * rather than a number. The value type says so, so a caller reading
+     * `duration` as a number has to narrow first instead of silently computing
+     * on an object. `numericStat()` below is the narrowing helper.
+     *
+     * `Partial` because the endpoint returns only the stats it has: a plain
+     * `Record` would claim every key is present and let a caller read a missing
+     * aggregate as though the endpoint had answered. Callers that require a stat
+     * must assert it is present rather than testing it into an `if`.
+     */
+    async getThreadsStats(
+      args: { projectId: string; filters?: BackendFilter[] } & ReadWindow,
+    ): Promise<Partial<Record<string, ThreadStatValue>>> {
+      const stats = await opik.api.traces.getTraceThreadStats({
+        projectId: args.projectId,
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+        ...(args.toTime ? { toTime: args.toTime } : {}),
+      });
+      return Object.fromEntries(
+        (stats.stats ?? []).map((s) => {
+          const value = (s as { value?: ThreadStatValue }).value;
+          return [String(s.name ?? ''), value ?? null];
+        }),
+      );
+    },
+
+    /**
+     * Trace ids visible for a project under `filters` and an optional window —
+     * `GET /v1/private/traces`. Returned as ids only: these tests assert *which*
+     * traces a scoped view is entitled to, never their content.
+     */
+    async listTraceIds(
+      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+    ): Promise<string[]> {
+      const page = await opik.api.traces.getTracesByProject({
+        projectId: args.projectId,
+        size: args.size ?? 200,
+        page: 1,
+        truncate: true,
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+        ...(args.toTime ? { toTime: args.toTime } : {}),
+      });
+      return (page.content ?? []).map((t) => String(t.id));
+    },
+
+    /**
+     * Create a trace with an explicit id and `source`. The SDK bridge always
+     * emits `source=sdk`; the optimization-trial overlay filters on
+     * `source=optimization`, so a trial-log fixture cannot be built through the
+     * bridge and has to go through the REST write directly.
+     *
+     * The id is caller-supplied because `createTrace` returns 204 with no body,
+     * and these tests assert on exact trace ids.
+     */
+    async createTraceWithSource(args: {
+      id: string;
+      projectName: string;
+      name: string;
+      source: 'sdk' | 'experiment' | 'playground' | 'optimization';
+      input?: Record<string, unknown>;
+      output?: Record<string, unknown>;
+      startTime?: Date;
+    }): Promise<string> {
+      await opik.api.traces.createTrace({
+        id: args.id,
+        projectName: args.projectName,
+        name: args.name,
+        source: args.source,
+        startTime: args.startTime ?? new Date(),
+        ...(args.input ? { input: args.input } : {}),
+        ...(args.output ? { output: args.output } : {}),
+      });
+      return args.id;
+    },
+
+    /**
+     * Create an optimization run row directly. Seeding the row rather than
+     * launching a real run keeps the trial-scoping tests deterministic and
+     * LLM-free — the thing under test is which traces a trial's Logs overlay
+     * lists, which has nothing to do with how the optimizer got there.
+     */
+    async createOptimization(args: {
+      id: string;
+      name: string;
+      datasetName: string;
+      projectName: string;
+      objectiveName: string;
+      status?: 'completed' | 'running';
+    }): Promise<string> {
+      await opik.api.optimizations.createOptimization({
+        id: args.id,
+        name: args.name,
+        datasetName: args.datasetName,
+        projectName: args.projectName,
+        objectiveName: args.objectiveName,
+        status: args.status ?? 'completed',
+      });
+      return args.id;
+    },
+
+    /**
+     * Create an experiment row directly, optionally as a trial of an
+     * optimization (`type: 'trial'` + `optimizationId`) — the shape the
+     * Optimization run page's Trials tab lists.
+     */
+    async createExperiment(args: {
+      id: string;
+      name: string;
+      datasetName: string;
+      projectName: string;
+      type?: 'regular' | 'trial' | 'mini-batch';
+      optimizationId?: string;
+      /**
+       * Trial rows are grouped and numbered from `metadata.candidate_id` and
+       * `metadata.step_index` (step 0 is the run's baseline, which is not a
+       * numbered trial), so a fixture that needs a specific trial to render has
+       * to set them.
+       */
+      metadata?: Record<string, unknown>;
+    }): Promise<string> {
+      await opik.api.experiments.createExperiment({
+        id: args.id,
+        name: args.name,
+        datasetName: args.datasetName,
+        projectName: args.projectName,
+        ...(args.type ? { type: args.type } : {}),
+        ...(args.optimizationId ? { optimizationId: args.optimizationId } : {}),
+        ...(args.metadata ? { metadata: args.metadata } : {}),
+      });
+      return args.id;
+    },
+
+    /**
+     * Link existing traces to an experiment. This is what puts a trace inside an
+     * experiment's scope, and therefore what the entity-scoped Logs views read.
+     */
+    async createExperimentItems(
+      items: Array<{ experimentId: string; datasetItemId: string; traceId: string }>,
+    ): Promise<void> {
+      await opik.api.experiments.createExperimentItems({ experimentItems: items });
     },
 
     getOptimization: localGetOptimization,

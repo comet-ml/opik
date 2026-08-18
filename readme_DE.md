@@ -196,9 +196,9 @@ cd opik
 powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 ```
 
-**Service-Profile für die Entwicklung**
+**Optionen des Installationsskripts**
 
-Die Opik-Installationsskripte unterstützen jetzt Service-Profile für verschiedene Entwicklungsszenarien:
+Die Skripte `opik.sh` und `opik.ps1` unterstützen die folgenden Optionen:
 
 ```bash
 # Start full Opik suite (default behavior)
@@ -213,6 +213,22 @@ Die Opik-Installationsskripte unterstützen jetzt Service-Profile für verschied
 # Enable guardrails with any profile
 ./opik.sh --guardrails # Guardrails with full Opik suite
 ./opik.sh --backend --guardrails # Guardrails with infrastructure + backend
+
+# Build the containers from source before starting
+./opik.sh --build
+
+# Check that all containers are healthy
+./opik.sh --verify
+
+# Stop all containers
+./opik.sh --stop
+
+# Stop all containers and remove all Opik data volumes
+# WARNING: ALL OPIK DATA WILL BE LOST
+./opik.sh --clean
+
+# Show all available options
+./opik.sh --help
 ```
 
 Verwenden Sie die Optionen `--help` oder `--info`, um Probleme zu beheben. Die Dockerfiles stellen jetzt sicher, dass Container als Nicht-Root-Benutzer laufen, um die Sicherheit zu erhöhen. Sobald alles läuft, können Sie nun [localhost:5173](http://localhost:5173) in Ihrem Browser aufrufen! Ausführliche Anweisungen finden Sie im [Leitfaden zur lokalen Bereitstellung](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik).
@@ -223,13 +239,10 @@ Für Produktions- oder größere Self-Hosted-Bereitstellungen kann Opik mithilfe
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
 
-> [!IMPORTANT]
-> **Änderungen in Version 1.7.0**: Bitte prüfen Sie das [Changelog](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md) auf wichtige Aktualisierungen und Breaking Changes.
-
 <a id="-opik-client-sdk"></a>
 ## 💻 Opik-Client-SDK
 
-Opik bietet eine Reihe von Client-Bibliotheken und eine REST-API zur Interaktion mit dem Opik-Server. Dazu gehören SDKs für Python, TypeScript und Ruby (über OpenTelemetry), die eine nahtlose Integration in Ihre Workflows ermöglichen. Ausführliche API- und SDK-Referenzen finden Sie in der [Opik-Client-Referenzdokumentation](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik).
+Opik bietet eine Reihe von Client-Bibliotheken und eine REST-API zur Interaktion mit dem Opik-Server. Dazu gehören SDKs für Python und TypeScript sowie native [OpenTelemetry](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=otel_link&utm_campaign=opik)-Unterstützung: Jede Sprache mit einem OpenTelemetry-SDK — einschließlich [Java](https://www.comet.com/docs/opik/integrations/spring-ai?from=llm&utm_source=opik&utm_medium=github&utm_content=java_link&utm_campaign=opik), [Ruby](https://www.comet.com/docs/opik/integrations/opentelemetry-ruby-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=ruby_link&utm_campaign=opik) und .NET — kann Traces an Opik senden. Ausführliche API- und SDK-Referenzen finden Sie in der [Opik-Client-Referenzdokumentation](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik).
 
 ### Python-SDK-Schnellstart
 
