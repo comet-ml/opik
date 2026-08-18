@@ -1,4 +1,4 @@
-export { test, expect } from './optimization-run.fixture';
+export { test, expect } from './aged-experiment.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -55,4 +55,8 @@ export type {
   OptimizationTrialRef,
   OptimizationRunFixtures,
 } from './optimization-run.fixture';
+export type {
+  AgedExperimentRef,
+  AgedExperimentFixtures,
+} from './aged-experiment.fixture';
 export type { ProjectRef } from '../core/backend';
