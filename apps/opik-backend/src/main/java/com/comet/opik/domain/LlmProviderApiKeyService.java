@@ -3,11 +3,14 @@ package com.comet.opik.domain;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.api.ProviderAuthCheck;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -46,6 +49,8 @@ public interface LlmProviderApiKeyService {
     void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String userName, String workspaceId);
 
     void delete(Set<UUID> ids, String workspaceId);
+
+    ProviderAuthCheck.Result testAuthConfig(ProviderAuthCheck request, String workspaceId);
 }
 
 @Slf4j
@@ -57,6 +62,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull AuthTokenProvider authTokenProvider;
 
     @Override
     public ProviderApiKey find(@NonNull UUID id, @NonNull String workspaceId) {
@@ -164,6 +170,42 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             return null;
         });
+    }
+
+    @Override
+    public ProviderAuthCheck.Result testAuthConfig(@NonNull ProviderAuthCheck request, @NonNull String workspaceId) {
+        ProviderAuthConfig resolved = resolveAuthConfigForTest(request, workspaceId);
+        try {
+            return new ProviderAuthCheck.Result(authTokenProvider.testFetch(resolved));
+        } catch (AuthTokenException exception) {
+            // the message is user-facing and redacted by contract; a failed test is the caller's
+            // configuration problem, not a server error
+            log.info("Auth config test failed on workspace_id '{}': {}", workspaceId, exception.getMessage());
+            throw new BadRequestException(exception.getMessage());
+        }
+    }
+
+    private ProviderAuthConfig resolveAuthConfigForTest(ProviderAuthCheck request, String workspaceId) {
+        ProviderAuthConfig incoming = request.authConfig();
+        if (incoming == null || incoming.isEmpty()) {
+            if (request.providerId() == null) {
+                throw new BadRequestException("either provider_id or auth_config must be provided");
+            }
+            ProviderAuthConfig stored = find(request.providerId(), workspaceId).authConfig();
+            if (stored == null) {
+                throw new BadRequestException("the provider has no auth_config to test");
+            }
+            return stored;
+        }
+
+        var errors = incoming.validationErrors();
+        if (!errors.isEmpty()) {
+            throw new BadRequestException(String.join("; ", errors));
+        }
+        ProviderAuthConfig stored = request.providerId() != null
+                ? find(request.providerId(), workspaceId).authConfig()
+                : null;
+        return mergeSecretSentinels(incoming, stored);
     }
 
     private record AuthConfigUpdate(boolean clear, ProviderAuthConfig authConfig) {

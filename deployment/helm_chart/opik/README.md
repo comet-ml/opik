@@ -249,6 +249,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS | string | `"300"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_REMOTE_ENABLED | string | `"false"` |  |
 | component.backend.env.LLM_MODEL_REGISTRY_REMOTE_URL | string | `""` |  |
+| component.backend.env.LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |
