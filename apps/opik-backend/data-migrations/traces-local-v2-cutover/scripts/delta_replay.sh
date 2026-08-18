@@ -90,34 +90,74 @@ sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
 sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
 sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
 sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
+# Blank out SQL comments while preserving line numbering: `--` to end of line, and /* */ which may span lines.
+# Used by every max_insert_threads check so that "is this assignment real?" means "is it executable?" rather than
+# "does this text appear anywhere?". Without it a line-anchored match inside a block comment counts as the
+# assignment (so an explicit value renders into a comment and silently does not apply), and a mere mention of the
+# placeholder in a comment trips the post-condition (so a perfectly good file is refused).
+mit_mask_comments() {
+    awk '{
+        line = $0; out = ""; i = 1; n = length(line)
+        while (i <= n) {
+            if (inblk) {
+                if (substr(line, i, 2) == "*/") { inblk = 0; i += 2 } else { i++ }
+            } else {
+                if (substr(line, i, 2) == "/*") { inblk = 1; i += 2 }
+                else if (substr(line, i, 2) == "--") { break }
+                else { out = out substr(line, i, 1); i++ }
+            }
+        }
+        print out
+    }' <<<"$1"
+}
+
+# Line numbers of EXECUTABLE, isolated `max_insert_threads = ${MAX_INSERT_THREADS},` assignments.
+mit_assignment_lines() {
+    mit_mask_comments "$1" | grep -nE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},[[:space:]]*$' | cut -d: -f1
+}
+
+# Abort unless the SQL text holds exactly one such assignment. $2 is the file name, for diagnostics.
+mit_require_one_assignment() {
+    local n
+    n="$(mit_assignment_lines "$1" | grep -c . || true)"
+    if [[ "$n" -ne 1 ]]; then
+        echo "ERROR: expected exactly ONE executable line holding nothing but" >&2
+        echo "       'max_insert_threads = \${MAX_INSERT_THREADS},' in $2; found $n." >&2
+        echo "       The trailing comma is REQUIRED: it is what makes removing the line safe, so the" >&2
+        echo "       assignment must not be the last entry in the SETTINGS clause. A line ending in ';'," >&2
+        echo "       or in nothing with the ';' on the next line, carries the clause terminator, so" >&2
+        echo "       stripping it would leave a dangling comma and no terminator." >&2
+        echo "       Occurrences inside '--' or '/* */' comments do not count: a commented assignment" >&2
+        echo "       would render the setting into a comment, where it silently does not apply." >&2
+        return 1
+    fi
+}
+
 # >>> BEGIN max_insert_threads rendering (fence for extracting this block to test edits -- keep the markers)
-# This depends on ONE exact line in ANOTHER file:  max_insert_threads = ${MAX_INSERT_THREADS},
-# Require exactly one line-anchored, ISOLATED assignment before touching anything. A bare token match would
-# also accept the placeholder inside a `--` header, a /* */ block comment or a string literal, and let the run
-# proceed with no setting rendered at all. Anchoring also catches the two layout hazards in one check: a
-# shared line (which cannot be removed without dropping its neighbours) and a reformatted one (which the
-# fixed-string strip would silently miss).
-assignments="$(grep -cE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},[[:space:]]*$' <<<"$sql" || true)"
-if [[ "$assignments" -ne 1 ]]; then
-    echo "ERROR: expected exactly ONE line holding nothing but 'max_insert_threads = \${MAX_INSERT_THREADS},'" >&2
-    echo "       -- trailing comma REQUIRED -- in $SQL_FILE; found $assignments. It must sit alone on its" >&2
-    echo "       own line and must not be the last entry in the SETTINGS clause: the comma is what makes" >&2
-    echo "       removing the line safe. A line ending in ';' or in nothing carries the clause terminator," >&2
-    echo "       so stripping it would leave a dangling comma and no ';'." >&2
+# The SETTINGS line this depends on lives in ANOTHER file, so it is validated rather than assumed. The full
+# validation runs once at startup (this block runs at top level, so it is reached before any
+# statement is sent). The render needs the line's position, so the lines are resolved here.
+#
+# Comments are masked before matching. A line-anchored match is NOT by itself a check that the assignment is
+# executable: an identical line inside a /* */ block carries a trailing comma too, and would otherwise be
+# treated as the assignment.
+mit_line="$(mit_assignment_lines "$sql")"
+if [[ "$(grep -c . <<<"$mit_line" || true)" -ne 1 ]]; then
+    mit_require_one_assignment "$sql" "$SQL_FILE" || exit 2
     exit 2
 fi
 if [[ -z "$MAX_INSERT_THREADS" ]]; then
     # Unset means INHERIT: drop the line so the server's own value applies. Rendering an explicit 0 would
-    # OVERRIDE it and force the insert serial -- a silent slowdown, not a no-op.
-    sql="$(grep -vE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},[[:space:]]*$' <<<"$sql")"
+    # OVERRIDE it and force the insert serial -- a slowdown, not a no-op.
+    sql="$(sed "${mit_line}d" <<<"$sql")"
 else
-    sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
+    sql="$(sed "${mit_line}s/\\\${MAX_INSERT_THREADS}/${MAX_INSERT_THREADS}/" <<<"$sql")"
 fi
-# Post-condition for BOTH paths. `--` lines are skipped: both SQL headers legitimately quote the placeholder.
-# Note the deliberate absence of a pipe into `grep -q` -- it exits on first match, the upstream grep takes
-# SIGPIPE, and `set -o pipefail` then reports 141, so the guard would skip its own failure branch.
-executable="$(grep -v '^[[:space:]]*--' <<<"$sql" || true)"
-if grep -qF '${MAX_INSERT_THREADS}' <<<"$executable"; then
+# Post-condition for BOTH paths, on the comment-masked text so a placeholder mentioned in a comment does not
+# trip it. No pipe into `grep -q`: it exits on first match, the upstream process takes SIGPIPE, and
+# `set -o pipefail` then reports 141, so the guard would skip its own failure branch.
+mit_masked="$(mit_mask_comments "$sql" || true)"
+if grep -qF '${MAX_INSERT_THREADS}' <<<"$mit_masked"; then
     echo "ERROR: \${MAX_INSERT_THREADS} survives in an executable line of $SQL_FILE after rendering." >&2
     echo "       Refusing to send SQL containing a literal placeholder." >&2
     exit 2
