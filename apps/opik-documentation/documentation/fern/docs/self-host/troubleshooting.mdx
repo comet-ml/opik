@@ -626,7 +626,7 @@ To avoid Zookeeper metadata loss issues:
 
 5. **Replica Validation**: Regularly check replica status with the diagnostic queries above.
 
-6. **Back Up the Changelog**: Include ClickHouse's `default` database in backups alongside `opik`. It holds `DATABASECHANGELOG`; restoring data without it leaves the deployment unable to start new replicas. See [Lost Liquibase Changelog with an Intact Schema](#lost-liquibase-changelog-with-an-intact-schema).
+6. **Back Up the Liquibase Ledger**: Include ClickHouse's `default` database in backups alongside `opik`. It holds Liquibase's `DATABASECHANGELOG` table — the migration ledger, not a list of release notes; restoring data without it leaves the deployment unable to start new replicas. See [Lost Liquibase Changelog with an Intact Schema](#lost-liquibase-changelog-with-an-intact-schema).
 
 ## Getting Help
 
