@@ -1,4 +1,5 @@
 import { FormatDetector } from "../../types";
+import { OPENAI_RENDER_LIMITS } from "./limits";
 
 interface OpenAIMessage {
   role?: string;
@@ -37,6 +38,13 @@ const isOpenAIMessage = (msg: unknown): msg is OpenAIMessage => {
   // Tool messages should have content
   if (m.role === "tool" && m.content === undefined) return false;
 
+  // Keep the message detectable when an optional tool call is malformed. The
+  // mapper represents invalid entries safely so renderable message content is
+  // not hidden by the detector.
+  if (m.tool_calls !== undefined && !Array.isArray(m.tool_calls)) {
+    return false;
+  }
+
   return true;
 };
 
@@ -66,7 +74,7 @@ const isCustomInputMessage = (
  * Checks if an object has OpenAI chat completion input format
  * (messages array with role/content objects)
  */
-const hasOpenAIInputFormat = (data: unknown): boolean => {
+const hasOpenAIMessageListFormat = (data: unknown): boolean => {
   if (!data || typeof data !== "object") return false;
   const d = data as Record<string, unknown>;
 
@@ -75,7 +83,9 @@ const hasOpenAIInputFormat = (data: unknown): boolean => {
   if (d.messages.length === 0) return false;
 
   // Check that all messages have valid OpenAI message structure
-  return d.messages.every(isOpenAIMessage);
+  return d.messages
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every(isOpenAIMessage);
 };
 
 /**
@@ -86,7 +96,7 @@ const isOpenAIMessageArray = (data: unknown): boolean => {
   if (data.length === 0) return false;
 
   // Check that all items are valid OpenAI messages
-  return data.every(isOpenAIMessage);
+  return data.slice(0, OPENAI_RENDER_LIMITS.messages).every(isOpenAIMessage);
 };
 
 /**
@@ -102,7 +112,9 @@ const hasCustomInputFormat = (data: unknown): boolean => {
   if (d.input.length === 0) return false;
 
   // Check that all messages have valid custom input message structure
-  return d.input.every(isCustomInputMessage);
+  return d.input
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every(isCustomInputMessage);
 };
 
 /**
@@ -118,11 +130,13 @@ const hasOpenAIOutputFormat = (data: unknown): boolean => {
   if (d.choices.length === 0) return false;
 
   // Check that all choices have a valid message
-  return d.choices.every((choice: unknown) => {
-    if (!choice || typeof choice !== "object") return false;
-    const c = choice as OpenAIChoice;
-    return c.message && isOpenAIMessage(c.message);
-  });
+  return d.choices
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every((choice: unknown) => {
+      if (!choice || typeof choice !== "object") return false;
+      const c = choice as OpenAIChoice;
+      return c.message && isOpenAIMessage(c.message);
+    });
 };
 
 /**
@@ -166,7 +180,7 @@ export const detectOpenAIFormat: FormatDetector = (data, prettifyConfig) => {
   // Check for input formats
   if (isInput) {
     // Standard format: { messages: [...] }
-    if (hasOpenAIInputFormat(data)) {
+    if (hasOpenAIMessageListFormat(data)) {
       return true;
     }
     // Direct array format: [{ role: "user", content: "..." }]
@@ -183,6 +197,10 @@ export const detectOpenAIFormat: FormatDetector = (data, prettifyConfig) => {
   if (isOutput) {
     // Standard format: { choices: [...] }
     if (hasOpenAIOutputFormat(data)) {
+      return true;
+    }
+    // OpenWebUI stores the completed conversation as { messages: [...] }
+    if (hasOpenAIMessageListFormat(data)) {
       return true;
     }
     // Custom output format: { text: "...", usage: {...}, finish_reason: "..." }

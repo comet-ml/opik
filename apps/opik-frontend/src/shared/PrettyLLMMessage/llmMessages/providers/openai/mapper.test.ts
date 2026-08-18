@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapOpenAIMessages } from "./mapper";
+import { combineOpenAIMessages, mapOpenAIMessages } from "./mapper";
 
 describe("mapOpenAIMessages", () => {
   describe("Input formats", () => {
@@ -184,6 +184,163 @@ describe("mapOpenAIMessages", () => {
           "Simple response",
         );
       }
+    });
+
+    it("should map an OpenWebUI response envelope", () => {
+      const data = {
+        chat_id: "chat-123",
+        messages: [
+          { role: "user", content: "What is Opik?" },
+          { role: "assistant", content: "An observability platform." },
+        ],
+      };
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("user");
+      expect(result.messages[1].role).toBe("assistant");
+      if (result.messages[1].blocks[0].blockType === "text") {
+        expect(result.messages[1].blocks[0].props.children).toBe(
+          "An observability platform.",
+        );
+      }
+    });
+
+    it("should keep rendering messages with malformed tool calls", () => {
+      for (const toolCall of [null, "invalid tool call", 42]) {
+        const data = {
+          messages: [
+            {
+              role: "assistant",
+              content: "The response is still renderable",
+              tool_calls: [toolCall],
+            },
+          ],
+        };
+
+        expect(() =>
+          mapOpenAIMessages(data, { fieldType: "output" }),
+        ).not.toThrow();
+
+        const result = mapOpenAIMessages(data, { fieldType: "output" });
+        expect(result.messages).toHaveLength(1);
+        expect(result.messages[0].blocks[0].blockType).toBe("text");
+      }
+    });
+
+    it("should preserve valid tool-call rendering", () => {
+      const data = {
+        messages: [
+          {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: {
+                  name: "get_weather",
+                  arguments: '{"city":"Paris"}',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("code");
+      if (result.messages[0].blocks[0].blockType === "code") {
+        expect(result.messages[0].blocks[0].props.label).toBe("get_weather");
+        expect(result.messages[0].blocks[0].props.code).toContain('"city"');
+      }
+    });
+
+    it("should prioritize a valid message list over text or choices", () => {
+      const messages = [
+        { role: "user", content: "What is Opik?" },
+        { role: "assistant", content: "An observability platform." },
+      ];
+      const payloads = [
+        { messages, text: "Summary only" },
+        { messages, choices: [] },
+        { messages, choices: [null] },
+      ];
+
+      for (const data of payloads) {
+        const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+        expect(result.messages).toHaveLength(2);
+        expect(result.messages[0].role).toBe("user");
+        expect(result.messages[1].role).toBe("assistant");
+      }
+    });
+
+    it("should safely ignore malformed choices without a message-list fallback", () => {
+      for (const choices of [
+        [null],
+        [{ message: { role: "assistant", content: "ok" } }, null],
+      ]) {
+        expect(() =>
+          mapOpenAIMessages({ choices }, { fieldType: "output" }),
+        ).not.toThrow();
+        expect(mapOpenAIMessages({ choices }, { fieldType: "output" })).toEqual(
+          { messages: [] },
+        );
+      }
+    });
+
+    it("should bound tool-call argument rendering", () => {
+      const oversizedArguments = "x".repeat(50_001);
+      const result = mapOpenAIMessages(
+        {
+          messages: [
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  function: {
+                    name: "large_tool",
+                    arguments: oversizedArguments,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        { fieldType: "output" },
+      );
+
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("code");
+      if (result.messages[0].blocks[0].blockType === "code") {
+        expect(result.messages[0].blocks[0].props.code).not.toContain(
+          oversizedArguments,
+        );
+        expect(result.messages[0].blocks[0].props.code).toContain(
+          "rendering limit",
+        );
+      }
+    });
+
+    it("should add a visible placeholder when message output is truncated", () => {
+      const result = mapOpenAIMessages(
+        {
+          messages: [
+            ...Array.from({ length: 100 }, (_, index) => ({
+              role: "assistant",
+              content: `message-${index}`,
+            })),
+            { role: "invalid", content: "ignored" },
+          ],
+        },
+        { fieldType: "output" },
+      );
+
+      expect(result.messages).toHaveLength(101);
+      expect(result.messages.at(-1)?.id).toBe("output-truncated");
+      expect(result.messages.at(-1)?.blocks[0].blockType).toBe("code");
     });
   });
 
@@ -657,5 +814,57 @@ describe("mapOpenAIMessages", () => {
       expect(result.messages).toHaveLength(1);
       expect(result.messages[0].blocks).toHaveLength(0);
     });
+  });
+});
+
+describe("combineOpenAIMessages with truncation", () => {
+  const manyMessages = (count: number, prefix: string) =>
+    Array.from({ length: count }, (_, index) => ({
+      role: "assistant" as const,
+      content: prefix + "-" + index,
+    }));
+
+  it("uses the output once when both views are truncated at the same point", () => {
+    const input = mapOpenAIMessages(
+      { messages: manyMessages(60, "m") },
+      { fieldType: "input" },
+    );
+    const output = mapOpenAIMessages(
+      { messages: manyMessages(62, "m") },
+      { fieldType: "output" },
+    );
+
+    const combined = combineOpenAIMessages(
+      { raw: undefined, mapped: input },
+      { raw: undefined, mapped: output },
+    );
+
+    // Input and output are truncated with different omitted counts, but the
+    // placeholder fingerprint is stable, so the output is recognized as a
+    // superset and rendered once instead of duplicating the history.
+    expect(combined.messages.length).toBeLessThan(
+      input.messages.length + output.messages.length,
+    );
+    expect(combined.messages).toEqual(output.messages);
+  });
+
+  it("keeps concatenation when the output is not a superset", () => {
+    const input = mapOpenAIMessages(
+      { messages: [{ role: "user" as const, content: "hello" }] },
+      { fieldType: "input" },
+    );
+    const output = mapOpenAIMessages(
+      { messages: [{ role: "assistant" as const, content: "hi there" }] },
+      { fieldType: "output" },
+    );
+
+    const combined = combineOpenAIMessages(
+      { raw: undefined, mapped: input },
+      { raw: undefined, mapped: output },
+    );
+
+    expect(combined.messages).toHaveLength(
+      input.messages.length + output.messages.length,
+    );
   });
 });

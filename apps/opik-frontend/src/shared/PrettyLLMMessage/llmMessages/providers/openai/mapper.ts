@@ -1,5 +1,6 @@
 import PrettyLLMMessage from "@/shared/PrettyLLMMessage";
 import {
+  FormatCombiner,
   FormatMapper,
   LLMMessageDescriptor,
   LLMBlockDescriptor,
@@ -7,6 +8,7 @@ import {
 } from "../../types";
 import { MessageRole } from "@/shared/PrettyLLMMessage/types";
 import { isPlaceholder } from "../../utils";
+import { OPENAI_RENDER_LIMITS } from "./limits";
 
 /**
  * OpenAI message content item types
@@ -82,6 +84,8 @@ interface OpenAIInputData {
   messages: OpenAIMessage[];
 }
 
+type OpenAIMessageListData = OpenAIInputData;
+
 interface OpenAIOutputData {
   choices: OpenAIChoice[];
   usage?: {
@@ -106,6 +110,32 @@ interface OpenAICustomOutputFormat {
 }
 
 type OpenAIDirectArrayInput = OpenAIMessage[];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object";
+
+const isMappableOpenAIMessage = (message: unknown): message is OpenAIMessage =>
+  isRecord(message) && typeof message.role === "string";
+
+const isMappableOpenAIMessageList = (
+  data: unknown,
+): data is OpenAIMessageListData =>
+  isRecord(data) &&
+  Array.isArray(data.messages) &&
+  data.messages.length > 0 &&
+  data.messages
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every(isMappableOpenAIMessage);
+
+const isMappableOpenAIOutput = (data: unknown): data is OpenAIOutputData =>
+  isRecord(data) &&
+  Array.isArray(data.choices) &&
+  data.choices.length > 0 &&
+  data.choices
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .every(
+      (choice) => isRecord(choice) && isMappableOpenAIMessage(choice.message),
+    );
 
 /**
  * Generates a deterministic ID for a message
@@ -239,46 +269,76 @@ const processMultimodalContent = (
  * Maps tool calls to code block descriptors with formatted JSON arguments.
  */
 const mapToolCalls = (
-  toolCalls: OpenAIToolCall[],
+  toolCalls: unknown[],
   blocks: LLMBlockDescriptor[],
 ): void => {
-  toolCalls.forEach((toolCall) => {
-    // Guard: skip if function is missing or invalid
-    if (
-      !toolCall.function ||
-      typeof toolCall.function !== "object" ||
-      !toolCall.function.name ||
-      typeof toolCall.function.arguments !== "string"
-    ) {
-      // Use safe fallback
+  let renderedArgumentsLength = 0;
+  toolCalls
+    .slice(0, OPENAI_RENDER_LIMITS.toolCallsPerMessage)
+    .forEach((toolCall) => {
+      const functionCall =
+        isRecord(toolCall) && isRecord(toolCall.function)
+          ? toolCall.function
+          : undefined;
+      const functionName = functionCall?.name;
+      const functionArguments = functionCall?.arguments;
+
+      if (
+        typeof functionName !== "string" ||
+        typeof functionArguments !== "string"
+      ) {
+        blocks.push({
+          blockType: "code",
+          component: PrettyLLMMessage.CodeBlock,
+          props: {
+            code: "",
+            label:
+              typeof functionName === "string" ? functionName : "unknown tool",
+          },
+        });
+        return;
+      }
+
+      let formattedArgs = functionArguments;
+      const exceedsArgumentLimit =
+        functionArguments.length > OPENAI_RENDER_LIMITS.toolArgumentsLength ||
+        renderedArgumentsLength + functionArguments.length >
+          OPENAI_RENDER_LIMITS.toolArgumentsTotalLength;
+
+      if (exceedsArgumentLimit) {
+        formattedArgs = `[Tool arguments omitted: payload exceeds the ${OPENAI_RENDER_LIMITS.toolArgumentsLength.toLocaleString()}-character rendering limit]`;
+      } else {
+        renderedArgumentsLength += functionArguments.length;
+        try {
+          const parsed = JSON.parse(functionArguments);
+          formattedArgs = JSON.stringify(parsed, null, 2);
+        } catch {
+          // Keep original if not parseable
+        }
+      }
+
       blocks.push({
         blockType: "code",
         component: PrettyLLMMessage.CodeBlock,
         props: {
-          code: "",
-          label: toolCall.function?.name ?? `unknown tool`,
+          code: formattedArgs,
+          label: functionName,
         },
       });
-      return;
-    }
+    });
 
-    let formattedArgs = toolCall.function.arguments;
-    try {
-      const parsed = JSON.parse(toolCall.function.arguments);
-      formattedArgs = JSON.stringify(parsed, null, 2);
-    } catch {
-      // Keep original if not parseable
-    }
-
+  if (toolCalls.length > OPENAI_RENDER_LIMITS.toolCallsPerMessage) {
     blocks.push({
       blockType: "code",
       component: PrettyLLMMessage.CodeBlock,
       props: {
-        code: formattedArgs,
-        label: toolCall.function.name,
+        code: `[${
+          toolCalls.length - OPENAI_RENDER_LIMITS.toolCallsPerMessage
+        } additional tool calls omitted]`,
+        label: "Tool calls truncated",
       },
     });
-  });
+  }
 };
 
 /**
@@ -389,7 +449,7 @@ const buildContentBlocks = (
   }
 
   // Handle tool calls (assistant requesting tools)
-  if (toolCalls && toolCalls.length > 0) {
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
     mapToolCalls(toolCalls, blocks);
   }
 
@@ -469,6 +529,54 @@ const mapCustomInputMessage = (
   };
 };
 
+// Placeholder marker for truncated message lists. The count is deliberately
+// not part of the fingerprint: the input and output views of the same
+// conversation can be truncated at different points, and the superset check
+// only cares whether the output contains the input's real messages.
+const TRUNCATED_PLACEHOLDER_FINGERPRINT = "truncated";
+
+// Cap each serialized part so the fingerprint stays bounded on very large
+// payloads (the Messages tab renders limited blocks, but the raw message can
+// still carry unbounded content and tool arguments).
+const FINGERPRINT_PART_MAX_LENGTH = 1000;
+
+const buildOpenAIMessageFingerprint = (message: OpenAIMessage): string => {
+  const parts: string[] = [
+    message.role,
+    message.name ?? "",
+    message.tool_call_id ?? "",
+    message.refusal ?? "",
+  ];
+
+  if (typeof message.content === "string") {
+    parts.push(message.content);
+  } else if (Array.isArray(message.content)) {
+    for (const block of message.content) {
+      if (typeof block === "string") {
+        parts.push("text:" + block);
+      } else if (block && typeof block === "object") {
+        const text = (block as OpenAITextContent).text;
+        if (typeof text === "string") {
+          parts.push("text:" + text);
+        } else {
+          parts.push((block as { type?: string }).type ?? "block");
+        }
+      }
+    }
+  }
+
+  for (const call of message.tool_calls ?? []) {
+    if (!call || typeof call !== "object") continue;
+    parts.push(
+      "call:" + call.function?.name + ":" + (call.function?.arguments ?? ""),
+    );
+  }
+
+  return parts
+    .map((part) => part.slice(0, FINGERPRINT_PART_MAX_LENGTH))
+    .join("\u0000");
+};
+
 /**
  * Maps an OpenAI message to our normalized LLMMessageDescriptor structure
  */
@@ -492,42 +600,85 @@ const mapOpenAIMessage = (
     role,
     label,
     blocks,
+    contentFingerprint: buildOpenAIMessageFingerprint(message),
   };
+};
+
+const appendMessageLimitPlaceholder = (
+  messages: LLMMessageDescriptor[],
+  prefix: string,
+  omittedCount: number,
+): void => {
+  if (omittedCount <= 0) return;
+
+  messages.push({
+    id: `${prefix}-truncated`,
+    role: "assistant",
+    blocks: [
+      {
+        blockType: "code",
+        component: PrettyLLMMessage.CodeBlock,
+        props: {
+          code: `[${omittedCount} additional messages omitted]`,
+          label: "Messages truncated",
+        },
+      },
+    ],
+    contentFingerprint: TRUNCATED_PLACEHOLDER_FINGERPRINT,
+  });
 };
 
 /**
  * Maps OpenAI input format to LLMMapperResult
  */
-const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult => {
-  if (!data.messages || !Array.isArray(data.messages)) {
+const mapOpenAIMessageList = (
+  data: OpenAIMessageListData,
+  prefix: string,
+): LLMMapperResult => {
+  if (!isMappableOpenAIMessageList(data)) {
     return { messages: [] };
   }
 
-  const messages = data.messages.map((msg, index) =>
-    mapOpenAIMessage(msg, index, "input"),
+  const messages = data.messages
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .map((msg, index) => mapOpenAIMessage(msg, index, prefix));
+  appendMessageLimitPlaceholder(
+    messages,
+    prefix,
+    data.messages.length - OPENAI_RENDER_LIMITS.messages,
   );
 
   return { messages };
 };
 
+const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult =>
+  mapOpenAIMessageList(data, "input");
+
 /**
  * Maps OpenAI output format to LLMMapperResult
  */
 const mapOpenAIOutput = (data: OpenAIOutputData): LLMMapperResult => {
-  if (!data.choices || !Array.isArray(data.choices)) {
+  if (!isMappableOpenAIOutput(data)) {
     return { messages: [] };
   }
 
-  const messages = data.choices.map((choice, index) => {
-    const message = mapOpenAIMessage(choice.message, index, "output");
+  const messages = data.choices
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .map((choice, index) => {
+      const message = mapOpenAIMessage(choice.message, index, "output");
 
-    // Add finish reason to message if available
-    if (choice.finish_reason) {
-      message.finishReason = choice.finish_reason;
-    }
+      // Add finish reason to message if available
+      if (choice.finish_reason) {
+        message.finishReason = choice.finish_reason;
+      }
 
-    return message;
-  });
+      return message;
+    });
+  appendMessageLimitPlaceholder(
+    messages,
+    "output",
+    data.choices.length - OPENAI_RENDER_LIMITS.messages,
+  );
 
   return {
     messages,
@@ -543,8 +694,13 @@ const mapDirectArrayInput = (data: OpenAIDirectArrayInput): LLMMapperResult => {
     return { messages: [] };
   }
 
-  const messages = data.map((msg, index) =>
-    mapOpenAIMessage(msg, index, "input"),
+  const messages = data
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .map((msg, index) => mapOpenAIMessage(msg, index, "input"));
+  appendMessageLimitPlaceholder(
+    messages,
+    "input",
+    data.length - OPENAI_RENDER_LIMITS.messages,
   );
 
   return { messages };
@@ -560,8 +716,13 @@ const mapCustomInputFormat = (
     return { messages: [] };
   }
 
-  const messages = data.input.map((msg, index) =>
-    mapCustomInputMessage(msg, index, "input"),
+  const messages = data.input
+    .slice(0, OPENAI_RENDER_LIMITS.messages)
+    .map((msg, index) => mapCustomInputMessage(msg, index, "input"));
+  appendMessageLimitPlaceholder(
+    messages,
+    "input",
+    data.input.length - OPENAI_RENDER_LIMITS.messages,
   );
 
   return { messages };
@@ -607,6 +768,44 @@ const mapCustomOutputFormat = (
   };
 };
 
+const isOutputSupersetOfInput = (
+  inputMsgs: LLMMessageDescriptor[],
+  outputMsgs: LLMMessageDescriptor[],
+): boolean => {
+  // Truncation placeholders are not real messages: the input and output views
+  // of the same conversation can be truncated at different points, so compare
+  // only the actual messages positionally.
+  const inputReal = inputMsgs.filter(
+    (message) =>
+      message.contentFingerprint !== TRUNCATED_PLACEHOLDER_FINGERPRINT,
+  );
+  const outputReal = outputMsgs.filter(
+    (message) =>
+      message.contentFingerprint !== TRUNCATED_PLACEHOLDER_FINGERPRINT,
+  );
+  if (outputReal.length < inputReal.length) return false;
+
+  return inputReal.every(
+    (message, index) =>
+      message.contentFingerprint !== undefined &&
+      message.contentFingerprint === outputReal[index]?.contentFingerprint,
+  );
+};
+
+export const combineOpenAIMessages: FormatCombiner = (input, output) => {
+  if (isOutputSupersetOfInput(input.mapped.messages, output.mapped.messages)) {
+    return {
+      messages: output.mapped.messages,
+      usage: output.mapped.usage,
+    };
+  }
+
+  return {
+    messages: [...input.mapped.messages, ...output.mapped.messages],
+    usage: output.mapped.usage,
+  };
+};
+
 /**
  * Maps OpenAI format data to normalized LLMMapperResult.
  * Supports multiple input and output formats.
@@ -637,18 +836,18 @@ export const mapOpenAIMessages: FormatMapper = (data, prettifyConfig) => {
   }
 
   if (isOutput) {
+    if (isMappableOpenAIMessageList(data)) {
+      return mapOpenAIMessageList(data, "output");
+    }
+
     // Check for custom output format { text: "...", usage: {...}, ... }
-    if (
-      typeof data === "object" &&
-      "text" in data &&
-      typeof (data as OpenAICustomOutputFormat).text === "string"
-    ) {
-      return mapCustomOutputFormat(data as OpenAICustomOutputFormat);
+    if (isRecord(data) && "text" in data && typeof data.text === "string") {
+      return mapCustomOutputFormat(data as unknown as OpenAICustomOutputFormat);
     }
 
     // Standard format { choices: [...] }
-    if (typeof data === "object" && "choices" in data) {
-      return mapOpenAIOutput(data as OpenAIOutputData);
+    if (isMappableOpenAIOutput(data)) {
+      return mapOpenAIOutput(data);
     }
   }
 

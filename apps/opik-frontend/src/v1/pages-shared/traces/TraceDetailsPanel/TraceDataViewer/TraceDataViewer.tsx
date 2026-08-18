@@ -41,7 +41,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
-import { detectLLMMessages } from "@/shared/PrettyLLMMessage/llmMessages";
+import { canShowMessagesTab as canShowLLMMessagesTab } from "@/shared/PrettyLLMMessage/llmMessages";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 
 type TraceDataViewerProps = {
@@ -91,17 +91,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   // Show Messages tab when at least one field is supported and neither is invalid
   const canShowMessagesTab = useMemo(() => {
-    const input = detectLLMMessages(transformedInput, { fieldType: "input" });
-    const output = detectLLMMessages(transformedOutput, {
-      fieldType: "output",
-    });
-
-    const hasValid = input.supported || output.supported;
-    const hasInvalid =
-      (!input.supported && !input.empty) ||
-      (!output.supported && !output.empty);
-
-    return hasValid && !hasInvalid;
+    return canShowLLMMessagesTab(transformedInput, transformedOutput);
   }, [transformedInput, transformedOutput]);
 
   const defaultTab = canShowMessagesTab ? "messages" : "details";
