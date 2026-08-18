@@ -123,10 +123,10 @@
 #                                 ceiling.
 #                             (2) PARTS. Each insert thread writes its own parts, so part count per
 #                                 partition grows. Watch it against THIS cluster's parts_to_throw_insert
-#                                 and parts_to_delay_insert, read from system.merge_tree_settings -- do not
-#                                 assume ClickHouse's defaults (300 / 150). Deployments routinely raise
-#                                 them, so the real headroom can be an order of magnitude off either way,
-#                                 and "parts vs 300" is a misleading ratio on a tuned cluster.
+#                                 and parts_to_delay_insert, read from system.merge_tree_settings. Do NOT
+#                                 work from a remembered default: ClickHouse has changed these across
+#                                 versions, and a deployment may tune them further, so a hardcoded ratio can
+#                                 be an order of magnitude wrong in either direction.
 #
 #                             CHOOSING A VALUE IS A CAPACITY DECISION, NOT A BENCHMARK. On an idle
 #                             rehearsal environment a large value looks free; on a production cluster
@@ -326,47 +326,36 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
     sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
+    # >>> BEGIN max_insert_threads rendering (extracted verbatim by scripts/verify_render.sh -- keep the markers)
+    # This depends on ONE exact line in ANOTHER file:  max_insert_threads = ${MAX_INSERT_THREADS},
+    # Require exactly one line-anchored, ISOLATED assignment before touching anything. A bare token match would
+    # also accept the placeholder inside a `--` header, a /* */ block comment or a string literal, and let the run
+    # proceed with no setting rendered at all. Anchoring also catches the two layout hazards in one check: a
+    # shared line (which cannot be removed without dropping its neighbours) and a reformatted one (which the
+    # fixed-string strip would silently miss).
+    assignments="$(grep -cE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},?[[:space:]]*$' <<<"$sql" || true)"
+    if [[ "$assignments" -ne 1 ]]; then
+        echo "ERROR: expected exactly ONE line reading 'max_insert_threads = \${MAX_INSERT_THREADS},' in" >&2
+        echo "       $BACKFILL_SQL, found $assignments. The setting must sit alone on its own line." >&2
+        exit 2
+    fi
     if [[ -z "$MAX_INSERT_THREADS" ]]; then
-        # Unset means INHERIT: drop the whole setting line so the server's own value applies. Rendering an
-        # explicit 0 would OVERRIDE it and force the insert serial -- a silent slowdown, not a no-op.
-        #
-        # The strip matches ONE exact spelling of a SETTINGS line that lives in ANOTHER file, so it is guarded on
-        # both sides. BEFORE: the setting must sit alone on its line, because deleting a shared line would take its
-        # neighbours (log_comment, the partition bound) with it and the after-check would still pass. AFTER: no
-        # executable line may still carry the placeholder, because a reformatted line makes the strip a silent
-        # no-op and sends ${MAX_INSERT_THREADS} to the server as a literal. `--` lines are skipped: both SQL
-        # headers legitimately quote the placeholder. This is the default path, so either failure aborts.
-        #
-        # Note the deliberate absence of a pipe into `grep -q`: it exits on first match, the upstream grep takes
-        # SIGPIPE, and `set -o pipefail` then reports 141 -- so the guard would skip its own failure branch.
-        hits="$(grep -F 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql" || true)"
-        shared="$(grep -vE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},?[[:space:]]*$' <<<"$hits" || true)"
-        if [[ -n "${shared//[[:space:]]/}" ]]; then
-            echo "ERROR: max_insert_threads shares a SETTINGS line with another setting in $BACKFILL_SQL:" >&2
-            echo "       $shared" >&2
-            echo "       Dropping that line would silently drop its neighbours. Put the setting on its own line." >&2
-            exit 2
-        fi
-        sql="$(grep -vF 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql")"
-        executable="$(grep -v '^[[:space:]]*--' <<<"$sql" || true)"
-        if grep -qF '${MAX_INSERT_THREADS}' <<<"$executable"; then
-            echo "ERROR: max_insert_threads strip failed -- the SETTINGS line in $BACKFILL_SQL no longer matches the" >&2
-            echo "       pattern above (was it reformatted?). Refusing to send SQL with a literal placeholder." >&2
-            exit 2
-        fi
+        # Unset means INHERIT: drop the line so the server's own value applies. Rendering an explicit 0 would
+        # OVERRIDE it and force the insert serial -- a silent slowdown, not a no-op.
+        sql="$(grep -vE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},?[[:space:]]*$' <<<"$sql")"
     else
-            # Symmetry with the inherit path: a substitution that matches nothing is also a silent failure -- the
-        # requested value would simply not appear and the server would quietly use its own. Check for an
-        # EXECUTABLE occurrence specifically: both SQL headers mention the placeholder in `--` comments, so a
-        # substitution can "change something" while rendering no actual setting.
-        executable="$(grep -v '^[[:space:]]*--' <<<"$sql" || true)"
-        if ! grep -qF '${MAX_INSERT_THREADS}' <<<"$executable"; then
-            echo "ERROR: --max-insert-threads $MAX_INSERT_THREADS was requested, but $BACKFILL_SQL has no" >&2
-            echo "       \${MAX_INSERT_THREADS} in any executable line, so the setting would be silently dropped." >&2
-            exit 2
-        fi
         sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
     fi
+    # Post-condition for BOTH paths. `--` lines are skipped: both SQL headers legitimately quote the placeholder.
+    # Note the deliberate absence of a pipe into `grep -q` -- it exits on first match, the upstream grep takes
+    # SIGPIPE, and `set -o pipefail` then reports 141, so the guard would skip its own failure branch.
+    executable="$(grep -v '^[[:space:]]*--' <<<"$sql" || true)"
+    if grep -qF '${MAX_INSERT_THREADS}' <<<"$executable"; then
+        echo "ERROR: \${MAX_INSERT_THREADS} survives in an executable line of $BACKFILL_SQL after rendering." >&2
+        echo "       Refusing to send SQL containing a literal placeholder." >&2
+        exit 2
+    fi
+    # <<< END max_insert_threads rendering
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 

@@ -372,13 +372,19 @@ independent controls keep each statement safe:
   **Two costs.** Upstream: *"higher values will lead to higher memory usage"* — and on this table a single very
   large `output` document is a **per-row** cost that no block cap bounds, so raise `max_memory_usage` alongside
   or narrow the window. And parts per partition grow; watch them against **this cluster's** `parts_to_throw_insert` and
-  `parts_to_delay_insert` — read them from `system.merge_tree_settings` rather than assuming ClickHouse's
-  defaults (300 / 150), because deployments routinely raise them and the real headroom can be an order of
-  magnitude different in either direction.
+  `parts_to_delay_insert` — read them from `system.merge_tree_settings`. **Do not work from a
+  remembered default**: ClickHouse has changed these across versions (older releases shipped far lower values
+  than current ones), and a deployment may tune them further, so a hardcoded ratio can be an order of magnitude
+  wrong in either direction.
   Value choice is a capacity decision, not a benchmark: on an idle rehearsal box a large value looks free, but
   on production those threads compete with live query latency. `estimate.sh` does **not** model this setting —
   time a real window at your intended value and feed it back via `--rows-per-sec`.
   Full diagnosis in `backfill.sh`'s `--max-insert-threads` option docs.
+
+  **Regression check:** `scripts/verify_render.sh` exercises how both drivers render this setting — inherit,
+  explicit value, and the six ways the SQL can be malformed such that a setting is silently dropped or a literal
+  placeholder is sent. It runs no SQL and needs no cluster. Run it after editing either driver or the `SETTINGS`
+  clause of `000001`/`000002`.
 
 - **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
   max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is
