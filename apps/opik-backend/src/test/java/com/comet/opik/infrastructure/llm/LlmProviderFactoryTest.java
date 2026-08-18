@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.gemini.GeminiClientGenerator;
@@ -181,7 +182,8 @@ class LlmProviderFactoryTest {
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
-        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig);
+        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
+                mock(AuthTokenProvider.class));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should successfully get the service
@@ -221,7 +223,8 @@ class LlmProviderFactoryTest {
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
-        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig);
+        CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
+                mock(AuthTokenProvider.class));
         customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
 
         // When & Then - Should throw BadRequestException
