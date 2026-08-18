@@ -1,29 +1,25 @@
 /**
- * Selects which App to mount from the workspace version in the store.
+ * Mounts the Opik application.
  *
- * Opik V2 is the only supported experience: resolveSyncWorkspaceVersion() always
- * returns v2, so V2App is always mounted. The V1App branch and the downstream
- * WorkspaceVersionResolver are kept until the V1 UI is removed (tracked
- * separately) but are effectively inert — there is no backend version lookup
- * (the `/workspaces/versions` endpoint has been removed) and nothing that
- * resolves a workspace to v1.
+ * V2 is the only experience; the V1 UI has been removed. The store write is
+ * retained because WorkspaceVersionResolver, mounted downstream from the V2
+ * workspace guard, still reads the value. Both go when the workspace-version
+ * machinery is retired (tracked separately), at which point this file goes too
+ * and V2App is mounted directly from the entry point.
  */
 import React, { Suspense } from "react";
-import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
 import { resolveSyncWorkspaceVersion } from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
 
-const V1App = React.lazy(() => import("@/v1/App"));
 const V2App = React.lazy(() => import("@/v2/App"));
 
 useAppStore.getState().setWorkspaceVersion(resolveSyncWorkspaceVersion());
 
 const WorkspaceVersionGate = () => {
-  const version = useWorkspaceVersion();
-
   return (
     <Suspense fallback={<Loader />}>
-      {version === "v1" ? <V1App /> : <V2App />}
+      <V2App />
     </Suspense>
   );
 };
