@@ -17,6 +17,7 @@ from ...testlib import (
     assert_equal,
 )
 
+# Groq retired the Llama chat models; this is one of the current production ones.
 MODEL = "openai/gpt-oss-20b"
 
 
