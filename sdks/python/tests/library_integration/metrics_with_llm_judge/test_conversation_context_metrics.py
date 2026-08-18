@@ -1,8 +1,6 @@
 import pytest
 
-from opik.evaluation.metrics.conversation.llm_judges.conversational_coherence import (
-    metric as conversational_coherence,
-)
+from opik.evaluation.metrics import ConversationalCoherenceMetric
 from ...testlib import assert_helpers
 
 
@@ -45,9 +43,7 @@ def test_conversational_coherence__with_documents__grounded_answers(
     grounded_conversation,
 ):
     """Integration test with a real model."""
-    metric = conversational_coherence.ConversationalCoherenceMetric(
-        track=False, reasoning_effort="minimal"
-    )
+    metric = ConversationalCoherenceMetric(track=False, reasoning_effort="minimal")
     result = metric.score(grounded_conversation)
 
     assert not isinstance(result, list)
@@ -60,9 +56,7 @@ def test_conversational_coherence__with_documents__contradicting_answer(
     ungrounded_conversation,
 ):
     """Integration test with a real model."""
-    metric = conversational_coherence.ConversationalCoherenceMetric(
-        track=False, reasoning_effort="minimal"
-    )
+    metric = ConversationalCoherenceMetric(track=False, reasoning_effort="minimal")
     result = metric.score(ungrounded_conversation)
 
     assert not isinstance(result, list)
@@ -78,9 +72,7 @@ def test_conversational_coherence__without_documents__unchanged_behaviour(
         {key: value for key, value in message.items() if key != "context"}
         for message in grounded_conversation
     ]
-    metric = conversational_coherence.ConversationalCoherenceMetric(
-        track=False, reasoning_effort="minimal"
-    )
+    metric = ConversationalCoherenceMetric(track=False, reasoning_effort="minimal")
     result = metric.score(plain)
 
     assert not isinstance(result, list)

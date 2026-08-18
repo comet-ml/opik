@@ -197,7 +197,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
 
     def _evaluate_window(
         self, conversation_sliding_window: conversation_types.Conversation
-    ) -> Any:
+    ) -> schema.EvaluateConversationCoherenceResponse:
         if not _has_retrieved_documents(conversation_sliding_window):
             return self._evaluate_conversation(
                 conversation_sliding_window=conversation_sliding_window
@@ -208,7 +208,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
 
     async def _a_evaluate_window(
         self, conversation_sliding_window: conversation_types.Conversation
-    ) -> Any:
+    ) -> schema.EvaluateConversationCoherenceResponse:
         if not _has_retrieved_documents(conversation_sliding_window):
             return await self._a_evaluate_conversation(
                 conversation_sliding_window=conversation_sliding_window

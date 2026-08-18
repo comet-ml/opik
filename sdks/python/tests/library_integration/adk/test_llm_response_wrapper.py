@@ -60,3 +60,9 @@ def test_pop_llm_usage_data__reads_the_attached_dict():
 
     assert usage_data is not None
     assert usage_data.opik_usage is not None
+    # Assert the counts survived the round-trip, not merely that parsing returned
+    # something - a dropped or defaulted count would otherwise pass unnoticed.
+    provider_usage = usage_data.opik_usage.provider_usage.model_dump()
+    assert provider_usage["prompt_token_count"] == 3
+    assert provider_usage["candidates_token_count"] == 5
+    assert provider_usage["total_token_count"] == 8
