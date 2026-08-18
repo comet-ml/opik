@@ -215,8 +215,8 @@ print(result.reason)
 
 `ConversationalCoherenceMetric` is **context aware**. When an agent message carries the documents it was generated
 from, they are shown to the judge right next to that message, so it can see each answer alongside what the agent had
-available when it wrote it. What the metric measures does not change - the verdict is still whether the answer is
-relevant given the preceding turns. Populate the documents with the `trace_context_transform` argument of
+available when it wrote it. What the metric measures does not change - every turn is still judged on whether its
+answer is relevant to the turns preceding it. Populate the documents with the `trace_context_transform` argument of
 [`evaluate_threads`](/evaluation/evaluate_threads), or attach them directly to the agent messages under a `context` key:
 
 ```python title="Context-aware coherence example"
@@ -239,8 +239,8 @@ result = metric.score(conversation)
 print(result.value)
 ```
 
-Turns whose agent message has no documents use the original prompt, so a conversation carrying no context scores
-exactly as it did before.
+A window in which no message carries documents is evaluated with the original prompt, so a conversation carrying no
+context scores exactly as it did before.
 
 <Note>
   The documents inform the relevancy judgement; they are not fact-checked against the answer. If you need to know

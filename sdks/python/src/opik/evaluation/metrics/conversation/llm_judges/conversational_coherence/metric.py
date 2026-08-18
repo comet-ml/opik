@@ -37,11 +37,12 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
 
     The metric is **context aware**: when an agent message carries the documents it was
     generated from - the ``context`` key, populated by the ``trace_context_transform``
-    argument of :func:`opik.evaluation.evaluate_threads` - those documents are shown to
-    the judge as background on what the agent had available when it answered, so it can
-    make a better informed call. What the metric measures does not change: the verdict
-    is still whether the last agent message is relevant given the preceding turns, and
-    turns without documents use the original prompt unchanged.
+    argument of :func:`opik.evaluation.evaluate_threads` - those documents are rendered
+    next to that message, so the judge sees each answer alongside what the agent had
+    available when it wrote it. What the metric measures does not change: every window
+    is still judged on whether its final `assistant` message is relevant to the turns
+    preceding it, and a window in which no message carries documents is evaluated with
+    the original prompt, unchanged.
 
     Args:
         model: The model to use for
