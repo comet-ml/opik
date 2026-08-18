@@ -318,6 +318,7 @@ areas:
     spec_dir: trace-explore
     specs:
       - trace-explore/thread-logging-smoke.spec.ts
+      - trace-explore/thread-id-prefilter.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
@@ -464,6 +465,7 @@ areas:
     spec_dir: optimization-studio
     specs:
       - optimization-studio/optimization-studio.spec.ts
+      - optimization-studio/optimization-trial-logs.spec.ts
     capabilities:
       new-run-form-validation:  { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       launch-gepa-run:          { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
@@ -472,7 +474,7 @@ areas:
       studio-logs-download:     { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       list-optimization-runs:   { covered: false }
       trials-table:             { covered: false }
-      trial-detail:             { covered: false }
+      trial-detail:             { covered: true,  tier: t2-cuj }
       best-trial-prompt:        { covered: false }
       kpi-cards:                { covered: false }
       compare-runs:             { covered: false }
@@ -552,6 +554,7 @@ areas:
     specs:
       - experiments/experiments-smoke.spec.ts
       - experiments/experiments-compare.spec.ts
+      - experiments/experiment-logs-date-window.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
@@ -624,6 +627,7 @@ areas:
     specs:
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-delete-rule.spec.ts
+      - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -636,7 +640,7 @@ areas:
       sampling-rate:           { covered: false }
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }
-      enable-disable-rule:     { covered: false }
+      enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       automation-logs:         { covered: false }
 

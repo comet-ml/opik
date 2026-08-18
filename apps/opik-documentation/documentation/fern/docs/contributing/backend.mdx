@@ -283,8 +283,7 @@ After implementing your changes, ensuring tests pass, and code is formatted, com
     DML (Data Manipulation Language) migrations are for changes to data itself, not the schema.
     
     - **Execution**: These are not run automatically. They must be run manually by a system admin using a database client.
-    - **Documentation**: DML migrations are documented in `CHANGELOG.md` (link to GitHub: [CHANGELOG.md](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md)) and the scripts are placed at
-    `apps/opik-backend/data-migrations` along with detailed instructions.
+    - **Documentation**: DML migration scripts are placed at `apps/opik-backend/data-migrations` along with detailed instructions.
     - **Requirements for DML Migrations**:
       * Must be backward compatible (no data deletion unless 100% safe, allow rollback, no performance degradation).
       * Must include detailed execution instructions.

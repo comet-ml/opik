@@ -194,9 +194,9 @@ cd opik
 powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 ```
 
-**Service Profiles for Development**
+**Installation Script Options**
 
-The Opik installation scripts now support service profiles for different development scenarios:
+The `opik.sh` and `opik.ps1` scripts support the following options:
 
 ```bash
 # Start full Opik suite (default behavior)
@@ -211,6 +211,22 @@ The Opik installation scripts now support service profiles for different develop
 # Enable guardrails with any profile
 ./opik.sh --guardrails # Guardrails with full Opik suite
 ./opik.sh --backend --guardrails # Guardrails with infrastructure + backend
+
+# Build the containers from source before starting
+./opik.sh --build
+
+# Check that all containers are healthy
+./opik.sh --verify
+
+# Stop all containers
+./opik.sh --stop
+
+# Stop all containers and remove all Opik data volumes
+# WARNING: ALL OPIK DATA WILL BE LOST
+./opik.sh --clean
+
+# Show all available options
+./opik.sh --help
 ```
 
 Use the `--help` or `--info` options to troubleshoot issues. Dockerfiles now ensure containers run as non-root users for enhanced security. Once all is up and running, you can now visit [localhost:5173](http://localhost:5173) on your browser! For detailed instructions, see the [Local Deployment Guide](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik).
@@ -221,13 +237,10 @@ For production or larger-scale self-hosted deployments, Opik can be installed on
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
 
-> [!IMPORTANT]
-> **Version 1.7.0 Changes**: Please check the [changelog](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md) for important updates and breaking changes.
-
 <a id="-opik-client-sdk"></a>
 ## 💻 Opik Client SDK
 
-Opik provides a suite of client libraries and a REST API to interact with the Opik server. This includes SDKs for Python, TypeScript, and Ruby (via OpenTelemetry), allowing for seamless integration into your workflows. For detailed API and SDK references, see the [Opik Client Reference Documentation](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik).
+Opik provides a suite of client libraries and a REST API to interact with the Opik server. This includes SDKs for Python and TypeScript, plus first-party [OpenTelemetry](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=otel_link&utm_campaign=opik) support: any language with an OpenTelemetry SDK — including [Java](https://www.comet.com/docs/opik/integrations/spring-ai?from=llm&utm_source=opik&utm_medium=github&utm_content=java_link&utm_campaign=opik), [Ruby](https://www.comet.com/docs/opik/integrations/opentelemetry-ruby-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=ruby_link&utm_campaign=opik), and .NET — can send traces to Opik. For detailed API and SDK references, see the [Opik Client Reference Documentation](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik).
 
 ### Python SDK Quick Start
 

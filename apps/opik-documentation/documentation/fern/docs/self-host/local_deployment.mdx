@@ -86,6 +86,28 @@ This will create a `~/.opik.config` file that will store the URL of your local O
 
 All the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.
 
+### Installation script options
+
+The `opik.sh` and `opik.ps1` scripts support the following options:
+
+| Option         | Description                                                                               |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| `--infra`      | Start only the infrastructure services (MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.)   |
+| `--backend`    | Start the infrastructure and backend services                                              |
+| `--guardrails` | Enable guardrails, can be combined with the other start options                            |
+| `--build`      | Build the containers from source before starting                                           |
+| `--verify`     | Check that all containers are healthy                                                      |
+| `--stop`       | Stop all containers                                                                        |
+| `--clean`      | Stop all containers and remove all Opik data volumes                                       |
+| `--help`       | Show all available options                                                                 |
+
+<Warning>
+  The `--clean` option removes all Opik data volumes. All data stored in the Opik platform will be lost and cannot be
+  recovered.
+</Warning>
+
+Run `./opik.sh --help` (or `powershell -ExecutionPolicy ByPass -c ".\opik.ps1 --help"` on Windows) to see the full list of options.
+
 ## Stopping the Opik platform
 
 You can stop the Opik server by running the following commands:

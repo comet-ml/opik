@@ -12,6 +12,9 @@
 --   ${WINDOW_LO} / ${WINDOW_HI}            the created_at half-open window bounds
 --   ${MAX_INSERT_BLOCK_SIZE}               rows per part-forming block
 --   ${MAX_PARTITIONS_PER_INSERT_BLOCK}     partitions one block may span (required; see the note below)
+--   ${MAX_INSERT_THREADS}                  threads for the INSERT SELECT pipeline. The driver OMITS this whole
+--                                          SETTINGS line when --max-insert-threads is unset, so the server's
+--                                          value is inherited; an explicit 0 forces no parallel execution.
 --
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:
@@ -24,6 +27,30 @@
 --     output-order guarantee, so inserted blocks may span/interleave partitions; the destination ReplacingMergeTree
 --     dedups regardless of insert order and background merges compact the parts. This is NOT a claim that rows arrive
 --     in sort-key order — do not rely on it (see README "Why slice by created_at").
+--   * SETTINGS max_insert_threads sizes the INSERT SELECT pipeline. ClickHouse documents 0 (the default) as
+--     "INSERT SELECT no parallel execution"; on ClickHouse Cloud the default is instead 1/2/4 by node memory.
+--     Raising it controls how much of the machine the backfill may use and can speed the copy up markedly,
+--     but only if the SELECT side is itself parallel (upstream: parallel INSERT SELECT "has effect only if the
+--     SELECT part is executed in parallel").
+--
+--     WHY THE INSERT SIDE, AND HOW SURE WE ARE. This table materialises output_keys by PARSING the output JSON
+--     (there is no input_keys column -- output_keys is traces-only). That computation is what makes the insert
+--     side the constraint here. Note carefully how strong that claim is: upstream says materialized columns are
+--     calculated "when rows are inserted", but it does NOT say which pipeline stage or which threads do the
+--     calculating. So the attribution to the insert side is an INFERENCE FROM PROFILING, not a documented
+--     guarantee. What supports it is the delta: raise this setting and effective cores rise towards the thread
+--     count while the read side is unchanged.
+--
+--     Computing effective cores, minding the units -- the ProfileEvents are MICROseconds while
+--     query_duration_ms is MILLIseconds, so the *1000 is not optional:
+--         (UserTimeMicroseconds + SystemTimeMicroseconds) / (query_duration_ms * 1000)
+--     Omit it and the answer is 1000x too high. Sanity-check against the node's core count. And note the figure
+--     is QUERY-WIDE CPU: query_log does not separate read-pipeline from insert-pipeline threads.
+--
+--     TWO COSTS. Upstream warns "higher values will lead to higher memory usage", which on this table compounds
+--     with oversized `output` documents, so move max_memory_usage with it. And part count per partition grows,
+--     to be watched against parts_to_throw_insert. The value is a capacity decision about what share of cores the cutover may take
+--     while serving traffic -- not a benchmark to maximise.
 --   * SETTINGS max_insert_block_size bounds the rows per part-forming block; peak insert memory is a small multiple of
 --     the smaller of that and min_insert_block_size_bytes (256 MB default), which dominates for wide trace rows.
 --   * SETTINGS max_partitions_per_insert_block is REQUIRED, not a tuning knob. Because the blocks above may span
@@ -89,6 +116,7 @@ WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
   AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
+         max_insert_threads = ${MAX_INSERT_THREADS},
          log_comment = 'traces_local_v2_backfill:${WINDOW_LO}:${WINDOW_HI}';
 
 -- Per-window reconciliation is automated by backfill.sh (uniqExact of the dedup key, aborting on > 0.01% divergence);
