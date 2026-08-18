@@ -1062,4 +1062,38 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Covers registering {@code replicate} as a canonical provider so that the 40 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "replicate"} are no longer silently dropped at load time. No Replicate
+     * model publishes cache rates today, so all Replicate requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesReplicateModels() {
+        // replicate/openai/o1: input 1.5e-05, output 6e-05
+        // 1000 * 1.5e-05 + 200 * 6e-05 = 0.027
+        BigDecimal cost = CostService.calculateCost("replicate/openai/o1", "replicate",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.027");
+    }
+
+    /**
+     * Covers registering {@code watsonx} as a canonical provider so that the 28 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "watsonx"} are no longer silently dropped at load time. No Watsonx
+     * model publishes cache rates today, so all Watsonx requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesWatsonxModels() {
+        // watsonx/openai/gpt-oss-120b: input 1.5e-07, output 6e-07
+        // 1000 * 1.5e-07 + 200 * 6e-07 = 0.00027
+        BigDecimal cost = CostService.calculateCost("watsonx/openai/gpt-oss-120b", "watsonx",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00027");
+    }
 }
