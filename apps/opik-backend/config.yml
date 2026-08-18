@@ -1217,6 +1217,11 @@ llmProviderTokenAuth:
   # Default: 1000000
   # Description: Maximum accepted size (in characters) of a token endpoint reply
   maxResponseChars: ${LLM_PROVIDER_TOKEN_AUTH_MAX_RESPONSE_CHARS:-1000000}
+  # Default: strict
+  # Description: SSRF guard on the token URL. "strict" refuses non-HTTPS and private/internal
+  # destinations; "relaxed" allows internal gateways. Strict by default so a missing override fails
+  # loudly instead of exposing the deployment
+  destinationGuard: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-strict}
 
 llmProviderClient:
   # Default: 3
