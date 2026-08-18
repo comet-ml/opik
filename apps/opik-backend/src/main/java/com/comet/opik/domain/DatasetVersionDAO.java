@@ -539,22 +539,26 @@ public interface DatasetVersionDAO {
             @Bind("workspace_id") String workspaceId,
             @Bind("last_updated_by") String lastUpdatedBy);
 
+    /**
+     * Applies signed deltas to the version counters in a single statement, so the arithmetic happens in the database
+     * rather than as a read-modify-write in the application. Correct under concurrent callers without an external lock.
+     */
     @SqlUpdate("""
             UPDATE dataset_versions
-            SET items_total = :items_total,
-                items_added = :items_added,
-                items_modified = :items_modified,
-                items_deleted = :items_deleted,
+            SET items_total = items_total + :items_total_delta,
+                items_added = items_added + :items_added_delta,
+                items_modified = items_modified + :items_modified_delta,
+                items_deleted = items_deleted + :items_deleted_delta,
                 last_updated_at = NOW(),
                 last_updated_by = :last_updated_by
             WHERE id = :version_id
               AND workspace_id = :workspace_id
             """)
-    void updateCounts(@Bind("version_id") UUID versionId,
-            @Bind("items_total") int itemsTotal,
-            @Bind("items_added") int itemsAdded,
-            @Bind("items_modified") int itemsModified,
-            @Bind("items_deleted") int itemsDeleted,
+    int incrementCounts(@Bind("version_id") UUID versionId,
+            @Bind("items_total_delta") int itemsTotalDelta,
+            @Bind("items_added_delta") int itemsAddedDelta,
+            @Bind("items_modified_delta") int itemsModifiedDelta,
+            @Bind("items_deleted_delta") int itemsDeletedDelta,
             @Bind("workspace_id") String workspaceId,
             @Bind("last_updated_by") String lastUpdatedBy);
 
