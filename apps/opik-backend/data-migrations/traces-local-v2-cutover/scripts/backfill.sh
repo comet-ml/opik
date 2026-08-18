@@ -59,6 +59,56 @@
 #                             TOTAL distinct partition count. Raising it trades a larger part count per insert (one part
 #                             per partition touched, compacted by background merges) for the INSERT completing at all.
 #                             See the runbook's "Far-future partitions from far-future-timestamp ids".
+#   --max-insert-threads N    threads for the INSERT SELECT pipeline (SETTINGS max_insert_threads).
+#                             Default 0. ClickHouse documents 0 (or 1) as "INSERT SELECT no parallel
+#                             execution", so the copy runs its insert side single-threaded unless this
+#                             is raised. NOTE the setting is scoped to INSERT SELECT, which is what
+#                             this backfill issues; it is not a general INSERT knob. NOTE ALSO that
+#                             ClickHouse CLOUD does not default it to 0 -- upstream documents 1 / 2 / 4
+#                             by node memory -- so on Cloud you may already have parallelism here.
+#
+#                             Raising it lets you decide how much of the machine the backfill may use,
+#                             and can speed the copy up substantially when the insert side is the
+#                             constraint.
+#
+#                             PRECONDITION, per upstream: "Parallel INSERT SELECT has effect only if
+#                             the SELECT part is executed in parallel" (see max_threads). If the read
+#                             side is serialised, raising this buys nothing.
+#
+#                             WHY THE INSERT SIDE IS OFTEN THE CONSTRAINT HERE: the destination carries
+#                             JSON-parsing MATERIALIZED columns (output_keys / input_keys), and upstream
+#                             states materialized values "are automatically calculated ... when rows are
+#                             inserted". Upstream does NOT state which pipeline stage or which threads
+#                             compute them; that the insert side is the bottleneck on this table is an
+#                             INFERENCE FROM PROFILING, not a documented guarantee -- see below for how
+#                             to confirm it on your own data rather than assuming it.
+#
+#                             HOW TO CONFIRM IT: effective cores sit near 1 while the machine is
+#                             otherwise idle and OSIOWaitMicroseconds is 0 -- i.e. the copy is neither
+#                             CPU-saturated nor I/O bound, it is serialised. Compute effective cores
+#                             from query_log as
+#                             (UserTimeMicroseconds + SystemTimeMicroseconds) / query_duration_ms.
+#                             After raising this, effective cores rising towards the thread count is
+#                             what turns the inference into a measurement.
+#
+#                             COSTS, BOTH OF THEM.
+#                             (1) MEMORY. Upstream is explicit: "Higher values will lead to higher
+#                                 memory usage." That matters more on this table than it might
+#                                 elsewhere, because a single oversized `output` document can dominate
+#                                 insert memory on its own. Raise this and max_memory_usage together,
+#                                 or narrow the window, rather than raising threads alone into a fixed
+#                                 ceiling.
+#                             (2) PARTS. Each insert thread writes its own parts, so part count per
+#                                 partition grows. Watch it against parts_to_throw_insert (ClickHouse
+#                                 default 300) rather than assuming headroom.
+#
+#                             CHOOSING A VALUE IS A CAPACITY DECISION, NOT A BENCHMARK. On an idle
+#                             rehearsal environment a large value looks free; on a production cluster
+#                             those threads compete with live query latency. Pick the share of cores
+#                             the cutover may take while serving traffic, and validate the value you
+#                             will actually deploy rather than the largest one that fits. 0 stays the
+#                             default so no existing deployment changes behaviour, and so a small
+#                             install on few cores does not silently start spawning insert threads.
 #   --divergence P            max tolerated |src-dst|/src per window before aborting. Default 0.0001 (0.01%).
 #   --pause-seconds S         sleep S seconds after each inserted window, to let destination merges catch up and bound
 #                             the part count / IO pressure. Default 0. Recommended 30-60 on a large table at peak.
@@ -97,6 +147,9 @@ MAX_ROWS=2000000          # rows: per-statement bound; a week over this is halve
 MAX_INSERT_BLOCK_SIZE=1048576  # rows: SETTINGS max_insert_block_size for the INSERT. Peak memory is a small multiple of
                           # the smaller of this and min_insert_block_size_bytes (256 MB default), which dominates for wide
                           # trace rows; lower it on a memory-constrained node. 1048576 is the ClickHouse default.
+MAX_INSERT_THREADS=0                  # threads for the INSERT SELECT pipeline (SETTINGS max_insert_threads).
+                          # 0 = ClickHouse default = SINGLE-THREADED sink, usually the throughput
+                          # ceiling here. See --max-insert-threads above for the measurements.
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions: SETTINGS max_partitions_per_insert_block for the INSERT. The
                           # destination is weekly-partitioned, so one block can span many partitions; ClickHouse's
                           # default of 100 THROWS (throw_on_max_partitions_per_insert_block=1). Far-future UUIDv7 ids
@@ -120,6 +173,7 @@ while [[ $# -gt 0 ]]; do
         --max-rows-per-insert) MAX_ROWS="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-insert-threads) MAX_INSERT_THREADS="${2:?"$1 requires a value"}"; shift 2 ;;
         --divergence) DIVERGENCE="${2:?"$1 requires a value"}"; shift 2 ;;
         --pause-seconds) PAUSE_SECONDS="${2:?"$1 requires a value"}"; shift 2 ;;
         --min-free-factor) MIN_FREE_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -147,6 +201,9 @@ done
 # rendered into the SQL and rejected by the server on the first INSERT — after the capacity preflight has passed and the
 # backfill_start anchor has been minted, which is a far more expensive place to discover a typo.
 [[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
+# 0 is meaningful (ClickHouse default, single-threaded sink), so allow it. Bounded at 2 digits: this is
+# a share of cores, and a value beyond the machine's core count buys nothing while multiplying parts.
+[[ "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (ClickHouse default: no parallel INSERT SELECT execution) or 1..99." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
@@ -240,6 +297,7 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
     sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
+    sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 

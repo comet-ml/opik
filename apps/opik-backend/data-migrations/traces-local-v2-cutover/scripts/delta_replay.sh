@@ -45,6 +45,7 @@ CH_PORT=""                # native port; empty = clickhouse-client default (9000
 BACKFILL_START=""
 MAX_INSERT_BLOCK_SIZE=1048576
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions per block for the delta INSERT; see the option docs above. 0 = unlimited.
+MAX_INSERT_THREADS=0                  # threads for the delta INSERT SELECT; 0 = ClickHouse default (single-threaded sink).
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -52,6 +53,7 @@ while [[ $# -gt 0 ]]; do
         --backfill-start) BACKFILL_START="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-insert-threads) MAX_INSERT_THREADS="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -70,6 +72,7 @@ done
 # the setting counts partitions, no real table approaches that, and an out-of-range value would otherwise be rendered
 # into the SQL and rejected by the server mid-run instead of here.
 [[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
+[[ "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (ClickHouse default: no parallel INSERT SELECT execution) or 1..99." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 
 echo "Reminder: raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs before this step (backend config, not SQL) and"
@@ -80,6 +83,7 @@ sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
 sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
 sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
 sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
+sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
 # --time makes clickhouse-client print each statement's elapsed seconds to stderr (it prints nothing under a bare
 # --query). The SECOND number is the deletion replay's wall time — a Go/No-Go acceptance criterion (it must fit inside
 # the buffer hold with margin), so without this the operator has no way to record it short of digging in query_log.

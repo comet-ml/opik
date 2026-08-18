@@ -12,6 +12,7 @@
 --   ${WINDOW_LO} / ${WINDOW_HI}            the created_at half-open window bounds
 --   ${MAX_INSERT_BLOCK_SIZE}               rows per part-forming block
 --   ${MAX_PARTITIONS_PER_INSERT_BLOCK}     partitions one block may span (required; see the note below)
+--   ${MAX_INSERT_THREADS}                  threads for the INSERT SELECT pipeline (0 = ClickHouse default)
 --
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:
@@ -24,6 +25,18 @@
 --     output-order guarantee, so inserted blocks may span/interleave partitions; the destination ReplacingMergeTree
 --     dedups regardless of insert order and background merges compact the parts. This is NOT a claim that rows arrive
 --     in sort-key order — do not rely on it (see README "Why slice by created_at").
+--   * SETTINGS max_insert_threads sizes the INSERT SELECT pipeline. ClickHouse documents 0 (the default) as
+--     "INSERT SELECT no parallel execution"; on ClickHouse Cloud the default is instead 1/2/4 by node memory.
+--     Raising it controls how much of the machine the backfill may use and can speed the copy up markedly,
+--     but only if the SELECT side is itself parallel (upstream: parallel INSERT SELECT "has effect only if the
+--     SELECT part is executed in parallel"). Upstream states materialized columns are calculated "when rows
+--     are inserted" but does NOT say which stage computes them -- that this table's JSON-parsing
+--     output_keys/input_keys make the insert side the constraint is an inference from profiling, confirmed by
+--     effective cores rising towards the thread count. Two costs: upstream warns "higher values will lead to
+--     higher memory usage" (which on this table compounds with oversized `output` documents, so move
+--     max_memory_usage with it), and part count per partition grows, to be watched against
+--     parts_to_throw_insert. The value is a capacity decision about what share of cores the cutover may take
+--     while serving traffic -- not a benchmark to maximise.
 --   * SETTINGS max_insert_block_size bounds the rows per part-forming block; peak insert memory is a small multiple of
 --     the smaller of that and min_insert_block_size_bytes (256 MB default), which dominates for wide trace rows.
 --   * SETTINGS max_partitions_per_insert_block is REQUIRED, not a tuning knob. Because the blocks above may span
@@ -89,6 +102,7 @@ WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
   AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
+         max_insert_threads = ${MAX_INSERT_THREADS},
          log_comment = 'traces_local_v2_backfill:${WINDOW_LO}:${WINDOW_HI}';
 
 -- Per-window reconciliation is automated by backfill.sh (uniqExact of the dedup key, aborting on > 0.01% divergence);

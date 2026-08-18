@@ -341,6 +341,46 @@ independent controls keep each statement safe:
   so peak insert memory is a small multiple of ~256 MB regardless of the window size — the statement does not load the
   window into memory. Lower this (or `min_insert_block_size_bytes`) on a memory-constrained data node.
 
+- **Insert pipeline threads (`--max-insert-threads`, default 0 → `SETTINGS max_insert_threads`).**
+  **This is often the throughput ceiling, and the default hides it.** ClickHouse documents the value `0`
+  (the default) as *"`INSERT SELECT` no parallel execution"*, so the insert side of this copy runs
+  serialised until you raise it. Raising it lets you control how much of the machine the backfill may
+  consume, and can speed the copy up substantially.
+
+  Two scope caveats worth knowing before you reach for it:
+  - The setting applies to **`INSERT SELECT`** — which is what this backfill issues — not to INSERTs
+    generally.
+  - **ClickHouse Cloud does not default it to `0`.** Upstream documents `1` / `2` / `4` by node memory, so
+    a Cloud deployment may already have parallelism here and see less benefit.
+  - It only helps if the read side is parallel too. Upstream: *"Parallel `INSERT SELECT` has effect only if
+    the `SELECT` part is executed in parallel"* (see `max_threads`).
+
+  **Why the insert side is often the constraint on this table — and what is inference rather than
+  documented.** The destination carries JSON-parsing MATERIALIZED columns (`output_keys`, `input_keys`), and
+  upstream states materialized values *"are automatically calculated according to the specified materialized
+  expression when rows are inserted"*. Upstream does **not** state which pipeline stage or which threads
+  perform that calculation. That these columns make the insert side the bottleneck here is an **inference from
+  profiling**, not a documented guarantee — so confirm it on your own data rather than assuming it:
+
+  **How to confirm it:** effective cores sit near 1 while the machine is otherwise idle and
+  `OSIOWaitMicroseconds` is 0 — the copy is neither CPU-saturated nor I/O bound, it is serialised. Compute
+  effective cores from `query_log` as
+  `(ProfileEvents['UserTimeMicroseconds'] + ProfileEvents['SystemTimeMicroseconds']) / query_duration_ms`.
+  After raising the setting, effective cores rising towards the thread count is what turns the inference into
+  a measurement.
+
+  **Two costs, both real:**
+  - **Memory.** Upstream is explicit: *"Higher values will lead to higher memory usage."* On this table that
+    compounds with a known hazard — a single oversized `output` document can dominate insert memory by itself
+    (see the memory section below) — so raise this together with `max_memory_usage`, or narrow the window,
+    rather than raising threads alone into a fixed ceiling.
+  - **Parts.** Each insert thread writes its own parts, so parts per partition grows. Watch it against
+    `parts_to_throw_insert` (ClickHouse default 300) rather than assuming headroom.
+
+  **Choosing a value is a capacity decision, not a benchmark:** on an idle rehearsal environment a large
+  value looks free, but on production those threads compete with live query latency, so pick the share of
+  cores the cutover may take while serving traffic, and validate the value you will actually deploy.
+
 - **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
   max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is
   weekly-partitioned, so a block spans as many partitions as the ids in it imply; ClickHouse's default of 100 aborts the

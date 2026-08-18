@@ -6,7 +6,7 @@
 -- this file, substitutes the placeholders and runs it — never run this file by hand. ALL FOUR placeholders it
 -- substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the server as a literal and the
 -- statement fails): ${ANALYTICS_DB_DATABASE_NAME}, ${BACKFILL_START}, ${MAX_INSERT_BLOCK_SIZE} and
--- ${MAX_PARTITIONS_PER_INSERT_BLOCK}. Invocation:
+-- ${MAX_PARTITIONS_PER_INSERT_BLOCK} and ${MAX_INSERT_THREADS}. Invocation:
 --   ../delta_replay.sh --database opik --backfill-start '2025-06-01 12:00:00.000000'
 -- The surrounding config operations (buffer raise/restore) and the go/no-go checkpoint stay with the operator, where
 -- situational awareness matters most — those are config/judgement, not SQL. The driver invokes clickhouse-client with
@@ -48,6 +48,11 @@
 -- by hand. Omitting it there reintroduces the TOO_MANY_PARTS abort immediately before the EXCHANGE, which is exactly
 -- what the setting on the single-statement form exists to prevent.
 -- >>> BEGIN delta-insert
+-- max_insert_threads in the SETTINGS clause below sizes the INSERT SELECT pipeline, same knob and same caveats as 000001: ClickHouse
+-- documents 0 (the default) as "INSERT SELECT no parallel execution", ClickHouse Cloud instead defaults to
+-- 1/2/4 by node memory, it only helps if the SELECT side is parallel, and upstream warns "higher values will
+-- lead to higher memory usage" -- which on this table compounds with oversized `output` documents. The delta
+-- writes into the same table through the same insert path as the backfill, so it benefits identically.
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,
     workspace_id,
@@ -102,6 +107,7 @@ WHERE created_at >= toDateTime64('${BACKFILL_START}', 6)
    OR last_updated_at >= toDateTime64('${BACKFILL_START}', 6)
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
+         max_insert_threads = ${MAX_INSERT_THREADS},
          log_comment = 'traces_local_v2_cutover:delta_insert';
 -- >>> END delta-insert
 
