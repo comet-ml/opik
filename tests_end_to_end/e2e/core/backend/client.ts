@@ -116,6 +116,37 @@ export interface ThreadRowRef {
   status: string | null;
 }
 
+/** Percentile bucket a `PERCENTAGE` stat item carries instead of a scalar. */
+export interface StatPercentiles {
+  p50?: number;
+  p90?: number;
+  p99?: number;
+}
+
+/**
+ * One value from the threads-stats endpoint. `COUNT` and `AVG` items are
+ * scalar; a `PERCENTAGE` item (today, `duration`) is a percentile object. Kept
+ * as a union so a caller cannot read a percentile object as though it were a
+ * number.
+ */
+export type ThreadStatValue = number | StatPercentiles | null;
+
+/**
+ * Narrow a stat to a number, or throw naming the stat. Use this instead of
+ * casting: the percentile case is a real shape from this endpoint, not a
+ * type-system inconvenience. Throws rather than asserting so this module stays
+ * free of test-runner imports.
+ */
+export function numericStat(value: ThreadStatValue, name: string): number {
+  if (typeof value !== 'number') {
+    throw new Error(
+      `stat "${name}" is not scalar (got ${JSON.stringify(value)}) — ` +
+        'a percentile object here means the endpoint changed shape',
+    );
+  }
+  return value;
+}
+
 /** A backend filter as the REST layer serialises it (the `filters` query param). */
 export interface BackendFilter {
   field: string;
@@ -548,10 +579,16 @@ export function makeBackendClient(apiKey: string | null = null) {
     /**
      * `GET /v1/private/traces/threads/stats` under the same filters — the
      * numbers the Threads view's count card shows, flattened to name -> value.
+     *
+     * Not every stat is scalar: the endpoint's items are a tagged union, and a
+     * `PERCENTAGE` one (today, `duration`) carries a `{p50, p90, p99}` object
+     * rather than a number. The value type says so, so a caller reading
+     * `duration` as a number has to narrow first instead of silently computing
+     * on an object. `numericStat()` below is the narrowing helper.
      */
     async getThreadsStats(
       args: { projectId: string; filters?: BackendFilter[] } & ReadWindow,
-    ): Promise<Record<string, number | null>> {
+    ): Promise<Record<string, ThreadStatValue>> {
       const stats = await opik.api.traces.getTraceThreadStats({
         projectId: args.projectId,
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
@@ -560,7 +597,7 @@ export function makeBackendClient(apiKey: string | null = null) {
       });
       return Object.fromEntries(
         (stats.stats ?? []).map((s) => {
-          const value = (s as { value?: number | null }).value;
+          const value = (s as { value?: ThreadStatValue }).value;
           return [String(s.name ?? ''), value ?? null];
         }),
       );

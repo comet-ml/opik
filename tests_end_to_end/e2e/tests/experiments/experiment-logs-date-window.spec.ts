@@ -165,7 +165,7 @@ test.describe('Experiment logs date window — CUJ', { tag: ['@t2-cuj', '@area:e
       ).toEqual([]);
     });
 
-    // Record every experiment-scoped traces read the tab issues, so the
+    // Record every experiment-scoped traces request the tab issues, so the
     // regression can be asserted at its cause (a from_time on the request) and
     // not only at its symptom (an empty table).
     const scopedTraceRequests: string[] = [];

@@ -5,6 +5,12 @@ import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
 
+/** Escape a literal so it can be embedded in a RegExp. Trial labels are plain
+ *  today ("Baseline", "Trial #3"), but a POM helper that takes arbitrary text
+ *  should not change meaning if that text ever grows a metacharacter. */
+const escapeForRegExp = (literal: string): string =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export interface StudioRunConfig {
   /** Name of a dataset already associated with the project (shown in the picker). */
   datasetName: string;
@@ -253,11 +259,20 @@ export class OptimizationStudioPage {
    */
   async openTrialByLabel(label: string): Promise<Locator> {
     return test.step(`Open trial "${label}"`, async () => {
-      await this.trialsTable()
-        .locator('tbody tr')
-        .filter({ hasText: label })
-        .first()
-        .click();
+      // Match the "Trial #" cell EXACTLY, not the row's text. A substring match
+      // on the whole row makes "Trial #1" also select "Trial #10" (and any other
+      // row sharing the prefix), and the label can collide with unrelated cell
+      // text elsewhere in the row. `TrialNumberCell` renders the label as the
+      // full text of the first cell, so an anchored match there is unambiguous.
+      const row = this.trialsTable()
+        .locator('tbody tr[data-row-id]')
+        .filter({
+          has: this.page.locator('td:first-child').filter({
+            hasText: new RegExp(`^\\s*${escapeForRegExp(label)}\\s*$`),
+          }),
+        });
+      await expect(row, `exactly one trial row labelled "${label}"`).toHaveCount(1);
+      await row.click();
       const panel = this.trialSidebar();
       await expect(panel, `trial side panel for "${label}"`).toBeVisible();
       return panel;

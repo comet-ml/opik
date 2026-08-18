@@ -1,5 +1,5 @@
 import { test, expect } from '@e2e/fixtures';
-import type { BackendFilter, ThreadRowRef } from '@e2e/core/backend';
+import { numericStat, type BackendFilter, type ThreadRowRef } from '@e2e/core/backend';
 
 /**
  * Threads read through the traces prefilter gate (OPIK-7919).
@@ -145,6 +145,17 @@ test.describe('Thread id prefilter — CUJ', { tag: ['@t2-cuj', '@area:threads']
           `EQUAL read on ${threadId} must be byte-identical to the unfiltered row`,
         ).toEqual(expected);
 
+        // Same exactness as the EQUAL path above. Without these two, a CONTAINS
+        // response that also carried unrelated project threads would still find
+        // the requested row and pass — which is the leak this differential is
+        // here to catch.
+        expect(containsRead.total, `CONTAINS read on ${threadId} matches exactly one thread`).toBe(
+          1,
+        );
+        expect(containsRead.threads, `CONTAINS read on ${threadId} returned one row`).toHaveLength(
+          1,
+        );
+
         const containsRow = containsRead.threads.find((r) => r.id === threadId);
         expect(containsRow, `CONTAINS read returned ${threadId}`).toBeDefined();
         expect(
@@ -160,12 +171,15 @@ test.describe('Thread id prefilter — CUJ', { tag: ['@t2-cuj', '@area:threads']
           projectId: project.id,
           filters: threadIdFilter(threadId, '='),
         });
-        expect(stats.thread_count, `thread_count under an EQUAL filter on ${threadId}`).toBe(1);
+        expect(
+          numericStat(stats.thread_count, 'thread_count'),
+          `thread_count under an EQUAL filter on ${threadId}`,
+        ).toBe(1);
 
         const row = unfiltered.get(threadId)!;
-        if (stats.total_estimated_cost_sum !== undefined && row.totalEstimatedCost !== null) {
+        if (stats.total_estimated_cost_sum != null && row.totalEstimatedCost !== null) {
           expect(
-            stats.total_estimated_cost_sum,
+            numericStat(stats.total_estimated_cost_sum, 'total_estimated_cost_sum'),
             `stats cost sum for ${threadId} agrees with the row's cost`,
           ).toBeCloseTo(row.totalEstimatedCost, 6);
         }

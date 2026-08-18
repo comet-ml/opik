@@ -15,6 +15,9 @@ export {
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
   type ThreadRowRef,
+  type StatPercentiles,
+  type ThreadStatValue,
+  numericStat,
   type BackendFilter,
   type ReadWindow,
 } from './client';
