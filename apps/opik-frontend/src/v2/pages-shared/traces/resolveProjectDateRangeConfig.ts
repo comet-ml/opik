@@ -60,3 +60,15 @@ export const resolveProjectDateRangeConfig = (
     storageKeySuffix: isDemoProject ? `-${projectName}` : "",
   };
 };
+
+/**
+ * What an ordinary project resolves to: the workspace default range, persisted in the shared slot.
+ *
+ * This is the behaviour that predates the demo override, which makes it the safe fallback for the
+ * boundaries a caller outside this repo can reach — `useLogsType` and `LogsTab`. Those callers live
+ * in plugin repos checked out at build time and are type-checked against whatever `main` holds, so
+ * making the config *required* there breaks their build with no signal in this repo. Both default to
+ * this instead; see LogsTab.tsx for the guard that keeps it that way.
+ */
+export const DEFAULT_PROJECT_DATE_RANGE_CONFIG: ProjectDateRangeConfig =
+  resolveProjectDateRangeConfig(undefined);

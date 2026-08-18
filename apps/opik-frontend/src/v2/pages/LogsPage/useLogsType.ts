@@ -4,7 +4,10 @@ import useLocalStorageState from "use-local-storage-state";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_TYPE } from "@/constants/traces";
-import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
+import {
+  DEFAULT_PROJECT_DATE_RANGE_CONFIG,
+  ProjectDateRangeConfig,
+} from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 import { LOGS_SOURCE } from "@/types/traces";
 import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
@@ -18,8 +21,11 @@ type UseLogsTypeOptions = {
   /**
    * Resolved by LogsPage from the project query it already owns, and shared with the tabs. All three
    * read one date-range key, so they must be given the same values.
+   *
+   * Optional because this hook is also called from plugin repos outside this one — omitting it keeps
+   * the pre-demo-override behaviour rather than failing to compile.
    */
-  dateRangeConfig: ProjectDateRangeConfig;
+  dateRangeConfig?: ProjectDateRangeConfig;
 };
 
 /**
@@ -27,7 +33,8 @@ type UseLogsTypeOptions = {
  * threadCount=undefined means stats are still loading.
  */
 const useLogsType = (options: UseLogsTypeOptions) => {
-  const { projectId, dateRangeConfig } = options;
+  const { projectId, dateRangeConfig = DEFAULT_PROJECT_DATE_RANGE_CONFIG } =
+    options;
 
   const { intervalStart, intervalEnd } =
     useMetricDateRangeWithQueryAndStorage(dateRangeConfig);
