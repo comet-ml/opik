@@ -122,8 +122,11 @@
 #                                 or narrow the window, rather than raising threads alone into a fixed
 #                                 ceiling.
 #                             (2) PARTS. Each insert thread writes its own parts, so part count per
-#                                 partition grows. Watch it against parts_to_throw_insert (ClickHouse
-#                                 default 300) rather than assuming headroom.
+#                                 partition grows. Watch it against THIS cluster's parts_to_throw_insert
+#                                 and parts_to_delay_insert, read from system.merge_tree_settings -- do not
+#                                 assume ClickHouse's defaults (300 / 150). Deployments routinely raise
+#                                 them, so the real headroom can be an order of magnitude off either way,
+#                                 and "parts vs 300" is a misleading ratio on a tuned cluster.
 #
 #                             CHOOSING A VALUE IS A CAPACITY DECISION, NOT A BENCHMARK. On an idle
 #                             rehearsal environment a large value looks free; on a production cluster

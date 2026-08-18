@@ -371,7 +371,10 @@ independent controls keep each statement safe:
 
   **Two costs.** Upstream: *"higher values will lead to higher memory usage"* — and on this table a single very
   large `output` document is a **per-row** cost that no block cap bounds, so raise `max_memory_usage` alongside
-  or narrow the window. And parts per partition grow; watch them against `parts_to_throw_insert` (default 300).
+  or narrow the window. And parts per partition grow; watch them against **this cluster's** `parts_to_throw_insert` and
+  `parts_to_delay_insert` — read them from `system.merge_tree_settings` rather than assuming ClickHouse's
+  defaults (300 / 150), because deployments routinely raise them and the real headroom can be an order of
+  magnitude different in either direction.
   Value choice is a capacity decision, not a benchmark: on an idle rehearsal box a large value looks free, but
   on production those threads compete with live query latency. `estimate.sh` does **not** model this setting —
   time a real window at your intended value and feed it back via `--rows-per-sec`.
