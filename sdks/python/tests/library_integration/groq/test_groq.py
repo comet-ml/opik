@@ -18,8 +18,6 @@ from ...testlib import (
 )
 
 MODEL = "openai/gpt-oss-20b"
-# Groq reports the served model without the vendor namespace it is requested under.
-LOGGED_MODEL = MODEL.split("/")[-1]
 
 
 @pytest.mark.usefixtures("ensure_groq_configured")
@@ -73,7 +71,7 @@ def test_groq_chat_completions_create__e2e__generator_tracked_correctly(
                         "total_tokens": ANY_BUT_NONE,
                     }
                 ),
-                model=ANY_STRING.starting_with(LOGGED_MODEL),
+                model=ANY_STRING.starting_with(MODEL),
                 provider="groq",
                 spans=[],
                 source="sdk",
@@ -137,7 +135,7 @@ def test_groq_chat_completions_create__async__e2e__generator_tracked_correctly(
                         "total_tokens": ANY_BUT_NONE,
                     }
                 ),
-                model=ANY_STRING.starting_with(LOGGED_MODEL),
+                model=ANY_STRING.starting_with(MODEL),
                 provider="groq",
                 spans=[],
                 source="sdk",
@@ -203,7 +201,7 @@ def test_groq_chat_completions_create__stream_mode_is_on__e2e__generator_tracked
                         "total_tokens": ANY_BUT_NONE,
                     }
                 ),
-                model=ANY_STRING.starting_with(LOGGED_MODEL),
+                model=ANY_STRING.starting_with(MODEL),
                 provider="groq",
                 spans=[],
                 source="sdk",
@@ -269,7 +267,7 @@ def test_groq_chat_completions_create__async__stream_mode_is_on__e2e__generator_
                         "total_tokens": ANY_BUT_NONE,
                     }
                 ),
-                model=ANY_STRING.starting_with(LOGGED_MODEL),
+                model=ANY_STRING.starting_with(MODEL),
                 provider="groq",
                 spans=[],
                 source="sdk",
