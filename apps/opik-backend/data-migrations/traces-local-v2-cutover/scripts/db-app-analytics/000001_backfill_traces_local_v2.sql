@@ -12,7 +12,9 @@
 --   ${WINDOW_LO} / ${WINDOW_HI}            the created_at half-open window bounds
 --   ${MAX_INSERT_BLOCK_SIZE}               rows per part-forming block
 --   ${MAX_PARTITIONS_PER_INSERT_BLOCK}     partitions one block may span (required; see the note below)
---   ${MAX_INSERT_THREADS}                  threads for the INSERT SELECT pipeline (0 = ClickHouse default)
+--   ${MAX_INSERT_THREADS}                  threads for the INSERT SELECT pipeline. The driver OMITS this whole
+--                                          SETTINGS line when --max-insert-threads is unset, so the server's
+--                                          value is inherited; an explicit 0 forces no parallel execution.
 --
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:

@@ -6,7 +6,8 @@
 -- this file, substitutes the placeholders and runs it — never run this file by hand. ALL FIVE placeholders it
 -- substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the server as a literal and the
 -- statement fails): ${ANALYTICS_DB_DATABASE_NAME}, ${BACKFILL_START}, ${MAX_INSERT_BLOCK_SIZE},
--- ${MAX_PARTITIONS_PER_INSERT_BLOCK} and ${MAX_INSERT_THREADS}. Invocation:
+-- ${MAX_PARTITIONS_PER_INSERT_BLOCK} and ${MAX_INSERT_THREADS} -- the last of which the driver instead REMOVES
+-- from the SETTINGS clause when --max-insert-threads is omitted, so the server's value is inherited. Invocation:
 --   ../delta_replay.sh --database opik --backfill-start '2025-06-01 12:00:00.000000'
 -- The surrounding config operations (buffer raise/restore) and the go/no-go checkpoint stay with the operator, where
 -- situational awareness matters most — those are config/judgement, not SQL. The driver invokes clickhouse-client with

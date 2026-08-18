@@ -328,6 +328,18 @@ run_backfill_window() {
         # non-zero default) applies. Rendering an explicit 0 here would OVERRIDE that and force the insert
         # serial -- a silent slowdown on any deployment that already sets the setting.
         sql="$(grep -vF 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql")"
+        # The strip is a whitespace-exact match on a SETTINGS line in ANOTHER file. If that line is ever
+        # reformatted the match silently no-ops and the placeholder reaches the server as a literal -- the exact
+        # failure that file's own header warns about. This is the DEFAULT path, so fail loudly here instead.
+        # The strip matches ONE exact spelling of a SETTINGS line that lives in ANOTHER file. Reformat that line
+        # -- even one extra space -- and the strip silently no-ops, leaving the placeholder to reach the server
+        # as a literal. So assert on the OUTCOME, whitespace-agnostically, and skip `--` comment lines, which
+        # legitimately keep the placeholder text in the file headers. This is the DEFAULT path; fail loudly.
+        if grep -v '^[[:space:]]*--' <<<"$sql" | grep -qF '${MAX_INSERT_THREADS}'; then
+            echo "ERROR: max_insert_threads strip failed -- the SETTINGS line in $BACKFILL_SQL no longer matches the" >&2
+            echo "       pattern above (was it reformatted?). Refusing to send SQL with a literal placeholder." >&2
+            exit 2
+        fi
     else
         sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
     fi
