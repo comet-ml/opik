@@ -30,9 +30,11 @@
 --     Raising it controls how much of the machine the backfill may use and can speed the copy up markedly,
 --     but only if the SELECT side is itself parallel (upstream: parallel INSERT SELECT "has effect only if the
 --     SELECT part is executed in parallel"). Upstream states materialized columns are calculated "when rows
---     are inserted" but does NOT say which stage computes them -- that this table's JSON-parsing
---     output_keys/input_keys make the insert side the constraint is an inference from profiling, confirmed by
---     effective cores rising towards the thread count. Two costs: upstream warns "higher values will lead to
+--     are inserted" but does NOT say which stage computes them -- that this table's JSON-parsing output_keys
+--     (there is no input_keys column) makes the insert side the constraint is an inference from profiling,
+--     confirmed by effective cores rising towards the thread count. Mind the units when computing those:
+--     (UserTimeMicroseconds + SystemTimeMicroseconds) / (query_duration_ms * 1000), and note the figure is
+--     query-wide CPU, not sink-only. Two costs: upstream warns "higher values will lead to
 --     higher memory usage" (which on this table compounds with oversized `output` documents, so move
 --     max_memory_usage with it), and part count per partition grows, to be watched against
 --     parts_to_throw_insert. The value is a capacity decision about what share of cores the cutover may take

@@ -76,9 +76,18 @@
 #                             side is serialised, raising this buys nothing.
 #
 #                             WHY THE INSERT SIDE IS OFTEN THE CONSTRAINT HERE: the destination carries
-#                             JSON-parsing MATERIALIZED columns (output_keys / input_keys), and upstream
-#                             states materialized values "are automatically calculated ... when rows are
-#                             inserted". Upstream does NOT state which pipeline stage or which threads
+#                             per-row MATERIALIZED work the source does not do. The expensive one is
+#                             output_keys, which PARSES the output JSON:
+#                               arrayMap(key -> tuple(key, toString(JSONType(JSONExtractRaw(output, key)))),
+#                                        JSONExtractKeys(output))
+#                             There is NO input_keys column -- output_keys is traces-only and has no input
+#                             counterpart; do not go looking for one. The table also materialises
+#                             truncated_input / truncated_output, which substring-copy documents that can
+#                             be very large, plus input_length / output_length / metadata_length, duration
+#                             and id_at.
+#
+#                             Upstream states materialized values "are automatically calculated ... when
+#                             rows are inserted", but does NOT state which pipeline stage or which threads
 #                             compute them; that the insert side is the bottleneck on this table is an
 #                             INFERENCE FROM PROFILING, not a documented guarantee -- see below for how
 #                             to confirm it on your own data rather than assuming it.
@@ -86,10 +95,18 @@
 #                             HOW TO CONFIRM IT: effective cores sit near 1 while the machine is
 #                             otherwise idle and OSIOWaitMicroseconds is 0 -- i.e. the copy is neither
 #                             CPU-saturated nor I/O bound, it is serialised. Compute effective cores
-#                             from query_log as
-#                             (UserTimeMicroseconds + SystemTimeMicroseconds) / query_duration_ms.
-#                             After raising this, effective cores rising towards the thread count is
-#                             what turns the inference into a measurement.
+#                             from query_log, MINDING THE UNITS -- the ProfileEvents are MICROseconds
+#                             and query_duration_ms is MILLIseconds, so the *1000 is not optional:
+#                               (UserTimeMicroseconds + SystemTimeMicroseconds) / (query_duration_ms * 1000)
+#                             Without it the result is 1000x too high and will read as hundreds of
+#                             cores. Sanity-check against the node's core count: a value above it means
+#                             the arithmetic is wrong, not that the machine is busy.
+#
+#                             NOTE WHAT THIS MEASURES: query_log aggregates are QUERY-WIDE CPU. They do
+#                             not separate read-pipeline threads from insert-pipeline threads, so this
+#                             number cannot by itself attribute the CPU to the sink. What makes it
+#                             evidence is the DELTA: raise the setting and effective cores rise towards
+#                             the thread count while the read side is unchanged.
 #
 #                             COSTS, BOTH OF THEM.
 #                             (1) MEMORY. Upstream is explicit: "Higher values will lead to higher
@@ -147,10 +164,10 @@ MAX_ROWS=2000000          # rows: per-statement bound; a week over this is halve
 MAX_INSERT_BLOCK_SIZE=1048576  # rows: SETTINGS max_insert_block_size for the INSERT. Peak memory is a small multiple of
                           # the smaller of this and min_insert_block_size_bytes (256 MB default), which dominates for wide
                           # trace rows; lower it on a memory-constrained node. 1048576 is the ClickHouse default.
-MAX_INSERT_THREADS=0                  # threads for the INSERT SELECT pipeline (SETTINGS max_insert_threads).
                           # 0 = ClickHouse default = SINGLE-THREADED sink, usually the throughput
                           # ceiling here. See --max-insert-threads above for the measurements.
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions: SETTINGS max_partitions_per_insert_block for the INSERT. The
+MAX_INSERT_THREADS=0                  # threads for the INSERT SELECT pipeline (SETTINGS max_insert_threads).
                           # destination is weekly-partitioned, so one block can span many partitions; ClickHouse's
                           # default of 100 THROWS (throw_on_max_partitions_per_insert_block=1). Far-future UUIDv7 ids
                           # make this reachable in practice — see the runbook's far-future section. 0 = unlimited.

@@ -3,9 +3,9 @@
 -- Run this only after the whole backfill (step 1) is complete and reconciled.
 
 -- Step 0: The SQL below (delta-insert + deletion replay) is the single source driven by ../delta_replay.sh, which reads
--- this file, substitutes the placeholders and runs it — never run this file by hand. ALL FOUR placeholders it
+-- this file, substitutes the placeholders and runs it — never run this file by hand. ALL FIVE placeholders it
 -- substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the server as a literal and the
--- statement fails): ${ANALYTICS_DB_DATABASE_NAME}, ${BACKFILL_START}, ${MAX_INSERT_BLOCK_SIZE} and
+-- statement fails): ${ANALYTICS_DB_DATABASE_NAME}, ${BACKFILL_START}, ${MAX_INSERT_BLOCK_SIZE},
 -- ${MAX_PARTITIONS_PER_INSERT_BLOCK} and ${MAX_INSERT_THREADS}. Invocation:
 --   ../delta_replay.sh --database opik --backfill-start '2025-06-01 12:00:00.000000'
 -- The surrounding config operations (buffer raise/restore) and the go/no-go checkpoint stay with the operator, where

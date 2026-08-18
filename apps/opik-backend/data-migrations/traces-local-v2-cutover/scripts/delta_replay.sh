@@ -33,6 +33,12 @@
 #                             (throw_on_max_partitions_per_insert_block = 1). An abort here is worse than in the
 #                             backfill: the final delta runs immediately before the EXCHANGE, inside the window the
 #                             runbook asks you to keep short. Pass the SAME value used for the backfill.
+#   --max-insert-threads N    threads for the delta INSERT SELECT pipeline (SETTINGS max_insert_threads).
+#                             Default 0, which ClickHouse documents as "INSERT SELECT no parallel
+#                             execution". Same knob, same caveats and same two costs (memory, part
+#                             count) as in backfill.sh -- see its option docs for the full diagnosis.
+#                             PASS THE SAME VALUE USED FOR THE BACKFILL: the delta writes into the
+#                             same table through the same insert path.
 
 set -euo pipefail
 

@@ -356,18 +356,34 @@ independent controls keep each statement safe:
     the `SELECT` part is executed in parallel"* (see `max_threads`).
 
   **Why the insert side is often the constraint on this table — and what is inference rather than
-  documented.** The destination carries JSON-parsing MATERIALIZED columns (`output_keys`, `input_keys`), and
-  upstream states materialized values *"are automatically calculated according to the specified materialized
-  expression when rows are inserted"*. Upstream does **not** state which pipeline stage or which threads
+  documented.** The destination carries per-row MATERIALIZED work the source does not. The expensive one is
+  **`output_keys`**, which parses the `output` JSON:
+  `arrayMap(key -> tuple(key, toString(JSONType(JSONExtractRaw(output, key)))), JSONExtractKeys(output))`.
+  There is **no `input_keys` column** — `output_keys` is traces-only and has no input counterpart, so don't go
+  looking for one. The table also materialises `truncated_input` / `truncated_output`, which substring-copy
+  documents that can be very large, plus `input_length` / `output_length` / `metadata_length`, `duration` and
+  `id_at`. Upstream states materialized values *"are automatically calculated according to the specified
+  materialized expression when rows are inserted"*. Upstream does **not** state which pipeline stage or which threads
   perform that calculation. That these columns make the insert side the bottleneck here is an **inference from
   profiling**, not a documented guarantee — so confirm it on your own data rather than assuming it:
 
   **How to confirm it:** effective cores sit near 1 while the machine is otherwise idle and
   `OSIOWaitMicroseconds` is 0 — the copy is neither CPU-saturated nor I/O bound, it is serialised. Compute
-  effective cores from `query_log` as
-  `(ProfileEvents['UserTimeMicroseconds'] + ProfileEvents['SystemTimeMicroseconds']) / query_duration_ms`.
-  After raising the setting, effective cores rising towards the thread count is what turns the inference into
-  a measurement.
+  effective cores from `query_log`, **minding the units** — the `ProfileEvents` are *micro*seconds while
+  `query_duration_ms` is *milli*seconds, so the `* 1000` is not optional:
+
+  ```sql
+  (ProfileEvents['UserTimeMicroseconds'] + ProfileEvents['SystemTimeMicroseconds'])
+      / (query_duration_ms * 1000)   -- omit the *1000 and the answer is 1000x too high
+  ```
+
+  Sanity-check the result against the node's core count: a value above it means the arithmetic is wrong, not
+  that the machine is busy.
+
+  **What this measures, precisely:** `query_log` aggregates are **query-wide CPU**. They do not separate
+  read-pipeline threads from insert-pipeline threads, so the number alone cannot attribute CPU to the insert
+  side. What makes it evidence is the *delta*: raise the setting and effective cores rise towards the thread
+  count while the read side is unchanged.
 
   **Two costs, both real:**
   - **Memory.** Upstream is explicit: *"Higher values will lead to higher memory usage."* On this table that
@@ -376,6 +392,12 @@ independent controls keep each statement safe:
     rather than raising threads alone into a fixed ceiling.
   - **Parts.** Each insert thread writes its own parts, so parts per partition grows. Watch it against
     `parts_to_throw_insert` (ClickHouse default 300) rather than assuming headroom.
+
+  **`estimate.sh` does not model this setting.** Its ETA probes the *read* side and derates it by a fixed
+  `--write-cost-factor`, so it is not specific to your thread count and will understate a run configured with
+  insert parallelism. If you are running with `--max-insert-threads` set, time one real window at that setting
+  and feed the measured throughput back via `estimate.sh --rows-per-sec`, which skips the probe and the
+  write-cost factor entirely.
 
   **Choosing a value is a capacity decision, not a benchmark:** on an idle rehearsal environment a large
   value looks free, but on production those threads compete with live query latency, so pick the share of
