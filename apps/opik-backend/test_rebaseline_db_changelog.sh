@@ -256,10 +256,34 @@ else
 	pass "dry run leaves the ledger untouched"
 fi
 
-# A dry run against an empty schema should still report the refusal — an operator inspecting before
-# committing is exactly who needs to hear it.
+# A dry run reports; it never writes, so no write-protecting guard applies to it. Against an empty
+# schema it still prints the pending set and exits 0 rather than refusing — the guards fire on the
+# real run that follows.
 reset_log
-PENDING=149 TABLE_COUNT=0 expect "dry run surfaces the refusal" 1 "Refusing to re-baseline" -- --dry-run
+PENDING=149 TABLE_COUNT=0 expect "dry run reports against an empty schema" 0 "Dry run" -- --dry-run
+reset_log
+PENDING=149 TABLE_COUNT=0 \
+	expect "dry run against an empty schema does not refuse" 0 "Pending changesets" -- --dry-run
+
+# --dry-run must not probe at all: the count would gate nothing, and not sending the migration
+# credentials is strictly safer than sending them to produce a report.
+reset_log
+PENDING=149 TABLE_COUNT=27 "$SCRIPT" --dry-run >/dev/null 2>&1 || true
+if [[ -s "$STUB_CURL_URLS" || -s "$STUB_CURL_CREDS" ]]; then
+	fail "dry run sends no credentials" "probed: $(head -1 "$STUB_CURL_URLS" 2>/dev/null)"
+else
+	pass "dry run sends no credentials"
+fi
+
+# The documented MySQL workflow: the operator is told to inspect the pending changesets, and
+# --database db cannot be schema-verified. A dry run must still show them the list rather than
+# demanding they assert the conclusion that inspection is meant to establish.
+reset_log
+PENDING=149 TABLE_COUNT=0 \
+	expect "MySQL dry run prints the pending list unforced" 0 "Pending changesets for 'db'" -- --database db --dry-run
+reset_log
+PENDING=149 TABLE_COUNT=0 \
+	expect "MySQL dry run completes without --force-unverified" 0 "Dry run" -- --database db --dry-run
 
 echo
 echo "migrations URL parsing"
@@ -267,10 +291,12 @@ echo "migrations URL parsing"
 # either '//host:port' or an embedded-protocol 'https://host:port'. Both reach the probe, and a
 # fixed '//'-strip would turn the latter into a host of 'jdbc:clickhouse:https:'.
 # expect_url <name> <migrations-url> <expected-probe-url>
+# Drives a real (non-dry) run, since --dry-run deliberately never probes. PENDING=0 keeps it on the
+# clean-ledger happy path so the probe is reached without the low-count guard interfering.
 expect_url() {
 	local name="$1" url="$2" want="$3" got
 	reset_log
-	ANALYTICS_DB_MIGRATIONS_URL="$url" PENDING=0 TABLE_COUNT=27 "$SCRIPT" --dry-run >/dev/null 2>&1 || true
+	ANALYTICS_DB_MIGRATIONS_URL="$url" PENDING=0 TABLE_COUNT=27 "$SCRIPT" --yes >/dev/null 2>&1 || true
 	got="$(head -1 "$STUB_CURL_URLS" 2>/dev/null || true)"
 	if [[ "$got" == "$want" ]]; then
 		pass "$name"
@@ -331,7 +357,7 @@ ANALYTICS_DB_MIGRATIONS_URL="not-a-jdbc-url" PENDING=149 TABLE_COUNT=27 \
 reset_log
 (
 	unset ANALYTICS_DB_MIGRATIONS_URL
-	PENDING=0 TABLE_COUNT=27 "$SCRIPT" --dry-run >/dev/null 2>&1 || true
+	PENDING=0 TABLE_COUNT=27 "$SCRIPT" --yes >/dev/null 2>&1 || true
 )
 got="$(head -1 "$STUB_CURL_URLS" 2>/dev/null || true)"
 if [[ "$got" == "http://localhost:8123/" ]]; then
@@ -344,7 +370,7 @@ fi
 reset_log
 (
 	unset ANALYTICS_DB_MIGRATIONS_USER ANALYTICS_DB_MIGRATIONS_PASS ANALYTICS_DB_DATABASE_NAME
-	PENDING=0 TABLE_COUNT=27 "$SCRIPT" --dry-run >/dev/null 2>&1 || true
+	PENDING=0 TABLE_COUNT=27 "$SCRIPT" --yes >/dev/null 2>&1 || true
 )
 creds="$(head -1 "$STUB_CURL_CREDS" 2>/dev/null || true)"
 if [[ "$creds" == "opik:opik" ]]; then
@@ -376,7 +402,7 @@ echo "probe contract"
 # is sent as a bound parameter rather than inlined, and that it tracks ANALYTICS_DB_DATABASE_NAME.
 reset_log
 PENDING=0 TABLE_COUNT=27 ANALYTICS_DB_DATABASE_NAME="custom_db" \
-	"$SCRIPT" --dry-run >/dev/null 2>&1 || true
+	"$SCRIPT" --yes >/dev/null 2>&1 || true
 sent_query="$(grep '^query=' "$STUB_CURL_QUERY" | head -1 || true)"
 sent_db="$(grep '^param_db=' "$STUB_CURL_QUERY" | head -1 || true)"
 if [[ "$sent_query" == *"count() FROM system.tables"* && "$sent_query" == *"database = {db:String}"* ]]; then

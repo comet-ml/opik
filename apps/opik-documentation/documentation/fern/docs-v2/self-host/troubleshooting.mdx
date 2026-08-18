@@ -259,6 +259,8 @@ Pass `--yes` to skip the confirmation prompt in an automated runbook; the schema
 
 The same applies to `--config`. The re-baseline connects through the config file you pass, while the schema check reads the `ANALYTICS_DB_MIGRATIONS_*` environment variables — these describe the same database only for the packaged `config.yml`, which resolves from exactly those variables. With any other config the check could verify a different database than the one being written, so the script refuses unless you add `--force-unverified`.
 
+None of these refusals apply to `--dry-run`, which reports without writing and so needs no verification: it prints the pending changesets and exits, on either database, and never contacts ClickHouse for a table count. That is what makes the inspection step above workable on MySQL, where the schema cannot be verified at all.
+
 If you prefer to run the underlying commands directly, these are the Dropwizard migration commands the script drives:
 
 ```bash

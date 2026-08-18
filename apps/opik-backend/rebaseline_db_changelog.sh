@@ -170,7 +170,12 @@ analytics_table_count() {
 # properties of the invocation, not of the schema, so they need neither the pending set nor the
 # probe — and deciding them here means an operator whose database is unreachable sees this refusal
 # instead of a connection stack trace from the `status` call.
-if [[ "$FORCE_UNVERIFIED" != "true" ]]; then
+#
+# These guards exist to protect the write, so --dry-run skips them entirely: it records nothing, so
+# there is nothing to verify. Gating it would also break the documented MySQL workflow, where the
+# operator is told to inspect the pending changesets — unreachable if seeing them first required
+# asserting the very conclusion that inspection is meant to establish.
+if [[ "$DRY_RUN" != "true" && "$FORCE_UNVERIFIED" != "true" ]]; then
   if [[ "$DATABASE" != "dbAnalytics" ]]; then
     echo "❌ The schema cannot be verified for '${DATABASE}': there is no MySQL client in this image," >&2
     echo "   so the 'is the schema at head' precondition cannot be checked." >&2
@@ -234,14 +239,27 @@ pending_count="$(printf '%s' "$reviewed_pending" | grep -c . || true)"
 # to. Decided BEFORE probing: the probe authenticates with PROBE_USER/PROBE_PASS against the
 # endpoint the env vars name, so running it under a config we are about to reject would send
 # migration credentials to a host this invocation was never entitled to contact.
+#
+# --dry-run never probes either. It writes nothing, so the count would gate nothing — and not
+# sending the migration credentials at all is strictly safer than sending them for a report.
 PROBE_TRUSTED="false"
-if [[ "$DATABASE" == "dbAnalytics" && "$CONFIG" == "$DEFAULT_CONFIG" ]]; then
+if [[ "$DRY_RUN" != "true" && "$DATABASE" == "dbAnalytics" && "$CONFIG" == "$DEFAULT_CONFIG" ]]; then
   PROBE_TRUSTED="true"
 fi
 
 tables_before="-1"
 if [[ "$PROBE_TRUSTED" == "true" ]]; then
   tables_before="$(analytics_table_count)"
+fi
+
+# A dry run has now printed the pending set, which is all it promises. It exits before the guard
+# chain below rather than after it: those guards protect the write, and a report that refuses to
+# report is worse than useless — on MySQL it left the operator with no way to see the changesets the
+# docs tell them to inspect.
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "ℹ️  Dry run — nothing was changed."
+  echo "   Re-run without --dry-run to record the changesets above as applied."
+  exit 0
 fi
 
 # The precondition — "the schema is already at head" — is the only thing that makes this operation
@@ -283,12 +301,6 @@ elif [[ "$pending_count" -gt 0 ]] \
   echo "⚠️  Proceeding unverified — '${PROBE_DATABASE}' reports only ${tables_before} table(s) against" \
     "${pending_count} pending changeset(s), which normally means the schema is not built."
   echo "   You are asserting it is at head; if it is not, the missing migrations are permanently lost."
-fi
-
-if [[ "$DRY_RUN" == "true" ]]; then
-  echo "ℹ️  Dry run — nothing was changed."
-  echo "   Re-run without --dry-run to record the changesets above as applied."
-  exit 0
 fi
 
 cat <<EOF
