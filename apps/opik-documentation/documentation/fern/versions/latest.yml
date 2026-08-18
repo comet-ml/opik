@@ -776,6 +776,9 @@ navigation:
               - page: Together AI
                 path: ../docs-v2/integrations/together-ai.mdx
                 slug: together-ai
+              - page: TokenLab
+                path: ../docs-v2/integrations/tokenlab.mdx
+                slug: tokenlab
               - page: WatsonX
                 path: ../docs-v2/integrations/watsonx.mdx
                 slug: watsonx
