@@ -164,13 +164,14 @@ MAX_ROWS=2000000          # rows: per-statement bound; a week over this is halve
 MAX_INSERT_BLOCK_SIZE=1048576  # rows: SETTINGS max_insert_block_size for the INSERT. Peak memory is a small multiple of
                           # the smaller of this and min_insert_block_size_bytes (256 MB default), which dominates for wide
                           # trace rows; lower it on a memory-constrained node. 1048576 is the ClickHouse default.
-                          # 0 = ClickHouse default = SINGLE-THREADED sink, usually the throughput
-                          # ceiling here. See --max-insert-threads above for the measurements.
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions: SETTINGS max_partitions_per_insert_block for the INSERT. The
-MAX_INSERT_THREADS=0                  # threads for the INSERT SELECT pipeline (SETTINGS max_insert_threads).
                           # destination is weekly-partitioned, so one block can span many partitions; ClickHouse's
                           # default of 100 THROWS (throw_on_max_partitions_per_insert_block=1). Far-future UUIDv7 ids
                           # make this reachable in practice — see the runbook's far-future section. 0 = unlimited.
+MAX_INSERT_THREADS=0      # threads: SETTINGS max_insert_threads for the INSERT SELECT. 0 is the ClickHouse default and
+                          # means "INSERT SELECT no parallel execution", which is usually the throughput ceiling here.
+                          # Raising it trades memory and destination part count for copy speed — see the
+                          # --max-insert-threads option docs above for the full diagnosis and both costs.
 DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled window before aborting (0.01%).
 PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 for a large table at peak.
 MIN_FREE_FACTOR="2.0"     # multiple of the current traces on-disk size that node free space must clear before starting.
