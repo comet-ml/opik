@@ -33,7 +33,9 @@ pytestmark = [
     pytest.mark.usefixtures("use_us_central1_for_veo"),
 ]
 
-VIDEO_MODEL = "veo-3.1-fast-generate-preview"
+# GA endpoint. The -preview endpoint this replaced was shut down on 2026-04-02,
+# after which every weekly run 404'd with "Publisher model ... was not found".
+VIDEO_MODEL = "veo-3.1-fast-generate-001"
 
 VIDEO_CONFIG = GenerateVideosConfig(
     duration_seconds=4,
