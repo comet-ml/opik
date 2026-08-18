@@ -34,7 +34,8 @@ dependencies = [
     #                completion() raises PydanticUserError.
     #                https://github.com/BerriAI/litellm/issues/36384
     #     1.98.0rc1  ImportError: cannot import name 'NotRequired' from 'typing'
-    #                (3.11+ only; should come from typing_extensions).
+    #                typing.NotRequired does not exist on 3.10 (added in 3.11);
+    #                litellm should import it from typing_extensions.
     #   Both are still unfixed on litellm main, so 1.99+ is expected to break on 3.10 too.
     #   The cap is the standing guard; 3.11+ deliberately stays uncapped. Lift it once
     #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
