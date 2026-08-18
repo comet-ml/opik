@@ -381,10 +381,14 @@ independent controls keep each statement safe:
   time a real window at your intended value and feed it back via `--rows-per-sec`.
   Full diagnosis in `backfill.sh`'s `--max-insert-threads` option docs.
 
-  **Regression check:** `scripts/verify_render.sh` exercises how both drivers render this setting — inherit,
-  explicit value, and the six ways the SQL can be malformed such that a setting is silently dropped or a literal
-  placeholder is sent. It runs no SQL and needs no cluster. Run it after editing either driver or the `SETTINGS`
-  clause of `000001`/`000002`.
+  **If you edit the rendering, re-validate it by hand — nothing in this repo checks it for you.** The drivers
+  render this setting by requiring exactly one line-anchored `max_insert_threads = ${MAX_INSERT_THREADS},` in
+  `000001`/`000002` and then either stripping it (inherit) or substituting it. Every way that can go wrong is
+  silent: a reformatted or shared line, a missing assignment, a duplicate one, or a placeholder that survives
+  into an executable line. The drivers' own guards abort on each of those, but there is deliberately **no
+  committed harness** here — this directory holds operator drivers only — so after changing either driver or the
+  `SETTINGS` clause of `000001`/`000002`, exercise those cases manually against corrupted copies before a
+  cutover window.
 
 - **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
   max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is

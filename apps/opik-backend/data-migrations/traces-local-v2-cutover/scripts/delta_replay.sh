@@ -99,8 +99,8 @@ sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOC
 # fixed-string strip would silently miss).
 assignments="$(grep -cE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},?[[:space:]]*$' <<<"$sql" || true)"
 if [[ "$assignments" -ne 1 ]]; then
-    echo "ERROR: expected exactly ONE line reading 'max_insert_threads = \${MAX_INSERT_THREADS},' in" >&2
-    echo "       $SQL_FILE, found $assignments. The setting must sit alone on its own line." >&2
+    echo "ERROR: expected exactly ONE line holding nothing but 'max_insert_threads = \${MAX_INSERT_THREADS}'" >&2
+    echo "       (trailing comma optional) in $SQL_FILE; found $assignments. It must sit alone on its own line." >&2
     exit 2
 fi
 if [[ -z "$MAX_INSERT_THREADS" ]]; then
