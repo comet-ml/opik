@@ -2,9 +2,16 @@
 -- The gate test TracesLocalV2CutoverTest reimplements this statement inline; keep the two in step (see its Javadoc).
 --
 -- This file is the SINGLE source of the backfill INSERT; ../backfill.sh reads it, substitutes the ${...} placeholders
--- (database, window bounds, block size) and runs it once per time sub-window — so the script and this reference never
+-- and runs it once per time sub-window — so the script and this reference never
 -- drift. Run the migration through backfill.sh, never this file by hand. WINDOW_LO/WINDOW_HI are a created_at half-open
 -- range the driver picks so each INSERT stays under its --max-rows-per-insert bound (see README "Batching and throttling").
+--
+-- ALL FIVE placeholders the driver substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the
+-- server as a literal and the INSERT fails):
+--   ${ANALYTICS_DB_DATABASE_NAME}          the analytics database
+--   ${WINDOW_LO} / ${WINDOW_HI}            the created_at half-open window bounds
+--   ${MAX_INSERT_BLOCK_SIZE}               rows per part-forming block
+--   ${MAX_PARTITIONS_PER_INSERT_BLOCK}     partitions one block may span (required; see the note below)
 --
 -- Slicing rationale (created_at, not id / not workspace), delta and replay design: see ../../README.md.
 -- Notes on the statement:
@@ -19,6 +26,14 @@
 --     in sort-key order — do not rely on it (see README "Why slice by created_at").
 --   * SETTINGS max_insert_block_size bounds the rows per part-forming block; peak insert memory is a small multiple of
 --     the smaller of that and min_insert_block_size_bytes (256 MB default), which dominates for wide trace rows.
+--   * SETTINGS max_partitions_per_insert_block is REQUIRED, not a tuning knob. Because the blocks above may span
+--     partitions (see the ORDER BY note), and the destination is weekly-partitioned on id_at, a block spans as many
+--     partitions as the ids in it imply. ClickHouse's default is 100 and throw_on_max_partitions_per_insert_block = 1,
+--     so exceeding it ABORTS the INSERT. Far-future UUIDv7 ids (litellm BerriAI/litellm#31294) put real tables well
+--     past it: measured on a production-shape table, one block spanned 333 destination partitions in total (269 of them
+--     far-future, the rest ordinary weeks the same block touched) while every other block in that window spanned <= 7.
+--     The driver's default (2000) is sized to clear the table's TOTAL distinct partition count with margin -- not just
+--     the far-future count, which the 333-vs-269 gap shows is an undercount of a block's real spread.
 
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,
@@ -73,6 +88,7 @@ FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
 WHERE created_at >= toDateTime64('${WINDOW_LO}', 9, 'UTC')
   AND created_at <  toDateTime64('${WINDOW_HI}', 9, 'UTC')
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
+         max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
          log_comment = 'traces_local_v2_backfill:${WINDOW_LO}:${WINDOW_HI}';
 
 -- Per-window reconciliation is automated by backfill.sh (uniqExact of the dedup key, aborting on > 0.01% divergence);

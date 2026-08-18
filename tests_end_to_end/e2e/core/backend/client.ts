@@ -6,6 +6,10 @@ import {
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
 import {
+  waitForTraceScoresSettled,
+  type WaitForScoresSettledOpts,
+} from './wait-for-scores-settled';
+import {
   pollOptimizationStatus,
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
@@ -83,6 +87,7 @@ export interface AutomationRuleRef {
   id: string;
   name: string;
   projectIds: string[];
+  enabled: boolean;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -449,6 +454,13 @@ export function makeBackendClient(apiKey: string | null = null) {
       return pollTraceForFeedbackScore(localGetTrace, traceId, scoreName, opts);
     },
 
+    async waitForTraceScoresSettled(
+      traceId: string,
+      opts: WaitForScoresSettledOpts = {},
+    ): Promise<TraceDetail> {
+      return waitForTraceScoresSettled(localGetTrace, traceId, opts);
+    },
+
     async listAutomationRulesForProject(projectId: string): Promise<AutomationRuleRef[]> {
       const page = await opik.api.automationRuleEvaluators.findEvaluators({
         projectId,
@@ -459,6 +471,7 @@ export function makeBackendClient(apiKey: string | null = null) {
         id: String(r.id),
         name: r.name,
         projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
+        enabled: r.enabled ?? true,
       }));
     },
 

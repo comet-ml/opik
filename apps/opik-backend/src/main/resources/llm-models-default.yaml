@@ -185,9 +185,6 @@ gemini:
     structuredOutput: true
   - id: "gemini-3.1-flash-lite"
     label: "Gemini 3.1 Flash Lite"
-  - id: "gemini-3.1-flash-lite-preview"
-    label: "Gemini 3.1 Flash Lite Preview"
-    structuredOutput: true
   - id: "gemini-3-flash-preview"
     label: "Gemini 3 Flash Preview"
     structuredOutput: true
@@ -231,11 +228,17 @@ gemini:
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
   - id: "gemini-3.1-flash-lite-image"
+  - id: "gemini-3.1-flash-lite-preview"
+    structuredOutput: true
   - id: "gemini-3.1-flash-tts-preview"
   - id: "gemini-pro-vision"
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
 vertex-ai:
+  - id: "gemini-3.7-flash"
+    qualifiedName: "vertex_ai/gemini-3.7-flash"
+    label: "Gemini 3.7 Flash"
+    structuredOutput: true
   - id: "gemini-3.6-flash"
     qualifiedName: "vertex_ai/gemini-3.6-flash"
     label: "Gemini 3.6 Flash"
@@ -568,6 +571,8 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v4-pro-0813"
     label: "deepseek/deepseek-v4-pro-0813"
+  - id: "dots-studio/dots-3-note-preview:free"
+    label: "dots-studio/dots-3-note-preview:free"
   - id: "eleutherai/llemma_7b"
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
@@ -1493,6 +1498,8 @@ openrouter:
     label: "qwen/qwen3.7-plus"
   - id: "qwen/qwen3.8-2.4t-a95b"
     label: "qwen/qwen3.8-2.4t-a95b"
+  - id: "qwen/qwen3.8-27b"
+    label: "qwen/qwen3.8-27b"
   - id: "qwen/qwen3.8-max"
     label: "qwen/qwen3.8-max"
   - id: "qwen/qwq-32b"
@@ -1660,6 +1667,8 @@ openrouter:
     label: "z-ai/glm-5.2"
   - id: "z-ai/glm-5.2:batch"
     label: "z-ai/glm-5.2:batch"
+  - id: "z-ai/glm-5.2:free"
+    label: "z-ai/glm-5.2:free"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
   - id: "~anthropic/claude-fable-latest"

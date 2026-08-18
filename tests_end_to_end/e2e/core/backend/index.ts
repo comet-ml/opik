@@ -16,3 +16,4 @@ export {
   type AnnotationQueueReviewerRef,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
+export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';
