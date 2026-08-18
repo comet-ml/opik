@@ -7,6 +7,7 @@ import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.domain.mapping.otel.ElasticInferenceServiceResolver;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
+import com.comet.opik.domain.mapping.otel.HostProviderResolver;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -275,6 +276,10 @@ public class OpenTelemetryMapper {
         // Disambiguate the generic 'google' provider (PydanticAI / google-genai) into the Vertex AI
         // vs Gemini API canonical name using server.address, so cost lookup can match a price row.
         provider = GoogleProviderResolver.resolve(provider, metadata);
+
+        // Normalize host-style provider values (e.g. "api.cerebras.ai" -> "cerebras")
+        // so cost lookup can find the canonical provider.
+        provider = HostProviderResolver.resolve(provider, metadata);
 
         // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
         // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.

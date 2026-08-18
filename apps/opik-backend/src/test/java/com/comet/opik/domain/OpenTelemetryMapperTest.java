@@ -1515,6 +1515,52 @@ class OpenTelemetryMapperTest {
     }
 
     /**
+     * Host-style {@code gen_ai.system} values (e.g. {@code api.cerebras.ai}) emitted by
+     * OpenAI-compatible SDKs must be normalized to the canonical provider so cost lookup works.
+     */
+    @Nested
+    class HostProviderResolution {
+
+        private com.comet.opik.api.Span mapWithProvider(String genAiSystem) {
+            var attributes = new java.util.ArrayList<KeyValue>();
+            attributes.add(KeyValue.newBuilder()
+                    .setKey("gen_ai.system")
+                    .setValue(AnyValue.newBuilder().setStringValue(genAiSystem))
+                    .build());
+
+            var spanBuilder = com.comet.opik.api.Span.builder()
+                    .id(java.util.UUID.randomUUID())
+                    .traceId(java.util.UUID.randomUUID())
+                    .projectId(java.util.UUID.randomUUID())
+                    .startTime(java.time.Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+            return spanBuilder.build();
+        }
+
+        @Test
+        void apiCerebrasHostNormalizedToCerebras() {
+            assertThat(mapWithProvider("api.cerebras.ai").provider()).isEqualTo("cerebras");
+        }
+
+        @Test
+        void apiXAiHostNormalizedToXai() {
+            assertThat(mapWithProvider("api.x.ai").provider()).isEqualTo("xai");
+        }
+
+        @Test
+        void unknownHostPassesThroughUnchanged() {
+            assertThat(mapWithProvider("api.unknownvendor.io").provider()).isEqualTo("api.unknownvendor.io");
+        }
+
+        @Test
+        void canonicalProviderNamePassesThroughUnchanged() {
+            assertThat(mapWithProvider("openai").provider()).isEqualTo("openai");
+        }
+    }
+
+    /**
      * Failed spans must surface as Opik errors. Both OTel-core signals are covered: the
      * {@code exception} span event and a {@code STATUS_CODE_ERROR} status.
      */
