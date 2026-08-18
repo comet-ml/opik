@@ -49,21 +49,21 @@ If you would like to migrate previous dataset items to the new format, please se
 
 ### Backward Incompatible Change
 
-- Updated datasets to support more flexible data schema - This change affects how dataset items are structured and may require updates to existing dataset insertion code. See the [Dataset documentation](/evaluation/manage_datasets) for details.
+- Updated datasets to support more flexible data schema - This change affects how dataset items are structured and may require updates to existing dataset insertion code. See the [Dataset documentation](/evaluation/advanced/manage_datasets) for details.
 - The `context` field is now optional in the [Hallucination metric](/evaluation/metrics/hallucination) - This may affect existing evaluation configurations
 
 ## Release 1.0.1, 2024-09-30
 
 ### Backward Incompatible Change
 
-- Changed dataset item insertion behavior - Duplicate items are now silently ignored instead of being ingested, which may affect data collection workflows. See the [Dataset documentation](/evaluation/manage_datasets) for details.
+- Changed dataset item insertion behavior - Duplicate items are now silently ignored instead of being ingested, which may affect data collection workflows. See the [Dataset documentation](/evaluation/advanced/manage_datasets) for details.
 
 ## Release 1.0.0, 2024-11-25
 
 ### Backward Incompatible Change
 
 - Updated OpenAI integration to track structured output calls using `beta.chat.completions.parse` - This may affect existing OpenAI integration code. See the [OpenAI integration documentation](/integrations/openai) for details.
-- Fixed issue with `update_current_span` and `update_current_trace` that did not support updating the `output` field - This may affect existing trace update code. See the [Tracing documentation](/tracing/log_traces) for details.
+- Fixed issue with `update_current_span` and `update_current_trace` that did not support updating the `output` field - This may affect existing trace update code. See the [Tracing documentation](/tracing/advanced/log_traces) for details.
 
 ## Release 1.0.0, 2025-03-17
 
