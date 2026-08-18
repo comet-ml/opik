@@ -220,9 +220,9 @@ Open the rendered page and confirm:
 
 ## Changelog routing
 
-Pick the changelog target by scope — do not default everything to the root `CHANGELOG.md`.
+Pick the changelog target by scope — do not default everything to one surface.
 
-- `CHANGELOG.md` (repo root) — self-hosted deployment changelog. Breaking, critical, or security-impacting changes only.
+- `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` — self-hosted deployment changelog shown at `/docs/opik/self-host/changelog`. Breaking, critical, or security-impacting changes only. (The former repo-root `CHANGELOG.md` was removed; its content lives on this page now.)
 - `apps/opik-documentation/documentation/fern/docs/changelog/*.mdx` — general product release notes shown at `/docs/opik/changelog`. One dated `.mdx` per entry.
 - `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` — Agent Optimizer version updates (e.g. `sdks/opik_optimizer` releases like `3.1.0`).
 - Liquibase `changelog.xml` files are migration manifests, not user-facing release notes. Do not put prose there.

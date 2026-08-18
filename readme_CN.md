@@ -196,9 +196,9 @@ cd opik
 powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 ```
 
-**用于开发的服务配置文件（Service Profiles）**
+**安装脚本选项**
 
-Opik 安装脚本现已支持针对不同开发场景的服务配置文件：
+`opik.sh` 和 `opik.ps1` 脚本支持以下选项：
 
 ```bash
 # Start full Opik suite (default behavior)
@@ -213,6 +213,22 @@ Opik 安装脚本现已支持针对不同开发场景的服务配置文件：
 # Enable guardrails with any profile
 ./opik.sh --guardrails # Guardrails with full Opik suite
 ./opik.sh --backend --guardrails # Guardrails with infrastructure + backend
+
+# Build the containers from source before starting
+./opik.sh --build
+
+# Check that all containers are healthy
+./opik.sh --verify
+
+# Stop all containers
+./opik.sh --stop
+
+# Stop all containers and remove all Opik data volumes
+# WARNING: ALL OPIK DATA WILL BE LOST
+./opik.sh --clean
+
+# Show all available options
+./opik.sh --help
 ```
 
 使用 `--help` 或 `--info` 选项来排查问题。Dockerfile 现已确保容器以非 root 用户运行，以增强安全性。一切启动并运行后，你现在就可以在浏览器中访问 [localhost:5173](http://localhost:5173) 了！有关详细说明，请参阅[本地部署指南](https://www.comet.com/docs/opik/self-host/local_deployment?from=llm&utm_source=opik&utm_medium=github&utm_content=self_host_link&utm_campaign=opik)。
@@ -223,13 +239,10 @@ Opik 安装脚本现已支持针对不同开发场景的服务配置文件：
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
 
-> [!IMPORTANT]
-> **1.7.0 版本变更**：请查看[更新日志](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md)，了解重要更新和破坏性变更。
-
 <a id="-opik-client-sdk"></a>
 ## 💻 Opik 客户端 SDK
 
-Opik 提供一套客户端库和一个 REST API 用于与 Opik 服务器交互。这包括面向 Python、TypeScript 和 Ruby（通过 OpenTelemetry）的 SDK，可无缝集成到你的工作流中。有关详细的 API 和 SDK 参考，请参阅 [Opik 客户端参考文档](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik)。
+Opik 提供一套客户端库和一个 REST API 用于与 Opik 服务器交互。这包括面向 Python 和 TypeScript 的 SDK，以及第一方 [OpenTelemetry](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=otel_link&utm_campaign=opik) 支持：任何具有 OpenTelemetry SDK 的语言（包括 Java、[Ruby](https://www.comet.com/docs/opik/integrations/opentelemetry-ruby-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=ruby_link&utm_campaign=opik) 和 .NET）都可以将追踪数据发送到 Opik。有关详细的 API 和 SDK 参考，请参阅 [Opik 客户端参考文档](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik)。
 
 ### Python SDK 快速开始
 
