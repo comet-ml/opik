@@ -1,5 +1,6 @@
 from typing import List, Dict
 
+from opik.evaluation.metrics.conversation import helpers as conversation_helpers
 from opik.evaluation.metrics.conversation import types as conversation_types
 from opik.evaluation.models import base_model
 
@@ -148,7 +149,10 @@ Given the groundedness score, which is a 0-1 score indicating how well the OVERA
 def build_evaluate_conversation_messages(
     sliding_window: conversation_types.Conversation,
 ) -> List[base_model.ConversationDict]:
-    user_content = f"** Turns: **\n{sliding_window}\n\n** JSON: **"
+    user_content = (
+        f"** Turns: **\n{conversation_helpers.render_turns_for_prompt(sliding_window)}"
+        "\n\n** JSON: **"
+    )
     return [
         {"role": "system", "content": _EVALUATE_CONVERSATION_SYSTEM},
         {"role": "user", "content": user_content},
@@ -159,12 +163,8 @@ def build_evaluate_conversation_with_documents_messages(
     sliding_window: conversation_types.Conversation,
     retrieved_documents: List[str],
 ) -> List[base_model.ConversationDict]:
-    turns = [
-        {key: value for key, value in message.items() if key != "context"}
-        for message in sliding_window
-    ]
     user_content = (
-        f"** Turns: **\n{turns}\n\n"
+        f"** Turns: **\n{conversation_helpers.render_turns_for_prompt(sliding_window)}\n\n"
         f"** Retrieved documents: **\n{retrieved_documents}\n\n"
         "** JSON: **"
     )

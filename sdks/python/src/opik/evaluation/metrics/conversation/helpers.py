@@ -77,8 +77,20 @@ def extract_turns_windows_from_conversation(
     return turns_windows
 
 
+def render_turns_for_prompt(conversation: types.Conversation) -> str:
+    """Renders a conversation for interpolation into a judge prompt.
+
+    Only ``role`` and ``content`` are emitted. Messages may carry extra keys -
+    today ``context``, the documents an answer was grounded on - and prompts must
+    opt into those explicitly rather than inherit them by stringifying the message
+    dicts, which would silently change what the judge sees whenever a key is added.
+    """
+    return str([{"role": m["role"], "content": m["content"]} for m in conversation])
+
+
 __all__ = [
     "get_turns_in_sliding_window",
     "merge_turns",
     "extract_turns_windows_from_conversation",
+    "render_turns_for_prompt",
 ]

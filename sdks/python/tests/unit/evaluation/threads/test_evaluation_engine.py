@@ -332,10 +332,10 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
 
     @patch("opik.decorator.base_track_decorator.opik_client")
     @patch("opik.evaluation.threads.evaluation_engine.helpers.load_conversation_thread")
-    def test_evaluate_thread__conversation_with_context__context_passed_only_to_opted_in_metrics(
+    def test_evaluate_thread__conversation_with_context__context_reaches_the_metrics(
         self, load_conversation_thread, decorator_opik_client
     ):
-        """Only metrics declaring `uses_message_context` receive the per-message context."""
+        """The context is attached to the agent message and handed to every metric."""
         mocked_opik_client = mock.MagicMock(spec=opik_client.Opik)
         decorator_opik_client.get_global_client.return_value = mocked_opik_client
 
@@ -344,35 +344,25 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         mock_conversation.add_assistant_message("Hi there", context=["some document"])
         load_conversation_thread.return_value = mock_conversation
 
-        context_aware_metric = mock.MagicMock(
+        metric = mock.MagicMock(
             spec=conversation_thread_metric.ConversationThreadMetric
         )
-        context_aware_metric.name = "context_aware_metric"
-        context_aware_metric.uses_message_context = True
-        context_aware_metric.score.return_value = score_result.ScoreResult(
-            name="context_aware_metric", value=1.0
-        )
-
-        regular_metric = mock.MagicMock(
-            spec=conversation_thread_metric.ConversationThreadMetric
-        )
-        regular_metric.name = "regular_metric"
-        regular_metric.uses_message_context = False
-        regular_metric.score.return_value = score_result.ScoreResult(
-            name="regular_metric", value=1.0
+        metric.name = "some_metric"
+        metric.score.return_value = score_result.ScoreResult(
+            name="some_metric", value=1.0
         )
 
         self.engine.evaluate_thread(
             thread=TraceThread(id="thread_1"),
             eval_project_name="eval_project",
-            metrics=[context_aware_metric, regular_metric],
+            metrics=[metric],
             trace_input_transform=lambda x: "",
             trace_output_transform=lambda x: "",
             trace_context_transform=lambda trace: ["some document"],
             max_traces_per_thread=10,
         )
 
-        context_aware_metric.score.assert_called_once_with(
+        metric.score.assert_called_once_with(
             [
                 {"role": "user", "content": "Hello"},
                 {
@@ -380,12 +370,6 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
                     "content": "Hi there",
                     "context": ["some document"],
                 },
-            ]
-        )
-        regular_metric.score.assert_called_once_with(
-            [
-                {"role": "user", "content": "Hello"},
-                {"role": "assistant", "content": "Hi there"},
             ]
         )
 

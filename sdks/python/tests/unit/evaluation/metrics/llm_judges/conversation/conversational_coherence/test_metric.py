@@ -4,8 +4,10 @@ from unittest import mock
 import pytest
 
 from opik import exceptions
+from opik.evaluation.metrics.conversation import helpers as conversation_helpers
 from opik.evaluation.metrics.conversation.llm_judges.conversational_coherence import (
     schema,
+    templates,
 )
 from opik.evaluation.metrics.conversation.llm_judges.conversational_coherence.metric import (
     ConversationalCoherenceMetric,
@@ -401,5 +403,33 @@ def test_score__messages_without_context__single_score_and_original_prompt(
     assert schema.EvaluateConversationCoherenceWithDocumentsResponse not in used_formats
 
 
-def test_score__context_aware_flag_declared():
-    assert ConversationalCoherenceMetric.uses_message_context is True
+def test_prompts__never_leak_context_into_the_turns():
+    """Retrieved documents must not reach a judge prompt by stringifying messages.
+
+    A window whose LAST agent message has no documents takes the no-documents path,
+    but may still contain an EARLIER turn that carries them - that leaked before the
+    prompts rendered role/content explicitly.
+    """
+    conversation = [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {"role": "assistant", "content": "5%.", "context": ["SECRET-DOC"]},
+        {"role": "user", "content": "Thanks!"},
+        {"role": "assistant", "content": "You are welcome."},
+    ]
+    window = conversation_helpers.extract_turns_windows_from_conversation(
+        conversation=conversation, window_size=10
+    )[-1]
+
+    no_documents_prompt = templates.build_evaluate_conversation_messages(
+        sliding_window=window
+    )[1]["content"]
+    assert "SECRET-DOC" not in no_documents_prompt
+
+    with_documents_prompt = (
+        templates.build_evaluate_conversation_with_documents_messages(
+            sliding_window=window, retrieved_documents=["THE-DOC"]
+        )[1]["content"]
+    )
+    # Documents appear only in their own section, never inside the turns.
+    assert "SECRET-DOC" not in with_documents_prompt
+    assert "THE-DOC" in with_documents_prompt

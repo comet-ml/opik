@@ -162,10 +162,10 @@ The extracted context is attached to the agent message produced by the same trac
 ```
 
 <Note>
-The context is passed **only** to metrics that declare `uses_message_context = True`. Today that is
-`ConversationalCoherenceMetric`, which uses the retrieved documents to additionally report a
+`ConversationalCoherenceMetric` uses the retrieved documents to additionally report a
 `conversational_groundedness_score` - whether each answer is supported by the documents it was generated from.
-Every other metric receives the conversation without the context, so its scores are unaffected. If you write
+Metrics that don't need the context ignore it, and the built-in prompts render `role` and `content` explicitly,
+so adding a context transform never changes their scores. If you write
 your own context-aware metric, set that attribute on it - see the [Custom Conversation Metrics guide](/v1/evaluation/metrics/custom_conversation_metric).
 </Note>
 

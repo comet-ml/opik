@@ -13,10 +13,9 @@ else:
 class ConversationDict(TypedDict, total=False):
     """A single message of a conversation thread.
 
-    ``role`` and ``content`` are always set. ``context`` is present only for
-    conversations built with a ``trace_context_transform`` (see
-    ``opik.evaluation.evaluate_threads``) and is delivered exclusively to metrics
-    that declare ``uses_message_context = True``.
+    ``role`` and ``content`` are always set. ``context`` - the documents the answer
+    was grounded on - is present only on agent messages of conversations built with a
+    ``trace_context_transform`` (see ``opik.evaluation.evaluate_threads``).
     """
 
     role: Required[str]

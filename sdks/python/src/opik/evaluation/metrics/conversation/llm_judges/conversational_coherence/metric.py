@@ -80,8 +80,6 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         >>>     print(result.value)
     """
 
-    uses_message_context = True
-
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,

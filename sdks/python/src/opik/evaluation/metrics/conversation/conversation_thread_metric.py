@@ -13,11 +13,10 @@ class ConversationThreadMetric(base_metric.BaseMetric):
     single input-output pairs. They accept a conversation as a list of message dictionaries,
     where each message has a 'role' (either 'user' or 'assistant') and 'content'.
 
-    Set the class attribute ``uses_message_context = True`` if the metric evaluates
-    the context each message was grounded on (e.g. documents retrieved by a RAG
-    pipeline). Only metrics that declare it receive messages carrying an extra
-    ``context`` key - see the ``trace_context_transform`` argument of
-    ``opik.evaluation.evaluate_threads``.
+    Agent messages may carry an extra ``context`` key - the documents the answer was
+    grounded on - when ``evaluate_threads`` is called with a ``trace_context_transform``.
+    Metrics that don't need it can ignore it; prompts should render ``role`` and
+    ``content`` explicitly rather than stringifying the message dicts.
 
     Args:
         name: The name of the metric. If not provided, uses the class name as default.
@@ -42,8 +41,6 @@ class ConversationThreadMetric(base_metric.BaseMetric):
         >>>             reason=f"Conversation has {num_turns} turns"
         >>>         )
     """
-
-    uses_message_context: bool = False
 
     def score(
         self, conversation: types.Conversation, **kwargs: Any

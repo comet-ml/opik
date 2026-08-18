@@ -156,20 +156,11 @@ class ThreadsEvaluationEngine:
         conversation: conversation_types.Conversation,
         metrics: List[conversation_thread_metric.ConversationThreadMetric],
     ) -> List[score_result.ScoreResult]:
-        has_context = any("context" in message for message in conversation)
-        conversation_without_context = (
-            helpers.strip_message_context(conversation) if has_context else conversation
-        )
-
         score_results: List[score_result.ScoreResult] = []
         for metric in metrics:
             try:
                 LOGGER.debug("Metric %s score started", metric.name)
-                result = metric.score(
-                    conversation
-                    if getattr(metric, "uses_message_context", False)
-                    else conversation_without_context
-                )
+                result = metric.score(conversation)
                 LOGGER.debug("Metric %s score ended", metric.name)
 
                 if isinstance(result, list):

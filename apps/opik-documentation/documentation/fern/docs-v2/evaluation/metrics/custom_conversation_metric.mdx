@@ -42,8 +42,9 @@ conversation = [
 
 Agent messages can carry an extra `context` key holding what the answer was grounded on, for example the
 documents retrieved by a RAG pipeline. It is populated by the `trace_context_transform` argument of
-[`evaluate_threads`](/evaluation/evaluate_threads) and is delivered **only** to metrics that opt in by setting
-`uses_message_context = True`, so that it never leaks into the prompts of metrics that don't expect it:
+[`evaluate_threads`](/evaluation/evaluate_threads). Metrics that don't need it simply ignore it - but build your prompt from
+`role` and `content` explicitly rather than stringifying the message dicts, so a key you don't expect
+can never end up in front of the judge:
 
 ```python
 from typing import Any
@@ -53,8 +54,6 @@ from opik.evaluation.metrics.conversation import conversation_thread_metric, typ
 
 
 class GroundedAnswersMetric(conversation_thread_metric.ConversationThreadMetric):
-    uses_message_context = True
-
     def __init__(self, name: str = "grounded_answers_score"):
         super().__init__(name)
 

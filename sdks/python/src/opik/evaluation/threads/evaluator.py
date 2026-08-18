@@ -78,11 +78,9 @@ def evaluate_threads(
             Example: If you log the retrieved documents as trace metadata,
             use: lambda trace: trace.metadata["retrieved_docs"]
 
-            The extracted context is attached to the agent message of the same trace and is
-            passed only to metrics that declare `uses_message_context = True`, such as
-            `ConversationalCoherenceMetric`, which uses it to additionally report a
-            `conversational_groundedness_score`. All other metrics receive the conversation
-            without it.
+            The extracted context is attached to the agent message of the same trace.
+            `ConversationalCoherenceMetric` uses it to additionally report a
+            `conversational_groundedness_score`; metrics that don't need it ignore it.
         verbose: Verbosity level for progress reporting (0=silent, 1=progress).
             Default is 1.
         num_workers: Number of concurrent workers for thread evaluation.
