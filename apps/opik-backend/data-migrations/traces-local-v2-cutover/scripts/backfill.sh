@@ -282,6 +282,19 @@ mit_require_one_assignment() {
         echo "       would render the setting into a comment, where it silently does not apply." >&2
         return 1
     fi
+    # The assignment must also be the ONLY executable occurrence of the placeholder. Rendering replaces just that
+    # one line, so any other executable ${MAX_INSERT_THREADS} survives into the statement -- which the per-window
+    # post-condition catches, but only during a real run. Checking it here too is what makes --dry-run a faithful
+    # rehearsal: without it a template can pass a full dry-run and abort on the first real window.
+    local occurrences
+    occurrences="$(mit_mask_comments "$1" | grep -oF '${MAX_INSERT_THREADS}' | grep -c . || true)"
+    if [[ "$occurrences" -ne 1 ]]; then
+        echo "ERROR: \${MAX_INSERT_THREADS} appears $occurrences times in executable lines of $2; expected" >&2
+        echo "       exactly once, as the SETTINGS assignment. Rendering rewrites only that one line, so any" >&2
+        echo "       other executable occurrence would survive into the statement the server receives." >&2
+        echo "       (Occurrences inside '--' or '/* */' comments are ignored and are fine.)" >&2
+        return 1
+    fi
 }
 
 # Validate the rendering target ONCE, here, rather than only when the first window renders. Two reasons, both
