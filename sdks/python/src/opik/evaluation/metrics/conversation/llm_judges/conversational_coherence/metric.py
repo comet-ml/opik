@@ -37,14 +37,11 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
 
     The metric is **context aware**: when an agent message carries the documents it was
     generated from - the ``context`` key, populated by the ``trace_context_transform``
-    argument of :func:`opik.evaluation.evaluate_threads` - the judge is shown those
-    documents and a turn counts towards the score only when the answer is both relevant
-    to the conversation *and* supported by them. Turns without documents are judged on
-    relevance alone, using the original prompt, so conversations carrying no context
-    score exactly as they did before.
-
-    Note this makes the score stricter once you supply context: an answer that is
-    perfectly relevant but contradicts its documents no longer counts as coherent.
+    argument of :func:`opik.evaluation.evaluate_threads` - those documents are shown to
+    the judge as background on what the agent had available when it answered, so it can
+    make a better informed call. What the metric measures does not change: the verdict
+    is still whether the last agent message is relevant given the preceding turns, and
+    turns without documents use the original prompt unchanged.
 
     Args:
         model: The model to use for
@@ -200,27 +197,23 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
     def _evaluate_window(
         self, conversation_sliding_window: conversation_types.Conversation
     ) -> Any:
-        documents = _retrieved_documents(conversation_sliding_window)
-        if not documents:
+        if not _has_retrieved_documents(conversation_sliding_window):
             return self._evaluate_conversation(
                 conversation_sliding_window=conversation_sliding_window
             )
         return self._evaluate_conversation_with_documents(
-            conversation_sliding_window=conversation_sliding_window,
-            retrieved_documents=documents,
+            conversation_sliding_window=conversation_sliding_window
         )
 
     async def _a_evaluate_window(
         self, conversation_sliding_window: conversation_types.Conversation
     ) -> Any:
-        documents = _retrieved_documents(conversation_sliding_window)
-        if not documents:
+        if not _has_retrieved_documents(conversation_sliding_window):
             return await self._a_evaluate_conversation(
                 conversation_sliding_window=conversation_sliding_window
             )
         return await self._a_evaluate_conversation_with_documents(
-            conversation_sliding_window=conversation_sliding_window,
-            retrieved_documents=documents,
+            conversation_sliding_window=conversation_sliding_window
         )
 
     def _reason_from_verdicts(
@@ -280,11 +273,9 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
     def _evaluate_conversation_with_documents(
         self,
         conversation_sliding_window: conversation_types.Conversation,
-        retrieved_documents: List[str],
     ) -> schema.EvaluateConversationCoherenceResponse:
         messages = templates.build_evaluate_conversation_with_documents_messages(
-            sliding_window=conversation_sliding_window,
-            retrieved_documents=retrieved_documents,
+            sliding_window=conversation_sliding_window
         )
         message = self._model.generate_chat_completion(
             messages=messages,
@@ -295,11 +286,9 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
     async def _a_evaluate_conversation_with_documents(
         self,
         conversation_sliding_window: conversation_types.Conversation,
-        retrieved_documents: List[str],
     ) -> schema.EvaluateConversationCoherenceResponse:
         messages = templates.build_evaluate_conversation_with_documents_messages(
-            sliding_window=conversation_sliding_window,
-            retrieved_documents=retrieved_documents,
+            sliding_window=conversation_sliding_window
         )
         message = await self._model.agenerate_chat_completion(
             messages=messages,
@@ -354,11 +343,8 @@ def _score_from_verdicts(
     return relevant_count / len(verdicts)
 
 
-def _retrieved_documents(
+def _has_retrieved_documents(
     conversation_sliding_window: conversation_types.Conversation,
-) -> List[str]:
-    """The documents attached to the assistant message the window is judging."""
-    for message in reversed(conversation_sliding_window):
-        if message["role"] == "assistant":
-            return list(message.get("context") or [])
-    return []
+) -> bool:
+    """Whether any message in the window carries the documents it was generated from."""
+    return any(message.get("context") for message in conversation_sliding_window)

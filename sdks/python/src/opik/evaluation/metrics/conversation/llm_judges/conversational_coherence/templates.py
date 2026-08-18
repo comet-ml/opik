@@ -82,20 +82,19 @@ Given the relevancy score, which is a 0-1 score indicating how relevant the OVER
 """
 
 
-_EVALUATE_CONVERSATION_WITH_DOCUMENTS_SYSTEM = """Based on the given list of message exchanges between a user and an LLM, and the RETRIEVED DOCUMENTS the LAST `assistant` message was generated from, generate a JSON object to indicate whether the LAST `assistant` message is relevant to the previous messages AND supported by those documents.
+_EVALUATE_CONVERSATION_WITH_DOCUMENTS_SYSTEM = """Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST `assistant` message is relevant to context in messages. Some `assistant` messages carry a 'context' field: the documents that message was generated from, given to you as background on what the LLM had available when it answered.
 
 ** Guidelines: **
 - Make sure to only return in JSON format.
 - The JSON must have only 2 fields: 'verdict' and 'reason'.
-- The 'verdict' key should STRICTLY be either 'yes' or 'no'. Answer 'yes' only when the last `assistant` message is BOTH relevant to the previous messages AND supported by the RETRIEVED DOCUMENTS.
+- The 'verdict' key should STRICTLY be either 'yes' or 'no', which states whether the last `assistant` message is relevant according to the context in messages.
 - Provide a 'reason' ONLY if the answer is 'no'.
 - You DON'T have to provide a reason if the answer is 'yes'.
 - You MUST USE the previous messages (if any) provided in the list of messages to make an informed judgement on relevancy.
 - You MUST ONLY provide a verdict for the LAST message on the list but MUST USE context from the previous messages.
-- ONLY answer 'no' for relevancy if the LLM response is COMPLETELY irrelevant to the user's input message.
+- ONLY provide a 'no' answer if the LLM response is COMPLETELY irrelevant to the user's input message.
 - Vague LLM responses to vague inputs, such as greetings DOES NOT count as irrelevancies!
-- Answer 'no' for support when the last `assistant` message introduces information that is not in the RETRIEVED DOCUMENTS, or contradicts them. Consider partial cases where some information is supported and other parts are not.
-- Judge support ONLY against the RETRIEVED DOCUMENTS, not against the previous messages.
+- Use the 'context' documents to make a better informed judgement about relevancy. Do NOT turn this into a fact-checking task: a response is not irrelevant merely because it goes beyond its documents.
 - You should mention LLM response instead of `assistant`, and User instead of `user`.
 
 ===== Start OF EXAMPLE ======
@@ -103,23 +102,19 @@ _EVALUATE_CONVERSATION_WITH_DOCUMENTS_SYSTEM = """Based on the given list of mes
 [
     {
         "role": "user",
-        "content": "What is the fee if I go overdrawn?"
+        "content": "I've a sore throat, what meds should I take?"
     },
     {
         "role": "assistant",
-        "content": "Overdrafts are completely free of charge."
+        "content": "Not sure, but isn't it a nice day today?",
+        "context": ["For a sore throat, paracetamol or ibuprofen may relieve the pain."]
     }
-]
-
-** Example Retrieved documents: **
-[
-    "The overdraft fee is 5% of the overdrawn amount, charged monthly."
 ]
 
 ** Example output JSON **
 {
     "verdict": "no",
-    "reason": "The LLM response answers the User's question about overdraft fees, but states that overdrafts are free while the retrieved documents state a 5% monthly fee."
+    "reason": "The LLM responded 'isn't it a nice day today' to a message that asked about how to treat a sore throat, which is completely irrelevant - even though it had a document describing suitable medication."
 }
 ===== END OF EXAMPLE ======
 """
@@ -140,12 +135,11 @@ def build_evaluate_conversation_messages(
 
 def build_evaluate_conversation_with_documents_messages(
     sliding_window: conversation_types.Conversation,
-    retrieved_documents: List[str],
 ) -> List[base_model.ConversationDict]:
     user_content = (
-        f"** Turns: **\n{conversation_helpers.render_turns_for_prompt(sliding_window)}\n\n"
-        f"** Retrieved documents: **\n{retrieved_documents}\n\n"
-        "** JSON: **"
+        f"** Turns: **\n"
+        f"{conversation_helpers.render_turns_for_prompt(sliding_window, include_context=True)}"
+        "\n\n** JSON: **"
     )
     return [
         {"role": "system", "content": _EVALUATE_CONVERSATION_WITH_DOCUMENTS_SYSTEM},

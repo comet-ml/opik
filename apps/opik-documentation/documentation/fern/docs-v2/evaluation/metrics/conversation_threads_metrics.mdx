@@ -211,11 +211,12 @@ print(result.value)
 print(result.reason)
 ```
 
-### Grounding answers in retrieved context
+### Using retrieved context
 
 `ConversationalCoherenceMetric` is **context aware**. When an agent message carries the documents it was generated
-from, the judge is shown those documents and the turn counts towards the score only when the answer is both relevant
-to the conversation **and** supported by them. Populate the documents with the `trace_context_transform` argument of
+from, they are shown to the judge right next to that message, so it can see each answer alongside what the agent had
+available when it wrote it. What the metric measures does not change - the verdict is still whether the answer is
+relevant given the preceding turns. Populate the documents with the `trace_context_transform` argument of
 [`evaluate_threads`](/evaluation/evaluate_threads), or attach them directly to the agent messages under a `context` key:
 
 ```python title="Context-aware coherence example"
@@ -228,21 +229,25 @@ conversation = [
     },
     {
         "role": "assistant",
-        "content": "Overdrafts are completely free.",
+        "content": "It is 5% of the overdrawn amount, charged monthly.",
         "context": ["The overdraft fee is 5% of the overdrawn amount, charged monthly."],
     },
 ]
 
 metric = ConversationalCoherenceMetric(model="gpt-5-nano")
 result = metric.score(conversation)
-
-# The answer addresses the question, but contradicts its document -> low score
 print(result.value)
 ```
 
-Turns whose agent message has no documents are judged on relevance alone, using the original prompt, so a conversation
-carrying no context scores exactly as it did before. Note the score becomes stricter once you supply context: an answer
-that is perfectly relevant but unsupported by its documents no longer counts as coherent.
+Turns whose agent message has no documents use the original prompt, so a conversation carrying no context scores
+exactly as it did before.
+
+<Note>
+  The documents inform the relevancy judgement; they are not fact-checked against the answer. If you need to know
+  whether an answer is *supported* by its documents, score the underlying traces with
+  [`Hallucination`](/evaluation/metrics/hallucination) or write a
+  [custom conversation metric](/evaluation/metrics/custom_conversation_metric) that reads the `context` key.
+</Note>
 
 ## Next steps
 

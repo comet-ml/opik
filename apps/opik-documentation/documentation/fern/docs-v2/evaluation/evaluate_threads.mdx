@@ -161,10 +161,10 @@ The extracted context is attached to the agent message produced by the same trac
 ```
 
 <Note>
-`ConversationalCoherenceMetric` is context aware: it shows the retrieved documents to the judge, so a turn
-scores only when the answer is both relevant and supported by them. Metrics that don't need the context ignore
-it, and the built-in prompts render `role` and `content` explicitly, so adding a context transform never
-changes their scores. If you write
+`ConversationalCoherenceMetric` is context aware: the retrieved documents are shown to its judge as background,
+so it can make a better informed relevancy call - what it measures is unchanged. Metrics that don't need the
+context ignore it, and the built-in prompts render `role` and `content` explicitly, so adding a context
+transform never changes their scores. If you write
 your own context-aware metric, set that attribute on it - see the [Custom Conversation Metrics guide](/evaluation/metrics/custom_conversation_metric).
 </Note>
 
