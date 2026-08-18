@@ -1,6 +1,6 @@
 import pytest
 
-from opik.evaluation.metrics.heuristics.is_json import IsJson
+from opik.evaluation.metrics import IsJson
 from opik.evaluation.metrics.score_result import ScoreResult
 
 
