@@ -342,77 +342,40 @@ independent controls keep each statement safe:
   window into memory. Lower this (or `min_insert_block_size_bytes`) on a memory-constrained data node.
 
 - **Insert pipeline threads (`--max-insert-threads`, omitted by default → `SETTINGS max_insert_threads`).**
-  **This is often the throughput ceiling, and ClickHouse's own default hides it.** Where nothing sets the
-  setting, ClickHouse documents `0` as *"`INSERT SELECT` no parallel execution"*, so the insert side of this
-  copy runs serialised. Passing a value lets you control how much of the machine the backfill may consume,
-  and can speed the copy up substantially.
+  Often the throughput ceiling: where nothing sets it, ClickHouse's default `0` means *"`INSERT SELECT` no
+  parallel execution"*, so the insert side runs serialised. Passing a value controls how much of the machine
+  the backfill may use and can speed the copy up substantially.
 
-  **Omitting the flag means *inherit*, not zero.** The drivers strip the setting line from the SQL entirely
-  when the flag is not passed, so whatever the server profile sets applies. That distinction is load-bearing:
-  rendering an explicit `0` would **override** a profile that sets the setting and force the insert serial —
-  a silent slowdown, not a no-op. ClickHouse Cloud ships non-zero defaults (`1`/`2`/`4` by node memory), and a
-  self-managed cluster may set it in a profile too. Pass an explicit `0` when you actually want to *force*
-  serial execution.
+  **Omitting the flag means *inherit*, not zero.** The drivers strip the setting line from the SQL when the
+  flag isn't passed, so the server's own value applies. Rendering an explicit `0` would **override** a profile
+  that sets it and force the insert serial — a silent slowdown, not a no-op. Pass `0` only to *force* serial.
 
-  Two scope caveats worth knowing before you reach for it:
-  - The setting applies to **`INSERT SELECT`** — which is what this backfill issues — not to INSERTs
-    generally.
-  - **ClickHouse Cloud does not default it to `0`.** Upstream documents `1` / `2` / `4` by node memory, so
-    a Cloud deployment may already have parallelism here and see less benefit.
-  - It only helps if the read side is parallel too. Upstream: *"Parallel `INSERT SELECT` has effect only if
-    the `SELECT` part is executed in parallel"* (see `max_threads`).
+  Three caveats, all from upstream: the setting applies to **`INSERT SELECT`** only; **ClickHouse Cloud
+  defaults it to `1`/`2`/`4`** by node memory, not `0`; and it helps only if the read side is parallel too
+  (*"has effect only if the `SELECT` part is executed in parallel"* — see `max_threads`).
 
-  **Why the insert side is often the constraint on this table — and what is inference rather than
-  documented.** The destination carries per-row MATERIALIZED work the source does not. The expensive one is
-  **`output_keys`**, which parses the `output` JSON:
-  `arrayMap(key -> tuple(key, toString(JSONType(JSONExtractRaw(output, key)))), JSONExtractKeys(output))`.
-  There is **no `input_keys` column** — `output_keys` is traces-only and has no input counterpart, so don't go
-  looking for one. The table also materialises `truncated_input` / `truncated_output`, which substring-copy
-  documents that can be very large, plus `input_length` / `output_length` / `metadata_length`, `duration` and
-  `id_at`. Upstream states materialized values *"are automatically calculated according to the specified
-  materialized expression when rows are inserted"*. Upstream does **not** state which pipeline stage or which threads
-  perform that calculation. That these columns make the insert side the bottleneck here is an **inference from
-  profiling**, not a documented guarantee — so confirm it on your own data rather than assuming it:
-
-  **How to confirm it:** effective cores sit near 1 while the machine is otherwise idle and
-  `OSIOWaitMicroseconds` is 0 — the copy is neither CPU-saturated nor I/O bound, it is serialised. Compute
-  effective cores from `query_log`, **minding the units** — the `ProfileEvents` are *micro*seconds while
-  `query_duration_ms` is *milli*seconds, so the `* 1000` is not optional:
+  **Why the insert side, and how sure we are.** The destination materialises `output_keys` by parsing the
+  `output` JSON (there is no `input_keys` column), plus `truncated_input`/`truncated_output` and the length,
+  `duration` and `id_at` columns. Upstream says materialized values are calculated *"when rows are inserted"*
+  but not by which stage, so blaming the insert side is an **inference from profiling**, not a guarantee.
+  Confirm it on your own data: effective cores near 1 while the machine is idle and `OSIOWaitMicroseconds` is
+  0, then rising towards the thread count once raised. Mind the units — `ProfileEvents` are microseconds,
+  `query_duration_ms` is milliseconds:
 
   ```sql
-  (ProfileEvents['UserTimeMicroseconds'] + ProfileEvents['SystemTimeMicroseconds'])
-      / (query_duration_ms * 1000)   -- omit the *1000 and the answer is 1000x too high
+  (ProfileEvents['UserTimeMicroseconds'] + ProfileEvents['SystemTimeMicroseconds']) / (query_duration_ms * 1000)
   ```
 
-  Sanity-check the result against the node's core count: a value above it means the arithmetic is wrong, not
-  that the machine is busy.
+  A result above the node's core count means the arithmetic is wrong. Note it is *query-wide* CPU: `query_log`
+  does not separate read from insert threads, so the delta on raising the setting is what carries the argument.
 
-  **What this measures, precisely:** `query_log` aggregates are **query-wide CPU**. They do not separate
-  read-pipeline threads from insert-pipeline threads, so the number alone cannot attribute CPU to the insert
-  side. What makes it evidence is the *delta*: raise the setting and effective cores rise towards the thread
-  count while the read side is unchanged.
-
-  **Two costs, both real:**
-  - **Memory.** Upstream is explicit: *"Higher values will lead to higher memory usage."* On this table that
-    compounds with this table's row width, and in a way the block bullet above does **not** cover. That bullet's
-    rule — peak insert memory is a small multiple of the 256 MB byte cap — holds for ordinary wide rows. It does
-    not hold for a single very large `output` document: materialising `output_keys` over one of those is a
-    **per-row** cost that no block cap bounds, so neither `max_insert_block_size` nor `min_insert_block_size_bytes`
-    constrains it. That is precisely why the lever here is the ceiling: raise this together with
-    `max_memory_usage`, or narrow the window,
-    rather than raising threads alone into a fixed ceiling.
-  - **Parts.** Each insert thread writes its own parts, so parts per partition grows. Watch it against
-    `parts_to_throw_insert` (ClickHouse default 300) rather than assuming headroom.
-
-  **`estimate.sh` does not model this setting.** Its ETA probes the *read* side and derates it by a fixed
-  `--write-cost-factor`, so it is not specific to your thread count and will understate a run configured with
-  insert parallelism. If you are running with `--max-insert-threads` set, time one real window at that setting
-  and feed the measured throughput back via `estimate.sh --rows-per-sec`, which skips the probe and the
-  write-cost factor entirely.
-
-  **Choosing a value is a capacity decision, not a benchmark:** on an idle rehearsal environment a large
-  value looks free, but on production those threads compete with live query latency, so pick the share of
-  cores the cutover may take while serving traffic, and validate the value you will actually deploy.
+  **Two costs.** Upstream: *"higher values will lead to higher memory usage"* — and on this table a single very
+  large `output` document is a **per-row** cost that no block cap bounds, so raise `max_memory_usage` alongside
+  or narrow the window. And parts per partition grow; watch them against `parts_to_throw_insert` (default 300).
+  Value choice is a capacity decision, not a benchmark: on an idle rehearsal box a large value looks free, but
+  on production those threads compete with live query latency. `estimate.sh` does **not** model this setting —
+  time a real window at your intended value and feed it back via `--rows-per-sec`.
+  Full diagnosis in `backfill.sh`'s `--max-insert-threads` option docs.
 
 - **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
   max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is
