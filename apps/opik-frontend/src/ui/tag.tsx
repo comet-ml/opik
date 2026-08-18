@@ -19,6 +19,7 @@ const tagVariants = cva("inline-block truncate rounded-sm transition-colors", {
       turquoise:
         "bg-[var(--tag-turquoise-bg)] text-[var(--tag-turquoise-text)]",
       blue: "bg-[var(--tag-blue-bg)] text-[var(--tag-blue-text)]",
+      ochre: "bg-[var(--tag-ochre-bg)] text-[var(--tag-ochre-text)]",
       lavender: "bg-[var(--tag-lavender-bg)] text-[var(--tag-lavender-text)]",
       white:
         "border border-gray-200 bg-white text-muted-slate dark:border-gray-600 dark:bg-gray-800 dark:text-foreground",
@@ -60,11 +61,23 @@ const Tag = React.forwardRef<HTMLDivElement, TagProps>(
 );
 Tag.displayName = "Tag";
 
+/**
+ * Palette used to derive a color automatically from a label (see `generateTagVariant`).
+ *
+ * Two invariants are enforced by `lib/colorVariants.test.ts` and must hold for any change here:
+ * - every pair of entries stays perceptually distinguishable (OPIK-7839: `primary` #6366f1 sat at
+ *   ΔE 14.5 from `purple`, which made distinct series look identical in grouped charts);
+ * - the list keeps its length, because the automatic color is `hash % TAG_VARIANTS.length` —
+ *   adding or removing an entry re-maps every label in the product, while substituting one
+ *   re-maps only the labels that resolved to that slot.
+ *
+ * `primary` is deliberately absent: it is too close to both `purple` and `blue` for chart series.
+ */
 export const TAG_VARIANTS: Exclude<
   TagProps["variant"],
   "red" | "transparent" | "white" | "lavender"
 >[] = [
-  "primary",
+  "ochre",
   "gray",
   "purple",
   "burgundy",
@@ -94,6 +107,7 @@ export const TAG_VARIANTS_COLOR_MAP: Record<
   green: "var(--color-green)",
   turquoise: "var(--color-turquoise)",
   blue: "var(--color-blue)",
+  ochre: "var(--color-ochre)",
 };
 
 export { Tag, tagVariants };
