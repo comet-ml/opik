@@ -242,7 +242,7 @@ powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 <a id="-opik-client-sdk"></a>
 ## 💻 Opik 客户端 SDK
 
-Opik 提供一套客户端库和一个 REST API 用于与 Opik 服务器交互。这包括面向 Python 和 TypeScript 的 SDK，以及第一方 [OpenTelemetry](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=otel_link&utm_campaign=opik) 支持：任何具有 OpenTelemetry SDK 的语言（包括 Java、[Ruby](https://www.comet.com/docs/opik/integrations/opentelemetry-ruby-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=ruby_link&utm_campaign=opik) 和 .NET）都可以将追踪数据发送到 Opik。有关详细的 API 和 SDK 参考，请参阅 [Opik 客户端参考文档](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik)。
+Opik 提供一套客户端库和一个 REST API 用于与 Opik 服务器交互。这包括面向 Python 和 TypeScript 的 SDK，以及第一方 [OpenTelemetry](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=otel_link&utm_campaign=opik) 支持：任何具有 OpenTelemetry SDK 的语言（包括 [Java](https://www.comet.com/docs/opik/integrations/spring-ai?from=llm&utm_source=opik&utm_medium=github&utm_content=java_link&utm_campaign=opik)、[Ruby](https://www.comet.com/docs/opik/integrations/opentelemetry-ruby-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=ruby_link&utm_campaign=opik) 和 .NET）都可以将追踪数据发送到 Opik。有关详细的 API 和 SDK 参考，请参阅 [Opik 客户端参考文档](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik)。
 
 ### Python SDK 快速开始
 
