@@ -27,33 +27,15 @@
 --     output-order guarantee, so inserted blocks may span/interleave partitions; the destination ReplacingMergeTree
 --     dedups regardless of insert order and background merges compact the parts. This is NOT a claim that rows arrive
 --     in sort-key order — do not rely on it (see README "Why slice by created_at").
---   * SETTINGS max_insert_threads sizes the INSERT SELECT pipeline. ClickHouse documents 0 (the default) as
---     "INSERT SELECT no parallel execution"; on ClickHouse Cloud the default is instead 1/2/4 by node memory.
---     Raising it controls how much of the machine the backfill may use and can speed the copy up markedly,
---     but only if the SELECT side is itself parallel (upstream: parallel INSERT SELECT "has effect only if the
---     SELECT part is executed in parallel").
---
---     WHY THE INSERT SIDE, AND HOW SURE WE ARE. This table materialises output_keys by PARSING the output JSON
---     (there is no input_keys column -- output_keys is traces-only). That computation is what makes the insert
---     side the constraint here. Note carefully how strong that claim is: upstream says materialized columns are
---     calculated "when rows are inserted", but it does NOT say which pipeline stage or which threads do the
---     calculating. So the attribution to the insert side is an INFERENCE FROM PROFILING, not a documented
---     guarantee. What supports it is the delta: raise this setting and effective cores rise towards the thread
---     count while the read side is unchanged.
---
---     Computing effective cores, minding the units -- the ProfileEvents are MICROseconds while
---     query_duration_ms is MILLIseconds, so the *1000 is not optional:
---         (UserTimeMicroseconds + SystemTimeMicroseconds) / (query_duration_ms * 1000)
---     Omit it and the answer is 1000x too high. Sanity-check against the node's core count. And note the figure
---     is QUERY-WIDE CPU: query_log does not separate read-pipeline from insert-pipeline threads.
---
---     TWO COSTS. Upstream warns "higher values will lead to higher memory usage", which on this table compounds
---     with oversized `output` documents, so move max_memory_usage with it. And part count per partition grows,
---     to be watched against THIS cluster's parts_to_throw_insert and parts_to_delay_insert (read them from
---     system.merge_tree_settings; do NOT work from a remembered default -- ClickHouse has changed these across
---     versions and a deployment may tune them further. Throttling at the delay limit is what an operator meets
---     first). The value is a capacity decision about what share of cores the cutover may take
---     while serving traffic -- not a benchmark to maximise.
+--   * SETTINGS max_insert_threads sizes the INSERT SELECT pipeline. The driver omits this line when
+--     --max-insert-threads is unset, so the server's configured value applies; an explicit 0 forces no parallel
+--     execution. Raising it parallelises the insert side, which here carries the per-row cost of materialising
+--     output_keys (a JSON parse of `output`). It has no effect unless the SELECT side is also parallel; see
+--     max_threads. Two costs: peak memory rises, and on this table that compounds with oversized `output`
+--     documents, so raise max_memory_usage alongside it; and each thread writes its own parts, so parts per
+--     partition grow -- compare against parts_to_throw_insert and parts_to_delay_insert as read from
+--     system.merge_tree_settings. For how to size the value, and for the measurements behind it, see
+--     backfill.sh's --max-insert-threads option docs.
 --   * SETTINGS max_insert_block_size bounds the rows per part-forming block; peak insert memory is a small multiple of
 --     the smaller of that and min_insert_block_size_bytes (256 MB default), which dominates for wide trace rows.
 --   * SETTINGS max_partitions_per_insert_block is REQUIRED, not a tuning knob. Because the blocks above may span

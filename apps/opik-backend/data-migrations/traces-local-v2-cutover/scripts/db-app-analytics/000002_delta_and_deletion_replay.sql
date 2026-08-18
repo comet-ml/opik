@@ -43,31 +43,22 @@
 --   (a) created_at >= backfill_start                                  -- batch by created_at sub-windows
 --   (b) last_updated_at >= backfill_start AND created_at < backfill_start  -- the updates-to-old-rows arm; batch by
 --       last_updated_at sub-windows. (a) ∪ (b) equals the OR below, with no overlap.
--- CARRY THE FULL SETTINGS BLOCK BELOW ONTO BOTH PASSES, max_partitions_per_insert_block included. The driver does not
--- implement this split, so these two statements are hand-written, and arm (b) is precisely the updates-to-old-rows arm
--- named above as the far-future carrier — so the pass that most needs the partition bound is the one an operator writes
--- by hand. Omitting it there reintroduces the TOO_MANY_PARTS abort immediately before the EXCHANGE, which is exactly
--- what the setting on the single-statement form exists to prevent.
---
--- "CARRY" MEANS THE SETTINGS, NOT THE PLACEHOLDERS. Hand-written statements do not go through the driver, so nothing
--- substitutes ${...} and none of the driver's guards apply: a copied ${MAX_INSERT_BLOCK_SIZE} or ${MAX_INSERT_THREADS}
--- reaches the server as a literal and the statement fails. Substitute every placeholder with a concrete value first.
---
--- ${MAX_INSERT_THREADS} IS THE ONE WITH NO SUBSTITUTABLE "DEFAULT". Its unset state means INHERIT, which the driver
--- expresses by removing the line -- there is no value you can write that means the same thing (0 does NOT: it forces
--- no parallel execution and overrides whatever the server sets). So either:
---   * substitute the SAME concrete thread count on BOTH passes, or
---   * DELETE that whole line, comma and all, from both -- keeping max_partitions_per_insert_block and log_comment.
--- Deleting the line is comma-safe here because it sits between two other settings; do not leave a dangling comma, and
--- do not delete the line if it is the last entry in your clause without moving the semicolon.
---
--- CHECK BEFORE YOU RUN, since no guard will: `grep -n '\${' <your-statements>.sql` must print nothing.
+-- Both passes are hand-written: the driver does not implement the split, so its substitution and guards do not
+-- apply to them. Prepare each pass as follows.
+--   1. Copy the SETTINGS block below onto both passes, max_partitions_per_insert_block included. Arm (b) is the
+--      updates-to-old-rows arm, so it carries the far-future ids and is the pass that most needs that bound;
+--      omitting it aborts the statement with TOO_MANY_PARTS immediately before the EXCHANGE.
+--   2. Replace every ${...} with a concrete value. A copied placeholder reaches the server as a literal and the
+--      statement fails.
+--   3. max_insert_threads has no value meaning "inherit": 0 forces no parallel execution rather than deferring to
+--      the server's setting. Either substitute the same thread count on both passes, or delete the whole line
+--      including its trailing comma from both, keeping max_partitions_per_insert_block and log_comment. Deleting
+--      is comma-safe only while the line sits between two others.
+--   4. Confirm no placeholder survives: `grep -n '\${' <your-statements>.sql` must print nothing.
 -- >>> BEGIN delta-insert
--- max_insert_threads in the SETTINGS clause below sizes the INSERT SELECT pipeline, same knob and same caveats as 000001: ClickHouse
--- documents 0 (the default) as "INSERT SELECT no parallel execution", ClickHouse Cloud instead defaults to
--- 1/2/4 by node memory, it only helps if the SELECT side is parallel, and upstream warns "higher values will
--- lead to higher memory usage" -- which on this table compounds with oversized `output` documents. The delta
--- writes into the same table through the same insert path as the backfill, so it benefits identically.
+-- max_insert_threads below sizes the INSERT SELECT pipeline, with the same semantics and costs as in 000001:
+-- omitted when --max-insert-threads is unset, an explicit 0 forcing no parallel execution. The delta writes to
+-- the same table through the same insert path, so pass the value used for the backfill.
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,
     workspace_id,
