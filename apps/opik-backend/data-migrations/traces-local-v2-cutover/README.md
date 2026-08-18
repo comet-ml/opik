@@ -388,7 +388,10 @@ independent controls keep each statement safe:
   into an executable line. The drivers' own guards abort on each of those, but there is deliberately **no
   committed harness** here — this directory holds operator drivers only — so after changing either driver or the
   `SETTINGS` clause of `000001`/`000002`, exercise those cases manually against corrupted copies before a
-  cutover window.
+  cutover window. Each driver fences its rendering block with `>>> BEGIN max_insert_threads rendering` /
+  `<<< END` so it can be extracted verbatim rather than reimplemented; run whatever you extract it into from
+  inside `scripts/`, since the block resolves `000001`/`000002` by relative path and from elsewhere reads
+  nothing and fails every case for the wrong reason.
 
 - **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
   max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is

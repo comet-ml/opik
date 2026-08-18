@@ -326,7 +326,7 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
     sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
-    # >>> BEGIN max_insert_threads rendering (extracted verbatim by scripts/verify_render.sh -- keep the markers)
+    # >>> BEGIN max_insert_threads rendering (fence for extracting this block to test edits -- keep the markers)
     # This depends on ONE exact line in ANOTHER file:  max_insert_threads = ${MAX_INSERT_THREADS},
     # Require exactly one line-anchored, ISOLATED assignment before touching anything. A bare token match would
     # also accept the placeholder inside a `--` header, a /* */ block comment or a string literal, and let the run
