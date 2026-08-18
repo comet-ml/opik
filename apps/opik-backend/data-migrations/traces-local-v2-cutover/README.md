@@ -372,13 +372,31 @@ independent controls keep each statement safe:
   **Two costs.** Upstream: *"higher values will lead to higher memory usage"* — and on this table a single very
   large `output` document is a **per-row** cost that no block cap bounds, so raise `max_memory_usage` alongside
   or narrow the window. And parts per partition grow; watch them against **this cluster's** `parts_to_throw_insert` and
-  `parts_to_delay_insert` — read them from `system.merge_tree_settings` rather than assuming ClickHouse's
-  defaults (300 / 150), because deployments routinely raise them and the real headroom can be an order of
-  magnitude different in either direction.
+  `parts_to_delay_insert` — read them from `system.merge_tree_settings`. **Do not work from a
+  remembered default**: ClickHouse has changed these across versions (older releases shipped far lower values
+  than current ones), and a deployment may tune them further, so a hardcoded ratio can be an order of magnitude
+  wrong in either direction.
   Value choice is a capacity decision, not a benchmark: on an idle rehearsal box a large value looks free, but
   on production those threads compete with live query latency. `estimate.sh` does **not** model this setting —
   time a real window at your intended value and feed it back via `--rows-per-sec`.
   Full diagnosis in `backfill.sh`'s `--max-insert-threads` option docs.
+
+  **If you edit the rendering, re-validate it by hand — nothing in this repo checks it for you.** The drivers
+  render this setting by requiring exactly one line-anchored `max_insert_threads = ${MAX_INSERT_THREADS},` in
+  `000001`/`000002` and then either stripping it (inherit) or substituting it. The trailing comma is **required**: it is
+  what makes removing the line safe, so the assignment must not be the last entry in the `SETTINGS` clause. A line
+  ending in `;`, or in nothing with the `;` on the next line, carries the clause terminator — stripping it would
+  leave a dangling comma and no terminator, so both spellings are refused rather than rendered. Every way that can go wrong is
+  silent: a reformatted or shared line, a missing assignment, a duplicate one, or a placeholder that survives
+  into an executable line. The drivers' own guards abort on each of those, but there is deliberately **no
+  committed harness** here — this directory holds operator drivers only — so after changing either driver or the
+  `SETTINGS` clause of `000001`/`000002`, exercise those cases manually against corrupted copies before a
+  cutover window. Each driver fences its rendering block with `>>> BEGIN max_insert_threads rendering` /
+  `<<< END` so it can be extracted verbatim rather than reimplemented. The
+  block reads no files: it operates on a `$sql` variable the caller must populate, and names the SQL path only in
+  its two error messages, so whatever you extract it into has to load the file itself. It is otherwise
+  CWD-independent, as are the drivers (`SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"`), so it can be
+  run from anywhere.
 
 - **Per-block partition bound (`--max-partitions-per-insert-block`, default 2000 → `SETTINGS
   max_partitions_per_insert_block`).** Not a throughput knob — a **correctness gate**. The destination is
@@ -404,7 +422,13 @@ It is a planning ballpark — real throughput varies with concurrent load, merge
 
 The **delta-insert** (step 2) covers only writes during the backfill window, not the whole table, so it is normally one
 statement (with the same block-size **and partition** bounds); `000002` documents how to split it into two batched passes
-if a long backfill made it large. If you do split it, **carry the whole `SETTINGS` block onto both passes**: the driver
+if a long backfill made it large. If you do split it, **carry the whole `SETTINGS` block onto both passes — but carry
+the settings, not the placeholders.** Hand-written statements bypass the driver, so nothing substitutes `${...}` and
+none of the driver's guards apply; substitute every placeholder concretely first, and note that
+`${MAX_INSERT_THREADS}` has no substitutable "default" — its unset state means *inherit*, which the driver expresses by
+removing the line, and `0` is not equivalent (it forces serial execution). Either put the same concrete thread count on
+both passes, or delete that one line, comma and all, keeping `max_partitions_per_insert_block` and `log_comment`. Then
+check what you are about to run — `grep -n '\${' <your-statements>.sql` must print nothing. The driver
 does not implement the split, so those statements are hand-written, and the second arm
 (`last_updated_at >= backfill_start AND created_at < backfill_start`) is the updates-to-old-rows arm that carries
 far-future ids, so it is the pass that most needs `max_partitions_per_insert_block` and the easiest one to write without

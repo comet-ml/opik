@@ -123,18 +123,20 @@
 #                                 ceiling.
 #                             (2) PARTS. Each insert thread writes its own parts, so part count per
 #                                 partition grows. Watch it against THIS cluster's parts_to_throw_insert
-#                                 and parts_to_delay_insert, read from system.merge_tree_settings -- do not
-#                                 assume ClickHouse's defaults (300 / 150). Deployments routinely raise
-#                                 them, so the real headroom can be an order of magnitude off either way,
-#                                 and "parts vs 300" is a misleading ratio on a tuned cluster.
+#                                 and parts_to_delay_insert, read from system.merge_tree_settings. Do NOT
+#                                 work from a remembered default: ClickHouse has changed these across
+#                                 versions, and a deployment may tune them further, so a hardcoded ratio can
+#                                 be an order of magnitude wrong in either direction.
 #
 #                             CHOOSING A VALUE IS A CAPACITY DECISION, NOT A BENCHMARK. On an idle
 #                             rehearsal environment a large value looks free; on a production cluster
 #                             those threads compete with live query latency. Pick the share of cores
 #                             the cutover may take while serving traffic, and validate the value you
-#                             will actually deploy rather than the largest one that fits. 0 stays the
-#                             default so no existing deployment changes behaviour, and so a small
-#                             install on few cores does not silently start spawning insert threads.
+#                             will actually deploy rather than the largest one that fits. Omitting the
+#                             flag is the default and means INHERIT, so no existing deployment changes
+#                             behaviour and a small install on few cores does not start spawning insert
+#                             threads. An explicit 0 is not the same as omitting it: it forces no
+#                             parallel execution and overrides whatever the server sets.
 #   --divergence P            max tolerated |src-dst|/src per window before aborting. Default 0.0001 (0.01%).
 #   --pause-seconds S         sleep S seconds after each inserted window, to let destination merges catch up and bound
 #                             the part count / IO pressure. Default 0. Recommended 30-60 on a large table at peak.
@@ -239,6 +241,70 @@ done
 [[ "$DIVERGENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --divergence must be a number." >&2; exit 2; }
 [[ "$MIN_FREE_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --min-free-factor must be a number." >&2; exit 2; }
 [[ -f "$BACKFILL_SQL" ]] || { echo "ERROR: cannot find backfill SQL at $BACKFILL_SQL" >&2; exit 2; }
+# Blank out SQL comments while preserving line numbering: `--` to end of line, and /* */ which may span lines.
+# Used by every max_insert_threads check so that "is this assignment real?" means "is it executable?" rather than
+# "does this text appear anywhere?". Without it a line-anchored match inside a block comment counts as the
+# assignment (so an explicit value renders into a comment and silently does not apply), and a mere mention of the
+# placeholder in a comment trips the post-condition (so a perfectly good file is refused).
+mit_mask_comments() {
+    awk '{
+        line = $0; out = ""; i = 1; n = length(line)
+        while (i <= n) {
+            if (inblk) {
+                if (substr(line, i, 2) == "*/") { inblk = 0; i += 2 } else { i++ }
+            } else {
+                if (substr(line, i, 2) == "/*") { inblk = 1; i += 2 }
+                else if (substr(line, i, 2) == "--") { break }
+                else { out = out substr(line, i, 1); i++ }
+            }
+        }
+        print out
+    }' <<<"$1"
+}
+
+# Line numbers of EXECUTABLE, isolated `max_insert_threads = ${MAX_INSERT_THREADS},` assignments.
+mit_assignment_lines() {
+    mit_mask_comments "$1" | grep -nE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},[[:space:]]*$' | cut -d: -f1
+}
+
+# Abort unless the SQL text holds exactly one such assignment. $2 is the file name, for diagnostics.
+mit_require_one_assignment() {
+    local n
+    n="$(mit_assignment_lines "$1" | grep -c . || true)"
+    if [[ "$n" -ne 1 ]]; then
+        echo "ERROR: expected exactly ONE executable line holding nothing but" >&2
+        echo "       'max_insert_threads = \${MAX_INSERT_THREADS},' in $2; found $n." >&2
+        echo "       The trailing comma is REQUIRED: it is what makes removing the line safe, so the" >&2
+        echo "       assignment must not be the last entry in the SETTINGS clause. A line ending in ';'," >&2
+        echo "       or in nothing with the ';' on the next line, carries the clause terminator, so" >&2
+        echo "       stripping it would leave a dangling comma and no terminator." >&2
+        echo "       Occurrences inside '--' or '/* */' comments do not count: a commented assignment" >&2
+        echo "       would render the setting into a comment, where it silently does not apply." >&2
+        return 1
+    fi
+    # The assignment must also be the ONLY executable occurrence of the placeholder. Rendering replaces just that
+    # one line, so any other executable ${MAX_INSERT_THREADS} survives into the statement -- which the per-window
+    # post-condition catches, but only during a real run. Checking it here too is what makes --dry-run a faithful
+    # rehearsal: without it a template can pass a full dry-run and abort on the first real window.
+    local occurrences
+    occurrences="$(mit_mask_comments "$1" | grep -oF '${MAX_INSERT_THREADS}' | grep -c . || true)"
+    if [[ "$occurrences" -ne 1 ]]; then
+        echo "ERROR: \${MAX_INSERT_THREADS} appears $occurrences times in executable lines of $2; expected" >&2
+        echo "       exactly once, as the SETTINGS assignment. Rendering rewrites only that one line, so any" >&2
+        echo "       other executable occurrence would survive into the statement the server receives." >&2
+        echo "       (Occurrences inside '--' or '/* */' comments are ignored and are fine.)" >&2
+        return 1
+    fi
+}
+
+# Validate the rendering target ONCE, here, rather than only when the first window renders. Two reasons, both
+# the same argument this file already makes for validating --max-partitions-per-insert-block eagerly: a malformed
+# SETTINGS clause would otherwise pass a full --dry-run clean and abort on the first real window, and in a real
+# run the abort would land after the successor-table check, after preflight_capacity() and after backfill_start
+# has been minted and persisted. The check reads the file's text, which does not change between windows, so this
+# covers every window; the per-window path re-resolves the line and keeps its own post-condition so a mid-run
+# edit to the file is still caught.
+mit_require_one_assignment "$(cat "$BACKFILL_SQL")" "$BACKFILL_SQL" || exit 2
 
 # Every query runs against the analytics database; --query keeps output scriptable (TSV, no formatting).
 ch() {
@@ -248,6 +314,7 @@ ch() {
 log() {
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
 }
+
 
 bytes_gib() {
     awk -v b="$1" 'BEGIN { printf "%.1f", b / 1073741824 }'
@@ -326,26 +393,43 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
     sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
-    if [[ -z "$MAX_INSERT_THREADS" ]]; then
-        # Unset means INHERIT: strip the whole setting line so the server's profile (or ClickHouse Cloud's
-        # non-zero default) applies. Rendering an explicit 0 here would OVERRIDE that and force the insert
-        # serial -- a silent slowdown on any deployment that already sets the setting.
-        sql="$(grep -vF 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql")"
-        # The strip is a whitespace-exact match on a SETTINGS line in ANOTHER file. If that line is ever
-        # reformatted the match silently no-ops and the placeholder reaches the server as a literal -- the exact
-        # failure that file's own header warns about. This is the DEFAULT path, so fail loudly here instead.
-        # The strip matches ONE exact spelling of a SETTINGS line that lives in ANOTHER file. Reformat that line
-        # -- even one extra space -- and the strip silently no-ops, leaving the placeholder to reach the server
-        # as a literal. So assert on the OUTCOME, whitespace-agnostically, and skip `--` comment lines, which
-        # legitimately keep the placeholder text in the file headers. This is the DEFAULT path; fail loudly.
-        if grep -v '^[[:space:]]*--' <<<"$sql" | grep -qF '${MAX_INSERT_THREADS}'; then
-            echo "ERROR: max_insert_threads strip failed -- the SETTINGS line in $BACKFILL_SQL no longer matches the" >&2
-            echo "       pattern above (was it reformatted?). Refusing to send SQL with a literal placeholder." >&2
-            exit 2
-        fi
-    else
-        sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
+    # >>> BEGIN max_insert_threads rendering (fence for extracting this block to test edits -- keep the markers)
+    # The SETTINGS line this depends on lives in ANOTHER file, so it is validated rather than assumed. The full
+    # validation runs once at startup (see the mit_require_one_assignment call there), which is what makes it
+    # exercised by --dry-run and reached before backfill_start is minted. Here it is re-resolved per window
+    # because the render needs the line's position, and the file is re-read each window -- so an edit made
+    # mid-run is still caught rather than rendered.
+    #
+    # Comments are masked before matching. A line-anchored match is NOT by itself a check that the assignment is
+    # executable: an identical line inside a /* */ block carries a trailing comma too, and would otherwise be
+    # treated as the assignment.
+    # `|| true` is load-bearing: mit_assignment_lines ends in a pipeline whose grep exits 1 when there is no
+    # match, so under `set -euo pipefail` this assignment would fail and `set -e` would kill the script HERE --
+    # before the count check below could call mit_require_one_assignment. The zero case would exit 1 mutely,
+    # which is the one case that most needs the diagnostic. The >=2 case never had this exposure, because grep
+    # succeeds there.
+    mit_line="$(mit_assignment_lines "$sql" || true)"
+    if [[ "$(grep -c . <<<"$mit_line" || true)" -ne 1 ]]; then
+        mit_require_one_assignment "$sql" "$BACKFILL_SQL" || exit 2
+        exit 2
     fi
+    if [[ -z "$MAX_INSERT_THREADS" ]]; then
+        # Unset means INHERIT: drop the line so the server's own value applies. Rendering an explicit 0 would
+        # OVERRIDE it and force the insert serial -- a slowdown, not a no-op.
+        sql="$(sed "${mit_line}d" <<<"$sql")"
+    else
+        sql="$(sed "${mit_line}s/\\\${MAX_INSERT_THREADS}/${MAX_INSERT_THREADS}/" <<<"$sql")"
+    fi
+    # Post-condition for BOTH paths, on the comment-masked text so a placeholder mentioned in a comment does not
+    # trip it. No pipe into `grep -q`: it exits on first match, the upstream process takes SIGPIPE, and
+    # `set -o pipefail` then reports 141, so the guard would skip its own failure branch.
+    mit_masked="$(mit_mask_comments "$sql" || true)"
+    if grep -qF '${MAX_INSERT_THREADS}' <<<"$mit_masked"; then
+        echo "ERROR: \${MAX_INSERT_THREADS} survives in an executable line of $BACKFILL_SQL after rendering." >&2
+        echo "       Refusing to send SQL containing a literal placeholder." >&2
+        exit 2
+    fi
+    # <<< END max_insert_threads rendering
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 
