@@ -12,6 +12,12 @@
 # in by --write-cost-factor. For an exact figure, time one real window with backfill.sh and pass its rows/sec via
 # --rows-per-sec.
 #
+# THIS ESTIMATE DOES NOT MODEL --max-insert-threads. The probe measures the READ side and derates it by a fixed
+# --write-cost-factor, so a run configured with insert parallelism can copy substantially faster than the number
+# printed here, and the estimate is not specific to your thread setting either way. If you intend to run the
+# backfill with --max-insert-threads set, do not tune against this figure: time one real window at THAT setting
+# and pass the result via --rows-per-sec, which bypasses the probe and the write-cost factor entirely.
+#
 # Connection: CLICKHOUSE_USER / CLICKHOUSE_PASSWORD from the environment, plus --host and --port. CLICKHOUSE_PORT is
 # NOT honored by clickhouse-client, and CLICKHOUSE_HOST is honored only when no connection flag is given, so pass
 # --host and --port together. The user must be able to set `log_comment` (used for cutover attribution in

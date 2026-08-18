@@ -59,6 +59,82 @@
 #                             TOTAL distinct partition count. Raising it trades a larger part count per insert (one part
 #                             per partition touched, compacted by background merges) for the INSERT completing at all.
 #                             See the runbook's "Far-future partitions from far-future-timestamp ids".
+#   --max-insert-threads N    threads for the INSERT SELECT pipeline (SETTINGS max_insert_threads).
+#                             OMITTED BY DEFAULT, and omitted means INHERIT: the setting line is stripped
+#                             from the SQL, so whatever the server profile sets applies. This matters --
+#                             rendering an explicit 0 would OVERRIDE a profile that sets it and force the
+#                             insert serial, which is a silent slowdown rather than a no-op. ClickHouse
+#                             Cloud ships non-zero defaults (1/2/4 by node memory), and a self-managed
+#                             cluster may set it in a profile too.
+#                             Pass an explicit 0 to FORCE "INSERT SELECT no parallel execution"; pass N to
+#                             request N. Where nothing sets it, ClickHouse's own default is 0, so the
+#                             insert side runs single-threaded unless raised. NOTE the setting is scoped to INSERT SELECT, which is what
+#                             this backfill issues; it is not a general INSERT knob. NOTE ALSO that
+#                             ClickHouse CLOUD does not default it to 0 -- upstream documents 1 / 2 / 4
+#                             by node memory -- so on Cloud you may already have parallelism here.
+#
+#                             Raising it lets you decide how much of the machine the backfill may use,
+#                             and can speed the copy up substantially when the insert side is the
+#                             constraint.
+#
+#                             PRECONDITION, per upstream: "Parallel INSERT SELECT has effect only if
+#                             the SELECT part is executed in parallel" (see max_threads). If the read
+#                             side is serialised, raising this buys nothing.
+#
+#                             WHY THE INSERT SIDE IS OFTEN THE CONSTRAINT HERE: the destination carries
+#                             per-row MATERIALIZED work the source does not do. The expensive one is
+#                             output_keys, which PARSES the output JSON:
+#                               arrayMap(key -> tuple(key, toString(JSONType(JSONExtractRaw(output, key)))),
+#                                        JSONExtractKeys(output))
+#                             There is NO input_keys column -- output_keys is traces-only and has no input
+#                             counterpart; do not go looking for one. The table also materialises
+#                             truncated_input / truncated_output, which substring-copy documents that can
+#                             be very large, plus input_length / output_length / metadata_length, duration
+#                             and id_at.
+#
+#                             Upstream states materialized values "are automatically calculated ... when
+#                             rows are inserted", but does NOT state which pipeline stage or which threads
+#                             compute them; that the insert side is the bottleneck on this table is an
+#                             INFERENCE FROM PROFILING, not a documented guarantee -- see below for how
+#                             to confirm it on your own data rather than assuming it.
+#
+#                             HOW TO CONFIRM IT: effective cores sit near 1 while the machine is
+#                             otherwise idle and OSIOWaitMicroseconds is 0 -- i.e. the copy is neither
+#                             CPU-saturated nor I/O bound, it is serialised. Compute effective cores
+#                             from query_log, MINDING THE UNITS -- the ProfileEvents are MICROseconds
+#                             and query_duration_ms is MILLIseconds, so the *1000 is not optional:
+#                               (UserTimeMicroseconds + SystemTimeMicroseconds) / (query_duration_ms * 1000)
+#                             Without it the result is 1000x too high and will read as hundreds of
+#                             cores. Sanity-check against the node's core count: a value above it means
+#                             the arithmetic is wrong, not that the machine is busy.
+#
+#                             NOTE WHAT THIS MEASURES: query_log aggregates are QUERY-WIDE CPU. They do
+#                             not separate read-pipeline threads from insert-pipeline threads, so this
+#                             number cannot by itself attribute the CPU to the sink. What makes it
+#                             evidence is the DELTA: raise the setting and effective cores rise towards
+#                             the thread count while the read side is unchanged.
+#
+#                             COSTS, BOTH OF THEM.
+#                             (1) MEMORY. Upstream is explicit: "Higher values will lead to higher
+#                                 memory usage." That matters more on this table than it might
+#                                 elsewhere, because a single oversized `output` document can dominate
+#                                 insert memory on its own. Raise this and max_memory_usage together,
+#                                 or narrow the window, rather than raising threads alone into a fixed
+#                                 ceiling.
+#                             (2) PARTS. Each insert thread writes its own parts, so part count per
+#                                 partition grows. Watch it against THIS cluster's parts_to_throw_insert
+#                                 and parts_to_delay_insert, read from system.merge_tree_settings -- do not
+#                                 assume ClickHouse's defaults (300 / 150). Deployments routinely raise
+#                                 them, so the real headroom can be an order of magnitude off either way,
+#                                 and "parts vs 300" is a misleading ratio on a tuned cluster.
+#
+#                             CHOOSING A VALUE IS A CAPACITY DECISION, NOT A BENCHMARK. On an idle
+#                             rehearsal environment a large value looks free; on a production cluster
+#                             those threads compete with live query latency. Pick the share of cores
+#                             the cutover may take while serving traffic, and validate the value you
+#                             will actually deploy rather than the largest one that fits. 0 stays the
+#                             default so no existing deployment changes behaviour, and so a small
+#                             install on few cores does not silently start spawning insert threads.
 #   --divergence P            max tolerated |src-dst|/src per window before aborting. Default 0.0001 (0.01%).
 #   --pause-seconds S         sleep S seconds after each inserted window, to let destination merges catch up and bound
 #                             the part count / IO pressure. Default 0. Recommended 30-60 on a large table at peak.
@@ -101,6 +177,11 @@ MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions: SETTINGS max_partitions_per_
                           # destination is weekly-partitioned, so one block can span many partitions; ClickHouse's
                           # default of 100 THROWS (throw_on_max_partitions_per_insert_block=1). Far-future UUIDv7 ids
                           # make this reachable in practice — see the runbook's far-future section. 0 = unlimited.
+MAX_INSERT_THREADS=""     # threads: SETTINGS max_insert_threads for the INSERT SELECT. EMPTY = inherit whatever the
+                          # server profile sets (the setting line is stripped from the SQL entirely). An explicit 0
+                          # is ClickHouse's own default and means "INSERT SELECT no parallel execution".
+                          # Raising it trades memory and destination part count for copy speed — see the
+                          # --max-insert-threads option docs above for the full diagnosis and both costs.
 DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled window before aborting (0.01%).
 PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 for a large table at peak.
 MIN_FREE_FACTOR="2.0"     # multiple of the current traces on-disk size that node free space must clear before starting.
@@ -120,6 +201,7 @@ while [[ $# -gt 0 ]]; do
         --max-rows-per-insert) MAX_ROWS="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-insert-threads) MAX_INSERT_THREADS="${2:?"$1 requires a value"}"; shift 2 ;;
         --divergence) DIVERGENCE="${2:?"$1 requires a value"}"; shift 2 ;;
         --pause-seconds) PAUSE_SECONDS="${2:?"$1 requires a value"}"; shift 2 ;;
         --min-free-factor) MIN_FREE_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -147,6 +229,10 @@ done
 # rendered into the SQL and rejected by the server on the first INSERT — after the capacity preflight has passed and the
 # backfill_start anchor has been minted, which is a far more expensive place to discover a typo.
 [[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
+# 0 is meaningful (ClickHouse default, no parallel INSERT SELECT execution), so allow it. Bounded at 2 digits:
+# this is
+# a share of cores, and a value beyond the machine's core count buys nothing while multiplying parts.
+[[ -z "$MAX_INSERT_THREADS" || "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (force no parallel INSERT SELECT execution) or 1..99; omit it entirely to inherit the server's setting." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
@@ -240,6 +326,26 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
     sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
+    if [[ -z "$MAX_INSERT_THREADS" ]]; then
+        # Unset means INHERIT: strip the whole setting line so the server's profile (or ClickHouse Cloud's
+        # non-zero default) applies. Rendering an explicit 0 here would OVERRIDE that and force the insert
+        # serial -- a silent slowdown on any deployment that already sets the setting.
+        sql="$(grep -vF 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql")"
+        # The strip is a whitespace-exact match on a SETTINGS line in ANOTHER file. If that line is ever
+        # reformatted the match silently no-ops and the placeholder reaches the server as a literal -- the exact
+        # failure that file's own header warns about. This is the DEFAULT path, so fail loudly here instead.
+        # The strip matches ONE exact spelling of a SETTINGS line that lives in ANOTHER file. Reformat that line
+        # -- even one extra space -- and the strip silently no-ops, leaving the placeholder to reach the server
+        # as a literal. So assert on the OUTCOME, whitespace-agnostically, and skip `--` comment lines, which
+        # legitimately keep the placeholder text in the file headers. This is the DEFAULT path; fail loudly.
+        if grep -v '^[[:space:]]*--' <<<"$sql" | grep -qF '${MAX_INSERT_THREADS}'; then
+            echo "ERROR: max_insert_threads strip failed -- the SETTINGS line in $BACKFILL_SQL no longer matches the" >&2
+            echo "       pattern above (was it reformatted?). Refusing to send SQL with a literal placeholder." >&2
+            exit 2
+        fi
+    else
+        sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
+    fi
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 

@@ -33,6 +33,12 @@
 #                             (throw_on_max_partitions_per_insert_block = 1). An abort here is worse than in the
 #                             backfill: the final delta runs immediately before the EXCHANGE, inside the window the
 #                             runbook asks you to keep short. Pass the SAME value used for the backfill.
+#   --max-insert-threads N    threads for the delta INSERT SELECT pipeline (SETTINGS max_insert_threads).
+#                             OMITTED BY DEFAULT = INHERIT the server's setting (the line is stripped from
+#                             the SQL); an explicit 0 FORCES "INSERT SELECT no parallel execution". Same knob, same caveats and same two costs (memory, part
+#                             count) as in backfill.sh -- see its option docs for the full diagnosis.
+#                             PASS THE SAME VALUE USED FOR THE BACKFILL: the delta writes into the
+#                             same table through the same insert path.
 
 set -euo pipefail
 
@@ -45,6 +51,8 @@ CH_PORT=""                # native port; empty = clickhouse-client default (9000
 BACKFILL_START=""
 MAX_INSERT_BLOCK_SIZE=1048576
 MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions per block for the delta INSERT; see the option docs above. 0 = unlimited.
+MAX_INSERT_THREADS=""                 # threads for the delta INSERT SELECT. EMPTY = inherit the server's setting (the
+                                      # line is stripped from the SQL). Explicit 0 FORCES no parallel execution.
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -52,6 +60,7 @@ while [[ $# -gt 0 ]]; do
         --backfill-start) BACKFILL_START="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-insert-threads) MAX_INSERT_THREADS="${2:?"$1 requires a value"}"; shift 2 ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -70,6 +79,7 @@ done
 # the setting counts partitions, no real table approaches that, and an out-of-range value would otherwise be rendered
 # into the SQL and rejected by the server mid-run instead of here.
 [[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
+[[ -z "$MAX_INSERT_THREADS" || "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (force no parallel INSERT SELECT execution) or 1..99; omit it entirely to inherit the server's setting." >&2; exit 2; }
 [[ -f "$SQL_FILE" ]] || { echo "ERROR: cannot find $SQL_FILE" >&2; exit 2; }
 
 echo "Reminder: raise databaseAnalytics.asyncInsertBusyTimeoutMaxMs before this step (backend config, not SQL) and"
@@ -80,6 +90,26 @@ sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
 sql="${sql//'${BACKFILL_START}'/$BACKFILL_START}"
 sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
 sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
+if [[ -z "$MAX_INSERT_THREADS" ]]; then
+    # Unset means INHERIT: strip the whole setting line so the server's profile (or ClickHouse Cloud's
+    # non-zero default) applies. Rendering an explicit 0 here would OVERRIDE that and force the insert
+    # serial -- a silent slowdown on any deployment that already sets the setting.
+    sql="$(grep -vF 'max_insert_threads = ${MAX_INSERT_THREADS}' <<<"$sql")"
+    # The strip is a whitespace-exact match on a SETTINGS line in ANOTHER file. If that line is ever
+    # reformatted the match silently no-ops and the placeholder reaches the server as a literal -- the exact
+    # failure that file's own header warns about. This is the DEFAULT path, so fail loudly here instead.
+    # The strip matches ONE exact spelling of a SETTINGS line that lives in ANOTHER file. Reformat that line
+    # -- even one extra space -- and the strip silently no-ops, leaving the placeholder to reach the server
+    # as a literal. So assert on the OUTCOME, whitespace-agnostically, and skip `--` comment lines, which
+    # legitimately keep the placeholder text in the file headers. This is the DEFAULT path; fail loudly.
+    if grep -v '^[[:space:]]*--' <<<"$sql" | grep -qF '${MAX_INSERT_THREADS}'; then
+        echo "ERROR: max_insert_threads strip failed -- the SETTINGS line in $SQL_FILE no longer matches the" >&2
+        echo "       pattern above (was it reformatted?). Refusing to send SQL with a literal placeholder." >&2
+        exit 2
+    fi
+else
+    sql="${sql//'${MAX_INSERT_THREADS}'/$MAX_INSERT_THREADS}"
+fi
 # --time makes clickhouse-client print each statement's elapsed seconds to stderr (it prints nothing under a bare
 # --query). The SECOND number is the deletion replay's wall time — a Go/No-Go acceptance criterion (it must fit inside
 # the buffer hold with margin), so without this the operator has no way to record it short of digging in query_log.
