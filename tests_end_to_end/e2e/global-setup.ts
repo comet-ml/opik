@@ -130,9 +130,18 @@ async function dismissWelcomeWizard(env: EnvConfig): Promise<void> {
 }
 
 async function authenticateAndPersist(env: EnvConfig): Promise<void> {
-  // OSS deployments have no auth wall — skip.
+  // OSS deployments have no auth wall, but playwright.config.ts passes
+  // storageState unconditionally, so the file has to exist. Write an empty one
+  // here rather than in globalSetup: a stub present before the branch below
+  // would make haveStorageState true and send an apiKey-configured cloud run
+  // down the "trust existing state" path with an empty session.
   if (env.deployment === 'oss') {
     console.log('[global-setup] OSS deployment: no auth needed');
+    await fs.writeFile(
+      AUTH_STATE_FILE,
+      JSON.stringify({ cookies: [], origins: [] }, null, 2),
+      'utf-8',
+    );
     return;
   }
 
