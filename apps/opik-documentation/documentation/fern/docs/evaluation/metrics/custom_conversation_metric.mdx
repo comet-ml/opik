@@ -19,10 +19,15 @@ Conversation metrics evaluate multi-turn conversations rather than single input-
 Conversation thread metrics work with a standardized conversation format:
 
 ```python
-from typing import List, Dict, Literal
+from typing import List
+from typing_extensions import Required, TypedDict
 
 # Type definition
-ConversationDict = Dict[Literal["role", "content"], str]
+class ConversationDict(TypedDict, total=False):
+    role: Required[str]
+    content: Required[str]
+    context: List[str]  # only for context-aware metrics, see below
+
 Conversation = List[ConversationDict]
 
 # Example conversation
@@ -33,6 +38,36 @@ conversation = [
     {"role": "assistant", "content": "Python is a versatile programming language..."},
 ]
 ```
+
+### Accessing the retrieved context
+
+Agent messages can carry an extra `context` key holding what the answer was grounded on, for example the
+documents retrieved by a RAG pipeline. It is populated by the `trace_context_transform` argument of
+[`evaluate_threads`](/v1/evaluation/evaluate_threads). Metrics that don't need it simply ignore it - but build your prompt from
+`role` and `content` explicitly rather than stringifying the message dicts, so a key you don't expect
+can never end up in front of the judge:
+
+```python
+from typing import Any
+
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import conversation_thread_metric, types
+
+
+class GroundedAnswersMetric(conversation_thread_metric.ConversationThreadMetric):
+    def __init__(self, name: str = "grounded_answers_score"):
+        super().__init__(name)
+
+    def score(self, conversation: types.Conversation, **kwargs: Any):
+        answers = [msg for msg in conversation if msg["role"] == "assistant"]
+        grounded = [msg for msg in answers if msg.get("context")]
+        return score_result.ScoreResult(
+            name=self.name,
+            value=len(grounded) / len(answers) if answers else 0.0,
+            reason=f"{len(grounded)} of {len(answers)} answers had retrieved context",
+        )
+```
+
 
 ## Creating a Custom Conversation Metric
 

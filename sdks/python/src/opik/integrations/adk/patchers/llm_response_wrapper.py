@@ -94,7 +94,15 @@ def _wrap_llm_response_create(
     if response.custom_metadata is None:
         response.custom_metadata = {}
 
-    response.custom_metadata["opik_usage"] = usage_metadata
+    # Store the usage as a plain dict, not the genai pydantic model. ``custom_metadata``
+    # is typed ``dict[str, Any]``, so pydantic has no serializer for a model placed in
+    # it and dumping the whole LlmResponse later raises "'MockValSer' object is not an
+    # instance of 'SchemaSerializer'". after_model_callback swallows that, which is how
+    # the LLM spans ended up with no output and no usage. The reader below already
+    # handles a dict - that is what it gets from the dumped result in the streaming path.
+    response.custom_metadata["opik_usage"] = adk_helpers.convert_adk_base_model_to_dict(
+        usage_metadata
+    )
     response.custom_metadata["provider"] = adk_helpers.get_adk_provider()
     response.custom_metadata["model_version"] = generate_content_response.model_version
     LOGGER.debug(

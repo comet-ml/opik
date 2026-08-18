@@ -1,5 +1,6 @@
 from typing import List
 
+from opik.evaluation.metrics.conversation import helpers as conversation_helpers
 from opik.evaluation.metrics.conversation import types as conversation_types
 from opik.evaluation.models import base_model
 
@@ -112,7 +113,10 @@ Given the completeness score, which is a [0, 1] score indicating how incomplete 
 def build_extract_user_goals_messages(
     conversation: conversation_types.Conversation,
 ) -> List[base_model.ConversationDict]:
-    user_content = f"** Turns: **\n{conversation}\n\n** JSON: **"
+    user_content = (
+        f"** Turns: **\n{conversation_helpers.render_turns_for_prompt(conversation)}"
+        "\n\n** JSON: **"
+    )
     return [
         {"role": "system", "content": _EXTRACT_USER_GOALS_SYSTEM},
         {"role": "user", "content": user_content},
@@ -123,7 +127,7 @@ def build_evaluate_user_goal_messages(
     conversation: conversation_types.Conversation, user_goal: str
 ) -> List[base_model.ConversationDict]:
     user_content = (
-        f"** Turns: **\n{conversation}\n\n"
+        f"** Turns: **\n{conversation_helpers.render_turns_for_prompt(conversation)}\n\n"
         f"** User Goal in the conversation: **\n{user_goal}\n\n"
         "** JSON: **"
     )

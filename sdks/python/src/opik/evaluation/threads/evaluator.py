@@ -5,7 +5,7 @@ from ...api_objects import opik_client
 from ...api_objects.threads import threads_client
 from ..metrics.conversation import conversation_thread_metric
 from . import evaluation_engine, evaluation_result
-from opik.rest_api import JsonListStringPublic
+from opik.rest_api import JsonListStringPublic, TracePublic
 
 
 def evaluate_threads(
@@ -15,6 +15,10 @@ def evaluate_threads(
     metrics: List[conversation_thread_metric.ConversationThreadMetric],
     trace_input_transform: Callable[[JsonListStringPublic], str],
     trace_output_transform: Callable[[JsonListStringPublic], str],
+    trace_context_transform: Optional[
+        Callable[[TracePublic], Optional[List[str]]]
+    ] = None,
+    *,
     verbose: int = 1,
     num_workers: int = 8,
     max_traces_per_thread: int = 1000,
@@ -65,6 +69,19 @@ def evaluate_threads(
 
             This transformation is essential because trace outputs vary by framework, but metrics
             expect a standardized string format representing the agent's response.
+        trace_context_transform: Optional function extracting the context the agent response was
+            grounded on, e.g. the documents retrieved by a RAG pipeline for that turn.
+            Unlike the two transforms above, it receives the **whole trace object**, because
+            the context can be logged anywhere: `trace.metadata`, `trace.output` or `trace.input`.
+            It should return a list of strings, or None when the trace has no context.
+
+            Example: If you log the retrieved documents as trace metadata,
+            use: lambda trace: trace.metadata["retrieved_docs"]
+
+            The extracted context is attached to the agent message of the same trace.
+            `ConversationalCoherenceMetric` is context aware: it shows the documents to
+            the judge, so a turn scores only when the answer is both relevant and
+            supported by them. Metrics that don't need the context ignore it.
         verbose: Verbosity level for progress reporting (0=silent, 1=progress).
             Default is 1.
         num_workers: Number of concurrent workers for thread evaluation.
@@ -99,6 +116,22 @@ def evaluate_threads(
         >>>     trace_input_transform=lambda x: x["input"],
         >>>     trace_output_transform=lambda x: x["output"],
         >>> )
+
+    Example:
+        >>> # Evaluating a RAG agent: ConversationalCoherenceMetric additionally checks
+        >>> # each answer against the documents it was generated from.
+        >>> from opik.evaluation import evaluate_threads
+        >>> from opik.evaluation.metrics import ConversationalCoherenceMetric
+        >>>
+        >>> results = evaluate_threads(
+        >>>     project_name="ai_team",
+        >>>     filter_string=None,
+        >>>     eval_project_name="ai_team_evaluation",
+        >>>     metrics=[ConversationalCoherenceMetric()],
+        >>>     trace_input_transform=lambda x: x["input"],
+        >>>     trace_output_transform=lambda x: x["output"],
+        >>>     trace_context_transform=lambda trace: trace.metadata["retrieved_docs"],
+        >>> )
     """
     client = opik_client.get_global_client()
     threads_client_ = threads_client.ThreadsClient(client)
@@ -116,5 +149,6 @@ def evaluate_threads(
             metrics=metrics,
             trace_input_transform=trace_input_transform,
             trace_output_transform=trace_output_transform,
+            trace_context_transform=trace_context_transform,
             max_traces_per_thread=max_traces_per_thread,
         )
