@@ -17,7 +17,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,6 +47,7 @@ public record ProviderAuthConfig(
                 ProviderApiKey.View.Write.class}) @Min(0) @Schema(description = "Lifetime in seconds assumed when the reply doesn't state one; 0 means such tokens are not cached (fetched per call)") Long fallbackTtlSeconds) {
 
     public static final String SECRET_SENTINEL = "__SECRET__";
+    private static final ProviderAuthConfig EMPTY = ProviderAuthConfig.builder().build();
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -87,12 +87,12 @@ public record ProviderAuthConfig(
     }
 
     /**
-     * An empty object ({@code {}}) is the API convention for clearing the auth config on update,
-     * mirroring how an empty headers map clears headers.
+     * A literal empty object ({@code {}}) is the API convention for clearing the auth config on
+     * update, mirroring how an empty headers map clears headers.
      */
     @JsonIgnore
     public boolean isEmpty() {
-        return StringUtils.isBlank(tokenUrl) && CollectionUtils.isEmpty(credentials);
+        return equals(EMPTY);
     }
 
     /**
