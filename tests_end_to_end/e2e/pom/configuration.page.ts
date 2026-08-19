@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
@@ -29,6 +29,36 @@ const PROVIDER_TYPE_MAP: Record<ProviderName, string> = {
 
 /** data-provider value for the Custom (vLLM / OpenAI-compatible) option. */
 const CUSTOM_PROVIDER_TYPE = 'custom-llm';
+
+/**
+ * Label of the *unconfigured* Custom option in the add-provider grid. The grid
+ * also lists every already-configured custom provider under the same
+ * `data-provider`, and picking one of those opens it for editing instead of
+ * starting a new configuration — so a fresh add has to name this option.
+ */
+const CUSTOM_PROVIDER_OPTION_LABEL = 'vLLM / Custom provider';
+
+export type AuthMode = 'Static API key' | 'OAuth2 client credentials';
+
+/** One credential row of the Authentication card, as the dialog renders it. */
+export interface CredentialRowState {
+  key: string;
+  value: string;
+  placeholder: string;
+  /** Lock engaged: the value is marked secret. */
+  locked: boolean;
+  /** Lock toggle disabled — a saved secret's lock can never be removed. */
+  lockToggleDisabled: boolean;
+  /** A reveal (eye) button is offered. Never for a value that is only stored. */
+  revealable: boolean;
+  /** The value is rendered obscured rather than in clear. */
+  masked: boolean;
+}
+
+export interface SubmittedRequest {
+  status: number;
+  payload: Record<string, unknown>;
+}
 
 export interface CustomProviderConfig {
   /** Unique provider_name (e.g. "openrouter"). Used to dedupe in the providers table. */
@@ -203,6 +233,242 @@ export class ConfigurationPage {
     });
   }
 
+  // --- Custom provider dialog: Authentication card (dynamic token auth) ---
+
+  /**
+   * Narrow the providers table to a single provider and wait for the filter to
+   * settle. The search is debounced, and acting on the table before it settles
+   * addresses whatever row still occupies that position in the unfiltered list
+   * — a row far enough down the page that its actions menu opens off-screen.
+   */
+  async searchForProvider(providerName: string): Promise<void> {
+    return test.step(`search providers for "${providerName}"`, async () => {
+      await this.page
+        .getByTestId('ai-providers-tabpanel')
+        .getByPlaceholder('Search by name')
+        .fill(providerName);
+      await expect(
+        this.providerNameCells(),
+        'the table narrowed to the searched provider',
+      ).toHaveText([providerName]);
+    });
+  }
+
+  /**
+   * The table row for a custom provider, addressed by the name cell's exact
+   * text. Anchored so `-uitoken` can't also match `-uitoken-2`, and the row is
+   * not positional: this table sets no `getRowId`, so `data-row-id` carries the
+   * row index rather than the provider id.
+   */
+  providerRow(providerName: string): Locator {
+    return this.page.getByRole('row').filter({
+      has: this.page
+        .getByRole('cell')
+        .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(providerName)}\\s*$`) }),
+    });
+  }
+
+  /** Open a blank Custom provider configuration. */
+  async openAddCustomProviderDialog(): Promise<void> {
+    return test.step('open the add Custom provider dialog', async () => {
+      const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
+      await tabpanel.getByRole('button', { name: 'Add configuration', exact: true }).first().click();
+      const dialog = this.providerDialog();
+      await dialog.waitFor({ state: 'visible' });
+      await dialog
+        .getByTestId('add-provider-dialog-option')
+        .filter({ hasText: CUSTOM_PROVIDER_OPTION_LABEL })
+        .click();
+      await expect(dialog.getByLabel('Provider name', { exact: true })).toBeVisible();
+    });
+  }
+
+  /** Open an existing provider's configuration from its row's actions menu. */
+  async openEditDialogFor(providerName: string): Promise<void> {
+    return test.step(`open the edit dialog for "${providerName}"`, async () => {
+      const row = this.providerRow(providerName);
+      await expect(row, `exactly one row named "${providerName}"`).toHaveCount(1);
+      const actions = row.getByRole('button', { name: 'Actions menu' });
+      // The row re-renders as it takes hover, which swaps the trigger out from
+      // under the first pointerdown and leaves the menu closed. Settling the
+      // hover first makes the click land on the element that stays.
+      await actions.hover();
+      await actions.click();
+      // Don't re-address the trigger from here on: the open menu is modal and
+      // hides the rest of the page from the accessibility tree, so any
+      // role-based locator outside it stops resolving until the menu closes.
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      const dialog = this.providerDialog();
+      await dialog.waitFor({ state: 'visible' });
+      await expect(dialog.getByLabel('Models list', { exact: true })).toBeVisible();
+    });
+  }
+
+  async fillCustomProviderBasics(fields: {
+    providerName?: string;
+    baseUrl?: string;
+    models?: string;
+  }): Promise<void> {
+    return test.step('fill the custom provider fields', async () => {
+      const dialog = this.providerDialog();
+      if (fields.providerName !== undefined) {
+        await dialog.getByLabel('Provider name', { exact: true }).fill(fields.providerName);
+      }
+      if (fields.baseUrl !== undefined) {
+        await dialog.getByLabel('URL', { exact: true }).fill(fields.baseUrl);
+      }
+      if (fields.models !== undefined) {
+        await dialog.getByLabel('Models list', { exact: true }).fill(fields.models);
+      }
+    });
+  }
+
+  async selectAuthMode(mode: AuthMode): Promise<void> {
+    return test.step(`select the "${mode}" authentication mode`, async () => {
+      await this.providerDialog().getByRole('radio', { name: mode, exact: true }).click();
+    });
+  }
+
+  async fillTokenUrl(url: string): Promise<void> {
+    return test.step(`fill the token URL "${url}"`, async () => {
+      await this.providerDialog().getByLabel('Token URL', { exact: true }).fill(url);
+    });
+  }
+
+  /** Set the value of the credential row carrying `key`. */
+  async fillCredentialValue(key: string, value: string): Promise<void> {
+    return test.step(`fill credential "${key}"`, async () => {
+      const row = await this.credentialRowFor(key);
+      await this.valueInput(row).fill(value);
+    });
+  }
+
+  async addCredential(credential: { key: string; value: string }): Promise<void> {
+    return test.step(`add credential "${credential.key}"`, async () => {
+      const dialog = this.providerDialog();
+      await dialog.getByRole('button', { name: 'Add credential' }).click();
+      const rows = this.credentialRows();
+      const added = rows.nth((await rows.count()) - 1);
+      await added.getByPlaceholder('Field name', { exact: true }).fill(credential.key);
+      await this.valueInput(added).fill(credential.value);
+    });
+  }
+
+  /**
+   * Every credential row, in the order the dialog renders them. Returned as a
+   * whole so a spec can assert the entire set rather than probing for the row
+   * it expects — an extra or missing row is then a failure, not a silent pass.
+   */
+  async readCredentialRows(): Promise<CredentialRowState[]> {
+    return test.step('read the credential rows', async () => {
+      const rows = this.credentialRows();
+      const count = await rows.count();
+      const states: CredentialRowState[] = [];
+      for (let i = 0; i < count; i++) {
+        const row = rows.nth(i);
+        const value = this.valueInput(row);
+        const lockToggle = this.lockToggle(row);
+        states.push({
+          key: await row.getByPlaceholder('Field name', { exact: true }).inputValue(),
+          value: await value.inputValue(),
+          placeholder: (await value.getAttribute('placeholder')) ?? '',
+          locked: (await lockToggle.locator('svg.lucide-lock').count()) > 0,
+          lockToggleDisabled: await lockToggle.isDisabled(),
+          revealable: (await this.revealToggle(row).count()) > 0,
+          // EyeInput obscures through -webkit-text-security rather than
+          // type=password, so this is what "not rendered in clear" means here.
+          masked: await value.evaluate(
+            (input) =>
+              (input.style as CSSStyleDeclaration & { webkitTextSecurity?: string })
+                .webkitTextSecurity === 'disc',
+          ),
+        });
+      }
+      return states;
+    });
+  }
+
+  /**
+   * Submit the dialog and return the write it actually sent. The dialog closes
+   * on submit whether or not the request succeeded, so "it closed" proves
+   * nothing — the request's status is the only signal available in the UI.
+   */
+  async submitProviderDialog(action: 'create' | 'update'): Promise<SubmittedRequest> {
+    return test.step(`submit the provider dialog (${action})`, async () => {
+      const method = action === 'create' ? 'POST' : 'PATCH';
+      const dialog = this.providerDialog();
+      const buttonName = action === 'create' ? 'Add provider' : 'Update configuration';
+
+      const responsePromise = this.page.waitForResponse((response) => {
+        // The collection route the FE posts to carries a trailing slash; the
+        // item route it patches does not. Both, and neither the auth-config
+        // test endpoint the same dialog can fire nor any other route.
+        const path = new URL(response.url()).pathname.replace(/\/$/, '');
+        return (
+          response.request().method() === method &&
+          /\/v1\/private\/llm-provider-key(\/[0-9a-f-]{36})?$/.test(path)
+        );
+      });
+      await dialog.getByRole('button', { name: buttonName, exact: true }).click();
+      const response = await responsePromise;
+      await dialog.waitFor({ state: 'hidden' });
+
+      return {
+        status: response.status(),
+        payload: (response.request().postDataJSON() ?? {}) as Record<string, unknown>,
+      };
+    });
+  }
+
+  private providerDialog(): Locator {
+    return this.page.getByTestId('add-provider-dialog');
+  }
+
+  /** Name-column cells, addressed by column rather than by position. */
+  private providerNameCells(): Locator {
+    return this.page.locator('[data-cell-id$="_name"]');
+  }
+
+  /**
+   * The credential rows carry no `data-testid`, so each is addressed as the row
+   * container of its "Field name" input. A descriptive testid on the row would
+   * be the stable contract (see conventions.md, "Selector preference") but
+   * adding one means editing the feature's own frontend from a QA-proposed
+   * spec; flagged for the FE owners instead.
+   */
+  private credentialRows(): Locator {
+    return this.providerDialog()
+      .getByPlaceholder('Field name', { exact: true })
+      .locator('xpath=ancestor::div[contains(@class,"items-start")][1]');
+  }
+
+  /** The row whose field name is exactly `key`; fails if it isn't unique. */
+  private async credentialRowFor(key: string): Promise<Locator> {
+    const rows = this.credentialRows();
+    const count = await rows.count();
+    const matches: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const rowKey = await rows.nth(i).getByPlaceholder('Field name', { exact: true }).inputValue();
+      if (rowKey === key) matches.push(i);
+    }
+    expect(matches, `exactly one credential row named "${key}"`).toHaveLength(1);
+    return rows.nth(matches[0]);
+  }
+
+  /** Plain input for a clear value, EyeInput's for a secret one. */
+  private valueInput(row: Locator): Locator {
+    return row.getByPlaceholder(new RegExp(`^(Value|stored, write-only)$`));
+  }
+
+  /** Addressed by its icon: the row's buttons carry no accessible name. */
+  private lockToggle(row: Locator): Locator {
+    return row.locator('button:has(svg.lucide-lock), button:has(svg.lucide-lock-open)');
+  }
+
+  private revealToggle(row: Locator): Locator {
+    return row.locator('button:has(svg.lucide-eye), button:has(svg.lucide-eye-off)');
+  }
+
   /**
    * Block until the providers table has resolved into either a populated or an
    * empty state. Counting rows before this settles reports zero for a populated
@@ -243,4 +509,8 @@ export class ConfigurationPage {
     }
     return false;
   }
+}
+
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

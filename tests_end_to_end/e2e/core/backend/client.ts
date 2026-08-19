@@ -193,6 +193,48 @@ export interface OptimizationRef {
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
+/** Placeholder the backend reads secret credential values back as; never a real value. */
+export const AUTH_SECRET_SENTINEL = '__SECRET__';
+
+export interface AuthCredentialRef {
+  key: string;
+  value: string;
+  secret: boolean;
+}
+
+export interface ProviderAuthConfigRef {
+  tokenUrl: string | null;
+  sendAs: string | null;
+  credentials: AuthCredentialRef[];
+  tokenField: string | null;
+  expiresField: string | null;
+  fallbackTtlSeconds: number | null;
+}
+
+export interface LlmProviderKeyRef {
+  id: string;
+  provider: string;
+  providerName: string | null;
+  baseUrl: string | null;
+  /** Masked when present. */
+  apiKey: string | null;
+  /**
+   * Whether the response carried an `api_key` key at all. A provider on dynamic
+   * token auth must not carry one even as null, so "absent" and "present but
+   * null" are genuinely different answers and must not be collapsed.
+   */
+  hasApiKeyField: boolean;
+  /** Free-form provider settings — `models`, `auth_header_name`, … */
+  configuration: Record<string, string>;
+  authConfig: ProviderAuthConfigRef | null;
+}
+
+/** Status + parsed body, for endpoints whose error shape is itself under test. */
+export interface RawApiResponse {
+  status: number;
+  body: Record<string, unknown>;
+}
+
 export function makeBackendClient(apiKey: string | null = null) {
   const env = loadEnvConfig();
   const opik = new Opik({
@@ -221,6 +263,70 @@ export function makeBackendClient(apiKey: string | null = null) {
       throw err;
     }
   };
+
+  /**
+   * Raw call against a private REST route. The generated SDK client is the
+   * default for everything it models; this exists for routes it doesn't (yet)
+   * carry, and for the cases where the *status and error body are the contract
+   * under test* and must not be turned into a thrown SDK error.
+   */
+  const privateRequest = async (
+    method: string,
+    path: string,
+    payload?: unknown,
+  ): Promise<{ status: number; body: Record<string, unknown>; location: string | null }> => {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Comet-Workspace': env.workspace,
+    };
+    const key = apiKey ?? env.apiKey;
+    if (key) headers['Authorization'] = key;
+
+    const res = await fetch(`${env.apiBaseUrl}${path}`, {
+      method,
+      headers,
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+    });
+    const text = await res.text();
+    let body: Record<string, unknown> = {};
+    if (text.length > 0) {
+      try {
+        body = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        throw new Error(`${method} ${path} -> ${res.status}: non-JSON body ${text.slice(0, 300)}`);
+      }
+    }
+    return { status: res.status, body, location: res.headers.get('location') };
+  };
+
+  const toAuthConfigRef = (raw: Record<string, unknown> | null): ProviderAuthConfigRef | null => {
+    if (raw === null) return null;
+    const credentials = (raw.credentials ?? []) as Array<Record<string, unknown>>;
+    return {
+      tokenUrl: (raw.token_url as string) ?? null,
+      sendAs: (raw.send_as as string) ?? null,
+      credentials: credentials.map((credential) => ({
+        key: String(credential.key),
+        value: String(credential.value),
+        secret: Boolean(credential.secret),
+      })),
+      tokenField: (raw.token_field as string) ?? null,
+      expiresField: (raw.expires_field as string) ?? null,
+      fallbackTtlSeconds: (raw.fallback_ttl_seconds as number) ?? null,
+    };
+  };
+
+  const toLlmProviderKeyRef = (raw: Record<string, unknown>): LlmProviderKeyRef => ({
+    id: String(raw.id),
+    provider: String(raw.provider),
+    providerName: (raw.provider_name as string) ?? null,
+    baseUrl: (raw.base_url as string) ?? null,
+    apiKey: (raw.api_key as string) ?? null,
+    hasApiKeyField: 'api_key' in raw,
+    configuration: (raw.configuration as Record<string, string>) ?? {},
+    authConfig: toAuthConfigRef((raw.auth_config as Record<string, unknown>) ?? null),
+  });
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
   // depending on the not-yet-constructed return object.
@@ -820,6 +926,92 @@ export function makeBackendClient(apiKey: string | null = null) {
       } catch {
         return { url, urlReachable: false, content: null };
       }
+    },
+
+    // --- AI provider configurations (Configuration -> AI Providers) ---
+    //
+    // Workspace-scoped and not modelled by the generated SDK client, so these go
+    // through the private REST route directly. They are also the read-back side
+    // of the UI specs: what the dialog stores is only observable here.
+
+    /** Seed a provider configuration. Throws unless the backend answers 201. */
+    async createLlmProviderKey(seed: Record<string, unknown>): Promise<string> {
+      const { status, body, location } = await privateRequest(
+        'POST',
+        '/v1/private/llm-provider-key',
+        seed,
+      );
+      if (status !== 201 || !location) {
+        throw new Error(
+          `POST /v1/private/llm-provider-key -> ${status}: ${JSON.stringify(body).slice(0, 300)}`,
+        );
+      }
+      return location.slice(location.lastIndexOf('/') + 1);
+    },
+
+    /** Create attempt whose status and error body are the assertion target. */
+    async tryCreateLlmProviderKey(seed: Record<string, unknown>): Promise<RawApiResponse> {
+      const { status, body } = await privateRequest('POST', '/v1/private/llm-provider-key', seed);
+      return { status, body };
+    },
+
+    async getLlmProviderKey(id: string): Promise<LlmProviderKeyRef | null> {
+      const { status, body } = await privateRequest('GET', `/v1/private/llm-provider-key/${id}`);
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(
+          `GET /v1/private/llm-provider-key/${id} -> ${status}: ${JSON.stringify(body).slice(0, 300)}`,
+        );
+      }
+      return toLlmProviderKeyRef(body);
+    },
+
+    async listLlmProviderKeysWithPrefix(prefix: string): Promise<LlmProviderKeyRef[]> {
+      const { status, body } = await privateRequest('GET', '/v1/private/llm-provider-key');
+      if (status !== 200) {
+        throw new Error(
+          `GET /v1/private/llm-provider-key -> ${status}: ${JSON.stringify(body).slice(0, 300)}`,
+        );
+      }
+      return ((body.content ?? []) as Array<Record<string, unknown>>)
+        .map(toLlmProviderKeyRef)
+        .filter((providerKey) => (providerKey.providerName ?? '').startsWith(prefix));
+    },
+
+    /** Update attempt whose status and error body are the assertion target. */
+    async patchLlmProviderKey(id: string, patch: Record<string, unknown>): Promise<RawApiResponse> {
+      const { status, body } = await privateRequest(
+        'PATCH',
+        `/v1/private/llm-provider-key/${id}`,
+        patch,
+      );
+      return { status, body };
+    },
+
+    async deleteLlmProviderKeys(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      const { status, body } = await privateRequest('POST', '/v1/private/llm-provider-key/delete', {
+        ids,
+      });
+      if (status !== 204) {
+        throw new Error(
+          `POST /v1/private/llm-provider-key/delete -> ${status}: ${JSON.stringify(body).slice(0, 300)}`,
+        );
+      }
+    },
+
+    /**
+     * Run a provider's token-fetch recipe once, backend-side. The whole point of
+     * the endpoint is what it does *not* return, so the raw status and body are
+     * handed back rather than a parsed lifetime.
+     */
+    async testProviderAuthConfig(request: Record<string, unknown>): Promise<RawApiResponse> {
+      const { status, body } = await privateRequest(
+        'POST',
+        '/v1/private/llm-provider-key/auth-config/test',
+        request,
+      );
+      return { status, body };
     },
   };
 }

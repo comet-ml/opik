@@ -732,8 +732,10 @@ areas:
     label: Configuration
     nav_group: Workspace
     routes: ["/$workspaceName/configuration"]
-    specs: []
-    # A configuration.page.ts POM exists with no spec using it — half-built surface.
+    spec_dir: configuration
+    specs:
+      - configuration/ai-provider-token-auth.spec.ts
+      - configuration/ai-provider-auth-config-test.spec.ts
     # Split per-tab: the page has 5 distinct tabs (CONFIGURATION_TABS), each with
     # its own CRUD surface, so one capability per tab was too coarse. Capabilities
     # below are read off the tab components on origin/main.
@@ -751,8 +753,8 @@ areas:
       environment-delete:       { covered: false }
       # -- AI providers tab --
       ai-provider-list:         { covered: false }
-      ai-provider-add:          { covered: false, note: "exercised indirectly by playground provider setup (configuration.page.ts), never asserted here" }
-      ai-provider-edit:         { covered: false }
+      ai-provider-add:          { covered: true,  tier: t2-cuj, note: "custom provider added in OAuth2 mode, plus the auth-config test endpoint's contract" }
+      ai-provider-edit:         { covered: true,  tier: t2-cuj, note: "edit that leaves the stored secret untouched" }
       ai-provider-delete:       { covered: false }
       # -- Workspace preferences tab --
       pref-thread-timeout:      { covered: false, note: "EditThreadTimeoutDialog" }

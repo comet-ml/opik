@@ -20,6 +20,11 @@ export {
   numericStat,
   type BackendFilter,
   type ReadWindow,
+  AUTH_SECRET_SENTINEL,
+  type AuthCredentialRef,
+  type ProviderAuthConfigRef,
+  type LlmProviderKeyRef,
+  type RawApiResponse,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
 export { uuid7 } from './uuid7';
