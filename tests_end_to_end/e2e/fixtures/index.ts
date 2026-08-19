@@ -1,4 +1,4 @@
-export { test, expect } from './aged-experiment.fixture';
+export { test, expect } from './otel-spans.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -59,4 +59,10 @@ export type {
   AgedExperimentRef,
   AgedExperimentFixtures,
 } from './aged-experiment.fixture';
+export type {
+  OtelProviderCase,
+  OtelSpansRef,
+  OtelAliasSpansRef,
+  OtelSpansFixtures,
+} from './otel-spans.fixture';
 export type { ProjectRef } from '../core/backend';
