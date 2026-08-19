@@ -95,6 +95,21 @@ class WeeklyPartitionsTest {
     }
 
     @Test
+    @DisplayName("the returned set is immutable, so a delete's partitions cannot be narrowed after derivation")
+    void returnedSetIsImmutable() {
+        // Not a general hygiene assertion: this set IS the partition list a DELETE binds, so a caller that removed an
+        // entry would turn a correct delete into one that matches nothing and reports success.
+        var partitions = WeeklyPartitions.of(List.of(
+                UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"),
+                UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8")))
+                .orElseThrow();
+
+        assertThatThrownBy(() -> partitions.remove(20260817L))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThat(partitions).containsExactlyInAnyOrder(20260817L, 19960205L);
+    }
+
+    @Test
     @DisplayName("a null batch throws rather than reading as an unprunable one")
     void nullBatchThrows() {
         // The one intolerant case, and deliberately not folded into the empty result above: empty is a documented

@@ -98,6 +98,9 @@ public class WeeklyPartitions {
             partitions.add(monday.getYear() * 10000L + monday.getMonthValue() * 100L + monday.getDayOfMonth());
         }
 
-        return partitions.isEmpty() ? Optional.empty() : Optional.of(partitions);
+        // Set.copyOf, not the working HashSet: what escapes here decides which partitions a DELETE mutation touches, so
+        // a caller holding a mutable reference could narrow the set after it was derived and turn a correct delete into
+        // a silent no-op. Immutable by default per apps/opik-backend/AGENTS.md, and the accumulator stays local.
+        return partitions.isEmpty() ? Optional.empty() : Optional.of(Set.copyOf(partitions));
     }
 }
