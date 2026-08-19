@@ -61,7 +61,7 @@
   <rect x="252" y="202" width="32" height="24" rx="5" fill="none" stroke="#1f2937" stroke-width="1.4"/>
   <line x1="252" y1="210" x2="284" y2="210" stroke="#1f2937" stroke-width="1.2"/>
   <circle cx="257" cy="206" r="1.2" fill="#1f2937"/>
-  <text x="294" y="212" font-size="9.5" font-weight="700" fill="#1f2937">Claude</text>
+  <text x="294" y="212" font-size="9.5" font-weight="700" fill="#1f2937">Claude Code</text>
   <text x="294" y="226" font-size="8" fill="#94a3b8">desktop app</text>
 
   <path d="M136 250 V288 H316 V250" fill="none" stroke="#cbd5e1" stroke-width="1.2"/>

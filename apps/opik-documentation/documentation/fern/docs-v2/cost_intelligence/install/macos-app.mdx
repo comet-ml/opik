@@ -8,7 +8,7 @@ og:title: Install the macOS app with MDM - Opik
 title: macOS app with MDM
 ---
 
-The macOS app is the rollout path for fleets where nothing can be configured on the agent itself. Developers keep using Claude Code — the CLI or the desktop app — exactly as before: no base-URL change, no environment variables, nothing to install in the agent. The app sees the traffic anyway.
+The macOS app is the rollout path for full coverage: it captures every Claude Code user on the machine, whether they work in the CLI or the desktop app. Developers keep working exactly as before — no base-URL change, no environment variables, nothing to install in the agent. The app sees the traffic anyway.
 
 <Warning>
   This path terminates TLS locally in order to see traffic, which makes it a
@@ -28,16 +28,18 @@ The data landing in Opik is the same as the plugin produces. What differs is how
 | | Plugin (proxy) | macOS app (extension) |
 | --- | --- | --- |
 | How traffic arrives | Agent is pointed at a local port | The OS diverts the flows |
+| Captures | Claude Code CLI | CLI **and** the Claude Code desktop app |
 | Client configuration | Required (delivered by MDM) | None |
 | TLS | Not intercepted | Terminated locally |
 | Platforms | macOS, Linux, Windows | macOS only |
 
 <Note>
-  **The plugin is our recommended path.** If [managed settings](/cost-intelligence/install/managed-settings)
-  or [MDM](/cost-intelligence/install/mdm) can deliver configuration to your
-  fleet, use them — no system extension, no certificate, no TLS interception.
-  Reach for the macOS app only when no client configuration can be delivered
-  to the agent at all.
+  **The plugin is our recommended path.** It is simpler — no system extension,
+  no certificate, no TLS interception — and it runs on macOS, Linux and
+  Windows. Its limit is coverage: it captures the Claude Code **CLI**, not the
+  desktop app. Choose the macOS app when you want to roll Cost Intelligence
+  out to all of your users, including the ones working in the Claude Code
+  desktop app.
 </Note>
 
 ## What you deploy
