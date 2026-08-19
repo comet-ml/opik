@@ -15,13 +15,13 @@ def evaluate_threads(
     metrics: List[conversation_thread_metric.ConversationThreadMetric],
     trace_input_transform: Callable[[JsonListStringPublic], str],
     trace_output_transform: Callable[[JsonListStringPublic], str],
-    trace_context_transform: Optional[
-        Callable[[TracePublic], Optional[List[str]]]
-    ] = None,
-    *,
     verbose: int = 1,
     num_workers: int = 8,
     max_traces_per_thread: int = 1000,
+    *,
+    trace_context_transform: Optional[
+        Callable[[TracePublic], Optional[List[str]]]
+    ] = None,
 ) -> evaluation_result.ThreadsEvaluationResult:
     """Evaluate conversation threads using specified metrics.
 
@@ -69,8 +69,11 @@ def evaluate_threads(
 
             This transformation is essential because trace outputs vary by framework, but metrics
             expect a standardized string format representing the agent's response.
-        trace_context_transform: Optional function extracting the context the agent response was
-            grounded on, e.g. the documents retrieved by a RAG pipeline for that turn.
+        trace_context_transform: Keyword-only. Optional function extracting the context the agent
+            response was grounded on, e.g. the documents retrieved by a RAG pipeline for that turn.
+            It is keyword-only, and declared after the existing arguments, so that callers who
+            already pass `verbose` / `num_workers` / `max_traces_per_thread` positionally keep
+            binding them to the same parameters.
             Unlike the two transforms above, it receives the **whole trace object**, because
             the context can be logged anywhere: `trace.metadata`, `trace.output` or `trace.input`.
             It should return a list of strings, or None when the trace has no context.
