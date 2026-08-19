@@ -1926,7 +1926,7 @@ class TraceDAOImpl implements TraceDAO {
      * <p>
      * {@code <if(partitions)>} adds the table's own weekly partition expression, bound as the exact set of partitions
      * the batch's ids resolve to. Both conditions must hold for it to be emitted: the live table must be the weekly
-     * partitioned successor ({@link #tracesWeeklyPartitioningEnabled()}), and every id in the batch must be one whose
+     * partitioned successor ({@link #tracesWeeklyPartitionPruningEnabled()}), and every id in the batch must be one whose
      * partition can be derived exactly ({@link WeeklyPartitions#of}). Otherwise the predicate is omitted and the
      * statement is byte-identical to the previous unbounded form. That is what preserves the original guarantee — a
      * row whose {@code id_at} cannot be trusted is still deleted, because no id in such a batch is used to derive a
@@ -3372,10 +3372,11 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
-     * Whether the live trace mutation target is the weekly partitioned successor — {@code id_at} as
-     * {@code DateTime64(0, 'UTC')} under
-     * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} — so a mutation may bound
-     * itself to the partitions its ids resolve to ({@link WeeklyPartitions}).
+     * Whether a trace mutation may prune to the partitions its ids resolve to ({@link WeeklyPartitions}). The flag
+     * enables the <b>pruning</b>, never the partitioning: it asserts that the live mutation target already is the
+     * weekly partitioned successor — {@code id_at} as {@code DateTime64(0, 'UTC')} under
+     * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} — which the cutover's
+     * EXCHANGE installs, not this flag.
      * <p>
      * This has to be its own flag because <b>neither existing schema flag marks the EXCHANGE, which is the moment the
      * partitioning appears</b>, and both are wrong in a different direction:
@@ -3400,8 +3401,8 @@ class TraceDAOImpl implements TraceDAO {
      * schema. Turn it on once the EXCHANGE is confirmed, and back off <b>before</b> a rollback stage B/C promotes the
      * original.
      */
-    private boolean tracesWeeklyPartitioningEnabled() {
-        return configuration.getDatabaseAnalyticsDataModel().tracesWeeklyPartitioningEnabled();
+    private boolean tracesWeeklyPartitionPruningEnabled() {
+        return configuration.getDatabaseAnalyticsDataModel().tracesWeeklyPartitionPruningEnabled();
     }
 
     /**
@@ -3410,7 +3411,7 @@ class TraceDAOImpl implements TraceDAO {
      * only meaningful against a table that partitions on it.
      */
     private Optional<Set<Long>> weeklyPartitionsFor(Collection<UUID> ids) {
-        return tracesWeeklyPartitioningEnabled() ? WeeklyPartitions.of(ids) : Optional.empty();
+        return tracesWeeklyPartitionPruningEnabled() ? WeeklyPartitions.of(ids) : Optional.empty();
     }
 
     /**

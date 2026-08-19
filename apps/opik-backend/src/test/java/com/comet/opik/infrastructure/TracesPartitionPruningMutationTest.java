@@ -69,7 +69,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * <p>{@link #liveTracesIsTheWeeklyPartitionedSuccessor} is the guard that keeps the rest honest. The predicate is
  * harmless against an unpartitioned table for recent ids, so had the EXCHANGE below not taken effect every test here
  * would still pass while proving nothing; it pins both facts
- * {@code databaseAnalyticsDataModel.tracesWeeklyPartitioningEnabled} asserts — the weekly {@code PARTITION BY} and
+ * {@code databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled} asserts — the weekly {@code PARTITION BY} and
  * {@code id_at} as {@code DateTime64}.
  *
  * <p>Two internal touches, on the pattern of {@code TracesDistributedWrapMutationTest}: the EXCHANGE has no public API,
@@ -143,7 +143,7 @@ class TracesPartitionPruningMutationTest {
                         // non-nullable sentinel columns, and the pruning flag asserts the schema this suite installs.
                         .customConfigs(List.of(
                                 new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
-                                new CustomConfig("databaseAnalyticsDataModel.tracesWeeklyPartitioningEnabled",
+                                new CustomConfig("databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled",
                                         "true")))
                         .build());
     }
@@ -174,7 +174,7 @@ class TracesPartitionPruningMutationTest {
     @Test
     @DisplayName("the live traces table is the weekly partitioned successor")
     void liveTracesIsTheWeeklyPartitionedSuccessor() {
-        // Both halves of what tracesWeeklyPartitioningEnabled asserts. Without this the whole suite is vacuous: against
+        // Both halves of what tracesWeeklyPartitionPruningEnabled asserts. Without this the whole suite is vacuous: against
         // the legacy unpartitioned `traces` a pruned delete of a recent id still removes the row, so every behavioural
         // assertion below would stay green while the predicate was being emitted at exactly the table it must not be.
         // Asserted piecewise rather than against PARTITION_PREDICATE verbatim: system.tables reports the expression as

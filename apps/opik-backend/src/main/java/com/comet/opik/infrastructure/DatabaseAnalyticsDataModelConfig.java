@@ -51,12 +51,15 @@ import lombok.Builder;
  * (the wrapper accepts them as metadata-only, and targeting only {@code traces_local} leaves the wrapper without the
  * column, so reads fail with code 47).</p>
  *
- * <p>{@code tracesWeeklyPartitioningEnabled}: whether the live trace mutation target is the weekly partitioned
- * successor — {@code id_at} as {@code DateTime64(0, 'UTC')} under
- * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} — so a trace {@code DELETE}
- * may bound itself to the partitions its own ids resolve to instead of being planned against every part of the table
- * (OPIK-6901). Purely an optimisation: {@code false} keeps the unbounded mutation, which is always correct and merely
- * slower, and only {@code true} asserts anything about the schema.</p>
+ * <p>{@code tracesWeeklyPartitionPruningEnabled}: enables partition-aware <b>pruning</b> of trace deletes — a trace
+ * {@code DELETE} bounds itself to the weekly partitions its own ids resolve to instead of being planned against every
+ * part of the table (OPIK-6901). It does <b>not</b> create or activate any partitioning; installing the partitioned
+ * schema is the EXCHANGE step of the cutover. Turning it on therefore <b>asserts</b> a schema fact rather than causing
+ * one: that the live mutation target already is the weekly partitioned successor — {@code id_at} as
+ * {@code DateTime64(0, 'UTC')} under
+ * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))}. Purely an optimisation:
+ * {@code false} keeps the unbounded mutation, which is always correct and merely slower, and only {@code true} asserts
+ * anything about the schema.</p>
  *
  * <p>It is deliberately a third flag rather than a reuse of the two above, because the partitioning appears at the
  * <b>EXCHANGE</b> and neither of them marks that moment. {@code traceColumnsNonNullable} must be rolled out
@@ -76,5 +79,5 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean spanDeletionEventsCaptureEnabled,
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
         boolean tracesDistributedWrapEnabled,
-        boolean tracesWeeklyPartitioningEnabled) {
+        boolean tracesWeeklyPartitionPruningEnabled) {
 }

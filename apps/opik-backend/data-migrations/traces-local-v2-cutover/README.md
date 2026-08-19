@@ -322,11 +322,16 @@ the `traceColumnsNonNullable` flip").
 
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
-**The `tracesWeeklyPartitioningEnabled` flip (optional, and why it goes last).** `databaseAnalyticsDataModel.tracesWeeklyPartitioningEnabled`
-(env `ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITIONING_ENABLED`, default `false`) lets a trace `DELETE` bound itself to
+**The `tracesWeeklyPartitionPruningEnabled` flip (optional, and why it goes last).** `databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled`
+(env `ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED`, default `false`) lets a trace `DELETE` bound itself to
 the weekly partitions its own ids resolve to (OPIK-6901), instead of being planned against every part of the table — on
 prod-test, 12 ids rewrote 3,928 parts / 5.40 TiB without it. It asserts a **schema** fact: that `traces` (or
 `traces_local`) is the successor, with `id_at` as `DateTime64(0,'UTC')` under the weekly `PARTITION BY`.
+
+> **It enables the *pruning*, not the partitioning — the name is deliberate.** Setting it does not create, activate or
+> migrate anything; the partitioned schema arrives with the `EXCHANGE` above and nowhere else. So it is never a step that
+> *makes* the cutover progress, and setting it early does not bring the partitioning forward — it only starts emitting a
+> predicate against whatever table is live, which is the failure below.
 
 It is a third flag precisely because **neither of the two above marks the `EXCHANGE`**, which is when the partitioning
 appears: `traceColumnsNonNullable` must lead it (above), and `tracesDistributedWrapEnabled` flips at the wrap, which may
@@ -851,9 +856,9 @@ statements, so a failure *between* them needs a restart path:
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
 complete until they land.
 
-> **If `tracesWeeklyPartitioningEnabled` was turned on, revert it *before* the stage runs, not after.** It asserts the
+> **If `tracesWeeklyPartitionPruningEnabled` was turned on, revert it *before* the stage runs, not after.** It asserts the
 > live table is the partitioned successor, and the restored original is not one, so a stale `true` makes trace deletes
-> match zero rows while reporting success — see "The `tracesWeeklyPartitioningEnabled` flip". It is the one flag whose
+> match zero rows while reporting success — see "The `tracesWeeklyPartitionPruningEnabled` flip". It is the one flag whose
 > revert has to lead the swap; the two steps below follow it.
 
 1. **Revert `traceColumnsNonNullable` to `false` AND roll-restart every backend instance.** The flag is read from a
