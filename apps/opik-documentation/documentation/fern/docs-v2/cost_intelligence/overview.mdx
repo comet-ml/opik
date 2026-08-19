@@ -20,6 +20,16 @@ Cost Intelligence closes that gap. It captures every coding-agent API call on th
   workspace.
 </Note>
 
+## How it works
+
+Each developer machine runs its own local `opik-cipx` daemon. The coding agent talks to it over the loopback interface, and the daemon forwards every call to the provider unchanged — there is no shared collector, and none of your traffic routes through Comet. What ships to your Opik workspace is a separate, asynchronous stream of metadata-only spans: token counts, costs, and structure, [never content](/cost-intelligence/data-privacy-security).
+
+<Frame>
+  <img src="/img/v2/cost-intelligence/architecture.svg" alt="Cost Intelligence architecture: a local opik-cipx daemon on each developer machine forwards Claude Code traffic unchanged to Anthropic and ships metadata-only spans to Opik" />
+</Frame>
+
+The provider's response carries its own `usage` block, and that is what the spans report — which is why every number you see reconciles with your bill.
+
 ## What you get
 
 <CardGroup cols={2}>
