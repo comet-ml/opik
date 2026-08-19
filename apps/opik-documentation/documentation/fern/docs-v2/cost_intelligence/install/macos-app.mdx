@@ -8,7 +8,7 @@ og:title: Install the macOS app with MDM - Opik
 title: macOS app with MDM
 ---
 
-The macOS app captures coding-agent traffic **transparently**, using a system extension that the OS hands the relevant network flows. Nothing configures the agent: no base-URL change, no environment variables.
+The macOS app is the rollout path for fleets where nothing can be configured on the agent itself. Developers keep using Claude Code — the CLI or the desktop app — exactly as before: no base-URL change, no environment variables, nothing to install in the agent. The app sees the traffic anyway.
 
 <Warning>
   This path terminates TLS locally in order to see traffic, which makes it a
@@ -18,6 +18,32 @@ The macOS app captures coding-agent traffic **transparently**, using a system ex
   your fleet, since they need no system extension, no certificate, and no TLS
   interception. Use this path when neither can.
 </Warning>
+
+## How it works
+
+Everything happens on the developer's machine. The app runs as a menu-bar app with a network extension, and macOS hands that extension the coding agent's API traffic:
+
+```mermaid
+flowchart LR
+    subgraph mac["Developer's Mac"]
+        direction TB
+        CLI["Claude Code CLI"]
+        DESK["Claude desktop app"]
+        APP["Cost Intelligence macOS app<br/>(network extension, local TLS)"]
+        CLI --> APP
+        DESK --> APP
+    end
+    APP -->|"default"| ANT["Anthropic API"]
+    APP -->|"when configured"| GW["Your LLM gateway"] --> ANT
+    APP -.->|"metadata only, asynchronous"| OPIK["Opik workspace"]
+```
+
+Walking through the flow:
+
+1. **The developer works as usual.** They prompt Claude Code from the CLI or the desktop app. Neither is configured, pointed at a proxy, or aware the app exists.
+2. **macOS diverts the agent's API calls to the app.** The system extension terminates TLS on the device so the app can read each call and attribute its cost — this is the interception the warning above is about, and it never leaves the machine.
+3. **The call is forwarded unchanged.** The app opens its own TLS connection — to the Anthropic API by default, or to your LLM gateway when one is configured — with full certificate validation, and passes the request and response through untouched.
+4. **Metadata ships to Opik on the side.** Counts, costs, and structure — [never content](/cost-intelligence/data-privacy-security) — go to your Opik workspace asynchronously. This side path never sits between the developer and the model: if anything in it fails, the agent keeps working.
 
 ## How it differs from the plugin
 
