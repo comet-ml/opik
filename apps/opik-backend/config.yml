@@ -1215,7 +1215,7 @@ llmProviderTokenAuth:
   # Description: Lease time for the cross-pod single-flight lock around a token fetch
   lockTimeout: ${LLM_PROVIDER_TOKEN_AUTH_LOCK_TIMEOUT:-15s}
   # Default: 1000000
-  # Description: Maximum accepted size (in characters) of a token endpoint reply
+  # Description: Maximum accepted size (in characters) of a token endpoint reply. Capped at 10000000
   maxResponseChars: ${LLM_PROVIDER_TOKEN_AUTH_MAX_RESPONSE_CHARS:-1000000}
   # Default: strict
   # Description: SSRF guard on the token URL. "strict" refuses non-HTTPS and private/internal
