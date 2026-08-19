@@ -9,14 +9,14 @@ import Loader from "@/shared/Loader/Loader";
 import { APP_VERSION } from "@/constants/app";
 import { runLocalStorageMigrations } from "@/lib/ls-migrations";
 
-const V2App = React.lazy(() => import("@/v2/App"));
-
 import "./main.scss";
 import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
 
 // other styles
 import "react18-json-view/src/style.css";
 import "react18-json-view/src/dark.css";
+
+const V2App = React.lazy(() => import("@/v2/App"));
 
 const container = document.getElementById("root") as HTMLDivElement;
 const root = createRoot(container);
