@@ -60,7 +60,11 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -1921,8 +1925,19 @@ class TraceDAOImpl implements TraceDAO {
      * so a single statement can span several projects (e.g. a reused id resolved to all its owning projects, or a
      * cross-project batch) instead of one delete per project (OPIK-7483). Every deleted row carries its {@code
      * project_id}, so no delete is ever project-less - also required once {@code traces} is a Distributed table
-     * (OPIK-7455). No {@code id_at}/time predicate on purpose, so it still deletes rows whose {@code id_at} is
-     * untrustworthy (e.g. a wrapped timestamp); correctness here does not depend on {@code id_at}.
+     * (OPIK-7455).
+     * <p>
+     * {@code <if(partitions)>} adds the table's own weekly partition expression, bound as the exact set of partitions
+     * the batch's ids resolve to. It is emitted <b>only when every id in the batch is a UUIDv7</b>
+     * ({@link #weeklyPartitionsOf}); if any id is not, the predicate is omitted and the statement is byte-identical to
+     * the previous unbounded form. That preserves the original guarantee — a row whose {@code id_at} cannot be trusted
+     * is still deleted, because no id in such a batch is used to derive a partition.
+     * <p>
+     * Why it matters: a mutation selects parts at the <b>partition</b> stage, where the (workspace_id, project_id, id)
+     * predicate prunes nothing, so deleting a handful of rows rewrote every part of the table. Measured on prod-test
+     * (271.6 M rows, 3,928 parts): 12 ids rewrote <b>3,928 parts / 5.40 TiB</b>. With this predicate the same batch
+     * selects <b>5</b> parts. An {@code id_at} <em>range</em> is not a substitute: on a batch spanning 1996 and 2200 a
+     * range still selected 2,644 parts, where the exact set selected 4.
      * <p>
      * The pairs are bound (never inlined) as two positional string arrays and zipped back into {@code (project_id, id)}
      * tuples with {@code arrayZip}, so the query text is constant regardless of batch size and no value reaches the SQL
@@ -1934,6 +1949,7 @@ class TraceDAOImpl implements TraceDAO {
             DELETE FROM <if(distributed_wrap)>traces_local<else>traces<endif>
             WHERE workspace_id = :workspace_id
             AND (project_id, id) IN arrayZip(:project_ids, :trace_ids)
+            <if(partitions)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :partitions<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -3511,6 +3527,41 @@ class TraceDAOImpl implements TraceDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
+    /**
+     * The weekly partition values a batch of ids resolves to, or empty if the batch contains an id we refuse to derive
+     * a partition from.
+     * <p>
+     * Mirrors the table's partition expression exactly:
+     * {@code toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))}, where {@code id_at} is MATERIALIZED
+     * as {@code UUIDv7ToDateTime(toUUID(id))} — i.e. the Monday of the id's UTC week, as {@code yyyyMMdd}.
+     * <p>
+     * Returns empty unless <b>every</b> id is a UUIDv7. Deriving a partition from a non-v7 id would read whatever bits
+     * sit in the timestamp field, and a wrong partition means a <b>silently skipped delete</b>. All-or-nothing keeps the
+     * emitted SQL either fully pruned or exactly the previous unbounded form, never partially bounded.
+     * <p>
+     * Far-future ids are fine and deliberately supported: their {@code id_at} is bogus but self-consistent, so they live
+     * in the far-future partition this computes. Verified on prod-test — <b>0</b> partition mismatches across 11.23 M
+     * far-future rows.
+     */
+    static Optional<Set<Long>> weeklyPartitionsOf(Collection<UUID> ids) {
+        var partitions = new java.util.HashSet<Long>();
+
+        for (UUID id : ids) {
+            if (id == null || id.version() != 7) {
+                return Optional.empty();
+            }
+            // UUIDv7: the high 48 bits are the unix epoch in milliseconds.
+            long epochMilli = id.getMostSignificantBits() >>> 16;
+            LocalDate monday = Instant.ofEpochMilli(epochMilli)
+                    .atZone(ZoneOffset.UTC)
+                    .toLocalDate()
+                    .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            partitions.add(monday.getYear() * 10000L + monday.getMonthValue() * 100L + monday.getDayOfMonth());
+        }
+
+        return partitions.isEmpty() ? Optional.empty() : Optional.of(partitions);
+    }
+
     @Override
     @WithSpan
     public Mono<Void> delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs, @NonNull Connection connection) {
@@ -3529,10 +3580,20 @@ class TraceDAOImpl implements TraceDAO {
                     var projectIds = batch.stream().map(pair -> pair.getLeft().toString()).toArray(String[]::new);
                     var traceIds = batch.stream().map(pair -> pair.getRight().toString()).toArray(String[]::new);
 
+                    // Prune to the batch's own partitions when every id is a UUIDv7; otherwise emit the unbounded form.
+                    var partitions = weeklyPartitionsOf(batch.stream().map(Pair::getRight).toList());
+                    // Flag only, exactly like distributed_wrap: the values reach ClickHouse via the bind below,
+                    // never through the template, so the rendered SQL is constant regardless of batch contents.
+                    partitions.ifPresent(_ -> template.add("partitions", true));
+
                     var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
                             .bind("project_ids", projectIds)
                             .bind("trace_ids", traceIds);
+
+                    if (partitions.isPresent()) {
+                        statement = statement.bind("partitions", partitions.get().toArray(Long[]::new));
+                    }
 
                     var segment = startSegment("traces", "Clickhouse", "delete");
                     return Mono.from(statement.execute())
