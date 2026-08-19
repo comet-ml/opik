@@ -22,7 +22,7 @@ Cost Intelligence closes that gap. It captures every coding-agent API call on th
 
 ## How it works
 
-Each developer machine runs its own local `opik-cipx` daemon. The coding agent talks to it over the loopback interface, and the daemon forwards every call to the provider unchanged — there is no shared collector, and none of your traffic routes through Comet. What ships to your Opik workspace is a separate, asynchronous stream of metadata-only spans: token counts, costs, and structure, [never content](/cost-intelligence/data-privacy-security).
+Each developer machine runs its own local `opik-cipx` daemon. The coding agent talks to it over the loopback interface, and the daemon forwards every call to the provider unchanged — there is no shared collector, and none of your traffic routes through Comet. What ships to your Opik workspace is a separate, asynchronous stream of metadata-only spans: token counts, costs, and structure, [never content](/cost-intelligence/data-privacy-security). The diagram shows Claude Code on the plugin path, the most common setup; see [Installation](/cost-intelligence/install/overview) for the other agents and rollout paths.
 
 <Frame>
   <img src="/img/v2/cost-intelligence/architecture.svg" alt="Cost Intelligence architecture: a local opik-cipx daemon on each developer machine forwards Claude Code traffic unchanged to Anthropic and ships metadata-only spans to Opik" />
