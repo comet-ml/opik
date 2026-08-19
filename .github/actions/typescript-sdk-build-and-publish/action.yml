@@ -236,10 +236,6 @@ runs:
           exit 1
         fi
 
-        # Save package name and version for summary
-        echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
-        echo "PUBLISHED_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-
     - name: Commit version changes
       if: ${{ inputs.is_release == 'true' && inputs.skip_commit_push != 'true' }}
       shell: bash
