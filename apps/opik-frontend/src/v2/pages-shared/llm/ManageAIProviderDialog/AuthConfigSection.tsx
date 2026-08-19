@@ -34,9 +34,10 @@ type AuthConfigSectionProps = {
 };
 
 /**
- * The Authentication block of the custom/Bedrock provider form: a mode selector between the
- * classic static API key and OAuth2 client credentials (OPIK-7940). The UI surfaces only the
- * OAuth2 flow.
+ * The Authentication block of the custom/Bedrock provider form: a mode switch between the classic
+ * static API key (rendered via {@code staticModeFields}) and dynamic token auth (OPIK-7940). Of
+ * the backend's general token-auth recipe, the UI surfaces only the OAuth2 client credentials
+ * flow — other recipe shapes remain API-only.
  * Secret credential values are write-only once saved — they load as the backend's sentinel and
  * their lock cannot be removed, mirroring the API contract.
  */

@@ -204,7 +204,7 @@ public class AuthTokenProvider {
             }
             return JsonUtils.readValue(EncryptionUtils.decryptGcm(encrypted), CachedToken.class);
         } catch (RuntimeException exception) {
-            log.warn("Failed to read the cached token for key '{}'", cacheKey, exception);
+            log.warn("Failed to read the cached token for key '{}': {}", cacheKey, exception.getMessage());
             return null;
         }
     }
@@ -349,7 +349,7 @@ public class AuthTokenProvider {
 
     /**
      * Resolves the token lifetime, in order: the reply's lifetime field (number or numeric string;
-     * a non-positive value is an error), else the recipe's fallback (where 0 meansthe token is
+     * a non-positive value is an error), else the recipe's fallback (where 0 means the token is
      * served uncached), else an error naming the missing field.
      */
     private long resolveTtlSeconds(JsonNode root, ProviderAuthConfig authConfig, long startNanos, String origin) {

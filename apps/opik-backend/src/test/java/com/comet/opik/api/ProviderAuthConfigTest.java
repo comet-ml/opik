@@ -42,6 +42,19 @@ class ProviderAuthConfigTest {
     }
 
     @Test
+    void partialConfigsAreNotEmptySoTheyValidateInsteadOfClearing() {
+        // any single field set means "not the clear convention" — the update path must
+        // route these through validationErrors(), never silently clear the stored recipe
+        assertThat(ProviderAuthConfig.builder().sendAs(ProviderAuthConfig.SendAs.BASIC).build().isEmpty()).isFalse();
+        assertThat(ProviderAuthConfig.builder().tokenField("access_token").build().isEmpty()).isFalse();
+        assertThat(ProviderAuthConfig.builder().expiresField("expires_in").build().isEmpty()).isFalse();
+        assertThat(ProviderAuthConfig.builder().fallbackTtlSeconds(60L).build().isEmpty()).isFalse();
+
+        assertThat(ProviderAuthConfig.builder().fallbackTtlSeconds(60L).build().validationErrors())
+                .isNotEmpty();
+    }
+
+    @Test
     void validationErrorsRequireTokenUrlAndCredentials() {
         assertThat(AUTH_CONFIG.validationErrors()).isEmpty();
 

@@ -6,6 +6,7 @@ import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -40,7 +41,7 @@ public class LlmProviderTokenAuthConfig {
     private Duration lockTimeout = Duration.seconds(15);
 
     @JsonProperty
-    @Min(1) private int maxResponseChars = 1_000_000;
+    @Min(1) @Max(10_000_000) private int maxResponseChars = 1_000_000;
 
     /**
      * SSRF guard on the token URL: {@code strict} refuses non-HTTPS and private/internal
