@@ -21,7 +21,7 @@ const SECRET_SENTINEL = '__SECRET__';
  * Provider keys are workspace-global: every test uses a namespaced provider_name
  * and deletes it in a finally block.
  */
-test.describe('AI Providers — OAuth2 token auth', { tag: ['@t1-smoke', '@area:ai-providers'] }, () => {
+test.describe('AI Providers — OAuth2 token auth', { tag: ['@t1-smoke', '@area:configuration'] }, () => {
   test('configure with test connection, persist the recipe masked', { tag: ['@cap:configuration.ai-provider-add'] }, async ({
     page,
     testNamespace,

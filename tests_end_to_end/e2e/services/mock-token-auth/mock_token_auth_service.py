@@ -243,7 +243,8 @@ def main():
 
     log(f"listening on http://{args.host}:{args.port} "
         f"(token URL /oauth/token, gateway /v1/chat/completions, ttl={TTL_SECONDS}s)")
-    log(f"client_id={CLIENT_ID} client_secret={CLIENT_SECRET} static_api_key={STATIC_API_KEY}")
+    # fake, hardcoded test identities — still redacted so CodeQL's clear-text-logging check stays green
+    log(f"client_id={CLIENT_ID} client_secret=[see CLIENT_SECRET constant] static_api_key=[see STATIC_API_KEY constant]")
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
 
 
