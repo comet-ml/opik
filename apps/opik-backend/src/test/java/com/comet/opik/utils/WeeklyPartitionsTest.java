@@ -2,13 +2,18 @@ package com.comet.opik.utils;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Covers {@link WeeklyPartitions#of}, which derives the weekly partition values a delete batch resolves to so the
@@ -23,30 +28,29 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class WeeklyPartitionsTest {
 
-    @Test
-    @DisplayName("matches the partition ClickHouse computed — ordinary id")
-    void ordinaryId() {
-        // id_at 2026-08-19 (a Wednesday) -> Monday 2026-08-17
-        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"))))
-                .contains(Set.of(20260817L));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    @DisplayName("matches the partition ClickHouse computed")
+    void matchesThePartitionClickHouseComputed(String era, UUID id, long expectedPartition) {
+        assertThat(WeeklyPartitions.of(List.of(id))).contains(Set.of(expectedPartition));
     }
 
-    @Test
-    @DisplayName("far-future ids are supported, not excluded")
-    void farFutureId() {
-        // A bogus-but-self-consistent timestamp: id_at 2200-01-01 -> Monday 2199-12-30.
-        // 4.1% of rows on prod-test look like this; they must still be deletable and still prune.
-        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2"))))
-                .contains(Set.of(21991230L));
-    }
-
-    @Test
-    @DisplayName("matches the partition ClickHouse computed — id from 1996")
-    void oldId() {
-        // id_at 1996-02-09 -> Monday 1996-02-05. Long before Opik existed but well after the Unix epoch, and well
-        // inside Date32's 1900 floor: an id this old prunes like any other.
-        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"))))
-                .contains(Set.of(19960205L));
+    /**
+     * One row per era the derivation has to get right, each pinned to the value ClickHouse itself returned for that id
+     * on prod-test — not to a hand-computed Monday. The eras are not interchangeable samples: an expression that is
+     * correct for the ordinary calendar and wrong at the extremes is exactly the {@code toMonday} trap migration 000114
+     * was written to escape, so dropping any of the three would weaken the pin rather than tidy it.
+     */
+    private static Stream<Arguments> matchesThePartitionClickHouseComputed() {
+        return Stream.of(
+                // The ordinary case: id_at 2026-08-19 (a Wednesday) -> Monday 2026-08-17.
+                arguments("ordinary id", UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"), 20260817L),
+                // Long before Opik existed but well after the Unix epoch, and well inside Date32's 1900 floor: an id
+                // this old prunes like any other. id_at 1996-02-09 -> Monday 1996-02-05.
+                arguments("id from 1996", UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"), 19960205L),
+                // Far-future ids are supported, not excluded: a bogus-but-self-consistent timestamp, id_at 2200-01-01 ->
+                // Monday 2199-12-30. 4.1% of rows on prod-test look like this; they must still be deletable and prune.
+                arguments("far-future id", UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2"), 21991230L));
     }
 
     @Test
