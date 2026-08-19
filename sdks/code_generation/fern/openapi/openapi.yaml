@@ -7287,9 +7287,12 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ReportCompleteRequest"
+        required: true
       responses:
         "204":
           description: Report updated
+        "400":
+          description: Status is not terminal
         "404":
           description: Report not found
   /v1/private/projects/{projectId}/reports/generate:
@@ -20736,6 +20739,12 @@ components:
           type: string
         recommended_actions:
           $ref: "#/components/schemas/JsonNode"
+        failure_reason:
+          maxLength: 64
+          minLength: 0
+          type: string
+          description: Why the report failed. Only 'out_of_credits' is acted on; any
+            other value is recorded but renders as a generic failure.
     GenerateReportResponse:
       type: object
       properties:
@@ -20787,6 +20796,8 @@ components:
           - pending
           - completed
           - failed
+        failure_reason:
+          type: string
         created_at:
           type: string
           format: date-time
