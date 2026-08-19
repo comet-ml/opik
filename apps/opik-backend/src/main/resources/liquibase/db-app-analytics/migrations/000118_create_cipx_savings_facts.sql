@@ -2,7 +2,7 @@
 --changeset andriid:000118_create_cipx_savings_facts
 --comment: Daily realized/avoided savings facts per user and recommendation, written by the cost API measurement job
 
--- One row per (workspace, day, user, recommendation, quantity, tier, causal_link),
+-- One row per (workspace, day, user, recommendation, harness, quantity, tier, causal_link),
 -- computed once per day by the cost API's measurement job from cipx_spend_blocks and the
 -- recommendation apply log. The dollar amount is priced on the computation day, per
 -- (model, billing tier) inside the job before aggregating to this grain: the money not
