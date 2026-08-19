@@ -10,14 +10,9 @@ title: macOS app with MDM
 
 The macOS app is the rollout path for full coverage: it captures every Claude Code user on the machine, whether they work in the CLI or the desktop app. Developers keep working exactly as before — no base-URL change, no environment variables, nothing to install in the agent. The app sees the traffic anyway.
 
-<Warning>
-  This path terminates TLS locally in order to see traffic, which makes it a
-  materially larger security review than the plugin paths.
-</Warning>
-
 ## How it works
 
-Everything happens on the developer's machine. The app runs as a menu-bar app with a network extension, macOS hands that extension the coding agent's traffic, and the calls continue to Anthropic — or your LLM gateway — unchanged:
+Everything happens on the developer's machine. The app runs as a menu-bar app with a network extension, and macOS hands that extension the coding agent's traffic. The extension acts as a local MITM (man-in-the-middle): it terminates TLS on the device to read each call, then forwards it re-encrypted — with full certificate validation — to Anthropic or your LLM gateway, unchanged:
 
 <Frame>
   <img src="/img/v2/cost-intelligence/macos-app-flow.svg" alt="macOS app data flow: an MDM delivers the app and its configuration profile to a managed Mac, macOS diverts Claude Code traffic to the app's network extension, calls are forwarded re-encrypted to the Anthropic API or a configured gateway, and metadata-only spans ship to Opik" />
@@ -152,7 +147,7 @@ Ways to trigger the first launch, in order of preference:
 The four numbered steps in the diagram, in full:
 
 1. **The developer works as usual.** They prompt Claude Code from the CLI or the desktop app. Neither is configured, pointed at a proxy, or aware the app exists.
-2. **macOS diverts the agent's API calls to the app.** The system extension terminates TLS on the device so the app can read each call and attribute its cost — this is the interception the warning above is about, and it never leaves the machine.
+2. **macOS diverts the agent's API calls to the app.** The system extension terminates TLS on the device so the app can read each call and attribute its cost — that interception happens on the device only, and it never leaves the machine.
 3. **The call is forwarded unchanged.** The app opens its own TLS connection — to the Anthropic API by default, or to your LLM gateway when one is configured — with full certificate validation, and passes the request and response through untouched.
 4. **Metadata ships to Opik on the side.** Counts, costs, and structure — [never content](/cost-intelligence/data-privacy-security) — go to your Opik workspace asynchronously. This side path never sits between the developer and the model: if anything in it fails, the agent keeps working.
 
