@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import useAppStore, { useActiveWorkspaceName } from "@/store/AppStore";
-import { getWorkspaceNameFromUrl } from "@/lib/utils";
+import { getWorkspaceNameFromUrl } from "./getWorkspaceNameFromUrl";
 import Loader from "@/shared/Loader/Loader";
 
 /**
