@@ -13,4 +13,6 @@ export interface ReportCompleteRequest {
     status: OpikApi.ReportCompleteRequestStatus;
     sessionId?: string;
     recommendedActions?: OpikApi.JsonNode;
+    /** Why the report failed. Only 'out_of_credits' is acted on; any other value is recorded but renders as a generic failure. */
+    failureReason?: string;
 }

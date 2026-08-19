@@ -746,6 +746,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_2 = "z-ai/glm-5.2",
   Z_AI_GLM_5_2_BATCH = "z-ai/glm-5.2:batch",
   Z_AI_GLM_5_2_FREE = "z-ai/glm-5.2:free",
+  Z_AI_GLM_5_3 = "z-ai/glm-5.3",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
   ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
