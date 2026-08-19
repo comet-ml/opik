@@ -13,9 +13,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Covers {@link WeeklyPartitions#of}, which derives the weekly partition values a delete batch resolves to so the
  * mutation can prune instead of rewriting every part.
  * <p>
- * The expected values are not hand-computed: each is what ClickHouse itself returned for
+ * The in-range expected values are not hand-computed: each is what ClickHouse itself returned for
  * {@code toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} on prod-test for that id. If the table's
  * partition expression ever changes, these assertions are what should fail.
+ * <p>
+ * The range-boundary cases are the exception and say so: the ids are constructed rather than observed, because the point
+ * of each is an {@code id_at} value the column cannot store, which is exactly what no real row has.
  */
 class WeeklyPartitionsTest {
 
@@ -88,5 +91,57 @@ class WeeklyPartitionsTest {
     @DisplayName("an empty batch yields no partitions")
     void emptyBatch() {
         assertThat(WeeklyPartitions.of(List.of())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the last id_at the column can store still prunes")
+    void lastRepresentableIdStillPrunes() {
+        // id_at 2299-12-31T23:59:59.999 — the last instant DateTime64 represents, so nothing saturates and the two
+        // sides agree: DateTime64(0) truncates to 23:59:59, whose Date32 is 2299-12-31 (a Sunday) -> Monday 2299-12-25.
+        // The ceiling check must be exclusive at exactly this point, hence a case sitting on it.
+        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("0978a65f-77ff-7abc-8000-000000000001"))))
+                .contains(Set.of(22991225L));
+    }
+
+    @Test
+    @DisplayName("an id one millisecond past the id_at ceiling disables pruning")
+    void firstUnrepresentableIdDisablesPruning() {
+        // id_at 2300-01-01T00:00:00 — one ms past the previous case and outside DateTime64. ClickHouse saturates it to
+        // 2299-12-31 23:59:59 and files the row under 22991225, so the honest week this would compute (2300-01-01 is
+        // itself a Monday, giving 23000101) is a partition the row is NOT in. Pruning off rather than clamped: matching
+        // ClickHouse here would mean reproducing its saturation semantics, for ids that should not exist.
+        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("0978a65f-7800-7abc-8000-000000000001"))))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the largest timestamp a UUIDv7 can carry disables pruning, and does not throw")
+    void largestUuidV7TimestampDisablesPruning() {
+        // All 48 timestamp bits set: 10889-08-02, the furthest future any UUIDv7 can encode. Read unsigned it is still
+        // only ~2.8e14 ms, far inside Instant's range — so the guard is what excludes it, not an exception, and there
+        // is no input on which this can throw.
+        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("ffffffff-ffff-7abc-8000-000000000001"))))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("one out-of-range id disables pruning for the whole batch")
+    void outOfRangeIdDisablesPruningForTheWholeBatch() {
+        // Same all-or-nothing rule as a non-v7 id, for the same reason: a set derived from the rest of the batch is a
+        // set this row is not in.
+        assertThat(WeeklyPartitions.of(List.of(
+                UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"),
+                UUID.fromString("ffffffff-ffff-7abc-8000-000000000001"))))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the earliest id a UUIDv7 can carry is inside Date32, so there is no floor to guard")
+    void earliestUuidV7TimestampIsInRange() {
+        // All 48 timestamp bits clear: id_at 1970-01-01, the earliest any UUIDv7 can encode (the field is unsigned).
+        // Its Monday, 1969-12-29, is 70 years above Date32's 1900 floor, so a below-1900 id_at is unreachable by
+        // construction rather than merely untested — which is why `of` guards only the ceiling.
+        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("00000000-0000-7abc-8000-000000000001"))))
+                .contains(Set.of(19691229L));
     }
 }

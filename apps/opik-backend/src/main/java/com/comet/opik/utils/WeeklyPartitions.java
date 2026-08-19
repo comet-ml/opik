@@ -24,20 +24,43 @@ import java.util.UUID;
  *
  * <p><b>Why the caller must treat an empty result as "no predicate", never as "no partitions".</b> The whole value of
  * the derivation is that a partition the batch resolves to is the <em>only</em> place its rows can be; a value that is
- * merely close is a silently skipped delete, not a slower one. So this returns a set only when every id in the batch is
- * a UUIDv7, and empty otherwise — leaving the caller to emit its unbounded form, which is always correct and merely
- * slower. Deriving a partition from a non-v7 id would read whatever bits sit in the timestamp field, and
- * {@code UUIDv7ToDateTime} returns {@code 1970-01-01} for it rather than throwing, so the row sits in the epoch
- * partition while the bits read as an arbitrary week. All-or-nothing across the batch, not per id: a partially derived
- * set is a set the rows of the underivable ids are not in.</p>
+ * merely close is a silently skipped delete, not a slower one. So this returns a set only when every id in the batch
+ * is one it can derive exactly, and empty otherwise — leaving the caller to emit its unbounded form, which is always
+ * correct and merely slower. The two rejections are:</p>
+ * <ul>
+ *     <li><b>Any id that is not a UUIDv7.</b> Its high 48 bits are not a timestamp, and {@code UUIDv7ToDateTime}
+ *     returns {@code 1970-01-01} for it rather than throwing, so the row sits in the epoch partition while the bits
+ *     read as an arbitrary week. All-or-nothing across the batch, not per id: a partially derived set is a set the
+ *     rows of the underivable ids are not in.</li>
+ *     <li><b>Any id whose embedded timestamp is outside {@code DateTime64}'s range</b> ({@link #ID_AT_CEILING}). Java
+ *     has no such bound, so past it the two disagree: ClickHouse stores the saturated bound and the row lands in
+ *     {@code 22991225}, while this would compute the real (out-of-range) week. Rejecting is deliberate in preference
+ *     to clamping to {@code 22991225}: clamping would make correctness depend on reproducing ClickHouse's saturation
+ *     semantics exactly — including where the saturation happens, which is already two steps before {@code toDate32}
+ *     (see below) — to buy pruning for ids that should not exist. Falling back to the unbounded mutation costs
+ *     performance on those batches and nothing else.</li>
+ * </ul>
  *
- * <p>Far-future ids are supported on purpose: a UUIDv7 minted with a bad clock (litellm
- * <a href="https://github.com/BerriAI/litellm/issues/31294">BerriAI/litellm#31294</a> mints ~2201) has a bogus but
- * self-consistent {@code id_at}, so it lives in the far-future partition this computes and stays deletable and prunable.
- * Verified on prod-test: 0 partition mismatches across 11.23 M far-future rows.</p>
+ * <p>Far-future ids <em>within</em> the range are supported on purpose and are the common case of the two: a UUIDv7
+ * minted with a bad clock (litellm <a href="https://github.com/BerriAI/litellm/issues/31294">BerriAI/litellm#31294</a>
+ * mints ~2201) has a bogus but self-consistent {@code id_at}, so it lives in the far-future partition this computes and
+ * stays deletable and prunable. Verified on prod-test: 0 partition mismatches across 11.23 M far-future rows.</p>
  */
 @UtilityClass
 public class WeeklyPartitions {
+
+    /**
+     * First instant {@code id_at} cannot represent. {@code DateTime64} spans
+     * {@code [1900-01-01 00:00:00, 2299-12-31 23:59:59.99999999]} and saturates rather than wrapping or throwing, and
+     * it saturates twice over before {@code toDate32} is reached: {@code UUIDv7ToDateTime} already returns
+     * {@code DateTime64(3)}, and the column is {@code DateTime64(0)}. So an id at or past this instant is stored as
+     * {@code 2299-12-31 23:59:59} and partitions as {@code 22991225} (that Sunday's Monday) whatever its real week —
+     * observable on prod-test, whose far-future rows top out at exactly {@code 2299-12-31}.
+     */
+    private static final long ID_AT_CEILING = LocalDate.of(2300, 1, 1)
+            .atStartOfDay()
+            .toInstant(ZoneOffset.UTC)
+            .toEpochMilli();
 
     /**
      * The weekly partition values the ids resolve to, or empty if the batch contains an id whose partition cannot be
@@ -51,8 +74,14 @@ public class WeeklyPartitions {
             if (id == null || id.version() != 7) {
                 return Optional.empty();
             }
-            // UUIDv7: the high 48 bits are the unix epoch in milliseconds.
+            // UUIDv7: the high 48 bits are the unix epoch in milliseconds. `>>> 16` reads them unsigned, so the value
+            // is in [0, 2^48) — never negative, and never large enough for Instant.ofEpochMilli to overflow. That is
+            // also why only the ceiling is checked: the floor of the range is 1900-01-01, the smallest id_at any
+            // UUIDv7 can carry is the epoch, and even its Monday (1969-12-29) is comfortably inside Date32.
             long epochMilli = id.getMostSignificantBits() >>> 16;
+            if (epochMilli >= ID_AT_CEILING) {
+                return Optional.empty();
+            }
             LocalDate monday = Instant.ofEpochMilli(epochMilli)
                     .atZone(ZoneOffset.UTC)
                     .toLocalDate()
