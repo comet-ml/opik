@@ -6,9 +6,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@e2e/*": [
-        "./e2e/*"
       ]
     },
     "target": "esnext",
@@ -38,9 +35,7 @@
     ]
   },
   "include": [
-    "src",
-    "e2e/**/*.ts",
-    "playwright.config.ts"
+    "src"
   ],
   "exclude": [
     "node_modules"
