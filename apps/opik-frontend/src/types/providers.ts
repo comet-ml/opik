@@ -853,6 +853,34 @@ export interface ProviderKeyConfiguration {
   openai_pipeline_mode?: OpenAiPipelineMode;
 }
 
+/** Read-back sentinel for secret credential values: the backend never returns a stored secret,
+ * it returns this marker instead. Submitting it back means "keep the stored value". */
+export const AUTH_SECRET_SENTINEL = "__SECRET__";
+
+export const AUTH_SEND_AS_VALUES = ["form", "json", "basic"] as const;
+export type AuthSendAs = (typeof AUTH_SEND_AS_VALUES)[number];
+
+export interface ProviderAuthCredential {
+  key: string;
+  value: string;
+  /** Secret values are encrypted at rest and read back masked; once true it cannot be unset. */
+  secret: boolean;
+}
+
+/** Dynamic token auth recipe (OPIK-7940): how to fetch a short-lived bearer before LLM calls.
+ * Presence on a provider means token mode; an empty object on update clears it (back to static). */
+export interface ProviderAuthConfig {
+  token_url: string;
+  send_as?: AuthSendAs;
+  credentials: ProviderAuthCredential[];
+  /** Field holding the token in the reply; dot-path for nested replies (e.g. "result.jwt"). */
+  token_field?: string;
+  /** Field holding the lifetime in seconds in the reply; dot-path supported. */
+  expires_field?: string;
+  /** Lifetime assumed when the reply doesn't state one; 0 means such tokens are not cached. */
+  fallback_ttl_seconds?: number;
+}
+
 export interface BaseProviderKey {
   id: string;
   created_at: string;
@@ -860,6 +888,7 @@ export interface BaseProviderKey {
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;
+  auth_config?: ProviderAuthConfig;
   read_only: boolean;
 }
 
@@ -887,7 +916,7 @@ export type ProviderObject =
   | OllamaProviderObject;
 
 export type PartialProviderKeyUpdate = Partial<
-  Omit<BaseProviderKey, "provider">
+  Omit<BaseProviderKey, "provider" | "auth_config">
 > & {
   id?: string;
   provider?: PROVIDER_TYPE;
@@ -895,6 +924,8 @@ export type PartialProviderKeyUpdate = Partial<
   base_url?: string;
   provider_name?: string;
   headers?: Record<string, string>;
+  /** Full recipe to set, or an empty object to clear (switch back to static key). */
+  auth_config?: ProviderAuthConfig | Record<string, never>;
 };
 
 export type ReasoningEffort =

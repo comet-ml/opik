@@ -42,8 +42,12 @@ import ProviderSelectionStep from "@/v2/pages-shared/llm/SetupProviderDialog/Pro
 import ProviderConfigurationStep from "@/v2/pages-shared/llm/SetupProviderDialog/ProviderConfigurationStep";
 
 import {
+  AuthConfigFormValues,
+  EMPTY_AUTH_FORM_VALUES,
+  authConfigToFormValues,
   configStringToQueryParamsArray,
   convertHeadersForAPI,
+  formValuesToAuthConfig,
   queryParamsArrayToConfigString,
 } from "./customProviderConfig";
 
@@ -139,6 +143,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       openaiPipelineMode: normalizeOpenAiPipelineMode(
         providerKey?.configuration?.openai_pipeline_mode,
       ),
+      ...authConfigToFormValues(providerKey?.auth_config),
     } as AIProviderFormType,
   });
 
@@ -188,6 +193,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       authHeaderName: "",
       suppressDefaultAuth: false,
       openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
+      ...EMPTY_AUTH_FORM_VALUES,
     });
     setStep("select");
   }, [form]);
@@ -248,6 +254,15 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         ),
       );
 
+      const authFormValues = authConfigToFormValues(providerData?.auth_config);
+      form.setValue("authMode", authFormValues.authMode);
+      form.setValue("authTokenUrl", authFormValues.authTokenUrl);
+      form.setValue("authSendAs", authFormValues.authSendAs);
+      form.setValue("authCredentials", authFormValues.authCredentials);
+      form.setValue("authTokenField", authFormValues.authTokenField);
+      form.setValue("authExpiresField", authFormValues.authExpiresField);
+      form.setValue("authFallbackTtl", authFormValues.authFallbackTtl);
+
       form.setValue("provider", providerType);
       form.setValue("composedProviderType", composedProviderType);
       form.setValue("apiKey", "");
@@ -262,7 +277,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     resetSelectionState();
   }, [resetSelectionState]);
 
-  const cloudConfigHandler = useCallback(() => {
+  const submitProviderHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
     const url = form.getValues("url");
     const location = form.getValues("location");
@@ -321,14 +336,31 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       isCustomLike && !!(providerKey || calculatedProviderKey);
     const headers = convertHeadersForAPI(headersArray, isEditingCustomProvider);
 
+    const storedProvider = providerKey ?? calculatedProviderKey;
+    const authConfig = isCustomLike
+      ? // the isCustomLike guard means the union's custom member (which carries the
+        // auth fields) is the live one; TS can't narrow a union by that boolean
+        formValuesToAuthConfig(
+          form.getValues() as Partial<AuthConfigFormValues>,
+          {
+            isEditing: isEditingCustomProvider,
+            hadAuthConfig: Boolean(storedProvider?.auth_config),
+          },
+        )
+      : undefined;
+    // token mode and static key are mutually exclusive on the API
+    const isTokenMode = isCustomLike && form.getValues("authMode") === "token";
+    const effectiveApiKey = isTokenMode ? "" : apiKey;
+
     if (providerKey || calculatedProviderKey) {
       updateMutate({
         providerKey: {
           id: providerKey?.id ?? calculatedProviderKey?.id,
-          apiKey,
+          apiKey: effectiveApiKey,
           base_url: isCustomLike ? url : undefined,
           ...(configuration && { configuration }),
           ...(isCustomLike && headers !== undefined && { headers }),
+          ...(authConfig !== undefined && { auth_config: authConfig }),
         },
       });
     } else if (provider) {
@@ -338,12 +370,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
       createMutate({
         providerKey: {
-          apiKey,
+          apiKey: effectiveApiKey,
           provider,
           base_url: isCustomLike ? url : undefined,
           provider_name: isCustomLike ? providerName : undefined,
           ...(configuration && { configuration }),
           ...(isCustomLike && headers !== undefined && { headers }),
+          ...(authConfig !== undefined && { auth_config: authConfig }),
         },
       });
     }
@@ -428,7 +461,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
               <ProviderConfigurationStep
                 selectedProviderType={selectedProviderType as PROVIDER_TYPE}
                 form={form}
-                onSubmit={cloudConfigHandler}
+                onSubmit={submitProviderHandler}
                 isEdit={isEdit}
                 customProviderName={customProviderName}
               />
@@ -471,7 +504,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                 )}
                 <Button
                   type="submit"
-                  onClick={form.handleSubmit(cloudConfigHandler)}
+                  onClick={form.handleSubmit(submitProviderHandler)}
                 >
                   {buttonText}
                 </Button>

@@ -52,7 +52,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
         var providerConfig = getProviderApiKey(workspaceId, llmProvider, model);
-        var config = buildConfig(providerConfig);
+        var config = buildConfig(providerConfig, workspaceId);
 
         return Optional.ofNullable(services.get(llmProvider))
                 .map(provider -> provider.getService(config))
@@ -60,7 +60,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                         "LLM provider not supported: %s".formatted(llmProvider)));
     }
 
-    private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig) {
+    private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
 
         // For providers that support naming, add provider_name to configuration if present
@@ -75,6 +75,9 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .headers(Optional.ofNullable(providerConfig.headers()).orElse(Map.of()))
                 .baseUrl(providerConfig.baseUrl())
                 .configuration(configuration)
+                .providerId(providerConfig.id())
+                .workspaceId(workspaceId)
+                .authConfig(providerConfig.authConfig())
                 .build();
     }
 
@@ -82,7 +85,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var llmProvider = getLlmProvider(modelParameters.name());
         var providerConfig = getProviderApiKey(workspaceId, llmProvider, modelParameters.name());
-        var config = buildConfig(providerConfig);
+        var config = buildConfig(providerConfig, workspaceId);
 
         return Optional.ofNullable(services.get(llmProvider))
                 .map(provider -> provider.getLanguageModel(config, modelParameters))
