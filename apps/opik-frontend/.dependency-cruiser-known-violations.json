@@ -658,5 +658,14 @@
       "severity": "info",
       "name": "no-orphans"
     }
+  },
+  {
+    "type": "dependency",
+    "from": "src/v2/pages-shared/onboarding/IntegrationExplorer/components/IntegrationDetailsDialog.tsx",
+    "to": "src/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
   }
 ]
