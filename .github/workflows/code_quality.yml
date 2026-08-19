@@ -154,7 +154,7 @@ jobs:
         working-directory: sdks/typescript
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Cache pre-commit environments
         uses: actions/cache@v6
