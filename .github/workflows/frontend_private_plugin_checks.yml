@@ -163,6 +163,6 @@ jobs:
           echo "::endgroup::"
 
           if [ "${failed}" -ne 0 ]; then
-            echo "::error title=Frontend checks fail with the ai-spend plugin staged::Reproduce locally with a sibling opik-plugin-ai-spend checkout: bash scripts/dev-runner.sh --lint-fe. Keep the shared surface backward compatible, or land the matching plugin change first and add 'ai-spend-plugin-ref: <branch>' to this PR body."
+            echo "::error title=Frontend checks fail with the ai-spend plugin staged::Reproduce locally: symlink or copy a sibling opik-plugin-ai-spend checkout's src/ into apps/opik-frontend/src/plugins/ai-spend, then from apps/opik-frontend run: npm run typecheck && npx eslint src/plugins/ai-spend --max-warnings=0 && npm run deps:validate. (bash scripts/dev-runner.sh --lint-fe is close but not equivalent -- it lints the whole src tree with --fix, plus stylelint, none of which this check runs.) Keep the shared surface backward compatible, or land the matching plugin change first and add 'ai-spend-plugin-ref: <branch>' to this PR body."
             exit 1
           fi
