@@ -81,6 +81,20 @@ export interface TraceDetail {
   name: string;
   projectId: string;
   feedbackScores: FeedbackScoreRef[];
+  /**
+   * The trace's `input` payload, untyped and unflattened. Kept as a raw record
+   * so a caller can assert on which KEYS the SDK wrote — an absent key and a
+   * key set to null are different answers, and any shaped type here would
+   * collapse them.
+   */
+  input: Record<string, unknown> | null;
+}
+
+/** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
+export interface ThreadDetail {
+  id: string;
+  projectId: string;
+  feedbackScores: FeedbackScoreRef[];
 }
 
 export interface AutomationRuleRef {
@@ -237,6 +251,7 @@ export function makeBackendClient(apiKey: string | null = null) {
           reason: fs.reason ?? null,
           source: String(fs.source),
         })),
+        input: (t.input as Record<string, unknown> | undefined) ?? null,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -592,6 +607,31 @@ export function makeBackendClient(apiKey: string | null = null) {
           startTime: t.startTime ? new Date(t.startTime).toISOString() : null,
           endTime: t.endTime ? new Date(t.endTime).toISOString() : null,
           status: t.status ? String(t.status) : null,
+        })),
+      };
+    },
+
+    /**
+     * One thread by id, with the feedback scores attached to the THREAD itself.
+     *
+     * Not derivable from `listThreads`: the row shape that view renders carries
+     * the aggregates, not the scores. Thread-level metrics (`evaluate_threads`)
+     * write here and nowhere else — a score on a thread is not a score on any
+     * of its traces — so this is the only API read that can confirm one landed.
+     */
+    async getThread(args: { projectId: string; threadId: string }): Promise<ThreadDetail> {
+      const thread = await opik.api.traces.getTraceThread({
+        projectId: args.projectId,
+        threadId: args.threadId,
+      });
+      return {
+        id: String(thread.id ?? ''),
+        projectId: String(thread.projectId ?? ''),
+        feedbackScores: (thread.feedbackScores ?? []).map((fs) => ({
+          name: fs.name,
+          value: Number(fs.value),
+          reason: fs.reason ?? null,
+          source: String(fs.source),
         })),
       };
     },
