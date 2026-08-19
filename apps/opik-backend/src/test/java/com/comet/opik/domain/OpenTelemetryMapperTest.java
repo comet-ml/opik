@@ -1444,6 +1444,122 @@ class OpenTelemetryMapperTest {
     }
 
     /**
+     * OTel semantic conventions spell providers differently from the Opik price-table vocabulary
+     * (e.g. {@code vertex_ai} vs {@code google_vertexai}). Unambiguous values are aliased 1:1;
+     * ambiguous ones fall through to {@code server.address} disambiguation.
+     */
+    @Nested
+    class ProviderAliasResolution {
+
+        private Span map(KeyValue... attributes) {
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, List.of(attributes), null, null);
+
+            return spanBuilder.build();
+        }
+
+        private KeyValue attr(String key, String value) {
+            return KeyValue.newBuilder().setKey(key)
+                    .setValue(AnyValue.newBuilder().setStringValue(value)).build();
+        }
+
+        @ParameterizedTest(name = "[{index}] {0} -> {1}")
+        @CsvSource({
+                "vertex_ai,       google_vertexai",
+                "gcp.vertex_ai,   google_vertexai",
+                "gcp.gemini,      google_ai",
+                "aws.bedrock,     bedrock",
+                "az.ai.openai,    azure",
+                "azure.ai.openai, azure",
+                "mistral_ai,      mistral",
+                "x_ai,            xai",
+        })
+        void semconvValueIsAliasedToCanonicalProvider(String wireValue, String expected) {
+            assertThat(map(attr("gen_ai.system", wireValue)).provider()).isEqualTo(expected);
+        }
+
+        /**
+         * The Azure AI Inference endpoint fronts both Azure OpenAI and Foundry models (Claude,
+         * Llama), which LiteLLM prices under a separate {@code azure_ai} provider. Aliasing it to
+         * {@code azure} would price a Foundry model against the OpenAI table, so it stays untouched.
+         */
+        @ParameterizedTest(name = "[{index}] {0} is not aliased")
+        @CsvSource({"azure.ai.inference", "az.ai.inference"})
+        void ambiguousAzureInferenceEndpointIsNotAliased(String wireValue) {
+            assertThat(map(attr("gen_ai.system", wireValue)).provider()).isEqualTo(wireValue);
+        }
+
+        @ParameterizedTest(name = "[{index}] {0} unchanged")
+        @CsvSource({"openai", "anthropic", "bedrock", "azure", "mistral", "xai", "groq", "deepseek"})
+        void canonicalProviderPassesThroughUnchanged(String provider) {
+            assertThat(map(attr("gen_ai.system", provider)).provider()).isEqualTo(provider);
+        }
+
+        @ParameterizedTest(name = "[{index}] {0} -> google_vertexai")
+        @CsvSource({"VERTEX_AI", "Vertex_Ai", "  vertex_ai  "})
+        void aliasMatchingIsCaseAndWhitespaceInsensitive(String wireValue) {
+            assertThat(map(attr("gen_ai.system", wireValue)).provider()).isEqualTo("google_vertexai");
+        }
+
+        @Test
+        void unknownProviderIsLeftUntouched() {
+            assertThat(map(attr("gen_ai.system", "some-inhouse-gateway")).provider())
+                    .isEqualTo("some-inhouse-gateway");
+        }
+
+        /**
+         * {@code gcp.gen_ai} means "specific backend is unknown" per the semconv, so it must be
+         * disambiguated by host rather than aliased to one of the two Google backends.
+         */
+        @Test
+        void gcpGenAiIsDisambiguatedByServerAddress() {
+            assertThat(map(attr("gen_ai.system", "gcp.gen_ai"),
+                    attr("server.address", "us-east1-aiplatform.googleapis.com")).provider())
+                    .isEqualTo("google_vertexai");
+            assertThat(map(attr("gen_ai.system", "gcp.gen_ai"),
+                    attr("server.address", "generativelanguage.googleapis.com")).provider())
+                    .isEqualTo("google_ai");
+            assertThat(map(attr("gen_ai.system", "gcp.gen_ai")).provider()).isEqualTo("google_ai");
+        }
+
+        @Test
+        void providerNameAttributeSetsProviderWhenSystemIsAbsent() {
+            assertThat(map(attr("gen_ai.provider.name", "gcp.vertex_ai")).provider())
+                    .isEqualTo("google_vertexai");
+        }
+
+        /**
+         * Instrumentations migrating to the new semconv emit both attributes. Their vocabularies
+         * differ, so the winner must be pinned rather than decided by OTLP attribute order.
+         */
+        @Test
+        void deprecatedGenAiSystemWinsOverProviderName() {
+            assertThat(map(attr("gen_ai.system", "anthropic"),
+                    attr("gen_ai.provider.name", "aws.bedrock")).provider())
+                    .isEqualTo("anthropic");
+            // ...regardless of the order the attributes arrive in
+            assertThat(map(attr("gen_ai.provider.name", "aws.bedrock"),
+                    attr("gen_ai.system", "anthropic")).provider())
+                    .isEqualTo("anthropic");
+        }
+
+        /**
+         * Regression guard for the dual-emit case: {@code xai} prices correctly today, and adding
+         * a second provider attribute must not let the newer {@code x_ai} spelling change it.
+         */
+        @Test
+        void dualEmittedProviderSpellingsConvergeOnCanonicalName() {
+            assertThat(map(attr("gen_ai.system", "xai"), attr("gen_ai.provider.name", "x_ai")).provider())
+                    .isEqualTo("xai");
+        }
+    }
+
+    /**
      * The generic {@code "google"} provider (PydanticAI / google-genai) must be resolved to the
      * Vertex AI vs Gemini API canonical name via {@code server.address}, otherwise cost lookup
      * can't match a price row.

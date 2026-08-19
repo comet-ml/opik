@@ -14,6 +14,9 @@ public final class GenAIMappingRules {
 
     public static final String SOURCE = "GenAI";
 
+    /** Current semantic-convention provider attribute; replaced the deprecated {@code gen_ai.system}. */
+    public static final String PROVIDER_NAME_ATTR = "gen_ai.provider.name";
+
     private static final List<OpenTelemetryMappingRule> RULES = List.of(
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.prompt").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
@@ -44,6 +47,12 @@ public final class GenAIMappingRules {
                     .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.system").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER)
+                    .spanType(SpanType.llm).build(),
+            // Replacement for the deprecated `gen_ai.system`. Instrumentations migrating to the
+            // current semconv emit this one (and often both). OpenTelemetryMapper keeps
+            // `gen_ai.system` authoritative when present; see PROVIDER_NAME_ATTR there.
+            OpenTelemetryMappingRule.builder()
+                    .rule(PROVIDER_NAME_ATTR).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.usage.cost").source(SOURCE)
