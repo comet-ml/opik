@@ -18,6 +18,20 @@ const EXPLAIN_LABEL: Record<ExplainKind, string> = {
   cost: 'Explain cost',
 };
 
+/**
+ * Parse a rendered currency string ("$1.5", "$37.65") to a number.
+ *
+ * The FE floors to two decimals, so the rendered value is at or just below the
+ * stored one — callers compare with that granularity rather than for equality.
+ */
+function parseRenderedCost(text: string, what: string): number {
+  const match = /^\$(\d+(?:\.\d+)?)$/.exec(text);
+  if (!match) {
+    throw new Error(`${what} rendered "${text}", which is not a dollar amount`);
+  }
+  return Number(match[1]);
+}
+
 export class LogsPage {
   private projectId: string | null = null;
 
@@ -414,6 +428,82 @@ export class LogsPage {
     return test.step('Clear all filters', async () => {
       await this.clearAllFiltersButton.click();
       await this.clearAllFiltersButton.waitFor({ state: 'hidden' });
+    });
+  }
+
+  // --- Spans tab ---
+
+  /** The Threads/Traces/Spans tab toggle for "Spans". */
+  get spansTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /**
+   * Switch the Logs view to Spans via the toggle (not by URL), and wait for the
+   * spans table to render. Gated on the toggle's own checked state as well as a
+   * row, because the Traces table it replaces also has `data-row-id` rows — so
+   * "a row is visible" alone cannot tell the two views apart.
+   */
+  async switchToSpans(): Promise<void> {
+    return test.step('Switch the Logs view to Spans', async () => {
+      await this.spansTab.click();
+      await expect(this.spansTab).toBeChecked();
+      await this.spanRows.first().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Every row of the Spans table. The Spans view reuses the same shared
+   * DataTable as Traces, so its rows carry `data-row-id` too — here the span id
+   * rather than the trace id.
+   */
+  get spanRows(): Locator {
+    return this.page.locator('tr[data-row-id]');
+  }
+
+  /** A span row, keyed by span id. */
+  spanRow(spanId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${spanId}"]`);
+  }
+
+  /**
+   * Read a span row's "Estimated cost" cell as a number.
+   *
+   * Throws rather than returning null when the cell holds anything that is not
+   * a dollar amount: "-" (no cost was computed) and "<$0.01" (a cost too small
+   * to render) are the two ways a broken price lookup shows up here, and a
+   * caller must not be able to compare against them by accident.
+   */
+  async readSpanCost(spanId: string): Promise<number> {
+    return test.step(`Read the estimated cost of span ${spanId}`, async () => {
+      const cell = this.page.locator(`[data-cell-id="${spanId}_total_estimated_cost"]`);
+      await cell.waitFor({ state: 'visible' });
+      const text = ((await cell.textContent()) ?? '').trim();
+      return parseRenderedCost(text, `span ${spanId} estimated cost`);
+    });
+  }
+
+  /**
+   * Read the "Total cost" metrics card as a number. On the Spans tab this card
+   * aggregates the spans in view, so it is the roll-up a per-span cost feeds.
+   */
+  async readTotalCost(): Promise<number> {
+    return test.step('Read the Total cost metrics card', async () => {
+      const value = this.page.getByTestId('metrics-card-total_cost-value');
+      await value.waitFor({ state: 'visible' });
+      const text = ((await value.textContent()) ?? '').trim();
+      return parseRenderedCost(text, 'Total cost card');
+    });
+  }
+
+  /**
+   * Open a span's detail panel from the Spans table. Clicking a span row selects
+   * its parent trace as well, so the returned panel is keyed on the trace id.
+   */
+  async openSpanById(spanId: string, traceId: string): Promise<TracePanelPage> {
+    return test.step(`Open span ${spanId}`, async () => {
+      await this.spanRow(spanId).click();
+      return new TracePanelPage(this.page, traceId);
     });
   }
 

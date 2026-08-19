@@ -14,6 +14,8 @@ import {
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
 } from './poll-optimization-status';
+import { pollProjectForSpanCount, type PollOtelSpansOpts } from './poll-otel-spans';
+import { buildOtlpTraceBatch, type OtelSpanSeed } from './otel-batch';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
@@ -190,6 +192,32 @@ export interface OptimizationRef {
   bestObjectiveScore: number | null;
 }
 
+/**
+ * One row of `GET /v1/private/spans`, reduced to the fields the LLM-cost
+ * pipeline produces.
+ *
+ * `provider`, `model` and `totalEstimatedCost` are nullable on purpose. A span
+ * that resolved no provider carries none at all, and a provider that matched no
+ * price row is stored with no cost — those are exactly the silent failures a
+ * cost test exists to catch, so they must reach the assertion as `null` rather
+ * than being defaulted to `''` or `0` here.
+ */
+export interface SpanRowRef {
+  id: string;
+  traceId: string;
+  name: string;
+  provider: string | null;
+  model: string | null;
+  totalEstimatedCost: number | null;
+}
+
+/** A page of spans, carrying the server's own `total` alongside the rows. */
+export interface SpanPage {
+  /** Total matching the query server-side — null if the endpoint omitted it. */
+  total: number | null;
+  content: SpanRowRef[];
+}
+
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
@@ -242,6 +270,23 @@ export function makeBackendClient(apiKey: string | null = null) {
       if (isNotFoundError(err)) return null;
       throw err;
     }
+  };
+
+  // Hoisted so pollProjectForSpanCount (a free function) can call it without
+  // depending on the not-yet-constructed return object.
+  const localListSpans = async (projectId: string): Promise<SpanPage> => {
+    const page = await opik.api.spans.getSpansByProject({ projectId, size: 500 });
+    return {
+      total: page.total ?? null,
+      content: (page.content ?? []).map((s) => ({
+        id: String(s.id),
+        traceId: String(s.traceId),
+        name: s.name ?? '',
+        provider: s.provider ?? null,
+        model: s.model ?? null,
+        totalEstimatedCost: s.totalEstimatedCost ?? null,
+      })),
+    };
   };
 
   return {
@@ -820,6 +865,56 @@ export function makeBackendClient(apiKey: string | null = null) {
       } catch {
         return { url, urlReachable: false, content: null };
       }
+    },
+
+    /**
+     * Send one OTLP/JSON batch to the OpenTelemetry ingest endpoint, routed to
+     * `projectName` by the header the collector contract defines. The project is
+     * created on first use if it does not exist, so callers seeding into a
+     * fixture project pass that project's name.
+     *
+     * Raw fetch rather than an `opik.api.*` call: OTLP ingest is not part of the
+     * SDK's REST surface at all — it accepts a protobuf message, encoded here as
+     * OTLP/JSON. Returning 200 means accepted, not stored; see
+     * `waitForOtelSpans`.
+     */
+    async ingestOtelSpans(projectName: string, spans: OtelSpanSeed[]): Promise<void> {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+        projectName,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      const res = await fetch(`${env.apiBaseUrl}/v1/private/otel/v1/traces`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(buildOtlpTraceBatch(spans)),
+      });
+      if (!res.ok) {
+        throw new Error(
+          `POST /v1/private/otel/v1/traces -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+        );
+      }
+    },
+
+    /** Every span in a project, with the server's own total for the query. */
+    async listSpansByProject(projectId: string): Promise<SpanPage> {
+      return localListSpans(projectId);
+    },
+
+    /**
+     * Wait until exactly `expectedCount` spans are queryable in the project, and
+     * return them. OTLP ingest is asynchronous, so this is the read that turns
+     * "the endpoint accepted the batch" into "the batch is there".
+     */
+    async waitForOtelSpans(
+      projectId: string,
+      expectedCount: number,
+      opts: PollOtelSpansOpts = {},
+    ): Promise<SpanPage> {
+      return pollProjectForSpanCount(localListSpans, projectId, expectedCount, opts);
     },
   };
 }

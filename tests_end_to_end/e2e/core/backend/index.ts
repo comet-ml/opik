@@ -15,6 +15,8 @@ export {
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
   type ThreadRowRef,
+  type SpanRowRef,
+  type SpanPage,
   type StatPercentiles,
   type ThreadStatValue,
   numericStat,
@@ -22,5 +24,7 @@ export {
   type ReadWindow,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
+export { type PollOtelSpansOpts } from './poll-otel-spans';
+export { buildOtlpTraceBatch, type OtelSpanSeed } from './otel-batch';
 export { uuid7 } from './uuid7';
 export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';
