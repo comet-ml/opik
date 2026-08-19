@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 524" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" role="img" aria-labelledby="ci-mac-title">
+  <title id="ci-mac-title">macOS app data flow: an MDM delivers the app and its configuration profile to a managed Mac, macOS diverts Claude Code traffic to the app's network extension, calls are forwarded re-encrypted to the Anthropic API or a configured gateway, and metadata-only spans ship to Opik.</title>
+  <style>
+    .flow-a { stroke-dasharray: 7 5; animation: dashA 1.4s linear infinite; }
+    .flow-c { stroke-dasharray: 3 5; animation: dashC 1.8s linear infinite; }
+    @keyframes dashA { to { stroke-dashoffset: -24; } }
+    @keyframes dashC { to { stroke-dashoffset: -16; } }
+    @media (prefers-reduced-motion: reduce) {
+      .flow-a, .flow-c { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="arrGray" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L8 4L0 8z" fill="#cbd5e1"/>
+    </marker>
+    <marker id="arrSlate" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L8 4L0 8z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrDark" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L8 4L0 8z" fill="#334155"/>
+    </marker>
+    <marker id="arrGreen" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L8 4L0 8z" fill="#2e8555"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="980" height="524" fill="#ffffff"/>
+
+  <!-- ===================== flows between panels ===================== -->
+  <!-- metadata to Opik -->
+  <path d="M336 338 H452 V115 H484" fill="none" stroke="#2e8555" stroke-width="1.4" class="flow-c" marker-end="url(#arrGreen)"/>
+  <!-- LLM traffic to the provider -->
+  <path d="M336 378 H440 V352 H484" fill="none" stroke="#334155" stroke-width="1.6" class="flow-a" marker-end="url(#arrDark)"/>
+
+  <!-- ===================== your MDM ===================== -->
+  <rect x="28" y="36" width="396" height="76" rx="14" fill="none" stroke="#94a3b8" stroke-width="1.4"/>
+  <rect x="46" y="29" width="76" height="14" fill="#ffffff"/>
+  <text x="54" y="40" font-size="9" font-weight="700" letter-spacing="1.5" fill="#64748b">YOUR MDM</text>
+  <text x="226" y="80" font-size="10" fill="#475569" text-anchor="middle">Jamf · Kandji · Intune · JumpCloud</text>
+
+  <line x1="226" y1="112" x2="226" y2="144" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#arrSlate)"/>
+  <text x="240" y="126" font-size="8.5" fill="#475569">app + configuration profile</text>
+  <text x="240" y="138" font-size="7.5" fill="#94a3b8">extension pre-approved — no user prompt</text>
+
+  <!-- ===================== managed Mac ===================== -->
+  <rect x="28" y="150" width="396" height="290" rx="14" fill="none" stroke="#94a3b8" stroke-width="1.4"/>
+  <rect x="46" y="143" width="104" height="14" fill="#ffffff"/>
+  <text x="54" y="154" font-size="9" font-weight="700" letter-spacing="1.5" fill="#64748b">MANAGED MAC</text>
+
+  <circle cx="66" cy="172" r="7.5" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
+  <text x="66" y="175" font-size="8" font-weight="700" fill="#475569" text-anchor="middle">1</text>
+  <text x="80" y="175" font-size="8" fill="#475569">developers work as usual — nothing configured on the agent</text>
+
+  <rect x="56" y="186" width="160" height="64" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <rect x="72" y="202" width="32" height="24" rx="5" fill="#1f2937"/>
+  <text x="88" y="218" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle">&gt;_</text>
+  <text x="114" y="212" font-size="9.5" font-weight="700" fill="#1f2937">Claude Code</text>
+  <text x="114" y="226" font-size="8" fill="#94a3b8">CLI</text>
+
+  <rect x="236" y="186" width="160" height="64" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+  <rect x="252" y="202" width="32" height="24" rx="5" fill="none" stroke="#1f2937" stroke-width="1.4"/>
+  <line x1="252" y1="210" x2="284" y2="210" stroke="#1f2937" stroke-width="1.2"/>
+  <circle cx="257" cy="206" r="1.2" fill="#1f2937"/>
+  <text x="294" y="212" font-size="9.5" font-weight="700" fill="#1f2937">Claude</text>
+  <text x="294" y="226" font-size="8" fill="#94a3b8">desktop app</text>
+
+  <path d="M136 250 V288 H316 V250" fill="none" stroke="#cbd5e1" stroke-width="1.2"/>
+  <line x1="226" y1="288" x2="226" y2="316" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+  <circle cx="226" cy="301" r="7.5" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
+  <text x="226" y="304" font-size="8" font-weight="700" fill="#475569" text-anchor="middle">2</text>
+  <text x="242" y="304" font-size="8.5" fill="#475569">macOS diverts the API calls</text>
+
+  <rect x="116" y="322" width="220" height="72" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="1.2"/>
+  <text x="226" y="346" font-size="11" font-weight="700" fill="#1f2937" text-anchor="middle">Cost Intelligence app</text>
+  <text x="226" y="361" font-size="8" fill="#94a3b8" text-anchor="middle">network extension</text>
+  <text x="226" y="374" font-size="8" fill="#94a3b8" text-anchor="middle">TLS terminated on device</text>
+  <text x="226" y="412" font-size="7.5" fill="#94a3b8" text-anchor="middle">per-device certificate — hardware-backed key</text>
+
+  <text x="52" y="470" font-size="8.5" fill="#94a3b8">no shared fleet key — one hardware-backed certificate per device</text>
+
+  <!-- ===================== Comet / Opik ===================== -->
+  <rect x="470" y="36" width="482" height="220" rx="14" fill="none" stroke="#2e8555" stroke-width="1.4"/>
+  <rect x="488" y="29" width="56" height="14" fill="#ffffff"/>
+  <text x="496" y="40" font-size="9" font-weight="700" letter-spacing="1.5" fill="#2e8555">COMET</text>
+
+  <circle cx="498" cy="115" r="7.5" fill="#ffffff" stroke="#2e8555" stroke-width="1.2"/>
+  <text x="498" y="118" font-size="8" font-weight="700" fill="#2e8555" text-anchor="middle">4</text>
+  <text x="512" y="112" font-size="9" fill="#334155">HTTPS — metadata only, asynchronous</text>
+  <text x="512" y="126" font-size="8" fill="#94a3b8">content capture off by default</text>
+  <line x1="700" y1="115" x2="778" y2="115" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+  <rect x="784" y="91" width="144" height="48" rx="10" fill="#f0fdf4" stroke="#2e8555" stroke-width="1.4"/>
+  <text x="856" y="112" font-size="15" font-weight="700" fill="#166534" text-anchor="middle">Opik</text>
+  <text x="856" y="128" font-size="8" fill="#94a3b8" text-anchor="middle">your workspace</text>
+
+  <text x="494" y="228" font-size="8.5" fill="#94a3b8">a side path — if it breaks, the agent keeps working</text>
+
+  <!-- ===================== model provider ===================== -->
+  <rect x="470" y="280" width="482" height="220" rx="14" fill="none" stroke="#1f2937" stroke-width="1.4"/>
+  <rect x="488" y="273" width="122" height="14" fill="#ffffff"/>
+  <text x="496" y="284" font-size="9" font-weight="700" letter-spacing="1.5" fill="#1f2937">MODEL PROVIDER</text>
+
+  <circle cx="498" cy="352" r="7.5" fill="#ffffff" stroke="#334155" stroke-width="1.2"/>
+  <text x="498" y="355" font-size="8" font-weight="700" fill="#334155" text-anchor="middle">3</text>
+  <text x="512" y="348" font-size="9" fill="#334155">HTTPS — forwarded unchanged</text>
+  <text x="512" y="362" font-size="8" fill="#94a3b8">re-encrypted — full certificate validation</text>
+  <line x1="700" y1="352" x2="750" y2="352" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+  <rect x="756" y="326" width="172" height="52" rx="10" fill="#f8fafc" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="842" y="350" font-size="11" font-weight="700" fill="#1f2937" text-anchor="middle">Anthropic API</text>
+  <text x="842" y="366" font-size="8" fill="#94a3b8" text-anchor="middle">api.anthropic.com</text>
+
+  <rect x="512" y="408" width="180" height="48" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <text x="602" y="429" font-size="9.5" font-weight="700" fill="#475569" text-anchor="middle">your LLM gateway</text>
+  <text x="602" y="444" font-size="8" fill="#94a3b8" text-anchor="middle">optional</text>
+  <path d="M700 432 H842 V386" fill="none" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+  <text x="512" y="482" font-size="8" fill="#94a3b8">when a gateway is configured, calls route here first</text>
+</svg>

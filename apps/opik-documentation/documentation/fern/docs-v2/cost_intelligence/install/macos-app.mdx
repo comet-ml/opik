@@ -23,20 +23,9 @@ The macOS app is the rollout path for fleets where nothing can be configured on 
 
 Everything happens on the developer's machine. The app runs as a menu-bar app with a network extension, and macOS hands that extension the coding agent's API traffic:
 
-```mermaid
-flowchart LR
-    subgraph mac["Developer's Mac"]
-        direction TB
-        CLI["Claude Code CLI"]
-        DESK["Claude desktop app"]
-        APP["Cost Intelligence macOS app<br/>(network extension, local TLS)"]
-        CLI --> APP
-        DESK --> APP
-    end
-    APP -->|"default"| ANT["Anthropic API"]
-    APP -->|"when configured"| GW["Your LLM gateway"] --> ANT
-    APP -.->|"metadata only, asynchronous"| OPIK["Opik workspace"]
-```
+<Frame>
+  <img src="/img/v2/cost-intelligence/macos-app-flow.svg" alt="macOS app data flow: an MDM delivers the app and its configuration profile to a managed Mac, macOS diverts Claude Code traffic to the app's network extension, calls are forwarded re-encrypted to the Anthropic API or a configured gateway, and metadata-only spans ship to Opik" />
+</Frame>
 
 Walking through the flow:
 
