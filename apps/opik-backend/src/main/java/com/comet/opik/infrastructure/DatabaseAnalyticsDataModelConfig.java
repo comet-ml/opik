@@ -50,6 +50,23 @@ import lombok.Builder;
  * {@code MODIFY COLUMN} must be applied to <b>both</b> {@code traces_local} and the {@code Distributed} {@code traces}
  * (the wrapper accepts them as metadata-only, and targeting only {@code traces_local} leaves the wrapper without the
  * column, so reads fail with code 47).</p>
+ *
+ * <p>{@code tracesWeeklyPartitioningEnabled}: whether the live trace mutation target is the weekly partitioned
+ * successor — {@code id_at} as {@code DateTime64(0, 'UTC')} under
+ * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} — so a trace {@code DELETE}
+ * may bound itself to the partitions its own ids resolve to instead of being planned against every part of the table
+ * (OPIK-6901). Purely an optimisation: {@code false} keeps the unbounded mutation, which is always correct and merely
+ * slower, and only {@code true} asserts anything about the schema.</p>
+ *
+ * <p>It is deliberately a third flag rather than a reuse of the two above, because the partitioning appears at the
+ * <b>EXCHANGE</b> and neither of them marks that moment. {@code traceColumnsNonNullable} must be rolled out
+ * <b>before</b> the EXCHANGE (a rolling restart cannot be atomic with a metadata swap), and
+ * {@code tracesDistributedWrapEnabled} flips at the wrap, a separate step that may be deferred long after it — so one
+ * flag would be true too early and the other true too late. Emitting the predicate too early is the harmful direction:
+ * legacy {@code traces} has no {@code PARTITION BY} at all and declares {@code id_at} as a 32-bit {@code DateTime} that
+ * overflows past 2106, so a far-future id is stored under a wrapped timestamp the derived partition cannot match and
+ * the delete would silently affect zero rows. Left {@code false} at deploy time; set {@code true} once the EXCHANGE is
+ * confirmed on the target, and back to {@code false} <b>before</b> a rollback promotes the original {@code traces}.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -58,5 +75,6 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean traceDeletionEventsCaptureEnabled,
         boolean spanDeletionEventsCaptureEnabled,
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
-        boolean tracesDistributedWrapEnabled) {
+        boolean tracesDistributedWrapEnabled,
+        boolean tracesWeeklyPartitioningEnabled) {
 }

@@ -322,6 +322,25 @@ the `traceColumnsNonNullable` flip").
 
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
+**The `tracesWeeklyPartitioningEnabled` flip (optional, and why it goes last).** `databaseAnalyticsDataModel.tracesWeeklyPartitioningEnabled`
+(env `ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITIONING_ENABLED`, default `false`) lets a trace `DELETE` bound itself to
+the weekly partitions its own ids resolve to (OPIK-6901), instead of being planned against every part of the table — on
+prod-test, 12 ids rewrote 3,928 parts / 5.40 TiB without it. It asserts a **schema** fact: that `traces` (or
+`traces_local`) is the successor, with `id_at` as `DateTime64(0,'UTC')` under the weekly `PARTITION BY`.
+
+It is a third flag precisely because **neither of the two above marks the `EXCHANGE`**, which is when the partitioning
+appears: `traceColumnsNonNullable` must lead it (above), and `tracesDistributedWrapEnabled` flips at the wrap, which may
+be deferred long after it (`--skip-wrap` … `--wrap-only`). So gate on this one, not on either of those.
+
+Unlike its siblings it is **safe to lag and unsafe to lead**: `false` is the previous unbounded delete, always correct
+and merely slower, so turn it on at leisure **after** the `EXCHANGE` is confirmed. Turning it on early — while `traces` is
+still the original — is the failure mode worth avoiding: the original has **no `PARTITION BY` at all** (nothing to prune)
+and declares `id_at` as a 32-bit `DateTime` that overflows past 2106, so a far-future id (the litellm ~2201 rows) is
+stored under a wrapped recent timestamp that the derived partition cannot match, and the delete reports success having
+matched **zero rows**. For the same reason, a stage B/C **rollback must revert it to `false` — and roll-restart every
+instance — before promoting the original**, ahead of the swap rather than after it. Like its siblings it comes from a
+startup snapshot of `OpikConfiguration`, so the config change alone changes nothing until each instance restarts.
+
 ## Batching and throttling
 
 On a large production table a single week can be enormous, so the backfill does **not** run one INSERT per week. Two
@@ -831,6 +850,11 @@ statements, so a failure *between* them needs a restart path:
 **Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
 complete until they land.
+
+> **If `tracesWeeklyPartitioningEnabled` was turned on, revert it *before* the stage runs, not after.** It asserts the
+> live table is the partitioned successor, and the restored original is not one, so a stale `true` makes trace deletes
+> match zero rows while reporting success — see "The `tracesWeeklyPartitioningEnabled` flip". It is the one flag whose
+> revert has to lead the swap; the two steps below follow it.
 
 1. **Revert `traceColumnsNonNullable` to `false` AND roll-restart every backend instance.** The flag is read from a
    **startup snapshot** of `OpikConfiguration` (bound via `toInstance`), so a config change does **not** take effect until
