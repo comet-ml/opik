@@ -2904,8 +2904,8 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when project_name does not match the prompt's project, then fall back to workspace-level and return it")
-        void whenProjectNameDoesNotMatchPromptProject__thenFallBackToWorkspaceAndReturnIt() {
+        @DisplayName("when project_name does not match the prompt's project, then return not found")
+        void whenProjectNameDoesNotMatchPromptProject__thenReturnNotFound() {
             var projectName = "project-" + UUID.randomUUID();
             projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -2929,15 +2929,19 @@ class PromptResourceTest {
                     .projectId(otherProjectId)
                     .build();
 
-            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+            createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
 
-            // Retrieve using a different project name: project-level lookup misses, falls back to workspace-wide and finds it
+            // The prompt belongs to otherProject, so a lookup scoped to a different project must not reach it:
+            // the fallback resolves only legacy prompts with no project at all.
             var retrieveRequest = PromptVersionRetrieve.builder()
                     .name(prompt.name())
                     .projectName(projectName)
                     .build();
 
-            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+            try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
         }
 
         @Test
@@ -2974,13 +2978,10 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when project_name does not match, fall back to workspace-wide, then return X-Opik-Deprecation header")
+        @DisplayName("when the prompt has no project, fall back to the legacy prompt and return X-Opik-Deprecation header")
         void whenProjectNameDoesNotMatch__thenReturnDeprecationHeader() {
             var projectName = "project-" + UUID.randomUUID();
             projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
-
-            var otherProjectName = "project-" + UUID.randomUUID();
-            var otherProjectId = projectResourceClient.createProject(otherProjectName, API_KEY, TEST_WORKSPACE);
 
             var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
@@ -2990,12 +2991,13 @@ class PromptResourceTest {
                     .templateStructure(TemplateStructure.TEXT)
                     .build();
 
+            // No project on the create request: this is a legacy project-less prompt, the only kind the
+            // deprecated workspace fallback is meant to resolve.
             var createRequest = CreatePromptVersion.builder()
                     .name(prompt.name())
                     .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
                             .createdBy(USER)
                             .build())
-                    .projectId(otherProjectId)
                     .build();
 
             createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
