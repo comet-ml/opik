@@ -1,10 +1,15 @@
 package com.comet.opik.api;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class ProviderAuthConfigTest {
 
@@ -41,17 +46,24 @@ class ProviderAuthConfigTest {
         assertThat(ProviderAuthConfig.builder().tokenUrl("https://auth.example.com").build().isEmpty()).isFalse();
     }
 
-    @Test
-    void partialConfigsAreNotEmptySoTheyValidateInsteadOfClearing() {
-        // any single field set means "not the clear convention" — the update path must
-        // route these through validationErrors(), never silently clear the stored recipe
-        assertThat(ProviderAuthConfig.builder().sendAs(ProviderAuthConfig.SendAs.BASIC).build().isEmpty()).isFalse();
-        assertThat(ProviderAuthConfig.builder().tokenField("access_token").build().isEmpty()).isFalse();
-        assertThat(ProviderAuthConfig.builder().expiresField("expires_in").build().isEmpty()).isFalse();
-        assertThat(ProviderAuthConfig.builder().fallbackTtlSeconds(60L).build().isEmpty()).isFalse();
+    // any single field set means "not the clear convention" — the update path must
+    // route these through validationErrors(), never silently clear the stored recipe
+    static Stream<Arguments> partialConfigs() {
+        return Stream.of(
+                arguments("sendAs", ProviderAuthConfig.builder().sendAs(ProviderAuthConfig.SendAs.BASIC).build()),
+                arguments("credentials", ProviderAuthConfig.builder()
+                        .credentials(List.of(credential("client_id", "opik", false)))
+                        .build()),
+                arguments("tokenField", ProviderAuthConfig.builder().tokenField("access_token").build()),
+                arguments("expiresField", ProviderAuthConfig.builder().expiresField("expires_in").build()),
+                arguments("fallbackTtlSeconds", ProviderAuthConfig.builder().fallbackTtlSeconds(60L).build()));
+    }
 
-        assertThat(ProviderAuthConfig.builder().fallbackTtlSeconds(60L).build().validationErrors())
-                .isNotEmpty();
+    @ParameterizedTest(name = "only {0} set")
+    @MethodSource("partialConfigs")
+    void partialConfigsAreNotEmptySoTheyValidateInsteadOfClearing(String field, ProviderAuthConfig partial) {
+        assertThat(partial.isEmpty()).isFalse();
+        assertThat(partial.validationErrors()).isNotEmpty();
     }
 
     @Test
