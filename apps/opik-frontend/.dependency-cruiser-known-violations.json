@@ -229,51 +229,6 @@
   },
   {
     "type": "module",
-    "from": "src/hooks/useAnnotationQueueIdFromURL.ts",
-    "to": "src/hooks/useAnnotationQueueIdFromURL.ts",
-    "rule": {
-      "severity": "info",
-      "name": "no-orphans"
-    }
-  },
-  {
-    "type": "module",
-    "from": "src/hooks/useDatasetIdFromCompareExperimentsURL.ts",
-    "to": "src/hooks/useDatasetIdFromCompareExperimentsURL.ts",
-    "rule": {
-      "severity": "info",
-      "name": "no-orphans"
-    }
-  },
-  {
-    "type": "module",
-    "from": "src/hooks/usePromptIdFromURL.ts",
-    "to": "src/hooks/usePromptIdFromURL.ts",
-    "rule": {
-      "severity": "info",
-      "name": "no-orphans"
-    }
-  },
-  {
-    "type": "module",
-    "from": "src/hooks/useSuiteIdFromURL.ts",
-    "to": "src/hooks/useSuiteIdFromURL.ts",
-    "rule": {
-      "severity": "info",
-      "name": "no-orphans"
-    }
-  },
-  {
-    "type": "module",
-    "from": "src/shared/ResizableSection/ResizableSection.tsx",
-    "to": "src/shared/ResizableSection/ResizableSection.tsx",
-    "rule": {
-      "severity": "info",
-      "name": "no-orphans"
-    }
-  },
-  {
-    "type": "module",
     "from": "src/types/chart.ts",
     "to": "src/types/chart.ts",
     "rule": {
