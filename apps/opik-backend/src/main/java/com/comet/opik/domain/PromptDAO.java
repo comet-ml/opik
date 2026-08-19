@@ -251,7 +251,8 @@ public interface PromptDAO {
             @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id" +
-            " <if(project_id)> AND project_id = :project_id <endif>")
+            " <if(project_id)> AND project_id = :project_id <endif>" +
+            " ORDER BY id LIMIT 1")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId,
