@@ -48,6 +48,80 @@ Three steps, delivered with the MDM you already run (Jamf, Kandji, Intune, JumpC
 
 Deploy `Opik CIPX.app` to `/Applications` as a package payload, together with an MDM configuration profile. The profile does two jobs: it pre-approves the system extension so activation is **silent** (the developer never sees an approval prompt), and it forces the app's settings so users can't turn capture off. The app bundle embeds the extension and the capture engine, so there is nothing else to install.
 
+<Accordion title="View an example configuration profile">
+
+```xml title="opik-cipx-app.mobileconfig"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadDisplayName</key>
+  <string>Opik Cost Intelligence</string>
+  <key>PayloadIdentifier</key>
+  <string>com.comet.opik-cipx-app.managed</string>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>8A7B0C64-1D2E-4F35-9B86-3C5A7D9E0F12</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadContent</key>
+  <array>
+    <!-- Job 1: pre-approve the system extension (silent activation) -->
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.system-extension-policy</string>
+      <key>PayloadIdentifier</key>
+      <string>com.comet.opik-cipx-app.managed.sysext</string>
+      <key>PayloadUUID</key>
+      <string>2F4E6A18-9C3B-4D07-8E51-B6A0D2C48F93</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>AllowedSystemExtensions</key>
+      <dict>
+        <!-- Comet's Apple developer team ID -->
+        <key>XXXXXXXXXX</key>
+        <array>
+          <string>com.comet.opik-cipx-app.extension</string>
+        </array>
+      </dict>
+    </dict>
+    <!-- Job 2: force the app's settings -->
+    <dict>
+      <key>PayloadType</key>
+      <string>com.comet.opik-cipx-app</string>
+      <key>PayloadIdentifier</key>
+      <string>com.comet.opik-cipx-app.managed.settings</string>
+      <key>PayloadUUID</key>
+      <string>5D1C8B72-0A94-4E6F-B3D8-7E29C4A61F05</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>Cipx.isEnabled</key>
+      <true/>
+      <key>Settings.startAtLogin</key>
+      <true/>
+      <key>Settings.allowExtensionUninstall</key>
+      <false/>
+      <key>Settings.enableViewer</key>
+      <false/>
+      <key>Settings.enableAdmin</key>
+      <false/>
+      <key>Settings.enabledHarnesses</key>
+      <array>
+        <string>com.anthropic.claude-code</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>
+```
+
+The team ID and the extension bundle identifier must match the shipped app.
+Email [sales@comet.com](mailto:sales@comet.com) for a filled-in,
+ready-to-push profile.
+
+</Accordion>
+
 Every payload key, profile validation, and the per-MDM upload paths are in [Advanced](#advanced) below.
 
 ### Drop the workspace credentials
