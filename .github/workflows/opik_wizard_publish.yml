@@ -4,11 +4,6 @@ run-name: "Opik TypeScript Configure Publish from ${{github.ref_name}} by @${{ g
 permissions:
   contents: write
   packages: write
-  # Mints the OIDC token npm trusted publishing exchanges for a short-lived
-  # publish credential. This workflow is its own entry point (nothing calls it
-  # via workflow_call), so `opik_wizard_publish.yml` is the workflow filename
-  # registered as the trusted publisher for `opik-ts` on npmjs.com.
-  id-token: write
 
 on:
   workflow_dispatch:
@@ -54,12 +49,26 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          # npm trusted publishing (OIDC) requires Node >= 22.14.0 and npm >= 11.5.1.
-          node-version: "22.14.0"
+          node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup npm
-        run: npm install -g npm@11.6.2
+      - name: Resolve published package name
+        if: ${{ env.IS_RELEASE }}
+        id: resolve_pkg_name
+        shell: bash
+        working-directory: sdks/typescript/src/opik/configure
+        run: |
+          # Derive from package.json so the preflight always probes the actual publish
+          # target, even if the package is renamed (e.g., opik-configure -> opik-ts).
+          PKG=$(node -p "require('./package.json').name")
+          echo "name=${PKG}" >> "$GITHUB_OUTPUT"
+
+      - name: NPM token preflight
+        if: ${{ env.IS_RELEASE }}
+        uses: ./.github/actions/npm-token-preflight
+        with:
+          npm_token: ${{ secrets.NPM_TOKEN }}
+          package_name: ${{ steps.resolve_pkg_name.outputs.name }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -121,18 +130,11 @@ jobs:
 
       - name: Publish to NPM
         if: ${{ env.IS_RELEASE }}
-        # Published with `npm publish`, not `pnpm publish`: OIDC trusted publishing
-        # landed in pnpm 10.x (this workflow pins pnpm 9.15.5 for install/build) and
-        # pnpm 11 has an open report of OIDC publishes 404-ing. `--access public` is
-        # already the package's `publishConfig.access`, kept explicit for clarity.
-        #
-        # `npm config delete` removes the `_authToken=${NODE_AUTH_TOKEN}` stub that
-        # `setup-node` writes into ~/.npmrc — with no token, npm would try that empty
-        # credential instead of falling back to the OIDC exchange.
         run: |
-          echo "Publishing $(node -p "require('./package.json').name") version ${{ env.VERSION }} to NPM..."
-          npm config delete //registry.npmjs.org/:_authToken || true
-          npm publish --access public
+          echo "Publishing opik-configure version ${{ env.VERSION }} to NPM..."
+          pnpm publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Push changes and tags
         if: ${{ env.IS_RELEASE }}

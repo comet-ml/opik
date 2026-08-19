@@ -31,6 +31,9 @@ inputs:
     required: false
     description: Run npm pack --dry-run test
     default: "false"
+  npm_token:
+    required: false
+    description: NPM token for publishing
   github_token:
     required: false
     description: GitHub token for pushing changes
@@ -52,16 +55,10 @@ runs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        # npm trusted publishing (OIDC) requires Node >= 22.14.0 and npm >= 11.5.1.
-        # Node 22.14.0 ships npm 10.x, so the npm CLI is bumped explicitly below.
-        node-version: "22.14.0"
+        node-version: "20"
         registry-url: "https://registry.npmjs.org"
         cache: ${{ inputs.enable_cache == 'true' && 'npm' || '' }}
         cache-dependency-path: ${{ inputs.cache_dependency_path }}
-
-    - name: Setup npm
-      shell: bash
-      run: npm install -g npm@11.6.2
 
     - name: Install dependencies
       shell: bash
@@ -143,14 +140,22 @@ runs:
         npm pack --dry-run
         echo "Package can be installed successfully"
 
-    - name: Prepare trusted publishing auth
-      # `setup-node` with `registry-url` writes
-      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` into ~/.npmrc. With
-      # trusted publishing there is no token, and npm would try that empty
-      # credential before falling back to OIDC — so remove the stub entirely.
+    - name: Resolve npm package name from package.json
+      id: npm_name
       if: ${{ inputs.is_release == 'true' }}
       shell: bash
-      run: npm config delete //registry.npmjs.org/:_authToken || true
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        NPM_PACKAGE_NAME=$(node -p "require('./package.json').name")
+        echo "name=${NPM_PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+        echo "Resolved npm package name: ${NPM_PACKAGE_NAME}"
+
+    - name: NPM token preflight
+      if: ${{ inputs.is_release == 'true' }}
+      uses: ./.github/actions/npm-token-preflight
+      with:
+        npm_token: ${{ inputs.npm_token }}
+        package_name: ${{ steps.npm_name.outputs.name }}
 
     - name: Publish to NPM (with retry)
       id: npm_publish
@@ -234,6 +239,8 @@ runs:
         # Save package name and version for summary
         echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
         echo "PUBLISHED_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.npm_token }}
 
     - name: Commit version changes
       if: ${{ inputs.is_release == 'true' && inputs.skip_commit_push != 'true' }}

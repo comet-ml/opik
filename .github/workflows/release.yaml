@@ -104,12 +104,6 @@ jobs:
     needs:
       - set-version
       - create-git-tag
-    # `id-token: write` is required here, not just in the called workflow: npm
-    # trusted publishing validates the entry-point (calling) workflow filename,
-    # so `release.yaml` is what is registered as the publisher on npmjs.com.
-    permissions:
-      contents: write
-      id-token: write
     uses: ./.github/workflows/typescript_sdk_publish.yml
     secrets: inherit
     with:
@@ -121,9 +115,6 @@ jobs:
     needs:
       - set-version
       - create-git-tag
-    permissions:
-      contents: write
-      id-token: write
     uses: ./.github/workflows/typescript_sdk_integration_publish.yml
     secrets: inherit
     with:
