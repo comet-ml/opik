@@ -2,12 +2,6 @@
 canonical-url: https://www.comet.com/docs/opik/changelog
 ---
 
-## Guardrails: LLM-as-Judge, Prompt Injection Detection, and Custom Trained Classifiers
-
-Guardrails now cover three new validator types alongside the existing PII and Topic checks. **LLM Judge** guards run client-side through the Python SDK using your configured provider, logging the check as a nested span. **Prompt Injection** adds a dedicated classifier that flags injection attempts in user input. **Custom Guardrail** lets you train and serve your own classifier from the guardrails server, with an SDK helper (`create_custom_guardrail`) that reports training progress and an overwrite policy for retraining. All three new types are configured through the SDK and show up alongside PII/Topic guardrails in traces and alert filters; the in-app "Set a guardrail" dialog remains scoped to PII and Topic.
-
-The guardrails backend also gained a CPU-only Docker image and `--guardrails-cpu` deploy mode (previously GPU-only), a per-guardrail-name breakdown on the "Failed guardrails" metrics chart, and the ability to filter guardrail alerts by guardrail type.
-
 ## Oversized Payloads No Longer Crash Ingestion
 
 A single inline field or an unusually large batch could previously push ingestion into an out-of-memory crash loop. Both SDKs now cap an individual span's input/output/metadata at a configurable per-field size before sending, replacing anything over the limit with a compact `opik_truncated` marker and a warning instead of shipping the full payload (Python and TypeScript SDKs now behave the same way here). The backend independently rejects requests whose declared size exceeds the configured limit with a `413` before reading the body, and caps the total decompressed document size during parsing, so an oversized request fails fast and cleanly instead of destabilizing the server.
