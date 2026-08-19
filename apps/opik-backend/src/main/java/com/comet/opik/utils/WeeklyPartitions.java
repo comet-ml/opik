@@ -1,5 +1,6 @@
 package com.comet.opik.utils;
 
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.time.DayOfWeek;
@@ -66,8 +67,16 @@ public class WeeklyPartitions {
      * The weekly partition values the ids resolve to, or empty if the batch contains an id whose partition cannot be
      * derived exactly (see the class javadoc) — in which case the caller must omit its partition predicate entirely.
      * An empty batch yields empty for the same reason: there is nothing to bound the mutation to.
+     * <p>
+     * A {@code null} batch throws rather than reading as empty, which is the one place this class is deliberately
+     * intolerant. Empty is a <em>documented answer</em> — "this batch cannot be pruned, emit the unbounded form" — and a
+     * caller that lost its batch would receive that answer, silently issue a correct-but-unbounded mutation, and never
+     * learn it had a bug. A null collection here is a programming error, not a data condition; a null <em>element</em>
+     * is the data condition, and that keeps returning empty.
+     *
+     * @throws NullPointerException if {@code ids} is null.
      */
-    public static Optional<Set<Long>> of(Collection<UUID> ids) {
+    public static Optional<Set<Long>> of(@NonNull Collection<UUID> ids) {
         var partitions = new HashSet<Long>();
 
         for (UUID id : ids) {

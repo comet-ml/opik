@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Covers {@link WeeklyPartitions#of}, which derives the weekly partition values a delete batch resolves to so the
@@ -91,6 +92,18 @@ class WeeklyPartitionsTest {
     @DisplayName("an empty batch yields no partitions")
     void emptyBatch() {
         assertThat(WeeklyPartitions.of(List.of())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a null batch throws rather than reading as an unprunable one")
+    void nullBatchThrows() {
+        // The one intolerant case, and deliberately not folded into the empty result above: empty is a documented
+        // answer ("emit the unbounded form"), so a caller that lost its batch would get a valid-looking answer, issue a
+        // correct-but-unbounded mutation, and never learn it had a bug. Matches every other collection-taking method in
+        // this package, all of which are @NonNull.
+        assertThatThrownBy(() -> WeeklyPartitions.of(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("ids");
     }
 
     @Test
