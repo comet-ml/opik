@@ -19,8 +19,8 @@ import { createProviderKey, deleteProviderKeyByName } from '@e2e/core/provider-k
  * refetch is asserted through /stats deltas (counts, not timing). The mock's
  * counters are global across the run, so assertions are >= deltas.
  */
-test.describe('AI Providers — OAuth2 reactive token refetch', { tag: ['@t1-smoke', '@area:ai-providers'] }, () => {
-  test('a revoked token is transparently refetched and the request retried', async ({
+test.describe('AI Providers — OAuth2 reactive token refetch', { tag: ['@t1-smoke', '@area:configuration'] }, () => {
+  test('a revoked token is transparently refetched and the request retried', { tag: ['@cap:configuration.ai-provider-token-refetch'] }, async ({
     page,
     project,
     testNamespace,
