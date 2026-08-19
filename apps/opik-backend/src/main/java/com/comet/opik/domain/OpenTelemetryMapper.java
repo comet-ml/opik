@@ -282,7 +282,10 @@ public class OpenTelemetryMapper {
 
         // Fall back to the current `gen_ai.provider.name` only when the deprecated `gen_ai.system`
         // did not report a provider.
-        if (StringUtils.isBlank(provider)) {
+        // Both sides must be non-blank: a non-string or empty `gen_ai.provider.name` yields ""
+        // from getStringValue(), and assigning that would persist an empty provider where the
+        // span previously carried none at all.
+        if (StringUtils.isBlank(provider) && StringUtils.isNotBlank(providerName)) {
             provider = providerName;
         }
 

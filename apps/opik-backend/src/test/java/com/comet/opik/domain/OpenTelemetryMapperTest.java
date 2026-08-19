@@ -1557,6 +1557,23 @@ class OpenTelemetryMapperTest {
             assertThat(map(attr("gen_ai.system", "xai"), attr("gen_ai.provider.name", "x_ai")).provider())
                     .isEqualTo("xai");
         }
+
+        /**
+         * A blank {@code gen_ai.provider.name} (also what a non-string value yields) must not be
+         * applied as a fallback: that would persist an empty provider on a span that previously
+         * carried none at all.
+         */
+        @Test
+        void blankProviderNameDoesNotPersistAnEmptyProvider() {
+            assertThat(map(attr("gen_ai.provider.name", "")).provider()).isNull();
+            assertThat(map(attr("gen_ai.provider.name", "   ")).provider()).isNull();
+        }
+
+        @Test
+        void blankProviderNameDoesNotOverrideAResolvedProvider() {
+            assertThat(map(attr("gen_ai.system", "vertex_ai"), attr("gen_ai.provider.name", "")).provider())
+                    .isEqualTo("google_vertexai");
+        }
     }
 
     /**
@@ -1604,6 +1621,46 @@ class OpenTelemetryMapperTest {
         @Test
         void missingServerAddressDefaultsToGoogleAi() {
             assertThat(mapGoogle(null).provider()).isEqualTo("google_ai");
+        }
+
+        /**
+         * The markers must match on a domain boundary, not anywhere in the string, so a host that
+         * merely embeds one is not classified as that backend.
+         */
+        @ParameterizedTest(name = "[{index}] {0} does not resolve to vertex")
+        @CsvSource({
+                "evil-aiplatform.googleapis.com.attacker.test",
+                "aiplatform.googleapis.com.attacker.test",
+                "aiplatform.googleapis.com.evil.test",
+        })
+        void hostEmbeddingMarkerIsNotClassifiedAsVertex(String serverAddress) {
+            assertThat(mapGoogle(serverAddress).provider()).isEqualTo("google_ai");
+        }
+
+        /**
+         * Regression guard for the stricter suffix match: well-formed addresses that carry a port,
+         * a scheme/path or a trailing FQDN dot must still resolve.
+         */
+        @ParameterizedTest(name = "[{index}] {0} -> google_vertexai")
+        @CsvSource({
+                "us-east1-aiplatform.googleapis.com",
+                "aiplatform.googleapis.com",
+                "us-east1-aiplatform.googleapis.com:443",
+                "us-east1-aiplatform.googleapis.com.",
+                "https://us-east1-aiplatform.googleapis.com/v1/projects",
+        })
+        void wellFormedVertexAddressesStillResolve(String serverAddress) {
+            assertThat(mapGoogle(serverAddress).provider()).isEqualTo("google_vertexai");
+        }
+
+        @ParameterizedTest(name = "[{index}] {0} -> google_ai")
+        @CsvSource({
+                "generativelanguage.googleapis.com",
+                "generativelanguage.googleapis.com:443",
+                "https://generativelanguage.googleapis.com/v1beta/models",
+        })
+        void wellFormedGeminiApiAddressesStillResolve(String serverAddress) {
+            assertThat(mapGoogle(serverAddress).provider()).isEqualTo("google_ai");
         }
 
         @Test

@@ -55,19 +55,51 @@ public class GoogleProviderResolver {
         String serverAddress = metadata != null && metadata.hasNonNull(GeneralMappingRules.SERVER_ADDRESS_ATTR)
                 ? metadata.get(GeneralMappingRules.SERVER_ADDRESS_ATTR).asText().toLowerCase(Locale.ROOT)
                 : "";
+        String host = extractHost(serverAddress);
 
         String resolved;
-        if (serverAddress.contains(VERTEX_AI_HOST_MARKER)) {
+        boolean recognized = true;
+        if (host.endsWith(VERTEX_AI_HOST_MARKER)) {
             resolved = GOOGLE_VERTEX_AI;
-        } else if (serverAddress.contains(GEMINI_API_HOST_MARKER)) {
+        } else if (host.endsWith(GEMINI_API_HOST_MARKER)) {
             resolved = GOOGLE_AI;
         } else {
             resolved = GOOGLE_AI;
-            log.debug("Provider '{}' with unrecognized server.address '{}', defaulting to '{}'",
-                    provider, serverAddress, resolved);
+            recognized = false;
         }
 
-        log.debug("Resolved provider '{}' to '{}' from server.address '{}'", provider, resolved, serverAddress);
+        log.debug("Resolved provider '{}' to '{}' from {} server.address host '{}'",
+                provider, resolved, recognized ? "recognized" : "unrecognized (defaulted)", host);
         return resolved;
+    }
+
+    /**
+     * Reduces a {@code server.address} to its bare host so the markers can be matched on a domain
+     * boundary rather than anywhere in the string — {@code contains} would classify
+     * {@code evil-aiplatform.googleapis.com.attacker.test} as Vertex AI.
+     * <p>
+     * The semconv defines {@code server.address} as a host name, but scheme, path, port and a
+     * trailing FQDN dot are tolerated so a well-formed address is never rejected by the stricter
+     * suffix match.
+     */
+    private static String extractHost(String serverAddress) {
+        String host = serverAddress;
+
+        int scheme = host.indexOf("://");
+        if (scheme >= 0) {
+            host = host.substring(scheme + 3);
+        }
+        int path = host.indexOf('/');
+        if (path >= 0) {
+            host = host.substring(0, path);
+        }
+        // Only strip a genuine numeric port, so an IPv6 literal isn't truncated at its last colon.
+        int port = host.lastIndexOf(':');
+        if (port >= 0 && port < host.length() - 1
+                && host.substring(port + 1).chars().allMatch(Character::isDigit)) {
+            host = host.substring(0, port);
+        }
+
+        return StringUtils.removeEnd(host, ".");
     }
 }
