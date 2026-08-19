@@ -167,6 +167,13 @@ class CostIntelligenceIngestionTest {
                 // speed: selects the rate table, so it must survive ingestion
                 assertThat(row.get().speed()).isEqualTo("fast");
                 assertThat(row.get().aiuNano()).isNull();
+                // attribution fields: what caused the call, which agent ran it, which turn it
+                // belongs to, and which Agent tool_use spawned it. Without these the spend tables
+                // cannot separate subagent spend from the main agent's, nor name the agent.
+                assertThat(row.get().trigger()).isEqualTo("subagent");
+                assertThat(row.get().triggerDetail()).isEqualTo("code-reviewer");
+                assertThat(row.get().turnKey()).isEqualTo("abc123turnkey");
+                assertThat(row.get().parentToolUseId()).isEqualTo("toolu_parent_agent");
             });
 
             // Carried on every block row too.
@@ -181,6 +188,33 @@ class CostIntelligenceIngestionTest {
             // listener has already decided this one: it must not have produced a row.
             assertThat(getCipxSpend(plainSpan.id(), ws.workspaceId())).isEmpty();
             assertThat(getCipxBlocks(plainSpan.id(), ws.workspaceId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a call carrying no trigger fields ingests with empty attribution columns")
+        void spanWithoutTriggerFieldsLandsWithEmptyAttribution() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            // systemToolsCipxMetadata carries no trigger/turn_key/parent_tool_use_id — the shape
+            // every span written before the proxy shipped them has. Ingestion must still land the
+            // row and must leave the attribution columns empty rather than substituting a default:
+            // "" means unknown, and a guessed agent name would book real spend against an agent
+            // that never ran.
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(systemToolsCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxSpend(span.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().trigger()).isEmpty();
+                assertThat(row.get().triggerDetail()).isEmpty();
+                assertThat(row.get().turnKey()).isEmpty();
+                assertThat(row.get().parentToolUseId()).isEmpty();
+            });
         }
 
         @Test
@@ -708,7 +742,11 @@ class CostIntelligenceIngestionTest {
                                 "max_tokens": 64000,
                                 "context_management": "clear_thinking_20251015",
                                 "speed": "fast"
-                              }
+                              },
+                              "trigger": "subagent",
+                              "trigger_detail": "code-reviewer",
+                              "turn_key": "abc123turnkey",
+                              "parent_tool_use_id": "toolu_parent_agent"
                             },
                             "blocks": [
                               {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
@@ -906,7 +944,8 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano
+                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                    `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -930,7 +969,11 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
-                            row.get("aiu_nano", Long.class)))));
+                            row.get("aiu_nano", Long.class),
+                            row.get("trigger_kind", String.class),
+                            row.get("trigger_detail", String.class),
+                            row.get("turn_key", String.class),
+                            row.get("parent_tool_use_id", String.class)))));
         }).blockOptional();
     }
 
@@ -1059,7 +1102,8 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement, String speed, Long aiuNano) {
+            String thinkingType, Long maxTokens, String contextManagement, String speed, Long aiuNano,
+            String trigger, String triggerDetail, String turnKey, String parentToolUseId) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
