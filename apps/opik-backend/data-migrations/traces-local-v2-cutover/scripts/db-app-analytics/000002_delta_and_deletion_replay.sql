@@ -128,9 +128,17 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- as deleted but is LIVE again on the source, and the backfill/delta already copied its live version. Deleting it by key
 -- would drop a row that is live on the source — silent data loss. So the replay deletes only ids that are NOT currently
 -- live on the source (mask-honored). The `id IN (deleted_ids since anchor)` bound keeps the deleted-id set tiny
--- (retention is off, so these are user-scale deletes); `traces` has no id skip index (000088 indexes only
--- created_at/last_updated_at — id minmax/bloom indexes exist only on traces_local_v2), so this source lookup is a
--- bounded id-filtered read of that tiny set, not a value-indexed prune of the full `traces` table.
+-- (retention is off, so these are user-scale deletes). `traces` DOES carry an id skip index --
+-- `idx_traces_id_bf`, a bloom_filter(0.01) on id, added by 000113 for OPIK-7483's delete-by-id project
+-- resolution -- and its primary key is (workspace_id, project_id, id), so this source lookup prunes on both
+-- the bloom filter and the primary key rather than scanning the table.
+--
+-- An earlier revision of this comment claimed `traces` had no id skip index and that id indexes existed only
+-- on traces_local_v2. That predated 000113 and is wrong on any deployment carrying it. Corrected because the
+-- claim is load-bearing: it is the stated reason this lookup is cheap, and it was quoted during the OPIK-6901
+-- prod-test rehearsal as the explanation for an expensive verify query -- sending the investigation the wrong
+-- way. What actually makes a differing-window verdict heavy is the candidate key COUNT and its scatter under
+-- FINAL (every version of every candidate must be read), not a missing index.
 -- allow_nondeterministic_mutations: a lightweight DELETE with cross-table subqueries is flagged nondeterministic, but
 -- deletion_events_local and traces are replicated and identical on every node and the window predicate is fixed, so the
 -- subqueries resolve to the same set on every replica. Idempotent (never masks a live-on-source id, so re-runs converge).
