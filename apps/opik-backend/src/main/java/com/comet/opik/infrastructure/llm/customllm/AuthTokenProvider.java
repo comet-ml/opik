@@ -79,6 +79,8 @@ public class AuthTokenProvider {
     private static final String CLIENT_SECRET_KEY = "client_secret";
     private static final String REDACTED = "***";
     private static final int ERROR_BODY_SNIPPET_CHARS = 500;
+    // Upper bound on any token lifetime (1 year): beyond this a reply is malformed or malicious
+    static final long MAX_TTL_SECONDS = 31_536_000L;
 
     private static final AttributeKey<String> OUTCOME = AttributeKey.stringKey("outcome");
     private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace_id");
@@ -367,10 +369,11 @@ public class AuthTokenProvider {
             }
         }
         if (ttlSeconds != null) {
-            if (ttlSeconds <= 0) {
+            if (ttlSeconds <= 0 || ttlSeconds > MAX_TTL_SECONDS) {
                 recordFetchMetric(startNanos, "lifetime_invalid", origin);
-                throw new AuthTokenException("token reply states a non-positive lifetime of '%d' seconds"
-                        .formatted(ttlSeconds));
+                throw new AuthTokenException(
+                        "token reply states a lifetime of '%d' seconds, outside the accepted range of 1 to %d"
+                                .formatted(ttlSeconds, MAX_TTL_SECONDS));
             }
             return ttlSeconds;
         }

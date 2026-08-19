@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -44,7 +45,7 @@ public record ProviderAuthConfig(
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @Size(max = 250) @Schema(description = "Field holding the token lifetime in seconds in the reply; dot-path for nested replies", example = "expires_in") String expiresField,
         @JsonView({ProviderApiKey.View.Public.class,
-                ProviderApiKey.View.Write.class}) @Min(0) @Schema(description = "Lifetime in seconds assumed when the reply doesn't state one; 0 means such tokens are not cached (fetched per call)") Long fallbackTtlSeconds) {
+                ProviderApiKey.View.Write.class}) @Min(0) @Max(31_536_000) @Schema(description = "Lifetime in seconds assumed when the reply doesn't state one, capped at one year; 0 means such tokens are not cached (fetched per call)") Long fallbackTtlSeconds) {
 
     public static final String SECRET_SENTINEL = "__SECRET__";
     private static final ProviderAuthConfig EMPTY = ProviderAuthConfig.builder().build();

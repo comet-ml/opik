@@ -355,6 +355,16 @@ class AuthTokenProviderTest {
     }
 
     @Test
+    @DisplayName("an absurdly large lifetime is rejected before it can corrupt cache arithmetic")
+    void oversizedLifetimeIsRejected() {
+        stubToken("{\"access_token\": \"tok-huge\", \"expires_in\": 9223372036854775807}");
+
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+                .isInstanceOf(AuthTokenException.class)
+                .hasMessageContaining("outside the accepted range");
+    }
+
+    @Test
     @DisplayName("a reply without a lifetime and without a fallback is a clear error")
     void missingLifetimeWithoutFallbackIsRejected() {
         stubToken("{\"access_token\": \"tok-nolife\"}");
