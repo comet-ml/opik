@@ -15,6 +15,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
@@ -1563,10 +1564,19 @@ class OpenTelemetryMapperTest {
          * applied as a fallback: that would persist an empty provider on a span that previously
          * carried none at all.
          */
-        @Test
-        void blankProviderNameDoesNotPersistAnEmptyProvider() {
-            assertThat(map(attr("gen_ai.provider.name", "")).provider()).isNull();
-            assertThat(map(attr("gen_ai.provider.name", "   ")).provider()).isNull();
+        @ParameterizedTest(name = "[{index}] blank provider.name '{0}' leaves provider null")
+        @ValueSource(strings = {"", "   "})
+        void blankProviderNameDoesNotPersistAnEmptyProvider(String blank) {
+            assertThat(map(attr("gen_ai.provider.name", blank)).provider()).isNull();
+        }
+
+        @ParameterizedTest(name = "[{index}] padded '{0}' is stored trimmed")
+        @CsvSource({
+                "'  openai  ',   openai",
+                "'  vertex_ai  ', google_vertexai",
+        })
+        void paddedProviderIsStoredTrimmed(String wireValue, String expected) {
+            assertThat(map(attr("gen_ai.system", wireValue)).provider()).isEqualTo(expected);
         }
 
         @Test

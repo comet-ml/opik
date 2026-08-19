@@ -51,16 +51,21 @@ public class GenAiProviderAliasResolver {
 
     /**
      * Returns the canonical Opik provider for a semantic-convention provider value, or the
-     * provider unchanged when it needs no aliasing.
+     * trimmed provider when it needs no aliasing.
+     * <p>
+     * Surrounding whitespace is stripped either way: an aliased value is matched on its trimmed
+     * form, so returning a padded {@code " openai "} verbatim would leave the two paths
+     * inconsistent and miss the price-table lookup, which keys on the exact provider string.
      */
     public static String resolve(String provider) {
         if (StringUtils.isBlank(provider)) {
             return provider;
         }
 
-        String resolved = ALIASES.get(StringUtils.trimToEmpty(provider).toLowerCase(Locale.ROOT));
+        String trimmed = StringUtils.trim(provider);
+        String resolved = ALIASES.get(trimmed.toLowerCase(Locale.ROOT));
         if (resolved == null) {
-            return provider;
+            return trimmed;
         }
 
         log.debug("Aliased OTel provider '{}' to canonical '{}'", provider, resolved);
