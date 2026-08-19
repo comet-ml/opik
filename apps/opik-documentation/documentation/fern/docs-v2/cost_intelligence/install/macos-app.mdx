@@ -1,8 +1,8 @@
 ---
 headline: Install the macOS app with MDM
 og:description: Deploy Cost Intelligence as a macOS menu-bar app and network
-  extension for transparent capture, when no client configuration can be
-  delivered to the coding agent.
+  extension for transparent capture of every Claude Code user, including the
+  desktop app, delivered through the MDM you already run.
 og:site_name: Opik Documentation
 og:title: Install the macOS app with MDM - Opik
 title: macOS app with MDM
@@ -43,37 +43,61 @@ The data landing in Opik is the same as the plugin produces. What differs is how
   desktop app.
 </Note>
 
-## What you deploy
+## Deploy via MDM
 
-Four deliverables. Only two can ride in the configuration profile, which is the main thing to plan around:
+Three steps, delivered with the MDM you already run (Jamf, Kandji, Intune, JumpCloud):
 
-| Deliverable | Delivery |
-| --- | --- |
-| `Opik CIPX.app` in `/Applications` | Package payload |
-| Configuration profile | MDM configuration profile |
-| `~/.opik-cipx/config.toml` (workspace credentials) | Per-user file drop, **not** profile-deliverable |
-| Per-device certificate trust | Established on-device; cannot be centrally authored |
+<Steps>
 
-The app bundle embeds both the system extension and the capture engine, so there is no separate engine install.
+### Push the app and its configuration profile
 
-## The configuration profile
+Deploy `Opik CIPX.app` to `/Applications` as a package payload, together with an MDM configuration profile. The profile does two jobs: it pre-approves the system extension so activation is **silent** (the developer never sees an approval prompt), and it forces the app's settings so users can't turn capture off. The app bundle embeds the extension and the capture engine, so there is nothing else to install.
+
+Every payload key, profile validation, and the per-MDM upload paths are in [Advanced](#advanced) below.
+
+### Drop the workspace credentials
+
+Ship a file per user at `~/.opik-cipx/config.toml`:
+
+```toml
+[opik]
+base_url  = "https://www.comet.com/opik/api"
+api_key   = "<workspace-scoped service-account key>"
+workspace = "your-org-cc-workspace"
+project   = "claude-code"
+
+[capture]
+capture_content = false
+```
+
+It lands in a user home, so an MDM script running as root must resolve the console user and `chown` the file to them, with the file at mode `0600` and the directory `0700`.
+
+### Launch once and verify
+
+Trigger a first launch — a package postinstall script that opens the app in the console user's context works best. From there the app handles everything itself: it activates the extension, starts capture, and registers a login item so capture survives reboots. With the profile in place, none of this prompts the user.
+
+Then check a target device:
+
+```bash
+systemextensionsctl list | grep opik-cipx        # extension activated
+ls -l ~/.opik-cipx/config.toml                   # the step that silently fails
+```
+
+Finally, confirm traces are arriving in your Opik workspace. That last check is the one that matters: the app is deliberately fail-open, so a device missing its credentials file looks completely healthy and captures nothing.
+
+</Steps>
+
+## Advanced
+
+<AccordionGroup>
+
+<Accordion title="The configuration profile in detail">
 
 The profile carries two payloads that do different jobs.
 
-### Pre-approving the system extension
+**Pre-approving the system extension.** A `com.apple.system-extension-policy` payload allow-lists the capture extension so it activates silently: the developer never sees the *System Settings → General → Login Items & Extensions → Network Extensions* approval gate. This is honored **only when the profile is pushed by an MDM the device is enrolled in** — a locally installed profile is ignored for this payload type, so a test machine with a hand-installed profile will still show the manual approval prompt. That's expected, and it isn't a broken profile.
 
-A `com.apple.system-extension-policy` payload allow-lists the capture extension so it activates **silently**: the developer never sees the *System Settings → General → Login Items & Extensions → Network Extensions* approval gate.
-
-<Note>
-  This is honored **only when the profile is pushed by an MDM the device is
-  enrolled in.** A locally installed profile is ignored for this payload type, so
-  a test machine with a hand-installed profile will still show the manual
-  approval prompt. That's expected, and it isn't a broken profile.
-</Note>
-
-### Forcing the app's settings
-
-A managed-preferences payload writes into the app's preference domain `com.comet.opik-cipx-app`. Forced values take precedence over anything the user sets, and the corresponding controls are disabled in the app's Settings window with a "Managed by your organization" note.
+**Forcing the app's settings.** A managed-preferences payload writes into the app's preference domain `com.comet.opik-cipx-app`. Forced values take precedence over anything the user sets, and the corresponding controls are disabled in the app's Settings window with a "Managed by your organization" note.
 
 | Key | Type | Recommended | Why |
 | --- | --- | --- | --- |
@@ -90,7 +114,7 @@ Validate the profile before pushing, because a malformed payload is silently ign
 plutil -lint opik-cipx-app.mobileconfig    # must print "OK"
 ```
 
-### Pushing it
+Where it goes in each MDM:
 
 | MDM | Path |
 | --- | --- |
@@ -99,49 +123,31 @@ plutil -lint opik-cipx-app.mobileconfig    # must print "OK"
 | **Intune** | Devices → macOS → Configuration profile → Preference file; domain `com.comet.opik-cipx-app` |
 | **JumpCloud** | Custom macOS MDM Profile (Policy) → paste the `.mobileconfig` |
 
-## Delivering workspace credentials
+</Accordion>
 
-The Opik destination is **not** a preference key, so no configuration profile can carry it. The capture engine is launched by a login-item app, and GUI apps don't inherit shell environment, so nothing you export in a shell profile or push as an MDM environment variable reaches it.
+<Accordion title="Why credentials ship as a file">
 
-Ship a file instead, per user, at `~/.opik-cipx/config.toml`:
+The Opik destination is **not** a preference key, so no configuration profile can carry it. The capture engine is launched by a login-item app, and GUI apps don't inherit shell environment, so nothing you export in a shell profile or push as an MDM environment variable reaches it. The per-user file at `~/.opik-cipx/config.toml` is the only path that works.
 
-```toml
-[opik]
-base_url  = "https://www.comet.com/opik/api"
-api_key   = "<workspace-scoped service-account key>"
-workspace = "your-org-cc-workspace"
-project   = "claude-code"
+The file contains the ingest API key, so use a workspace-scoped service-account key and rotate it by re-deploying the file.
 
-[capture]
-capture_content = false
-```
+</Accordion>
 
-Delivery notes:
+<Accordion title="Activation and first launch">
 
-- It lands in a **user home**, so an MDM script running as root must resolve the console user and `chown` the file to them. A root-owned file won't be writable by the daemon.
-- Mode the file `0600` and the directory `0700`.
-- It contains the ingest API key, so use a service-account key and rotate by re-deploying.
-
-<Warning>
-  A device missing this file will look completely healthy and capture nothing.
-  The extension is deliberately fail-open, and a missing or crashed engine can never
-  break a developer's session, so the only reliable verification is confirming
-  traces arrive in Opik.
-</Warning>
-
-## Activation
-
-Once the app has launched once, everything else is automatic. On launch it activates the system extension, starts the capture engine, enables the proxy configuration, and registers a login item so capture returns after every reboot. The engine also applies your org's [cost policies](/cost-intelligence/roll-out-cost-policies) to the machine automatically. With the profile pre-approving the extension, none of this prompts the user.
+On first launch the app activates the system extension, starts the capture engine, enables the proxy configuration, and registers a login item so capture returns after every reboot. The engine also applies your org's [cost policies](/cost-intelligence/roll-out-cost-policies) to the machine automatically.
 
 Activation is fail-safe: any error in the chain turns capture back off rather than leaving a half-configured proxy.
 
-To trigger that first launch, in order of preference:
+Ways to trigger the first launch, in order of preference:
 
 1. A package postinstall script that opens the app in the console user's context.
 2. A LaunchAgent shipped alongside the app. This also covers users who weren't logged in at install time.
 3. An MDM "run as current user" script.
 
-## The data path in detail
+</Accordion>
+
+<Accordion title="The data path in detail">
 
 The four numbered steps in the diagram, in full:
 
@@ -150,7 +156,9 @@ The four numbered steps in the diagram, in full:
 3. **The call is forwarded unchanged.** The app opens its own TLS connection — to the Anthropic API by default, or to your LLM gateway when one is configured — with full certificate validation, and passes the request and response through untouched.
 4. **Metadata ships to Opik on the side.** Counts, costs, and structure — [never content](/cost-intelligence/data-privacy-security) — go to your Opik workspace asynchronously. This side path never sits between the developer and the model: if anything in it fails, the agent keeps working.
 
-## Certificate trust
+</Accordion>
+
+<Accordion title="Certificate trust">
 
 To categorize traffic rather than just count bytes, the extension terminates TLS locally, which means the client must trust the interception certificate.
 
@@ -158,19 +166,9 @@ The certificate authority is minted **per device**, with a private key that is h
 
 For Claude Code this is handled for you: the app points Claude Code at the device's own certificate. The certificate authority also carries constraints limiting it to the specific model-provider hostnames, so even a fully trusted authority cannot vouch for any other domain. That is worth raising early in a security review, because it's the property that makes local termination defensible.
 
-## Verify
+</Accordion>
 
-On a target device, as the logged-in user:
-
-```bash
-systemextensionsctl list | grep opik-cipx        # extension activated
-defaults read com.comet.opik-cipx-app Cipx.isEnabled
-ls -l ~/.opik-cipx/config.toml                   # the step that silently fails
-```
-
-Then confirm traces are arriving in the target Opik workspace.
-
-## Uninstall
+<Accordion title="Uninstall">
 
 ```bash
 # Remove the profile via your MDM, or:
@@ -185,6 +183,10 @@ rm -rf ~/.opik-cipx "~/Library/Application Support/opik-cipx"
 ```
 
 Removing the app without disabling first leaves an orphaned system-extension registration, so prefer the `disable` step.
+
+</Accordion>
+
+</AccordionGroup>
 
 ## Next steps
 
