@@ -37,9 +37,10 @@ class WeeklyPartitionsTest {
     }
 
     @Test
-    @DisplayName("pre-epoch-era id")
+    @DisplayName("matches the partition ClickHouse computed — id from 1996")
     void oldId() {
-        // id_at 1996-02-09 -> Monday 1996-02-05
+        // id_at 1996-02-09 -> Monday 1996-02-05. Long before Opik existed but well after the Unix epoch, and well
+        // inside Date32's 1900 floor: an id this old prunes like any other.
         assertThat(WeeklyPartitions.of(List.of(UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"))))
                 .contains(Set.of(19960205L));
     }
