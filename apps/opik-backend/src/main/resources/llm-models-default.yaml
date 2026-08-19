@@ -811,6 +811,7 @@ openrouter:
     structuredOutput: true
   - id: "meta/muse-spark-1.2"
     label: "meta/muse-spark-1.2"
+    structuredOutput: true
   - id: "microsoft/mai-ds-r1"
     label: "microsoft/mai-ds-r1"
   - id: "microsoft/mai-ds-r1:free"
@@ -1669,6 +1670,8 @@ openrouter:
     label: "z-ai/glm-5.2:batch"
   - id: "z-ai/glm-5.2:free"
     label: "z-ai/glm-5.2:free"
+  - id: "z-ai/glm-5.3"
+    label: "z-ai/glm-5.3"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
   - id: "~anthropic/claude-fable-latest"

@@ -46,6 +46,97 @@
 #                             memory is a small multiple of the smaller of this and min_insert_block_size_bytes (256 MB
 #                             default), so for wide trace rows the byte bound usually dominates. Default 1048576 (the
 #                             ClickHouse default); lower it on a memory-constrained data node. Applied to the INSERT.
+#   --max-partitions-per-insert-block N
+#                             partitions one insert block may span (SETTINGS max_partitions_per_insert_block).
+#                             Default 2000; 0 = unlimited. The destination is weekly-partitioned on the honest Monday
+#                             of id_at, so a block spans as many partitions as the ids in it imply — NOT one. ClickHouse
+#                             defaults this to 100 and, with throw_on_max_partitions_per_insert_block = 1, ABORTS the
+#                             INSERT rather than degrading. Far-future UUIDv7 ids (litellm BerriAI/litellm#31294) make
+#                             that reachable on real data: measured on a production-shape table, one block spanned 333
+#                             destination partitions in total, 269 of them far-future (the rest ordinary weeks the same
+#                             block touched), against a window holding 275 far-future partitions. Note the implication
+#                             for sizing: a block's spread is NOT just the far-future count, so size from the table's
+#                             TOTAL distinct partition count. Raising it trades a larger part count per insert (one part
+#                             per partition touched, compacted by background merges) for the INSERT completing at all.
+#                             See the runbook's "Far-future partitions from far-future-timestamp ids".
+#   --max-insert-threads N    threads for the INSERT SELECT pipeline (SETTINGS max_insert_threads).
+#                             OMITTED BY DEFAULT, and omitted means INHERIT: the setting line is stripped
+#                             from the SQL, so whatever the server profile sets applies. This matters --
+#                             rendering an explicit 0 would OVERRIDE a profile that sets it and force the
+#                             insert serial, which is a silent slowdown rather than a no-op. ClickHouse
+#                             Cloud ships non-zero defaults (1/2/4 by node memory), and a self-managed
+#                             cluster may set it in a profile too.
+#                             Pass an explicit 0 to FORCE "INSERT SELECT no parallel execution"; pass N to
+#                             request N. Where nothing sets it, ClickHouse's own default is 0, so the
+#                             insert side runs single-threaded unless raised. NOTE the setting is scoped to INSERT SELECT, which is what
+#                             this backfill issues; it is not a general INSERT knob. NOTE ALSO that
+#                             ClickHouse CLOUD does not default it to 0 -- upstream documents 1 / 2 / 4
+#                             by node memory -- so on Cloud you may already have parallelism here.
+#
+#                             Raising it lets you decide how much of the machine the backfill may use,
+#                             and can speed the copy up substantially when the insert side is the
+#                             constraint.
+#
+#                             PRECONDITION, per upstream: "Parallel INSERT SELECT has effect only if
+#                             the SELECT part is executed in parallel" (see max_threads). If the read
+#                             side is serialised, raising this buys nothing.
+#
+#                             WHY THE INSERT SIDE IS OFTEN THE CONSTRAINT HERE: the destination carries
+#                             per-row MATERIALIZED work the source does not do. The expensive one is
+#                             output_keys, which PARSES the output JSON:
+#                               arrayMap(key -> tuple(key, toString(JSONType(JSONExtractRaw(output, key)))),
+#                                        JSONExtractKeys(output))
+#                             There is NO input_keys column -- output_keys is traces-only and has no input
+#                             counterpart; do not go looking for one. The table also materialises
+#                             truncated_input / truncated_output, which substring-copy documents that can
+#                             be very large, plus input_length / output_length / metadata_length, duration
+#                             and id_at.
+#
+#                             Upstream states materialized values "are automatically calculated ... when
+#                             rows are inserted", but does NOT state which pipeline stage or which threads
+#                             compute them; that the insert side is the bottleneck on this table is an
+#                             INFERENCE FROM PROFILING, not a documented guarantee -- see below for how
+#                             to confirm it on your own data rather than assuming it.
+#
+#                             HOW TO CONFIRM IT: effective cores sit near 1 while the machine is
+#                             otherwise idle and OSIOWaitMicroseconds is 0 -- i.e. the copy is neither
+#                             CPU-saturated nor I/O bound, it is serialised. Compute effective cores
+#                             from query_log, MINDING THE UNITS -- the ProfileEvents are MICROseconds
+#                             and query_duration_ms is MILLIseconds, so the *1000 is not optional:
+#                               (UserTimeMicroseconds + SystemTimeMicroseconds) / (query_duration_ms * 1000)
+#                             Without it the result is 1000x too high and will read as hundreds of
+#                             cores. Sanity-check against the node's core count: a value above it means
+#                             the arithmetic is wrong, not that the machine is busy.
+#
+#                             NOTE WHAT THIS MEASURES: query_log aggregates are QUERY-WIDE CPU. They do
+#                             not separate read-pipeline threads from insert-pipeline threads, so this
+#                             number cannot by itself attribute the CPU to the sink. What makes it
+#                             evidence is the DELTA: raise the setting and effective cores rise towards
+#                             the thread count while the read side is unchanged.
+#
+#                             COSTS, BOTH OF THEM.
+#                             (1) MEMORY. Upstream is explicit: "Higher values will lead to higher
+#                                 memory usage." That matters more on this table than it might
+#                                 elsewhere, because a single oversized `output` document can dominate
+#                                 insert memory on its own. Raise this and max_memory_usage together,
+#                                 or narrow the window, rather than raising threads alone into a fixed
+#                                 ceiling.
+#                             (2) PARTS. Each insert thread writes its own parts, so part count per
+#                                 partition grows. Watch it against THIS cluster's parts_to_throw_insert
+#                                 and parts_to_delay_insert, read from system.merge_tree_settings. Do NOT
+#                                 work from a remembered default: ClickHouse has changed these across
+#                                 versions, and a deployment may tune them further, so a hardcoded ratio can
+#                                 be an order of magnitude wrong in either direction.
+#
+#                             CHOOSING A VALUE IS A CAPACITY DECISION, NOT A BENCHMARK. On an idle
+#                             rehearsal environment a large value looks free; on a production cluster
+#                             those threads compete with live query latency. Pick the share of cores
+#                             the cutover may take while serving traffic, and validate the value you
+#                             will actually deploy rather than the largest one that fits. Omitting the
+#                             flag is the default and means INHERIT, so no existing deployment changes
+#                             behaviour and a small install on few cores does not start spawning insert
+#                             threads. An explicit 0 is not the same as omitting it: it forces no
+#                             parallel execution and overrides whatever the server sets.
 #   --divergence P            max tolerated |src-dst|/src per window before aborting. Default 0.0001 (0.01%).
 #   --pause-seconds S         sleep S seconds after each inserted window, to let destination merges catch up and bound
 #                             the part count / IO pressure. Default 0. Recommended 30-60 on a large table at peak.
@@ -84,6 +175,15 @@ MAX_ROWS=2000000          # rows: per-statement bound; a week over this is halve
 MAX_INSERT_BLOCK_SIZE=1048576  # rows: SETTINGS max_insert_block_size for the INSERT. Peak memory is a small multiple of
                           # the smaller of this and min_insert_block_size_bytes (256 MB default), which dominates for wide
                           # trace rows; lower it on a memory-constrained node. 1048576 is the ClickHouse default.
+MAX_PARTITIONS_PER_INSERT_BLOCK=2000  # partitions: SETTINGS max_partitions_per_insert_block for the INSERT. The
+                          # destination is weekly-partitioned, so one block can span many partitions; ClickHouse's
+                          # default of 100 THROWS (throw_on_max_partitions_per_insert_block=1). Far-future UUIDv7 ids
+                          # make this reachable in practice — see the runbook's far-future section. 0 = unlimited.
+MAX_INSERT_THREADS=""     # threads: SETTINGS max_insert_threads for the INSERT SELECT. EMPTY = inherit whatever the
+                          # server profile sets (the setting line is stripped from the SQL entirely). An explicit 0
+                          # is ClickHouse's own default and means "INSERT SELECT no parallel execution".
+                          # Raising it trades memory and destination part count for copy speed — see the
+                          # --max-insert-threads option docs above for the full diagnosis and both costs.
 DIVERGENCE="0.0001"       # fraction: max tolerated |src-dst|/src per settled window before aborting (0.01%).
 PAUSE_SECONDS=0           # seconds: sleep after each inserted window so destination merges catch up. 30-60 for a large table at peak.
 MIN_FREE_FACTOR="2.0"     # multiple of the current traces on-disk size that node free space must clear before starting.
@@ -102,6 +202,8 @@ while [[ $# -gt 0 ]]; do
         --to-week) TO_WEEK="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-rows-per-insert) MAX_ROWS="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-insert-threads) MAX_INSERT_THREADS="${2:?"$1 requires a value"}"; shift 2 ;;
         --divergence) DIVERGENCE="${2:?"$1 requires a value"}"; shift 2 ;;
         --pause-seconds) PAUSE_SECONDS="${2:?"$1 requires a value"}"; shift 2 ;;
         --min-free-factor) MIN_FREE_FACTOR="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -124,12 +226,85 @@ done
 # Numeric args flow into the reference SQL / window arithmetic; require sane numeric shapes so none can alter the query.
 [[ "$MAX_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-rows-per-insert must be a positive integer." >&2; exit 2; }
 [[ "$MAX_INSERT_BLOCK_SIZE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-insert-block-size must be a positive integer." >&2; exit 2; }
+# 0 is meaningful here (ClickHouse reads it as "unlimited"), so allow it — unlike the bounds above. Upper-bounded at 6
+# digits: the setting counts partitions, no real table approaches that, and an out-of-range value would otherwise be
+# rendered into the SQL and rejected by the server on the first INSERT — after the capacity preflight has passed and the
+# backfill_start anchor has been minted, which is a far more expensive place to discover a typo.
+[[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
+# 0 is meaningful (ClickHouse default, no parallel INSERT SELECT execution), so allow it. Bounded at 2 digits:
+# this is
+# a share of cores, and a value beyond the machine's core count buys nothing while multiplying parts.
+[[ -z "$MAX_INSERT_THREADS" || "$MAX_INSERT_THREADS" =~ ^(0|[1-9][0-9]?)$ ]] || { echo "ERROR: --max-insert-threads must be 0 (force no parallel INSERT SELECT execution) or 1..99; omit it entirely to inherit the server's setting." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
 [[ "$DIVERGENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --divergence must be a number." >&2; exit 2; }
 [[ "$MIN_FREE_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --min-free-factor must be a number." >&2; exit 2; }
 [[ -f "$BACKFILL_SQL" ]] || { echo "ERROR: cannot find backfill SQL at $BACKFILL_SQL" >&2; exit 2; }
+# Blank out SQL comments while preserving line numbering: `--` to end of line, and /* */ which may span lines.
+# Used by every max_insert_threads check so that "is this assignment real?" means "is it executable?" rather than
+# "does this text appear anywhere?". Without it a line-anchored match inside a block comment counts as the
+# assignment (so an explicit value renders into a comment and silently does not apply), and a mere mention of the
+# placeholder in a comment trips the post-condition (so a perfectly good file is refused).
+mit_mask_comments() {
+    awk '{
+        line = $0; out = ""; i = 1; n = length(line)
+        while (i <= n) {
+            if (inblk) {
+                if (substr(line, i, 2) == "*/") { inblk = 0; i += 2 } else { i++ }
+            } else {
+                if (substr(line, i, 2) == "/*") { inblk = 1; i += 2 }
+                else if (substr(line, i, 2) == "--") { break }
+                else { out = out substr(line, i, 1); i++ }
+            }
+        }
+        print out
+    }' <<<"$1"
+}
+
+# Line numbers of EXECUTABLE, isolated `max_insert_threads = ${MAX_INSERT_THREADS},` assignments.
+mit_assignment_lines() {
+    mit_mask_comments "$1" | grep -nE '^[[:space:]]*max_insert_threads = \$\{MAX_INSERT_THREADS\},[[:space:]]*$' | cut -d: -f1
+}
+
+# Abort unless the SQL text holds exactly one such assignment. $2 is the file name, for diagnostics.
+mit_require_one_assignment() {
+    local n
+    n="$(mit_assignment_lines "$1" | grep -c . || true)"
+    if [[ "$n" -ne 1 ]]; then
+        echo "ERROR: expected exactly ONE executable line holding nothing but" >&2
+        echo "       'max_insert_threads = \${MAX_INSERT_THREADS},' in $2; found $n." >&2
+        echo "       The trailing comma is REQUIRED: it is what makes removing the line safe, so the" >&2
+        echo "       assignment must not be the last entry in the SETTINGS clause. A line ending in ';'," >&2
+        echo "       or in nothing with the ';' on the next line, carries the clause terminator, so" >&2
+        echo "       stripping it would leave a dangling comma and no terminator." >&2
+        echo "       Occurrences inside '--' or '/* */' comments do not count: a commented assignment" >&2
+        echo "       would render the setting into a comment, where it silently does not apply." >&2
+        return 1
+    fi
+    # The assignment must also be the ONLY executable occurrence of the placeholder. Rendering replaces just that
+    # one line, so any other executable ${MAX_INSERT_THREADS} survives into the statement -- which the per-window
+    # post-condition catches, but only during a real run. Checking it here too is what makes --dry-run a faithful
+    # rehearsal: without it a template can pass a full dry-run and abort on the first real window.
+    local occurrences
+    occurrences="$(mit_mask_comments "$1" | grep -oF '${MAX_INSERT_THREADS}' | grep -c . || true)"
+    if [[ "$occurrences" -ne 1 ]]; then
+        echo "ERROR: \${MAX_INSERT_THREADS} appears $occurrences times in executable lines of $2; expected" >&2
+        echo "       exactly once, as the SETTINGS assignment. Rendering rewrites only that one line, so any" >&2
+        echo "       other executable occurrence would survive into the statement the server receives." >&2
+        echo "       (Occurrences inside '--' or '/* */' comments are ignored and are fine.)" >&2
+        return 1
+    fi
+}
+
+# Validate the rendering target ONCE, here, rather than only when the first window renders. Two reasons, both
+# the same argument this file already makes for validating --max-partitions-per-insert-block eagerly: a malformed
+# SETTINGS clause would otherwise pass a full --dry-run clean and abort on the first real window, and in a real
+# run the abort would land after the successor-table check, after preflight_capacity() and after backfill_start
+# has been minted and persisted. The check reads the file's text, which does not change between windows, so this
+# covers every window; the per-window path re-resolves the line and keeps its own post-condition so a mid-run
+# edit to the file is still caught.
+mit_require_one_assignment "$(cat "$BACKFILL_SQL")" "$BACKFILL_SQL" || exit 2
 
 # Every query runs against the analytics database; --query keeps output scriptable (TSV, no formatting).
 ch() {
@@ -139,6 +314,7 @@ ch() {
 log() {
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
 }
+
 
 bytes_gib() {
     awk -v b="$1" 'BEGIN { printf "%.1f", b / 1073741824 }'
@@ -216,6 +392,44 @@ run_backfill_window() {
     sql="${sql//'${WINDOW_LO}'/$lo}"
     sql="${sql//'${WINDOW_HI}'/$hi}"
     sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
+    sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
+    # >>> BEGIN max_insert_threads rendering (fence for extracting this block to test edits -- keep the markers)
+    # The SETTINGS line this depends on lives in ANOTHER file, so it is validated rather than assumed. The full
+    # validation runs once at startup (see the mit_require_one_assignment call there), which is what makes it
+    # exercised by --dry-run and reached before backfill_start is minted. Here it is re-resolved per window
+    # because the render needs the line's position, and the file is re-read each window -- so an edit made
+    # mid-run is still caught rather than rendered.
+    #
+    # Comments are masked before matching. A line-anchored match is NOT by itself a check that the assignment is
+    # executable: an identical line inside a /* */ block carries a trailing comma too, and would otherwise be
+    # treated as the assignment.
+    # `|| true` is load-bearing: mit_assignment_lines ends in a pipeline whose grep exits 1 when there is no
+    # match, so under `set -euo pipefail` this assignment would fail and `set -e` would kill the script HERE --
+    # before the count check below could call mit_require_one_assignment. The zero case would exit 1 mutely,
+    # which is the one case that most needs the diagnostic. The >=2 case never had this exposure, because grep
+    # succeeds there.
+    mit_line="$(mit_assignment_lines "$sql" || true)"
+    if [[ "$(grep -c . <<<"$mit_line" || true)" -ne 1 ]]; then
+        mit_require_one_assignment "$sql" "$BACKFILL_SQL" || exit 2
+        exit 2
+    fi
+    if [[ -z "$MAX_INSERT_THREADS" ]]; then
+        # Unset means INHERIT: drop the line so the server's own value applies. Rendering an explicit 0 would
+        # OVERRIDE it and force the insert serial -- a slowdown, not a no-op.
+        sql="$(sed "${mit_line}d" <<<"$sql")"
+    else
+        sql="$(sed "${mit_line}s/\\\${MAX_INSERT_THREADS}/${MAX_INSERT_THREADS}/" <<<"$sql")"
+    fi
+    # Post-condition for BOTH paths, on the comment-masked text so a placeholder mentioned in a comment does not
+    # trip it. No pipe into `grep -q`: it exits on first match, the upstream process takes SIGPIPE, and
+    # `set -o pipefail` then reports 141, so the guard would skip its own failure branch.
+    mit_masked="$(mit_mask_comments "$sql" || true)"
+    if grep -qF '${MAX_INSERT_THREADS}' <<<"$mit_masked"; then
+        echo "ERROR: \${MAX_INSERT_THREADS} survives in an executable line of $BACKFILL_SQL after rendering." >&2
+        echo "       Refusing to send SQL containing a literal placeholder." >&2
+        exit 2
+    fi
+    # <<< END max_insert_threads rendering
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
 

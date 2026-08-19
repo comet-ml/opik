@@ -962,6 +962,9 @@ navigation:
       - page: Troubleshooting
         path: ../docs-v2/self-host/troubleshooting.mdx
         slug: troubleshooting
+      - page: Changelog
+        path: ../docs-v2/self-host/changelog.mdx
+        slug: changelog
       - section: Configuration
         slug: /configure
         contents:

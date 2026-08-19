@@ -42,6 +42,15 @@ helm upgrade --install opik -n opik --create-namespace opik/opik \
     --set component.frontend.image.tag=$VERSION
 ```
 
+<Tip>
+  We recommend that you always install the latest version of the Opik helm chart. You can list the available chart
+  versions by running:
+
+  ```bash
+  helm search repo opik/opik --versions
+  ```
+</Tip>
+
 You can port-forward any service you need to your local machine:
 
 ```bash
@@ -286,7 +295,7 @@ Make sure both versions match. If they don't match:
 
 # Troubleshooting
 
-If you get this error when running helm
+If you get an error similar to the following when running helm (the ClickHouse version in the message depends on your installation):
 
 ```bash
 ERROR: Exception Primary Reason:  Code: 225. DB::Exception: Can't create replicated table without ZooKeeper. (NO_ZOOKEEPER) (version 24.3.5.47.altinitystable (altinity build))

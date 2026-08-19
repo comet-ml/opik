@@ -27,6 +27,15 @@ This page is the complete picture of how policies behave: how organization and u
 
 Delivery is automatic once you are set up. Bootstrap configuration (workspace, API key, base URL) is delivered once via [managed settings](/cost-intelligence/install/managed-settings) or [MDM](/cost-intelligence/install/mdm); cost policies need no further push after that. You deploy once and manage spend from the dashboard afterwards.
 
+<Note>
+  **Disabling a skill doesn't take it away.** The most common recommendation —
+  turning off unused skills and MCP servers — only keeps them out of the
+  context that ships with every request. Nothing is uninstalled, and a disabled
+  skill stays callable: when a developer asks for it by name, Claude Code
+  re-enables it and uses it. The saving comes from the thousands of requests
+  that never needed it, not from taking capability away.
+</Note>
+
 ## Grant exceptions per user
 
 A baseline only survives if exceptions are cheap to grant. **User policies** are per-user values that sit on top of the org baseline, so one team needing a bigger thinking budget never means loosening it for everyone. An admin can set them for any developer, and a developer can set their own — where you allow it — from their **My preferences** page.

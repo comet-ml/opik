@@ -7,16 +7,15 @@ description: Feature documentation and release notes patterns. Use when document
 
 ## PR Description
 
-```markdown
-## Summary
-- What this PR does (bullet points)
+Use the repository template at `.github/pull_request_template.md` — read the FULL file before drafting (the required sections continue past the first screen). CI (`.github/workflows/pr-lint.yml`) fails any PR whose description is missing one of these exact headings:
 
-## Test Plan
-- How to verify it works
+- `## Details`
+- `## Change checklist`
+- `## Issues`
+- `## Testing`
+- `## Documentation`
 
-## Related Issues
-- Resolves #123
-```
+Also fill in the template's `## AI-WATERMARK` section (yes/no; if yes: Tools, Model(s), Scope, Human verification). Never invent a different structure such as `## Summary` / `## Test Plan`.
 
 ## Changelog Entry
 
@@ -56,7 +55,7 @@ When documenting a feature, cover:
 
 ## Key Files
 
-- `CHANGELOG.md` - Self-hosted deployment changelog (breaking/critical changes only)
+- `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` - Self-hosted deployment changelog (breaking/critical changes only; the former repo-root `CHANGELOG.md` was removed)
 - `apps/opik-documentation/documentation/fern/docs/changelog/` - Main product docs changelog entries (dated `.mdx` files)
 - `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` - Agent Optimizer release changelog
 - `apps/opik-documentation/documentation/fern/docs.yml` - Docs routing/navigation source of truth for changelog surfaces
@@ -64,8 +63,8 @@ When documenting a feature, cover:
 
 ## Changelog Routing Rules
 
-- Pick the changelog target by scope; do not default everything to root `CHANGELOG.md`.
-- Use `CHANGELOG.md` only for self-hosted deployment breaking/critical/security-impacting notes.
+- Pick the changelog target by scope; do not default everything to one surface.
+- Use `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` only for self-hosted deployment breaking/critical/security-impacting notes.
 - Use `apps/opik-documentation/documentation/fern/docs/changelog/*.mdx` for general Opik product release notes shown in `/docs/opik/changelog`.
 - Use `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` for Agent Optimizer version updates (for example `sdks/opik_optimizer` releases like `3.1.0`).
 - Liquibase `changelog.xml` files are migration manifests, not user-facing release-note changelogs.
