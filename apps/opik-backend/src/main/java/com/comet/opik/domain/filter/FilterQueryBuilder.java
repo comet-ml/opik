@@ -1398,8 +1398,8 @@ public class FilterQueryBuilder {
     /**
      * Builds field mapping for DatasetItem JSON fields (output, input, metadata).
      * These fields are stored as JSON strings in ClickHouse, so we need to use JSONExtractRaw
-     * instead of bracket notation. We use literal keys instead of bind parameters
-     * to avoid the dynamic field tuple wrapping.
+     * instead of bracket notation. The JSON key is bound as a query parameter rather than
+     * interpolated, consistent with the data.* sort path.
      * <p>
      * This is used for sorting DatasetItem fields.
      *

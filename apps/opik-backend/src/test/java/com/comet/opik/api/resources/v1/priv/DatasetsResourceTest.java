@@ -8760,8 +8760,8 @@ class DatasetsResourceTest {
                 "metadata.m\\path",
                 "output.o';"
         })
-        @DisplayName("when sorting by a JSON key containing special characters, then return items unaffected")
-        void findDatasetItemsWithExperimentItems__whenSortingKeyContainsSpecialCharacters__thenReturnItems(
+        @DisplayName("when sorting by a JSON key containing special characters, then items are sorted by that key")
+        void findDatasetItemsWithExperimentItems__whenSortingByJsonKeyWithSpecialCharacters__thenSortedByThatKey(
                 String jsonKeyField) {
 
             String workspaceName = UUID.randomUUID().toString();
@@ -8773,11 +8773,28 @@ class DatasetsResourceTest {
             var dataset = buildDataset().toBuilder().id(null).build();
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
+            // Namespace (output/input/metadata) and the JSON key (with special characters) being sorted on.
+            String namespace = jsonKeyField.substring(0, jsonKeyField.indexOf('.'));
+            String jsonKey = jsonKeyField.substring(jsonKeyField.indexOf('.') + 1);
+
+            // Seed each trace with a DISTINCT, sortable value stored under exactly that key, so the
+            // assertions below prove the key is actually used for ordering (not ignored/missing/constant).
+            // Values 10..50 are assigned to item indices 0..4 (equal-length numeric strings sort in
+            // numeric order under JSONExtractRaw's raw-string comparison).
             String projectName = GENERATOR.generate().toString();
-            List<Trace> traces = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
-                            .projectName(projectName)
-                            .build())
+            int count = 5;
+            List<Trace> traces = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        var value = JsonUtils.valueToTree(Map.of(jsonKey, (i + 1) * 10));
+                        var builder = factory.manufacturePojo(Trace.class).toBuilder().projectName(projectName);
+                        switch (namespace) {
+                            case "output" -> builder.output(value);
+                            case "input" -> builder.input(value);
+                            case "metadata" -> builder.metadata(value);
+                            default -> throw new IllegalStateException("Unexpected namespace: " + namespace);
+                        }
+                        return builder.build();
+                    })
                     .toList();
 
             traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
@@ -8812,20 +8829,59 @@ class DatasetsResourceTest {
 
             createAndAssert(new ExperimentItemsBatch(experimentItems), apiKey, workspaceName);
 
-            var sorting = SortingField.builder().field(jsonKeyField).direction(Direction.DESC).build();
-            var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
-                    StandardCharsets.UTF_8);
             var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
 
-            // The JSON key is bound as a JSONExtractRaw parameter value, so a key containing special
-            // characters is treated as data: the request succeeds and returns all items unaffected.
-            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+            // Baseline fetch (no sorting) to capture the full DatasetItem objects exactly as the API returns them.
+            List<DatasetItem> baselineItems = fetchDatasetItems(datasetId, experimentIdsParam, null, null,
+                    apiKey, workspaceName);
+            assertThat(baselineItems).hasSize(count);
+
+            // Item index i was seeded with value (i+1)*10; order the full objects by that value.
+            Map<UUID, Integer> valueByItemId = IntStream.range(0, count).boxed()
+                    .collect(Collectors.toMap(i -> datasetItemBatch.items().get(i).id(), i -> (i + 1) * 10));
+
+            List<DatasetItem> expectedAsc = baselineItems.stream()
+                    .sorted(Comparator.comparingInt(item -> valueByItemId.get(item.id())))
+                    .toList();
+            List<DatasetItem> expectedDesc = baselineItems.stream()
+                    .sorted(Comparator.comparingInt((DatasetItem item) -> valueByItemId.get(item.id())).reversed())
+                    .toList();
+
+            assertSortedByKey(datasetId, experimentIdsParam, jsonKeyField, Direction.ASC, apiKey, workspaceName,
+                    expectedAsc);
+            assertSortedByKey(datasetId, experimentIdsParam, jsonKeyField, Direction.DESC, apiKey, workspaceName,
+                    expectedDesc);
+        }
+
+        private void assertSortedByKey(UUID datasetId, String experimentIdsParam, String sortField,
+                Direction direction, String apiKey, String workspaceName, List<DatasetItem> expectedItems) {
+            List<DatasetItem> actualItems = fetchDatasetItems(datasetId, experimentIdsParam, sortField, direction,
+                    apiKey, workspaceName);
+
+            // Compare the whole DatasetItem objects, in order - not just their ids - so the assertion proves
+            // the bound key actually drives the ordering. Volatile/derived fields are ignored per suite convention.
+            assertThat(actualItems)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyElementsOf(expectedItems);
+        }
+
+        private List<DatasetItem> fetchDatasetItems(UUID datasetId, String experimentIdsParam, String sortField,
+                Direction direction, String apiKey, String workspaceName) {
+            var target = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path(datasetId.toString())
                     .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
                     .queryParam("page", 1)
                     .queryParam("size", 10)
-                    .queryParam("experiment_ids", experimentIdsParam)
-                    .queryParam("sorting", sortingParam)
+                    .queryParam("experiment_ids", experimentIdsParam);
+
+            if (sortField != null) {
+                var sorting = SortingField.builder().field(sortField).direction(direction).build();
+                var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
+                        StandardCharsets.UTF_8);
+                target = target.queryParam("sorting", sortingParam);
+            }
+
+            try (var actualResponse = target
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
@@ -8834,8 +8890,7 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
                 assertThat(actualResponse.hasEntity()).isTrue();
 
-                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
-                assertThat(actualPage.content()).hasSize(5);
+                return actualResponse.readEntity(DatasetItemPage.class).content();
             }
         }
 
