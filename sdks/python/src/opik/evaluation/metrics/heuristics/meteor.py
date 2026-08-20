@@ -82,10 +82,21 @@ class METEOR(base_metric.BaseMetric):
                         ) from download_error
 
             def _scorer(references: Sequence[str], hypothesis: str) -> float:
+                # NLTK's meteor_score expects pre-tokenized input: an iterable of
+                # token lists for the references and a token list for the
+                # hypothesis. Handing it raw strings raises TypeError, so tokenize
+                # here (whitespace split, matching BLEU/GLEU) while keeping the
+                # public `meteor_fn` contract string-based.
+                tokenized_references = [reference.split() for reference in references]
+                tokenized_hypothesis = hypothesis.split()
                 try:
                     return float(
                         nltk_meteor_score.meteor_score(
-                            references, hypothesis, alpha=alpha, beta=beta, gamma=gamma
+                            tokenized_references,
+                            tokenized_hypothesis,
+                            alpha=alpha,
+                            beta=beta,
+                            gamma=gamma,
                         )
                     )
                 except LookupError as error:
