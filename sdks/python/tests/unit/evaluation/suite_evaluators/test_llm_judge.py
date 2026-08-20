@@ -1,3 +1,4 @@
+import logging
 import pytest
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
@@ -343,3 +344,22 @@ class TestLLMJudgeRetries:
             evaluator.score(input="q", output="PASS")
 
         assert calls["n"] == 1, "auth failures must not be retried"
+
+    def test_score__empty_response_logged__diagnostic_reaches_logger(self, caplog):
+        from opik import exceptions
+        from opik.evaluation.models import base_model
+
+        class EmptyModel:
+            def generate_provider_response(self, messages, **kwargs):
+                raise exceptions.EmptyLLMResponseError("no content, no tool calls")
+
+        caplog.set_level(logging.ERROR)
+        with pytest.raises(exceptions.EmptyLLMResponseError):
+            with base_model.get_provider_response(
+                model_provider=EmptyModel(), messages=[]
+            ):
+                pass
+
+        assert any(
+            "Failed to call LLM provider" in record.message for record in caplog.records
+        )
