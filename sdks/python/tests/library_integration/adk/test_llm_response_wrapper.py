@@ -1,11 +1,12 @@
 import asyncio
+from typing import AsyncGenerator
 
 import pydantic
 import pytest
 from google.adk import agents as adk_agents
 from google.adk import models as adk_models
 from google.adk import runners as adk_runners
-from google.adk.models import base_llm
+from google.adk.models import base_llm, llm_request, llm_response
 from google.adk.sessions import in_memory_session_service
 from google.genai import types as genai_types
 
@@ -13,6 +14,7 @@ from opik.integrations.adk import OpikTracer
 from opik.integrations.adk import helpers as adk_helpers
 from opik.integrations.adk.patchers import llm_response_wrapper
 from . import helpers
+from ...testlib import ANY_BUT_NONE, ANY_DICT, SpanModel, TraceModel, assert_equal
 
 
 def _generate_content_response() -> genai_types.GenerateContentResponse:
@@ -126,7 +128,9 @@ def test_wrap_llm_response_create__usage_class_not_rebuilt_yet__still_dumpable()
     "tracer_module_name",
     ["opik_tracer", "legacy_opik_tracer"],
 )
-def test_both_tracers_report_conversion_failure_at_error_level(tracer_module_name):
+def test_tracer_conversion_failure__both_tracers__logs_at_error_level(
+    tracer_module_name,
+):
     """A conversion failure must not be swallowed at DEBUG in either tracer.
 
     When it happens the span is still logged, but without output or usage, and nothing
@@ -184,7 +188,9 @@ class _FakeUsageModel(base_llm.BaseLlm):
 
     model: str = "fake-gemini"
 
-    async def generate_content_async(self, llm_request, stream=False):  # type: ignore[no-untyped-def]
+    async def generate_content_async(
+        self, request: llm_request.LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[llm_response.LlmResponse, None]:
         generate_content_response = genai_types.GenerateContentResponse(
             candidates=[
                 genai_types.Candidate(
@@ -206,19 +212,8 @@ class _FakeUsageModel(base_llm.BaseLlm):
         )
 
 
-@helpers.pytest_skip_for_adk_older_than_1_3_0
-def test_adk_llm_span__carries_output_and_usage(fake_backend):
-    """The user-facing symptom: an LLM span must actually arrive with output and usage.
-
-    Every other test here stops at ``pop_llm_usage_data`` returning the right
-    counts, which leaves the gap that broke production - the values parsed
-    correctly but never reached the span, because the exception was swallowed
-    upstream of the assignment. This drives a real ADK agent and asserts on the
-    span the backend receives.
-
-    A fake model keeps it offline; what a live Gemini call adds on top is only
-    whether the provider really returns usage metadata, not whether we record it.
-    """
+def _run_fake_agent() -> None:
+    """Drive a real ADK agent through the fake model, offline."""
     tracer = OpikTracer(project_name="adk-usage-test")
     agent = adk_agents.LlmAgent(
         name="weather_agent",
@@ -231,16 +226,14 @@ def test_adk_llm_span__carries_output_and_usage(fake_backend):
     )
 
     session_service = in_memory_session_service.InMemorySessionService()
-    asyncio.run(
-        session_service.create_session(
-            app_name="usage-probe", user_id="u1", session_id="s1"
-        )
-    )
     runner = adk_runners.Runner(
         agent=agent, app_name="usage-probe", session_service=session_service
     )
 
     async def _run() -> None:
+        await session_service.create_session(
+            app_name="usage-probe", user_id="u1", session_id="s1"
+        )
         async for _ in runner.run_async(
             user_id="u1",
             session_id="s1",
@@ -253,23 +246,78 @@ def test_adk_llm_span__carries_output_and_usage(fake_backend):
     asyncio.run(_run())
     tracer.flush()
 
-    llm_spans = [
-        span
-        for trace in fake_backend.trace_trees
-        for span in _walk(trace.spans)
-        if span.type == "llm"
-    ]
-    assert llm_spans, "expected at least one LLM span"
 
-    for span in llm_spans:
-        assert span.output, f"LLM span {span.name} has no output"
-        assert span.usage, f"LLM span {span.name} has no usage"
-        assert span.usage["original_usage.total_token_count"] == 18
-        assert span.usage["prompt_tokens"] == 11
-        assert span.usage["total_tokens"] == 18
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_adk_llm_span__deferred_usage_metadata__output_and_usage_reach_the_backend(
+    fake_backend,
+):
+    """The user-facing symptom: the span the backend receives must carry both.
 
+    Every other test here stops at ``pop_llm_usage_data`` returning the right
+    counts, which is exactly what failed to protect us - the counts parsed fine,
+    the exception was swallowed upstream of the assignment, and the span went out
+    empty. So this asserts the recorded tree, not the parser.
 
-def _walk(spans):
-    for span in spans:
-        yield span
-        yield from _walk(span.spans)
+    A fake model keeps it offline. What a live Gemini call adds on top is only
+    whether the provider really returns usage metadata, not whether we record it.
+    """
+    _run_fake_agent()
+
+    EXPECTED_LLM_OUTPUT = {
+        "content": {"parts": [{"text": "sunny, 22C"}], "role": "model"},
+        "model_version": "fake-gemini-1.0",
+        "finish_reason": "STOP",
+        "custom_metadata": {"provider": "google_ai"},
+        "usage_metadata": {
+            "candidates_token_count": 7,
+            "prompt_token_count": 11,
+            "total_token_count": 18,
+        },
+        "avg_logprobs": None,
+        "citation_metadata": None,
+        "grounding_metadata": None,
+        "logprobs_result": None,
+    }
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="weather_agent",
+        input={"parts": [{"text": "weather?"}], "role": "user"},
+        output=EXPECTED_LLM_OUTPUT,
+        metadata=ANY_DICT,
+        # ADK's session id becomes the Opik thread id.
+        thread_id="s1",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name="adk-usage-test",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="fake-gemini-1.0",
+                type="llm",
+                input=ANY_DICT,
+                output=EXPECTED_LLM_OUTPUT,
+                # The whole point of the ticket: not merely present, but correct.
+                usage={
+                    "completion_tokens": 7,
+                    "prompt_tokens": 11,
+                    "total_tokens": 18,
+                    "original_usage.candidates_token_count": 7,
+                    "original_usage.prompt_token_count": 11,
+                    "original_usage.total_token_count": 18,
+                },
+                model="fake-gemini-1.0",
+                provider="google_ai",
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                project_name="adk-usage-test",
+                spans=[],
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
