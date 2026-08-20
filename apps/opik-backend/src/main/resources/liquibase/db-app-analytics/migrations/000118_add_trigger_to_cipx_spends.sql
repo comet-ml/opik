@@ -28,3 +28,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_spends ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS parent_tool_use_id String DEFAULT '';
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_spends ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS `trigger`, DROP COLUMN IF EXISTS trigger_detail, DROP COLUMN IF EXISTS turn_key, DROP COLUMN IF EXISTS parent_tool_use_id;
+
