@@ -83,9 +83,12 @@ def display_experiment_results(
     # Add experiment scores if available
     if experiment_scores:
         for score in experiment_scores:
-            score_strings += text.Text(
-                f"{score.name}: {score.value:.4f}", style="green bold"
-            )
+            if score.scoring_failed:
+                score_strings += text.Text(f"{score.name}: failed", style="red")
+            else:
+                score_strings += text.Text(
+                    f"{score.name}: {score.value:.4f}", style="green bold"
+                )
             score_strings += text.Text("\n")
 
     aligned_test_results = align.Align.left(score_strings)
