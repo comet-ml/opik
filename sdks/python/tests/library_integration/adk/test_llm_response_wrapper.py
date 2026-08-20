@@ -200,10 +200,13 @@ class _DeferredUsageMetadata(genai_types.GenerateContentResponseUsageMetadata):
 class _FakeUsageModel(base_llm.BaseLlm):
     """An ADK model that carries usage metadata without touching the network.
 
-    Routes its response through the patched ``LlmResponse.create`` the real
-    provider path uses, so the usage lands in ``custom_metadata`` exactly as it
-    does in production - and carries a deferred usage class, so the agent run
-    reproduces the failure rather than a healthy variant of it.
+    Calls ``LlmResponse.create`` plainly, exactly as a real model does, and relies
+    on ``patch_adk`` having replaced it - so the test also covers that the patch is
+    installed and still lands on the boundary ADK actually uses. Wrapping the call
+    explicitly would keep passing even if the patching broke entirely.
+
+    The usage it carries is a deferred class, so the agent run reproduces the
+    failure rather than a healthy variant of it.
     """
 
     model: str = "fake-gemini"
@@ -227,9 +230,7 @@ class _FakeUsageModel(base_llm.BaseLlm):
             )
         )
         generate_content_response.model_version = "fake-gemini-1.0"
-        yield llm_response_wrapper._wrap_llm_response_create(
-            generate_content_response, adk_models.LlmResponse.create
-        )
+        yield adk_models.LlmResponse.create(generate_content_response)
 
 
 def _run_fake_agent() -> None:
