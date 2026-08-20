@@ -10,11 +10,12 @@ on:
     paths:
       - "sdks/typescript/src/opik/integrations/**"
       - ".github/workflows/typescript_sdk_integration_publish.yml"
-  # NOTE: `is_release` is intentionally NOT a workflow_dispatch input. npm trusted
-  # publishing (OIDC) validates the *entry-point* workflow filename and a package
-  # can have only one trusted publisher, so `release.yaml` is the registered
-  # publisher for these packages. A direct dispatch of this workflow builds and
-  # tests only; to publish, run the release workflow.
+  # NOTE: `is_release` is intentionally NOT a workflow_dispatch input. See
+  # typescript_sdk_publish.yml — npm validates the *entry-point* workflow filename
+  # and a package can have only one trusted publisher, so
+  # `release-wrapper-release-n-deploy.yml` is the registered publisher for these
+  # packages. A direct dispatch of this workflow builds and tests only; to publish,
+  # go through the release wrapper.
   workflow_dispatch:
     inputs:
       version:
