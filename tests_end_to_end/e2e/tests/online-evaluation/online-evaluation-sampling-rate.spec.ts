@@ -1,5 +1,6 @@
 import { test, expect } from '@e2e/fixtures';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
+import { loadEnvConfig } from '@e2e/config/env.config';
 
 const REFERENCE_OUTPUT = 'seed output';
 
@@ -74,6 +75,11 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     // the body would otherwise skip the deletion, and the project fixture's
     // teardown does not reach automation rules (ProjectService.delete does not
     // cascade through automation_rule_projects), so a red run leaks both rules.
+    // Tracks whether the body threw, so cleanup can honour OPIK_LEAVE_FAILURES
+    // the way the fixtures do. testInfo.status is unusable here: inside
+    // `finally` Playwright has not finalised it yet, so it still reads
+    // 'passed' on a failing test and shouldLeaveArtifacts would always be false.
+    let testFailed = false;
     try {
 
       await test.step('Create a 50% rule and a 100% rule via the UI', async () => {
@@ -265,6 +271,9 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
         },
       );
 
+    } catch (err) {
+      testFailed = true;
+      throw err;
     } finally {
       // Deletes every rule the fixture project EXCLUSIVELY owns, rather than
       // two captured ids: a rule created moments before a failure has no
@@ -286,6 +295,18 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
       // anything that is not a 404, and a failed list would skip every
       // deletion, so both are caught and downgraded to warnings. Leaked rules
       // are a tidiness problem; a masked failure costs a debugging session.
+      // Mirrors the project fixture: with OPIK_LEAVE_FAILURES set, a failed run
+      // deliberately keeps its state for debugging, so deleting the rules would
+      // hand the next debugger a preserved project stripped of the rules that
+      // explain the failure.
+      if (testFailed && loadEnvConfig().leaveFailures) {
+        console.warn(
+          '[sampling-rate] OPIK_LEAVE_FAILURES set and the test failed — ' +
+            'leaving rules in place for debugging',
+        );
+        return;
+      }
+
       await test.step('Cleanup: delete both rules (project teardown does not cascade)', async () => {
         let rules: Awaited<
           ReturnType<typeof backendClient.listAutomationRulesForProject>
