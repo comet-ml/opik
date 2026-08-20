@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -32,6 +33,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
@@ -229,6 +231,33 @@ class MetricsAlertJobTest {
         assertThat(payload.get("conditions").get(1).get("threshold").asText()).isEqualTo("0.6000");
     }
 
+    @ParameterizedTest
+    @MethodSource("windowConfigKeys")
+    void firesTraceErrorsWhenWindowProvidedUnderCanonicalOrDocumentedAlias(String windowKey) {
+        Alert alert = alertWithErrorThreshold(windowKey, "2", "300");
+
+        when(projectMetricsDAO.getTotalTraceErrors(anyList(), any(Instant.class), any(Instant.class)))
+                .thenReturn(Mono.just(new BigDecimal("3")));
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        ArgumentCaptor<List<String>> payloadCaptor = listCaptor();
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_ERRORS), anyList(),
+                payloadCaptor.capture(), anyList());
+
+        JsonNode payload = JsonUtils.readValue(payloadCaptor.getValue().getFirst(), JsonNode.class);
+        assertThat(payload.get("window_seconds").asLong()).isEqualTo(300L);
+        assertThat(payload.get("metric_value").asText()).isEqualTo("3");
+        assertThat(payload.get("threshold").asText()).isEqualTo("2");
+    }
+
+    static Stream<String> windowConfigKeys() {
+        return Stream.of(WINDOW_CONFIG_KEY, "window_in_seconds");
+    }
+
     @Test
     void doesNotEvaluateWhenInterrupted() throws org.quartz.UnableToInterruptJobException {
         job.interrupt();
@@ -261,6 +290,30 @@ class MetricsAlertJobTest {
                 .triggerConfigs(List.of(
                         feedbackConfig(operator, threshold1, groupIndex),
                         feedbackConfig(operator, threshold2, groupIndex)))
+                .build();
+
+        return Alert.builder()
+                .id(UUID.randomUUID())
+                .name("test-alert")
+                .enabled(true)
+                .webhook(Webhook.builder().url("http://example/hook").build())
+                .triggers(List.of(trigger))
+                .projectId(PROJECT_ID)
+                .workspaceId(WORKSPACE_ID)
+                .build();
+    }
+
+    private static Alert alertWithErrorThreshold(String windowKey, String threshold, String window) {
+        AlertTrigger trigger = AlertTrigger.builder()
+                .id(UUID.randomUUID())
+                .eventType(AlertEventType.TRACE_ERRORS)
+                .triggerConfigs(List.of(AlertTriggerConfig.builder()
+                        .id(UUID.randomUUID())
+                        .type(AlertTriggerConfigType.THRESHOLD_ERRORS)
+                        .configValue(Map.of(
+                                THRESHOLD_CONFIG_KEY, threshold,
+                                windowKey, window))
+                        .build()))
                 .build();
 
         return Alert.builder()
