@@ -83,6 +83,18 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * ingestion path rejects a non-v7 or far-future {@code id} by design ({@code IdGenerator.validateId}), so the batches
  * that must <b>not</b> prune are handed to {@link TraceDAO#delete} directly — the only way to reach that arm.
  *
+ * <p><b>Topology covered, and the one cell that is not.</b> This suite runs the <b>post-EXCHANGE, pre-wrap</b> state on
+ * purpose: {@code traces} is the partitioned successor and still a {@code MergeTree}, which is the state the pruning
+ * flag has to hold in on its own — the wrap is a separate, deferrable cutover step ({@code --skip-wrap} now,
+ * {@code --wrap-only} later), and prod-test sat in exactly this window. Applying the wrap here would remove that
+ * coverage rather than add to it, since {@code partition_key} is meaningless once {@code traces} is {@code Distributed}.
+ * The {@code traces_local} branch of this same template is executed by {@code TracesDistributedWrapMutationTest}, with
+ * pruning off. So the untested cell is <b>both flags on at once</b>, and it stays untested here: the two are independent
+ * StringTemplate attributes with no shared state, and the wrap is a {@code RENAME} — {@code traces_local} is the very
+ * table this suite partitions and asserts against, so {@code id_at} and the partition key belong to the data, not to
+ * the name it is reached by. Covering it needs a third topology (EXCHANGE + wrap + both flags) and therefore its own
+ * suite; it cannot live in the wrap suite, which wraps the <em>legacy</em> table where this flag must be false.
+ *
  * <p>Dedicated, non-reused ClickHouse and ZooKeeper containers are required because the EXCHANGE destructively swaps the
  * live {@code traces} table; a reused container would corrupt other suites and reruns.
  */
