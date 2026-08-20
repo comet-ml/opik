@@ -323,7 +323,7 @@ the `traceColumnsNonNullable` flip").
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
 **The `tracesWeeklyPartitionPruningEnabled` flip (optional, and why it goes last).** `databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled`
-(env `ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED`, default `false`) lets a trace `DELETE` bound itself to
+(env `ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED`, default `false`) lets a trace `DELETE` bind itself to
 the weekly partitions its own ids resolve to (OPIK-6901), instead of being planned against every part of the table — on
 prod-test, 12 ids rewrote 3,928 parts / 5.40 TiB without it. It asserts a **schema** fact: that `traces` (or
 `traces_local`) is the successor, with `id_at` as `DateTime64(0,'UTC')` under the weekly `PARTITION BY`.
