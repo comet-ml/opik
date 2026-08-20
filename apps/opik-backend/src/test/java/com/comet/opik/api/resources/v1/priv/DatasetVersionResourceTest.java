@@ -5544,6 +5544,76 @@ class DatasetVersionResourceTest {
         }
 
         @Test
+        @DisplayName("Concurrent inserts into one version keep items_total equal to the rows stored (OPIK-7707)")
+        void parallelInsertsIntoSameVersion__thenItemsTotalMatchesStoredRows() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            var baseVersion = getLatestVersion(datasetId);
+
+            // No batch_group_id: every writer mutates the same latest version, so all of them apply
+            // their count delta to one row. With a read-modify-write the increments can be lost; with
+            // an atomic increment the stored counter has to agree with the rows actually persisted.
+            int writers = 8;
+            int perWriter = 5;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> DatasetItemBatch.builder()
+                            .datasetId(datasetId)
+                            .items(buildManualItems(perWriter, "m" + i))
+                            .build())
+                    .toList();
+
+            assertThat(runParallel(batches)).allMatch(status -> status == 204);
+
+            int expected = 1 + writers * perWriter;
+            var latestVersion = getLatestVersion(datasetId);
+            assertThat(latestVersion.id()).isEqualTo(baseVersion.id());
+            assertThat(latestVersion.itemsTotal()).isEqualTo(expected);
+            assertThat(latestItemCount(datasetId)).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("Concurrent deletes from one version keep items_total equal to the rows stored (OPIK-7707)")
+        void parallelDeletesFromSameVersion__thenItemsTotalMatchesStoredRows() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 12);
+
+            var items = datasetResourceClient.getDatasetItems(datasetId, 1, 20, null, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(items).hasSize(12);
+
+            // Each worker deletes a distinct item from the same version, so every delete applies a
+            // -1 delta to one shared row. Same guarantee as the insert path, opposite direction.
+            int deletions = 8;
+            List<UUID> toDelete = items.stream().limit(deletions).map(DatasetItem::id).toList();
+
+            ExecutorService executor = Executors.newFixedThreadPool(deletions);
+            CyclicBarrier barrier = new CyclicBarrier(deletions);
+            try {
+                List<CompletableFuture<Void>> futures = toDelete.stream()
+                        .map(itemId -> CompletableFuture.runAsync(() -> {
+                            awaitBarrier(barrier);
+                            datasetResourceClient.deleteDatasetItems(
+                                    DatasetItemsDelete.builder().itemIds(Set.of(itemId)).build(),
+                                    TEST_WORKSPACE, API_KEY);
+                        }, executor))
+                        .toList();
+                futures.forEach(CompletableFuture::join);
+            } finally {
+                executor.shutdown();
+                try {
+                    executor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            int expected = 12 - deletions;
+            assertThat(getLatestVersion(datasetId).itemsTotal()).isEqualTo(expected);
+            assertThat(latestItemCount(datasetId)).isEqualTo(expected);
+        }
+
+        @Test
         @DisplayName("Bug A: parallel uploads sharing a batch_group_id don't 500 or duplicate the version")
         void parallelSharedBatchGroup__thenNoErrorAndSingleVersion() {
             var datasetId = createDataset(UUID.randomUUID().toString());

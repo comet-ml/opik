@@ -1714,13 +1714,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                     log.info("Inserting into version '{}': new='{}', updated='{}'",
                                             versionId, finalNewItemsCount, finalUpdatedItemsCount);
 
-                                    // Insert items directly into the existing version
+                                    // Insert items directly into the existing version.
+                                    // Callers discard the emitted version (the resource returns 204), so the
+                                    // counters are applied without re-reading the row that was just written.
                                     return versionDao
                                             .insertItems(datasetId, versionId, normalizedItems, workspaceId, userName)
                                             .then(Mono.fromCallable(() -> {
                                                 updateVersionCountsForInsert(versionId, workspaceId, finalNewItemsCount,
                                                         finalUpdatedItemsCount, userName);
-                                                return versionService.getVersionById(workspaceId, datasetId, versionId);
+                                                return DatasetVersion.builder().id(versionId).build();
                                             }).subscribeOn(Schedulers.boundedElastic()));
                                 });
                     }));
@@ -1742,17 +1744,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
             int updatedItemsCount, String userName) {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            var currentVersion = dao.findById(versionId, workspaceId)
-                    .orElseThrow(() -> new NotFoundException(
-                            "Version not found: '%s'".formatted(versionId)));
 
-            // Only increment total by new items (not updates)
-            int newTotal = currentVersion.itemsTotal() + newItemsCount;
-            int newAdded = currentVersion.itemsAdded() + newItemsCount;
-            int newModified = currentVersion.itemsModified() + updatedItemsCount;
+            // Only the total and added counters move by new items; updates move only modified.
+            int updated = dao.incrementCounts(versionId, newItemsCount, newItemsCount, updatedItemsCount, 0,
+                    workspaceId, userName);
 
-            dao.updateCounts(versionId, newTotal, newAdded, newModified,
-                    currentVersion.itemsDeleted(), workspaceId, userName);
+            if (updated == 0) {
+                throw new NotFoundException("Version not found: '%s'".formatted(versionId));
+            }
             return null;
         });
     }
@@ -1763,22 +1762,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
      *
      * @param versionId The version ID to update
      * @param workspaceId The workspace ID
-     * @param currentVersion The current version before deletion
      * @param deletedCount Number of items deleted
      * @param userName The user performing the update
      */
-    private void updateVersionCountsForDelete(UUID versionId, String workspaceId, DatasetVersion currentVersion,
-            int deletedCount, String userName) {
-        int newTotal = currentVersion.itemsTotal() - deletedCount;
-        int newDeleted = currentVersion.itemsDeleted() + deletedCount;
-
-        log.info("deleteItemsFromExistingVersion: updating counts - newTotal='{}', newDeleted='{}'",
-                newTotal, newDeleted);
+    private void updateVersionCountsForDelete(UUID versionId, String workspaceId, int deletedCount, String userName) {
+        log.info("deleteItemsFromExistingVersion: decrementing counts by '{}'", deletedCount);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            dao.updateCounts(versionId, newTotal, currentVersion.itemsAdded(),
-                    currentVersion.itemsModified(), newDeleted, workspaceId, userName);
+
+            int updated = dao.incrementCounts(versionId, -deletedCount, 0, 0, deletedCount, workspaceId, userName);
+
+            if (updated == 0) {
+                throw new NotFoundException("Version not found: '%s'".formatted(versionId));
+            }
             return null;
         });
     }
@@ -2173,8 +2170,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         // Update version counts in MySQL
                         return Mono.fromCallable(() -> {
-                            updateVersionCountsForDelete(versionId, workspaceId, currentVersion,
-                                    deletedCount.intValue(), userName);
+                            updateVersionCountsForDelete(versionId, workspaceId, deletedCount.intValue(), userName);
                             log.info("Deleted '{}' items from version '{}', new total '{}'",
                                     deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
                             return null;
@@ -2218,8 +2214,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         // Update version counts in MySQL
                         return Mono.fromCallable(() -> {
-                            updateVersionCountsForDelete(versionId, workspaceId, currentVersion,
-                                    deletedCount.intValue(), userName);
+                            updateVersionCountsForDelete(versionId, workspaceId, deletedCount.intValue(), userName);
                             log.info("Deleted '{}' items from version '{}', new total '{}'",
                                     deletedCount, versionId, currentVersion.itemsTotal() - deletedCount.intValue());
                             return null;
