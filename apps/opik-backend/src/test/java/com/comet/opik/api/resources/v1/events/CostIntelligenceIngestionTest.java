@@ -14,6 +14,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.CipxSpendDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -42,6 +43,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -94,13 +96,15 @@ class CostIntelligenceIngestionTest {
     private TransactionTemplate mySqlTemplate;
     private SpanResourceClient spanResourceClient;
     private TraceResourceClient traceResourceClient;
+    private CipxSpendDAO cipxSpendDAO;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate,
-            TransactionTemplate mySqlTemplate) {
+            TransactionTemplate mySqlTemplate, CipxSpendDAO cipxSpendDAO) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.clickHouseTemplate = clickHouseTemplate;
         this.mySqlTemplate = mySqlTemplate;
+        this.cipxSpendDAO = cipxSpendDAO;
 
         ClientSupportUtils.config(client);
 
@@ -194,6 +198,71 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().turnKey()).isEmpty();
                 assertThat(row.get().parentToolUseId()).isEmpty();
             });
+        }
+
+        @Test
+        @DisplayName("every positional bind lands in its own column, across a multi-row insert")
+        void everyPositionalBindLandsInItsOwnColumn() {
+            var ws = newWorkspace();
+
+            // CipxSpendDAO binds by position and nothing checks the bind order against the INSERT
+            // tuple at compile time. A mismatch does not fail the insert — it writes each value into
+            // the neighbouring column, which is invisible unless the columns hold values that can be
+            // told apart. So give every column its own recognizable sentinel and assert each one
+            // holds its own: a rotation then surfaces as a value reported under the wrong name.
+            //
+            // Two rows, deliberately: the bind index accumulates across rows while workspace_id is
+            // bound once at index 0 and its repeats dedup. If that dedup assumption is ever wrong
+            // the stride becomes 21 instead of 20 and only the second row is corrupted — which a
+            // single-row insert cannot see.
+            var rowOne = sentinelRow(1);
+            var rowTwo = sentinelRow(2);
+
+            cipxSpendDAO.insert(List.of(rowOne, rowTwo), ws.workspaceId(), USER).block();
+
+            assertEveryColumnHoldsItsOwnValue(ws.workspaceId(), rowOne);
+            assertEveryColumnHoldsItsOwnValue(ws.workspaceId(), rowTwo);
+        }
+
+        @Test
+        @DisplayName("a call carrying fields the DAO does not know still ingests")
+        void unknownFieldsDoNotRejectTheRow() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            // cipx adds fields to metadata.cipx.call on its own release cadence and ships to laptops
+            // independently of this service, so a newer proxy talking to an older backend is the
+            // normal state, not an edge case. Ingestion must ignore what it does not recognize
+            // rather than reject the row — dropping the row would lose the spend entirely, and spend
+            // totals are the one thing that is correct today.
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(unknownFieldsCipxMetadata("claude-sonnet-4-6"))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxSpend(span.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                // Every known field still parsed correctly alongside the unknown ones.
+                assertThat(row.get().model()).isEqualTo("claude-sonnet-4-6");
+                assertThat(row.get().uInput()).isEqualTo(11L);
+                assertThat(row.get().uCacheRead()).isEqualTo(22L);
+                assertThat(row.get().uCacheCreation()).isEqualTo(33L);
+                assertThat(row.get().uCacheCreation5m()).isEqualTo(44L);
+                assertThat(row.get().uCacheCreation1h()).isEqualTo(55L);
+                assertThat(row.get().uOutput()).isEqualTo(66L);
+                assertThat(row.get().effort()).isEqualTo("high");
+                assertThat(row.get().speed()).isEqualTo("fast");
+                assertThat(row.get().trigger()).isEqualTo("subagent");
+                assertThat(row.get().triggerDetail()).isEqualTo("Explore");
+                assertThat(row.get().turnKey()).isEqualTo("unknown-fields-turnkey");
+                assertThat(row.get().parentToolUseId()).isEqualTo("toolu_unknown_fields");
+            });
+
+            // The block writer sees the same metadata, so an unknown field on a block must not drop
+            // the blocks either.
+            assertThat(getCipxBlocks(span.id(), ws.workspaceId())).isNotEmpty();
         }
 
         @Test
@@ -552,6 +621,164 @@ class CostIntelligenceIngestionTest {
         return new WorkspaceContext(apiKey, workspaceName, workspaceId);
     }
 
+    // One distinct value per column, derived from n so two rows never collide. The ids are UUIDs
+    // because project_id/trace_id/span_id are FixedString(36) — a rotation among those three is
+    // silently accepted by ClickHouse, which is precisely why they need telling apart.
+    private CipxSpendDAO.SpanRow sentinelRow(int n) {
+        long base = n * 1_000_000L;
+        return CipxSpendDAO.SpanRow.builder()
+                .projectId(UUID.randomUUID().toString())
+                .traceId(UUID.randomUUID().toString())
+                .spanId(UUID.randomUUID().toString())
+                .startTime(Instant.ofEpochMilli(1_800_000_000_000L + n))
+                .model("sentinel-" + n + "-model")
+                .uInput(base + 1)
+                .uCacheRead(base + 2)
+                .uCacheCreation(base + 3)
+                .uCacheCreation5m(base + 4)
+                .uCacheCreation1h(base + 5)
+                .uOutput(base + 6)
+                .effort("sentinel-" + n + "-effort")
+                .thinkingType("sentinel-" + n + "-thinking-type")
+                .maxTokens(base + 7)
+                .contextManagement("sentinel-" + n + "-context-management")
+                .speed("sentinel-" + n + "-speed")
+                .trigger("sentinel-" + n + "-trigger")
+                .triggerDetail("sentinel-" + n + "-trigger-detail")
+                .turnKey("sentinel-" + n + "-turn-key")
+                .parentToolUseId("sentinel-" + n + "-parent-tool-use-id")
+                .build();
+    }
+
+    // Asserts column by column with the column name as the description, so a bind-order regression
+    // reports which column received the wrong value rather than just "expected X but was Y".
+    private void assertEveryColumnHoldsItsOwnValue(String workspaceId, CipxSpendDAO.SpanRow expected) {
+        var stored = getCipxSpendAllColumns(expected.spanId(), workspaceId);
+        assertThat(stored).as("row for span_id %s", expected.spanId()).isPresent();
+        var actual = stored.get();
+
+        assertThat(actual.workspaceId()).as("workspace_id").isEqualTo(workspaceId);
+        assertThat(actual.projectId()).as("project_id").isEqualTo(expected.projectId());
+        assertThat(actual.traceId()).as("trace_id").isEqualTo(expected.traceId());
+        assertThat(actual.spanId()).as("span_id").isEqualTo(expected.spanId());
+        assertThat(actual.startMs()).as("start_time").isEqualTo(expected.startTime().toEpochMilli());
+        assertThat(actual.model()).as("model").isEqualTo(expected.model());
+        assertThat(actual.uInput()).as("u_input").isEqualTo(expected.uInput());
+        assertThat(actual.uCacheRead()).as("u_cache_read").isEqualTo(expected.uCacheRead());
+        assertThat(actual.uCacheCreation()).as("u_cache_creation").isEqualTo(expected.uCacheCreation());
+        assertThat(actual.uCacheCreation5m()).as("u_cache_creation_5m").isEqualTo(expected.uCacheCreation5m());
+        assertThat(actual.uCacheCreation1h()).as("u_cache_creation_1h").isEqualTo(expected.uCacheCreation1h());
+        assertThat(actual.uOutput()).as("u_output").isEqualTo(expected.uOutput());
+        assertThat(actual.effort()).as("effort").isEqualTo(expected.effort());
+        assertThat(actual.thinkingType()).as("thinking_type").isEqualTo(expected.thinkingType());
+        assertThat(actual.maxTokens()).as("max_tokens").isEqualTo(expected.maxTokens());
+        assertThat(actual.contextManagement()).as("context_management").isEqualTo(expected.contextManagement());
+        assertThat(actual.speed()).as("speed").isEqualTo(expected.speed());
+        assertThat(actual.trigger()).as("trigger").isEqualTo(expected.trigger());
+        assertThat(actual.triggerDetail()).as("trigger_detail").isEqualTo(expected.triggerDetail());
+        assertThat(actual.turnKey()).as("turn_key").isEqualTo(expected.turnKey());
+        assertThat(actual.parentToolUseId()).as("parent_tool_use_id").isEqualTo(expected.parentToolUseId());
+    }
+
+    // Reads every column the DAO writes, including workspace_id and trace_id which the narrower
+    // getCipxSpend does not project. Bind-order coverage is only as wide as the read.
+    private Optional<SentinelSpendRow> getCipxSpendAllColumns(String spanId, String workspaceId) {
+        String sql = """
+                SELECT
+                    workspace_id AS workspace_id,
+                    project_id AS project_id,
+                    trace_id AS trace_id,
+                    span_id AS span_id,
+                    toUnixTimestamp64Milli(start_time) AS start_ms,
+                    model AS model,
+                    u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
+                    effort, thinking_type, max_tokens, context_management, speed,
+                    `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id
+                FROM cipx_spends FINAL
+                WHERE workspace_id = :workspace_id AND span_id = :span_id
+                """;
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind("workspace_id", workspaceId)
+                    .bind("span_id", spanId);
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, meta) -> new SentinelSpendRow(
+                            row.get("workspace_id", String.class),
+                            row.get("project_id", String.class),
+                            row.get("trace_id", String.class),
+                            row.get("span_id", String.class),
+                            row.get("start_ms", Long.class),
+                            row.get("model", String.class),
+                            row.get("u_input", Long.class),
+                            row.get("u_cache_read", Long.class),
+                            row.get("u_cache_creation", Long.class),
+                            row.get("u_cache_creation_5m", Long.class),
+                            row.get("u_cache_creation_1h", Long.class),
+                            row.get("u_output", Long.class),
+                            row.get("effort", String.class),
+                            row.get("thinking_type", String.class),
+                            row.get("max_tokens", Long.class),
+                            row.get("context_management", String.class),
+                            row.get("speed", String.class),
+                            row.get("trigger_kind", String.class),
+                            row.get("trigger_detail", String.class),
+                            row.get("turn_key", String.class),
+                            row.get("parent_tool_use_id", String.class)))));
+        }).blockOptional();
+    }
+
+    // A cipx call carrying fields this backend has never heard of, at every level a newer proxy could
+    // add them: on the call, inside usage (inference_geo is the real pending one — OPIK-7757), inside
+    // cache_creation, inside config, as a sibling of call under cipx, on a block, and beside cipx in
+    // metadata. Every known field is still present and must still parse.
+    private static JsonNode unknownFieldsCipxMetadata(String model) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "unrelated_top_level": {"anything": true},
+                          "cipx": {
+                            "future_section": {"whatever": [1, 2, 3]},
+                            "call": {
+                              "model": "%s",
+                              "future_scalar": "ignored",
+                              "future_object": {"nested": {"deep": 1}},
+                              "future_array": [{"a": 1}, {"b": 2}],
+                              "usage": {
+                                "input_tokens": 11,
+                                "cache_read_input_tokens": 22,
+                                "cache_creation_input_tokens": 33,
+                                "cache_creation": {
+                                  "ephemeral_5m_input_tokens": 44,
+                                  "ephemeral_1h_input_tokens": 55,
+                                  "ephemeral_7d_input_tokens": 77
+                                },
+                                "output_tokens": 66,
+                                "service_tier": "standard",
+                                "inference_geo": "not_available"
+                              },
+                              "config": {
+                                "effort": "high",
+                                "thinking_type": "adaptive",
+                                "max_tokens": 64000,
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast",
+                                "future_knob": true
+                              },
+                              "trigger": "subagent",
+                              "trigger_detail": "Explore",
+                              "turn_key": "unknown-fields-turnkey",
+                              "parent_tool_use_id": "toolu_unknown_fields",
+                              "spawn_depth": 2
+                            },
+                            "blocks": [
+                              {"category":"skills_loaded","side":"input","cache_status":"read","parent_category":"context","chars":100,"tool_name":"","tool_server":"","tool_use_id":"","resource":"dataviz","kind":"text","future_block_field":"ignored"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model));
+    }
+
     private static JsonNode spanCipxMetadata(String model, long input, long cacheRead, long cacheCreation,
             long cacheCreation5m, long cacheCreation1h, long output) {
         return JsonUtils.getJsonNodeFromString(
@@ -859,6 +1086,13 @@ class CostIntelligenceIngestionTest {
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
             String thinkingType, Long maxTokens, String contextManagement, String speed, String trigger,
             String triggerDetail, String turnKey, String parentToolUseId) {
+    }
+
+    private record SentinelSpendRow(String workspaceId, String projectId, String traceId, String spanId,
+            Long startMs, String model, Long uInput, Long uCacheRead, Long uCacheCreation, Long uCacheCreation5m,
+            Long uCacheCreation1h, Long uOutput, String effort, String thinkingType, Long maxTokens,
+            String contextManagement, String speed, String trigger, String triggerDetail, String turnKey,
+            String parentToolUseId) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
