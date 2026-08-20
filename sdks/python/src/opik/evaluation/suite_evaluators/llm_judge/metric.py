@@ -13,7 +13,7 @@ import tenacity
 
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result
-from opik.exceptions import LLMJudgeParseError
+from opik.exceptions import BaseLLMError, LLMJudgeParseError
 
 from opik.evaluation.suite_evaluators import base
 from . import config as llm_judge_config
@@ -22,8 +22,13 @@ from . import strategy_selector as _strategy_selector
 
 LOGGER = logging.getLogger(__name__)
 
+# `BaseLLMError` covers the provider returning a structurally empty response
+# (no content and no tool_calls) — seen in practice when a provider is briefly
+# degraded and the structured-output tool_use call comes back blank. It is
+# transient in the same way a malformed parse is, so it earns the same retry
+# rather than costing the item its whole score.
 _RETRY_POLICY = tenacity.retry(
-    retry=tenacity.retry_if_exception_type(LLMJudgeParseError),
+    retry=tenacity.retry_if_exception_type((LLMJudgeParseError, BaseLLMError)),
     stop=tenacity.stop_after_attempt(3),
     before_sleep=tenacity.before_sleep_log(LOGGER, logging.WARNING),
     reraise=True,

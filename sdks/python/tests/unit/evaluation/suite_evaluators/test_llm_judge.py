@@ -289,3 +289,46 @@ class TestLLMJudgeFromConfig:
             "seed": 123,
             "customParameters": {"reasoning_effort": "low"},
         }
+
+
+class TestLLMJudgeRetries:
+    """A transient provider hiccup must not cost the whole item's score.
+
+    An empty structured-output response surfaces as ``BaseLLMError`` from the
+    response parser, which is a different exception type than the parse errors
+    the retry policy was originally written for.
+    """
+
+    def _judge_with_model(self, model):
+        evaluator = llm_judge.LLMJudge(
+            assertions=["The response contains the literal text PASS."],
+            track=False,
+        )
+        evaluator._model = model
+        return evaluator
+
+    def test_score__transient_empty_llm_response__retries_and_succeeds(self):
+        from opik import exceptions
+
+        calls = {"n": 0}
+        valid = (
+            '{"assertion_1": {"score": true, "reason": "contains PASS", '
+            '"confidence": 1.0}}'
+        )
+
+        class FlakyModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise exceptions.BaseLLMError(
+                        "LLM infrastructure error: Received None as the output "
+                        "from the LLM."
+                    )
+                return {"role": "assistant", "content": valid}
+
+        evaluator = self._judge_with_model(FlakyModel())
+        results = evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 2, "the empty first response should have been retried"
+        assert len(results) == 1
+        assert results[0].value == 1.0

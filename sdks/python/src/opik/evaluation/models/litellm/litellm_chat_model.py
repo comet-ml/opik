@@ -7,6 +7,7 @@ import pydantic
 import tenacity
 
 if TYPE_CHECKING:
+    import httpx
     from litellm.types.utils import ModelResponse
 
 import opik.semantic_version as semantic_version
@@ -17,6 +18,35 @@ from . import warning_filters, response_parser, util
 from opik import exceptions
 
 LOGGER = logging.getLogger(__name__)
+
+# LiteLLM's own default request timeout is 6000s (100 minutes), so a provider
+# that stalls — most often on TCP connect, where no response ever arrives —
+# blocks the caller effectively forever.
+#
+# The connect timeout is deliberately much tighter than the read timeout: a
+# provider either accepts the connection promptly or it is unreachable, whereas
+# generating a long completion legitimately takes time. Splitting them lets a
+# stalled connect fail fast without truncating slow-but-healthy generations.
+#
+# `num_retries` is pinned alongside them because LiteLLM retries internally by
+# default (~3 HTTP attempts per call), which silently multiplies the timeout on
+# top of the tenacity retries this module and the LLM-judge metric already
+# apply. Leaving it unset makes the worst-case wall clock the product of three
+# independent retry layers. Retrying stays the callers' job.
+#
+# All are defaults only — an explicit `timeout`/`num_retries` still wins.
+DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
+DEFAULT_READ_TIMEOUT_SECONDS = 60.0
+DEFAULT_NUM_RETRIES = 0
+
+
+def _default_timeout() -> "httpx.Timeout":
+    import httpx
+
+    return httpx.Timeout(
+        DEFAULT_READ_TIMEOUT_SECONDS,
+        connect=DEFAULT_CONNECT_TIMEOUT_SECONDS,
+    )
 
 
 def _log_warning(message: str, *args: Any) -> None:
@@ -378,6 +408,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         # we need to pop messages first, and after we will check the rest params
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
+        all_kwargs.setdefault("timeout", _default_timeout())
+        all_kwargs.setdefault("num_retries", DEFAULT_NUM_RETRIES)
         # Conflicts that can only be diagnosed on the merged dict
         # (constructor + per-call sources) run here — see the method's
         # docstring for the Anthropic reasoning_effort/temperature case.
@@ -469,6 +501,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
+        all_kwargs.setdefault("timeout", _default_timeout())
+        all_kwargs.setdefault("num_retries", DEFAULT_NUM_RETRIES)
         # See sync `generate_provider_response` for why the merged
         # dict needs its own conflict-resolution pass.
         all_kwargs = self._resolve_provider_conflicts(all_kwargs)

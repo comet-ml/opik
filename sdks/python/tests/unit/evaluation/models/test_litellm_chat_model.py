@@ -876,3 +876,64 @@ def test_litellm_chat_model_track_parameter_controls_monitoring(
 
     # Verify that track_completion decorator was applied the expected number of times
     assert decorator_calls == expected_calls
+
+
+def test_litellm_chat_model_bounds_request_by_default(monkeypatch):
+    """A stalled provider must not block forever.
+
+    litellm's own defaults are a 6000s timeout and internal retries, so an
+    unbounded call multiplied across the retry layers can outlive any caller.
+    Observed stalls sit in TCP connect, hence the separate connect ceiling.
+    """
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name="openai/gpt-4o-mini")
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert (
+        kwargs["timeout"].connect == litellm_chat_model.DEFAULT_CONNECT_TIMEOUT_SECONDS
+    )
+    assert kwargs["timeout"].read == litellm_chat_model.DEFAULT_READ_TIMEOUT_SECONDS
+    assert kwargs["num_retries"] == litellm_chat_model.DEFAULT_NUM_RETRIES
+
+
+def test_litellm_chat_model_explicit_timeout_overrides_default(monkeypatch):
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="openai/gpt-4o-mini",
+        timeout=5.0,
+        num_retries=2,
+    )
+    model.generate_string("hello")
+
+    _, _, kwargs = stub._calls[-1]
+    assert kwargs["timeout"] == 5.0
+    assert kwargs["num_retries"] == 2
+
+
+@pytest.mark.asyncio
+async def test_litellm_chat_model_bounds_async_request_by_default(monkeypatch):
+    stub = _install_litellm_stub(monkeypatch)
+
+    captured = {}
+
+    async def acompletion(model, messages, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
+        )
+
+    stub.acompletion = acompletion
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name="openai/gpt-4o-mini")
+    await model.agenerate_string("hello")
+
+    assert (
+        captured["timeout"].connect
+        == litellm_chat_model.DEFAULT_CONNECT_TIMEOUT_SECONDS
+    )
+    assert captured["timeout"].read == litellm_chat_model.DEFAULT_READ_TIMEOUT_SECONDS
+    assert captured["num_retries"] == litellm_chat_model.DEFAULT_NUM_RETRIES
