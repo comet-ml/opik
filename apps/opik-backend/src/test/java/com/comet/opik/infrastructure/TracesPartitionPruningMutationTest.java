@@ -143,6 +143,20 @@ class TracesPartitionPruningMutationTest {
     // are single literals built by no Java string operation, and they are kept byte-identical to
     // 000003_exchange_and_wrap.sql by eye, so they belong at the call site next to the javadoc that says so - as
     // TracesDistributedWrapMutationTest does.
+    private static final String TRACES_PARTITION_KEY = """
+            SELECT partition_key
+            FROM system.tables
+            WHERE database = currentDatabase()
+            AND name = 'traces'
+            """;
+
+    private static final String SUCCESSOR_TABLE_COUNT = """
+            SELECT toString(count())
+            FROM system.tables
+            WHERE database = currentDatabase()
+            AND name = 'traces_local_v2'
+            """;
+
     private static final String INSERT_RAW_TRACE = """
             INSERT INTO traces (workspace_id, project_id, id)
             VALUES (:workspace_id, :project_id, :id)
@@ -194,12 +208,11 @@ class TracesPartitionPruningMutationTest {
      * far-future or at the epoch, so a recent-only batch would accept the very expression migration 000114 was written
      * to escape. The 2200 id is the litellm shape and the one that makes the assertion bite.
      */
-    private static final List<UUID> ERA_IDS = List.of(
-            UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"), // id_at 2026-08-19 (Wed) -> 20260817
-            UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"), // id_at 1996-02-09       -> 19960205
-            UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2")); // id_at 2200-01-01      -> 21991230
+    private static final List<UUID> OUT_OF_WINDOW_ERA_IDS = List.of(
+            UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"), // id_at 1996-02-09  -> 19960205
+            UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2")); // id_at 2200-01-01 -> 21991230
 
-    private static final Set<Long> ERA_PARTITIONS = Set.of(20260817L, 19960205L, 21991230L);
+    private static final Set<Long> OUT_OF_WINDOW_ERA_PARTITIONS = Set.of(19960205L, 21991230L);
 
     /** A v4 UUID: no timestamp to derive a partition from. */
     private static final UUID NON_V7_ID = UUID.fromString("9f527bac-527a-4f92-8875-0fa8af8e4f22");
@@ -264,7 +277,7 @@ class TracesPartitionPruningMutationTest {
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
         this.traceDAO = traceDAO;
-        installPartitionedSuccessorUnderTraces();
+        ensurePartitionedSuccessorUnderTraces();
     }
 
     @AfterAll
@@ -312,23 +325,30 @@ class TracesPartitionPruningMutationTest {
         // 32-bit id_at the 2200 row would be stored under a wrapped recent timestamp, the derived partition would not
         // match it, and the row would survive.
         //
-        // Three eras in one batch is also the multi-value Long[] bind, which a single-id delete never reaches. Seeded
-        // raw because ingestion rejects a backdated or far-future id by design, supplying only the three columns
-        // without a DEFAULT so id_at comes from the real MATERIALIZED definition rather than a restated copy.
-        var projectId = UUID.randomUUID();
-        ERA_IDS.forEach(id -> insertRawTrace(projectId, id));
-        assertThat(ERA_IDS.stream().map(this::liveRowCount)).as("every era is seeded").containsOnly("1");
+        // Three eras in one batch is also the multi-value Long[] bind, which a single-id delete never reaches.
+        var recent = newTrace().build();
+        traceResourceClient.createTrace(recent, API_KEY, WORKSPACE_NAME);
+        var projectId = projectIdOf(recent);
+        assertThat(projectId.version()).as("the project id is a real UUIDv7, as the backend mints it").isEqualTo(7);
+        // Only the out-of-window eras are seeded raw: ingestion rejects a 1996 or 2200 id by design (24h window), so
+        // there is no endpoint that can create them. The recent row above went through the real ingestion path, and
+        // they all share its project.
+        OUT_OF_WINDOW_ERA_IDS.forEach(id -> insertRawTrace(projectId, id));
+        var batch = Stream.concat(Stream.of(recent.id()), OUT_OF_WINDOW_ERA_IDS.stream()).toList();
+        assertThat(batch.stream().map(this::liveRowCount)).as("every era is present").containsOnly("1");
 
-        delete(ERA_IDS.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
+        delete(batch.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
 
-        assertThat(ERA_IDS.stream().map(this::liveRowCount))
+        assertThat(batch.stream().map(this::liveRowCount))
                 .as("every era's row is gone, so the predicate named the partition each was actually filed under")
                 .containsOnly("0");
-        var sql = lastTraceDeleteSql(ERA_IDS.getFirst());
+        var sql = lastTraceDeleteSql(recent.id());
         assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
         assertThat(boundPartitionsOf(sql))
-                .as("exactly the three partitions the batch resolves to, not a range across three centuries")
-                .containsExactlyInAnyOrderElementsOf(ERA_PARTITIONS);
+                .as("exactly the partitions the batch resolves to, not a range across three centuries")
+                .containsExactlyInAnyOrderElementsOf(
+                        Stream.concat(Stream.of(partitionOf(recent.id())), OUT_OF_WINDOW_ERA_PARTITIONS.stream())
+                                .collect(Collectors.toUnmodifiableSet()));
     }
 
     @Test
@@ -348,17 +368,21 @@ class TracesPartitionPruningMutationTest {
         // DELETE and put behind a SELECT - predicate and bound partition values included. Only the verb changes; the
         // statement being explained is still the DAO's. Same instrument and record shape as
         // TracesLocalV2PartitioningTest.
-        var projectId = UUID.randomUUID();
-        ERA_IDS.forEach(id -> insertRawTrace(projectId, id));
+        // Real project from the ingestion path, and a recent row created through the endpoint; only the out-of-window
+        // eras are seeded raw, so the table holds several partitions to prune between.
+        var recent = newTrace().build();
+        traceResourceClient.createTrace(recent, API_KEY, WORKSPACE_NAME);
+        var projectId = projectIdOf(recent);
+        OUT_OF_WINDOW_ERA_IDS.forEach(id -> insertRawTrace(projectId, id));
 
-        // Bounded: one derivable id, so the predicate names one of the three partitions just seeded.
-        delete(Set.of(Pair.of(projectId, ERA_IDS.getFirst())));
-        var bounded = partsSelectedBy(lastTraceDeleteSql(ERA_IDS.getFirst()))
+        // Bounded: one derivable id, so the predicate names one of the partitions just populated.
+        delete(Set.of(Pair.of(projectId, recent.id())));
+        var bounded = partsSelectedBy(lastTraceDeleteSql(recent.id()))
                 .orElseThrow(() -> new AssertionError("EXPLAIN reported no partition index for the bounded delete"));
 
         // Unbounded: a non-v7 id in the batch, so no predicate at all. Its partner is a different era, so the query_log
         // lookup finds this statement rather than the one above.
-        var partner = ERA_IDS.get(1);
+        var partner = OUT_OF_WINDOW_ERA_IDS.getFirst();
         delete(Set.of(Pair.of(projectId, partner), Pair.of(projectId, NON_V7_ID)));
         var unbounded = partsSelectedBy(lastTraceDeleteSql(partner));
 
@@ -493,13 +517,29 @@ class TracesPartitionPruningMutationTest {
      * Setup, not a test: puts the partitioned successor under the name the DAO deletes from, so the pruning assertions
      * are made against a table that actually has weekly partitions.
      * <p>
+     * <b>Idempotent on purpose, because the estate this runs against is going to change.</b> Today {@code traces} is
+     * the legacy table and the successor is the empty {@code traces_local_v2}, so the two cutover statements are needed.
+     * Once the cutover migration lands, {@code traces} <em>is</em> the partitioned successor and {@code traces_local_v2}
+     * is gone — at which point this is a no-op and the suite keeps working unchanged, instead of dying in
+     * {@link #beforeAll} on an {@code EXCHANGE} against a table that no longer exists. If neither state holds it fails
+     * with that said plainly, rather than surfacing as a bare "table not found".
+     * <p>
      * The EXCHANGE (000003 exchange block): puts the successor under {@code traces} and the original under
      * {@code traces_local_v2}, then a RENAME parks the original as {@code traces_pre_cutover_backup}. The wrap is
      * deliberately not applied — it is a separate, deferrable step, and the flag under test must hold on its own between
      * the two (which is why it is not the wrap flag). Kept identical to the cutover SQL by eye, as
      * {@code TracesLocalV2CutoverTest.exchangeTables} and the wrap suite do.
      */
-    private void installPartitionedSuccessorUnderTraces() {
+    private void ensurePartitionedSuccessorUnderTraces() {
+        if (queryOneString(TRACES_PARTITION_KEY, _ -> {
+        }).contains("id_at")) {
+            return; // The cutover migration has landed: `traces` already is the partitioned successor.
+        }
+        assertThat(queryOneString(SUCCESSOR_TABLE_COUNT, _ -> {
+        }))
+                .as("`traces` is not partitioned and `traces_local_v2` does not exist, so there is no successor to"
+                        + " install - this suite needs one of those two states")
+                .isEqualTo("1");
         execute("EXCHANGE TABLES traces AND traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
         });
         execute("RENAME TABLE traces_local_v2 TO traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
