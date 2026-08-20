@@ -1,10 +1,18 @@
+import asyncio
+
 import pydantic
 import pytest
+from google.adk import agents as adk_agents
 from google.adk import models as adk_models
+from google.adk import runners as adk_runners
+from google.adk.models import base_llm
+from google.adk.sessions import in_memory_session_service
 from google.genai import types as genai_types
 
+from opik.integrations.adk import OpikTracer
 from opik.integrations.adk import helpers as adk_helpers
 from opik.integrations.adk.patchers import llm_response_wrapper
+from . import helpers
 
 
 def _generate_content_response() -> genai_types.GenerateContentResponse:
@@ -153,3 +161,115 @@ def test_both_tracers_report_conversion_failure_at_error_level(tracer_module_nam
         f"{tracer_module_name}: conversion failure is logged at "
         f"LOGGER.{handler.group(1)}, expected LOGGER.error"
     )
+
+
+class _DeferredUsageMetadata(genai_types.GenerateContentResponseUsageMetadata):
+    """Usage whose class is still deferred, as google-genai >= 2.18.0 ships them.
+
+    Module-level so the class is shared, but ``defer_build=True`` means it stays
+    unbuilt until something dumps it - which is the state that broke production.
+    """
+
+    model_config = pydantic.ConfigDict(defer_build=True)
+
+
+class _FakeUsageModel(base_llm.BaseLlm):
+    """An ADK model that carries usage metadata without touching the network.
+
+    Routes its response through the patched ``LlmResponse.create`` the real
+    provider path uses, so the usage lands in ``custom_metadata`` exactly as it
+    does in production - and carries a deferred usage class, so the agent run
+    reproduces the failure rather than a healthy variant of it.
+    """
+
+    model: str = "fake-gemini"
+
+    async def generate_content_async(self, llm_request, stream=False):  # type: ignore[no-untyped-def]
+        generate_content_response = genai_types.GenerateContentResponse(
+            candidates=[
+                genai_types.Candidate(
+                    content=genai_types.Content(
+                        role="model", parts=[genai_types.Part(text="sunny, 22C")]
+                    ),
+                    finish_reason=genai_types.FinishReason.STOP,
+                )
+            ],
+        )
+        generate_content_response.usage_metadata = (
+            _DeferredUsageMetadata.model_construct(
+                prompt_token_count=11, candidates_token_count=7, total_token_count=18
+            )
+        )
+        generate_content_response.model_version = "fake-gemini-1.0"
+        yield llm_response_wrapper._wrap_llm_response_create(
+            generate_content_response, adk_models.LlmResponse.create
+        )
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_adk_llm_span__carries_output_and_usage(fake_backend):
+    """The user-facing symptom: an LLM span must actually arrive with output and usage.
+
+    Every other test here stops at ``pop_llm_usage_data`` returning the right
+    counts, which leaves the gap that broke production - the values parsed
+    correctly but never reached the span, because the exception was swallowed
+    upstream of the assignment. This drives a real ADK agent and asserts on the
+    span the backend receives.
+
+    A fake model keeps it offline; what a live Gemini call adds on top is only
+    whether the provider really returns usage metadata, not whether we record it.
+    """
+    tracer = OpikTracer(project_name="adk-usage-test")
+    agent = adk_agents.LlmAgent(
+        name="weather_agent",
+        model=_FakeUsageModel(),
+        instruction="Answer the weather question.",
+        before_agent_callback=tracer.before_agent_callback,
+        after_agent_callback=tracer.after_agent_callback,
+        before_model_callback=tracer.before_model_callback,
+        after_model_callback=tracer.after_model_callback,
+    )
+
+    session_service = in_memory_session_service.InMemorySessionService()
+    asyncio.run(
+        session_service.create_session(
+            app_name="usage-probe", user_id="u1", session_id="s1"
+        )
+    )
+    runner = adk_runners.Runner(
+        agent=agent, app_name="usage-probe", session_service=session_service
+    )
+
+    async def _run() -> None:
+        async for _ in runner.run_async(
+            user_id="u1",
+            session_id="s1",
+            new_message=genai_types.Content(
+                role="user", parts=[genai_types.Part(text="weather?")]
+            ),
+        ):
+            pass
+
+    asyncio.run(_run())
+    tracer.flush()
+
+    llm_spans = [
+        span
+        for trace in fake_backend.trace_trees
+        for span in _walk(trace.spans)
+        if span.type == "llm"
+    ]
+    assert llm_spans, "expected at least one LLM span"
+
+    for span in llm_spans:
+        assert span.output, f"LLM span {span.name} has no output"
+        assert span.usage, f"LLM span {span.name} has no usage"
+        assert span.usage["original_usage.total_token_count"] == 18
+        assert span.usage["prompt_tokens"] == 11
+        assert span.usage["total_tokens"] == 18
+
+
+def _walk(spans):
+    for span in spans:
+        yield span
+        yield from _walk(span.spans)
