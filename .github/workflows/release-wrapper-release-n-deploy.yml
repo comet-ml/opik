@@ -19,6 +19,17 @@ on:
 
 jobs:
   trigger-release:
+    # A called reusable workflow can only narrow the caller job's token, never
+    # widen it — so every permission any job inside release.yaml (or the
+    # workflows it calls in turn) needs must be granted HERE too. Notably
+    # `id-token` is never part of the repo default, so without this block the
+    # `id-token: write` declared in release.yaml / typescript_sdk_publish.yml is
+    # silently capped to `none`, no OIDC token is minted, and `npm publish`
+    # fails with ENEEDAUTH (the setup-node _authToken stub is deleted before
+    # publishing, so there is no fallback credential). See DND-1565.
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/release.yaml  # Call the actual release workflow
     secrets: inherit
     with:

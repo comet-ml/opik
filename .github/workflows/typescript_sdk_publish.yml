@@ -13,10 +13,12 @@ on:
       - "sdks/typescript/**"
       - ".github/workflows/typescript_sdk_publish.yml"
   # NOTE: `is_release` is intentionally NOT a workflow_dispatch input. npm trusted
-  # publishing (OIDC) validates the *entry-point* workflow filename and a package
-  # can have only one trusted publisher, so `release.yaml` is the registered
-  # publisher for these packages. A direct dispatch of this workflow builds and
-  # tests only; to publish, run the release workflow.
+  # publishing (OIDC) validates the *entry-point* workflow filename — the one that
+  # started the run, not the reusable workflow that calls `npm publish` — and a
+  # package can have only one trusted publisher. Releases are dispatched by
+  # Release-n-Deploy-Agent against `release-wrapper-release-n-deploy.yml`, so that
+  # is what is registered on npmjs.com. A direct dispatch of this workflow builds
+  # and tests only; to publish, go through the release wrapper.
   workflow_dispatch:
     inputs:
       version:
@@ -55,8 +57,11 @@ jobs:
     permissions:
       # `contents: write` — the release path commits the version bump and pushes it.
       # `id-token: write` — mints the OIDC token npm trusted publishing exchanges for
-      # a short-lived publish credential. Required on BOTH this workflow and its
-      # caller (release.yaml): npm validates the entry-point workflow.
+      # a short-lived publish credential. Declaring it here is necessary but NOT
+      # sufficient: a called workflow can only narrow its caller's token, so every
+      # workflow in the chain (release.yaml AND
+      # release-wrapper-release-n-deploy.yml) must grant it too, or it is capped to
+      # `none` and publishing fails with ENEEDAUTH. See DND-1565.
       contents: write
       id-token: write
     env:
