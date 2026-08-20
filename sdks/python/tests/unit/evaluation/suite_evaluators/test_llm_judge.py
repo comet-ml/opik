@@ -1,3 +1,4 @@
+import pytest
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 
@@ -292,7 +293,7 @@ class TestLLMJudgeFromConfig:
 
 
 class TestLLMJudgeRetries:
-    """An empty provider response raises BaseLLMError, not a parse error."""
+    """Empty responses are transient and retried; permanent errors are not."""
 
     def _judge_with_model(self, model):
         evaluator = llm_judge.LLMJudge(
@@ -315,9 +316,8 @@ class TestLLMJudgeRetries:
             def generate_chat_completion(self, messages, response_format=None):
                 calls["n"] += 1
                 if calls["n"] == 1:
-                    raise exceptions.BaseLLMError(
-                        "LLM infrastructure error: Received None as the output "
-                        "from the LLM."
+                    raise exceptions.EmptyLLMResponseError(
+                        "LLM returned no content and no tool calls"
                     )
                 return {"role": "assistant", "content": valid}
 
@@ -327,3 +327,19 @@ class TestLLMJudgeRetries:
         assert calls["n"] == 2, "the empty first response should have been retried"
         assert len(results) == 1
         assert results[0].value == 1.0
+
+    def test_score__permanent_llm_error__not_retried(self):
+        from opik import exceptions
+
+        calls = {"n": 0}
+
+        class FailingModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                raise exceptions.BaseLLMError("AuthenticationError: missing key")
+
+        evaluator = self._judge_with_model(FailingModel())
+        with pytest.raises(exceptions.BaseLLMError):
+            evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 1, "auth failures must not be retried"

@@ -50,14 +50,12 @@ def parse_assistant_message(
         content = _extract_response_format_arguments(message)
 
     if content is None and not tool_calls:
-        # A degraded provider lands here with a valid key, so report the
-        # rejected response shape rather than only blaming the key.
-        raise exceptions.BaseLLMError(
+        raise exceptions.EmptyLLMResponseError(
             "LLM returned no content and no tool calls "
             f"(model={getattr(response, 'model', None)!r}, "
             f"finish_reason={_finish_reason(response)!r}). "
-            "If this persists, verify the API keys for the models in use "
-            "(e.g., OPENAI_API_KEY) are set correctly."
+            "The provider accepted the request but returned nothing usable; "
+            "check the model's structured-output support if it persists."
         )
 
     assistant: base_model.ConversationDict = {"role": "assistant"}
@@ -72,7 +70,13 @@ def _finish_reason(response: "ModelResponse") -> Optional[str]:
     choices = getattr(response, "choices", None)
     if not isinstance(choices, list) or not choices:
         return None
-    return _get_str(_as_mapping(util.normalise_choice(choices[0])), "finish_reason")
+    choice = choices[0]
+    # normalise_choice's non-pydantic fallback keeps only message/logprobs.
+    reason = _get_str(_as_mapping(util.normalise_choice(choice)), "finish_reason")
+    if reason is None:
+        raw = getattr(choice, "finish_reason", None)
+        reason = raw if isinstance(raw, str) else None
+    return reason
 
 
 def _normalise_message(response: "ModelResponse") -> Dict[str, Any]:
