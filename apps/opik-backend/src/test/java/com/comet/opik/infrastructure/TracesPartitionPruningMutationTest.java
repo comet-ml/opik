@@ -583,7 +583,7 @@ class TracesPartitionPruningMutationTest {
      * {@code TracesLocalV2CutoverTest.wrapInDistributed} do: build the wrapper under a temp name first, then one atomic
      * multi-target {@code RENAME} rotates the data to {@code traces_local} and the wrapper into {@code traces}, so
      * {@code traces} is never absent. Re-entrant: it returns early when the wrap is already applied, and
- * clears a wrapper stranded by an interrupted run before rebuilding it.
+     * clears a wrapper stranded by an interrupted run before rebuilding it.
      */
     private void ensureDistributedWrap() {
         if ("Distributed".equals(queryOneString(TABLE_ENGINE, _ -> {
