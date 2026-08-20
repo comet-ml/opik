@@ -1392,8 +1392,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             }
 
                             var hasDynamicKeys = datasetItemSearchCriteria.sortingFields() != null
-                                    && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields(),
-                                            itemFieldMapping);
+                                    && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields());
 
                             var selectStatement = connection.createStatement(finalTemplate.render())
                                     .bind("datasetId", datasetItemSearchCriteria.datasetId())
@@ -1411,7 +1410,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             // Bind dynamic sorting keys if present
                             if (hasDynamicKeys) {
                                 selectStatement = sortingQueryBuilder.bindDynamicKeys(selectStatement,
-                                        datasetItemSearchCriteria.sortingFields(), itemFieldMapping);
+                                        datasetItemSearchCriteria.sortingFields());
                             }
 
                             bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
