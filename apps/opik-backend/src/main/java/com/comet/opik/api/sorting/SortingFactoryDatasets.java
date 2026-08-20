@@ -26,9 +26,6 @@ import static com.comet.opik.api.sorting.SortableFields.OUTPUT_WILDCARD;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
 import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST;
 import static com.comet.opik.api.sorting.SortableFields.USAGE;
-import static com.comet.opik.domain.filter.FilterQueryBuilder.INPUT_FIELD_PREFIX;
-import static com.comet.opik.domain.filter.FilterQueryBuilder.METADATA_FIELD_PREFIX;
-import static com.comet.opik.domain.filter.FilterQueryBuilder.OUTPUT_FIELD_PREFIX;
 
 public class SortingFactoryDatasets extends SortingFactory {
 
@@ -97,18 +94,9 @@ public class SortingFactoryDatasets extends SortingFactory {
     }
 
     private SortingField ensureBindKeyParam(SortingField sortingField) {
-        String field = sortingField.field();
-
-        // JSON fields (output.*, input.*, metadata.*) should NOT be treated as dynamic
-        // because they use JSONExtractRaw with literal keys in DatasetItemDAO
-        if (field.startsWith(OUTPUT_FIELD_PREFIX) || field.startsWith(INPUT_FIELD_PREFIX)
-                || field.startsWith(METADATA_FIELD_PREFIX)) {
-            return sortingField.toBuilder()
-                    .bindKeyParam(null)
-                    .build();
-        }
-
-        // Only dynamic fields need bindKeyParam
+        // Only dynamic fields need bindKeyParam. JSON fields (output.*, input.*, metadata.*) are
+        // dynamic as well: their key is bound as a query parameter via JSONExtractRaw(col, :param)
+        // in DatasetItemDAO, so they follow the same bindKeyParam path as data.*.
         if (!sortingField.isDynamic()) {
             return sortingField;
         }

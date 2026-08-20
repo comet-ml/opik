@@ -51,9 +51,9 @@ public class SortableFields {
     public static final String INSTRUCTIONS = "instructions";
     public static final String WEBHOOK_URL = "webhook_url";
     public static final String DATA = "data.*"; // Truly dynamic - uses Map with parameter binding
-    public static final String OUTPUT_WILDCARD = "output.*"; // JSON fields - use JSONExtractRaw, not parameter binding
-    public static final String INPUT_WILDCARD = "input.*"; // JSON fields - use JSONExtractRaw, not parameter binding
-    public static final String METADATA_WILDCARD = "metadata.*"; // JSON fields - use JSONExtractRaw, not parameter binding (metadata field already exists above)
+    public static final String OUTPUT_WILDCARD = "output.*"; // JSON fields - use JSONExtractRaw with the key bound as a parameter
+    public static final String INPUT_WILDCARD = "input.*"; // JSON fields - use JSONExtractRaw with the key bound as a parameter
+    public static final String METADATA_WILDCARD = "metadata.*"; // JSON fields - use JSONExtractRaw with the key bound as a parameter (metadata field already exists above)
     public static final String COMMENTS = "comments";
     public static final String EXPERIMENT_ID = "experiment_id";
     public static final String PASS_RATE = "pass_rate";

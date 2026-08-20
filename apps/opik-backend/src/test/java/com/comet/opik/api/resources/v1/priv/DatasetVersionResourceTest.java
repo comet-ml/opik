@@ -78,6 +78,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -3508,6 +3509,83 @@ class DatasetVersionResourceTest {
                             datasetItems.get(2).id(),
                             datasetItems.get(1).id(),
                             datasetItems.get(0).id());
+        }
+
+        @Test
+        @DisplayName("should sort versioned experiment items by a JSON output key through the push-top-limit path")
+        void sortByJsonOutputKey__whenAscendingAndDescending__thenReturnSortedByKey() {
+            var datasetName = UUID.randomUUID().toString();
+            var datasetId = createDataset(datasetName);
+            createDatasetItems(datasetId, 3);
+
+            var version = getLatestVersion(datasetId);
+            var datasetItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+
+            var projectName = UUID.randomUUID().toString();
+
+            // One trial per dataset item; each trace's output carries a distinct value under a key that
+            // contains special characters. Sorting by output.* routes through the push-top-limit path, whose
+            // JSON expression binds the key as a parameter (JSONExtractRaw(argMax(...), :param)).
+            int count = 3;
+            String jsonKey = "score's";
+            var traceIds = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(projectName)
+                                .output(JsonUtils.valueToTree(Map.of(jsonKey, (i + 1) * 10)))
+                                .build();
+                        traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+                        return trace.id();
+                    })
+                    .toList();
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(datasetName)
+                    .datasetVersionId(version.id())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            IntStream.range(0, count).forEach(i -> {
+                var item = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experimentId)
+                        .datasetItemId(datasetItems.get(i).id())
+                        .traceId(traceIds.get(i))
+                        .build();
+                experimentResourceClient.createExperimentItem(Set.of(item), API_KEY, TEST_WORKSPACE);
+            });
+
+            String sortField = "output." + jsonKey;
+
+            // Baseline fetch (no sorting) captures the full objects as returned; the assertions below only test order.
+            var baseline = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, null, API_KEY, TEST_WORKSPACE).content();
+            assertThat(baseline).hasSize(count);
+
+            Map<UUID, Integer> valueByItemId = IntStream.range(0, count).boxed()
+                    .collect(Collectors.toMap(i -> datasetItems.get(i).id(), i -> (i + 1) * 10));
+
+            var expectedAsc = baseline.stream()
+                    .sorted(Comparator.comparingInt(item -> valueByItemId.get(item.id())))
+                    .toList();
+            var expectedDesc = baseline.stream()
+                    .sorted(Comparator.comparingInt((DatasetItem item) -> valueByItemId.get(item.id())).reversed())
+                    .toList();
+
+            // Compare the whole DatasetItem objects, in order - not just their ids.
+            var asc = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null,
+                    List.of(new SortingField(sortField, Direction.ASC)), API_KEY, TEST_WORKSPACE);
+            assertThat(asc.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyElementsOf(expectedAsc);
+
+            var desc = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null,
+                    List.of(new SortingField(sortField, Direction.DESC)), API_KEY, TEST_WORKSPACE);
+            assertThat(desc.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyElementsOf(expectedDesc);
         }
 
         @Test
