@@ -1,11 +1,9 @@
 package com.comet.opik.api.sorting;
 
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 import static com.comet.opik.api.sorting.SortableFields.COMMENTS;
 import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
@@ -85,32 +83,6 @@ public class SortingFactoryDatasets extends SortingFactory {
         return false;
     }
 
-    @Override
-    protected List<SortingField> processFields(List<SortingField> sorting) {
-        // Ensure dynamic fields have bindKeyParam set (needed after JSON deserialization)
-        return sorting.stream()
-                .map(this::ensureBindKeyParam)
-                .toList();
-    }
-
-    private SortingField ensureBindKeyParam(SortingField sortingField) {
-        // Only dynamic fields need bindKeyParam. JSON fields (output.*, input.*, metadata.*) are
-        // dynamic as well: their key is bound as a query parameter via JSONExtractRaw(col, :param)
-        // in DatasetItemDAO, so they follow the same bindKeyParam path as data.*.
-        if (!sortingField.isDynamic()) {
-            return sortingField;
-        }
-
-        // If bindKeyParam is already set, return as-is
-        String bindKeyParam = sortingField.bindKeyParam();
-        if (StringUtils.isNotBlank(bindKeyParam)) {
-            return sortingField;
-        }
-
-        // Generate UUID for dynamic field
-        bindKeyParam = UUID.randomUUID().toString().replace("-", "");
-        return sortingField.toBuilder()
-                .bindKeyParam(bindKeyParam)
-                .build();
-    }
+    // Note: bindKeyParam is generated in SortingField's canonical constructor (a safe identifier for
+    // dynamic fields), so no factory-side normalization is needed here.
 }

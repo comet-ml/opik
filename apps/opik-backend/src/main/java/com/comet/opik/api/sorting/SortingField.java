@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
@@ -18,9 +19,9 @@ public record SortingField(
         Direction direction,
         // bindKeyParam feeds a SQL parameter placeholder name (see bindKey()), so it is an internal
         // value derived server-side only: @JsonIgnore keeps it off the JSON API surface entirely (neither
-        // serialized nor deserialized), and it is always (re)generated as a safe identifier in the
-        // canonical constructor.
-        @JsonIgnore String bindKeyParam) {
+        // serialized nor deserialized). It is null for static (non-dynamic) fields and a server-generated
+        // safe identifier for dynamic fields (see the canonical constructor).
+        @JsonIgnore @Nullable String bindKeyParam) {
 
     private static final Pattern SAFE_BIND_KEY_PARAM = Pattern.compile("[A-Za-z0-9_]+");
 

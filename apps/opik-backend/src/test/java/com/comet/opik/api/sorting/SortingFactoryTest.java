@@ -54,8 +54,8 @@ class SortingFactoryTest {
 
     @Test
     void newSorting__whenNullFieldOnDatasetsFactory__ignoresItWithoutThrowing() {
-        // Regression: the null field reaches SortingFactoryDatasets.processFields -> ensureBindKeyParam,
-        // which called field.startsWith(...) and NPE'd before the validity filter ran.
+        // Regression: a null/blank field must be dropped by newSorting's blank-field filter before any
+        // per-field processing, so it never reaches field.startsWith(...) / field.contains(...).
         var datasetsFactory = new SortingFactoryDatasets();
 
         assertThatCode(() -> datasetsFactory.newSorting("[{\"direction\":\"DESC\"}]")).doesNotThrowAnyException();
