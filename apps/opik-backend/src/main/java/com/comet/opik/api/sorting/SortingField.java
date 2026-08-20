@@ -1,7 +1,7 @@
 package com.comet.opik.api.sorting;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotBlank;
@@ -16,10 +16,11 @@ import java.util.regex.Pattern;
 public record SortingField(
         @NotBlank String field,
         Direction direction,
-        // bindKeyParam feeds a SQL parameter placeholder name (see bindKey()), so it must be derived
-        // server-side only: it is never accepted from client input (READ_ONLY) and is always
-        // (re)generated as a safe identifier in the canonical constructor.
-        @JsonProperty(access = JsonProperty.Access.READ_ONLY) String bindKeyParam) {
+        // bindKeyParam feeds a SQL parameter placeholder name (see bindKey()), so it is an internal
+        // value derived server-side only: @JsonIgnore keeps it off the JSON API surface entirely (neither
+        // serialized nor deserialized), and it is always (re)generated as a safe identifier in the
+        // canonical constructor.
+        @JsonIgnore String bindKeyParam) {
 
     private static final Pattern SAFE_BIND_KEY_PARAM = Pattern.compile("[A-Za-z0-9_]+");
 
