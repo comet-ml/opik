@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.metrics.WorkspaceMetricRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
@@ -55,6 +56,7 @@ public class WorkspacesResource {
 
     private final @NonNull WorkspaceMetricsService workspaceMetricsService;
     private final @NonNull WorkspaceConfigurationService workspaceConfigurationService;
+    private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @Deprecated
@@ -164,9 +166,15 @@ public class WorkspacesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        // Same validation the query-param paths get: these filters reach the analytics query builder, which has no
+        // template for an operator the field's type does not support.
+        var validatedRequest = request.toBuilder()
+                .filters(filtersFactory.validateFilter(request.filters()))
+                .build();
+
         log.info("Retrieve workspace span metric '{}' for projectIds '{}', on workspace_id '{}'", request.metricType(),
                 request.projectIds(), workspaceId);
-        WorkspaceMetricResponse response = workspaceMetricsService.getWorkspaceSpanMetric(request)
+        WorkspaceMetricResponse response = workspaceMetricsService.getWorkspaceSpanMetric(validatedRequest)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved workspace span metric '{}' for projectIds '{}', on workspace_id '{}'", request.metricType(),

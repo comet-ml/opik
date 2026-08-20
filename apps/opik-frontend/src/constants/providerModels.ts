@@ -2736,6 +2736,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_LATEST,
       label: "~x-ai/grok-latest",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_LATEST,
+      label: "~z-ai/glm-latest",
+    },
   ],
 
   [PROVIDER_TYPE.GEMINI]: [

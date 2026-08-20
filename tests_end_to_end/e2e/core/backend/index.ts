@@ -15,6 +15,7 @@ export {
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
   type ThreadRowRef,
+  type ThreadDetail,
   type StatPercentiles,
   type ThreadStatValue,
   numericStat,

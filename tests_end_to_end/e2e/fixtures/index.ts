@@ -1,4 +1,4 @@
-export { test, expect } from './aged-experiment.fixture';
+export { test, expect } from './evaluated-thread.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -59,4 +59,10 @@ export type {
   AgedExperimentRef,
   AgedExperimentFixtures,
 } from './aged-experiment.fixture';
+export type {
+  EvaluatedThreadRef,
+  EvaluatedThreadTurnRef,
+  ThreadEvaluationRunRef,
+  EvaluatedThreadFixtures,
+} from './evaluated-thread.fixture';
 export type { ProjectRef } from '../core/backend';

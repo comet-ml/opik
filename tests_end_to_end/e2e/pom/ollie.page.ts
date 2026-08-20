@@ -14,9 +14,19 @@ export class OlliePage {
   async goto(): Promise<void> {
     return test.step('open the Ollie page', async () => {
       const env = loadEnvConfig();
-      await this.page.goto(
-        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/ollie`,
-      );
+      const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/ollie`;
+      const onTarget = new RegExp(`/projects/${this.projectId}/ollie(?:$|[/?#])`);
+
+      await this.page.goto(url);
+      // A redirect away from this project's /ollie route (e.g. the project
+      // isn't provisioned yet) otherwise fails silently here and only
+      // surfaces later as an opaque iframe/readiness timeout. Re-navigate
+      // once in case the first load raced a redirect, then fail loudly if
+      // it still isn't on the target project's Ollie page.
+      if (!onTarget.test(this.page.url())) {
+        await this.page.goto(url);
+      }
+      await expect(this.page).toHaveURL(onTarget);
     });
   }
 
