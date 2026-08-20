@@ -18,7 +18,11 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -37,6 +41,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -44,6 +49,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -167,6 +173,17 @@ class TracesPartitionPruningMutationTest {
      */
     private static final Pattern EMITTED_IN_CLAUSE = Pattern.compile(
             Pattern.quote(PARTITION_PREDICATE) + "\\s+IN\\s+([^\\n]*)");
+
+    /**
+     * The emitted statement's shape, so its {@code WHERE} clause can be lifted verbatim and re-asked as a
+     * {@code SELECT}: {@code EXPLAIN} does not accept a mutation. Captures the target table too, since the DAO picks
+     * {@code traces} or {@code traces_local} depending on the wrap flag.
+     */
+    private static final Pattern DELETE_SHAPE = Pattern.compile(
+            "DELETE\\s+FROM\\s+(\\S+)\\s+(WHERE\\b.*?)\\s+SETTINGS\\b", Pattern.DOTALL);
+
+    /** {@code EXPLAIN} index entries that reflect <b>partition</b>-level part selection. */
+    private static final Set<String> PARTITION_INDEX_TYPES = Set.of("MinMax", "Partition");
 
     /** A weekly partition value as it appears in SQL — {@code yyyyMMdd}, so always eight digits. */
     private static final Pattern PARTITION_VALUE = Pattern.compile("\\d{8}");
@@ -312,6 +329,48 @@ class TracesPartitionPruningMutationTest {
         assertThat(boundPartitionsOf(sql))
                 .as("exactly the three partitions the batch resolves to, not a range across three centuries")
                 .containsExactlyInAnyOrderElementsOf(ERA_PARTITIONS);
+    }
+
+    @Test
+    @DisplayName("the planner actually prunes, and the fallback provably does not")
+    void pruningReachesThePlannerAndTheFallbackDoesNot() {
+        // Correctness and pruning are different claims, and this is the only test that makes the second one. Deletes
+        // were already correct before OPIK-6901 - what the change buys is parts touched (3,928/3,928 -> 5/3,928 on
+        // prod-test), so a suite that cannot see pruning stop does not test what this change exists to do.
+        //
+        // The regression it guards is specific: a migration rewrites the partition expression to something semantically
+        // identical but textually different, the planner stops recognising the DAO's predicate as the partition key,
+        // pruning silently stops - and values still agree, so every row is still deleted and every other assertion in
+        // this suite stays green. That is the property the removed AST pin covered; this asks the planner directly
+        // instead of inferring it from text.
+        //
+        // EXPLAIN does not accept a mutation, so the WHERE clause is lifted verbatim out of the DAO's own emitted
+        // DELETE and put behind a SELECT - predicate and bound partition values included. Only the verb changes; the
+        // statement being explained is still the DAO's. Same instrument and record shape as
+        // TracesLocalV2PartitioningTest.
+        var projectId = UUID.randomUUID();
+        ERA_IDS.forEach(id -> insertRawTrace(projectId, id));
+
+        // Bounded: one derivable id, so the predicate names one of the three partitions just seeded.
+        delete(Set.of(Pair.of(projectId, ERA_IDS.getFirst())));
+        var bounded = partsSelectedBy(lastTraceDeleteSql(ERA_IDS.getFirst()))
+                .orElseThrow(() -> new AssertionError("EXPLAIN reported no partition index for the bounded delete"));
+
+        // Unbounded: a non-v7 id in the batch, so no predicate at all. Its partner is a different era, so the query_log
+        // lookup finds this statement rather than the one above.
+        var partner = ERA_IDS.get(1);
+        delete(Set.of(Pair.of(projectId, partner), Pair.of(projectId, NON_V7_ID)));
+        var unbounded = partsSelectedBy(lastTraceDeleteSql(partner));
+
+        assertThat(bounded.selected())
+                .as("the bounded delete selects fewer parts than the table holds: %s", bounded)
+                .isLessThan(bounded.total());
+        // Shown to discriminate, or it proves nothing - the same trap as `.contains(partition)` and
+        // `doesNotContain("toDayOfWeek")`. The fallback must not prune: either the planner reports no partition index at
+        // all, because nothing filters on the key, or it reports every part still selected.
+        assertThat(unbounded.map(parts -> parts.selected() == parts.total()).orElse(true))
+                .as("the fallback prunes nothing: %s", unbounded)
+                .isTrue();
     }
 
     @ParameterizedTest
@@ -493,6 +552,54 @@ class TracesPartitionPruningMutationTest {
     }
 
     /**
+     * Parts the planner selects for the DAO's own statement, or empty when it reports no partition index at all.
+     * <p>
+     * {@code SELECT id} rather than {@code count()}, so no trivial-count optimisation can answer from metadata without
+     * selecting parts at all.
+     * <p>
+     * Only {@code MinMax} and {@code Partition} entries are considered, and {@code PrimaryKey} is deliberately
+     * excluded: the DAO's {@code WHERE} also filters {@code workspace_id} and {@code (project_id, id)}, which are the
+     * sort key, so {@code PrimaryKey} prunes parts for the <b>unbounded</b> statement too — counting it would make the
+     * fallback look pruned and destroy the discrimination this test rests on. Across the entries that do qualify it
+     * takes the smallest selected count and the largest initial count, so it does not depend on which of the two
+     * reports the pruning.
+     * <p>
+     * Empty is a meaningful answer rather than a failure: the {@code Indexes} block carries a partition entry only when
+     * the query filters on the partition key, so its absence is exactly what the fallback should produce.
+     */
+    private Optional<SelectedParts> partsSelectedBy(String daoDeleteSql) {
+        var shape = DELETE_SHAPE.matcher(daoDeleteSql);
+        assertThat(shape.find())
+                .as("the emitted statement has the expected DELETE shape:%n%s", daoDeleteSql)
+                .isTrue();
+        var selectSql = "SELECT id FROM %s %s".formatted(shape.group(1), shape.group(2));
+
+        var explainRows = template.stream(connection -> Flux
+                .from(connection.createStatement("EXPLAIN indexes = 1, json = 1 %s".formatted(selectSql)).execute())
+                .flatMap(result -> result.map((row, _) -> row.get("explain", String.class))))
+                .collectList()
+                .block();
+        var explain = String.join("\n", explainRows);
+
+        var indexes = JsonUtils.getJsonNodeFromString(explain).findValue("Indexes");
+        if (indexes == null) {
+            return Optional.empty();
+        }
+        SelectedParts partition = null;
+        for (JsonNode index : indexes) {
+            if (!PARTITION_INDEX_TYPES.contains(index.path("Type").asText()) || !index.has("Selected Parts")) {
+                continue;
+            }
+            var entry = JsonUtils.treeToValue(index, SelectedParts.class);
+            partition = partition == null
+                    ? entry
+                    : new SelectedParts(Math.min(partition.selected(), entry.selected()),
+                            Math.max(partition.total(), entry.total()));
+        }
+        return Optional.ofNullable(partition);
+    }
+
+    /**
      * First column of the first row, as a string. Every read in this suite is a single scalar, so this is the only
      * mapper needed; values go in as binds.
      */
@@ -511,5 +618,15 @@ class TracesPartitionPruningMutationTest {
             binder.accept(statement);
             return Mono.from(statement.execute()).flatMap(result -> Mono.from(result.getRowsUpdated()));
         }).block();
+    }
+
+    /**
+     * The part counts {@code EXPLAIN indexes = 1, json = 1} reports for one index entry: how many parts the query
+     * started from, and how many survived pruning.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record SelectedParts(
+            @JsonProperty("Selected Parts") int selected,
+            @JsonProperty("Initial Parts") int total) {
     }
 }
