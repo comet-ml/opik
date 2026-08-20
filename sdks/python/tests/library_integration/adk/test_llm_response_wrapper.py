@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import AsyncGenerator
 
 import pydantic
@@ -117,11 +118,22 @@ def test_wrap_llm_response_create__usage_class_not_rebuilt_yet__still_dumpable()
         ),
     )
 
-    # Both serialization paths that broke: ours, and the one ADK itself uses.
-    dumped = adk_helpers.convert_adk_base_model_to_dict(response)
-    response.model_dump_json()
+    # Both paths that broke, each reported independently. Chaining them would let a
+    # failure in ours mask whether ADK's own serializer - the one that produced the
+    # HTTP 500 - is actually fixed.
+    failures = {}
+    try:
+        dumped = adk_helpers.convert_adk_base_model_to_dict(response)
+        assert dumped["custom_metadata"]["opik_usage"]["total_token_count"] == 8
+    except Exception as opik_path_error:
+        failures["opik convert_adk_base_model_to_dict"] = repr(opik_path_error)
+    try:
+        # What ADK hands to starlette.
+        response.model_dump_json()
+    except Exception as adk_path_error:
+        failures["adk model_dump_json"] = repr(adk_path_error)
 
-    assert dumped["custom_metadata"]["opik_usage"]["total_token_count"] == 8
+    assert not failures, f"deferred usage class broke serialization: {failures}"
 
 
 @pytest.mark.parametrize(
@@ -155,7 +167,9 @@ def test_tracer_conversion_failure__both_tracers__logs_at_error_level(
 
     handler = re.search(
         r"except Exception[^:]*:\s*\n(?:\s*#.*\n)*\s*LOGGER\.(\w+)\(\s*\n?\s*"
-        r"\"Error converting LlmResponse to dict",
+        r"\"Error converting LlmResponse to dict"
+        # Capture the rest of the call so exc_info can be checked too.
+        r"(?P<rest>(?:[^)]|\)(?!\s*\n))*\))",
         source,
     )
     assert handler, (
@@ -164,6 +178,12 @@ def test_tracer_conversion_failure__both_tracers__logs_at_error_level(
     assert handler.group(1) == "error", (
         f"{tracer_module_name}: conversion failure is logged at "
         f"LOGGER.{handler.group(1)}, expected LOGGER.error"
+    )
+    # Without the traceback the ERROR says something broke but not where, which is
+    # most of the value on a failure this indirect.
+    assert "exc_info=True" in handler.group("rest"), (
+        f"{tracer_module_name}: conversion failure is logged without exc_info=True, "
+        f"so the traceback is lost"
     )
 
 
@@ -263,9 +283,15 @@ def test_adk_llm_span__deferred_usage_metadata__output_and_usage_reach_the_backe
     """
     _run_fake_agent()
 
-    # Derived, not hardcoded: the provider depends on GOOGLE_GENAI_USE_VERTEXAI,
-    # which CI sets and a local run usually does not.
-    expected_provider = adk_helpers.get_adk_provider().value
+    # Read the environment directly rather than calling get_adk_provider(): deriving
+    # the expectation from the helper under test would mirror a provider-detection
+    # regression instead of catching it. Hardcoding is not an option either - the
+    # ADK workflow sets this variable and a local shell usually does not.
+    expected_provider = (
+        "google_vertexai"
+        if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "0").lower() in ("true", "1")
+        else "google_ai"
+    )
 
     EXPECTED_LLM_OUTPUT = {
         "content": {"parts": [{"text": "sunny, 22C"}], "role": "model"},
