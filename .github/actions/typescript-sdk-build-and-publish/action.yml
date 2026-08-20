@@ -174,9 +174,24 @@ runs:
         SUCCESS=false
         TIMEOUT_SECONDS=180  # 3 minutes per attempt
 
-        PUBLISH_CMD="npm publish"
+        # Built as an array and expanded as "${PUBLISH_CMD[@]}" below, so the
+        # value of NPM_ACCESS is always ONE argv element. As a plain string,
+        # `$PUBLISH_CMD` word-splits at the use site, and a value like
+        # `public --registry https://elsewhere.invalid` would smuggle in extra
+        # npm flags and redirect the publish. NPM_ACCESS is set from workflow
+        # YAML today, not user input, so this is defence in depth — but the
+        # allowlist keeps it that way regardless of who edits the caller.
+        PUBLISH_CMD=(npm publish)
         if [ -n "${NPM_ACCESS}" ]; then
-          PUBLISH_CMD="npm publish --access ${NPM_ACCESS}"
+          case "${NPM_ACCESS}" in
+            public|restricted)
+              PUBLISH_CMD+=(--access "${NPM_ACCESS}")
+              ;;
+            *)
+              echo "::error title=Publish to NPM::npm_access must be 'public' or 'restricted' (got '${NPM_ACCESS}')."
+              exit 1
+              ;;
+          esac
         fi
 
         ALREADY_PUBLISHED=false
@@ -198,7 +213,7 @@ runs:
           #      into false-green CI).
           #   3. `tee` streams output live AND captures it to PUBLISH_LOG for the
           #      grep-based 403-already-published check.
-          if timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG"; then
+          if timeout "$TIMEOUT_SECONDS" "${PUBLISH_CMD[@]}" 2>&1 | tee "$PUBLISH_LOG"; then
             SUCCESS=true
             break
           else
