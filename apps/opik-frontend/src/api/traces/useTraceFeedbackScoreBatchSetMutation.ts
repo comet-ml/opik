@@ -2,7 +2,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import chunk from "lodash/chunk";
 import { AxiosError } from "axios";
 
-import api, { TRACE_KEY, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
+import api, {
+  COMPARE_EXPERIMENTS_KEY,
+  TRACE_KEY,
+  TRACES_KEY,
+  TRACES_REST_ENDPOINT,
+} from "@/api/api";
 import { FEEDBACK_SCORE_TYPE } from "@/types/traces";
 import { useToast } from "@/ui/use-toast";
 import { extractErrorMessage } from "@/lib/errors";
@@ -49,11 +54,20 @@ const useTraceFeedbackScoreBatchSetMutation = () => {
       });
     },
     onSettled: async (data, error, variables) => {
-      // Mirror useTraceFeedbackScoreSetMutation: the scores feed the traces list, its
-      // columns/statistics and the per-trace details panel.
+      // Same invalidation set as useTraceFeedbackScoreSetMutation.
       await queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
       await queryClient.invalidateQueries({ queryKey: ["traces-columns"] });
       await queryClient.invalidateQueries({ queryKey: ["traces-statistic"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["experiment-items-statistic"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["experiments-columns"],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["experiment"] });
+      await queryClient.invalidateQueries({
+        queryKey: [COMPARE_EXPERIMENTS_KEY],
+      });
 
       const traceIds = [...new Set(variables.scores.map((score) => score.id))];
       await Promise.all(
