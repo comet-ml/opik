@@ -140,7 +140,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -d .ai-spend-plugin/src ]; then
-            echo "::error title=Plugin staging produced nothing::.ai-spend-plugin/src does not exist. The plugin's src layout likely changed."
+            echo "::error title=Plugin src directory missing::.ai-spend-plugin/src does not exist. The plugin's src layout likely changed."
             exit 1
           fi
 
