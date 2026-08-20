@@ -239,6 +239,13 @@ class TracesPartitionPruningMutationTest {
      * the unbounded case a full scan, which is the conservative direction for an assertion that the fallback prunes
      * nothing.
      */
+    private static final String EXPLAIN_SELECTED_PARTS = """
+            EXPLAIN indexes = 1, json = 1
+            SELECT id
+            FROM <table>
+            <if(partition_expression)>WHERE <partition_expression> IN :partitions<endif>
+            """;
+
     /**
      * The wrap block of {@code 000003_exchange_and_wrap.sql}. The database name is a <b>fragment</b> (an identifier
      * inside a function argument, not a bindable value), so it goes through {@link TemplateUtils#newST} rather than
@@ -248,13 +255,6 @@ class TracesPartitionPruningMutationTest {
     private static final String CREATE_DISTRIBUTED_WRAPPER = """
             CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
             ENGINE = Distributed('{cluster}', '<database>', 'traces_local', sipHash64(project_id))
-            """;
-
-    private static final String EXPLAIN_SELECTED_PARTS = """
-            EXPLAIN indexes = 1, json = 1
-            SELECT id
-            FROM <table>
-            <if(partition_expression)>WHERE <partition_expression> IN :partitions<endif>
             """;
 
     /** A weekly partition value as it appears in SQL — {@code yyyyMMdd}, so always eight digits. */
