@@ -3591,6 +3591,15 @@ class DatasetVersionResourceTest {
             assertThat(sorted.content())
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
                     .containsExactlyElementsOf(expected);
+
+            // Page boundary: with size=2, page 2 returns only the trailing item in sort order, exercising the
+            // push-top-limit OFFSET :top_offset + outer LIMIT path; total stays at the full matching count.
+            var pageTwo = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, sorting, 2, 2, API_KEY, TEST_WORKSPACE);
+            assertThat(pageTwo.total()).isEqualTo(count);
+            assertThat(pageTwo.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactly(expected.get(count - 1));
         }
 
         @Test
