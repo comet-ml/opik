@@ -53,7 +53,10 @@ public class FilterQueryBuilder {
 
     public static final String JSONPATH_ROOT = "$";
 
-    private static final String JSON_EXTRACT_RAW_TEMPLATE = "JSONExtractRaw(%s, '%s')";
+    // The JSON key is passed as a bound query parameter (:sorting_param_xxx) rather than interpolated,
+    // consistent with the data.* sort path and robust to keys containing special characters.
+    // See buildDatasetItemFieldMapping.
+    private static final String JSON_EXTRACT_RAW_TEMPLATE = "JSONExtractRaw(%s, :%s)";
     public static final String OUTPUT_FIELD_PREFIX = "output.";
     public static final String INPUT_FIELD_PREFIX = "input.";
     public static final String METADATA_FIELD_PREFIX = "metadata.";
@@ -1395,8 +1398,8 @@ public class FilterQueryBuilder {
     /**
      * Builds field mapping for DatasetItem JSON fields (output, input, metadata).
      * These fields are stored as JSON strings in ClickHouse, so we need to use JSONExtractRaw
-     * instead of bracket notation. We use literal keys instead of bind parameters
-     * to avoid the dynamic field tuple wrapping.
+     * instead of bracket notation. The JSON key is bound as a query parameter rather than
+     * interpolated, consistent with the data.* sort path.
      * <p>
      * This is used for sorting DatasetItem fields.
      *
@@ -1409,20 +1412,20 @@ public class FilterQueryBuilder {
         for (SortingField field : sortingFields) {
             String fieldName = field.field();
 
-            // Check if this is a JSON field (output, input, or metadata)
-            // Use literal keys instead of bind parameters to avoid dynamic field handling
+            // Check if this is a JSON field (output, input, or metadata).
+            // The JSON key is bound as a query parameter (field.bindKey() -> :sorting_param_xxx) rather
+            // than interpolated into the SQL. The key VALUE (field.dynamicKey()) is bound later in
+            // SortingQueryBuilder.bindDynamicKeys(), consistent with the data.* path, so keys containing
+            // special characters are handled correctly.
             if (fieldName.startsWith(OUTPUT_FIELD_PREFIX)) {
-                String key = fieldName.substring(OUTPUT_FIELD_PREFIX.length());
                 fieldMapping.put(fieldName,
-                        JSON_EXTRACT_RAW_TEMPLATE.formatted("output", key));
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("output", field.bindKey()));
             } else if (fieldName.startsWith(INPUT_FIELD_PREFIX)) {
-                String key = fieldName.substring(INPUT_FIELD_PREFIX.length());
                 fieldMapping.put(fieldName,
-                        JSON_EXTRACT_RAW_TEMPLATE.formatted("input", key));
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("input", field.bindKey()));
             } else if (fieldName.startsWith(METADATA_FIELD_PREFIX)) {
-                String key = fieldName.substring(METADATA_FIELD_PREFIX.length());
                 fieldMapping.put(fieldName,
-                        JSON_EXTRACT_RAW_TEMPLATE.formatted("metadata", key));
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("metadata", field.bindKey()));
             }
             // For other fields (including feedback_scores, data, etc.), use default dbField()
         }

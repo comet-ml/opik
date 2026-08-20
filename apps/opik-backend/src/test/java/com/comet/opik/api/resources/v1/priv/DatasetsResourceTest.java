@@ -8829,6 +8829,148 @@ class DatasetsResourceTest {
             assertThat(firstFetchIds).containsExactlyElementsOf(secondFetchIds);
         }
 
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "output.x'",
+                "output.a'b",
+                "input.k\"v",
+                "metadata.m\\path",
+                "output.o';"
+        })
+        @DisplayName("when sorting by a JSON key containing special characters, then items are sorted by that key")
+        void findDatasetItemsWithExperimentItems__whenSortingByJsonKeyWithSpecialCharacters__thenSortedByThatKey(
+                String jsonKeyField) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset().toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Namespace (output/input/metadata) and the JSON key (with special characters) being sorted on.
+            String namespace = jsonKeyField.substring(0, jsonKeyField.indexOf('.'));
+            String jsonKey = jsonKeyField.substring(jsonKeyField.indexOf('.') + 1);
+
+            // Seed each trace with a DISTINCT, sortable value stored under exactly that key, so the
+            // assertions below prove the key is actually used for ordering (not ignored/missing/constant).
+            // Values 10..50 are assigned to item indices 0..4 (equal-length numeric strings sort in
+            // numeric order under JSONExtractRaw's raw-string comparison).
+            String projectName = GENERATOR.generate().toString();
+            int count = 5;
+            List<Trace> traces = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        var value = JsonUtils.valueToTree(Map.of(jsonKey, (i + 1) * 10));
+                        var builder = factory.manufacturePojo(Trace.class).toBuilder().projectName(projectName);
+                        switch (namespace) {
+                            case "output" -> builder.output(value);
+                            case "input" -> builder.input(value);
+                            case "metadata" -> builder.metadata(value);
+                            default -> throw new IllegalStateException("Unexpected namespace: " + namespace);
+                        }
+                        return builder.build();
+                    })
+                    .toList();
+
+            traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .items(traces.stream()
+                            .map(trace -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                                    .datasetId(datasetId)
+                                    .traceId(trace.id())
+                                    .spanId(null)
+                                    .source(DatasetItemSource.TRACE)
+                                    .build())
+                            .toList())
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItems = IntStream.range(0, traces.size())
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .datasetItemId(datasetItemBatch.items().get(i).id())
+                            .traceId(traces.get(i).id())
+                            .build())
+                    .collect(Collectors.toSet());
+
+            createAndAssert(new ExperimentItemsBatch(experimentItems), apiKey, workspaceName);
+
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            // Baseline fetch (no sorting) to capture the full DatasetItem objects exactly as the API returns them.
+            List<DatasetItem> baselineItems = fetchDatasetItems(datasetId, experimentIdsParam, null, null,
+                    apiKey, workspaceName);
+            assertThat(baselineItems).hasSize(count);
+
+            // Item index i was seeded with value (i+1)*10; order the full objects by that value.
+            Map<UUID, Integer> valueByItemId = IntStream.range(0, count).boxed()
+                    .collect(Collectors.toMap(i -> datasetItemBatch.items().get(i).id(), i -> (i + 1) * 10));
+
+            List<DatasetItem> expectedAsc = baselineItems.stream()
+                    .sorted(Comparator.comparingInt(item -> valueByItemId.get(item.id())))
+                    .toList();
+            List<DatasetItem> expectedDesc = baselineItems.stream()
+                    .sorted(Comparator.comparingInt((DatasetItem item) -> valueByItemId.get(item.id())).reversed())
+                    .toList();
+
+            assertSortedByKey(datasetId, experimentIdsParam, jsonKeyField, Direction.ASC, apiKey, workspaceName,
+                    expectedAsc);
+            assertSortedByKey(datasetId, experimentIdsParam, jsonKeyField, Direction.DESC, apiKey, workspaceName,
+                    expectedDesc);
+        }
+
+        private void assertSortedByKey(UUID datasetId, String experimentIdsParam, String sortField,
+                Direction direction, String apiKey, String workspaceName, List<DatasetItem> expectedItems) {
+            List<DatasetItem> actualItems = fetchDatasetItems(datasetId, experimentIdsParam, sortField, direction,
+                    apiKey, workspaceName);
+
+            // Compare the whole DatasetItem objects, in order - not just their ids - so the assertion proves
+            // the bound key actually drives the ordering. Volatile/derived fields are ignored per suite convention.
+            assertThat(actualItems)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactlyElementsOf(expectedItems);
+        }
+
+        private List<DatasetItem> fetchDatasetItems(UUID datasetId, String experimentIdsParam, String sortField,
+                Direction direction, String apiKey, String workspaceName) {
+            var target = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam);
+
+            if (sortField != null) {
+                var sorting = SortingField.builder().field(sortField).direction(direction).build();
+                var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
+                        StandardCharsets.UTF_8);
+                target = target.queryParam("sorting", sortingParam);
+            }
+
+            try (var actualResponse = target
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                return actualResponse.readEntity(DatasetItemPage.class).content();
+            }
+        }
+
         private Stream<Arguments> findDatasetItemsWithExperimentItems__whenSorting__thenReturnItemsSortedByValidFields() {
             return Stream.of(
                     // ID field sorting
