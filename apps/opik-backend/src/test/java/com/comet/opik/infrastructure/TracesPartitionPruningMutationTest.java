@@ -19,6 +19,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.WeeklyPartitions;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -108,6 +109,72 @@ class TracesPartitionPruningMutationTest {
 
     /** Project for the raw-SQL seeded rows, kept off the API-created projects so neither test's reads see the other's. */
     private static final UUID RAW_PROJECT_ID = UUID.randomUUID();
+
+    // The suite's SQL, per .agents/skills/opik-backend/SKILL.md "SQL Query Construction": each query declared once as a
+    // text block, values as :placeholders, and the two things that cannot be bound - a partition-key EXPRESSION and a
+    // table IDENTIFIER - as StringTemplate fragments rendered through TemplateUtils.newST, following
+    // ClickHousePartitionMetricsDAO. Both fragments are compile-time constants of this class, never test input, so
+    // neither needs the allow-list guard that DAO's isValidTable applies to its configured table list.
+    //
+    // The EXCHANGE/RENAME pair in exchangeTables() stays as inline literals on purpose: they are single literals built
+    // by no Java string operation, and they are kept byte-identical to 000003_exchange_and_wrap.sql by eye, so they
+    // belong at the call site next to the javadoc that says so - as TracesDistributedWrapMutationTest does.
+    private static final String SELECT_FILED_PARTITION = """
+            SELECT DISTINCT _partition_id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id = :id
+            """;
+
+    private static final String SELECT_PARTITION_EXPRESSION_VALUE = """
+            SELECT DISTINCT toString(<partition_expression>)
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id = :id
+            """;
+
+    private static final String CREATE_PARTITION_KEY_PROBE = """
+            CREATE TABLE <probe_table>
+            (
+                id_at DateTime64(0, 'UTC')
+            )
+            ENGINE = MergeTree
+            PARTITION BY <partition_expression>
+            ORDER BY tuple()
+            """;
+
+    private static final String DROP_PARTITION_KEY_PROBE = """
+            DROP TABLE IF EXISTS <probe_table> SYNC
+            """;
+
+    private static final String SELECT_ID_AT_TYPE = """
+            SELECT type
+            FROM system.columns
+            WHERE database = currentDatabase()
+            AND table = 'traces'
+            AND name = 'id_at'
+            """;
+
+    private static final String SELECT_PARTITION_KEY = """
+            SELECT partition_key
+            FROM system.tables
+            WHERE database = currentDatabase()
+            AND name = :table
+            """;
+
+    private static final String INSERT_RAW_TRACE = """
+            INSERT INTO traces (workspace_id, project_id, id)
+            VALUES (:workspace_id, :project_id, :id)
+            """;
+
+    private static final String LAST_TRACE_DELETE = """
+            SELECT query
+            FROM system.query_log
+            WHERE log_comment LIKE 'delete_traces:%'
+            AND type = 'QueryFinish'
+            ORDER BY event_time_microseconds DESC
+            LIMIT 1
+            """;
 
     /** A v4 UUID: no timestamp to derive a partition from. */
     private static final UUID NON_V7_ID = UUID.fromString("9f527bac-527a-4f92-8875-0fa8af8e4f22");
@@ -206,12 +273,11 @@ class TracesPartitionPruningMutationTest {
         // — so this seeds through the real column definition rather than restating it.
         insertRawTrace(id);
 
-        var filedUnder = queryOneString("SELECT DISTINCT _partition_id FROM traces"
-                + " WHERE workspace_id = :workspace_id AND id = :id", bindRawTrace(id));
-        // PARTITION_PREDICATE is interpolated because it is an expression, not a value - the point is to evaluate the
-        // DAO's own text. The ids and workspace go in as binds like everywhere else in this suite.
-        var daoPredicateValue = queryOneString("SELECT DISTINCT toString(" + PARTITION_PREDICATE + ") FROM traces"
-                + " WHERE workspace_id = :workspace_id AND id = :id", bindRawTrace(id));
+        var filedUnder = queryOneString(SELECT_FILED_PARTITION, bindRawTrace(id));
+        // The DAO predicate goes in as a StringTemplate fragment, not a bind: it is an expression to be evaluated, and
+        // evaluating the DAO's own text is the entire point. The workspace and id are values, so they bind.
+        var daoPredicateValue = queryOneString(withPartitionExpression(SELECT_PARTITION_EXPRESSION_VALUE),
+                bindRawTrace(id));
 
         assertThat(daoPredicateValue)
                 .as("the DAO predicate resolves to the partition ClickHouse filed the %s row under", era)
@@ -247,15 +313,14 @@ class TracesPartitionPruningMutationTest {
         // two re-prints. That makes the comparison AST-level and formatter-independent by construction: both strings
         // come out of the same printer, so they are equal iff the parsed expressions are. Diffing the DAO text against
         // system.tables directly would instead pin ClickHouse's whitespace choices, which is what it must not do.
-        execute("CREATE TABLE " + PARTITION_KEY_PROBE + " (id_at DateTime64(0, 'UTC')) ENGINE = MergeTree"
-                + " PARTITION BY " + PARTITION_PREDICATE + " ORDER BY tuple()", _ -> {
-                });
+        execute(createProbeTableSql(), _ -> {
+        });
         try {
             assertThat(partitionKeyOf(PARTITION_KEY_PROBE))
                     .as("the DAO predicate parses to the same expression traces is partitioned by")
                     .isEqualTo(partitionKeyOf("traces"));
         } finally {
-            execute("DROP TABLE IF EXISTS " + PARTITION_KEY_PROBE + " SYNC", _ -> {
+            execute(withProbeTable(DROP_PARTITION_KEY_PROBE), _ -> {
             });
         }
     }
@@ -265,9 +330,7 @@ class TracesPartitionPruningMutationTest {
     void idAtIsTheSixtyFourBitColumn() {
         // The second half of what the flag asserts, and not implied by the partition agreement above: a 32-bit
         // DateTime id_at would agree with itself while silently wrapping every id past 2106.
-        assertThat(queryOneString("SELECT type FROM system.columns WHERE database = currentDatabase()"
-                + " AND table = 'traces' AND name = 'id_at'"))
-                .isEqualTo("DateTime64(0, 'UTC')");
+        assertThat(queryOneString(SELECT_ID_AT_TYPE)).isEqualTo("DateTime64(0, 'UTC')");
     }
 
     @Test
@@ -367,14 +430,7 @@ class TracesPartitionPruningMutationTest {
     private String lastTraceDeleteSql() {
         execute("SYSTEM FLUSH LOGS", _ -> {
         });
-        return queryOneString("""
-                SELECT query
-                FROM system.query_log
-                WHERE log_comment LIKE 'delete_traces:%'
-                AND type = 'QueryFinish'
-                ORDER BY event_time_microseconds DESC
-                LIMIT 1
-                """);
+        return queryOneString(LAST_TRACE_DELETE);
     }
 
     /**
@@ -429,18 +485,43 @@ class TracesPartitionPruningMutationTest {
      * backdated or far-future {@code id} by design ({@code IdGenerator.validateId}).
      */
     private void insertRawTrace(UUID id) {
-        execute("INSERT INTO traces (workspace_id, project_id, id) VALUES (:workspace_id, :project_id, :id)",
+        execute(INSERT_RAW_TRACE,
                 statement -> statement
                         .bind("workspace_id", WORKSPACE_ID)
                         .bind("project_id", RAW_PROJECT_ID.toString())
                         .bind("id", id.toString()));
     }
 
+    /**
+     * Renders a template whose only fragment is the DAO's partition-key expression — an expression, not a value, so it
+     * cannot be bound. Each renderer adds exactly the attributes its template declares, as the DAOs do.
+     */
+    private static String withPartitionExpression(String sql) {
+        return TemplateUtils.newST(sql)
+                .add("partition_expression", PARTITION_PREDICATE)
+                .render();
+    }
+
+    /**
+     * As {@link #withPartitionExpression}, for the probe-table statements: a table identifier cannot be bound either.
+     */
+    private static String withProbeTable(String sql) {
+        return TemplateUtils.newST(sql)
+                .add("probe_table", PARTITION_KEY_PROBE)
+                .render();
+    }
+
+    /** The probe-table DDL carries both fragments. */
+    private static String createProbeTableSql() {
+        return TemplateUtils.newST(CREATE_PARTITION_KEY_PROBE)
+                .add("probe_table", PARTITION_KEY_PROBE)
+                .add("partition_expression", PARTITION_PREDICATE)
+                .render();
+    }
+
     /** ClickHouse's own re-print of a table's partition key expression. */
     private String partitionKeyOf(String table) {
-        return queryOneString("SELECT partition_key FROM system.tables"
-                + " WHERE database = currentDatabase() AND name = :table",
-                statement -> statement.bind("table", table));
+        return queryOneString(SELECT_PARTITION_KEY, statement -> statement.bind("table", table));
     }
 
     private static Consumer<Statement> bindRawTrace(UUID id) {
