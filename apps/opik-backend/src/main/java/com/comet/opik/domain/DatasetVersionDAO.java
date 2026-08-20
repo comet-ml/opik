@@ -579,10 +579,10 @@ public interface DatasetVersionDAO {
      */
     @SqlUpdate("""
             UPDATE dataset_versions
-            SET items_total = items_total + :items_total_delta,
-                items_added = items_added + :items_added_delta,
-                items_modified = items_modified + :items_modified_delta,
-                items_deleted = items_deleted + :items_deleted_delta,
+            SET items_total = COALESCE(items_total, 0) + :items_total_delta,
+                items_added = COALESCE(items_added, 0) + :items_added_delta,
+                items_modified = COALESCE(items_modified, 0) + :items_modified_delta,
+                items_deleted = COALESCE(items_deleted, 0) + :items_deleted_delta,
                 last_updated_at = NOW(),
                 last_updated_by = :last_updated_by
             WHERE id = :version_id

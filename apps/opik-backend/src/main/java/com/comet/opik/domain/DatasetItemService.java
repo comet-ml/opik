@@ -1766,15 +1766,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @param userName The user performing the update
      */
     private void updateVersionCountsForDelete(UUID versionId, String workspaceId, int deletedCount, String userName) {
-        log.info("deleteItemsFromExistingVersion: decrementing counts by '{}'", deletedCount);
+        log.debug("deleteItemsFromExistingVersion: decrementing counts by deletedCount='{}'", deletedCount);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
 
-            int updated = dao.incrementCounts(versionId, -deletedCount, 0, 0, deletedCount, workspaceId, userName);
-
-            if (updated == 0) {
-                throw new NotFoundException("Version not found: '%s'".formatted(versionId));
+            // A concurrent dataset delete can drop the version row: the previous absolute update
+            // ignored its result, so a vanished version stayed a 204. Keep that idempotency rather
+            // than turning the race into a 404.
+            if (dao.incrementCounts(versionId, -deletedCount, 0, 0, deletedCount, workspaceId, userName) == 0) {
+                log.info("Version '{}' no longer exists; skipping count update", versionId);
             }
             return null;
         });
