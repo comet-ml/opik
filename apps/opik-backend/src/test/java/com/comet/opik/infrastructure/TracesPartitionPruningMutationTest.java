@@ -492,6 +492,19 @@ class TracesPartitionPruningMutationTest {
                         .bind("id", id.toString()));
     }
 
+    /**
+     * First column of the first row, as a string. Every read in this suite is a single scalar, so this is the only
+     * mapper needed; values go in as binds.
+     */
+    private String queryOneString(String sql, Consumer<Statement> binder) {
+        return template.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql);
+            binder.accept(statement);
+            return Mono.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class))));
+        }).block();
+    }
+
     private void execute(String sql, Consumer<Statement> binder) {
         template.nonTransaction(connection -> {
             var statement = connection.createStatement(sql);
