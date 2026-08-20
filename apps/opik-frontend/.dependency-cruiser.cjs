@@ -186,7 +186,6 @@ module.exports = {
           "\\.test\\.(ts|tsx)$", // test files
           "\\.spec\\.(ts|tsx)$",
           "__mocks__",
-          "e2e/",
         ],
       },
       to: {},
@@ -234,7 +233,6 @@ module.exports = {
         "\\.spec\\.(ts|tsx)$",
         "__tests__",
         "__mocks__",
-        "e2e/",
         "\\.d\\.ts$",
       ],
     },

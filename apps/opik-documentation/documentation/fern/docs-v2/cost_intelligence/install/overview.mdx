@@ -37,8 +37,8 @@ Nothing needs to be installed on a server, and there is no per-developer manual 
     icon="fa-regular fa-shield-halved"
     href="/cost-intelligence/install/macos-app"
   >
-    Transparent capture via a system extension, for when no client
-    configuration can be delivered at all.
+    Transparent capture via a system extension. Covers every user, including
+    those on the Claude Code desktop app.
   </Card>
 </CardGroup>
 
@@ -50,7 +50,7 @@ Which one fits:
 | **Platforms** | macOS, Linux, Windows | macOS, Linux, Windows | macOS only |
 | **Who receives it** | Whichever devices or groups you target | Every authenticated user in the org | Targeted devices |
 | **Staged / pilot rollout** | Yes | No, all users at once | Yes |
-| **Client config needed** | Yes (delivered for you) | Yes (delivered for you) | None, transparent |
+| **Agent config needed** | Yes (delivered for you) | Yes (delivered for you) | None — the agent is untouched |
 | **Intercepts TLS** | No | No | Yes, locally |
 | **User can disable it** | No, enforced | No, enforced | No, enforced |
 | **Effort** | Low | Lowest | Highest |
@@ -65,8 +65,10 @@ Which one fits:
 
   Choose **managed settings** when you have Claude for Teams or Enterprise, want
   the fastest possible path, and are happy enabling everyone at once, or when
-  your developers' machines aren't centrally managed at all. Reach for the
-  **macOS app** only when neither path can deliver client configuration.
+  your developers' machines aren't centrally managed at all. The plugin
+  captures the Claude Code **CLI**, not the desktop app; reach for the
+  **macOS app** when you want to cover every user, including those on the
+  Claude Code desktop app.
 </Tip>
 
 ## Try it on your own machine first

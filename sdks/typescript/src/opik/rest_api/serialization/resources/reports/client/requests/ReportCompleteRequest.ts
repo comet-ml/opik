@@ -14,6 +14,7 @@ export const ReportCompleteRequest: core.serialization.Schema<
     status: ReportCompleteRequestStatus,
     sessionId: core.serialization.property("session_id", core.serialization.string().optional()),
     recommendedActions: core.serialization.property("recommended_actions", JsonNode.optional()),
+    failureReason: core.serialization.property("failure_reason", core.serialization.string().optional()),
 });
 
 export declare namespace ReportCompleteRequest {
@@ -22,5 +23,6 @@ export declare namespace ReportCompleteRequest {
         status: ReportCompleteRequestStatus.Raw;
         session_id?: string | null;
         recommended_actions?: JsonNode.Raw | null;
+        failure_reason?: string | null;
     }
 }

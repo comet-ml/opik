@@ -330,3 +330,47 @@ class AnnotationQueueCreate(BaseModel):
 class AnnotationQueueResponse(BaseModel):
     id: str
     name: str
+
+
+class ThreadsEvaluateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # Always distinct from project_name in the specs that drive this: the whole
+    # point of the flow is that the evaluation_task trace lands in a SEPARATE
+    # project from the conversation it scored.
+    eval_project_name: str
+    thread_id: str
+    # Keys the transforms read off each trace's input/output dict. The SDK takes
+    # callables; the wire cannot carry one, so the route builds the two lambdas
+    # from these and the shape stays the caller's choice.
+    trace_input_key: str
+    trace_output_key: str
+    # When set, evaluate_threads is called with a trace_context_transform that
+    # reads this key off trace.metadata. When None the argument is omitted
+    # entirely, which is the pre-existing caller shape.
+    context_metadata_key: str | None = None
+    metric_name: str
+    # Fixed score the metric returns. Deterministic on purpose: this flow must
+    # be assertable without a provider key or an LLM verdict.
+    score_value: float
+    score_reason: str
+    workspace: str | None = None
+
+
+class ThreadsEvaluateScore(BaseModel):
+    name: str
+    value: float
+    reason: str | None = None
+
+
+class ThreadsEvaluateResponse(BaseModel):
+    thread_id: str
+    eval_project_name: str
+    scores: list[ThreadsEvaluateScore]
+    # The conversation EXACTLY as the metric's score() received it, as raw
+    # dicts. Deliberately not a typed model: the fact under test is whether the
+    # `context` KEY is present at all, and any pydantic model with an optional
+    # `context` field would serialize an absent key as `"context": null` and
+    # destroy the distinction the caller is asserting on.
+    conversation: list[dict[str, Any]]
