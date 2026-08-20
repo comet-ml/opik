@@ -25,6 +25,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
+import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterAll;
@@ -696,8 +697,10 @@ class TracesPartitionPruningMutationTest {
             var entry = JsonUtils.treeToValue(index, SelectedParts.class);
             partition = partition == null
                     ? entry
-                    : new SelectedParts(Math.min(partition.selected(), entry.selected()),
-                            Math.max(partition.total(), entry.total()));
+                    : partition.toBuilder()
+                            .selected(Math.min(partition.selected(), entry.selected()))
+                            .total(Math.max(partition.total(), entry.total()))
+                            .build();
         }
         return Optional.ofNullable(partition);
     }
@@ -727,6 +730,7 @@ class TracesPartitionPruningMutationTest {
      * The part counts {@code EXPLAIN indexes = 1, json = 1} reports for one index entry: how many parts the query
      * started from, and how many survived pruning.
      */
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record SelectedParts(
             @JsonProperty("Selected Parts") int selected,
