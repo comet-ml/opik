@@ -94,12 +94,19 @@ def _wrap_llm_response_create(
     if response.custom_metadata is None:
         response.custom_metadata = {}
 
-    # Store the usage as a plain dict, not the genai pydantic model. ``custom_metadata``
-    # is typed ``dict[str, Any]``, so pydantic has no serializer for a model placed in
-    # it and dumping the whole LlmResponse later raises "'MockValSer' object is not an
-    # instance of 'SchemaSerializer'". after_model_callback swallows that, which is how
-    # the LLM spans ended up with no output and no usage. The reader below already
-    # handles a dict - that is what it gets from the dumped result in the streaming path.
+    # Store the usage as a plain dict, never the genai model itself. Since google-genai
+    # 2.18.0 (googleapis/python-genai#2784) these classes defer their pydantic build, so
+    # a class holds a MockValSer until something rebuilds it. Serializing one from an
+    # Any-typed field (custom_metadata is dict[str, Any]) takes pydantic's inference
+    # path, which downcasts to SchemaSerializer in Rust without firing the lazy rebuild
+    # hook a Python-level call would, and raises "'MockValSer' object is not an instance
+    # of 'SchemaSerializer'" - fallback=str does not rescue it. That broke both
+    # after_model_callback (silently, losing output and usage) and ADK's own response
+    # serialization (HTTP 500). Upstream, still open:
+    # https://github.com/pydantic/pydantic/issues/13647
+    # Dumping the model directly goes through Python and does rebuild the class, so the
+    # dict we attach is always safe. The reader below already handles a dict - that is
+    # what it gets from the dumped result in the streaming path.
     response.custom_metadata["opik_usage"] = adk_helpers.convert_adk_base_model_to_dict(
         usage_metadata
     )
