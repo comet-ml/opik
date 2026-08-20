@@ -388,7 +388,7 @@ Opik te permite evaluar tu aplicación de LLM durante el desarrollo a través de
 
 Si Opik te resulta útil, ¡considera darnos una estrella! Tu apoyo nos ayuda a hacer crecer nuestra comunidad y a seguir mejorando el producto.
 
-[![Gráfico del historial de estrellas](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+[![Gráfico del historial de estrellas](https://star-history.dera.page/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
 
 <a id="-contributing"></a>
 ## 🤝 Contribuir

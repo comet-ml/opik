@@ -389,7 +389,7 @@ Mit Opik können Sie Ihre LLM-Anwendung während der Entwicklung anhand von [Dat
 
 Wenn Sie Opik nützlich finden, geben Sie uns bitte einen Stern! Ihre Unterstützung hilft uns, unsere Community wachsen zu lassen und das Produkt weiter zu verbessern.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+[![Star History Chart](https://star-history.dera.page/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
 
 <a id="-contributing"></a>
 ## 🤝 Mitwirken

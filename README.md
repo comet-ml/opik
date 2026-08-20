@@ -389,7 +389,7 @@ Opik allows you to evaluate your LLM application during development through [Dat
 
 If you find Opik useful, please consider giving us a star! Your support helps us grow our community and continue improving the product.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
+[![Star History Chart](https://star-history.dera.page/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
 
 <a id="-contributing"></a>
 ## 🤝 Contributing
