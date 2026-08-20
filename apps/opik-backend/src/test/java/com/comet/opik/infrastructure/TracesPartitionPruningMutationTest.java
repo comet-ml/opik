@@ -902,9 +902,21 @@ class TracesPartitionPruningMutationTest {
             // Re-running the setup against the topology it already installed IS that shape - `traces_local` exists and
             // `traces` is Distributed over it, which is what the migration will hand us. So this covers the second of
             // the two states: with the swap (every other test here) and without it (this one).
-            // Not a tautology: if either step failed to early-return it would THROW, not quietly repeat itself. The
-            // EXCHANGE needs `traces_local_v2`, which the install renamed to `traces_pre_cutover_backup`; and the wrap
-            // ends in a RENAME onto `traces_local`, which by now exists. So a non-idempotent step fails loudly here.
+            // A row that already exists BEFORE the setup runs, created through the ingestion path so the check reads it
+            // back the way production does. Metadata on its own cannot see data loss: a table recreated from the same
+            // DDL reports the same engine_full and partition_key while being empty, so a step that rebuilt the topology
+            // rather than skipping it would satisfy every metadata assertion here. The surviving row is the assertion
+            // that distinguishes "skipped" from "rebuilt", and reading it through the wrapper also shows routing is
+            // intact rather than merely that the wrapper exists.
+            var existing = newTrace().build();
+            traceResourceClient.createTrace(existing, API_KEY, WORKSPACE_NAME);
+            assertThat(traceIdsOf(existing.projectName()))
+                    .as("the pre-existing row is readable before the setup re-runs")
+                    .contains(existing.id());
+
+            // Not a tautology either: if either step failed to early-return it would THROW, not quietly repeat itself.
+            // The EXCHANGE needs `traces_local_v2`, which the install renamed to `traces_pre_cutover_backup`; and the
+            // wrap ends in a RENAME onto `traces_local`, which by now exists. So a non-idempotent step fails loudly.
             var tracesEngineBefore = queryOneString(TABLE_ENGINE_FULL, _ -> {
             });
             var localPartitionKeyBefore = partitionKeyOf("traces_local");
@@ -912,12 +924,15 @@ class TracesPartitionPruningMutationTest {
             ensurePartitionedSuccessorUnderTraces();
             ensureDistributedWrap();
 
+            assertThat(traceIdsOf(existing.projectName()))
+                    .as("the row that existed before the setup is still there, and still routed through the wrapper")
+                    .contains(existing.id());
             assertThat(queryOneString(TABLE_ENGINE_FULL, _ -> {
             }))
                     .as("re-running the setup left the Distributed wrapper untouched")
                     .isEqualTo(tracesEngineBefore);
             assertThat(partitionKeyOf("traces_local"))
-                    .as("and left the partitioned data untouched")
+                    .as("and left the partitioned table's key untouched")
                     .isEqualTo(localPartitionKeyBefore);
 
             // Not just survivable - still testing what it claims. A pruned delete on the untouched topology, so a
@@ -943,53 +958,58 @@ class TracesPartitionPruningMutationTest {
             // concatMap - so "all-or-nothing" is a per-statement guarantee, not a per-request one. Every other test
             // here passes a handful of pairs, which is one chunk, so none of them can see that.
             //
-            // What this pins: chunk one is all-derivable and must prune; chunk two carries a non-v7 id and must fall
-            // back to the unbounded form; and the real rows in BOTH chunks must be deleted either way. A refactor that
-            // hoisted the derivation out of the lambda would make the whole request unbounded - safe, but it would
-            // silently give back the pruning on every large delete, and only this test would notice.
+            // The non-v7 id goes in the FIRST chunk and the derivable ids in the second, which is the only arrangement
+            // that can actually discriminate. Chunks are sized [BATCH_SIZE, remainder], so the first is always full and
+            // never inspectable: query_log truncates at log_queries_cut_to_length (100,000 bytes here) and a
+            // 10,000-pair statement inlines to ~762 KiB, so its tail - where the predicate sits - is not recorded.
+            // Only the remainder chunk is small enough to read back, so the assertion that matters has to live there.
+            //
+            // That makes the test bite on the refactor it exists to catch. Hoisting weeklyPartitionsFor out of the
+            // lambda, so the whole request is derived once, would let the non-v7 id in chunk one strip pruning from
+            // chunk two as well - and chunk two's predicate is exactly what is asserted below. Removing the pruning
+            // outright fails the same assertion. With the arrangement reversed, both regressions passed.
             var projectId = ID_GENERATOR.generateId();
             var firstChunkRow = idInWeekOf(ERA_MONDAYS.getFirst());
             var secondChunkRow = idInWeekOf(ERA_MONDAYS.getLast());
             insertRawTrace(projectId, firstChunkRow);
             insertRawTrace(projectId, secondChunkRow);
 
-            // Chunk one: the real row plus filler, all derivable, exactly ANALYTICS_DELETE_BATCH_SIZE pairs. Filler ids
+            // Chunk one: a real row, the non-v7 id, and filler up to exactly ANALYTICS_DELETE_BATCH_SIZE. Filler ids
             // match no row - a delete does not need its ids to exist, and the chunk boundary is what is under test.
             var ordered = new ArrayList<UUID>();
             ordered.add(firstChunkRow);
+            ordered.add(NON_V7_ID);
             while (ordered.size() < ANALYTICS_DELETE_BATCH_SIZE) {
                 ordered.add(idInWeekOf(ERA_MONDAYS.getFirst()));
             }
-            // Chunk two: the second real row and a non-v7 id, so this chunk alone loses its pruning.
+            // Chunk two: the remainder, all derivable, in two different weeks so the bound set is exact rather than
+            // trivially a single value.
+            var secondChunkCompanion = idInWeekOf(ERA_MONDAYS.get(1));
             ordered.add(secondChunkRow);
-            ordered.add(NON_V7_ID);
+            ordered.add(secondChunkCompanion);
 
             delete(ordered.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toCollection(
                     LinkedHashSet::new)));
 
             assertThat(liveRowCount(projectId, firstChunkRow))
-                    .as("the row in the pruned chunk is deleted")
+                    .as("the row in the chunk that fell back to unbounded is deleted")
                     .isEqualTo("0");
             assertThat(liveRowCount(projectId, secondChunkRow))
-                    .as("and so is the row in the chunk that fell back to unbounded")
+                    .as("and so is the row in the chunk that pruned")
                     .isEqualTo("0");
 
-            // Two statements, with the sizes the chunking implies - this is what shows the request was split at all.
-            // The full chunk's own text is NOT inspectable: query_log truncates at log_queries_cut_to_length (100,000
-            // bytes on this server) and a 10,000-pair statement inlines to ~762 KiB, so the recorded text stops long
-            // before the partition predicate at the statement's tail. Asserting on it would be asserting on a string
-            // the server never kept. That a derivable chunk prunes is covered by the single-chunk tests; what only this
-            // test can show is that the two chunks are derived INDEPENDENTLY - which the second chunk's shape proves,
-            // since it lost its pruning while the first still executed and deleted its row.
+            // The full chunk's statement is only checked to exist - that is what shows the request was split at all.
+            // Nothing about its text can be asserted, for the truncation reason above.
             deleteSqlForChunkOf(ANALYTICS_DELETE_BATCH_SIZE);
 
             var secondChunkSql = deleteSqlForChunkOf(2);
             assertThat(secondChunkSql)
-                    .as("the chunk carrying the non-v7 id emits no id_at predicate of any kind")
-                    .doesNotContain("id_at");
-            assertThat(EMITTED_IN_CLAUSE.matcher(secondChunkSql).find())
-                    .as("nor a partition IN clause: %s", secondChunkSql)
-                    .isFalse();
+                    .as("the all-derivable chunk prunes even though an earlier chunk could not")
+                    .contains(PARTITION_PREDICATE);
+            assertThat(boundPartitionsOf(secondChunkSql))
+                    .as("bounded to exactly its own two weeks")
+                    .containsExactlyInAnyOrder(partitionNameOf(ERA_MONDAYS.getLast()),
+                            partitionNameOf(ERA_MONDAYS.get(1)));
         }
 
         @ParameterizedTest
