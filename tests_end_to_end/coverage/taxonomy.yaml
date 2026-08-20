@@ -555,12 +555,13 @@ areas:
     specs:
       - experiments/experiments-smoke.spec.ts
       - experiments/experiments-compare.spec.ts
+      - experiments/experiments-compare-json-sort.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
       compare-side-by-side:    { covered: true,  tier: t2-cuj }
-      compare-sort-search:     { covered: true,  tier: t2-cuj }
+      compare-sort-search:     { covered: true,  tier: t2-cuj, note: "feedback-score sort + search in experiments-compare; evaluation-task JSON-key sort in experiments-compare-json-sort" }
       compare-feedback-tab:    { covered: true,  tier: t2-cuj }
       compare-row-detail:      { covered: true,  tier: t2-cuj }
       insights-tab:            { covered: false }

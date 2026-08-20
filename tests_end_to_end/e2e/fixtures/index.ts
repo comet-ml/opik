@@ -1,4 +1,4 @@
-export { test, expect } from './evaluated-thread.fixture';
+export { test, expect } from './json-sortable-comparison.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -65,4 +65,16 @@ export type {
   ThreadEvaluationRunRef,
   EvaluatedThreadFixtures,
 } from './evaluated-thread.fixture';
+export type {
+  JsonSortableComparisonRef,
+  JsonSortableComparisonFixtures,
+  JsonSortableItemSeed,
+  JsonSortableExperimentRef,
+} from './json-sortable-comparison.fixture';
+export {
+  PLAIN_OUTPUT_KEY,
+  QUOTED_OUTPUT_KEY,
+  BACKSLASHED_OUTPUT_KEY,
+  JSON_SORTABLE_OUTPUT_KEYS,
+} from './json-sortable-comparison.fixture';
 export type { ProjectRef } from '../core/backend';
