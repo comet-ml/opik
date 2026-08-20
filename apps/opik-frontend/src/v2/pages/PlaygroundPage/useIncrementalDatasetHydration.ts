@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { containsTruncatedMedia } from "@/lib/media";
@@ -10,10 +10,16 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
   const hydrateDatasetItemData = useHydrateDatasetItemData();
   const [hydratedItems, setHydratedItems] = useState<DatasetItem[]>([]);
   const [isHydrating, setIsHydrating] = useState(false);
-  const cancelledRef = useRef(false);
 
   useEffect(() => {
-    cancelledRef.current = false;
+    // Scoped to this effect run rather than a shared ref. React runs the previous
+    // run's cleanup before this body, so an in-flight hydration from an earlier
+    // dataset observes its own `cancelled === true` and stops — even when this run
+    // returns early below and installs no cleanup of its own. A shared ref instead
+    // got reset here on every run, un-cancelling the previous run's loop; its
+    // continuation would then write the old dataset's data into the new array at a
+    // positional index. Also covers unmount.
+    let cancelled = false;
 
     if (datasetItems.length === 0) {
       setHydratedItems([]);
@@ -48,11 +54,11 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
 
     const hydrateItems = async () => {
       for (const index of indexesToHydrate) {
-        if (cancelledRef.current) return;
+        if (cancelled) return;
 
         const hydratedData = await hydrateDatasetItemData(datasetItems[index]);
 
-        if (cancelledRef.current) return;
+        if (cancelled) return;
 
         setHydratedItems((prev) =>
           prev.map((item, idx) =>
@@ -67,7 +73,7 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
     hydrateItems();
 
     return () => {
-      cancelledRef.current = true;
+      cancelled = true;
     };
   }, [datasetItems, hydrateDatasetItemData]);
 
