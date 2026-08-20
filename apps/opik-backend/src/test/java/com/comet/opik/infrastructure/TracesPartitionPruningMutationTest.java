@@ -113,7 +113,11 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * against the one table where this predicate must never be emitted, and would pass while proving nothing: the predicate
  * is harmless against an unpartitioned table for recent ids. Hand-authoring a partitioned {@code traces} in the test
  * instead would duplicate migration 000114 and reintroduce exactly the drift this suite exists to detect. Both steps are
- * idempotent, so the suite keeps working once the cutover migration lands and they become no-ops.
+ * idempotent, so the suite keeps working once the cutover migration lands and they become no-ops — and that is
+ * asserted rather than assumed, by {@link PruningEnabled#topologySetupIsANoOpOnceTheEstateProvidesIt}. Two states
+ * are therefore covered: <b>with</b> the swap, which every other test here needs today, and <b>without</b> it,
+ * which is what the estate will look like once the migrations create {@code traces_local} partitioned with the
+ * {@code Distributed} {@code traces} over it and this suite's {@code EXCHANGE} stops being needed at all.
  *
  * <p><b>Topology: the post-cutover end state, with both schema flags on.</b> The wrap is applied and
  * {@code tracesDistributedWrapEnabled} set, so the DAO's mutations reach the data the way production routes them —
@@ -884,6 +888,52 @@ class TracesPartitionPruningMutationTest {
             assertThat(unbounded.map(parts -> parts.selected() == parts.total()).orElse(true))
                     .as("the fallback prunes nothing: %s", unbounded)
                     .isTrue();
+        }
+
+        @Test
+        @DisplayName("the topology setup is a no-op once the estate provides it - the path it takes post-cutover")
+        void topologySetupIsANoOpOnceTheEstateProvidesIt() {
+            // Today this suite installs the topology itself, so both setup steps take their INSTALL path and their
+            // early returns are dead code. Once the cutover migration lands, the migrations will provide
+            // `traces_local` partitioned with the Distributed `traces` over it: the EXCHANGE and the wrap are no
+            // longer needed, and that early return becomes the ONLY path either step takes. Nothing would exercise it
+            // until the day it becomes load-bearing, which is the wrong day to find out it was wrong.
+            //
+            // Re-running the setup against the topology it already installed IS that shape - `traces_local` exists and
+            // `traces` is Distributed over it, which is what the migration will hand us. So this covers the second of
+            // the two states: with the swap (every other test here) and without it (this one).
+            // Not a tautology: if either step failed to early-return it would THROW, not quietly repeat itself. The
+            // EXCHANGE needs `traces_local_v2`, which the install renamed to `traces_pre_cutover_backup`; and the wrap
+            // ends in a RENAME onto `traces_local`, which by now exists. So a non-idempotent step fails loudly here.
+            var tracesEngineBefore = queryOneString(TABLE_ENGINE_FULL, _ -> {
+            });
+            var localPartitionKeyBefore = partitionKeyOf("traces_local");
+
+            ensurePartitionedSuccessorUnderTraces();
+            ensureDistributedWrap();
+
+            assertThat(queryOneString(TABLE_ENGINE_FULL, _ -> {
+            }))
+                    .as("re-running the setup left the Distributed wrapper untouched")
+                    .isEqualTo(tracesEngineBefore);
+            assertThat(partitionKeyOf("traces_local"))
+                    .as("and left the partitioned data untouched")
+                    .isEqualTo(localPartitionKeyBefore);
+
+            // Not just survivable - still testing what it claims. A pruned delete on the untouched topology, so a
+            // no-op setup cannot quietly leave the suite asserting against something that is no longer partitioned.
+            var projectId = ID_GENERATOR.generateId();
+            var id = idInWeekOf(ERA_MONDAYS.getFirst());
+            insertRawTrace(projectId, id);
+
+            delete(Set.of(Pair.of(projectId, id)));
+
+            assertThat(liveRowCount(projectId, id))
+                    .as("the row is still deleted after a no-op setup")
+                    .isEqualTo("0");
+            assertThat(lastTraceDeleteSql(id))
+                    .as("and the delete is still pruned")
+                    .contains(PARTITION_PREDICATE);
         }
 
         @Test
