@@ -35,8 +35,19 @@ class AnthropicUsageExtractor(
             return False
 
     def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
+        # A failure in model-name resolution must not drop an already-extracted
+        # usage payload; continue with model=None and let the SDK still record
+        # token counts for downstream cost/usage analytics.
         usage_dict = _try_get_token_usage(run_dict)
-        model = _try_get_model_name(run_dict)
+        try:
+            model = _try_get_model_name(run_dict)
+        except Exception:
+            LOGGER.debug(
+                "Failed to extract model name from presumably Anthropic LLM langchain run, "
+                "continuing with model=None.",
+                exc_info=True,
+            )
+            model = None
 
         return llm_usage.LLMUsageInfo(
             provider=self.PROVIDER, model=model, usage=usage_dict
@@ -80,16 +91,25 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
         "model_name",  # detected in langchain-anthropic 0.3.17
     ]
     model = None
+    outputs = run_dict.get("outputs") or {}
+    llm_output = outputs.get("llm_output")
     for model_name_key in POSSIBLE_MODEL_NAME_KEYS:
         try:
-            if run_dict["outputs"]["llm_output"] is not None:
-                model = run_dict["outputs"]["llm_output"][model_name_key]
+            if llm_output is not None:
+                model = llm_output.get(model_name_key, model)
             else:
-                # Handle the streaming mode
-                model = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
-                    "response_metadata"
-                ][model_name_key]
-        except KeyError:
+                # Handle the streaming mode. Walk the chain with .get() so
+                # an empty generations list (IndexError) or a missing
+                # "message" / "kwargs" / "response_metadata" key (KeyError,
+                # TypeError on a None hop) returns None instead of raising
+                # into the orchestrator and dropping the usage payload.
+                generations = outputs.get("generations") or []
+                if generations and generations[-1]:
+                    last_message = generations[-1][-1].get("message") or {}
+                    kwargs = last_message.get("kwargs") or {}
+                    response_metadata = kwargs.get("response_metadata") or {}
+                    model = response_metadata.get(model_name_key, model)
+        except (KeyError, IndexError, TypeError, AttributeError):
             continue
 
     if model is None:

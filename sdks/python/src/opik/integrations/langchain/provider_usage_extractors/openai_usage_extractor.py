@@ -39,9 +39,29 @@ class OpenAIUsageExtractor(
             return False
 
     def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
+        # A failure in model-name or provider resolution must not drop an
+        # already-extracted usage payload; the SDK records token counts even
+        # when the model is unknown so cost/usage analytics stay accurate.
         opik_usage = _try_get_token_usage(run_dict)
-        model = _try_get_model_name(run_dict)
-        provider = self._get_provider(run_dict)
+        try:
+            model = _try_get_model_name(run_dict)
+        except Exception:
+            LOGGER.debug(
+                "Failed to extract model name from presumably OpenAI LLM langchain run, "
+                "continuing with model=None.",
+                exc_info=True,
+            )
+            model = None
+        try:
+            provider = self._get_provider(run_dict)
+        except Exception:
+            LOGGER.debug(
+                "Failed to extract provider from presumably OpenAI LLM langchain run, "
+                "falling back to %s.",
+                self.PROVIDER,
+                exc_info=True,
+            )
+            provider = self.PROVIDER
 
         return llm_usage.LLMUsageInfo(provider=provider, model=model, usage=opik_usage)
 
@@ -51,8 +71,11 @@ class OpenAIUsageExtractor(
         """
         provider = self.PROVIDER
 
-        # Check base URL to detect custom providers
-        if base_url := run_dict["extra"].get("invocation_params", {}).get("base_url"):
+        # Check base URL to detect custom providers. Use .get() so a missing
+        # "extra" key (e.g. a partial run_dict) returns the canonical provider
+        # rather than raising into the orchestrator.
+        extra = run_dict.get("extra") or {}
+        if base_url := extra.get("invocation_params", {}).get("base_url"):
             if base_url.host != "api.openai.com":
                 provider = base_url.host
 
@@ -103,22 +126,30 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
     """
-    Extracts the model name from the run dictionary.
+    Extracts the model name from the run dictionary. Returns None when the
+    run shape is missing the keys this helper normally reads (older or
+    partial langchain runs, custom stream wrappers) instead of raising.
     """
     model = None
 
-    # Get model from metadata
-    if metadata := run_dict["extra"].get("metadata"):
+    # Get model from metadata. Use .get() chains so a missing "extra" or
+    # "outputs" key returns None rather than raising into the orchestrator
+    # and dropping the already-extracted usage.
+    extra = run_dict.get("extra") or {}
+    if metadata := extra.get("metadata"):
         model = metadata.get("ls_model_name")
 
+    outputs = run_dict.get("outputs") or {}
     # Try to detect model+version more precise way if possible
     # .invoke() mode
-    if llm_output := run_dict["outputs"].get("llm_output"):
+    if llm_output := outputs.get("llm_output"):
         model = llm_output.get("model_name", model)
     # streaming mode
-    elif generation_info := run_dict["outputs"]["generations"][-1][-1][
-        "generation_info"
-    ]:
-        model = generation_info.get("model_name", model)
+    else:
+        generations = outputs.get("generations") or []
+        if generations and generations[-1]:
+            last = generations[-1][-1] or {}
+            if generation_info := last.get("generation_info"):
+                model = generation_info.get("model_name", model)
 
     return model

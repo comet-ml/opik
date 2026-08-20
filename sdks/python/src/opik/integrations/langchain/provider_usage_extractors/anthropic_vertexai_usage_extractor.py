@@ -38,8 +38,18 @@ class AnthropicVertexAIUsageExtractor(
             return False
 
     def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
+        # A failure in model-name resolution must not drop an already-extracted
+        # usage payload; continue with model=None.
         usage_dict = _try_get_token_usage(run_dict)
-        model = _try_get_model_name(run_dict)
+        try:
+            model = _try_get_model_name(run_dict)
+        except Exception:
+            LOGGER.debug(
+                "Failed to extract model name from presumably Anthropic LLM vertexai "
+                "langchain run, continuing with model=None.",
+                exc_info=True,
+            )
+            model = None
 
         return llm_usage.LLMUsageInfo(
             provider=self.PROVIDER, model=model, usage=usage_dict
@@ -62,6 +72,8 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
-    if invocation_params := run_dict["extra"].get("invocation_params"):
+    # Use .get() with a default dict so a missing "extra" key returns None
+    # instead of raising into the orchestrator and dropping the usage payload.
+    if invocation_params := (run_dict.get("extra") or {}).get("invocation_params"):
         return invocation_params.get("model_name")
     return None
