@@ -540,25 +540,6 @@ public interface DatasetVersionDAO {
             @Bind("last_updated_by") String lastUpdatedBy);
 
     @SqlUpdate("""
-            UPDATE dataset_versions
-            SET items_total = :items_total,
-                items_added = :items_added,
-                items_modified = :items_modified,
-                items_deleted = :items_deleted,
-                last_updated_at = NOW(),
-                last_updated_by = :last_updated_by
-            WHERE id = :version_id
-              AND workspace_id = :workspace_id
-            """)
-    void updateCounts(@Bind("version_id") UUID versionId,
-            @Bind("items_total") int itemsTotal,
-            @Bind("items_added") int itemsAdded,
-            @Bind("items_modified") int itemsModified,
-            @Bind("items_deleted") int itemsDeleted,
-            @Bind("workspace_id") String workspaceId,
-            @Bind("last_updated_by") String lastUpdatedBy);
-
-    @SqlUpdate("""
             INSERT INTO dataset_versions (
                 id, dataset_id, version_hash, items_total, items_added, items_modified, items_deleted,
                 change_description, metadata, created_by, last_updated_by, workspace_id,
@@ -590,6 +571,30 @@ public interface DatasetVersionDAO {
     int ensureVersion1Exists(@Bind("dataset_id") UUID datasetId,
             @Bind("version_id") UUID versionId,
             @Bind("workspace_id") String workspaceId);
+
+    /**
+     * Applies count deltas in a single statement so the arithmetic happens in the database
+     * rather than via read-modify-write in the application. Correct under concurrent callers
+     * without relying on the per-dataset lock for mutual exclusion.
+     */
+    @SqlUpdate("""
+            UPDATE dataset_versions
+            SET items_total = COALESCE(items_total, 0) + :items_total_delta,
+                items_added = COALESCE(items_added, 0) + :items_added_delta,
+                items_modified = COALESCE(items_modified, 0) + :items_modified_delta,
+                items_deleted = COALESCE(items_deleted, 0) + :items_deleted_delta,
+                last_updated_at = NOW(),
+                last_updated_by = :last_updated_by
+            WHERE id = :version_id
+              AND workspace_id = :workspace_id
+            """)
+    int incrementCounts(@Bind("version_id") UUID versionId,
+            @Bind("items_total_delta") int itemsTotalDelta,
+            @Bind("items_added_delta") int itemsAddedDelta,
+            @Bind("items_modified_delta") int itemsModifiedDelta,
+            @Bind("items_deleted_delta") int itemsDeletedDelta,
+            @Bind("workspace_id") String workspaceId,
+            @Bind("last_updated_by") String lastUpdatedBy);
 
     @SqlUpdate("""
             UPDATE dataset_versions
