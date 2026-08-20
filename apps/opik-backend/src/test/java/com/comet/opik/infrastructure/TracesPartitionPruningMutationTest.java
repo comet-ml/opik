@@ -381,7 +381,6 @@ class TracesPartitionPruningMutationTest {
         network.close();
     }
 
-
     /** A UUIDv7 in the given week, minted mid-week so the partition assertion exercises the map back to Monday. */
     private static UUID idInWeekOf(LocalDate monday) {
         return ID_GENERATOR.generateId(monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC));
