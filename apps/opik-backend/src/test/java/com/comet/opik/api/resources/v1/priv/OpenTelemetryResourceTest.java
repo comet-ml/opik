@@ -63,6 +63,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -425,6 +426,85 @@ class OpenTelemetryResourceTest {
             assertThat(span.metadata()).isNotEmpty();
             assertThat(span.metadata().get("foo").asText()).isEqualTo("bar");
             assertThat(span.metadata().get("inline").asText()).isEqualTo("inline_value");
+        }
+
+        Stream<Arguments> testProviderVocabularyIsAliasedAndPriced() {
+            return Stream.of(
+                    // The OPIK-7717 report: stored verbatim, 'vertex_ai' matched no price row and cost 0.
+                    arguments("vertex_ai", "gen_ai.system", "vertex_ai", "gemini-3.1-flash-lite", null,
+                            "google_vertexai"),
+                    arguments("gcp.gemini", "gen_ai.system", "gcp.gemini", "gemini-2.5-flash", null, "google_ai"),
+                    arguments("aws.bedrock", "gen_ai.system", "aws.bedrock",
+                            "anthropic.claude-3-5-sonnet-20241022-v2:0", null, "bedrock"),
+                    arguments("az.ai.openai", "gen_ai.system", "az.ai.openai", "gpt-4o", null, "azure"),
+                    arguments("mistral_ai", "gen_ai.system", "mistral_ai", "mistral-large-latest", null, "mistral"),
+                    arguments("x_ai", "gen_ai.system", "x_ai", "grok-3", null, "xai"),
+                    // gen_ai.provider.name replaced gen_ai.system and was previously not read at all.
+                    arguments("gen_ai.provider.name", "gen_ai.provider.name", "gcp.vertex_ai",
+                            "gemini-3.1-flash-lite", null, "google_vertexai"),
+                    // Names no backend on its own, so it is resolved from the endpoint host instead.
+                    arguments("google + vertex host", "gen_ai.system", "google", "gemini-2.5-flash-lite",
+                            "us-east1-aiplatform.googleapis.com", "google_vertexai"));
+        }
+
+        @ParameterizedTest(name = "OTel provider {0} is stored as {5} and priced")
+        @MethodSource
+        @DisplayName("test OTel provider vocabulary is aliased and priced on ingestion")
+        void testProviderVocabularyIsAliasedAndPriced(String testName, String providerAttribute,
+                String reportedProvider, String model, String serverAddress, String expectedProvider) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+
+            var otelSpanBuilder = Span.newBuilder()
+                    .setName("llm call")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(stringAttribute(providerAttribute, reportedProvider))
+                    .addAttributes(stringAttribute("gen_ai.request.model", model))
+                    .addAttributes(intAttribute("gen_ai.usage.input_tokens", 1_000))
+                    .addAttributes(intAttribute("gen_ai.usage.output_tokens", 500));
+
+            if (serverAddress != null) {
+                otelSpanBuilder.addAttributes(stringAttribute("server.address", serverAddress));
+            }
+
+            var otelSpans = List.of(otelSpanBuilder.build());
+
+            var minTimestampMs = Duration.ofNanos(otelSpans.getFirst().getStartTimeUnixNano()).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            var spanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId, "Test Project",
+                    workspaceName, okApikey);
+            assertThat(spanPage.content()).hasSize(1);
+
+            var persistedSpan = spanPage.content().getFirst();
+
+            assertThat(persistedSpan.provider())
+                    .as("provider stored for %s=%s", providerAttribute, reportedProvider)
+                    .isEqualTo(expectedProvider);
+
+            // Cost is computed once at ingestion from the stored provider, so an unmapped provider
+            // persists as a $0 span rather than failing loudly.
+            assertThat(persistedSpan.totalEstimatedCost())
+                    .as("cost stored for model %s under provider %s", model, expectedProvider)
+                    .isNotNull()
+                    .isGreaterThan(BigDecimal.ZERO);
+        }
+
+        private KeyValue stringAttribute(String key, String value) {
+            return KeyValue.newBuilder().setKey(key)
+                    .setValue(AnyValue.newBuilder().setStringValue(value)).build();
+        }
+
+        private KeyValue intAttribute(String key, long value) {
+            return KeyValue.newBuilder().setKey(key)
+                    .setValue(AnyValue.newBuilder().setIntValue(value)).build();
         }
 
         @Test
