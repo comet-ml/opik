@@ -33,6 +33,33 @@ export interface DatasetItemRef {
   data: Record<string, unknown>;
 }
 
+/** A sort clause as the experiments-comparison grid sends it. */
+export interface CompareSort {
+  /** e.g. `output.answer`, `feedback_scores.accuracy`, `id`. */
+  field: string;
+  direction: 'ASC' | 'DESC';
+}
+
+/**
+ * One row of the experiments-comparison grid: a dataset item plus each compared
+ * experiment's evaluation-task output.
+ */
+export interface ComparedDatasetItemRef {
+  id: string;
+  /**
+   * Evaluation-task output JSON keyed by experiment id, or null where the
+   * experiment recorded no output for this item — which is a real answer, not
+   * an empty one.
+   */
+  outputByExperimentId: Record<string, Record<string, unknown> | null>;
+}
+
+export interface ComparedDatasetItemsPage {
+  /** Null when the server omitted the count entirely. */
+  total: number | null;
+  items: ComparedDatasetItemRef[];
+}
+
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   versionName: string;
@@ -386,6 +413,45 @@ export function makeBackendClient(apiKey: string | null = null) {
         ids.push(...content.map((item) => String(item.id)));
         if (content.length < pageSize) return ids;
       }
+    },
+
+    /**
+     * The server read behind the experiments-comparison grid: dataset items
+     * joined with each compared experiment's last trial, in the order the
+     * server sorted them.
+     *
+     * `sorting` is the same JSON the grid's sort header writes. For an
+     * `output.<key>` / `input.<key>` / `metadata.<key>` field the backend has
+     * to bind `<key>` as a query parameter rather than interpolate it into the
+     * ClickHouse `JSONExtractRaw` call (OPIK-8023), so this read is what tells
+     * a correctly ordered grid apart from one the browser happened to render
+     * in a plausible order.
+     */
+    async listComparedDatasetItems(args: {
+      datasetId: string;
+      experimentIds: string[];
+      sorting?: CompareSort[];
+    }): Promise<ComparedDatasetItemsPage> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        size: 100,
+        ...(args.sorting ? { sorting: JSON.stringify(args.sorting) } : {}),
+      });
+      return {
+        // Left null rather than defaulted to 0: a caller checking that a sorted
+        // read returned the whole collection has to be able to tell "the server
+        // said none" from "the server said nothing".
+        total: page.total ?? null,
+        items: (page.content ?? []).map((item) => ({
+          id: String(item.id ?? ''),
+          outputByExperimentId: Object.fromEntries(
+            (item.experimentItems ?? []).map((experimentItem) => [
+              String(experimentItem.experimentId),
+              (experimentItem.output as Record<string, unknown> | undefined) ?? null,
+            ]),
+          ),
+        })),
+      };
     },
 
     /**

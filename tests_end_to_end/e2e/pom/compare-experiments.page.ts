@@ -2,6 +2,20 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
 /**
+ * The grid's column id for one key of the evaluation-task output JSON. The
+ * frontend builds the accessor as `output.<key>`, and TanStack derives the
+ * column id from it by replacing dots with underscores.
+ */
+const outputColumnId = (outputKey: string): string => `output_${outputKey}`;
+
+/**
+ * Escape a value for use inside the double quotes of a CSS attribute selector.
+ * Output JSON keys are user data and routinely contain quotes and backslashes.
+ */
+const cssAttributeValue = (value: string): string =>
+  value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+/**
  * The compare view lives at /experiments/{datasetId}/compare?experiments=[...]
  * and renders the SAME page in single- and multi-experiment mode. This POM
  * targets multi-experiment (comparison) mode: two experiments over one dataset.
@@ -93,10 +107,18 @@ export class CompareExperimentsPage {
     });
   }
 
-  /** The per-experiment evaluation-task output for one shared dataset item. */
-  async readItemOutput(datasetItemId: string, experimentIndex: number): Promise<string> {
-    return test.step(`read output for item ${datasetItemId} / experiment #${experimentIndex}`, async () => {
-      const band = this.splitBand(datasetItemId, experimentIndex, 'output_output');
+  /**
+   * The per-experiment evaluation-task output for one shared dataset item.
+   * `outputKey` is the JSON key inside the task output — each one renders as
+   * its own column under "Evaluation task (last trial)".
+   */
+  async readItemOutput(
+    datasetItemId: string,
+    experimentIndex: number,
+    outputKey = 'output',
+  ): Promise<string> {
+    return test.step(`read output "${outputKey}" for item ${datasetItemId} / experiment #${experimentIndex}`, async () => {
+      const band = this.splitBand(datasetItemId, experimentIndex, outputColumnId(outputKey));
       await expect(band, `output band for item ${datasetItemId} experiment #${experimentIndex}`).toBeVisible();
       return ((await band.textContent()) ?? '').trim();
     });
@@ -187,6 +209,61 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * Clear any sort the grid is carrying, so the next header click starts from
+   * the unsorted state. Sort selection is persisted, so a test that clicks a
+   * header without resetting first cannot know which direction it just asked
+   * for.
+   */
+  async clearSort(): Promise<void> {
+    await test.step('clear the grid sort', async () => {
+      const url = new URL(this.page.url());
+      url.searchParams.set('sorting', JSON.stringify([]));
+      await this.page.goto(url.toString());
+      await this.itemRows.first().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Click an "Evaluation task (last trial)" column header to sort by that JSON
+   * key. The grid's own toggle: the first click on an unsorted column sorts
+   * descending, the next flips to ascending.
+   *
+   * The click lands on the header's label rather than the `<th>` because the
+   * column-statistic sub-row covers the cell's centre and swallows a click
+   * aimed there — the same reason `sortByScoreDescending` above drives the
+   * query param instead. Nothing in the header carries a `data-testid`; the
+   * shared `DataTable` stamps only `data-header-id`, and the environments these
+   * specs run against serve a prebuilt frontend image, so adding one has to be
+   * a separate frontend change.
+   */
+  async sortByOutputKey(outputKey: string): Promise<void> {
+    await test.step(`click the "${outputKey}" output column header to sort`, async () => {
+      const header = this.outputColumnHeader(outputKey);
+      await expect(header, `output column header for "${outputKey}"`).toHaveCount(1);
+      await header.locator('span.truncate').click();
+      await this.itemRows.first().waitFor({ state: 'visible' });
+    });
+  }
+
+  /** The "Evaluation task (last trial)" column for one output JSON key. */
+  outputColumnHeader(outputKey: string): Locator {
+    return this.page.locator(`th[data-header-id="${cssAttributeValue(outputColumnId(outputKey))}"]`);
+  }
+
+  /**
+   * Assert the grid settled on exactly this row order. Polls rather than reads
+   * once: a header click re-fetches, and the previous order stays on screen
+   * until the response lands.
+   */
+  async expectItemRowOrder(expected: string[], because: string): Promise<void> {
+    await test.step(`row order is ${because}`, async () => {
+      await expect
+        .poll(() => this.itemRowOrder(), { message: `row order (${because})` })
+        .toEqual(expected);
+    });
+  }
+
   /** Dataset-item ids in current row order, top to bottom. */
   async itemRowOrder(): Promise<string[]> {
     return test.step('read the current row order', async () => {
@@ -217,7 +294,9 @@ export class CompareExperimentsPage {
    * array, which is the order the bands render in.
    */
   private splitBand(datasetItemId: string, experimentIndex: number, columnId: string): Locator {
-    const cell = this.page.locator(`td[data-cell-id="${datasetItemId}_${columnId}"]`);
+    const cell = this.page.locator(
+      `td[data-cell-id="${cssAttributeValue(`${datasetItemId}_${columnId}`)}"]`,
+    );
     return cell.locator(`div[data-virtual-row-id="${datasetItemId}-${experimentIndex}"]`);
   }
 
