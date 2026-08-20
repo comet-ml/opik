@@ -756,9 +756,9 @@ class TracesPartitionPruningMutationTest {
         assertThat(shape.find())
                 .as("the emitted statement has the expected DELETE shape:%n%s", daoDeleteSql)
                 .isTrue();
-        var bound = EMITTED_IN_CLAUSE.matcher(daoDeleteSql).find()
+        Set<Long> bound = EMITTED_IN_CLAUSE.matcher(daoDeleteSql).find()
                 ? boundPartitionsOf(daoDeleteSql)
-                : Set.<Long> of();
+                : Set.of();
 
         var explainSql = TemplateUtils.newST(EXPLAIN_SELECTED_PARTS)
                 .add("table", shape.group(1));
