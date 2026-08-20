@@ -59,6 +59,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
@@ -94,29 +95,33 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * those rows are seeded raw and those batches are handed to {@link TraceDAO#delete} directly — the only way to reach
  * that arm.
  *
- * <p><b>Why the EXCHANGE is here at all — it is setup, never the subject.</b> Nothing asserts anything about it. It is
- * required because the DAO names its target table: after the Liquibase migrations the live {@code traces} is still the
- * <em>legacy</em> table — no {@code PARTITION BY} at all and a 32-bit {@code DateTime} {@code id_at} — while the
- * partitioned successor exists only as the empty {@code traces_local_v2}, which no DAO query can reach. Two statements
- * copied from the cutover put the successor under the name the DAO deletes from. Without them these tests would run
+ * <p><b>Why the topology setup is here at all — it is setup, never the subject.</b> Nothing asserts anything about the
+ * EXCHANGE or the wrap themselves; {@code TracesLocalV2CutoverTest} owns that. They are required because the DAO names
+ * its target table: after the Liquibase migrations the live {@code traces} is still the <em>legacy</em> table — no
+ * {@code PARTITION BY} at all and a 32-bit {@code DateTime} {@code id_at} — while the partitioned successor exists only
+ * as the empty {@code traces_local_v2}, which no DAO query can reach. Without installing it these tests would run
  * against the one table where this predicate must never be emitted, and would pass while proving nothing: the predicate
  * is harmless against an unpartitioned table for recent ids. Hand-authoring a partitioned {@code traces} in the test
- * instead would duplicate migration 000114 and reintroduce exactly the drift this suite exists to detect.
+ * instead would duplicate migration 000114 and reintroduce exactly the drift this suite exists to detect. Both steps are
+ * idempotent, so the suite keeps working once the cutover migration lands and they become no-ops.
  *
- * <p><b>Topology covered, and the one cell that is not.</b> This suite runs the <b>post-EXCHANGE, pre-wrap</b> state on
- * purpose: {@code traces} is the partitioned successor and still a {@code MergeTree}, which is the state the pruning
- * flag has to hold in on its own — the wrap is a separate, deferrable cutover step ({@code --skip-wrap} now,
- * {@code --wrap-only} later), and prod-test sat in exactly this window. Applying the wrap here would remove that
- * coverage rather than add to it, since {@code partition_key} is meaningless once {@code traces} is {@code Distributed}.
- * The {@code traces_local} branch of this same template is executed by {@code TracesDistributedWrapMutationTest}, with
- * pruning off. So the untested cell is <b>both flags on at once</b>, and it stays untested here: the two are independent
- * StringTemplate attributes with no shared state, and the wrap is a {@code RENAME} — {@code traces_local} is the very
- * table this suite partitions and asserts against, so {@code id_at} and the partition key belong to the data, not to
- * the name it is reached by. Covering it needs a third topology (EXCHANGE + wrap + both flags) and therefore its own
- * suite; it cannot live in the wrap suite, which wraps the <em>legacy</em> table where this flag must be false.
+ * <p><b>Topology: the post-cutover end state, with both schema flags on.</b> The wrap is applied and
+ * {@code tracesDistributedWrapEnabled} set, so the DAO's mutations reach the data the way production routes them —
+ * {@code DELETE FROM traces_local}, chosen by the configuration switch that governs it, not by a table this suite
+ * renamed under the DAO. {@code traces} is the {@code Distributed} wrapper that reads and inserts flow through, which
+ * is why the endpoint-created row and the raw-seeded ones land in the same place.
+ * {@link #distributedTracesRejectsDirectMutation} keeps that claim honest: had the wrap not taken effect,
+ * {@code traces} would still be a {@code MergeTree} and every pruned delete here would have run against it.
  *
- * <p>Dedicated, non-reused ClickHouse and ZooKeeper containers are required because the EXCHANGE destructively swaps the
- * live {@code traces} table; a reused container would corrupt other suites and reruns.
+ * <p>This supersedes an earlier note in this file that both flags on at once was untested and would need its own suite.
+ * It does not: the wrap flag is how the DAO is pointed at the data, so enabling it costs two setup statements and
+ * covers the combination the fleet actually ends up in. What is no longer covered here is the transient
+ * post-EXCHANGE/pre-wrap window — the pruning predicate is identical in both, since {@code traces_local} is the same
+ * physical table under a different name, and the flag's own javadoc records that it must hold in that window.
+ *
+ * <p>Dedicated, non-reused ClickHouse and ZooKeeper containers are required because the setup destructively renames the
+ * live {@code traces} table — the EXCHANGE swaps it, and the wrap then renames it to {@code traces_local} — so a reused
+ * container would corrupt other suites and reruns.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -143,22 +148,29 @@ class TracesPartitionPruningMutationTest {
     // are single literals built by no Java string operation, and they are kept byte-identical to
     // 000003_exchange_and_wrap.sql by eye, so they belong at the call site next to the javadoc that says so - as
     // TracesDistributedWrapMutationTest does.
-    private static final String TRACES_PARTITION_KEY = """
+    private static final String PARTITION_KEY_OF_TABLE = """
             SELECT partition_key
+            FROM system.tables
+            WHERE database = currentDatabase()
+            AND name = :table
+            """;
+
+    private static final String TABLE_COUNT = """
+            SELECT toString(count())
+            FROM system.tables
+            WHERE database = currentDatabase()
+            AND name = :table
+            """;
+
+    private static final String TABLE_ENGINE = """
+            SELECT engine
             FROM system.tables
             WHERE database = currentDatabase()
             AND name = 'traces'
             """;
 
-    private static final String SUCCESSOR_TABLE_COUNT = """
-            SELECT toString(count())
-            FROM system.tables
-            WHERE database = currentDatabase()
-            AND name = 'traces_local_v2'
-            """;
-
     private static final String INSERT_RAW_TRACE = """
-            INSERT INTO traces (workspace_id, project_id, id)
+            INSERT INTO traces_local (workspace_id, project_id, id)
             VALUES (:workspace_id, :project_id, :id)
             """;
 
@@ -174,7 +186,7 @@ class TracesPartitionPruningMutationTest {
 
     private static final String LIVE_ROW_COUNT = """
             SELECT toString(uniqExact(id))
-            FROM traces
+            FROM traces_local
             WHERE workspace_id = :workspace_id
             AND id = :id
             """;
@@ -261,7 +273,8 @@ class TracesPartitionPruningMutationTest {
                         .customConfigs(List.of(
                                 new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
                                 new CustomConfig("databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled",
-                                        "true")))
+                                        "true"),
+                                new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true")))
                         .build());
     }
 
@@ -278,6 +291,7 @@ class TracesPartitionPruningMutationTest {
         this.template = template;
         this.traceDAO = traceDAO;
         ensurePartitionedSuccessorUnderTraces();
+        ensureDistributedWrap();
     }
 
     @AfterAll
@@ -286,6 +300,18 @@ class TracesPartitionPruningMutationTest {
         clickHouseContainer.stop();
         zookeeperContainer.stop();
         network.close();
+    }
+
+    @Test
+    @DisplayName("traces really is a mutation-rejecting Distributed wrapper, so the deletes here ran on traces_local")
+    void distributedTracesRejectsDirectMutation() {
+        // Keeps the both-flags claim from being vacuous. If the wrap had not taken effect, `traces` would still be a
+        // MergeTree, every pruned delete in this suite would have run against it, and nothing here would say so.
+        // Asserting the specific rejection - not merely that something threw - is what proves `traces` is Distributed,
+        // so a green delete could only have reached `traces_local`.
+        assertThatThrownBy(() -> execute("DELETE FROM traces WHERE workspace_id = :workspace_id",
+                statement -> statement.bind("workspace_id", WORKSPACE_ID)))
+                .hasMessageContaining("DELETE query is not supported for table");
     }
 
     @Test
@@ -531,19 +557,56 @@ class TracesPartitionPruningMutationTest {
      * {@code TracesLocalV2CutoverTest.exchangeTables} and the wrap suite do.
      */
     private void ensurePartitionedSuccessorUnderTraces() {
-        if (queryOneString(TRACES_PARTITION_KEY, _ -> {
-        }).contains("id_at")) {
-            return; // The cutover migration has landed: `traces` already is the partitioned successor.
+        if (tableExists("traces_local") || partitionKeyOf("traces").contains("id_at")) {
+            return; // Already installed, or the cutover migration has landed.
         }
-        assertThat(queryOneString(SUCCESSOR_TABLE_COUNT, _ -> {
-        }))
+        assertThat(tableExists("traces_local_v2"))
                 .as("`traces` is not partitioned and `traces_local_v2` does not exist, so there is no successor to"
                         + " install - this suite needs one of those two states")
-                .isEqualTo("1");
+                .isTrue();
         execute("EXCHANGE TABLES traces AND traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
         });
         execute("RENAME TABLE traces_local_v2 TO traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
         });
+    }
+
+    /**
+     * Setup, not a test: applies the sharding-readiness wrap, so the DAO's mutations reach the data through the
+     * configuration switch that governs them in production ({@code tracesDistributedWrapEnabled}) rather than through
+     * a table this suite renamed under it. After this, {@code traces} is a {@code Distributed} wrapper and
+     * {@code traces_local} holds the partitioned data — the post-cutover end state.
+     * <p>
+     * Kept identical to the wrap block of {@code 000003_exchange_and_wrap.sql}, as
+     * {@code TracesDistributedWrapMutationTest.applyDistributedWrap} and
+     * {@code TracesLocalV2CutoverTest.wrapInDistributed} do: build the wrapper under a temp name first, then one atomic
+     * multi-target {@code RENAME} rotates the data to {@code traces_local} and the wrapper into {@code traces}, so
+     * {@code traces} is never absent. Idempotent for the same reason as the step above.
+     */
+    private void ensureDistributedWrap() {
+        if ("Distributed".equals(queryOneString(TABLE_ENGINE, _ -> {
+        }))) {
+            return;
+        }
+        execute("""
+                CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
+                ENGINE = Distributed('{cluster}', '%s', 'traces_local', sipHash64(project_id))
+                """.formatted(ClickHouseContainerUtils.DATABASE_NAME), _ -> {
+        });
+        execute("""
+                RENAME TABLE
+                    traces TO traces_local,
+                    traces_dist TO traces
+                    ON CLUSTER '{cluster}'
+                """, _ -> {
+        });
+    }
+
+    private boolean tableExists(String table) {
+        return "1".equals(queryOneString(TABLE_COUNT, statement -> statement.bind("table", table)));
+    }
+
+    private String partitionKeyOf(String table) {
+        return queryOneString(PARTITION_KEY_OF_TABLE, statement -> statement.bind("table", table));
     }
 
     /**
