@@ -2,6 +2,7 @@ import atexit
 import time
 from typing import Any, List, Optional
 
+import httpx
 import opik
 from fastapi import APIRouter, Header, HTTPException
 from opik.evaluation import evaluate_threads
@@ -61,20 +62,37 @@ def _wait_for_thread(client: opik.Opik, project_name: str, thread_id: str) -> No
 
     threads = threads_client.ThreadsClient(client)
     deadline = time.monotonic() + _THREAD_VISIBLE_TIMEOUT_S
+    last_error: Exception | None = None
     while True:
-        found = threads.search_threads(
-            project_name=project_name, filter_string=f'id = "{thread_id}"'
-        )
-        if found:
-            return
-        if time.monotonic() >= deadline:
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    f"Thread {thread_id} not visible in project {project_name} "
-                    f"after {_THREAD_VISIBLE_TIMEOUT_S}s — nothing to evaluate"
-                ),
+        try:
+            found = threads.search_threads(
+                project_name=project_name, filter_string=f'id = "{thread_id}"'
             )
+            last_error = None
+            if found:
+                return
+        except (httpx.TransportError, httpx.TimeoutException) as exc:
+            # This loop exists because thread visibility is eventually
+            # consistent, and the window it polls across is exactly when the
+            # backend is most likely to drop a connection. Treating a transient
+            # transport failure as fatal would abort the evaluation for the very
+            # condition the wait was written to absorb, and would surface as a
+            # flake with no useful message. Keep polling; the deadline below is
+            # still the bound, and a genuine failure just ends there instead.
+            #
+            # Only transport-level errors are caught. An HTTPStatusError (a 4xx
+            # the server meant) is a real answer and must propagate.
+            last_error = exc
+        if time.monotonic() >= deadline:
+            detail = (
+                f"Thread {thread_id} not visible in project {project_name} "
+                f"after {_THREAD_VISIBLE_TIMEOUT_S}s — nothing to evaluate"
+            )
+            if last_error is not None:
+                # Say so, rather than reporting a clean timeout for what was
+                # really a connectivity failure the whole way through.
+                detail += f" (last transport error: {last_error!r})"
+            raise HTTPException(status_code=500, detail=detail)
         time.sleep(_THREAD_POLL_INTERVAL_S)
 
 
@@ -89,6 +107,18 @@ def evaluate_thread(
     function of this request's own seed and not of whatever else the project
     holds. The evaluation writes a feedback score onto the source thread and an
     `evaluation_task` trace into `eval_project_name`.
+
+    `context_metadata_key` is the one parameter whose ABSENCE is meaningful.
+    Set it and `evaluate_threads` is called with a `trace_context_transform`
+    reading that key off `trace.metadata`; leave it unset and the argument is
+    omitted entirely rather than passed as None — which is the pre-existing
+    caller shape, and what the specs assert about (a caller who never asked for
+    context must not start seeing a `context` key).
+
+    Returns the metric `scores` the run produced for this thread, and the
+    `conversation` the metric's own `score()` received — the latter being the
+    only way to see what `evaluate_threads` actually built, since the SDK does
+    not otherwise expose it.
     """
     # evaluate_threads resolves its client through get_global_client() and
     # ignores a locally-constructed one, so the request's auth/workspace context
