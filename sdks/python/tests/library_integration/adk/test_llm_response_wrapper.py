@@ -263,11 +263,15 @@ def test_adk_llm_span__deferred_usage_metadata__output_and_usage_reach_the_backe
     """
     _run_fake_agent()
 
+    # Derived, not hardcoded: the provider depends on GOOGLE_GENAI_USE_VERTEXAI,
+    # which CI sets and a local run usually does not.
+    expected_provider = adk_helpers.get_adk_provider().value
+
     EXPECTED_LLM_OUTPUT = {
         "content": {"parts": [{"text": "sunny, 22C"}], "role": "model"},
         "model_version": "fake-gemini-1.0",
         "finish_reason": "STOP",
-        "custom_metadata": {"provider": "google_ai"},
+        "custom_metadata": {"provider": expected_provider},
         "usage_metadata": {
             "candidates_token_count": 7,
             "prompt_token_count": 11,
@@ -308,7 +312,7 @@ def test_adk_llm_span__deferred_usage_metadata__output_and_usage_reach_the_backe
                     "original_usage.total_token_count": 18,
                 },
                 model="fake-gemini-1.0",
-                provider="google_ai",
+                provider=expected_provider,
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
