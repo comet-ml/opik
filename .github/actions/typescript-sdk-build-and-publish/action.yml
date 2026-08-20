@@ -157,8 +157,13 @@ runs:
       if: ${{ inputs.is_release == 'true' }}
       shell: bash
       working-directory: ${{ inputs.working_directory }}
+      env:
+        # Values reach the script via env, never `${{ }}` substitution — same
+        # hardening as the `Update version` step above (zizmor template-injection).
+        RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
+        NPM_ACCESS: ${{ inputs.npm_access }}
       run: |
-        NEW_VERSION="${{ steps.version.outputs.VERSION }}"
+        NEW_VERSION="${RELEASE_VERSION}"
         PACKAGE_NAME=$(node -p "require('./package.json').name")
 
         echo "Publishing to NPM: $PACKAGE_NAME@$NEW_VERSION"
@@ -169,9 +174,30 @@ runs:
         SUCCESS=false
         TIMEOUT_SECONDS=180  # 3 minutes per attempt
 
-        PUBLISH_CMD="npm publish"
-        if [ -n "${{ inputs.npm_access }}" ]; then
-          PUBLISH_CMD="npm publish --access ${{ inputs.npm_access }}"
+        # Built as an array and expanded as "${PUBLISH_CMD[@]}" below, so the
+        # value of NPM_ACCESS is always ONE argv element. As a plain string,
+        # `$PUBLISH_CMD` word-splits at the use site, and a value like
+        # `public --registry https://elsewhere.invalid` would smuggle in extra
+        # npm flags and redirect the publish. NPM_ACCESS is set from workflow
+        # YAML today, not user input, so this is defence in depth — but the
+        # allowlist keeps it that way regardless of who edits the caller.
+        #
+        # `public` is the only accepted value: every package published through
+        # this action is unscoped (opik, opik-*, opik-ts), and npm rejects
+        # `--access restricted` for unscoped packages. If a scoped package ever
+        # uses this action, widen the allowlist deliberately rather than
+        # letting a value through that npm will refuse at publish time.
+        PUBLISH_CMD=(npm publish)
+        if [ -n "${NPM_ACCESS}" ]; then
+          case "${NPM_ACCESS}" in
+            public)
+              PUBLISH_CMD+=(--access public)
+              ;;
+            *)
+              echo "::error title=Publish to NPM::npm_access must be 'public' or empty (got '${NPM_ACCESS}'). These packages are unscoped and npm rejects --access restricted for unscoped packages."
+              exit 1
+              ;;
+          esac
         fi
 
         ALREADY_PUBLISHED=false
@@ -193,7 +219,7 @@ runs:
           #      into false-green CI).
           #   3. `tee` streams output live AND captures it to PUBLISH_LOG for the
           #      grep-based 403-already-published check.
-          if timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG"; then
+          if timeout "$TIMEOUT_SECONDS" "${PUBLISH_CMD[@]}" 2>&1 | tee "$PUBLISH_LOG"; then
             SUCCESS=true
             break
           else
@@ -231,25 +257,24 @@ runs:
           exit 1
         fi
 
-        # Save package name and version for summary
-        echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
-        echo "PUBLISHED_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-
     - name: Commit version changes
       if: ${{ inputs.is_release == 'true' && inputs.skip_commit_push != 'true' }}
       shell: bash
       working-directory: ${{ inputs.working_directory }}
+      env:
+        INPUT_PACKAGE_NAME: ${{ inputs.package_name }}
+        RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
       run: |
         git config --local user.email "github-actions@comet.com"
         git config --local user.name "github-actions"
         git add package.json package-lock.json
-        
-        PACKAGE_NAME="${{ inputs.package_name }}"
+
+        PACKAGE_NAME="${INPUT_PACKAGE_NAME}"
         if [ -z "$PACKAGE_NAME" ]; then
           PACKAGE_NAME=$(node -p "require('./package.json').name")
         fi
-        
-        git commit -m "Update $PACKAGE_NAME version to ${{ steps.version.outputs.VERSION }}"
+
+        git commit -m "Update $PACKAGE_NAME version to ${RELEASE_VERSION}"
 
     - name: Push changes
       if: ${{ inputs.is_release == 'true' && inputs.skip_commit_push != 'true' }}
@@ -263,8 +288,10 @@ runs:
       id: set_outputs
       shell: bash
       working-directory: ${{ inputs.working_directory }}
+      env:
+        RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
       run: |
-        echo "version=${{ steps.version.outputs.VERSION }}" >> $GITHUB_OUTPUT
+        echo "version=${RELEASE_VERSION}" >> $GITHUB_OUTPUT
         
         # Get package name from package.json
         PACKAGE_NAME=$(node -p "require('./package.json').name")
