@@ -181,14 +181,20 @@ runs:
         # npm flags and redirect the publish. NPM_ACCESS is set from workflow
         # YAML today, not user input, so this is defence in depth — but the
         # allowlist keeps it that way regardless of who edits the caller.
+        #
+        # `public` is the only accepted value: every package published through
+        # this action is unscoped (opik, opik-*, opik-ts), and npm rejects
+        # `--access restricted` for unscoped packages. If a scoped package ever
+        # uses this action, widen the allowlist deliberately rather than
+        # letting a value through that npm will refuse at publish time.
         PUBLISH_CMD=(npm publish)
         if [ -n "${NPM_ACCESS}" ]; then
           case "${NPM_ACCESS}" in
-            public|restricted)
-              PUBLISH_CMD+=(--access "${NPM_ACCESS}")
+            public)
+              PUBLISH_CMD+=(--access public)
               ;;
             *)
-              echo "::error title=Publish to NPM::npm_access must be 'public' or 'restricted' (got '${NPM_ACCESS}')."
+              echo "::error title=Publish to NPM::npm_access must be 'public' or empty (got '${NPM_ACCESS}'). These packages are unscoped and npm rejects --access restricted for unscoped packages."
               exit 1
               ;;
           esac
