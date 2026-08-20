@@ -50,9 +50,13 @@ def parse_assistant_message(
         content = _extract_response_format_arguments(message)
 
     if content is None and not tool_calls:
+        # A degraded provider lands here with a valid key, so report the
+        # rejected response shape rather than only blaming the key.
         raise exceptions.BaseLLMError(
-            "Received None as the output from the LLM. Please verify your environment "
-            "configuration and ensure that the API keys for the models in use "
+            "LLM returned no content and no tool calls "
+            f"(model={getattr(response, 'model', None)!r}, "
+            f"finish_reason={_finish_reason(response)!r}). "
+            "If this persists, verify the API keys for the models in use "
             "(e.g., OPENAI_API_KEY) are set correctly."
         )
 
@@ -62,6 +66,13 @@ def parse_assistant_message(
     if tool_calls:
         assistant["tool_calls"] = tool_calls
     return assistant
+
+
+def _finish_reason(response: "ModelResponse") -> Optional[str]:
+    choices = getattr(response, "choices", None)
+    if not isinstance(choices, list) or not choices:
+        return None
+    return _get_str(_as_mapping(util.normalise_choice(choices[0])), "finish_reason")
 
 
 def _normalise_message(response: "ModelResponse") -> Dict[str, Any]:
