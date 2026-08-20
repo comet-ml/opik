@@ -266,9 +266,18 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
       );
 
     } finally {
-      // Deletes every rule in the project rather than two captured ids: this
-      // project is the test's own throwaway fixture, so anything here is ours,
-      // and a rule created moments before a failure has no captured id yet.
+      // Deletes every rule the fixture project EXCLUSIVELY owns, rather than
+      // two captured ids: a rule created moments before a failure has no
+      // captured id yet, so id-capture would leak it.
+      //
+      // The `projectIds` guard matters because deletion is workspace-global,
+      // not project-scoped: AutomationRuleEvaluatorService's delete path
+      // (deleteEvaluatorsByIds / deleteByRuleIds / deleteBaseRules) constrains
+      // only `workspace_id` and the rule id, so deleting a rule that also
+      // targets another project would destroy it there too. Rules created by
+      // this spec are single-project, so the filter is a no-op today; it keeps
+      // the blast radius local if a shared rule is ever attached to a fixture
+      // project, instead of relying on "everything here is ours".
       //
       // Best-effort throughout, and that is the point of running in `finally`:
       // this block also executes on the failure path, where throwing would
@@ -288,6 +297,14 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
           return;
         }
         for (const rule of rules) {
+          const sharedWith = rule.projectIds.filter((id) => id !== project.id);
+          if (sharedWith.length > 0) {
+            console.warn(
+              `[sampling-rate] skipping rule ${rule.name}: also targets ` +
+                `${sharedWith.join(', ')}, and deletion is workspace-global`,
+            );
+            continue;
+          }
           try {
             await backendClient.deleteAutomationRule(project.id, rule.id);
           } catch (err) {
