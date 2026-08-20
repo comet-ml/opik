@@ -98,8 +98,7 @@ class TracesPartitionPruningMutationTest {
      * {@code system.query_log}, which is safe because that is the query text as submitted — the DAO's own template
      * string, not a re-print.
      */
-    private static final String PARTITION_PREDICATE =
-            "toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))";
+    private static final String PARTITION_PREDICATE = "toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))";
 
     /**
      * Throwaway table used only to have ClickHouse re-print the DAO predicate as a partition key.
