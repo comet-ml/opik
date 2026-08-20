@@ -76,10 +76,15 @@ jobs:
           fi
 
           # Fenced blocks are skipped: a PR that documents this syntax in an
-          # example must not be taken as using it.
+          # example must not be taken as using it. CR stripped first: a body
+          # edited in the GitHub web UI is CRLF, and awk's default field
+          # separator does not treat \r as one, so it would otherwise stay
+          # attached to the captured ref and fail the validation below on an
+          # otherwise valid value.
           ref="${DISPATCH_REF:-}"
           if [ -z "${ref}" ]; then
             ref="$(printf '%s' "${PR_BODY:-}" \
+              | tr -d '\r' \
               | awk '/^[[:space:]]*```/ { fenced = !fenced; next } !fenced' \
               | grep -iEm1 '^[[:space:]]*ai-spend-plugin-ref:[[:space:]]*[^[:space:]]+' \
               | sed -E 's/^[^:]*:[[:space:]]*//' \
