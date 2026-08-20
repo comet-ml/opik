@@ -8752,6 +8752,93 @@ class DatasetsResourceTest {
             assertThat(firstFetchIds).containsExactlyElementsOf(secondFetchIds);
         }
 
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "output.x'",
+                "output.a'b",
+                "input.k\"v",
+                "metadata.m\\path",
+                "output.o';"
+        })
+        @DisplayName("when sorting by a JSON key containing special characters, then return items unaffected")
+        void findDatasetItemsWithExperimentItems__whenSortingKeyContainsSpecialCharacters__thenReturnItems(
+                String jsonKeyField) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset().toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            String projectName = GENERATOR.generate().toString();
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .items(traces.stream()
+                            .map(trace -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                                    .datasetId(datasetId)
+                                    .traceId(trace.id())
+                                    .spanId(null)
+                                    .source(DatasetItemSource.TRACE)
+                                    .build())
+                            .toList())
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItems = IntStream.range(0, traces.size())
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .datasetItemId(datasetItemBatch.items().get(i).id())
+                            .traceId(traces.get(i).id())
+                            .build())
+                    .collect(Collectors.toSet());
+
+            createAndAssert(new ExperimentItemsBatch(experimentItems), apiKey, workspaceName);
+
+            var sorting = SortingField.builder().field(jsonKeyField).direction(Direction.DESC).build();
+            var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
+                    StandardCharsets.UTF_8);
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            // The JSON key is bound as a JSONExtractRaw parameter value, so a key containing special
+            // characters is treated as data: the request succeeds and returns all items unaffected.
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sortingParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).hasSize(5);
+            }
+        }
+
         private Stream<Arguments> findDatasetItemsWithExperimentItems__whenSorting__thenReturnItemsSortedByValidFields() {
             return Stream.of(
                     // ID field sorting
