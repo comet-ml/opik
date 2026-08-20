@@ -1417,6 +1417,9 @@ public class FilterQueryBuilder {
             // than interpolated into the SQL. The key VALUE (field.dynamicKey()) is bound later in
             // SortingQueryBuilder.bindDynamicKeys(), consistent with the data.* path, so keys containing
             // special characters are handled correctly.
+            // Note: dynamicKey() is everything after the first dot, i.e. a single top-level JSON key
+            // ("output.a.b" looks up the key "a.b"); nested traversal is not performed. This matches the
+            // previous behavior.
             if (fieldName.startsWith(OUTPUT_FIELD_PREFIX)) {
                 fieldMapping.put(fieldName,
                         JSON_EXTRACT_RAW_TEMPLATE.formatted("output", field.bindKey()));
