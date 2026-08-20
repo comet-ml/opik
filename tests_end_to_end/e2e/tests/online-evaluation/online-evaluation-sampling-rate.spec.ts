@@ -299,15 +299,22 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
       // deliberately keeps its state for debugging, so deleting the rules would
       // hand the next debugger a preserved project stripped of the rules that
       // explain the failure.
-      if (testFailed && loadEnvConfig().leaveFailures) {
+      //
+      // Deliberately NOT an early `return`: a `return` inside `finally`
+      // discards an in-flight exception and resolves the function, so on the
+      // failure path Playwright would report this test as PASSED. Verified
+      // with a probe spec — a failing `expect` plus `return` in `finally`
+      // reports "1 passed". A flag keeps the failure propagating.
+      const retainForDebugging = testFailed && loadEnvConfig().leaveFailures;
+      if (retainForDebugging) {
         console.warn(
           '[sampling-rate] OPIK_LEAVE_FAILURES set and the test failed — ' +
             'leaving rules in place for debugging',
         );
-        return;
       }
 
-      await test.step('Cleanup: delete both rules (project teardown does not cascade)', async () => {
+      if (!retainForDebugging) {
+        await test.step('Cleanup: delete both rules (project teardown does not cascade)', async () => {
         let rules: Awaited<
           ReturnType<typeof backendClient.listAutomationRulesForProject>
         > = [];
@@ -333,7 +340,8 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
             console.warn(`[sampling-rate] could not delete rule ${rule.name}:`, err);
           }
         }
-      });
+        });
+      }
     }
   });
 });
