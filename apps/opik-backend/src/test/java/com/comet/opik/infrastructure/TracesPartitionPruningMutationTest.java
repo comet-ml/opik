@@ -54,6 +54,8 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,6 +67,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -168,8 +171,8 @@ class TracesPartitionPruningMutationTest {
             AND name = :table
             """;
 
-    private static final String TABLE_ENGINE = """
-            SELECT engine
+    private static final String TABLE_ENGINE_FULL = """
+            SELECT engine_full
             FROM system.tables
             WHERE database = currentDatabase()
             AND name = 'traces'
@@ -186,6 +189,21 @@ class TracesPartitionPruningMutationTest {
             WHERE log_comment LIKE 'delete_traces:%'
             AND type = 'QueryFinish'
             AND query LIKE concat('%', :trace_id, '%')
+            ORDER BY event_time_microseconds DESC
+            LIMIT 1
+            """;
+
+    /**
+     * The newest {@code delete_traces} statement carrying exactly {@code pairs_size} pairs. A request larger than
+     * {@link com.comet.opik.infrastructure.FilterUtils#ANALYTICS_DELETE_BATCH_SIZE} is chunked by the DAO into one
+     * statement per chunk, and pruning is derived <b>per chunk</b> — so a test that reads only one statement cannot see
+     * the second chunk at all.
+     */
+    private static final String DELETE_BY_PAIR_COUNT = """
+            SELECT query
+            FROM system.query_log
+            WHERE log_comment LIKE concat('delete_traces:%pairs_size=', :pairs_size)
+            AND type = 'QueryFinish'
             ORDER BY event_time_microseconds DESC
             LIMIT 1
             """;
@@ -314,9 +332,13 @@ class TracesPartitionPruningMutationTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     /**
-     * Runs the topology setup and every raw read straight against the container, with no app in the way — the idiom the
-     * sibling partition suites use. It has to be app-independent: the topology must be installed once, before either
-     * nested app boots, and both nested classes then read through the same handle.
+     * Runs the topology setup and this suite's own raw reads and seeds straight against the container, with no app in
+     * the way — the idiom the sibling partition suites use. It has to be app-independent: the topology must be
+     * installed once, before either nested app boots, and both nested classes then read through the same handle.
+     * <p>
+     * <b>Never use this for anything the DAO executes</b> — see {@link #appTemplate}. It carries none of the production
+     * {@code queryParameters}, so a statement the real connection would accept can fail here for reasons production
+     * would never hit.
      */
     private final TransactionTemplateAsync template;
 
@@ -335,6 +357,15 @@ class TracesPartitionPruningMutationTest {
 
     private TraceResourceClient traceResourceClient;
     private TraceDAO traceDAO;
+
+    /**
+     * The app's own connection handle, used for anything the <b>DAO</b> executes. It is not interchangeable with
+     * {@link #template}: the app builds its factory from {@code config-test.yml}, which carries the production
+     * {@code queryParameters} — including {@code max_query_size=100000000}. The container-derived handle sets none of
+     * them, so a full-size delete chunk (10,000 pairs inline to ~762 KiB of SQL) dies on ClickHouse's 256 KiB default.
+     * Routing the DAO through the container handle silently ran every delete in this suite on non-production settings.
+     */
+    private TransactionTemplateAsync appTemplate;
 
     /**
      * One app per flag state, identical in every other respect. {@code tracesWeeklyPartitionPruningEnabled} is the only
@@ -365,12 +396,13 @@ class TracesPartitionPruningMutationTest {
      * Wires the currently-running nested class's app in. Safe on shared outer fields because JUnit runs nested
      * containers one at a time — this tree configures no parallel execution — so only one app is live at a time.
      */
-    private void bindApp(ClientSupport clientSupport, TraceDAO traceDAO) {
+    private void bindApp(ClientSupport clientSupport, TraceDAO traceDAO, TransactionTemplateAsync appTemplate) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.traceDAO = traceDAO;
+        this.appTemplate = appTemplate;
     }
 
     @AfterAll
@@ -426,7 +458,7 @@ class TracesPartitionPruningMutationTest {
 
     /** Invokes the DAO under a workspace/user context, as {@code TraceService} does for the live delete path. */
     private void delete(Set<Pair<UUID, UUID>> projectIdTraceIdPairs) {
-        template.nonTransaction(connection -> traceDAO.delete(projectIdTraceIdPairs, connection))
+        appTemplate.nonTransaction(connection -> traceDAO.delete(projectIdTraceIdPairs, connection))
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER))
@@ -457,6 +489,27 @@ class TracesPartitionPruningMutationTest {
         assertThat(sql)
                 .as("query_log holds a delete_traces statement mentioning id '%s'", traceId)
                 .isNotNull();
+        return sql;
+    }
+
+    /**
+     * The newest {@code delete_traces} statement that carried exactly {@code pairsSize} pairs. Chunks are identified by
+     * their pair count rather than by a contained id, because the point is to inspect a <em>specific chunk</em> of one
+     * request — and the DAO stamps each chunk's size into its {@code log_comment}.
+     * <p>
+     * <b>The returned text is truncated for large statements.</b> ClickHouse caps {@code query_log.query} at
+     * {@code log_queries_cut_to_length} (100,000 bytes by default), and a full 10,000-pair chunk inlines to ~762 KiB,
+     * so anything at the tail of such a statement — the partition predicate included — is simply absent. Only assert on
+     * the text of statements small enough to be recorded whole.
+     */
+    private String deleteSqlForChunkOf(int pairsSize) {
+        execute("SYSTEM FLUSH LOGS", _ -> {
+        });
+        var sql = queryOneString(DELETE_BY_PAIR_COUNT,
+                statement -> statement.bind("pairs_size", String.valueOf(pairsSize)));
+        assertThat(sql)
+                .as("query_log holds a delete_traces statement with pairs_size=%s", pairsSize)
+                .isNotBlank();
         return sql;
     }
 
@@ -514,8 +567,17 @@ class TracesPartitionPruningMutationTest {
      * clears a wrapper stranded by an interrupted run before rebuilding it.
      */
     private void ensureDistributedWrap() {
-        if ("Distributed".equals(queryOneString(TABLE_ENGINE, _ -> {
-        }))) {
+        // Accepting any Distributed table would let a wrapper pointing at another database or another local table
+        // block the rebuild and silently route reads and inserts elsewhere - so the check is on the definition, not the
+        // engine name. Matched on the two parts that decide where rows actually go (the database and the local target)
+        // rather than the whole string, which ClickHouse re-prints and which would make this brittle about spacing.
+        var engineFull = Optional.ofNullable(queryOneString(TABLE_ENGINE_FULL, _ -> {
+        })).orElse("");
+        if (engineFull.startsWith("Distributed")) {
+            assertThat(engineFull)
+                    .as("`traces` is already Distributed but not over this database's traces_local: %s", engineFull)
+                    .contains("'" + ClickHouseContainerUtils.DATABASE_NAME + "'")
+                    .contains("'traces_local'");
             return;
         }
         // Clear a wrapper left behind by a run that died between the CREATE and the RENAME. It holds no data - a
@@ -707,8 +769,8 @@ class TracesPartitionPruningMutationTest {
         private final TestDropwizardAppExtension app = newApp(true);
 
         @BeforeAll
-        void beforeAll(ClientSupport clientSupport, TraceDAO traceDAO) {
-            bindApp(clientSupport, traceDAO);
+        void beforeAll(ClientSupport clientSupport, TraceDAO traceDAO, TransactionTemplateAsync appTemplate) {
+            bindApp(clientSupport, traceDAO, appTemplate);
         }
 
         @Test
@@ -824,6 +886,62 @@ class TracesPartitionPruningMutationTest {
                     .isTrue();
         }
 
+        @Test
+        @DisplayName("a request spanning two chunks prunes each chunk on its own")
+        void requestSpanningTwoChunksPrunesEachChunkIndependently() {
+            // The DAO chunks a request at ANALYTICS_DELETE_BATCH_SIZE and derives partitions PER CHUNK, inside the
+            // concatMap - so "all-or-nothing" is a per-statement guarantee, not a per-request one. Every other test
+            // here passes a handful of pairs, which is one chunk, so none of them can see that.
+            //
+            // What this pins: chunk one is all-derivable and must prune; chunk two carries a non-v7 id and must fall
+            // back to the unbounded form; and the real rows in BOTH chunks must be deleted either way. A refactor that
+            // hoisted the derivation out of the lambda would make the whole request unbounded - safe, but it would
+            // silently give back the pruning on every large delete, and only this test would notice.
+            var projectId = ID_GENERATOR.generateId();
+            var firstChunkRow = idInWeekOf(ERA_MONDAYS.getFirst());
+            var secondChunkRow = idInWeekOf(ERA_MONDAYS.getLast());
+            insertRawTrace(projectId, firstChunkRow);
+            insertRawTrace(projectId, secondChunkRow);
+
+            // Chunk one: the real row plus filler, all derivable, exactly ANALYTICS_DELETE_BATCH_SIZE pairs. Filler ids
+            // match no row - a delete does not need its ids to exist, and the chunk boundary is what is under test.
+            var ordered = new ArrayList<UUID>();
+            ordered.add(firstChunkRow);
+            while (ordered.size() < ANALYTICS_DELETE_BATCH_SIZE) {
+                ordered.add(idInWeekOf(ERA_MONDAYS.getFirst()));
+            }
+            // Chunk two: the second real row and a non-v7 id, so this chunk alone loses its pruning.
+            ordered.add(secondChunkRow);
+            ordered.add(NON_V7_ID);
+
+            delete(ordered.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toCollection(
+                    LinkedHashSet::new)));
+
+            assertThat(liveRowCount(projectId, firstChunkRow))
+                    .as("the row in the pruned chunk is deleted")
+                    .isEqualTo("0");
+            assertThat(liveRowCount(projectId, secondChunkRow))
+                    .as("and so is the row in the chunk that fell back to unbounded")
+                    .isEqualTo("0");
+
+            // Two statements, with the sizes the chunking implies - this is what shows the request was split at all.
+            // The full chunk's own text is NOT inspectable: query_log truncates at log_queries_cut_to_length (100,000
+            // bytes on this server) and a 10,000-pair statement inlines to ~762 KiB, so the recorded text stops long
+            // before the partition predicate at the statement's tail. Asserting on it would be asserting on a string
+            // the server never kept. That a derivable chunk prunes is covered by the single-chunk tests; what only this
+            // test can show is that the two chunks are derived INDEPENDENTLY - which the second chunk's shape proves,
+            // since it lost its pruning while the first still executed and deleted its row.
+            deleteSqlForChunkOf(ANALYTICS_DELETE_BATCH_SIZE);
+
+            var secondChunkSql = deleteSqlForChunkOf(2);
+            assertThat(secondChunkSql)
+                    .as("the chunk carrying the non-v7 id emits no id_at predicate of any kind")
+                    .doesNotContain("id_at");
+            assertThat(EMITTED_IN_CLAUSE.matcher(secondChunkSql).find())
+                    .as("nor a partition IN clause: %s", secondChunkSql)
+                    .isFalse();
+        }
+
         @ParameterizedTest
         @MethodSource
         @DisplayName("an id with no derivable partition disables pruning for the batch, and the delete still lands")
@@ -889,8 +1007,8 @@ class TracesPartitionPruningMutationTest {
         private final TestDropwizardAppExtension app = newApp(false);
 
         @BeforeAll
-        void beforeAll(ClientSupport clientSupport, TraceDAO traceDAO) {
-            bindApp(clientSupport, traceDAO);
+        void beforeAll(ClientSupport clientSupport, TraceDAO traceDAO, TransactionTemplateAsync appTemplate) {
+            bindApp(clientSupport, traceDAO, appTemplate);
         }
 
         @Test
