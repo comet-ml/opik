@@ -47,7 +47,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
@@ -174,6 +176,24 @@ class TracesPartitionPruningMutationTest {
             ORDER BY event_time_microseconds DESC
             LIMIT 1
             """;
+
+    /**
+     * The {@code IN} clause the DAO emitted, captured to end of line: the predicate sits on its own line in the
+     * template with {@code SETTINGS log_comment} on the next, so the line boundary delimits it exactly. Read this way
+     * rather than by matching a bracket style, because the driver's rendering of a {@code Long[]} is its own choice —
+     * what matters is which partition values are in the clause, not how it punctuates them.
+     */
+    private static final Pattern EMITTED_IN_CLAUSE = Pattern.compile(
+            Pattern.quote(PARTITION_PREDICATE) + "\\s+IN\\s+([^\\n]*)");
+
+    /** A weekly partition value as it appears in SQL — {@code yyyyMMdd}, so always eight digits. */
+    private static final Pattern PARTITION_VALUE = Pattern.compile("\\d{8}");
+
+    /** An id in a different week from anything the API mints, for the two-partition batch. id_at 2023-11-29 (a Wed). */
+    private static final UUID OTHER_WEEK_ID = UUID.fromString("018c1860-1800-7abc-8000-000000000001");
+
+    /** The Monday of {@link #OTHER_WEEK_ID}'s week — stated as a literal so the expectation is readable on its own. */
+    private static final long OTHER_WEEK_PARTITION = 20231127L;
 
     /** A v4 UUID: no timestamp to derive a partition from. */
     private static final UUID NON_V7_ID = UUID.fromString("9f527bac-527a-4f92-8875-0fa8af8e4f22");
@@ -349,10 +369,11 @@ class TracesPartitionPruningMutationTest {
                 .as("only the target row is gone")
                 .doesNotContain(target.id())
                 .contains(bystander.id());
-        assertThat(lastTraceDeleteSql())
-                .as("the mutation bounded itself to the target's own partition")
-                .contains(PARTITION_PREDICATE)
-                .contains(onlyPartitionOf(target.id()));
+        var sql = lastTraceDeleteSql();
+        assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
+        assertThat(boundPartitionsOf(sql))
+                .as("bounded to exactly the target's own partition, nothing wider")
+                .containsExactly(partitionOf(target.id()));
     }
 
     @Test
@@ -360,20 +381,25 @@ class TracesPartitionPruningMutationTest {
     void batchSpanningTwoWeeksBindsBothPartitions() {
         // The multi-value Long[] bind, which the single-id path never exercises. The second id is minted for a week
         // three years back and matches no row — the batch's partition SET is what is under test, and a delete does not
-        // need its ids to exist. A range over the span would have selected every partition in between; the set names
-        // exactly two.
+        // need its ids to exist.
+        //
+        // Asserted as an EXACT set, because "mentions both partitions" is satisfied by a binding that also names every
+        // week in between, and that is the failure worth catching: an over-broad set keeps every delete correct while
+        // giving back the entire benefit. On prod-test a range over this span selected 2,644 of 3,928 parts where the
+        // exact set selected 4 — so a delete that is right and slow is the regression, and no behavioural assertion
+        // can see it.
         var target = newTrace().build();
         traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
         var projectId = projectIdOf(target);
-        var otherWeekId = UUID.fromString("018c1860-1800-7abc-8000-000000000001"); // id_at 2023-11-29 -> 20231127
 
-        delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, otherWeekId)));
+        delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, OTHER_WEEK_ID)));
 
         assertThat(traceIdsOf(target.projectName())).doesNotContain(target.id());
-        assertThat(lastTraceDeleteSql())
-                .contains(PARTITION_PREDICATE)
-                .contains(onlyPartitionOf(target.id()))
-                .contains("20231127");
+        var sql = lastTraceDeleteSql();
+        assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
+        assertThat(boundPartitionsOf(sql))
+                .as("exactly the batch's own two partitions, not a range across them")
+                .containsExactlyInAnyOrder(partitionOf(target.id()), OTHER_WEEK_PARTITION);
     }
 
     @ParameterizedTest
@@ -404,12 +430,33 @@ class TracesPartitionPruningMutationTest {
     }
 
     /**
-     * The partition the id resolves to, as it appears in the SQL. Derived through {@code WeeklyPartitions} on purpose:
-     * this suite is about the predicate reaching ClickHouse, and the derivation's own expected values are pinned against
-     * real ClickHouse output in {@code WeeklyPartitionsTest}, so restating them here would only duplicate that.
+     * The partition a single id resolves to. Derived through {@code WeeklyPartitions} on purpose: this suite is about
+     * the predicate reaching ClickHouse, and the derivation's own expected values are pinned against real ClickHouse
+     * output in {@code WeeklyPartitionsTest} and again in
+     * {@link #predicateMatchesLivePartitioningAndJavaDerivation}, so restating them here would only duplicate that.
      */
-    private static String onlyPartitionOf(UUID id) {
-        return String.valueOf(WeeklyPartitions.of(List.of(id)).orElseThrow().iterator().next());
+    private static long partitionOf(UUID id) {
+        return WeeklyPartitions.of(List.of(id)).orElseThrow().iterator().next();
+    }
+
+    /**
+     * The partition values actually bound into the emitted {@code IN} clause, so a test can assert the set is exact
+     * rather than merely inclusive. The driver substitutes bound values into the query text client-side, which is why
+     * they are readable here at all; the two assertions below are what make a change in that behaviour say so plainly
+     * instead of quietly turning every set assertion into a tautology on an empty set.
+     */
+    private static Set<Long> boundPartitionsOf(String sql) {
+        var clause = EMITTED_IN_CLAUSE.matcher(sql);
+        assertThat(clause.find())
+                .as("the delete SQL carries the partition predicate followed by an IN clause:%n%s", sql)
+                .isTrue();
+        var bound = PARTITION_VALUE.matcher(clause.group(1)).results()
+                .map(match -> Long.parseLong(match.group()))
+                .collect(Collectors.toUnmodifiableSet());
+        assertThat(bound)
+                .as("the IN clause carries inlined partition values — got '%s'", clause.group(1))
+                .isNotEmpty();
+        return bound;
     }
 
     /** Invokes the DAO under a workspace/user context, as {@code TraceService} does for the live delete path. */
