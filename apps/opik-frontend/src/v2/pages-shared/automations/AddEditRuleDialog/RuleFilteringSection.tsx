@@ -426,7 +426,10 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
       className="-mb-4 w-full border-t border-border"
     >
       <AccordionItem value="filtering-sampling" className="border-none">
-        <AccordionTrigger className="px-3 py-2 hover:no-underline">
+        <AccordionTrigger
+          className="px-3 py-2 hover:no-underline"
+          data-testid="add-edit-rule-dialog-filtering-sampling-trigger"
+        >
           <div className="flex items-center gap-1">
             <Label className="text-sm font-medium">Filtering & Sampling</Label>
             <ExplainerIcon
