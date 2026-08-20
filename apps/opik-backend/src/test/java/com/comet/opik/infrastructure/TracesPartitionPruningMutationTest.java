@@ -22,6 +22,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -50,7 +51,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -190,10 +190,16 @@ class TracesPartitionPruningMutationTest {
             LIMIT 1
             """;
 
+    /**
+     * Scoped by the same key {@code TraceDAO.delete} matches on — {@code (workspace_id, project_id, id)}. An oracle
+     * narrower than the delete would answer a different question: a row for the same id in another project would keep
+     * the count at {@code 1} after a successful delete, failing a test whose subject worked.
+     */
     private static final String LIVE_ROW_COUNT = """
             SELECT toString(uniqExact(id))
             FROM traces_local
             WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
             AND id = :id
             """;
 
@@ -216,6 +222,40 @@ class TracesPartitionPruningMutationTest {
 
     /** {@code EXPLAIN} index entries that reflect <b>partition</b>-level part selection. */
     private static final Set<String> PARTITION_INDEX_TYPES = Set.of("MinMax", "Partition");
+
+    /**
+     * Asks the planner how many parts the DAO's partition predicate selects. Declared once as a text block, per
+     * {@code .agents/skills/opik-backend/SKILL.md}: the table {@code <table>} and the predicate
+     * {@code <partition_expression>} are <b>fragments</b> and go through {@link TemplateUtils#newST}, the partition
+     * values are <b>values</b> and are bound — nothing is spliced with {@code .formatted(...)}.
+     * <p>
+     * The predicate fragment is {@link #PARTITION_PREDICATE}, and using the constant does not re-author what is under
+     * test: every caller has already asserted the emitted statement <em>contains</em> that exact text, so the constant
+     * is pinned to the DAO's own SQL by assertion rather than by string surgery on it. The partition values come from
+     * the emitted statement too, parsed by {@link #boundPartitionsOf} and bound here.
+     * <p>
+     * The DAO's {@code workspace_id} and {@code (project_id, id)} predicates are deliberately not reproduced. They are
+     * sort-key filters, not partition filters, so they cannot change partition selection — and leaving them out makes
+     * the unbounded case a full scan, which is the conservative direction for an assertion that the fallback prunes
+     * nothing.
+     */
+    /**
+     * The wrap block of {@code 000003_exchange_and_wrap.sql}. The database name is a <b>fragment</b> (an identifier
+     * inside a function argument, not a bindable value), so it goes through {@link TemplateUtils#newST} rather than
+     * {@code .formatted(...)} — the sibling suites still splice it, but the rule says not to add new ones. The
+     * {@code {cluster}} macros are ClickHouse's own and pass through StringTemplate untouched, which uses {@code <>}.
+     */
+    private static final String CREATE_DISTRIBUTED_WRAPPER = """
+            CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
+            ENGINE = Distributed('{cluster}', '<database>', 'traces_local', sipHash64(project_id))
+            """;
+
+    private static final String EXPLAIN_SELECTED_PARTS = """
+            EXPLAIN indexes = 1, json = 1
+            SELECT id
+            FROM <table>
+            <if(partition_expression)>WHERE <partition_expression> IN :partitions<endif>
+            """;
 
     /** A weekly partition value as it appears in SQL — {@code yyyyMMdd}, so always eight digits. */
     private static final Pattern PARTITION_VALUE = Pattern.compile("\\d{8}");
@@ -375,11 +415,12 @@ class TracesPartitionPruningMutationTest {
         var projectId = ID_GENERATOR.generateId();
         var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
         ids.forEach(id -> insertRawTrace(projectId, id));
-        assertThat(ids.stream().map(this::liveRowCount)).as("every era is seeded").containsOnly("1");
+        assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
+                .as("every era is seeded").containsOnly("1");
 
         delete(ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
 
-        assertThat(ids.stream().map(this::liveRowCount))
+        assertThat(ids.stream().map(id -> liveRowCount(projectId, id)))
                 .as("every era's row is gone, so the predicate named the partition each was actually filed under")
                 .containsOnly("0");
         var sql = lastTraceDeleteSql(ids.getFirst());
@@ -448,11 +489,12 @@ class TracesPartitionPruningMutationTest {
         traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
         var projectId = projectIdOf(target);
         insertRawTrace(projectId, underivableId);
-        assertThat(liveRowCount(underivableId)).as("the %s row is seeded before the delete", cause).isEqualTo("1");
+        assertThat(liveRowCount(projectId, underivableId))
+                .as("the %s row is seeded before the delete", cause).isEqualTo("1");
 
         delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, underivableId)));
 
-        assertThat(liveRowCount(underivableId))
+        assertThat(liveRowCount(projectId, underivableId))
                 .as("the %s row is itself deleted, not skipped", cause)
                 .isEqualTo("0");
         assertThat(traceIdsOf(target.projectName()))
@@ -558,8 +600,9 @@ class TracesPartitionPruningMutationTest {
     }
 
     /** {@code "1"} while a live (non-lightweight-deleted) row exists for the id, {@code "0"} once it is gone. */
-    private String liveRowCount(UUID id) {
+    private String liveRowCount(UUID projectId, UUID id) {
         return queryOneString(LIVE_ROW_COUNT, statement -> statement
+                .bind("project_id", projectId.toString())
                 .bind("workspace_id", WORKSPACE_ID)
                 .bind("id", id.toString()));
     }
@@ -619,11 +662,10 @@ class TracesPartitionPruningMutationTest {
         // on a duplicate name and buries the real state. Same reset TracesLocalV2CutoverTest performs.
         execute("DROP TABLE IF EXISTS traces_dist ON CLUSTER '{cluster}' SYNC", _ -> {
         });
-        execute("""
-                CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
-                ENGINE = Distributed('{cluster}', '%s', 'traces_local', sipHash64(project_id))
-                """.formatted(ClickHouseContainerUtils.DATABASE_NAME), _ -> {
-        });
+        execute(TemplateUtils.newST(CREATE_DISTRIBUTED_WRAPPER)
+                .add("database", ClickHouseContainerUtils.DATABASE_NAME)
+                .render(), _ -> {
+                });
         execute("""
                 RENAME TABLE
                     traces TO traces_local,
@@ -714,11 +756,25 @@ class TracesPartitionPruningMutationTest {
         assertThat(shape.find())
                 .as("the emitted statement has the expected DELETE shape:%n%s", daoDeleteSql)
                 .isTrue();
-        var selectSql = "SELECT id FROM %s %s".formatted(shape.group(1), shape.group(2));
+        var bound = EMITTED_IN_CLAUSE.matcher(daoDeleteSql).find()
+                ? boundPartitionsOf(daoDeleteSql)
+                : Set.<Long> of();
 
-        var explainRows = template.stream(connection -> Flux
-                .from(connection.createStatement("EXPLAIN indexes = 1, json = 1 %s".formatted(selectSql)).execute())
-                .flatMap(result -> result.map((row, _) -> row.get("explain", String.class))))
+        var explainSql = TemplateUtils.newST(EXPLAIN_SELECTED_PARTS)
+                .add("table", shape.group(1));
+        if (!bound.isEmpty()) {
+            explainSql.add("partition_expression", PARTITION_PREDICATE);
+        }
+        var sql = explainSql.render();
+
+        var explainRows = template.stream(connection -> {
+            var statement = connection.createStatement(sql);
+            if (!bound.isEmpty()) {
+                statement.bind("partitions", bound.toArray(Long[]::new));
+            }
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, _) -> row.get("explain", String.class)));
+        })
                 .collectList()
                 .block();
         var explain = String.join("\n", explainRows);

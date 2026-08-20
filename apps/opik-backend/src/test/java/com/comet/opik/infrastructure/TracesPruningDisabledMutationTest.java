@@ -85,10 +85,16 @@ class TracesPruningDisabledMutationTest {
             VALUES (:workspace_id, :project_id, :id)
             """;
 
+    /**
+     * Scoped by the same key {@code TraceDAO.delete} matches on — {@code (workspace_id, project_id, id)}. An oracle
+     * narrower than the delete answers a different question, and this suite runs on shared containers where other
+     * suites' rows are present, so the scoping is what keeps the count about this test's row.
+     */
     private static final String LIVE_ROW_COUNT = """
             SELECT toString(uniqExact(id))
             FROM traces
             WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
             AND id = :id
             """;
 
@@ -186,11 +192,11 @@ class TracesPruningDisabledMutationTest {
         // nothing here anyway: the legacy id_at is accurate for one, so even a wrongly-emitted predicate would match it
         // and the row would still go.
         insertRawTrace(projectId, FAR_FUTURE_ID);
-        assertThat(liveRowCount(FAR_FUTURE_ID)).as("the far-future row is seeded").isEqualTo("1");
+        assertThat(liveRowCount(projectId, FAR_FUTURE_ID)).as("the far-future row is seeded").isEqualTo("1");
 
         delete(Set.of(Pair.of(projectId, FAR_FUTURE_ID)));
 
-        assertThat(liveRowCount(FAR_FUTURE_ID))
+        assertThat(liveRowCount(projectId, FAR_FUTURE_ID))
                 .as("it is deleted - a partition predicate here would have matched nothing and reported success")
                 .isEqualTo("0");
 
@@ -236,9 +242,10 @@ class TracesPruningDisabledMutationTest {
     }
 
     /** {@code "1"} while a live (non-lightweight-deleted) row exists for the id, {@code "0"} once it is gone. */
-    private String liveRowCount(UUID id) {
+    private String liveRowCount(UUID projectId, UUID id) {
         return queryOneString(LIVE_ROW_COUNT, statement -> statement
                 .bind("workspace_id", WORKSPACE_ID)
+                .bind("project_id", projectId.toString())
                 .bind("id", id.toString()));
     }
 
