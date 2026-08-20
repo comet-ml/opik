@@ -262,7 +262,7 @@ class CostIntelligenceIngestionTest {
                 // drop the blocks either. Asserted inside the same await: the listener subscribes to
                 // the spend insert and the block insert independently
                 // (CostIntelligenceIngestionListener), so the spend row landing says nothing about
-                // whether the blocks have.
+                // whether the blocks have landed.
                 assertThat(getCipxBlocks(span.id(), ws.workspaceId())).isNotEmpty();
             });
         }
