@@ -12,17 +12,15 @@ const REFERENCE_OUTPUT = 'seed output';
  * a genuine binomial random variable and the assertion has to be a band, not an
  * equality.
  *
- * n=30 with the band below leaves a ~1-in-29,000 false-failure rate
- * (P(5 <= X <= 25) for X~B(30, 0.5) = 0.999966). Tightening the band to
- * 25%-75% would cut that to ~1-in-300 — a flake every few weeks of CI — while
- * catching no additional real regression, since every plausible break in this
- * code path lands far outside even the wide band (see PARTIAL_RATE_* below).
+ * n=30 is the smallest batch that keeps the band below comfortably wide while
+ * staying quick to seed; the exact flake budget is derived from the band and
+ * documented on PARTIAL_RATE_MIN_FRACTION below.
  */
 const BATCH_SIZE = 30;
 
 /**
- * Acceptance band for the partial-rate rule, as trace counts out of
- * BATCH_SIZE: 15%-85% of the batch.
+ * Acceptance band for the partial-rate rule, expressed as the fraction of the
+ * batch that may be scored, and converted to inclusive trace counts below.
  *
  * Deliberately loose. The regressions this test exists to catch are structural,
  * not subtle drifts in the sampler's uniformity:
@@ -32,9 +30,20 @@ const BATCH_SIZE = 30;
  *     percent-display / API-fraction split invites) -> 30 or 0 (outside)
  *   - off-by-10x (0.05 instead of 0.5)   -> ~2 scored (below band)
  * A band that only rejects "not close to half" still rejects all of these.
+ *
+ * At BATCH_SIZE=30 these fractions give inclusive bounds of 4..26, for a
+ * false-failure rate of ~1 in 118,000: P(4 <= X <= 26) for X~B(30, 0.5) =
+ * 0.9999916. Tightening to 25%-75% (8..22) would cost ~1 in 1,500 — a flake
+ * every few weeks of CI — and catch nothing extra, since every plausible break
+ * lands at 0, ~2, or 30.
+ *
+ * Derived rather than hardcoded so the bounds, the reported percentages and the
+ * quoted flake rate cannot drift apart from each other.
  */
-const PARTIAL_RATE_MIN_SCORED = 5; // 15% of 30, rounded down
-const PARTIAL_RATE_MAX_SCORED = 25; // 85% of 30, rounded down
+const PARTIAL_RATE_MIN_FRACTION = 0.15;
+const PARTIAL_RATE_MAX_FRACTION = 0.85;
+const PARTIAL_RATE_MIN_SCORED = Math.floor(PARTIAL_RATE_MIN_FRACTION * BATCH_SIZE);
+const PARTIAL_RATE_MAX_SCORED = Math.ceil(PARTIAL_RATE_MAX_FRACTION * BATCH_SIZE);
 
 test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:online-evaluation'] }, () => {
   test('A 50% rule scores roughly half of a 30-trace batch while a 100% rule scores all of it', { tag: ['@cap:online-evaluation.sampling-rate'] }, async ({
@@ -260,10 +269,31 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
       // Deletes every rule in the project rather than two captured ids: this
       // project is the test's own throwaway fixture, so anything here is ours,
       // and a rule created moments before a failure has no captured id yet.
+      //
+      // Best-effort throughout, and that is the point of running in `finally`:
+      // this block also executes on the failure path, where throwing would
+      // replace the assertion or scoring error that actually explains the run
+      // with an incidental cleanup error. `deleteAutomationRule` rethrows
+      // anything that is not a 404, and a failed list would skip every
+      // deletion, so both are caught and downgraded to warnings. Leaked rules
+      // are a tidiness problem; a masked failure costs a debugging session.
       await test.step('Cleanup: delete both rules (project teardown does not cascade)', async () => {
-        const rules = await backendClient.listAutomationRulesForProject(project.id);
+        let rules: Awaited<
+          ReturnType<typeof backendClient.listAutomationRulesForProject>
+        > = [];
+        try {
+          rules = await backendClient.listAutomationRulesForProject(project.id);
+        } catch (err) {
+          console.warn(`[sampling-rate] could not list rules for cleanup:`, err);
+          return;
+        }
         for (const rule of rules) {
-          await backendClient.deleteAutomationRule(project.id, rule.id);
+          try {
+            await backendClient.deleteAutomationRule(project.id, rule.id);
+          } catch (err) {
+            // Keep going: one undeletable rule must not orphan the rest.
+            console.warn(`[sampling-rate] could not delete rule ${rule.name}:`, err);
+          }
         }
       });
     }
