@@ -562,8 +562,9 @@ class TracesPartitionPruningMutationTest {
             return; // Already installed, or the cutover migration has landed.
         }
         assertThat(tableExists("traces_local_v2"))
-                .as("`traces` is not partitioned and `traces_local_v2` does not exist, so there is no successor to"
-                        + " install - this suite needs one of those two states")
+                .as("neither `traces_local` nor a partitioned `traces` nor `traces_local_v2` is present (partition key"
+                        + " of `traces`: '%s') - this suite needs one of those states to install the successor from",
+                        partitionKeyOf("traces"))
                 .isTrue();
         execute("EXCHANGE TABLES traces AND traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
         });
@@ -581,13 +582,19 @@ class TracesPartitionPruningMutationTest {
      * {@code TracesDistributedWrapMutationTest.applyDistributedWrap} and
      * {@code TracesLocalV2CutoverTest.wrapInDistributed} do: build the wrapper under a temp name first, then one atomic
      * multi-target {@code RENAME} rotates the data to {@code traces_local} and the wrapper into {@code traces}, so
-     * {@code traces} is never absent. Idempotent for the same reason as the step above.
+     * {@code traces} is never absent. Re-entrant: it returns early when the wrap is already applied, and
+ * clears a wrapper stranded by an interrupted run before rebuilding it.
      */
     private void ensureDistributedWrap() {
         if ("Distributed".equals(queryOneString(TABLE_ENGINE, _ -> {
         }))) {
             return;
         }
+        // Clear a wrapper left behind by a run that died between the CREATE and the RENAME. It holds no data - a
+        // Distributed table is a routing definition - so dropping it is safe, and without this the CREATE below fails
+        // on a duplicate name and buries the real state. Same reset TracesLocalV2CutoverTest performs.
+        execute("DROP TABLE IF EXISTS traces_dist ON CLUSTER '{cluster}' SYNC", _ -> {
+        });
         execute("""
                 CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
                 ENGINE = Distributed('{cluster}', '%s', 'traces_local', sipHash64(project_id))
@@ -606,8 +613,15 @@ class TracesPartitionPruningMutationTest {
         return "1".equals(queryOneString(TABLE_COUNT, statement -> statement.bind("table", table)));
     }
 
+    /**
+     * The table's partition-key expression, or {@code ""} when there is no such table — never {@code null}. A missing
+     * row is a legitimate state here (a half-applied wrap can leave {@code traces} renamed away), and the setup guard
+     * has to be able to report that rather than die dereferencing it, which is what would bury the diagnostic.
+     */
     private String partitionKeyOf(String table) {
-        return queryOneString(PARTITION_KEY_OF_TABLE, statement -> statement.bind("table", table));
+        return Optional
+                .ofNullable(queryOneString(PARTITION_KEY_OF_TABLE, statement -> statement.bind("table", table)))
+                .orElse("");
     }
 
     /**
