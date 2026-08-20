@@ -38,6 +38,13 @@ if ! jq empty "$input" 2>/dev/null; then
     exit 1
 fi
 
+# Never override an existing .mcp.json -- it may hold personal tokens that exist
+# nowhere else. Generate only on first setup; reconciliation is OPIK-7271.
+if [[ -f "$output" ]]; then
+    echo "  Existing $output left untouched (not overriding local MCP config)."
+    exit 0
+fi
+
 # Helper function to parse env file into JSON object
 # Handles: missing files, empty files, comment-only files, special characters
 parse_env_file() {
@@ -185,4 +192,4 @@ else
 end
 ' "$input" > "$output"
 
-echo "  Converted MCP config: $input -> $output"
+echo "  Converted MCP config (first-time setup): $input -> $output"

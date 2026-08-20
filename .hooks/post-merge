@@ -1,0 +1,8 @@
+#!/bin/sh
+# Keep agent configs in sync after a pull/merge.
+set -e
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cd "$REPO_ROOT" || exit 0
+
+command -v make >/dev/null 2>&1 && make agent-configs || true

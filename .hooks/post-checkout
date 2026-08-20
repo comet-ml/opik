@@ -1,0 +1,11 @@
+#!/bin/sh
+# Keep agent configs in sync after a branch switch / worktree add.
+set -e
+
+# $3: 1 = branch checkout, 0 = file checkout. Skip file checkouts.
+[ "${3:-1}" = "1" ] || exit 0
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cd "$REPO_ROOT" || exit 0
+
+command -v make >/dev/null 2>&1 && make agent-configs || true
