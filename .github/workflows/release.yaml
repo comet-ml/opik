@@ -3,6 +3,11 @@ name: "Release"
 run-name: "Release from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
+  # NOTE: a direct dispatch of this workflow cannot publish the npm packages —
+  # npm's trusted publisher is registered against the *entry-point* workflow,
+  # which for releases is release-wrapper-release-n-deploy.yml. A direct run
+  # still tags and builds, so the npm jobs will fail the OIDC identity check
+  # after the tag has been pushed. Release through the wrapper.
   workflow_dispatch:
     inputs:
       reuse_existing_tag:
