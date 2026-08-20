@@ -258,11 +258,13 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().triggerDetail()).isEqualTo("Explore");
                 assertThat(row.get().turnKey()).isEqualTo("unknown-fields-turnkey");
                 assertThat(row.get().parentToolUseId()).isEqualTo("toolu_unknown_fields");
+                // The block writer sees the same metadata, so an unknown field on a block must not
+                // drop the blocks either. Asserted inside the same await: the listener subscribes to
+                // the spend insert and the block insert independently
+                // (CostIntelligenceIngestionListener), so the spend row landing says nothing about
+                // whether the blocks have.
+                assertThat(getCipxBlocks(span.id(), ws.workspaceId())).isNotEmpty();
             });
-
-            // The block writer sees the same metadata, so an unknown field on a block must not drop
-            // the blocks either.
-            assertThat(getCipxBlocks(span.id(), ws.workspaceId())).isNotEmpty();
         }
 
         @Test
