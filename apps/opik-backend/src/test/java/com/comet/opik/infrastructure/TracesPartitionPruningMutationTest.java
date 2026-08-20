@@ -12,6 +12,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -48,6 +50,9 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -221,21 +226,37 @@ class TracesPartitionPruningMutationTest {
      * far-future or at the epoch, so a recent-only batch would accept the very expression migration 000114 was written
      * to escape. The 2200 id is the litellm shape and the one that makes the assertion bite.
      */
-    private static final List<UUID> OUT_OF_WINDOW_ERA_IDS = List.of(
-            UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"), // id_at 1996-02-09  -> 19960205
-            UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2")); // id_at 2200-01-01 -> 21991230
-
-    private static final Set<Long> OUT_OF_WINDOW_ERA_PARTITIONS = Set.of(19960205L, 21991230L);
-
-    /** A v4 UUID: no timestamp to derive a partition from. */
-    private static final UUID NON_V7_ID = UUID.fromString("9f527bac-527a-4f92-8875-0fa8af8e4f22");
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     /**
-     * A UUIDv7 whose 48 timestamp bits are all set (10889-08-02), so its {@code id_at} saturates to the
-     * {@code DateTime64} ceiling and the honest week is not the partition the row would be in. Same rejection as
-     * {@link #NON_V7_ID}, different cause — see {@code WeeklyPartitions}.
+     * The weekly partitions this suite works in, each named by its Monday — which is also the partition name, since the
+     * key is that Monday as {@code yyyyMMdd}. Fixed rather than {@code now}-derived, for the reason
+     * {@code TracesLocalV2PartitioningTest} gives for its own anchor: the partition math stays deterministic and cannot
+     * drift across a week boundary mid-suite.
+     * <p>
+     * Ids are minted <b>mid-week</b> ({@link #idInWeekOf}), so the assertions exercise the map back to Monday rather
+     * than identity. The three eras are not interchangeable samples: {@code toMonday} agrees with the {@code Date32}
+     * expression across the ordinary calendar and diverges only far-future or at the epoch, so a recent-only batch would
+     * accept the very expression migration 000114 was written to escape. The 2199 row is the litellm shape and the one
+     * that makes it bite; it also covers the {@code DateTime64} half of what the flag asserts, since a 32-bit
+     * {@code id_at} would store it under a wrapped recent timestamp and the derived partition would miss it.
      */
-    private static final UUID OUT_OF_RANGE_ID = UUID.fromString("ffffffff-ffff-7abc-8000-000000000001");
+    private static final List<LocalDate> ERA_MONDAYS = List.of(
+            LocalDate.of(1996, 2, 5),
+            LocalDate.of(2025, 3, 3),
+            LocalDate.of(2199, 12, 30));
+
+    /** {@link UUID#randomUUID()} is a v4 by definition: no embedded timestamp to derive a partition from. */
+    private static final UUID NON_V7_ID = UUID.randomUUID();
+
+    /**
+     * A UUIDv7 minted one second past the first instant {@code DateTime64} cannot represent, so its {@code id_at}
+     * saturates to the ceiling and the honest week is not the partition the row lands in. Same rejection as
+     * {@link #NON_V7_ID}, different cause — see {@code WeeklyPartitions}. Minted rather than written out, so the
+     * boundary it sits past is visible.
+     */
+    private static final UUID OUT_OF_RANGE_ID = ID_GENERATOR
+            .getTimeOrderedEpoch(LocalDate.of(2300, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli());
 
     // Dedicated, non-reused ClickHouse + ZooKeeper on their own network: the EXCHANGE destructively swaps `traces`, so a
     // shared/reused container would corrupt other suites and reruns. Redis/MySQL are only read, so the shared ones are
@@ -343,39 +364,31 @@ class TracesPartitionPruningMutationTest {
     @DisplayName("the DAO's own delete clears every era and binds exactly those partitions")
     void deleteClearsEveryEraAndBindsExactlyThosePartitions() {
         // The three-way agreement - the migration's PARTITION BY as installed, the DAO's predicate, and
-        // WeeklyPartitions.of - asserted through the DAO's own delete instead of by re-evaluating the expression in
+        // WeeklyPartitions.of - asserted through the DAO's own delete rather than by re-evaluating the expression in
         // test SQL. If the predicate resolved to any partition other than the one ClickHouse filed a row under, the
-        // mutation would select the wrong parts and that row would SURVIVE. So "every row is gone" IS the agreement,
-        // and it is established by the statement production actually runs rather than by a query written here.
+        // mutation would select the wrong parts and that row would SURVIVE. So "every row is gone" IS the agreement.
         //
-        // This also covers the DateTime64 half of what the flag asserts, without asking system.columns: against a
-        // 32-bit id_at the 2200 row would be stored under a wrapped recent timestamp, the derived partition would not
-        // match it, and the row would survive.
-        //
-        // Three eras in one batch is also the multi-value Long[] bind, which a single-id delete never reaches.
-        var recent = newTrace().build();
-        traceResourceClient.createTrace(recent, API_KEY, WORKSPACE_NAME);
-        var projectId = projectIdOf(recent);
-        assertThat(projectId.version()).as("the project id is a real UUIDv7, as the backend mints it").isEqualTo(7);
-        // Only the out-of-window eras are seeded raw: ingestion rejects a 1996 or 2200 id by design (24h window), so
-        // there is no endpoint that can create them. The recent row above went through the real ingestion path, and
-        // they all share its project.
-        OUT_OF_WINDOW_ERA_IDS.forEach(id -> insertRawTrace(projectId, id));
-        var batch = Stream.concat(Stream.of(recent.id()), OUT_OF_WINDOW_ERA_IDS.stream()).toList();
-        assertThat(batch.stream().map(this::liveRowCount)).as("every era is present").containsOnly("1");
+        // Ids are minted from the named Mondays rather than written out, so both sides of the assertion are the same
+        // arithmetic a reader can check, and every era in one batch is also the multi-value Long[] bind. Seeded raw and
+        // in a minted project: the ingestion window is 24h, so no endpoint can create a 1996 or 2199 row, and the
+        // project id is a real UUIDv7 straight from IdGenerator - which is how the sibling partition suites get one.
+        var projectId = ID_GENERATOR.generateId();
+        var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
+        ids.forEach(id -> insertRawTrace(projectId, id));
+        assertThat(ids.stream().map(this::liveRowCount)).as("every era is seeded").containsOnly("1");
 
-        delete(batch.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
+        delete(ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
 
-        assertThat(batch.stream().map(this::liveRowCount))
+        assertThat(ids.stream().map(this::liveRowCount))
                 .as("every era's row is gone, so the predicate named the partition each was actually filed under")
                 .containsOnly("0");
-        var sql = lastTraceDeleteSql(recent.id());
+        var sql = lastTraceDeleteSql(ids.getFirst());
         assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
         assertThat(boundPartitionsOf(sql))
-                .as("exactly the partitions the batch resolves to, not a range across three centuries")
-                .containsExactlyInAnyOrderElementsOf(
-                        Stream.concat(Stream.of(partitionOf(recent.id())), OUT_OF_WINDOW_ERA_PARTITIONS.stream())
-                                .collect(Collectors.toUnmodifiableSet()));
+                .as("exactly the partitions the batch resolves to, not a range across two centuries")
+                .containsExactlyInAnyOrderElementsOf(ERA_MONDAYS.stream()
+                        .map(TracesPartitionPruningMutationTest::partitionNameOf)
+                        .collect(Collectors.toUnmodifiableSet()));
     }
 
     @Test
@@ -395,21 +408,19 @@ class TracesPartitionPruningMutationTest {
         // DELETE and put behind a SELECT - predicate and bound partition values included. Only the verb changes; the
         // statement being explained is still the DAO's. Same instrument and record shape as
         // TracesLocalV2PartitioningTest.
-        // Real project from the ingestion path, and a recent row created through the endpoint; only the out-of-window
-        // eras are seeded raw, so the table holds several partitions to prune between.
-        var recent = newTrace().build();
-        traceResourceClient.createTrace(recent, API_KEY, WORKSPACE_NAME);
-        var projectId = projectIdOf(recent);
-        OUT_OF_WINDOW_ERA_IDS.forEach(id -> insertRawTrace(projectId, id));
+        // One row per era, so the table holds several partitions for the planner to prune between.
+        var projectId = ID_GENERATOR.generateId();
+        var ids = ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList();
+        ids.forEach(id -> insertRawTrace(projectId, id));
 
-        // Bounded: one derivable id, so the predicate names one of the partitions just populated.
-        delete(Set.of(Pair.of(projectId, recent.id())));
-        var bounded = partsSelectedBy(lastTraceDeleteSql(recent.id()))
+        // Bounded: one derivable id, so the predicate names a single one of those partitions.
+        delete(Set.of(Pair.of(projectId, ids.getFirst())));
+        var bounded = partsSelectedBy(lastTraceDeleteSql(ids.getFirst()))
                 .orElseThrow(() -> new AssertionError("EXPLAIN reported no partition index for the bounded delete"));
 
         // Unbounded: a non-v7 id in the batch, so no predicate at all. Its partner is a different era, so the query_log
         // lookup finds this statement rather than the one above.
-        var partner = OUT_OF_WINDOW_ERA_IDS.getFirst();
+        var partner = ids.get(1);
         delete(Set.of(Pair.of(projectId, partner), Pair.of(projectId, NON_V7_ID)));
         var unbounded = partsSelectedBy(lastTraceDeleteSql(partner));
 
@@ -465,6 +476,19 @@ class TracesPartitionPruningMutationTest {
         return Stream.of(
                 arguments("non-v7", NON_V7_ID),
                 arguments("beyond-2299", OUT_OF_RANGE_ID));
+    }
+
+    /** A UUIDv7 in the given week, minted mid-week so the partition assertion exercises the map back to Monday. */
+    private static UUID idInWeekOf(LocalDate monday) {
+        return ID_GENERATOR.generateId(monday.plusDays(2).atTime(12, 0).toInstant(ZoneOffset.UTC));
+    }
+
+    /**
+     * The partition name for a week, which is its Monday as {@code yyyyMMdd}. Formatting a Monday the test already
+     * names — not re-deriving "the Monday of an arbitrary date", which is the part under test.
+     */
+    private static long partitionNameOf(LocalDate monday) {
+        return monday.getYear() * 10000L + monday.getMonthValue() * 100L + monday.getDayOfMonth();
     }
 
     /**
