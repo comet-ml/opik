@@ -116,6 +116,8 @@ Token counts are read straight from the provider's own `usage` block, so they re
 
 One row per classifiable region of the request or response. This is what makes cost attribution possible.
 
+The content hash is what stands in for the content itself. Two blocks with the same hash carry the same bytes, so Cost Intelligence can tell that the same system prompt, skill, or memory file appears across calls and across users — or that two copies of it have drifted apart — without ever seeing a character of the text.
+
 | Field | What it is |
 | --- | --- |
 | Position | Where in the request structure the block sits (a wire coordinate, not a file path) |

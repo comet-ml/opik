@@ -662,7 +662,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MOONSHOTAI_KIMI_LATEST("~moonshotai/kimi-latest"),
     OPENAI_GPT_LATEST("~openai/gpt-latest"),
     OPENAI_GPT_MINI_LATEST("~openai/gpt-mini-latest"),
-    X_AI_GROK_LATEST("~x-ai/grok-latest");
+    X_AI_GROK_LATEST("~x-ai/grok-latest"),
+    Z_AI_GLM_LATEST("~z-ai/glm-latest");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 
