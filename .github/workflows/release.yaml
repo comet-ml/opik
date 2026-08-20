@@ -3,6 +3,11 @@ name: "Release"
 run-name: "Release from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
+  # NOTE: a direct dispatch of this workflow cannot publish the npm packages —
+  # npm's trusted publisher is registered against the *entry-point* workflow,
+  # which for releases is release-wrapper-release-n-deploy.yml. A direct run
+  # still tags and builds, so the npm jobs will fail the OIDC identity check
+  # after the tag has been pushed. Release through the wrapper.
   workflow_dispatch:
     inputs:
       reuse_existing_tag:
@@ -104,6 +109,14 @@ jobs:
     needs:
       - set-version
       - create-git-tag
+    # `id-token: write` is required here, not just in the called workflow — and
+    # also on whatever dispatches THIS workflow, since permissions only ever
+    # narrow down the call chain. The entry point in practice is
+    # `release-wrapper-release-n-deploy.yml`, which is what npm has registered as
+    # the trusted publisher. See DND-1565.
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/typescript_sdk_publish.yml
     secrets: inherit
     with:
@@ -115,6 +128,9 @@ jobs:
     needs:
       - set-version
       - create-git-tag
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/typescript_sdk_integration_publish.yml
     secrets: inherit
     with:

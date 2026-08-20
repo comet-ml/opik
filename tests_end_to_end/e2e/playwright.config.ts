@@ -6,9 +6,8 @@ const env = loadEnvConfig();
 
 // Storage state minted by global-setup at .auth/user.json. For cloud/self-
 // hosted deployments it carries the auth cookies + storage from the login
-// round-trip; for OSS it's a minimal file holding the localStorage entries
-// (e.g. opik-version-override=v2) the suite needs the FE to read before any
-// API call. Never checked in.
+// round-trip; for OSS it's an empty state file, written so context creation has
+// something to read. Never checked in.
 const storageState = path.resolve(__dirname, '.auth/user.json');
 
 export default defineConfig({
