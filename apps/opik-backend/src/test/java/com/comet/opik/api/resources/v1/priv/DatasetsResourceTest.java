@@ -5118,6 +5118,42 @@ class DatasetsResourceTest {
         }
 
         @Test
+        @DisplayName("Error: batch update with an operator the field's type does not support")
+        void batchUpdateDatasetItems__whenFilterOperatorUnsupportedForFieldType__thenBadRequest() {
+            // The dataset has to exist, or the request is refused before it ever reaches the query builder.
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .tags(Set.of("tag1"))
+                    .build();
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var datasetId = datasetResourceClient.getDatasetItem(item.id(), API_KEY, TEST_WORKSPACE).datasetId();
+
+            // STARTS_WITH has no template for a LIST field, so nothing renders it into the update query.
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.STARTS_WITH, null, "tag");
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of(filter))
+                    .update(DatasetItemUpdate.builder()
+                            .tags(Set.of("tag"))
+                            .build())
+                    .build();
+
+            try (var actualResponse = datasetResourceClient.callBatchUpdateDatasetItems(batchUpdate, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo("Invalid operator '%s' for field '%s' of type '%s'".formatted(
+                                filter.operator().getQueryParamOperator(),
+                                filter.field().getQueryParamField(),
+                                filter.field().getType()));
+            }
+        }
+
+        @Test
         @DisplayName("Error: batch update exceeds max size")
         void batchUpdateDatasetItems__whenExceedsMaxSize__thenBadRequest() {
             // Create more than 1000 IDs
@@ -5569,6 +5605,47 @@ class DatasetsResourceTest {
                     .post(Entity.json(deleteRequest))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: delete with an operator the field's type does not support")
+        void deleteDatasetItems__whenFilterOperatorUnsupportedForFieldType__thenBadRequest() {
+            // These body filters used to skip FiltersFactory validation, so the pair reached the query builder
+            // with no operator template behind it and failed as a 500 instead of naming the bad filter.
+            // The dataset has to exist, or the request is refused before it ever reaches the query builder.
+            var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .tags(Set.of("tag1"))
+                    .build();
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .items(List.of(item))
+                    .datasetId(null)
+                    .build();
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var datasetId = datasetResourceClient.getDatasetItem(item.id(), API_KEY, TEST_WORKSPACE).datasetId();
+
+            // STARTS_WITH has no template for a LIST field, so nothing renders it into the delete query.
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.STARTS_WITH, null, "tag");
+
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of(filter))
+                    .build();
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("delete")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(deleteRequest))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo("Invalid operator '%s' for field '%s' of type '%s'".formatted(
+                                filter.operator().getQueryParamOperator(),
+                                filter.field().getQueryParamField(),
+                                filter.field().getType()));
             }
         }
 
