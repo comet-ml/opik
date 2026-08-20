@@ -118,7 +118,7 @@ class TracesPartitionPruningMutationTest {
     // The EXCHANGE/RENAME pair in exchangeTables() stays as inline literals on purpose: they are single literals built
     // by no Java string operation, and they are kept byte-identical to 000003_exchange_and_wrap.sql by eye, so they
     // belong at the call site next to the javadoc that says so - as TracesDistributedWrapMutationTest does.
-    private static final String SELECT_FILED_PARTITION = """
+    private static final String SELECT_PARTITION_ID = """
             SELECT DISTINCT _partition_id
             FROM traces
             WHERE workspace_id = :workspace_id
@@ -272,7 +272,7 @@ class TracesPartitionPruningMutationTest {
         // — so this seeds through the real column definition rather than restating it.
         insertRawTrace(id);
 
-        var filedUnder = queryOneString(SELECT_FILED_PARTITION, bindRawTrace(id));
+        var filedUnder = queryOneString(SELECT_PARTITION_ID, bindRawTrace(id));
         // The DAO predicate goes in as a StringTemplate fragment, not a bind: it is an expression to be evaluated, and
         // evaluating the DAO's own text is the entire point. The workspace and id are values, so they bind.
         var daoPredicateValue = queryOneString(withPartitionExpression(SELECT_PARTITION_EXPRESSION_VALUE),
