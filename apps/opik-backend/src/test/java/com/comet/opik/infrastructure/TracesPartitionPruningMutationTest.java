@@ -19,7 +19,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.WeeklyPartitions;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -63,25 +62,40 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * renders the predicate exactly when it should, that the derived {@code Long[]} binds to {@code IN :partitions}, and
  * that the row still goes away either way.
  *
- * <p>Each test asserts <b>both</b> halves, because either alone passes for the wrong reason: the rows are read back
- * through the public API (a delete that pruned to a partition the row is not in would leave it behind), and the SQL
- * ClickHouse actually received is read back from {@code system.query_log} (a delete that silently stopped pruning would
- * still remove the row, just slowly — the regression the flag and the derivation exist to prevent, and one no
- * behavioural assertion can see).
+ * <p><b>Everything is asserted through the DAO's own delete.</b> This suite writes no query that re-implements or
+ * re-evaluates the partition expression, and it asserts nothing about the EXCHANGE — the EXCHANGE is only setup (see
+ * below). Its own SQL is three statements, all plain binds: seed a row, count a row, read a statement back from
+ * {@code system.query_log}. Correctness is established the way production would feel it — <b>the rows go away</b>. If
+ * the DAO's predicate resolved to any partition other than the one ClickHouse filed a row under, the mutation would
+ * select the wrong parts and that row would survive, so
+ * {@link #deleteClearsEveryEraAndBindsExactlyThosePartitions} passing <em>is</em> the agreement between the migration's
+ * {@code PARTITION BY} as installed, the DAO's predicate, and {@link WeeklyPartitions#of}.
  *
- * <p>{@link #predicateMatchesLivePartitioningAndJavaDerivation} and {@link #idAtIsTheSixtyFourBitColumn} are the guards
- * that keep the rest honest, together pinning both facts
- * {@code databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled} asserts. They are load-bearing twice over. The
- * predicate is harmless against an unpartitioned table for recent ids, so had the EXCHANGE below not taken effect every
- * other test here would still pass while proving nothing. And the rule itself is expressed three times over — the
- * migration's {@code PARTITION BY}, the DAO's predicate, and {@link WeeklyPartitions#of} — so the first guard makes all
- * three compute the same value for the same row, across the eras where a plausible wrong expression
- * ({@code toMonday}) would diverge.
+ * <p>Each test then pairs that with the SQL ClickHouse actually received, because rows alone cannot see pruning
+ * silently stop — a delete that stopped bounding itself is still correct, just slow, and that is the regression this
+ * change exists to prevent. Read back by {@code log_comment} plus the test's own trace id, and checked as an
+ * <b>exact</b> bound partition set: a superset would keep every delete correct while handing back the whole benefit.
+ *
+ * <p>The eras in {@link #deleteClearsEveryEraAndBindsExactlyThosePartitions} are load-bearing, not variety.
+ * {@code toMonday} agrees with the {@code Date32} expression across the ordinary calendar and diverges only far-future
+ * or at the epoch, so a recent-only batch would accept the very expression migration 000114 was written to escape. The
+ * 2200 row also covers the {@code DateTime64} half of what the flag asserts: against a 32-bit {@code id_at} it would be
+ * stored under a wrapped recent timestamp, the derived partition would not match, and it would survive.
  *
  * <p>Two internal touches, on the pattern of {@code TracesDistributedWrapMutationTest}: the EXCHANGE has no public API,
  * so {@link #beforeAll} runs it in raw SQL identical to the swap block of {@code 000003_exchange_and_wrap.sql}; and the
- * ingestion path rejects a non-v7 or far-future {@code id} by design ({@code IdGenerator.validateId}), so the batches
- * that must <b>not</b> prune are handed to {@link TraceDAO#delete} directly — the only way to reach that arm.
+ * ingestion path rejects a non-v7, backdated or far-future {@code id} by design ({@code IdGenerator.validateId}), so
+ * those rows are seeded raw and those batches are handed to {@link TraceDAO#delete} directly — the only way to reach
+ * that arm.
+ *
+ * <p><b>Why the EXCHANGE is here at all — it is setup, never the subject.</b> Nothing asserts anything about it. It is
+ * required because the DAO names its target table: after the Liquibase migrations the live {@code traces} is still the
+ * <em>legacy</em> table — no {@code PARTITION BY} at all and a 32-bit {@code DateTime} {@code id_at} — while the
+ * partitioned successor exists only as the empty {@code traces_local_v2}, which no DAO query can reach. Two statements
+ * copied from the cutover put the successor under the name the DAO deletes from. Without them these tests would run
+ * against the one table where this predicate must never be emitted, and would pass while proving nothing: the predicate
+ * is harmless against an unpartitioned table for recent ids. Hand-authoring a partitioned {@code traces} in the test
+ * instead would duplicate migration 000114 and reintroduce exactly the drift this suite exists to detect.
  *
  * <p><b>Topology covered, and the one cell that is not.</b> This suite runs the <b>post-EXCHANGE, pre-wrap</b> state on
  * purpose: {@code traces} is the partitioned successor and still a {@code MergeTree}, which is the state the pruning
@@ -108,73 +122,21 @@ class TracesPartitionPruningMutationTest {
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
 
     /**
-     * The partition-key fragment the template emits. Compared verbatim against the SQL read back from
-     * {@code system.query_log}, which is safe because that is the query text as submitted — the DAO's own template
-     * string, not a re-print.
+     * The partition-key fragment the DAO's template emits. Only ever <b>compared against</b> the statement read back
+     * from {@code system.query_log} — never spliced into a query this suite runs. Verbatim comparison is safe because
+     * {@code query_log} stores the query as submitted, so both sides are the DAO's own template text.
      */
     private static final String PARTITION_PREDICATE = "toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))";
 
-    /**
-     * Throwaway table used only to have ClickHouse re-print the DAO predicate as a partition key.
-     * Created and dropped in-test.
-     */
-    private static final String PARTITION_KEY_PROBE = "traces_partition_key_probe";
-
-    /** Project for the raw-SQL seeded rows, kept off the API-created projects so neither test's reads see the other's. */
-    private static final UUID RAW_PROJECT_ID = UUID.randomUUID();
-
-    // The suite's SQL, per .agents/skills/opik-backend/SKILL.md "SQL Query Construction": each query declared once as a
-    // text block, values as :placeholders, and the two things that cannot be bound - a partition-key EXPRESSION and a
-    // table IDENTIFIER - as StringTemplate fragments rendered through TemplateUtils.newST, following
-    // ClickHousePartitionMetricsDAO. Both fragments are compile-time constants of this class, never test input, so
-    // neither needs the allow-list guard that DAO's isValidTable applies to its configured table list.
+    // The suite's whole SQL surface, per .agents/skills/opik-backend/SKILL.md "SQL Query Construction": one text block
+    // per query, every varying value a :placeholder. There are no StringTemplate fragments and no interpolation at all,
+    // because nothing here re-implements the DAO's predicate - PARTITION_PREDICATE is only ever compared against the
+    // statement the DAO emitted, never spliced into a query of ours.
     //
-    // The EXCHANGE/RENAME pair in exchangeTables() stays as inline literals on purpose: they are single literals built
-    // by no Java string operation, and they are kept byte-identical to 000003_exchange_and_wrap.sql by eye, so they
-    // belong at the call site next to the javadoc that says so - as TracesDistributedWrapMutationTest does.
-    private static final String SELECT_PARTITION_ID = """
-            SELECT DISTINCT _partition_id
-            FROM traces
-            WHERE workspace_id = :workspace_id
-            AND id = :id
-            """;
-
-    private static final String SELECT_PARTITION_EXPRESSION_VALUE = """
-            SELECT DISTINCT toString(<partition_expression>)
-            FROM traces
-            WHERE workspace_id = :workspace_id
-            AND id = :id
-            """;
-
-    private static final String CREATE_PARTITION_KEY_PROBE = """
-            CREATE TABLE <probe_table>
-            (
-                id_at DateTime64(0, 'UTC')
-            )
-            ENGINE = MergeTree
-            PARTITION BY <partition_expression>
-            ORDER BY tuple()
-            """;
-
-    private static final String DROP_PARTITION_KEY_PROBE = """
-            DROP TABLE IF EXISTS <probe_table> SYNC
-            """;
-
-    private static final String SELECT_ID_AT_TYPE = """
-            SELECT type
-            FROM system.columns
-            WHERE database = currentDatabase()
-            AND table = 'traces'
-            AND name = 'id_at'
-            """;
-
-    private static final String SELECT_PARTITION_KEY = """
-            SELECT partition_key
-            FROM system.tables
-            WHERE database = currentDatabase()
-            AND name = :table
-            """;
-
+    // The EXCHANGE/RENAME pair in installPartitionedSuccessorUnderTraces() stays as inline literals on purpose: they
+    // are single literals built by no Java string operation, and they are kept byte-identical to
+    // 000003_exchange_and_wrap.sql by eye, so they belong at the call site next to the javadoc that says so - as
+    // TracesDistributedWrapMutationTest does.
     private static final String INSERT_RAW_TRACE = """
             INSERT INTO traces (workspace_id, project_id, id)
             VALUES (:workspace_id, :project_id, :id)
@@ -209,11 +171,18 @@ class TracesPartitionPruningMutationTest {
     /** A weekly partition value as it appears in SQL — {@code yyyyMMdd}, so always eight digits. */
     private static final Pattern PARTITION_VALUE = Pattern.compile("\\d{8}");
 
-    /** An id in a different week from anything the API mints, for the two-partition batch. id_at 2023-11-29 (a Wed). */
-    private static final UUID OTHER_WEEK_ID = UUID.fromString("018c1860-1800-7abc-8000-000000000001");
+    /**
+     * One id per era the derivation has to get right, with the partition each resolves to. Not interchangeable samples:
+     * {@code toMonday} agrees with the {@code Date32} expression across the ordinary calendar and diverges only
+     * far-future or at the epoch, so a recent-only batch would accept the very expression migration 000114 was written
+     * to escape. The 2200 id is the litellm shape and the one that makes the assertion bite.
+     */
+    private static final List<UUID> ERA_IDS = List.of(
+            UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"), // id_at 2026-08-19 (Wed) -> 20260817
+            UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"), // id_at 1996-02-09       -> 19960205
+            UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2")); // id_at 2200-01-01      -> 21991230
 
-    /** The Monday of {@link #OTHER_WEEK_ID}'s week — stated as a literal so the expectation is readable on its own. */
-    private static final long OTHER_WEEK_PARTITION = 20231127L;
+    private static final Set<Long> ERA_PARTITIONS = Set.of(20260817L, 19960205L, 21991230L);
 
     /** A v4 UUID: no timestamp to derive a partition from. */
     private static final UUID NON_V7_ID = UUID.fromString("9f527bac-527a-4f92-8875-0fa8af8e4f22");
@@ -278,7 +247,7 @@ class TracesPartitionPruningMutationTest {
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
         this.traceDAO = traceDAO;
-        exchangeTables();
+        installPartitionedSuccessorUnderTraces();
     }
 
     @AfterAll
@@ -287,89 +256,6 @@ class TracesPartitionPruningMutationTest {
         clickHouseContainer.stop();
         zookeeperContainer.stop();
         network.close();
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    @DisplayName("the DAO predicate, the live partitioning and the Java derivation agree exactly")
-    void predicateMatchesLivePartitioningAndJavaDerivation(String era, UUID id, long expectedPartition) {
-        // The guard the rest of the suite rests on, and the one that catches drift. Three independently-maintained
-        // expressions of the same rule have to agree, or a delete prunes to a partition its rows are not in:
-        //
-        //   1. the migration's PARTITION BY, as ClickHouse actually installed it   -> _partition_id, where it filed the row
-        //   2. the DAO's predicate                                                 -> PARTITION_PREDICATE, evaluated here
-        //   3. WeeklyPartitions.of                                                 -> what gets bound to :partitions
-        //
-        // Compared as VALUES, not as normalized expression text. A text comparison would pin (1) against (2) and say
-        // nothing about (3), and it would pass for a rewrite that is textually equal after normalization yet computes a
-        // different week — which is precisely the toMonday trap migration 000114 was written to escape. Values also make
-        // the check immune to ClickHouse's re-printing of the AST, which is what made the previous substring form loose.
-        //
-        // The era matters: toMonday agrees with the Date32 expression across the ordinary calendar and diverges only for
-        // a far-future or epoch id_at, so a sample set that stopped at "recent" would accept the wrong expression. The
-        // rows are inserted in raw SQL because ingestion rejects a backdated or far-future id by design; only
-        // (workspace_id, project_id, id) are supplied, since id_at is MATERIALIZED and every other column has a DEFAULT
-        // — so this seeds through the real column definition rather than restating it.
-        insertRawTrace(id);
-
-        var filedUnder = queryOneString(SELECT_PARTITION_ID, bindRawTrace(id));
-        // The DAO predicate goes in as a StringTemplate fragment, not a bind: it is an expression to be evaluated, and
-        // evaluating the DAO's own text is the entire point. The workspace and id are values, so they bind.
-        var daoPredicateValue = queryOneString(withPartitionExpression(SELECT_PARTITION_EXPRESSION_VALUE),
-                bindRawTrace(id));
-
-        assertThat(daoPredicateValue)
-                .as("the DAO predicate resolves to the partition ClickHouse filed the %s row under", era)
-                .isEqualTo(filedUnder);
-        assertThat(WeeklyPartitions.of(List.of(id)))
-                .as("the Java derivation agrees with both for the %s row", era)
-                .contains(Set.of(expectedPartition));
-        assertThat(filedUnder)
-                .as("and all three are the expected partition for the %s row", era)
-                .isEqualTo(String.valueOf(expectedPartition));
-    }
-
-    private static Stream<Arguments> predicateMatchesLivePartitioningAndJavaDerivation() {
-        return Stream.of(
-                // id_at 2026-08-19 (Wed) -> Monday 2026-08-17. The ordinary case; toMonday would also pass this one.
-                arguments("recent", UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"), 20260817L),
-                // id_at 1996-02-09 -> Monday 1996-02-05. Far enough back to catch a key that keyed off wall-clock.
-                arguments("backdated", UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"), 19960205L),
-                // id_at 2200-01-01 -> Monday 2199-12-30. The litellm shape, and the sample a 16-bit toMonday key wraps
-                // into a plausible recent week (000114) — so this row is what makes the guard bite.
-                arguments("far-future", UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2"), 21991230L));
-    }
-
-    @Test
-    @DisplayName("the DAO predicate is the same expression as the live partition key, not merely an equal-valued one")
-    void daoPredicateIsTheSameExpressionAsTheLivePartitionKey() {
-        // Value agreement (above) proves the predicate names the right partition; it does NOT prove ClickHouse will
-        // PRUNE on it. Pruning needs the planner to recognise the predicate as being on the partition key expression,
-        // so an equal-valued but differently-written expression would keep every delete correct and quietly rewrite
-        // every part again - the exact regression this PR exists to prevent, invisible to every other assertion here.
-        //
-        // Compared by round-tripping the DAO's text through ClickHouse as a partition key of its own and diffing the
-        // two re-prints. That makes the comparison AST-level and formatter-independent by construction: both strings
-        // come out of the same printer, so they are equal iff the parsed expressions are. Diffing the DAO text against
-        // system.tables directly would instead pin ClickHouse's whitespace choices, which is what it must not do.
-        execute(createProbeTableSql(), _ -> {
-        });
-        try {
-            assertThat(partitionKeyOf(PARTITION_KEY_PROBE))
-                    .as("the DAO predicate parses to the same expression traces is partitioned by")
-                    .isEqualTo(partitionKeyOf("traces"));
-        } finally {
-            execute(withProbeTable(DROP_PARTITION_KEY_PROBE), _ -> {
-            });
-        }
-    }
-
-    @Test
-    @DisplayName("id_at is the 64-bit column, so a far-future timestamp is honest rather than wrapped")
-    void idAtIsTheSixtyFourBitColumn() {
-        // The second half of what the flag asserts, and not implied by the partition agreement above: a 32-bit
-        // DateTime id_at would agree with itself while silently wrapping every id past 2106.
-        assertThat(queryOneString(SELECT_ID_AT_TYPE)).isEqualTo("DateTime64(0, 'UTC')");
     }
 
     @Test
@@ -397,29 +283,35 @@ class TracesPartitionPruningMutationTest {
     }
 
     @Test
-    @DisplayName("a batch spanning two weeks binds both partitions, not a range")
-    void batchSpanningTwoWeeksBindsBothPartitions() {
-        // The multi-value Long[] bind, which the single-id path never exercises. The second id is minted for a week
-        // three years back and matches no row — the batch's partition SET is what is under test, and a delete does not
-        // need its ids to exist.
+    @DisplayName("the DAO's own delete clears every era and binds exactly those partitions")
+    void deleteClearsEveryEraAndBindsExactlyThosePartitions() {
+        // The three-way agreement - the migration's PARTITION BY as installed, the DAO's predicate, and
+        // WeeklyPartitions.of - asserted through the DAO's own delete instead of by re-evaluating the expression in
+        // test SQL. If the predicate resolved to any partition other than the one ClickHouse filed a row under, the
+        // mutation would select the wrong parts and that row would SURVIVE. So "every row is gone" IS the agreement,
+        // and it is established by the statement production actually runs rather than by a query written here.
         //
-        // Asserted as an EXACT set, because "mentions both partitions" is satisfied by a binding that also names every
-        // week in between, and that is the failure worth catching: an over-broad set keeps every delete correct while
-        // giving back the entire benefit. On prod-test a range over this span selected 2,644 of 3,928 parts where the
-        // exact set selected 4 — so a delete that is right and slow is the regression, and no behavioural assertion
-        // can see it.
-        var target = newTrace().build();
-        traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
-        var projectId = projectIdOf(target);
+        // This also covers the DateTime64 half of what the flag asserts, without asking system.columns: against a
+        // 32-bit id_at the 2200 row would be stored under a wrapped recent timestamp, the derived partition would not
+        // match it, and the row would survive.
+        //
+        // Three eras in one batch is also the multi-value Long[] bind, which a single-id delete never reaches. Seeded
+        // raw because ingestion rejects a backdated or far-future id by design, supplying only the three columns
+        // without a DEFAULT so id_at comes from the real MATERIALIZED definition rather than a restated copy.
+        var projectId = UUID.randomUUID();
+        ERA_IDS.forEach(id -> insertRawTrace(projectId, id));
+        assertThat(ERA_IDS.stream().map(this::liveRowCount)).as("every era is seeded").containsOnly("1");
 
-        delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, OTHER_WEEK_ID)));
+        delete(ERA_IDS.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet()));
 
-        assertThat(traceIdsOf(target.projectName())).doesNotContain(target.id());
-        var sql = lastTraceDeleteSql(target.id());
+        assertThat(ERA_IDS.stream().map(this::liveRowCount))
+                .as("every era's row is gone, so the predicate named the partition each was actually filed under")
+                .containsOnly("0");
+        var sql = lastTraceDeleteSql(ERA_IDS.getFirst());
         assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
         assertThat(boundPartitionsOf(sql))
-                .as("exactly the batch's own two partitions, not a range across them")
-                .containsExactlyInAnyOrder(partitionOf(target.id()), OTHER_WEEK_PARTITION);
+                .as("exactly the three partitions the batch resolves to, not a range across three centuries")
+                .containsExactlyInAnyOrderElementsOf(ERA_PARTITIONS);
     }
 
     @ParameterizedTest
@@ -468,8 +360,8 @@ class TracesPartitionPruningMutationTest {
     /**
      * The partition a single id resolves to. Derived through {@code WeeklyPartitions} on purpose: this suite is about
      * the predicate reaching ClickHouse, and the derivation's own expected values are pinned against real ClickHouse
-     * output in {@code WeeklyPartitionsTest} and again in
-     * {@link #predicateMatchesLivePartitioningAndJavaDerivation}, so restating them here would only duplicate that.
+     * output in {@code WeeklyPartitionsTest}, so restating them here would only duplicate that. Where the expectation
+     * needs to be readable on its own — the era batch — the partitions are stated as literals instead.
      */
     private static long partitionOf(UUID id) {
         return WeeklyPartitions.of(List.of(id)).orElseThrow().iterator().next();
@@ -539,13 +431,16 @@ class TracesPartitionPruningMutationTest {
     }
 
     /**
+     * Setup, not a test: puts the partitioned successor under the name the DAO deletes from, so the pruning assertions
+     * are made against a table that actually has weekly partitions.
+     * <p>
      * The EXCHANGE (000003 exchange block): puts the successor under {@code traces} and the original under
      * {@code traces_local_v2}, then a RENAME parks the original as {@code traces_pre_cutover_backup}. The wrap is
      * deliberately not applied — it is a separate, deferrable step, and the flag under test must hold on its own between
      * the two (which is why it is not the wrap flag). Kept identical to the cutover SQL by eye, as
      * {@code TracesLocalV2CutoverTest.exchangeTables} and the wrap suite do.
      */
-    private void exchangeTables() {
+    private void installPartitionedSuccessorUnderTraces() {
         execute("EXCHANGE TABLES traces AND traces_local_v2 ON CLUSTER '{cluster}'", _ -> {
         });
         execute("RENAME TABLE traces_local_v2 TO traces_pre_cutover_backup ON CLUSTER '{cluster}'", _ -> {
@@ -583,75 +478,18 @@ class TracesPartitionPruningMutationTest {
     }
 
     /**
-     * Seeds one row through the table's real column definitions. Only the three columns without a {@code DEFAULT} are
-     * supplied; {@code id_at} is {@code MATERIALIZED}, so ClickHouse derives it from {@code id} exactly as it does for a
-     * row the ingestion path wrote — which is the point, since restating the {@code id_at} expression here would create
-     * the very drift surface this test exists to detect. Raw SQL rather than the API because ingestion rejects a
-     * backdated or far-future {@code id} by design ({@code IdGenerator.validateId}).
+     * Seeds one row through the table's real column definitions, in the caller's project. Only the three columns
+     * without a {@code DEFAULT} are supplied; {@code id_at} is {@code MATERIALIZED}, so ClickHouse derives it from
+     * {@code id} exactly as it does for a row the ingestion path wrote - which is the point, since restating the
+     * {@code id_at} expression here would create the very drift this suite exists to detect. Raw SQL because ingestion
+     * rejects a backdated, far-future or non-v7 {@code id} by design ({@code IdGenerator.validateId}).
      */
-    private void insertRawTrace(UUID id) {
-        insertRawTrace(RAW_PROJECT_ID, id);
-    }
-
-    /** As {@link #insertRawTrace(UUID)}, into a caller-chosen project, so a seeded row can share a test's project. */
     private void insertRawTrace(UUID projectId, UUID id) {
         execute(INSERT_RAW_TRACE,
                 statement -> statement
                         .bind("workspace_id", WORKSPACE_ID)
                         .bind("project_id", projectId.toString())
                         .bind("id", id.toString()));
-    }
-
-    /**
-     * Renders a template whose only fragment is the DAO's partition-key expression — an expression, not a value, so it
-     * cannot be bound. Each renderer adds exactly the attributes its template declares, as the DAOs do.
-     */
-    private static String withPartitionExpression(String sql) {
-        return TemplateUtils.newST(sql)
-                .add("partition_expression", PARTITION_PREDICATE)
-                .render();
-    }
-
-    /**
-     * As {@link #withPartitionExpression}, for the probe-table statements: a table identifier cannot be bound either.
-     */
-    private static String withProbeTable(String sql) {
-        return TemplateUtils.newST(sql)
-                .add("probe_table", PARTITION_KEY_PROBE)
-                .render();
-    }
-
-    /** The probe-table DDL carries both fragments. */
-    private static String createProbeTableSql() {
-        return TemplateUtils.newST(CREATE_PARTITION_KEY_PROBE)
-                .add("probe_table", PARTITION_KEY_PROBE)
-                .add("partition_expression", PARTITION_PREDICATE)
-                .render();
-    }
-
-    /** ClickHouse's own re-print of a table's partition key expression. */
-    private String partitionKeyOf(String table) {
-        return queryOneString(SELECT_PARTITION_KEY, statement -> statement.bind("table", table));
-    }
-
-    private static Consumer<Statement> bindRawTrace(UUID id) {
-        return statement -> statement
-                .bind("workspace_id", WORKSPACE_ID)
-                .bind("id", id.toString());
-    }
-
-    private String queryOneString(String sql) {
-        return queryOneString(sql, _ -> {
-        });
-    }
-
-    private String queryOneString(String sql, Consumer<Statement> binder) {
-        return template.nonTransaction(connection -> {
-            var statement = connection.createStatement(sql);
-            binder.accept(statement);
-            return Mono.from(statement.execute())
-                    .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class))));
-        }).block();
     }
 
     private void execute(String sql, Consumer<Statement> binder) {
