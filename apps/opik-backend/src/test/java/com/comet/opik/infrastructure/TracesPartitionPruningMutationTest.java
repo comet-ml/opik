@@ -173,8 +173,16 @@ class TracesPartitionPruningMutationTest {
             FROM system.query_log
             WHERE log_comment LIKE 'delete_traces:%'
             AND type = 'QueryFinish'
+            AND query LIKE concat('%', :trace_id, '%')
             ORDER BY event_time_microseconds DESC
             LIMIT 1
+            """;
+
+    private static final String LIVE_ROW_COUNT = """
+            SELECT toString(uniqExact(id))
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id = :id
             """;
 
     /**
@@ -369,7 +377,7 @@ class TracesPartitionPruningMutationTest {
                 .as("only the target row is gone")
                 .doesNotContain(target.id())
                 .contains(bystander.id());
-        var sql = lastTraceDeleteSql();
+        var sql = lastTraceDeleteSql(target.id());
         assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
         assertThat(boundPartitionsOf(sql))
                 .as("bounded to exactly the target's own partition, nothing wider")
@@ -395,7 +403,7 @@ class TracesPartitionPruningMutationTest {
         delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, OTHER_WEEK_ID)));
 
         assertThat(traceIdsOf(target.projectName())).doesNotContain(target.id());
-        var sql = lastTraceDeleteSql();
+        var sql = lastTraceDeleteSql(target.id());
         assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
         assertThat(boundPartitionsOf(sql))
                 .as("exactly the batch's own two partitions, not a range across them")
@@ -406,21 +414,37 @@ class TracesPartitionPruningMutationTest {
     @MethodSource
     @DisplayName("an id with no derivable partition disables pruning for the batch, and the delete still lands")
     void underivableIdDisablesPruning(String cause, UUID underivableId) {
-        // The fallback that preserves the pre-OPIK-6901 guarantee: one id whose partition cannot be derived exactly and
-        // the statement goes back to its unbounded form — no predicate at all, never a partial set. The v7 row batched
-        // alongside it must still be deleted, which is the "not silently skipped" half.
+        // The fallback that preserves the pre-OPIK-6901 guarantee, as the original javadoc stated it: a row whose id_at
+        // cannot be trusted is STILL DELETED. That is a claim about the underivable row ITSELF, so it gets a real row
+        // here - seeded raw, since ingestion rejects both id shapes by design. Passing it as an id matching nothing
+        // would let an implementation that quietly drops underivable ids from the batch pass, which is the very bug the
+        // all-or-nothing rule exists to prevent.
         var target = newTrace().build();
         traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
         var projectId = projectIdOf(target);
+        insertRawTrace(projectId, underivableId);
+        assertThat(liveRowCount(underivableId)).as("the %s row is seeded before the delete", cause).isEqualTo("1");
 
         delete(Set.of(Pair.of(projectId, target.id()), Pair.of(projectId, underivableId)));
 
+        assertThat(liveRowCount(underivableId))
+                .as("the %s row is itself deleted, not skipped", cause)
+                .isEqualTo("0");
         assertThat(traceIdsOf(target.projectName()))
-                .as("the deletable row in a %s batch is still deleted", cause)
+                .as("and the derivable row batched alongside the %s id goes too", cause)
                 .doesNotContain(target.id());
-        assertThat(lastTraceDeleteSql())
-                .as("no partition predicate is emitted for a %s batch", cause)
-                .doesNotContain("toDayOfWeek");
+
+        // Asserted as the absence of ANY id_at predicate, not just of this PR's expression. A regression that narrowed
+        // the mutation with toMonday(id_at), an id_at range, or any other partition predicate would skip exactly the
+        // rows this fallback exists to reach, and rejecting one function name would not see it. The unbounded template
+        // mentions id_at nowhere at all, so that is the whole check.
+        var sql = lastTraceDeleteSql(target.id());
+        assertThat(sql)
+                .as("the unbounded form for a %s batch carries no id_at predicate of any kind", cause)
+                .doesNotContain("id_at");
+        assertThat(EMITTED_IN_CLAUSE.matcher(sql).find())
+                .as("and no partition IN clause: %s", sql)
+                .isFalse();
     }
 
     private static Stream<Arguments> underivableIdDisablesPruning() {
@@ -469,14 +493,37 @@ class TracesPartitionPruningMutationTest {
     }
 
     /**
-     * The SQL of the most recent trace delete, as ClickHouse received it. {@code log_comment} is what makes this
-     * unambiguous: {@code TraceDAO} stamps every statement with {@code <query_name>:<workspace>:<user>:<details>}, and
-     * {@code delete_traces} names this one template alone.
+     * The SQL of the trace delete that carried {@code traceId}, as ClickHouse received it. Two filters, because either
+     * alone is ambiguous: {@code log_comment} narrows to this one template ({@code TraceDAO} stamps every statement
+     * {@code <query_name>:<workspace>:<user>:<details>}, and {@code delete_traces} names it alone), and the id narrows
+     * to <b>this test's</b> statement.
+     * <p>
+     * The id filter is what makes the lookup deterministic. Every test in this class deletes under the same workspace,
+     * so ordering by {@code event_time_microseconds} alone would hand back a neighbouring test's delete whenever this
+     * one had not reached {@code query_log} yet, or whenever two landed in the same microsecond — and that flake could
+     * pass for the wrong reason, since a neighbour's statement has the same shape. Each test's target id is freshly
+     * minted, so it identifies the statement exactly; the {@code ORDER BY}/{@code LIMIT} now only picks the newest
+     * attempt when surefire retries a test.
+     * <p>
+     * Filtering on the id rather than on a marker injected into {@code details}: the DAO owns {@code log_comment} and
+     * puts {@code pairs_size} there, and the id is already in the statement text, so this needs no production change to
+     * serve a test.
      */
-    private String lastTraceDeleteSql() {
+    private String lastTraceDeleteSql(UUID traceId) {
         execute("SYSTEM FLUSH LOGS", _ -> {
         });
-        return queryOneString(LAST_TRACE_DELETE);
+        var sql = queryOneString(LAST_TRACE_DELETE, statement -> statement.bind("trace_id", traceId.toString()));
+        assertThat(sql)
+                .as("query_log holds a delete_traces statement mentioning id '%s'", traceId)
+                .isNotNull();
+        return sql;
+    }
+
+    /** {@code "1"} while a live (non-lightweight-deleted) row exists for the id, {@code "0"} once it is gone. */
+    private String liveRowCount(UUID id) {
+        return queryOneString(LIVE_ROW_COUNT, statement -> statement
+                .bind("workspace_id", WORKSPACE_ID)
+                .bind("id", id.toString()));
     }
 
     /**
@@ -531,10 +578,15 @@ class TracesPartitionPruningMutationTest {
      * backdated or far-future {@code id} by design ({@code IdGenerator.validateId}).
      */
     private void insertRawTrace(UUID id) {
+        insertRawTrace(RAW_PROJECT_ID, id);
+    }
+
+    /** As {@link #insertRawTrace(UUID)}, into a caller-chosen project, so a seeded row can share a test's project. */
+    private void insertRawTrace(UUID projectId, UUID id) {
         execute(INSERT_RAW_TRACE,
                 statement -> statement
                         .bind("workspace_id", WORKSPACE_ID)
-                        .bind("project_id", RAW_PROJECT_ID.toString())
+                        .bind("project_id", projectId.toString())
                         .bind("id", id.toString()));
     }
 
