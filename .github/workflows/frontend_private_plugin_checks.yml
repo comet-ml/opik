@@ -23,6 +23,10 @@ permissions:
 
 on:
   pull_request:
+    # edited: the ai-spend-plugin-ref override lives in the PR body, so adding
+    # it after opening the PR must retrigger this -- default types
+    # (opened, synchronize, reopened) do not cover an edited description.
+    types: [opened, synchronize, reopened, edited]
     paths:
       - "apps/opik-frontend/**"
       # A change to this check, or to the workflow that controls how the real
@@ -79,7 +83,7 @@ jobs:
               | awk '/^[[:space:]]*```/ { fenced = !fenced; next } !fenced' \
               | grep -iEm1 '^[[:space:]]*ai-spend-plugin-ref:[[:space:]]*[^[:space:]]+' \
               | sed -E 's/^[^:]*:[[:space:]]*//' \
-              | tr -d '[:space:]' || true)"
+              | awk '{print $1}' || true)"
           fi
           ref="${ref:-main}"
 
@@ -90,6 +94,23 @@ jobs:
 
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
           echo "Plugin ref: ${ref}"
+
+          if [ "${ref}" != "main" ]; then
+            echo "::warning title=Checking against a non-main plugin ref::This run verifies against '${ref}', not the plugin's main -- nothing enforces that branch is merged before this PR merges."
+          fi
+
+      # Ahead of the plugin checkout: npm ci's PR-controlled postinstall runs
+      # with no private plugin source on disk yet.
+      - name: Set up Node.js
+        if: steps.resolve.outputs.has_token == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        if: steps.resolve.outputs.has_token == 'true'
+        run: npm ci
+        working-directory: apps/opik-frontend
 
       - name: Checkout ai-spend plugin (private)
         if: steps.resolve.outputs.has_token == 'true'
@@ -106,11 +127,18 @@ jobs:
       # checked for the manifest PluginsStore actually loads by name -- a layout
       # change that drops or misnames manifest.ts would otherwise leave
       # production silently without the plugin's routes while this still passed
-      # on an unrelated .ts file count.
+      # on an unrelated .ts file count. The source directory is checked before
+      # copying: cp -R against a missing/renamed src fails under set -e with a
+      # raw cp error, before the friendlier "produced nothing" message below.
       - name: Stage ai-spend plugin into frontend src
         if: steps.resolve.outputs.has_token == 'true'
         run: |
           set -euo pipefail
+          if [ ! -d .ai-spend-plugin/src ]; then
+            echo "::error title=Plugin staging produced nothing::.ai-spend-plugin/src does not exist. The plugin's src layout likely changed."
+            exit 1
+          fi
+
           mkdir -p apps/opik-frontend/src/plugins/ai-spend
           cp -R .ai-spend-plugin/src/. apps/opik-frontend/src/plugins/ai-spend/
           rm -rf .ai-spend-plugin
@@ -122,23 +150,12 @@ jobs:
           fi
 
           manifest=apps/opik-frontend/src/plugins/ai-spend/manifest.ts
-          if [ ! -f "${manifest}" ] || ! grep -qE 'name:[[:space:]]*"ai-spend"' "${manifest}"; then
+          if [ ! -f "${manifest}" ] || ! grep -qE "name:[[:space:]]*['\"]ai-spend['\"]" "${manifest}"; then
             echo "::error title=Plugin manifest missing or misnamed::PluginsStore loads plugins by the name declared in plugins/*/manifest.ts. ${manifest} is missing, or no longer declares name: \"ai-spend\" -- production would silently drop the plugin's routes."
             exit 1
           fi
 
           echo "Staged ${count} TypeScript files from the plugin; manifest present and named correctly."
-
-      - name: Set up Node.js
-        if: steps.resolve.outputs.has_token == 'true'
-        uses: actions/setup-node@v7
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        if: steps.resolve.outputs.has_token == 'true'
-        run: npm ci
-        working-directory: apps/opik-frontend
 
       # All three run even if an earlier one fails, so a PR sees every problem in
       # one go. eslint is scoped to the plugin: core files are already linted by
