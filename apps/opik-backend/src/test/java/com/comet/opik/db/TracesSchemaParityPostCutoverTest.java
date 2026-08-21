@@ -145,6 +145,137 @@ class TracesSchemaParityPostCutoverTest {
     }
 
     /**
+     * The reference migration's post-cutover branch, applied to the topology it is written for — the same single file
+     * that {@link TracesSchemaParityPreCutoverTest} applies to the other one. Proves the guard selects the correct
+     * branch from the runtime topology, that the read-facing field reaches both the shard and the wrapper while the
+     * storage-only index reaches the shard alone, and that the field is genuinely readable afterwards.
+     */
+    @Test
+    @Order(5)
+    @DisplayName("the reference migration takes its post-cutover branch and marks the other one run")
+    void referenceMigrationTakesThePostCutoverBranch() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+
+        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.POST_CUTOVER_CHANGESET))
+                .as("on a cut-over install the post-cutover branch must run")
+                .isEqualTo(TracesDdlReferenceFixture.EXECUTED);
+        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.PRE_CUTOVER_CHANGESET))
+                .as("""
+                        the pre-cutover branch must be recorded MARK_RAN: its statements name traces_local_v2, which no \
+                        longer exists here, so running them would fail the migration on every cut-over install\
+                        """)
+                .isEqualTo(TracesDdlReferenceFixture.MARK_RAN);
+
+        var wrapper = TableSchema.read(connection, DATABASE_NAME, TRACES);
+        var shard = TableSchema.read(connection, DATABASE_NAME, SHARD);
+
+        // The full declared contract on both, not merely the name: a column of this name with the wrong type or
+        // default kind would satisfy a presence check while breaking what the migration promises.
+        assertReferenceFieldContract(shard, "the read-facing field must reach the shard, which stores it");
+        assertReferenceFieldContract(wrapper, "...and the wrapper, which resolves it for reads");
+
+        assertThat(shard.skipIndicesByName().get(TracesDdlReferenceFixture.STORAGE_INDEX))
+                .as("the storage-only index must reach the shard, defined as declared")
+                .isEqualTo(TracesDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
+        assertThat(wrapper.skipIndexNames())
+                .as("...and must NOT be attempted on the Distributed wrapper, which stores no data to index")
+                .doesNotContain(TracesDdlReferenceFixture.STORAGE_INDEX);
+
+        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+        selectColumns(List.of(TracesDdlReferenceFixture.DERIVED_COLUMN));
+        assertDerivedFieldComputesThroughTheWrapper();
+    }
+
+    private void assertReferenceFieldContract(TableSchema schema, String description) {
+        var column = schema.columnsByName().get(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        assertThat(column).as(description).isNotNull();
+        assertThat(column.type()).as("reference field type on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
+        assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+        assertThat(column.defaultExpression()).as("reference field expression on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
+    }
+
+    /**
+     * Resolving the column proves the wrapper can see it; it does not prove the expression behind it works. A
+     * materialized column with a valid name and a broken definition would pass every assertion above, so one row is
+     * written through the wrapper and its computed value read back — the reference migration declares
+     * {@code MATERIALIZED length(name)}, so a known name must yield its length.
+     */
+    private void assertDerivedFieldComputesThroughTheWrapper() throws Exception {
+        var traceId = java.util.UUID.randomUUID().toString();
+        var name = "reference-derived-probe";
+        execute("""
+                INSERT INTO %s.%s (id, workspace_id, project_id, name)
+                VALUES ('%s', 'ws-reference-probe', '%s', '%s')
+                """.formatted(DATABASE_NAME, TRACES, traceId, java.util.UUID.randomUUID(), name));
+
+        var sql = "SELECT %s FROM %s.%s WHERE id = '%s'"
+                .formatted(TracesDdlReferenceFixture.DERIVED_COLUMN, DATABASE_NAME, TRACES, traceId);
+        try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
+            assertThat(resultSet.next()).as("the probe row must be readable through the wrapper").isTrue();
+            assertThat(resultSet.getLong(1))
+                    .as("`%s` is MATERIALIZED length(name), so it must compute the probe name's length",
+                            TracesDdlReferenceFixture.DERIVED_COLUMN)
+                    .isEqualTo(name.length());
+        }
+    }
+
+    @Test
+    @Order(6)
+    @DisplayName("re-applying the reference migration is a no-op")
+    void reApplyingTheReferenceMigrationIsANoOp() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse, TracesDdlReferenceFixture.CHANGELOG))
+                .as("both branches stay recorded as applied, so nothing is left to run")
+                .isEmpty();
+
+        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The negative control on this topology: the unguarded {@code ALTER TABLE traces} lands on the Distributed wrapper,
+     * which accepts it as metadata, so the column resolves on reads while no shard stores it.
+     */
+    @Test
+    @Order(7)
+    @DisplayName("an unguarded traces migration is rejected: it only reaches the wrapper")
+    void unguardedMigrationIsRejected() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
+
+        assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
+                .as("the unguarded ALTER reaches the wrapper, so it applies without error")
+                .contains(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+        assertThat(TableSchema.read(connection, DATABASE_NAME, SHARD).columnNames())
+                .as("...and never reaches the shard that would have to store it")
+                .doesNotContain(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+
+        execute("ALTER TABLE %s.%s DROP COLUMN %s"
+                .formatted(DATABASE_NAME, TRACES, TracesDdlReferenceFixture.UNGUARDED_COLUMN));
+        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The fixtures do write Liquibase ledger rows, so this pins that they stay additive: the shipped changelog is still
+     * fully applied afterwards. Listing its unrun changesets also revalidates every recorded checksum, so a fixture
+     * that had disturbed a shipped ledger row would fail here rather than in some unrelated suite later.
+     */
+    @Test
+    @Order(8)
+    @DisplayName("applying the fixtures leaves the shipped changelog intact")
+    void applyingTheFixturesLeavesTheShippedChangelogIntact() {
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse))
+                .as("the shipped changelog must remain fully applied, with nothing pending or invalidated")
+                .isEmpty();
+    }
+
+    /**
      * The spike's central finding and the playbook's remedy, in one test: post-cutover a shard-only {@code ADD COLUMN}
      * applies without error and is then invisible through the wrapper, and altering the wrapper too — which it accepts as
      * a metadata-only change — makes it readable. This is the exact shape of a migration that forgets the wrapper branch,

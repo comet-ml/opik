@@ -53,6 +53,22 @@ public class MigrationUtils {
     }
 
     /**
+     * Applies an arbitrary ClickHouse changelog from the test classpath, with the same parameters and ledger the real
+     * one uses. Exists so a test can apply a purpose-built migration <i>after</i> the real changelog — the way a pull
+     * request's new migration arrives — instead of having to append it to the shipped migrations directory, where every
+     * other suite would then run it too.
+     */
+    public static void runClickhouseChangelog(ClickHouseContainer container, String changeLogFile) {
+        try (var connection = container.createConnection("")) {
+            DatabaseConnection dbConnection = new JdbcConnection(
+                    new ClickHouseConnectionImpl(connection.getMetaData().getURL()));
+            runDbMigration(changeLogFile, ClickHouseContainerUtils.migrationParameters(), dbConnection);
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to run ClickHouse changelog " + changeLogFile, e);
+        }
+    }
+
+    /**
      * Applies the ClickHouse changelog only up to and including the changesets of {@code migrationFileName}, leaving
      * every later migration unrun so a caller can transform the schema mid-changelog and then resume with
      * {@link #runClickhouseDbMigration(ClickHouseContainer)}.
@@ -91,11 +107,16 @@ public class MigrationUtils {
      * not) would otherwise leave the schema short without anything throwing.
      */
     public static List<String> unrunClickhouseChangeSetIds(ClickHouseContainer container) {
+        return unrunClickhouseChangeSetIds(container, CLICKHOUSE_CHANGELOG_FILE);
+    }
+
+    /** {@link #unrunClickhouseChangeSetIds(ClickHouseContainer)} for an arbitrary changelog on the test classpath. */
+    public static List<String> unrunClickhouseChangeSetIds(ClickHouseContainer container, String changeLogFile) {
         try (var connection = container.createConnection("")) {
             DatabaseConnection dbConnection = new JdbcConnection(
                     new ClickHouseConnectionImpl(connection.getMetaData().getURL()));
             var database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(dbConnection);
-            try (var liquibase = new Liquibase(CLICKHOUSE_CHANGELOG_FILE, new ClassLoaderResourceAccessor(),
+            try (var liquibase = new Liquibase(changeLogFile, new ClassLoaderResourceAccessor(),
                     database)) {
                 ClickHouseContainerUtils.migrationParameters().forEach(liquibase::setChangeLogParameter);
                 return liquibase.listUnrunChangeSets(new Contexts(), new LabelExpression())

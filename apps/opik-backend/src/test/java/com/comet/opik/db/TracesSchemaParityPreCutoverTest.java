@@ -100,6 +100,97 @@ class TracesSchemaParityPreCutoverTest {
     }
 
     /**
+     * The reference migration's pre-cutover branch, applied to the topology it is written for. Proves the two facts the
+     * pattern rests on: {@code liquibase-clickhouse} honours a formatted-SQL {@code sqlCheck} precondition with
+     * {@code onFail:MARK_RAN}, so one file can serve both topologies; and the branch that does run reaches both the live
+     * table and the shadow, leaving parity intact.
+     */
+    @Test
+    @Order(5)
+    @DisplayName("the reference migration takes its pre-cutover branch and marks the other one run")
+    void referenceMigrationTakesThePreCutoverBranch() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+
+        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.PRE_CUTOVER_CHANGESET))
+                .as("on a pre-cutover install the pre-cutover branch must run")
+                .isEqualTo(TracesDdlReferenceFixture.EXECUTED);
+        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.POST_CUTOVER_CHANGESET))
+                .as("""
+                        the post-cutover branch must be recorded MARK_RAN, not left unrun: it is marked applied without \
+                        executing, so a later startup never retries it against the wrong topology\
+                        """)
+                .isEqualTo(TracesDdlReferenceFixture.MARK_RAN);
+
+        // The read-facing field and the storage-only index both reach both tables pre-cutover.
+        var traces = TableSchema.read(connection, DATABASE_NAME, TRACES);
+        var shadow = TableSchema.read(connection, DATABASE_NAME, SHADOW);
+        assertReferenceFieldContract(traces);
+        assertReferenceFieldContract(shadow);
+        assertReferenceIndexContract(traces);
+        assertReferenceIndexContract(shadow);
+
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * Idempotency: the guarded branches are all {@code IF [NOT] EXISTS} and the skipped one is recorded {@code MARK_RAN},
+     * so a second apply — a restarting replica, a re-run after a partial failure — must be a no-op rather than an error.
+     */
+    @Test
+    @Order(6)
+    @DisplayName("re-applying the reference migration is a no-op")
+    void reApplyingTheReferenceMigrationIsANoOp() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse, TracesDdlReferenceFixture.CHANGELOG))
+                .as("both branches stay recorded as applied, so nothing is left to run")
+                .isEmpty();
+
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The negative control that makes the pattern load-bearing: the same change written the ordinary unguarded way
+     * applies without error and leaves the shadow behind, and this gate rejects it. A pull request shaped like this
+     * cannot merge.
+     */
+    @Test
+    @Order(7)
+    @DisplayName("an unguarded traces migration is rejected: it never reaches the shadow")
+    void unguardedMigrationIsRejected() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
+
+        assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
+                .as("the unguarded ALTER does reach the live table — it fails silently, which is the problem")
+                .contains(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+        assertThat(TableSchema.read(connection, DATABASE_NAME, SHADOW).columnNames())
+                .as("...and never reaches the shadow the cutover will promote")
+                .doesNotContain(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+
+        execute("ALTER TABLE %s.%s DROP COLUMN %s"
+                .formatted(DATABASE_NAME, TRACES, TracesDdlReferenceFixture.UNGUARDED_COLUMN));
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The fixtures do write Liquibase ledger rows, so this pins that they stay additive: the shipped changelog is still
+     * fully applied afterwards. Listing its unrun changesets also revalidates every recorded checksum, so a fixture
+     * that had disturbed a shipped ledger row would fail here rather than in some unrelated suite later.
+     */
+    @Test
+    @Order(8)
+    @DisplayName("applying the fixtures leaves the shipped changelog intact")
+    void applyingTheFixturesLeavesTheShippedChangelogIntact() {
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse))
+                .as("the shipped changelog must remain fully applied, with nothing pending or invalidated")
+                .isEmpty();
+    }
+
+    /**
      * Both directions of the same mistake — a column that reached one table and not the other — parameterized because
      * the arrange/act/assert is identical and only the target differs. Both directions are covered deliberately: a
      * migration writer is far likelier to forget the shadow, but a shadow-only change is equally broken.
@@ -267,6 +358,32 @@ class TracesSchemaParityPreCutoverTest {
 
         execute("ALTER TABLE %s.%s DROP INDEX idx_drift_name".formatted(DATABASE_NAME, TRACES));
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The reference field must arrive as the exact column the migration declares. Presence alone would be satisfied by
+     * a {@code UInt32}, or by an {@code ALIAS} where a {@code MATERIALIZED} was intended — both of which change the
+     * read contract while passing a name check.
+     */
+    private void assertReferenceFieldContract(TableSchema schema) {
+        var column = schema.columnsByName().get(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        assertThat(column)
+                .as("`%s` must carry the reference field on `%s`", TracesDdlReferenceFixture.DERIVED_COLUMN,
+                        schema.table())
+                .isNotNull();
+        assertThat(column.type()).as("reference field type on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
+        assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+        assertThat(column.defaultExpression()).as("reference field expression on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
+    }
+
+    /** Likewise the index: the same name with a different type, expression or granularity is a different index. */
+    private void assertReferenceIndexContract(TableSchema schema) {
+        assertThat(schema.skipIndicesByName().get(TracesDdlReferenceFixture.STORAGE_INDEX))
+                .as("`%s` must carry the reference index, defined as declared", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
     }
 
     private boolean tableExists(String table) throws Exception {
