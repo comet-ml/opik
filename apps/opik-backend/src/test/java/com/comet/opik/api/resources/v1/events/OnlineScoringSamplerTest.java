@@ -475,6 +475,87 @@ class OnlineScoringSamplerTest {
                     List.of(toLlmMessage(evaluator, trace1), toLlmMessage(evaluator, trace2)),
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
+
+        @Test
+        void scoresExperimentTracesWhenSamplingRateIsZero() {
+            var trace = createTrace(Source.EXPERIMENT);
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        }
+
+        @Test
+        void scoresExperimentTracesButSkipsProductionTracesWhenSamplingRateIsZero() {
+            var sdkTrace = createTrace(Source.SDK);
+            var experimentTrace = createTrace(Source.EXPERIMENT);
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler
+                    .onTracesCreated(new TracesCreated(List.of(sdkTrace, experimentTrace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, experimentTrace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = Source.class, mode = EnumSource.Mode.EXCLUDE, names = {"SDK", "EXPERIMENT"})
+        void scoresSelectedRuleTracesWhenSamplingRateIsZero(Source source) {
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of());
+            var trace = createTrace(source).toBuilder()
+                    .metadata(metadataWithRuleIds(evaluator.getId()))
+                    .build();
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        }
+
+        @Test
+        void scoresExperimentTracesWhenSamplingRateIsZeroForPythonEvaluator() {
+            when(serviceTogglesConfig.isPythonEvaluatorEnabled()).thenReturn(true);
+            var trace = createTrace(Source.EXPERIMENT);
+            var evaluator = createPythonEvaluator(0.0f);
+            whenFindAllPythonEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(any(),
+                    eq(AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON));
+        }
+
+        @Test
+        void stillHonoursFiltersOnExperimentTracesWhenSamplingIsBypassed() {
+            var trace = createTrace(Source.EXPERIMENT).toBuilder().name("no-match").build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value("expected-name")
+                    .build();
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of(filter));
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        @Test
+        void stillHonoursDisabledRuleOnExperimentTracesWhenSamplingIsBypassed() {
+            var trace = createTrace(Source.EXPERIMENT);
+            var evaluator = createLlmEvaluator(false, 0.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
     }
 
     @Nested
