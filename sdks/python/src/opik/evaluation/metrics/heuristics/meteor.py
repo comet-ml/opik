@@ -7,8 +7,14 @@ except ImportError:  # pragma: no cover - optional dependency
     nltk = None
     wordnet = None
 
+from opik import semantic_version
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
+
+# NLTK 3.6.5 switched `meteor_score` to pre-tokenized input; 3.6.4 and earlier
+# expect untokenized strings. Supporting both would mean branching on a release
+# from 2021, so the default backend requires the modern API and says so clearly.
+MINIMUM_NLTK_VERSION = "3.6.5"
 
 try:
     from nltk.translate import meteor_score as nltk_meteor_score
@@ -33,9 +39,13 @@ class METEOR(base_metric.BaseMetric):
         https://huggingface.co/spaces/evaluate-metric/meteor
 
     Args:
-        meteor_fn: Optional callable with the same interface as
-            ``nltk.translate.meteor_score.meteor_score``. When omitted the
-            function from NLTK is used.
+        meteor_fn: Optional callable ``(references, hypothesis) -> float`` that
+            receives **untokenized** text: a sequence of reference strings and a
+            single hypothesis string. Note this deliberately differs from
+            ``nltk.translate.meteor_score.meteor_score``, which requires
+            pre-tokenized input — passing that function in directly will not
+            work. When omitted, NLTK is used through an adapter that tokenizes
+            on your behalf.
         alpha: Precision weight.
         beta: Penalty exponent.
         gamma: Fragmentation penalty weight.
@@ -63,6 +73,18 @@ class METEOR(base_metric.BaseMetric):
                 raise ImportError(
                     "METEOR metric requires the optional 'nltk' package. Install via"
                     " `pip install nltk` or provide `meteor_fn`."
+                )
+
+            if (
+                nltk is not None
+                and semantic_version.SemanticVersion.parse(nltk.__version__)
+                < MINIMUM_NLTK_VERSION
+            ):
+                raise ImportError(
+                    f"METEOR metric requires nltk >= {MINIMUM_NLTK_VERSION}, but "
+                    f"{nltk.__version__} is installed. Earlier versions expect "
+                    "untokenized input. Upgrade via `pip install -U nltk` or supply "
+                    "`meteor_fn`."
                 )
 
             if nltk is not None and wordnet is not None:

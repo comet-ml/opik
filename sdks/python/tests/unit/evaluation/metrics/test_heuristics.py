@@ -1,4 +1,5 @@
 import re
+import types
 
 import pytest
 
@@ -444,6 +445,47 @@ def test_meteor_rejects_empty_inputs():
         metric.score(output="hyp", reference="   ")
 
 
+def test_meteor_metric__default_backend__hands_nltk_pretokenized_input(monkeypatch):
+    # Locks the tokenization contract with a stubbed NLTK, so this regression stays
+    # covered on a bare CI runner with neither `nltk` nor the WordNet corpus
+    # installed. Reverting the fix makes the recorded call raw strings and fails here.
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    recorded = {}
+
+    class _StubMeteor:
+        @staticmethod
+        def meteor_score(references, hypothesis, alpha, beta, gamma):
+            recorded["references"] = references
+            recorded["hypothesis"] = hypothesis
+            return 0.5
+
+    monkeypatch.setattr(meteor_module, "nltk_meteor_score", _StubMeteor)
+    monkeypatch.setattr(meteor_module, "nltk", None)
+    monkeypatch.setattr(meteor_module, "wordnet", None)
+
+    METEOR(track=False).score(output="the cat sat", reference="the cat ran")
+
+    assert recorded["hypothesis"] == ["the", "cat", "sat"]
+    assert recorded["references"] == [["the", "cat", "ran"]]
+
+
+def test_meteor_metric__legacy_nltk__raises_actionable_import_error(monkeypatch):
+    # NLTK <= 3.6.4 expects untokenized input, so the tokenizing adapter cannot
+    # work there. Fail at construction with a clear message instead of a confusing
+    # TypeError at score time.
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    monkeypatch.setattr(meteor_module, "nltk_meteor_score", object())
+    monkeypatch.setattr(
+        meteor_module, "nltk", types.SimpleNamespace(__version__="3.6.4")
+    )
+    monkeypatch.setattr(meteor_module, "wordnet", None)
+
+    with pytest.raises(ImportError, match="requires nltk >= 3.6.5"):
+        METEOR(track=False)
+
+
 def test_meteor_metric__default_nltk_backend__scores_without_error():
     # NLTK's meteor_score requires pre-tokenized input; before the fix the default
     # backend passed raw strings and every call raised
@@ -571,6 +613,37 @@ def test_chrf_metric__char_order_and_ignore_whitespace_vary__change_score():
         .value
     )
     assert order_1 != order_6
+
+
+def test_chrf_metric__default_backend__scores_each_reference_separately(monkeypatch):
+    # Locks the per-reference contract with a stubbed NLTK so it runs without the
+    # optional dependency. Before the fix NLTK received the reference list in one
+    # call and joined it; now it must be called once per reference, best score kept.
+    from opik.evaluation.metrics.heuristics import chrf as chrf_module
+
+    seen_references = []
+
+    class _StubChrf:
+        @staticmethod
+        def sentence_chrf(
+            reference,
+            hypothesis,
+            min_len=1,
+            max_len=6,
+            beta=3.0,
+            ignore_whitespace=True,
+        ):
+            seen_references.append(reference)
+            return 0.25 if reference == "first ref" else 0.75
+
+    monkeypatch.setattr(chrf_module, "nltk_chrf_score", _StubChrf)
+
+    result = ChrF(track=False).score(
+        output="hypothesis", reference=["first ref", "second ref"]
+    )
+
+    assert seen_references == ["first ref", "second ref"]
+    assert result.value == pytest.approx(0.75)
 
 
 def test_chrf_metric__multiple_references__scores_against_best_reference():
