@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -104,6 +105,25 @@ class TracesSchemaParity {
     static final Set<String> SHADOW_ONLY_SKIP_INDICES = Set.of("idx_traces_id_at", "idx_traces_id_minmax");
 
     /**
+     * The <b>only</b> columns whose type may differ between {@code traces} and the shadow, each with the reason it does.
+     * Six of thirty-one shared columns — a small, enumerable set, which is why type parity is asserted for every other
+     * column rather than skipped wholesale.
+     * <p>
+     * An entry is a claim that the difference is deliberate and that the cutover converts it safely (the backfill
+     * carries the corresponding {@code coalesce(...)} where one is needed). {@link #assertPreCutoverParity} also asserts
+     * this map is not stale — an entry whose columns no longer differ must be removed — so the allowlist cannot quietly
+     * grow into a blanket exemption.
+     */
+    static final Map<String, String> BASELINE_TYPE_DIFFERENCES = Map.of(
+            "start_time", "nanosecond -> microsecond precision; nothing ingested needs finer (000101)",
+            "created_at", "nanosecond -> microsecond precision; nothing ingested needs finer (000101)",
+            "end_time", "Nullable -> non-nullable with an epoch sentinel, dropping the null-mask overhead (000101)",
+            "ttft", "Nullable -> non-nullable with a NaN sentinel (000101)",
+            "duration", "Nullable -> non-nullable, materialized from the sentinels rather than a null check (000101)",
+            "id_at",
+            "DateTime -> DateTime64(0), honest past 2106 so a far-future UUIDv7 partitions correctly (000114)");
+
+    /**
      * The shipped cutover backfill, read rather than restated: this guard's whole point is that the backfill column
      * list cannot drift from the tables, so asserting against a copy of it here would assert nothing. The path is
      * relative to the Maven module directory ({@code apps/opik-backend}), which is the working directory both locally
@@ -136,6 +156,42 @@ class TracesSchemaParity {
                         without the other leaves the cutover promoting a table that does not match the live one.\
                         """, TRACES, SHADOW, SHADOW_ONLY_COLUMNS)
                 .containsExactlyInAnyOrderElementsOf(union(traces.columnNames(), SHADOW_ONLY_COLUMNS));
+
+        // Type parity for every shared column outside the documented baseline. This is the leg that catches a
+        // precision narrowed on one table only, or a String quietly becoming LowCardinality(String) on one side: the
+        // name sets still match, so nothing above would notice.
+        var shadowColumns = shadow.columnsByName();
+        traces.columnsByName().forEach((name, column) -> {
+            var shadowColumn = shadowColumns.get(name);
+            if (shadowColumn == null || BASELINE_TYPE_DIFFERENCES.containsKey(name)) {
+                return;
+            }
+            assertThat(shadowColumn.type())
+                    .as("""
+                            column type parity: `%s` must have the same type on `%s` and the `%s` shadow. A type that \
+                            differs on one side only is converted at the cutover — silently truncating, or changing the \
+                            read/write contract. If the difference is deliberate, add it to BASELINE_TYPE_DIFFERENCES \
+                            with its reason.\
+                            """,
+                            name, TRACES, SHADOW)
+                    .isEqualTo(column.type());
+        });
+
+        // The allowlist must not outlive the differences it excuses, or it silently becomes a blanket exemption.
+        BASELINE_TYPE_DIFFERENCES.forEach((name, reason) -> {
+            var tracesColumn = traces.columnsByName().get(name);
+            var shadowColumn = shadowColumns.get(name);
+            assertThat(tracesColumn).as("BASELINE_TYPE_DIFFERENCES names `%s`, which must exist on `%s`", name, TRACES)
+                    .isNotNull();
+            assertThat(shadowColumn).as("BASELINE_TYPE_DIFFERENCES names `%s`, which must exist on `%s`", name, SHADOW)
+                    .isNotNull();
+            assertThat(tracesColumn.type())
+                    .as("""
+                            stale allowlist entry: `%s` no longer differs between `%s` and `%s` (%s). Remove the entry \
+                            so the column is type-checked like every other.\
+                            """, name, TRACES, SHADOW, reason)
+                    .isNotEqualTo(shadowColumn.type());
+        });
 
         var backfillColumns = backfillColumnList();
 
@@ -208,6 +264,21 @@ class TracesSchemaParity {
         assertThat(wrapper.isDistributed())
                 .as("post-cutover `%s` must be the Distributed wrapper; found engine `%s`", TRACES, wrapper.engine())
                 .isTrue();
+
+        // Being *a* Distributed table is not enough: one pointed at another cluster, database, shard table or sharding
+        // key would expose the same column list and pass every assertion below. Pinning the parameters also keeps the
+        // spliced statements honest against the shipped 000003_exchange_and_wrap.sql they mirror.
+        assertThat(wrapper.engine())
+                .as("""
+                        the Distributed `%s` must front `%s` on the '{cluster}' cluster in the same database, sharded on \
+                        sipHash64(project_id) — the wrap the runbook applies. A wrapper over a different target reads \
+                        the wrong data while looking structurally identical.\
+                        """,
+                        TRACES, SHARD)
+                .contains("Distributed")
+                .contains("'" + database + "'")
+                .contains("'" + SHARD + "'")
+                .contains("sipHash64(project_id)");
         assertThat(shard.isDistributed())
                 .as("`%s` must be the local MergeTree shard; found engine `%s`", SHARD, shard.engine())
                 .isFalse();

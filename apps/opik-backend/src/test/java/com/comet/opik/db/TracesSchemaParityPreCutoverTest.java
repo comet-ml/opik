@@ -168,6 +168,47 @@ class TracesSchemaParityPreCutoverTest {
     }
 
     /**
+     * Type drift on a shared column: both tables still list `name`, so every column-name comparison passes, and the
+     * cutover would then convert `String` to `LowCardinality(String)` on the way across. This is the leg the documented
+     * BASELINE_TYPE_DIFFERENCES allowlist deliberately does not cover.
+     */
+    @Test
+    @Order(15)
+    @DisplayName("drift is caught: a shared column whose type changed on one table only")
+    void oneSidedTypeChangeIsCaught() throws Exception {
+        execute("ALTER TABLE %s.%s MODIFY COLUMN name LowCardinality(String)".formatted(DATABASE_NAME, SHADOW));
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("name")
+                .hasMessageContaining("LowCardinality");
+
+        execute("ALTER TABLE %s.%s MODIFY COLUMN name String".formatted(DATABASE_NAME, SHADOW));
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * And the allowlist itself is held honest: if a baseline difference is ever removed — the shadow's `ttft` made
+     * Nullable again, say — the entry excusing it becomes a blanket exemption for a column nothing checks. Bringing the
+     * types into line must therefore fail until the entry is deleted.
+     */
+    @Test
+    @Order(16)
+    @DisplayName("a stale type-allowlist entry is caught")
+    void staleTypeAllowlistEntryIsCaught() throws Exception {
+        execute("ALTER TABLE %s.%s MODIFY COLUMN ttft Nullable(Float64)".formatted(DATABASE_NAME, SHADOW));
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("stale allowlist entry")
+                .hasMessageContaining("ttft");
+
+        execute("ALTER TABLE %s.%s MODIFY COLUMN ttft Float64 DEFAULT toFloat64('nan')"
+                .formatted(DATABASE_NAME, SHADOW));
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
      * The third leg, and the one no table-to-table comparison can catch: a preserved column added correctly to both
      * tables but never added to the cutover backfill's column list is copied as its default, so the cutover silently
      * loses the data.
