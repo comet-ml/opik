@@ -52,6 +52,75 @@ class SpanCostCalculatorTest {
         assertThat(cost).isEqualByComparingTo("1.0");
     }
 
+    /**
+     * Covers reasoning-token handling in {@link SpanCostCalculator#textGenerationCost}. Reasoning
+     * tokens are a subset of {@code completion_tokens} and bill at {@code output_cost_per_reasoning_token}
+     * when the model publishes it, so they must be subtracted from the standard-output bucket (both
+     * the bare OTel key and the {@code original_usage.} prefixed key), and ignored entirely when no
+     * reasoning rate is configured. The audio+reasoning case guarantees both subtractions compose.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideReasoningTokenCases")
+    void textGenerationCost_splitsReasoningTokens(String description, ModelPrice modelPrice,
+            Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = SpanCostCalculator.textGenerationCost(modelPrice, usage);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideReasoningTokenCases() {
+        ModelPrice withReasoningRate = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .outputReasoningTokenPrice(new BigDecimal("0.003"))
+                .build();
+        ModelPrice withReasoningAndAudioRates = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .outputAudioTokenPrice(new BigDecimal("0.08"))
+                .outputReasoningTokenPrice(new BigDecimal("0.003"))
+                .build();
+        ModelPrice noReasoningRate = ModelPrice.defaultBuilder()
+                .inputPrice(new BigDecimal("0.01"))
+                .outputPrice(new BigDecimal("0.02"))
+                .build();
+        return Stream.of(
+                // reasoning rate set (bare OTel key): reasoning splits out of the completion bucket
+                // input = 1000 * 0.01 = 10.00
+                // standard completion = 500 - 200 reasoning = 300 -> 300 * 0.02 = 6.00
+                // reasoning = 200 * 0.003 = 0.60
+                // total = 10 + 6 + 0.60 = 16.60  (vs 16.00 if reasoning billed at the output rate)
+                Arguments.of("reasoning rate set: bare completion_tokens_details.reasoning_tokens",
+                        withReasoningRate,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                "completion_tokens_details.reasoning_tokens", 200),
+                        "16.60"),
+                // original_usage.* key path (SDK 1.6.0+): same expected math as the bare-key case
+                Arguments.of("reasoning rate set: original_usage.* prefixed key",
+                        withReasoningRate,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                "original_usage.completion_tokens_details.reasoning_tokens", 200),
+                        "16.60"),
+                // reasoning + audio both set: both subtracted from the completion bucket
+                // input = 1000 * 0.01 = 10.00
+                // completion - 100 audio - 200 reasoning = 200 -> 200 * 0.02 = 4.00
+                // audio_out = 100 * 0.08 = 8.00; reasoning = 200 * 0.003 = 0.60
+                // total = 10 + 4 + 8 + 0.60 = 22.60
+                Arguments.of("reasoning and audio rates set: both split out of completion",
+                        withReasoningAndAudioRates,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                "completion_tokens_details.audio_tokens", 100,
+                                "completion_tokens_details.reasoning_tokens", 200),
+                        "22.60"),
+                // reasoning rate unset: the reasoning-token key is ignored, all completion at output
+                // input = 1000 * 0.01 = 10.00; completion = 500 * 0.02 = 10.00; total = 20.00
+                Arguments.of("reasoning rate unset: reasoning_tokens key is ignored",
+                        noReasoningRate,
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 500,
+                                "completion_tokens_details.reasoning_tokens", 200),
+                        "20.00"));
+    }
+
     // --- Audio Speech Cost Tests ---
 
     @ParameterizedTest
