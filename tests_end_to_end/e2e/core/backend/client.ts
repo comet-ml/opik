@@ -121,6 +121,12 @@ export interface AutomationRuleRef {
   name: string;
   projectIds: string[];
   enabled: boolean;
+  /**
+   * Fraction in [0, 1] — the backend's own units. The dialog shows a
+   * percentage (50), the API stores a fraction (0.5); assertions must use the
+   * fraction.
+   */
+  samplingRate: number;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -325,6 +331,23 @@ export function makeBackendClient(apiKey: string | null = null) {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
     }
     return { status: res.status, message, json };
+  };
+
+  /**
+   * The generated REST type marks `samplingRate` optional. Defaulting a missing
+   * value to 1 would present as "100% of traces", which is indistinguishable
+   * from a correctly-configured full-rate rule — so a sampling assertion built
+   * on that default could pass while the field was never returned at all.
+   * Fail loudly instead.
+   */
+  const requireSamplingRate = (rate: number | undefined, ruleName: string): number => {
+    if (typeof rate !== 'number' || Number.isNaN(rate)) {
+      throw new Error(
+        `listAutomationRulesForProject: rule '${ruleName}' returned no samplingRate — ` +
+          `cannot assert on sampling behaviour.`,
+      );
+    }
+    return rate;
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -817,6 +840,7 @@ export function makeBackendClient(apiKey: string | null = null) {
         name: r.name,
         projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
         enabled: r.enabled ?? true,
+        samplingRate: requireSamplingRate(r.samplingRate, r.name),
       }));
     },
 
