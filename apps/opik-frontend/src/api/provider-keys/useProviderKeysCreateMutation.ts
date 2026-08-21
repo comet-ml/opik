@@ -31,6 +31,9 @@ const useProviderKeysCreateMutation = () => {
           configuration: providerKey.configuration,
         }),
         ...(providerKey?.headers && { headers: providerKey.headers }),
+        ...(providerKey.auth_config !== undefined && {
+          auth_config: providerKey.auth_config,
+        }),
       });
 
       return data;

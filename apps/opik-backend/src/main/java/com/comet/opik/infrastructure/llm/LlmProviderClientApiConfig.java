@@ -1,13 +1,15 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.api.ProviderAuthConfig;
 import lombok.Builder;
 import lombok.ToString;
 
 import java.util.Map;
+import java.util.UUID;
 
 @Builder
 public record LlmProviderClientApiConfig(@ToString.Exclude String apiKey, Map<String, String> headers, String baseUrl,
-        Map<String, String> configuration) {
+        Map<String, String> configuration, UUID providerId, String workspaceId, ProviderAuthConfig authConfig) {
 
     @Override
     public String toString() {
@@ -16,6 +18,9 @@ public record LlmProviderClientApiConfig(@ToString.Exclude String apiKey, Map<St
                 ", headers=" + headers +
                 ", baseUrl='" + baseUrl + '\'' +
                 ", configuration=" + configuration +
+                ", providerId=" + providerId +
+                ", workspaceId='" + workspaceId + '\'' +
+                ", authConfig=" + authConfig +
                 '}';
     }
 }

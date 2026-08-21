@@ -1189,6 +1189,26 @@ partitionMetrics:
   lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
 
 # LLM providers client configuration
+# Configuration for dynamic token auth on custom LLM providers (auth_config recipes)
+llmProviderTokenAuth:
+  # Default: 0.25
+  # Description: Refresh the cached token once its remaining lifetime drops below this fraction of the total lifetime
+  refreshFraction: ${LLM_PROVIDER_TOKEN_AUTH_REFRESH_FRACTION:-0.25}
+  # Default: 10s
+  # Description: Timeout for the token fetch call to the configured auth service
+  fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
+  # Default: 15s
+  # Description: Lease time for the cross-pod single-flight lock around a token fetch
+  lockTimeout: ${LLM_PROVIDER_TOKEN_AUTH_LOCK_TIMEOUT:-15s}
+  # Default: 1000000
+  # Description: Maximum accepted size (in characters) of a token endpoint reply. Capped at 10000000
+  maxResponseChars: ${LLM_PROVIDER_TOKEN_AUTH_MAX_RESPONSE_CHARS:-1000000}
+  # Default: strict
+  # Description: SSRF guard on the token URL. "strict" refuses non-HTTPS and private/internal
+  # destinations; "relaxed" allows internal gateways. Strict by default so a missing override fails
+  # loudly instead of exposing the deployment
+  destinationGuard: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-strict}
+
 llmProviderClient:
   # Default: 3
   # Description: Max amount of attempts to reach the LLM provider before giving up

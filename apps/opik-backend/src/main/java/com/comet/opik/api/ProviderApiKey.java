@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -41,6 +42,10 @@ public record ProviderApiKey(
         @JsonView({View.Public.class, View.Write.class}) Map<String, String> configuration,
         @JsonView({View.Public.class,
                 View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String baseUrl,
+        @JsonView({View.Public.class,
+                View.Write.class}) @Valid @Schema(description = "Dynamic token auth recipe. When set, Opik fetches a short-lived bearer from the configured auth service instead of using a static api_key. "
+                        +
+                        "Only supported for custom providers. Secret credential values read back masked.") ProviderAuthConfig authConfig,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
@@ -57,6 +62,7 @@ public record ProviderApiKey(
                 ", name='" + name + '\'' +
                 ", providerName='" + providerName + '\'' +
                 ", headers=" + headers +
+                ", authConfig=" + authConfig +
                 ", baseUrl='" + baseUrl + '\'' +
                 ", createdAt=" + createdAt +
                 ", createdBy='" + createdBy + '\'' +
