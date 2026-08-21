@@ -25,8 +25,9 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * Writes the cipx_spends table from cipx LLM-call spans: span-level call data only (model + usage
- * counters); the blocks land in cipx_spend_blocks via {@link CipxSpendBlockDAO}. Triggered
+ * Writes the cipx_spends table from cipx LLM-call spans: span-level call data only (model, usage
+ * counters, config knobs and the call's trigger/attribution fields); the blocks land in
+ * cipx_spend_blocks via {@link CipxSpendBlockDAO}. Triggered
  * asynchronously off span create events; never reads the spans or cipx_spends tables. The cipx fields
  * are parsed from metadata in Java ({@link SpanRow#from}); the listener only passes rows it has
  * already gated to cipx.
@@ -60,7 +61,12 @@ public class CipxSpendDAO {
             @NonNull String thinkingType,
             long maxTokens,
             @NonNull String contextManagement,
-            @NonNull String speed) {
+            @NonNull String speed,
+            @NonNull String trigger,
+            @NonNull String triggerDetail,
+            @NonNull String turnKey,
+            @NonNull String parentToolUseId,
+            @NonNull String linkFailureReason) {
 
         public static SpanRow from(UUID spanId, UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
@@ -84,6 +90,24 @@ public class CipxSpendDAO {
                     .maxTokens(config.path("max_tokens").asLong(0))
                     .contextManagement(config.path("context_management").asText(""))
                     .speed(config.path("speed").asText(""))
+                    // Attribution fields. trigger_detail carries the subagent NAME when
+                    // trigger=subagent (the parent's Agent tool_use input.subagent_type) and the tool
+                    // name when trigger=tool_continuation; parent_tool_use_id identifies the agent
+                    // invocation this call belongs to, which is the parent/child edge of the agent
+                    // tree. All default to "" when the proxy could not resolve them — an empty value
+                    // means unknown and must not be substituted for a guessed agent name.
+                    //
+                    // link_failure_reason says WHY a call cipx identified as a subagent has no
+                    // parent, which is the only thing that separates cipx correctly fail-closing on
+                    // two byte-identical peer dispatches (ambiguous_prompt) from cipx losing a
+                    // dispatch (no_dispatch_captured). Both land in the same "(unattributed)" bucket
+                    // downstream without it. cipx stamps it only on trigger=subagent calls, so ""
+                    // elsewhere means "nothing to report", not "resolved".
+                    .trigger(call.path("trigger").asText(""))
+                    .triggerDetail(call.path("trigger_detail").asText(""))
+                    .turnKey(call.path("turn_key").asText(""))
+                    .parentToolUseId(call.path("parent_tool_use_id").asText(""))
+                    .linkFailureReason(call.path("link_failure_reason").asText(""))
                     .build();
         }
     }
@@ -94,7 +118,8 @@ public class CipxSpendDAO {
             INSERT INTO cipx_spends
                 (workspace_id, project_id, trace_id, span_id, start_time, model,
                  u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                 effort, thinking_type, max_tokens, context_management, speed)
+                 effort, thinking_type, max_tokens, context_management, speed,
+                 `trigger`, trigger_detail, turn_key, parent_tool_use_id, link_failure_reason)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -115,7 +140,12 @@ public class CipxSpendDAO {
                         :thinking_type<item.index>,
                         :max_tokens<item.index>,
                         :context_management<item.index>,
-                        :speed<item.index>
+                        :speed<item.index>,
+                        :trigger<item.index>,
+                        :trigger_detail<item.index>,
+                        :turn_key<item.index>,
+                        :parent_tool_use_id<item.index>,
+                        :link_failure_reason<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -144,7 +174,9 @@ public class CipxSpendDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 16 parameters per row tuple in template order.
+        // (repeats dedup), then 21 parameters per row tuple in template order. The bind order below
+        // must stay in lockstep with the INSERT tuple above — nothing checks it at compile time, and a
+        // mismatch silently writes each value into the neighbouring column.
         statement.bind(0, workspaceId);
         int index = 1;
         for (SpanRow row : rows) {
@@ -163,7 +195,12 @@ public class CipxSpendDAO {
                     .bind(index++, row.thinkingType())
                     .bind(index++, row.maxTokens())
                     .bind(index++, row.contextManagement())
-                    .bind(index++, row.speed());
+                    .bind(index++, row.speed())
+                    .bind(index++, row.trigger())
+                    .bind(index++, row.triggerDetail())
+                    .bind(index++, row.turnKey())
+                    .bind(index++, row.parentToolUseId())
+                    .bind(index++, row.linkFailureReason());
         }
 
         return statement.execute();
