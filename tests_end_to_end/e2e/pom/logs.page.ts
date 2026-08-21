@@ -42,6 +42,17 @@ export class LogsPage {
     });
   }
 
+  /** Open Logs with the Spans tab active for the given project. */
+  async gotoSpans(projectId: string): Promise<void> {
+    return test.step(`Open Logs (Spans) for project ${projectId}`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=spans`,
+      );
+    });
+  }
+
   async waitForReady(): Promise<void> {
     return test.step('Wait for Logs table ready', async () => {
       const realRow = this.page.locator('tr[data-row-id]').first();
@@ -414,6 +425,76 @@ export class LogsPage {
     return test.step('Clear all filters', async () => {
       await this.clearAllFiltersButton.click();
       await this.clearAllFiltersButton.waitFor({ state: 'hidden' });
+    });
+  }
+
+  // --- Spans tab ---
+
+  /** The Threads/Traces/Spans tab toggle for "Spans". */
+  get spansTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /**
+   * Switch to the Spans view using the toggle a user would click, and wait for
+   * the URL to carry the choice. Gating on `logsType=spans` rather than on the
+   * toggle's own pressed state is what distinguishes "the tab was selected"
+   * from "the page re-queried as spans": the table below is keyed on the
+   * resolved type, and only the URL says which query ran.
+   */
+  async switchToSpans(): Promise<void> {
+    return test.step('Switch the Logs view to Spans', async () => {
+      await this.spansTab.click();
+      await this.page.waitForURL((url) => url.searchParams.get('logsType') === 'spans');
+    });
+  }
+
+  /**
+   * A span row, keyed by span id. The Spans view reuses the shared DataTable,
+   * so `data-row-id` carries the span id exactly as it carries the trace id in
+   * the Traces view.
+   */
+  spanRow(spanId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${spanId}"]`);
+  }
+
+  /** Every rendered span row — use to assert the table holds nothing extra. */
+  get spanRows(): Locator {
+    return this.page.locator('tr[data-row-id]');
+  }
+
+  /**
+   * One cell of a span row, addressed by column id (`type`,
+   * `total_estimated_cost`, ...) rather than by position: column order is
+   * user-configurable and persisted, so an `nth-child` lookup would read a
+   * different column for a user who had reordered the table.
+   */
+  spanCell(spanId: string, columnId: string): Locator {
+    return this.page.locator(`[data-cell-id="${spanId}_${columnId}"]`);
+  }
+
+  /** Wait for a specific span's row to render, so an empty table is never read as a result. */
+  async waitForSpanRow(spanId: string): Promise<void> {
+    return test.step(`Wait for span row ${spanId}`, async () => {
+      await this.spanRow(spanId).waitFor({ state: 'visible', timeout: 30_000 });
+    });
+  }
+
+  /**
+   * Open a span's detail panel by id. Both ids are needed: the panel is keyed
+   * on the trace and then selects the span within it.
+   */
+  async openSpanById(traceId: string, spanId: string): Promise<TracePanelPage> {
+    return test.step(`Open span ${spanId}`, async () => {
+      if (!this.projectId) {
+        throw new Error('LogsPage.openSpanById: call gotoSpans(projectId) first');
+      }
+      const env = loadEnvConfig();
+      const url =
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs` +
+        `?logsType=spans&trace=${traceId}&span=${spanId}`;
+      await this.page.goto(url);
+      return new TracePanelPage(this.page, traceId);
     });
   }
 

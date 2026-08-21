@@ -250,6 +250,7 @@ areas:
       - trace-explore/trace-spans-depth.spec.ts
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-filters.spec.ts
+      - trace-explore/otel-provider-aliases.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -257,10 +258,10 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "SDK-seeded LLM span detail, plus OTel-ingested provider aliasing/cost (otel-provider-aliases.spec.ts)" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
-      toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
+      toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "Spans toggle clicked and the spans query asserted in otel-provider-aliases.spec.ts; the Spans-tab filter chips remain uncovered" }
       filter-traces:          { covered: true,  tier: t2-cuj }
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }

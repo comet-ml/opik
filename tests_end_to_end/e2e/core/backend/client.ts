@@ -14,6 +14,7 @@ import {
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
 } from './poll-optimization-status';
+import { buildOtelTraceRequest, type OtelSpanSeed } from './otel-payload';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
@@ -88,6 +89,28 @@ export interface TraceDetail {
    * collapse them.
    */
   input: Record<string, unknown> | null;
+}
+
+/**
+ * One span as `GET /v1/private/spans` answers it.
+ *
+ * `provider`, `model` and `totalEstimatedCost` are all nullable because the
+ * endpoint omits them rather than zeroing them, and the three absences mean
+ * different things: no provider was resolved, the span is not an LLM call, and
+ * no price row matched. Collapsing an absent cost to `0` would make the
+ * unmapped-provider control indistinguishable from a priced span that happens
+ * to be free, which is the whole comparison the OTel mapping tests rest on.
+ */
+export interface SpanRef {
+  id: string;
+  traceId: string;
+  name: string;
+  /** `llm` | `general` | `tool` | `guardrail` as the backend spells it. */
+  type: string;
+  provider: string | null;
+  model: string | null;
+  totalEstimatedCost: number | null;
+  usage: Record<string, number> | null;
 }
 
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
@@ -686,6 +709,79 @@ export function makeBackendClient(apiKey: string | null = null) {
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
       return (page.content ?? []).map((t) => String(t.id));
+    },
+
+    /**
+     * Ingest a batch of spans through the OTel collector endpoint,
+     * `POST /v1/private/otel/v1/traces` (OTLP/JSON).
+     *
+     * A raw fetch rather than an SDK call: neither the Python bridge nor the TS
+     * `Opik` client can reach this endpoint — both write through the native
+     * span API, which skips `OpenTelemetryMapper`. Ingesting OTLP is the only
+     * way to exercise the attribute-to-provider mapping at all.
+     *
+     * The target project is named by the `projectName` header (see
+     * `RequestContext.PROJECT_NAME`), not by a body field, and is created on
+     * first write if it does not exist.
+     */
+    async ingestOtelSpans(args: {
+      projectName: string;
+      spans: OtelSpanSeed[];
+      startTime: Date;
+    }): Promise<void> {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+        projectName: args.projectName,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      const res = await fetch(`${env.apiBaseUrl}/v1/private/otel/v1/traces`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(buildOtelTraceRequest(args.spans, args.startTime)),
+      });
+      if (!res.ok) {
+        throw new Error(
+          `POST /v1/private/otel/v1/traces -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+        );
+      }
+    },
+
+    /**
+     * One page of `GET /v1/private/spans` — the read behind the Logs > Spans
+     * table, including its `filters`.
+     *
+     * `total` is returned alongside the rows so a caller can assert the whole
+     * answer: a filter that also returned rows it should have excluded is the
+     * failure a `find()` over the content would miss.
+     */
+    async listSpans(
+      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+    ): Promise<{ total: number; spans: SpanRef[] }> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        size: args.size ?? 200,
+        page: 1,
+        truncate: true,
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+        ...(args.toTime ? { toTime: args.toTime } : {}),
+      });
+      return {
+        total: Number(page.total ?? 0),
+        spans: (page.content ?? []).map((s) => ({
+          id: String(s.id ?? ''),
+          traceId: String(s.traceId ?? ''),
+          name: s.name ?? '',
+          type: String(s.type ?? ''),
+          provider: s.provider ?? null,
+          model: s.model ?? null,
+          totalEstimatedCost: s.totalEstimatedCost ?? null,
+          usage: s.usage ?? null,
+        })),
+      };
     },
 
     /**
