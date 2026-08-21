@@ -21,6 +21,13 @@ import { DatasetsPage } from '@e2e/pom/datasets.page';
  * The second half covers the validation `FiltersFactory` now applies to these
  * two endpoints: a filter the backend cannot serve has to be refused at
  * validation (400/422) rather than failing inside the query builder (500).
+ *
+ * Tags: `bulk-delete-items` for the filter-scoped delete, plus
+ * `filter-scoped-batch-update` and `filter-scoped-mutation-validation` — both
+ * added to the taxonomy with this spec, because the batch-update path and the
+ * validation contract are behaviours the map had no key for. The UI sends
+ * `filters` on this mutation (`useDatasetItemBatchUpdateMutation`), so these are
+ * user-facing behaviours, not API-only affordances.
  */
 
 const groupFilter: BackendFilter[] = [
@@ -35,7 +42,13 @@ const APPLIED_TAG = 'filter-scoped-update';
 test.describe('Dataset items — filter-scoped mutations', { tag: ['@t3-nightly', '@area:datasets'] }, () => {
   test(
     'a filter-scoped batch update and delete change exactly the items the filter matches',
-    { tag: ['@cap:datasets.bulk-delete-items'] },
+    {
+      tag: [
+        '@cap:datasets.bulk-delete-items',
+        '@cap:datasets.filter-scoped-batch-update',
+        '@cap:datasets.filter-scoped-mutation-validation',
+      ],
+    },
     async ({ groupedDataset, project, backendClient, page }) => {
       const { id: datasetId, targetItemIds, bystanderItemIds, allItemIds } = groupedDataset;
       const sorted = (ids: string[]): string[] => [...ids].sort();
