@@ -83,7 +83,7 @@ jobs:
           git add sdks/typescript/src/opik/rest_api/
           git add sdks/code_generation/fern/openapi/openapi.yaml
           git add apps/opik-documentation/documentation/fern/openapi/opik.yaml
-          git add apps/opik-documentation/documentation/fern/docs/agent_optimization/opik_optimizer/reference.mdx
+          git add apps/opik-documentation/documentation/fern/docs-v2/development/optimization-runs/advanced/api_reference.mdx
           git commit -m "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
 
       - name: Create Pull Request
