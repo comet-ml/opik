@@ -265,6 +265,23 @@ component:
     # retries span only ~3.5s, less than a pod takes to boot. Readiness gates the endpoint on the
     # app actually answering; the preStop sleep covers the other side of the race, giving
     # kube-proxy time to drop a terminating pod from the endpoint list before the process exits.
+    #
+    # Overriding any of these replaces only the keys you set — Helm merges the rest of the map in
+    # from here. Set every field you care about, or null the ones you want gone
+    # (`httpGet: null`, `periodSeconds: null`, ...).
+    #
+    # The startup probe is what makes the liveness probe safe: with
+    # PYTHON_CODE_EXECUTOR_STRATEGY=docker, entrypoint.sh waits up to 30s for dockerd and then
+    # loads the sandbox executor image before gunicorn binds, so liveness alone (15s x 3) could
+    # restart the pod before it ever finished starting. Kubernetes suppresses both liveness and
+    # readiness until the startup probe passes, and 5s x 60 gives startup five minutes.
+    startupProbe:
+      httpGet:
+        path: /health/liveness
+        port: 8000
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 60
     livenessProbe:
       httpGet:
         path: /health/liveness

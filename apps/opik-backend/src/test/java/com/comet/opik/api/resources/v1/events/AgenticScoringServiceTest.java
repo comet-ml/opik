@@ -14,6 +14,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -22,9 +25,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -112,28 +117,45 @@ class AgenticScoringServiceTest {
         assertThat(emitted.get()).isLessThan(5);
     }
 
-    @Test
-    @DisplayName("firstRoundToolChoice forces a tool call except on providers that reject a forced choice")
-    void firstRoundToolChoicePerProvider() {
-        // Vertex AI's langchain4j model throws UnsupportedFeatureException on any explicit tool choice,
-        // which is terminal — it failed the evaluation instead of scoring it.
-        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.VERTEX_AI)).isEqualTo(ToolChoice.AUTO);
+    /**
+     * One row per {@link LlmProvider} — deliberately explicit rather than derived from
+     * {@code supportsToolCalling}, so adding a provider fails
+     * {@link #firstRoundToolChoiceCoversEveryProvider()} until its tool choice is decided here
+     * instead of silently inheriting a default.
+     */
+    static Stream<Arguments> firstRoundToolChoices() {
+        return Stream.of(
+                // langchain4j's ChatRequestValidationUtils.validate throws
+                // UnsupportedFeatureException for any tool choice other than AUTO, and Vertex's
+                // model calls it — a forced choice failed the evaluation instead of scoring it.
+                arguments(LlmProvider.VERTEX_AI, ToolChoice.AUTO),
+                arguments(LlmProvider.OPEN_AI, ToolChoice.REQUIRED),
+                arguments(LlmProvider.ANTHROPIC, ToolChoice.REQUIRED),
+                arguments(LlmProvider.GEMINI, ToolChoice.REQUIRED),
+                arguments(LlmProvider.OPEN_ROUTER, ToolChoice.REQUIRED),
+                arguments(LlmProvider.BEDROCK, ToolChoice.REQUIRED),
+                // No tool support at all: callers gate these out, and AUTO keeps a caller that
+                // forgets the gate on the harmless side.
+                arguments(LlmProvider.OLLAMA, ToolChoice.AUTO),
+                arguments(LlmProvider.CUSTOM_LLM, ToolChoice.AUTO),
+                arguments(LlmProvider.OPIK_FREE, ToolChoice.AUTO));
+    }
 
-        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.OPEN_AI)).isEqualTo(ToolChoice.REQUIRED);
-        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.ANTHROPIC)).isEqualTo(ToolChoice.REQUIRED);
-        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.GEMINI)).isEqualTo(ToolChoice.REQUIRED);
-        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.OPEN_ROUTER)).isEqualTo(ToolChoice.REQUIRED);
-        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.BEDROCK)).isEqualTo(ToolChoice.REQUIRED);
+    @ParameterizedTest(name = "{0} -> {1}")
+    @MethodSource("firstRoundToolChoices")
+    @DisplayName("firstRoundToolChoice forces a tool call except where the provider rejects one")
+    void firstRoundToolChoicePerProvider(LlmProvider provider, ToolChoice expected) {
+        assertThat(agenticScoringService.firstRoundToolChoice(provider)).isEqualTo(expected);
     }
 
     @Test
-    @DisplayName("firstRoundToolChoice never forces a choice on a provider that has no tool support")
-    void firstRoundToolChoiceOnNonToolCallingProviders() {
-        Stream.of(LlmProvider.values())
-                .filter(provider -> !agenticScoringService.supportsToolCalling(provider))
-                .forEach(provider -> assertThat(agenticScoringService.firstRoundToolChoice(provider))
-                        .as("provider %s", provider)
-                        .isEqualTo(ToolChoice.AUTO));
+    @DisplayName("firstRoundToolChoice has a case for every LlmProvider")
+    void firstRoundToolChoiceCoversEveryProvider() {
+        var covered = firstRoundToolChoices()
+                .map(arguments -> (LlmProvider) arguments.get()[0])
+                .collect(Collectors.toSet());
+
+        assertThat(covered).containsExactlyInAnyOrder(LlmProvider.values());
     }
 
     private static Span spanWithInput(String payload) {

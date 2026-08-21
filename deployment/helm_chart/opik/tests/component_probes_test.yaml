@@ -60,6 +60,25 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
           value: 3
 
+  - it: python-backend gates liveness behind a startup probe with room to boot
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /health/liveness
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 5
+      # 5s x 60 = five minutes, enough for entrypoint.sh to wait on dockerd and
+      # load the sandbox executor image before gunicorn binds. Kubernetes holds
+      # liveness and readiness until this passes, so the tighter liveness timings
+      # below can never restart a pod that is merely still starting.
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 60
+
   - it: python-backend liveness uses the app's liveness endpoint
     documentSelector:
       path: metadata.name

@@ -198,7 +198,10 @@ tests:
 
   # ---- startupProbe: renders only when defined ------------------------------
   - it: startupProbe is absent when not defined
-    documentSelector: *pyb
+    # frontend, not python-backend: the latter ships a startupProbe of its own.
+    documentSelector:
+      path: metadata.name
+      value: opik-frontend
     asserts:
       - notExists:
           path: spec.template.spec.containers[0].startupProbe
@@ -206,6 +209,9 @@ tests:
   - it: startupProbe renders in simplified mode
     set:
       component.python-backend.startupProbe:
+        # Cleared so the assertion below sees the helper's default, not the
+        # periodSeconds python-backend ships.
+        periodSeconds: null
         path: /healthcheck
         port: 8000
         failureThreshold: 30

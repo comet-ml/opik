@@ -473,6 +473,11 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
+| component.python-backend.startupProbe.failureThreshold | int | `60` |  |
+| component.python-backend.startupProbe.httpGet.path | string | `"/health/liveness"` |  |
+| component.python-backend.startupProbe.httpGet.port | int | `8000` |  |
+| component.python-backend.startupProbe.periodSeconds | int | `5` |  |
+| component.python-backend.startupProbe.timeoutSeconds | int | `3` |  |
 | component.python-backend.waitForRedis.enabled | bool | `true` |  |
 | component.python-backend.waitForRedis.image.registry | string | `"docker.io"` |  |
 | component.python-backend.waitForRedis.image.repository | string | `"busybox"` |  |
