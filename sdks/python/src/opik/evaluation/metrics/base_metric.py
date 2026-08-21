@@ -1,9 +1,22 @@
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Type, Union
 
 import opik
 import opik.config as opik_config
 import _opik._base_metric as _opik_base_metric
+from ... import analytics
 from ..metrics import score_result
+
+
+def _track_metric_creation(metric_class: Type["BaseMetric"]) -> None:
+    # A user-defined metric class can be named anything, so only the names of
+    # Opik's own metrics are reported.
+    name = (
+        metric_class.__name__
+        if metric_class.__module__.startswith("opik.")
+        else "custom"
+    )
+
+    analytics.track_event("evaluation", "metric_created", metric=name)
 
 
 class BaseMetric(_opik_base_metric.BaseMetric):
@@ -51,6 +64,8 @@ class BaseMetric(_opik_base_metric.BaseMetric):
             track_decorator = opik.track(name=self.name, project_name=project_name)
             self.score = track_decorator(self.score)  # type: ignore
             self.ascore = track_decorator(self.ascore)  # type: ignore
+
+        _track_metric_creation(type(self))
 
     def score(
         self, *args: Any, **kwargs: Any

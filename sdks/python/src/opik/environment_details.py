@@ -1,3 +1,8 @@
+"""
+Details about the run that both Sentry error reports and Segment usage analytics
+attach to what they send, so the two describe the same session identically.
+"""
+
 import importlib.metadata
 import logging
 import functools
@@ -6,9 +11,7 @@ import string
 import importlib
 from typing import Any, Dict
 
-import opik
-
-from .. import environment
+from . import environment, package_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -39,7 +42,7 @@ def collect_tags_once() -> Dict[str, Any]:
     result = {
         "os_type": environment.get_os_type(),
         "python_version": environment.get_python_version(),
-        "release": opik.__version__,
+        "release": package_version.VERSION,
         "jupyter": environment.in_jupyter(),
         "colab": environment.in_colab(),
         "aws_lambda": environment.in_aws_lambda(),

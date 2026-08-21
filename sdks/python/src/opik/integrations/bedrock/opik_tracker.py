@@ -6,6 +6,7 @@ from .converse import converse_decorator
 
 from .invoke_model import invoke_model_decorator
 from .invoke_model import chunks_aggregator as invoke_model_chunks_aggregator
+from ... import analytics
 
 
 if TYPE_CHECKING:
@@ -34,6 +35,7 @@ def track_bedrock(
     Returns:
         The modified bedrock client with Opik tracking enabled.
     """
+    analytics.track_event("integration", "bedrock")
 
     decorator_for_converse = converse_decorator.BedrockConverseDecorator()
     decorator_for_invoke_agent = invoke_agent_decorator.BedrockInvokeAgentDecorator()
