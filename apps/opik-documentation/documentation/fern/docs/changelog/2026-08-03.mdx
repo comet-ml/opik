@@ -1,0 +1,43 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog
+---
+
+## Bug Fixes & Improvements
+
+- **Vertex AI multi-region endpoints fixed, flash-lite models unhidden** — Providers configured with a multi-region location such as `global` failed every completion with a 404, since the SDK's default host derivation only works for single-region locations. The API endpoint is now set explicitly for multi-region locations. Fixing the same underlying model-sync issue also unhides `gemini-3.1-flash-lite`, `gemini-3.1-flash-lite-preview`, and `gemini-3.5-flash-lite` in the model list.
+
+- **Duplicate online evaluation rule names are auto-suffixed** — Creating a rule with a name that already exists in the target project(s) (for example, by re-running the same SDK script) now stores it as `name-1`, `name-2`, and so on, so rules stay distinguishable in the UI instead of appearing as indistinguishable duplicates.
+
+- **Anthropic adaptive-thinking models no longer reject Playground/inference requests** — Requests to `claude-sonnet-5`, `claude-opus-4-7`, and `claude-opus-4-8` made through the API-driven Playground, inference, or proxy paths could fail with "temperature is deprecated for this model" because `temperature`/`top_p` were forwarded unconditionally. These parameters are now gated the same way they already were on the LLM-as-judge path.
+
+- **Optimizer: no-improvement runs now report an honest outcome** — The default perfect-score threshold that gates early stopping is now `1.0` (was `0.95`), so a strong-but-imperfect baseline no longer ends a run with zero candidates tried. GEPA's reflection mini-batch size now scales with dataset size instead of a fixed value, giving coarse pass/fail metrics a usable gradient. Every early-stop path (budget exhausted, baseline already perfect, and others) now reports a specific `finish_reason` end to end.
+
+- **Optimizer no longer drops prompt template variables** — Optimization Studio runs could silently corrupt a prompt's `{variable}` placeholders during candidate generation. Several independent causes are fixed, including a programmatic guard against candidates that rewrite a message without its template token.
+
+- **"No usable scores" now distinguishes "already a good prompt" from a real failure** — A completed run whose optimizer found no candidate better than the baseline previously showed a generic "the metric may have failed" message. That common, non-error outcome is now classified separately from genuine scoring failures.
+
+- **Optimization Studio: runs list and prompt display cleanups** — The always-empty "Pass rate" column (mutually exclusive with "Accuracy" depending on run type) is merged into a single objective column; `{{variable}}` placeholders render correctly again in prompt previews; and the "Rerun" action is labeled clearly.
+
+- **Dictionary filters with special characters no longer 500** — Filtering a dictionary/metadata field on a key containing characters outside letters, digits, or underscore (for example, a key with a space or a dash) previously built an invalid query path and failed outright. Such keys are now quoted correctly so any key value can be filtered on.
+
+- **Trace deletes no longer risk affecting the wrong project** — Deleting a trace by ID without specifying its project could, in rare cases where an ID had been reused across projects, fall back to a lookup that ignored the project scope, risking deletion of the wrong project's data. Deletes now resolve every owning project before deleting, closing that gap.
+
+- **Experiment counts scoped correctly per project** — Whether an experiments list used its fast (aggregated) or fallback query path was previously decided workspace-wide, so a single unaggregated experiment anywhere in the workspace could force every project onto the slower fallback, and in some cases silently omit rows. This decision is now scoped to the requested project.
+
+- **Expired sessions return the correct error instead of a 500** — An expired session cookie hitting an authenticated endpoint could surface as a generic server error instead of the intended "unauthorized" response when the underlying error body wasn't JSON. It now falls back correctly and returns the right error.
+
+- **Python SDK: `evaluate()` logs the correct experiment URL, and never fails because of it** — The URL logged after `evaluate()` completes now points directly at the experiment, and resolving it is now best-effort, so a workspace-resolution hiccup while building the URL can no longer turn a successful evaluation into a hard failure.
+
+## Performance Improvements
+
+- **Faster Optimization Studio run list loading** — The backend query behind the optimization runs list had a fixed CPU/memory cost regardless of how much data it actually needed to read. It's now scoped down to cut that fixed cost significantly.
+
+- **Self-hosted: ClickHouse async-insert tuning knobs, plus a `TOO_MANY_PARTS` runbook** — New optional environment variables let operators tune ClickHouse's async-insert batching (`ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS`, `ANALYTICS_DB_ASYNC_INSERT_MAX_DATA_SIZE`) to reduce part fragmentation on high-ingestion deployments, alongside a new self-host runbook for recovering from `TOO_MANY_PARTS` ingestion failures and stuck merges.
+
+- **Self-hosted: optional ClickHouse restore job** — The Helm chart now supports an optional job for restoring ClickHouse from backup, for self-hosted deployments that need to recover from a snapshot.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.7...2.2.13)
+
+_Releases_: `2.2.8`, `2.2.9`, `2.2.10`, `2.2.11`, `2.2.12`, `2.2.13`
