@@ -79,6 +79,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -765,6 +766,54 @@ class WorkspacesResourceTest {
 
             try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, API_KEY, WORKSPACE_NAME)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        void nullFilterElement_returnsUnprocessableEntity() {
+            // Bean validation has to reject a null element: validateFilter would dereference it and 500.
+            var startTime = Instant.now().minus(Duration.ofDays(1));
+            var request = spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, Instant.now(), null)
+                    .toBuilder()
+                    .filters(Collections.singletonList(null))
+                    .build();
+
+            try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+            }
+        }
+
+        @Test
+        void filterOperatorUnsupportedForFieldType_returnsBadRequest() {
+            // These body filters used to skip FiltersFactory validation, so the pair reached the query builder
+            // with no operator template behind it and failed as a 500 instead of naming the bad filter.
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            // A project has to resolve, or the request returns empty before it ever reaches the query builder.
+            var projectId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10), apiKey,
+                    workspaceName);
+
+            // STARTS_WITH has no template for a LIST field, so nothing renders it into the metric query.
+            var startTime = Instant.now().minus(Duration.ofDays(1));
+            var filter = SpanFilter.builder()
+                    .field(SpanField.TAGS)
+                    .operator(Operator.STARTS_WITH)
+                    .value("tag")
+                    .build();
+            var request = spanRequest(MetricType.SPAN_TOKEN_USAGE, Set.of(projectId), startTime, Instant.now(), null)
+                    .toBuilder()
+                    .filters(List.of(filter))
+                    .build();
+
+            try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo("Invalid operator '%s' for field '%s' of type '%s'".formatted(
+                                filter.operator().getQueryParamOperator(),
+                                filter.field().getQueryParamField(),
+                                filter.field().getType()));
             }
         }
     }

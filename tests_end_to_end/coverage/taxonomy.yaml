@@ -319,14 +319,15 @@ areas:
     specs:
       - trace-explore/thread-logging-smoke.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
+      - trace-explore/thread-evaluation.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
       open-thread-panel:       { covered: true,  tier: t1-smoke }
       turn-order-io:           { covered: true,  tier: t1-smoke }
-      thread-feedback-score:   { covered: false }
+      thread-feedback-score:   { covered: true,  tier: t2-cuj }
       thread-actions-panel:    { covered: false }
-      thread-level-metrics:    { covered: false, note: "conversational metrics" }
+      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics" }
 
     visual:
       logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }
@@ -364,17 +365,19 @@ areas:
     label: Dashboards
     nav_group: Observability
     routes: ["/$workspaceName/dashboards", "/dashboards/$dashboardId", "/projects/$projectId/dashboards"]
+    spec_dir: dashboards
     specs:
+      - dashboards/workspace-span-metrics.spec.ts
     capabilities:
       list-dashboards:      { covered: false }
-      create-dashboard:     { covered: false }
+      create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
       open-dashboard:       { covered: false }
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
-      add-widget:           { covered: false }
+      add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
       configure-widget:     { covered: false }
-      widget-filters:       { covered: false }
-      metric-date-range:    { covered: false }
+      widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
+      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
 
   # ===================== DEVELOPMENT =====================
 
@@ -496,6 +499,7 @@ areas:
     specs:
       - datasets/dataset-crud-smoke.spec.ts
       - datasets/dataset-items.spec.ts
+      - datasets/dataset-items-filter-scope.spec.ts
       - datasets/dataset-version-counters.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
@@ -505,6 +509,8 @@ areas:
       add-item-ui:            { covered: true,  tier: t1-smoke }
       edit-item-versions:     { covered: true,  tier: t2-cuj }
       bulk-delete-items:      { covered: true,  tier: t3-nightly }
+      filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
+      filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
       sdk-round-trip:         { covered: true,  tier: t1-smoke }
       version-history-view:   { covered: true,  tier: t2-cuj }
@@ -555,6 +561,7 @@ areas:
       - experiments/experiments-smoke.spec.ts
       - experiments/experiments-compare.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
+      - experiments/compare-json-key-sorting.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
