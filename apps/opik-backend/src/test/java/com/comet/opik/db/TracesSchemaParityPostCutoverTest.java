@@ -39,9 +39,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p><b>The failure this catches is silent.</b> Post-cutover, a shard-only {@code ADD COLUMN} succeeds — ClickHouse
  * raises nothing — but the column is not readable through the wrapper, so the feature that added it is broken on every
  * cut-over install while the migration, and every test that does not look at the wrapper, stays green.
- * {@link #shardOnlyColumnIsUnreadableThroughTheWrapper()} pins that behaviour and
- * {@link #alteringBothTablesMakesTheColumnReadable()} pins the remedy, so the playbook's "read-facing changes go to
- * both" rule is backed by an executable demonstration rather than by assertion.
+ * {@link #shardOnlyColumnIsUnreadableUntilTheWrapperIsAlteredToo()} pins both that behaviour and its remedy, so the
+ * playbook's "read-facing changes go to both" rule is backed by an executable demonstration rather than by assertion.
  *
  * <p><b>Splice, not a rewritten changelog.</b> The spliced statements mirror the shipped reference SQL
  * ({@code data-migrations/traces-local-v2-cutover/scripts/db-app-analytics/000003_exchange_and_wrap.sql}) and the
@@ -146,13 +145,20 @@ class TracesSchemaParityPostCutoverTest {
     }
 
     /**
-     * The spike's central finding, pinned: post-cutover a shard-only {@code ADD COLUMN} applies without error and is
-     * then invisible through the wrapper. This is the exact shape of a migration that forgets the wrapper branch.
+     * The spike's central finding and the playbook's remedy, in one test: post-cutover a shard-only {@code ADD COLUMN}
+     * applies without error and is then invisible through the wrapper, and altering the wrapper too — which it accepts as
+     * a metadata-only change — makes it readable. This is the exact shape of a migration that forgets the wrapper branch,
+     * followed by the fix.
+     *
+     * <p>Kept as one test rather than an ordered pair on purpose: the "after" half only means anything on the state the
+     * "before" half leaves behind, and handing mutated schema between two {@code @Order}ed tests would let a failure in
+     * the first leave the shard drifted for everything after it. One test owns the column from {@code ADD} to
+     * {@code DROP}.
      */
     @Test
     @Order(10)
-    @DisplayName("drift is caught: a column added to the shard alone is unreadable through the wrapper")
-    void shardOnlyColumnIsUnreadableThroughTheWrapper() throws Exception {
+    @DisplayName("drift is caught: a shard-only column is unreadable until the wrapper is altered too")
+    void shardOnlyColumnIsUnreadableUntilTheWrapperIsAlteredToo() throws Exception {
         execute("ALTER TABLE %s.%s ADD COLUMN drift_shard_only String".formatted(DATABASE_NAME, SHARD));
 
         assertThatThrownBy(() -> TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME))
@@ -162,17 +168,8 @@ class TracesSchemaParityPostCutoverTest {
         // Not merely absent from the wrapper's metadata — unresolvable, so any read referencing it fails at runtime.
         assertThatThrownBy(() -> selectColumns(List.of("drift_shard_only")))
                 .hasMessageContaining("drift_shard_only");
-    }
 
-    /**
-     * The remedy the playbook prescribes, demonstrated: the wrapper takes the same {@code ADD COLUMN} as a metadata-only
-     * change, after which parity holds and the column reads. Runs immediately after the negative case and shares its
-     * drift column, so the pair reads as one before/after.
-     */
-    @Test
-    @Order(11)
-    @DisplayName("altering both the shard and the wrapper makes the column readable")
-    void alteringBothTablesMakesTheColumnReadable() throws Exception {
+        // The remedy: the wrapper takes the same ADD COLUMN as metadata only, and the column then reads.
         execute("ALTER TABLE %s.%s ADD COLUMN drift_shard_only String".formatted(DATABASE_NAME, TRACES));
 
         TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
@@ -180,6 +177,29 @@ class TracesSchemaParityPostCutoverTest {
 
         execute("ALTER TABLE %s.%s DROP COLUMN drift_shard_only".formatted(DATABASE_NAME, TRACES));
         execute("ALTER TABLE %s.%s DROP COLUMN drift_shard_only".formatted(DATABASE_NAME, SHARD));
+        TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * A subtler drift that names and types alone cannot see: the same materialized column present on both sides, with
+     * the same type, computing something different. The wrapper is created {@code AS} the shard, so the expressions start
+     * identical and can only diverge by one side being altered on its own.
+     */
+    @Test
+    @Order(11)
+    @DisplayName("drift is caught: a materialized column whose expression differs between shard and wrapper")
+    void materializedExpressionDriftIsCaught() throws Exception {
+        execute("ALTER TABLE %s.%s ADD COLUMN drift_expression UInt64 MATERIALIZED length(name)"
+                .formatted(DATABASE_NAME, SHARD));
+        execute("ALTER TABLE %s.%s ADD COLUMN drift_expression UInt64 MATERIALIZED length(thread_id)"
+                .formatted(DATABASE_NAME, TRACES));
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("drift_expression");
+
+        execute("ALTER TABLE %s.%s DROP COLUMN drift_expression".formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s DROP COLUMN drift_expression".formatted(DATABASE_NAME, SHARD));
         TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 

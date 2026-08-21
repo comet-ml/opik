@@ -10,12 +10,16 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 
 import java.sql.Connection;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.db.TracesSchemaParity.SHADOW;
@@ -95,32 +99,72 @@ class TracesSchemaParityPreCutoverTest {
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
-    @Test
+    /**
+     * Both directions of the same mistake — a column that reached one table and not the other — parameterized because
+     * the arrange/act/assert is identical and only the target differs. Both directions are covered deliberately: a
+     * migration writer is far likelier to forget the shadow, but a shadow-only change is equally broken.
+     */
+    static Stream<Arguments> oneSidedColumns() {
+        return Stream.of(
+                Arguments.of(TRACES, "drift_on_traces"),
+                Arguments.of(SHADOW, "drift_on_shadow"));
+    }
+
+    @ParameterizedTest(name = "added to {0} alone")
+    @MethodSource("oneSidedColumns")
     @Order(10)
-    @DisplayName("drift is caught: a column added to traces but not to the shadow")
-    void columnAddedToTracesAloneIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s ADD COLUMN drift_on_traces String".formatted(DATABASE_NAME, TRACES));
+    @DisplayName("drift is caught: a column added to one table but not the other")
+    void oneSidedColumnIsCaught(String table, String column) throws Exception {
+        execute("ALTER TABLE %s.%s ADD COLUMN %s String".formatted(DATABASE_NAME, table, column));
 
         assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("drift_on_traces");
+                .hasMessageContaining(column);
 
-        execute("ALTER TABLE %s.%s DROP COLUMN drift_on_traces".formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s DROP COLUMN %s".formatted(DATABASE_NAME, table, column));
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
+    /**
+     * Projections are compared by definition, not just by name, so a projection present on both tables under the same
+     * name but computing something different is drift too — the successor would keep the name and lose the meaning. A
+     * projection missing from one table entirely is caught by the same comparison; this pins the harder case.
+     *
+     * <p>Both trace tables are {@code ReplacingMergeTree}, which refuses {@code ADD PROJECTION} outright while
+     * {@code deduplicate_merge_projection_mode} is at its default {@code throw} (ClickHouse code 344) — so a projection
+     * cannot in fact be added to these tables today without a deliberate per-table setting change. The setting is
+     * relaxed here only to make the guard's projection leg reachable, and restored afterwards; that a real projection
+     * would need the same decision is itself worth knowing.
+     */
     @Test
-    @Order(11)
-    @DisplayName("drift is caught: a column added to the shadow but not to traces")
-    void columnAddedToShadowAloneIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s ADD COLUMN drift_on_shadow String".formatted(DATABASE_NAME, SHADOW));
+    @Order(14)
+    @DisplayName("drift is caught: same-named projections with different queries")
+    void projectionQueryDriftIsCaught() throws Exception {
+        allowProjections(TRACES);
+        allowProjections(SHADOW);
+        execute("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, name ORDER BY name)"
+                .formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s ADD PROJECTION proj_drift (SELECT id, thread_id ORDER BY thread_id)"
+                .formatted(DATABASE_NAME, SHADOW));
 
         assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("drift_on_shadow");
+                .hasMessageContaining("proj_drift");
 
-        execute("ALTER TABLE %s.%s DROP COLUMN drift_on_shadow".formatted(DATABASE_NAME, SHADOW));
+        execute("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s DROP PROJECTION proj_drift".formatted(DATABASE_NAME, SHADOW));
+        restoreProjectionMode(TRACES);
+        restoreProjectionMode(SHADOW);
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    private void allowProjections(String table) throws Exception {
+        execute("ALTER TABLE %s.%s MODIFY SETTING deduplicate_merge_projection_mode = 'rebuild'"
+                .formatted(DATABASE_NAME, table));
+    }
+
+    private void restoreProjectionMode(String table) throws Exception {
+        execute("ALTER TABLE %s.%s RESET SETTING deduplicate_merge_projection_mode".formatted(DATABASE_NAME, table));
     }
 
     /**

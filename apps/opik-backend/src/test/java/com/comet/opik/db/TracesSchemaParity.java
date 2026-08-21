@@ -7,9 +7,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,6 +53,25 @@ import static org.assertj.core.api.Assertions.assertThat;
  * default and codec differences to the suites that own them ({@code TracesLocalV2TableTest} round-trips the types and
  * sentinels, {@code TracesLocalV2BenchmarkTest} pins the codecs, {@code TracesLocalV2PartitioningTest} pins the
  * partition expression). Comparing types here would re-assert those baseline differences as failures on every run.
+ *
+ * <p><b>What "parity" covers, and what it does not.</b> Column <b>names</b> and <b>types</b>, and the <b>select and
+ * expression definitions</b> built on them — the backfill's {@code INSERT}/{@code SELECT} column mapping, projection
+ * queries, and {@code DEFAULT}/{@code MATERIALIZED} expressions where a baseline permits comparing them. It is
+ * deliberately <b>not</b> about the data: no row counts, checksums or value comparisons live here (the cutover's data
+ * fidelity is {@code TracesLocalV2CutoverTest}'s job, and its full-volume rehearsal the QA gate's). Nor does it cover
+ * data <i>lifecycle</i> — table TTL and storage policy are neither names, types nor selects, and the changelog sets
+ * neither on the trace tables; the tiered-storage policy is attached by an environment-gated migration outside this
+ * changelog, so a guard over the changelog could not meaningfully assert it.
+ *
+ * <p><b>Why DEFAULT/MATERIALIZED expressions are compared post-cutover but not pre-cutover.</b> The asymmetry is not an
+ * oversight. Pre-cutover the two tables differ in expression by design and in most columns: {@code end_time} defaults to
+ * an epoch sentinel on the shadow and is {@code Nullable} with no default on {@code traces}; {@code ttft} likewise uses
+ * a {@code NaN} sentinel; {@code duration} is materialized from a sentinel comparison rather than a null check; several
+ * columns gained an explicit {@code ''} / {@code []} default only on the successor. Requiring equality there would mean
+ * an allowlist covering most of the table — exactly the bulk tolerance this guard avoids — and those semantics are
+ * already round-tripped by {@code TracesLocalV2TableTest}. Post-cutover there is no such baseline: the
+ * {@code Distributed} wrapper is created {@code AS} the shard, so any expression divergence is drift, and
+ * {@link #assertPostCutoverParity} compares expressions strictly.
  */
 @UtilityClass
 class TracesSchemaParity {
@@ -92,6 +114,9 @@ class TracesSchemaParity {
 
     private static final String COLUMN_NAME_PATTERN = "[a-z_][a-z0-9_]*";
 
+    /** A trailing {@code AS <column>} alias on a SELECT projection entry, naming that entry's destination column. */
+    private static final Pattern SELECT_ALIAS = Pattern.compile("(?i)\\bAS\\s+([a-z_][a-z0-9_]*)\\s*$");
+
     /**
      * Asserts the pre-cutover invariant: the live table, the shadow it will be replaced by, and the backfill column
      * list that moves the data between them all agree.
@@ -130,6 +155,9 @@ class TracesSchemaParity {
                         """, SHADOW, SHADOW_ONLY_COLUMNS)
                 .containsExactlyInAnyOrderElementsOf(union(backfillColumns, SHADOW_ONLY_COLUMNS));
 
+        // The column sets above say the right columns are carried; this says they are carried to the right places.
+        assertBackfillInsertMatchesSelect();
+
         assertThat(shadow.skipIndexNames())
                 .as("""
                         skip-index parity: an index added to `%s` must also be added to the `%s` shadow, or the \
@@ -143,10 +171,15 @@ class TracesSchemaParity {
                 .as("skip index `%s` must be defined identically on `%s` and the `%s` shadow", name, TRACES, SHADOW)
                 .isEqualTo(index));
 
-        assertThat(shadow.projectionNames())
-                .as("projection parity: a projection is storage-only, but pre-cutover both tables must carry it so "
-                        + "the successor keeps it after the swap")
-                .containsExactlyInAnyOrderElementsOf(traces.projectionNames());
+        // Compared by full definition, not just by name: two projections sharing a name but not a query would leave the
+        // successor computing something different after the swap, and a name-only check cannot see that.
+        assertThat(shadow.projections())
+                .as("""
+                        projection parity: a projection is storage-only, but pre-cutover both tables must carry it — \
+                        with the same query — so the successor keeps it, and keeps it meaning the same thing, after the \
+                        swap\
+                        """)
+                .containsExactlyInAnyOrderElementsOf(traces.projections());
 
         assertThat(shadow.sortingKey())
                 .as("the successor's sorting key is the dedup key the backfill relies on; it must match `%s`", TRACES)
@@ -187,6 +220,11 @@ class TracesSchemaParity {
                         """, TRACES, SHARD)
                 .isEqualTo(shard.columnNames());
 
+        // Strict per column here — type, default kind AND the DEFAULT/MATERIALIZED expression — because the wrapper is
+        // created `AS` the shard, so it starts as an exact copy and has no legitimate reason to diverge. (The opposite of
+        // pre-cutover, where the shadow deliberately differs; see the class Javadoc.) Without the expression check, a
+        // MATERIALIZED column added to the shard with one expression and to the wrapper with another would satisfy every
+        // name and type assertion while computing something different on each side.
         var shardColumns = shard.columnsByName();
         wrapper.columnsByName().forEach((name, column) -> {
             var shardColumn = shardColumns.get(name);
@@ -197,24 +235,32 @@ class TracesSchemaParity {
                     .as("column `%s` must have the same default kind on the Distributed `%s` and on `%s`", name,
                             TRACES, SHARD)
                     .isEqualTo(shardColumn.defaultKind());
+            assertThat(column.defaultExpression())
+                    .as("""
+                            column `%s` must have the same DEFAULT/MATERIALIZED expression on the Distributed `%s` and \
+                            on `%s`; the wrapper is created AS the shard, so a divergence here means one side was \
+                            altered on its own\
+                            """, name, TRACES, SHARD)
+                    .isEqualTo(shardColumn.defaultExpression());
         });
     }
 
     /**
-     * Every column the shipped cutover backfill names in its {@code INSERT INTO ... (...)} list.
+     * Every column the shipped cutover backfill names in its {@code INSERT INTO ... (...)} list, <b>in order</b>, with
+     * duplicates rejected.
+     *
+     * <p>Order and uniqueness matter even though the parity comparisons that consume this are set-based: ClickHouse maps
+     * {@code INSERT (...) SELECT ...} by <i>position</i>, so a duplicated or reordered entry changes which destination
+     * column a value lands in, and a set would hide both. {@link #assertBackfillInsertMatchesSelect} uses the order this
+     * preserves.
      *
      * <p>Line comments are stripped before the statement is located because the file's header prose mentions
      * {@code INSERT} and carries parentheses; the reference SQL contains no string literal holding {@code --}, so the
      * naive strip is safe here. Each parsed entry is checked to be a bare column name, so a future edit that puts an
      * expression or a nested parenthesis in the list fails loudly instead of being silently mis-parsed.
      */
-    static Set<String> backfillColumnList() throws IOException {
-        assertThat(BACKFILL_SQL)
-                .as("the shipped cutover backfill must be readable at %s (relative to apps/opik-backend); if it moved, "
-                        + "update this guard rather than dropping the assertion", BACKFILL_SQL)
-                .isRegularFile();
-
-        var sql = stripLineComments(Files.readString(BACKFILL_SQL));
+    static List<String> backfillColumnList() throws IOException {
+        var sql = readBackfillSql();
 
         int insertAt = sql.indexOf("INSERT INTO");
         assertThat(insertAt).as("no INSERT INTO statement found in %s", BACKFILL_SQL).isNotNegative();
@@ -227,15 +273,141 @@ class TracesSchemaParity {
         var columns = Arrays.stream(sql.substring(open + 1, close).split(","))
                 .map(String::trim)
                 .filter(entry -> !entry.isEmpty())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+                .toList();
 
         assertThat(columns)
                 .as("the backfill column list must hold bare column names; an expression here means this parse is "
                         + "reading the wrong parentheses")
                 .isNotEmpty()
                 .allMatch(column -> column.matches(COLUMN_NAME_PATTERN));
+        assertThat(columns)
+                .as("""
+                        the backfill column list must not repeat a column: ClickHouse maps INSERT (...) SELECT ... by \
+                        position, so a duplicate silently shifts every later value into the wrong destination column\
+                        """)
+                .doesNotHaveDuplicates();
 
         return columns;
+    }
+
+    /**
+     * Asserts the backfill's {@code INSERT} column list and its {@code SELECT} projection line up position by position.
+     *
+     * <p>ClickHouse pairs the two by position, not by name, so a column added to one list and not the other — or added at
+     * a different offset — sends every subsequent value to the wrong destination column. Nothing about that is a syntax
+     * error, and both tables stay perfectly consistent with each other, so no amount of table-to-table comparison can
+     * see it: the mapping between them has to be checked directly.
+     *
+     * <p>Each projection entry must therefore name its destination — a bare column, or an expression carrying an
+     * {@code AS <name>} alias, as {@code coalesce(end_time, ...) AS end_time} does. An unaliased expression is legal SQL
+     * and would still map positionally, but it leaves the mapping unverifiable, so one fails here. The shipped SQL
+     * already aliases every expression, so this pins an existing convention rather than demanding a change.
+     */
+    static void assertBackfillInsertMatchesSelect() throws IOException {
+        var insertColumns = backfillColumnList();
+        var selectTargets = backfillSelectTargets();
+
+        assertThat(selectTargets)
+                .as("""
+                        cutover backfill select parity: the SELECT projection of %s must line up with its INSERT column \
+                        list position by position, because ClickHouse pairs them by position and not by name. A mismatch \
+                        here writes values into the wrong destination columns at cutover time, without any error.\
+                        """,
+                        BACKFILL_SQL.getFileName())
+                .containsExactlyElementsOf(insertColumns);
+    }
+
+    /**
+     * The destination column each entry of the backfill's {@code SELECT} projection targets: the alias when the entry is
+     * an expression, the column name when it is bare.
+     */
+    private static List<String> backfillSelectTargets() throws IOException {
+        var sql = readBackfillSql();
+
+        int selectAt = sql.indexOf("SELECT", sql.indexOf("INSERT INTO"));
+        assertThat(selectAt).as("no SELECT found after the INSERT column list in %s", BACKFILL_SQL).isNotNegative();
+
+        int fromAt = indexOfTopLevelFrom(sql, selectAt + "SELECT".length());
+        assertThat(fromAt).as("no top-level FROM found after SELECT in %s", BACKFILL_SQL).isNotNegative();
+
+        return splitTopLevel(sql.substring(selectAt + "SELECT".length(), fromAt)).stream()
+                .map(TracesSchemaParity::destinationColumnOf)
+                .toList();
+    }
+
+    private static String destinationColumnOf(String projectionEntry) {
+        var aliased = SELECT_ALIAS.matcher(projectionEntry);
+        if (aliased.find()) {
+            return aliased.group(1);
+        }
+        assertThat(projectionEntry)
+                .as("""
+                        every entry of the backfill SELECT projection must name its destination — a bare column, or an \
+                        expression with an `AS <column>` alias — so its positional mapping to the INSERT column list can \
+                        be verified\
+                        """)
+                .matches(COLUMN_NAME_PATTERN);
+        return projectionEntry;
+    }
+
+    /** Index of the {@code FROM} keyword at paren depth 0 and outside a string literal, or {@code -1}. */
+    private static int indexOfTopLevelFrom(String sql, int from) {
+        int depth = 0;
+        boolean inString = false;
+        for (int i = from; i < sql.length(); i++) {
+            char c = sql.charAt(i);
+            if (c == '\'') {
+                inString = !inString;
+            } else if (!inString && c == '(') {
+                depth++;
+            } else if (!inString && c == ')') {
+                depth--;
+            } else
+                if (!inString && depth == 0 && sql.startsWith("FROM", i)
+                        && !Character.isLetterOrDigit(sql.charAt(i - 1))) {
+                            return i;
+                        }
+        }
+        return -1;
+    }
+
+    /** Splits on commas at paren depth 0 and outside a string literal, so nested call arguments stay intact. */
+    private static List<String> splitTopLevel(String projection) {
+        var entries = new ArrayList<String>();
+        var current = new StringBuilder();
+        int depth = 0;
+        boolean inString = false;
+        for (int i = 0; i < projection.length(); i++) {
+            char c = projection.charAt(i);
+            if (c == '\'') {
+                inString = !inString;
+            } else if (!inString && c == '(') {
+                depth++;
+            } else if (!inString && c == ')') {
+                depth--;
+            } else if (!inString && depth == 0 && c == ',') {
+                entries.add(normalizeWhitespace(current.toString()));
+                current.setLength(0);
+                continue;
+            }
+            current.append(c);
+        }
+        if (!current.toString().isBlank()) {
+            entries.add(normalizeWhitespace(current.toString()));
+        }
+        return entries;
+    }
+
+    private static String normalizeWhitespace(String entry) {
+        return entry.trim().replaceAll("\\s+", " ");
+    }
+
+    private static String readBackfillSql() throws IOException {
+        assertThat(BACKFILL_SQL)
+                .as("the shipped cutover backfill must be readable at %s (relative to apps/opik-backend); if it moved, "
+                        + "update this guard rather than dropping the assertion", BACKFILL_SQL)
+                .isRegularFile();
+        return stripLineComments(Files.readString(BACKFILL_SQL));
     }
 
     private static String stripLineComments(String sql) {
