@@ -1990,6 +1990,39 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /**
+     * The per-workspace bounded counterpart of {@link #DELETE_FOR_RETENTION}: each workspace carries its own
+     * {@code id} floor, so the windows are OR-ed rather than sharing one {@code :lower_bound}.
+     * <p>
+     * The {@code toMonday(id_at)} week bounds use the global {@code :min_lower_bound}, which is {@code <=} every
+     * per-workspace {@code :lb_i}, so the single floor never excludes a row that any per-workspace id-range would
+     * delete. UTC matches {@code id_at}.
+     * <p>
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BATCH_INSERT} and
+     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound. It was
+     * previously assembled with a {@code StringBuilder}, which hid the statement from the declaration site and from the
+     * routing guard that reads these constants.
+     */
+    private static final String DELETE_FOR_RETENTION_BOUNDED = """
+            DELETE FROM <traces_mutation_table>
+            WHERE (
+                <items:{item |
+                    (workspace_id = :ws_<item.index> AND id >= :lb_<item.index> AND id \\< :cutoff_id)
+                    <if(item.hasNext)>OR<endif>
+                }>
+            )
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:min_lower_bound), 'UTC'))
+            AND toMonday(id_at) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
+            AND id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids_flat
+                AND trace_id >= :min_lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    /**
      * Lightweight pre-delete count for observability. Omits the {@code experiment_items} exclusion subquery
      * to avoid the join cost, making it an upper-bound ceiling with &gt;99% precision in practice (very few
      * traces are linked to experiments). Carries the same {@code toMonday(id_at)} week bounds as
@@ -5215,34 +5248,16 @@ class TraceDAOImpl implements TraceDAO {
 
         log.info("Retention delete traces (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
-        var logComment = getLogComment("retention_delete_traces_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
-        var sb = new StringBuilder("DELETE FROM ").append(tracesMutationTable()).append(" WHERE (");
-        for (int i = 0; i < entries.size(); i++) {
-            if (i > 0) sb.append(" OR ");
-            sb.append("(workspace_id = :ws_").append(i)
-                    .append(" AND id >= :lb_").append(i)
-                    .append(" AND id < :cutoff_id)");
-        }
-        // toMonday(id_at) week bounds, the bounded counterpart of DELETE_FOR_RETENTION. The single floor
-        // uses the global :min_lower_bound, which is <= every per-workspace :lb_i, so it never excludes a row
-        // that any per-workspace id-range would delete. UTC matches id_at.
-        sb.append(") AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:min_lower_bound), 'UTC'))")
-                .append(" AND toMonday(id_at) < addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)")
-                .append(" AND id NOT IN (")
-                .append("SELECT trace_id FROM experiment_items")
-                .append(" WHERE workspace_id IN :workspace_ids_flat")
-                .append(" AND trace_id >= :min_lower_bound")
-                .append(" AND trace_id < :cutoff_id")
-                .append(") SETTINGS log_comment = '").append(logComment)
-                .append("', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1");
-
-        var sql = sb.toString();
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED, "retention_delete_traces_bounded", null, "",
+                workspaceMinIds.size());
+        selectTracesMutationTable(template);
+        template.add("items", getQueryItemPlaceHolder(entries.size()));
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = connection.createStatement(sql)
+                    var statement = connection.createStatement(template.render())
                             .bind("cutoff_id", cutoffId)
                             .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
                             .bind("min_lower_bound", lowerBound);
