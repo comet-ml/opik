@@ -637,3 +637,18 @@ export const combineExperimentScoresAsMap = (row: {
 
   return result;
 };
+
+// A single entry of the traces/spans batch feedback score payload: the entity id plus the
+// score to set on it.
+export type FeedbackScoreBatchEntry = {
+  id: string;
+  name: string;
+  value: number;
+  categoryName?: string;
+  reason?: string;
+};
+
+// The backend caps a feedback score batch at 1000 items
+// (FeedbackScoreBatchContainer: `@Size(min = 1, max = 1000)`), and annotating a selection
+// produces `rows * scores` entries, so larger payloads have to be split.
+export const MAX_FEEDBACK_SCORES_PER_BATCH = 1000;
