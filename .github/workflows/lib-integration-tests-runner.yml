@@ -21,6 +21,7 @@ on:
           - anthropic
           - mistral
           - groq
+          - cerebras
           - aisuite
           - haystack
           # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
@@ -144,6 +145,12 @@ jobs:
     uses: ./.github/workflows/lib-groq-tests.yml
     secrets: inherit
 
+  cerebras_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["cerebras", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-cerebras-tests.yml
+    secrets: inherit
+
   aisuite_tests:
     needs: [init_environment]
     if: contains(fromJSON('["aisuite", "all"]'), needs.init_environment.outputs.LIBS)
@@ -241,6 +248,7 @@ jobs:
       - anthropic_tests
       - mistral_tests
       - groq_tests
+      - cerebras_tests
       - aisuite_tests
       - haystack_tests
       # - guardrails_tests  # disabled: guardrails-ai is on PyPI quarantine
@@ -290,6 +298,7 @@ jobs:
               "Anthropic": "${{ needs.anthropic_tests.result }}",
               "Mistral": "${{ needs.mistral_tests.result }}",
               "Groq": "${{ needs.groq_tests.result }}",
+              "Cerebras": "${{ needs.cerebras_tests.result }}",
               "AISuite": "${{ needs.aisuite_tests.result }}",
               "Haystack": "${{ needs.haystack_tests.result }}",
               "DSPy": "${{ needs.dspy_tests.result }}",
