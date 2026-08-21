@@ -88,6 +88,13 @@ export interface TraceDetail {
    * collapse them.
    */
   input: Record<string, unknown> | null;
+  /**
+   * The trace's `output` payload. Deliberately *not* narrowed to a record the
+   * way `input` is: the column is a `JsonNode`, so a bare string, an array or a
+   * number are all legitimate values, and a record type would make the shapes
+   * a variable-mapping test exists to drive unrepresentable.
+   */
+  output: unknown;
 }
 
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
@@ -102,6 +109,22 @@ export interface AutomationRuleRef {
   name: string;
   projectIds: string[];
   enabled: boolean;
+}
+
+/**
+ * One line of `GET /v1/private/automations/evaluators/{id}/logs` — the
+ * automation log a user reads to find out why a trace was or wasn't scored.
+ *
+ * `traceId` is lifted out of the line's `markers` map because that is the only
+ * thing that ties a log line to a trace: the message text carries the id too,
+ * but only as a substring of free-form prose. `level` is kept as the raw string
+ * the backend sends rather than a union, so an unexpected level fails an
+ * assertion loudly instead of being narrowed away at the boundary.
+ */
+export interface AutomationRuleLogItem {
+  level: string;
+  message: string;
+  traceId: string | null;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -252,6 +275,7 @@ export function makeBackendClient(apiKey: string | null = null) {
           source: String(fs.source),
         })),
         input: (t.input as Record<string, unknown> | undefined) ?? null,
+        output: (t.output as unknown) ?? null,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -575,6 +599,74 @@ export function makeBackendClient(apiKey: string | null = null) {
     },
 
     /**
+     * Create a `user_defined_metric_python` rule with an explicit variable
+     * mapping and return its id.
+     *
+     * The create-rule dialog is the only path the existing online-evaluation
+     * specs use, and it can't express this: `arguments` is where the trace
+     * section a variable resolves against is chosen (`output.answer`,
+     * `output.[0].name`), which is exactly what a mapping test has to own.
+     *
+     * The id comes from a read-back rather than the write, because
+     * `POST /v1/private/automations/evaluators` answers 201 with no body.
+     */
+    async createPythonMetricRule(args: {
+      projectId: string;
+      name: string;
+      /** Python source declaring one BaseMetric subclass. */
+      metric: string;
+      /** Metric kwarg name -> trace JSON path, e.g. `{ answer: 'output.answer' }`. */
+      arguments: Record<string, string>;
+      samplingRate?: number;
+    }): Promise<string> {
+      await opik.api.automationRuleEvaluators.createAutomationRuleEvaluator({
+        type: 'user_defined_metric_python',
+        action: 'evaluator',
+        name: args.name,
+        projectIds: [args.projectId],
+        samplingRate: args.samplingRate ?? 1.0,
+        enabled: true,
+        code: { metric: args.metric, arguments: args.arguments },
+      });
+
+      const page = await opik.api.automationRuleEvaluators.findEvaluators({
+        projectId: args.projectId,
+        name: args.name,
+        size: 500,
+      });
+      const created = (page.content ?? []).filter((r) => r.name === args.name);
+      if (created.length !== 1) {
+        throw new Error(
+          `createPythonMetricRule: expected exactly 1 rule named "${args.name}" in project ` +
+            `${args.projectId} after creating it, found ${created.length}`,
+        );
+      }
+      return String(created[0].id);
+    },
+
+    /**
+     * Every line of a rule's automation log, newest first (the order the
+     * backend returns and the automation-logs page renders).
+     *
+     * `size` is deliberately large: the log is what proves a scoring run
+     * produced no errors, and a truncated page would turn a missing ERROR line
+     * into a silent pass.
+     */
+    async getAutomationRuleLogs(
+      ruleId: string,
+      opts: { size?: number } = {},
+    ): Promise<AutomationRuleLogItem[]> {
+      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
+        size: opts.size ?? 1000,
+      });
+      return (page.content ?? []).map((item) => ({
+        level: String(item.level ?? ''),
+        message: item.message ?? '',
+        traceId: item.markers?.trace_id ?? null,
+      }));
+    },
+
+    /**
      * One page of `GET /v1/private/traces/threads` — the exact read the Threads
      * view issues, including its `filters` and time window.
      *
@@ -715,6 +807,71 @@ export function makeBackendClient(apiKey: string | null = null) {
         ...(args.input ? { input: args.input } : {}),
         ...(args.output ? { output: args.output } : {}),
       });
+      return args.id;
+    },
+
+    /**
+     * Create a completed trace whose `output` is an arbitrary JSON value — a
+     * bare string, an array, a number — and not only the object shape every
+     * other seeding path in this suite produces.
+     *
+     * `output` is a `JsonNode` on the wire and the backend accepts any JSON
+     * value there, but no route this suite already has can say so:
+     *
+     *  - the Python SDK bridge wraps a decorated function's return as
+     *    `{"output": ...}`, so everything it seeds is an object;
+     *  - `createTraceWithSource` types `output` as a record;
+     *  - the pinned TS SDK's own `traces.createTrace` narrows it to
+     *    `object | object[] | string` and *validates that at runtime*, so a
+     *    cast doesn't help — `["a","b"]` and `42` are rejected client-side
+     *    before a request is made.
+     *
+     * Hence the raw fetch, the same escape hatch `getProjectStats` above takes
+     * for the same reason. Switch to the typed call once the SDK's `output`
+     * type admits a whole JsonNode.
+     *
+     * `end_time` is always sent: `OnlineScoringSampler.onTracesCreated` drops
+     * traces with no end time as partial, so a trace seeded without one is
+     * never scored at all and every downstream assertion would time out on a
+     * score that was never coming.
+     */
+    async createTraceWithJsonOutput(args: {
+      id: string;
+      projectName: string;
+      name: string;
+      input: Record<string, unknown>;
+      output: unknown;
+      startTime?: Date;
+    }): Promise<string> {
+      const startTime = args.startTime ?? new Date();
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Comet-Workspace': env.workspace,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      const res = await fetch(`${env.apiBaseUrl}/v1/private/traces`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          id: args.id,
+          project_name: args.projectName,
+          name: args.name,
+          source: 'sdk',
+          start_time: startTime.toISOString(),
+          end_time: new Date(startTime.getTime() + 1_000).toISOString(),
+          input: args.input,
+          output: args.output,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          `POST /v1/private/traces -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+        );
+      }
       return args.id;
     },
 
