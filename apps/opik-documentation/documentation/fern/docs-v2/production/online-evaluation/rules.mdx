@@ -68,6 +68,30 @@ rule is executed, Opik will replace the variables with the values from the trace
 
 You can control the format of the output using the `Scoring definition` parameter. This is where you can define the scores you want the LLM as a Judge metric to return. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the LLM as a Judge metric always returns trace scores.
 
+### Agent as a Judge
+
+An LLM as a Judge metric only sees the fields you map. An agent as a judge receives the trace and reads the rest of it itself.
+
+Add `{{trace}}` to the prompt. There is no variable mapping to fill in, so the same rule works whatever shape your traces have.
+
+The judge gets these tools:
+
+- `read` — read the trace or one of its spans
+- `jq` — pull out a specific path
+- `search` — find text anywhere in the trace
+- `get_trace_spans` — list the trace's spans
+- `get_attachment` — fetch an attached file as image, audio or text
+
+For a span-scope rule, use `{{span}}` instead. To inject the trace's spans as plain JSON without giving the judge any tools, use `{{spans}}`.
+
+<Note>
+  Agent as a Judge needs a model that supports tool calling. On a model that does not, the rule falls back to a single call with a truncated trace.
+</Note>
+
+Cost scales with trace size. A small trace fits in the prompt and the judge answers in one call. A larger trace is truncated in the prompt, and the judge makes extra tool calls to read the rest.
+
+Use **Max cost per evaluation (USD)** to cap that spend. Once an evaluation reaches the cap, the judge wraps up and returns the scores it has. Leave it empty for no limit.
+
 ### Evaluating traces with images
 
 LLM as a Judge metrics can evaluate traces that contain images when using vision-capable models. This is useful for:
