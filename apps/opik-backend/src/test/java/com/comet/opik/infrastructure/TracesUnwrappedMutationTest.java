@@ -28,6 +28,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
@@ -61,7 +62,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code distributedTracesRejectsDirectMutation} in the wrapped suite: it proves the deletes above really ran against
  * an unwrapped {@code traces} rather than accidentally against a shard.
  *
- * <p>Reusable containers are fine here — unlike the wrapped suite, nothing in this one renames or drops a table.
+ * <p>Dedicated, non-reused containers, as in the wrapped suite: nothing here renames a table, but the suite asserts
+ * the pre-cutover topology as a precondition, so it has to own that topology rather than inherit it.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -80,9 +82,15 @@ class TracesUnwrappedMutationTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
-    private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
+    // Dedicated, non-reused ClickHouse + ZooKeeper on their own network, matching TracesDistributedWrapMutationTest.
+    // This suite asserts the pre-cutover topology as a *precondition*, so it must own the container rather than inherit
+    // whatever state a shared one is in: reuse is enabled in CI, and a container left wrapped would fail this suite for
+    // environmental reasons rather than real ones.
+    private final Network network = Network.newNetwork();
+    private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer(false,
+            network);
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
-            .newClickHouseContainer(zookeeperContainer);
+            .newClickHouseContainer(false, network, zookeeperContainer);
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
 
@@ -128,6 +136,9 @@ class TracesUnwrappedMutationTest {
     @AfterAll
     void afterAll() {
         wireMock.server().stop();
+        clickHouseContainer.stop();
+        zookeeperContainer.stop();
+        network.close();
     }
 
     @Test
@@ -181,7 +192,7 @@ class TracesUnwrappedMutationTest {
      * "delete both" or "delete neither".
      */
     @Test
-    void deleteForRetentionBoundedAppliesEachWorkspacesOwnLowerBound() {
+    void deleteForRetentionBoundedAppliesPerWorkspaceLowerBounds() {
         var now = Instant.now();
         var floor = ID_GENERATOR.generateId(now.minusSeconds(2));
         var deletedId = ID_GENERATOR.generateId(now.minusSeconds(1));
@@ -214,9 +225,11 @@ class TracesUnwrappedMutationTest {
      */
     @Test
     void tracesIsAPlainMergeTreePreCutover() {
+        // Pinned, not merely "not Distributed": the helper returns "" for a missing table and any other engine
+        // (Memory, a plain MergeTree) would have satisfied a negative check, so an absent or wrong table passed.
         assertThat(engineOf("traces"))
-                .as("pre-cutover `traces` is the live MergeTree, not a Distributed wrapper")
-                .doesNotContain("Distributed");
+                .as("pre-cutover `traces` must be the live ReplicatedReplacingMergeTree")
+                .isEqualTo("ReplicatedReplacingMergeTree");
         assertThat(engineOf("traces_local"))
                 .as("`traces_local` is created by the cutover runbook and must not exist pre-cutover")
                 .isEmpty();
