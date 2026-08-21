@@ -167,7 +167,7 @@ class TracesMigrationPreconditionLintTest {
             assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("000200_add_foo")
-                    .contains("without a topology guard");
+                    .contains("without a complete topology guard");
         }
 
         /**
@@ -229,7 +229,7 @@ class TracesMigrationPreconditionLintTest {
 
             assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
-                    .contains("without a topology guard");
+                    .contains("without a complete topology guard");
         }
 
         /** Prose inside the changeset that merely discusses a trace mutation must not trip the lint. */
@@ -247,17 +247,78 @@ class TracesMigrationPreconditionLintTest {
             assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo_to_spans.sql", sql)).isEmpty();
         }
 
-        /** The shadow exists only pre-cutover, so a shadow-only migration is single-topology by nature. */
+        /**
+         * A shadow mutation looks single-topology and is not: the cutover renames {@code traces_local_v2} away, so an
+         * unguarded shadow ALTER added after the splice point runs against a table that exists on no cut-over install
+         * and fails the migration outright.
+         */
         @Test
-        @DisplayName("ignores a shadow-only migration")
-        void ignoresAShadowOnlyMigration() {
+        @DisplayName("rejects an unguarded shadow-only migration")
+        void rejectsAnUnguardedShadowOnlyMigration() {
             var sql = """
                     --liquibase formatted sql
                     --changeset opik:000200_tune_shadow
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' MODIFY COLUMN name String CODEC(ZSTD(3));
                     """;
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_tune_shadow.sql", sql)).isEmpty();
+            assertThat(TracesMigrationPreconditionLint.problems("000200_tune_shadow.sql", sql))
+                    .singleElement(STRING)
+                    .contains("without a complete topology guard");
+        }
+
+        /**
+         * The silent-failure case: {@code --changeset a:b id:c} is already used by 26 shipped changesets, and a header
+         * pattern anchored after {@code author:id} matched none of them. With no changeset parsed every check was
+         * skipped, so the migration passed unexamined — the worst possible outcome for a guard.
+         */
+        @Test
+        @DisplayName("still parses a changeset header carrying Liquibase attributes")
+        void parsesAttributedChangesetHeaders() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_add_foo id:add-foo runOnChange:false
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """;
+
+            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+                    .singleElement(STRING)
+                    .contains("000200_add_foo")
+                    .contains("without a complete topology guard");
+        }
+
+        /** And an unparseable header must fail rather than pass, so "checked nothing" can never read as "all clear". */
+        @Test
+        @DisplayName("rejects a trace mutation whose changeset header cannot be parsed")
+        void rejectsAnUnparseableChangesetHeader() {
+            var sql = """
+                    --liquibase formatted sql
+                    -- changesets go here
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """;
+
+            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+                    .singleElement(STRING)
+                    .contains("no `--changeset` header could be parsed");
+        }
+
+        /**
+         * {@code onError:HALT} is one of the four load-bearing details the playbook names: without it a precondition
+         * that cannot be evaluated falls through to a guessed topology instead of stopping.
+         */
+        @Test
+        @DisplayName("rejects a guard missing onError:HALT")
+        void rejectsAGuardMissingOnErrorHalt() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_add_foo_pre_cutover
+                    --preconditions onFail:MARK_RAN
+                    --precondition-sql-check expectedResult:0 SELECT count() FROM system.tables WHERE name = 'traces_local'
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """;
+
+            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+                    .singleElement(STRING)
+                    .contains("without a complete topology guard");
         }
 
         @Test
@@ -283,7 +344,7 @@ class TracesMigrationPreconditionLintTest {
 
             assertThat(TracesMigrationPreconditionLint.problems("000200_index_shard.sql", sql))
                     .singleElement(STRING)
-                    .contains("without a topology guard");
+                    .contains("without a complete topology guard");
         }
     }
 }
