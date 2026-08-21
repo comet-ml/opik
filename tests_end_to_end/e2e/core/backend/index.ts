@@ -18,6 +18,7 @@ export {
   type FeedbackScoreRef,
   type TraceDetail,
   type AutomationRuleRef,
+  type LlmJudgeRuleSeed,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
   type ThreadRowRef,

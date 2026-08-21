@@ -129,6 +129,29 @@ export interface AutomationRuleRef {
   samplingRate: number;
 }
 
+/**
+ * Model recorded on a seeded LLM-as-judge rule. Any name the backend accepts
+ * will do — the rule is never scored by these specs — but a real one keeps the
+ * edit dialog's model picker showing a value rather than a blank.
+ */
+const SEEDED_JUDGE_MODEL = 'gpt-4o';
+
+/** The shape `createLlmJudgeRule` needs to seed a trace-scope LLM-as-judge rule. */
+export interface LlmJudgeRuleSeed {
+  name: string;
+  projectId: string;
+  /**
+   * Content of the rule's single USER message. Its `{{tags}}` are what the edit
+   * dialog re-parses into the Variable-mapping list, so it must name every
+   * variable in `variables`.
+   */
+  prompt: string;
+  /** Variable name → extraction path, written verbatim — reserved sentinels included. */
+  variables: Record<string, string>;
+  /** Overrides {@link SEEDED_JUDGE_MODEL}. */
+  model?: string;
+}
+
 export interface AnnotationQueueReviewerRef {
   username: string;
   itemsScored: number;
@@ -348,6 +371,25 @@ export function makeBackendClient(apiKey: string | null = null) {
       );
     }
     return rate;
+  };
+
+  // Hoisted so createLlmJudgeRule can recover the id of the rule it just
+  // created without depending on the not-yet-constructed return object.
+  const localListAutomationRules = async (
+    projectId: string,
+  ): Promise<AutomationRuleRef[]> => {
+    const page = await opik.api.automationRuleEvaluators.findEvaluators({
+      projectId,
+      size: 500,
+    });
+    const content = page.content ?? [];
+    return content.map((r) => ({
+      id: String(r.id),
+      name: r.name,
+      projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
+      enabled: r.enabled ?? true,
+      samplingRate: requireSamplingRate(r.samplingRate, r.name),
+    }));
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -829,19 +871,95 @@ export function makeBackendClient(apiKey: string | null = null) {
       return waitForTraceScoresSettled(localGetTrace, traceId, opts);
     },
 
-    async listAutomationRulesForProject(projectId: string): Promise<AutomationRuleRef[]> {
-      const page = await opik.api.automationRuleEvaluators.findEvaluators({
-        projectId,
-        size: 500,
+    listAutomationRulesForProject: localListAutomationRules,
+
+    /**
+     * Create a trace-scope LLM-as-judge rule with an exact `variables` map.
+     *
+     * Seeding through the API rather than the dialog is not just faster here —
+     * it is the only way to express some of these maps. Under the agentic-tools
+     * default the dialog hides a reserved row whose value equals its sentinel,
+     * so a custom `spans` path has no input to type into; this endpoint still
+     * accepts one, which is exactly the round-trip worth pinning.
+     *
+     * The model is stored but never invoked: these specs assert on
+     * configuration, not on a score, so an install with zero provider keys
+     * still exercises them fully.
+     */
+    async createLlmJudgeRule(seed: LlmJudgeRuleSeed): Promise<AutomationRuleRef> {
+      await opik.api.automationRuleEvaluators.createAutomationRuleEvaluator({
+        type: 'llm_as_judge',
+        action: 'evaluator',
+        name: seed.name,
+        projectId: seed.projectId,
+        projectIds: [seed.projectId],
+        enabled: true,
+        samplingRate: 1,
+        code: {
+          model: { name: seed.model ?? SEEDED_JUDGE_MODEL, temperature: 0 },
+          messages: [{ role: 'USER', content: seed.prompt }],
+          variables: seed.variables,
+          schema: [
+            {
+              name: 'Correctness',
+              type: 'BOOLEAN',
+              description: 'Seeded score definition; never evaluated.',
+            },
+          ],
+        },
       });
-      const content = page.content ?? [];
-      return content.map((r) => ({
-        id: String(r.id),
-        name: r.name,
-        projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
-        enabled: r.enabled ?? true,
-        samplingRate: requireSamplingRate(r.samplingRate, r.name),
-      }));
+
+      // The create call answers 204 with no body, so the id has to be recovered
+      // by listing. Require a unique match rather than taking the first: a
+      // second rule sharing the name would otherwise be asserted against
+      // silently.
+      const matches = (await localListAutomationRules(seed.projectId)).filter(
+        (r) => r.name === seed.name,
+      );
+      if (matches.length !== 1) {
+        throw new Error(
+          `createLlmJudgeRule: expected exactly one rule named '${seed.name}' under ` +
+            `project ${seed.projectId}, found ${matches.length}.`,
+        );
+      }
+      return matches[0];
+    },
+
+    /**
+     * The `code.variables` map of an LLM-as-judge rule, as the backend stores it.
+     *
+     * `code` is optional on the generated read type, and a rule of another type
+     * carries a different one — both throw rather than resolving to `{}`. An
+     * empty map is indistinguishable from "the mapping was cleared", which is
+     * the precise regression these specs exist to catch.
+     */
+    async getLlmJudgeRuleVariables(ruleId: string): Promise<Record<string, string>> {
+      const rule = await opik.api.automationRuleEvaluators.getEvaluatorById(ruleId);
+      if (rule.type !== 'llm_as_judge' || !rule.code) {
+        throw new Error(
+          `getLlmJudgeRuleVariables: rule ${ruleId} is '${rule.type}' with ` +
+            `code=${rule.code === undefined ? 'absent' : 'present'} — ` +
+            'no LLM-as-judge variable mapping to read.',
+        );
+      }
+      return rule.code.variables;
+    },
+
+    /**
+     * `GET /v1/private/toggles/` — the deployment's feature-toggle defaults, as
+     * the frontend reads them on boot.
+     *
+     * Returned as the raw record so a caller can assert on which KEYS the
+     * deployment serves: a toggle that has been renamed away and a toggle
+     * serving `false` are different answers, and any shaped type here would
+     * collapse them into one.
+     */
+    async getFeatureToggles(): Promise<Record<string, unknown>> {
+      const { status, message, json } = await rawFetch('GET', '/v1/private/toggles/');
+      if (status !== 200 || json === null || typeof json !== 'object') {
+        throw new Error(`getFeatureToggles: ${status} ${message}`);
+      }
+      return json as Record<string, unknown>;
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {

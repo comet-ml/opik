@@ -49,6 +49,19 @@ class EqualsRule(base_metric.BaseMetric):
         return score_result.ScoreResult(value=value, name=self.name)`;
 }
 
+/**
+ * Placeholder every Variable-mapping path input carries
+ * (`TracesOrSpansPathsAutocomplete`, worded by the rule's scope). It is the
+ * only stable handle on those rows: they render no data-testid, and their tags
+ * carry only the variable name.
+ */
+const VARIABLE_PATH_PLACEHOLDER = /^Select a key from recent (trace|span)$/;
+
+/** Escape a variable name for interpolation into an anchored `hasText` regex. */
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export class OnlineEvaluationPage {
   private projectId: string | null = null;
 
@@ -238,6 +251,174 @@ export class OnlineEvaluationPage {
       await this.dialog.waitFor({ state: 'hidden' });
 
       await expect(this.ruleStatusCell(name, enabled ? 'Enabled' : 'Disabled')).toBeVisible();
+    });
+  }
+
+  /**
+   * Open a rule's edit dialog through the row's kebab menu, leaving every field
+   * as persisted. `setRuleEnabledByName` drives the same route but also flips
+   * the switch and submits; this is the read-only door for specs that assert on
+   * how the dialog hydrates.
+   */
+  async openEditRuleDialog(name: string): Promise<void> {
+    return test.step(`open the edit dialog for rule "${name}"`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      await this.dialog.waitFor({ state: 'visible' });
+    });
+  }
+
+  /** Dismiss the add/edit dialog without saving. */
+  async cancelDialog(): Promise<void> {
+    return test.step('cancel the add/edit rule dialog', async () => {
+      await this.dialog.getByRole('button', { name: 'Cancel' }).click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /** Submit the add/edit dialog and wait for it to close. */
+  async submitDialog(): Promise<void> {
+    return test.step('submit the add/edit rule dialog', async () => {
+      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /** The Scope select in the add/edit dialog (disabled once a rule exists). */
+  get scopeSelect(): Locator {
+    return this.dialog.getByRole('combobox').filter({ hasText: /^(Trace|Thread|Span)$/ });
+  }
+
+  /**
+   * Change the rule's Scope.
+   *
+   * `expectResetConfirm` is required rather than sniffed, because the dialog
+   * only raises "You're about to lose your changes" when the judge details are
+   * dirty. Probing for the confirm with an `isVisible()` check would race the
+   * dialog's mount and silently pick the wrong branch; naming the expectation
+   * makes a change in that rule fail here instead.
+   *
+   * Confirming RESETS the judge details to the new scope's defaults — prompt,
+   * model and variable mapping included — so a caller that needs a specific
+   * prompt on the new scope has to set it again afterwards.
+   */
+  async selectScope(
+    scope: 'Trace' | 'Thread' | 'Span',
+    { expectResetConfirm }: { expectResetConfirm: boolean },
+  ): Promise<void> {
+    return test.step(`select the ${scope} scope`, async () => {
+      await this.scopeSelect.click();
+      await this.page.getByRole('option', { name: scope, exact: true }).click();
+
+      if (expectResetConfirm) {
+        const confirm = this.page.getByRole('dialog').filter({
+          has: this.page.getByRole('heading', { name: /about to lose your changes/ }),
+        });
+        await confirm.waitFor({ state: 'visible' });
+        await confirm.getByRole('button', { name: 'Reset and continue' }).click();
+        await confirm.waitFor({ state: 'hidden' });
+      }
+
+      await expect(this.scopeSelect).toHaveText(scope);
+    });
+  }
+
+  /**
+   * Replace the LLM-judge prompt with `prompt`.
+   *
+   * The text is inserted with `insertText` rather than typed key-by-key:
+   * CodeMirror's default bracket-closing would turn a typed `{` into `{}`, and
+   * every variable this spec cares about is written `{{name}}`. `insertText`
+   * dispatches the text as a single input event, so what lands is what was
+   * asked for.
+   *
+   * Asserts a single message editor first — the canned templates are
+   * one-message, and a two-message template would otherwise have this silently
+   * edit whichever came first.
+   */
+  async setLLMJudgePrompt(prompt: string): Promise<void> {
+    return test.step('replace the LLM-judge prompt', async () => {
+      const editor = this.dialog.getByTestId('playground-message-editor');
+      await expect(editor, 'the judge prompt is a single message').toHaveCount(1);
+
+      const content = editor.locator('.cm-content');
+      await content.click();
+      await this.page.keyboard.press('ControlOrMeta+A');
+      await this.page.keyboard.press('Delete');
+      await this.page.keyboard.insertText(prompt);
+      await expect(content).toHaveText(prompt);
+    });
+  }
+
+  /**
+   * The "Variable mapping (N)" header of the add/edit dialog, present only on
+   * trace and span scope — thread-scope rules take no variables and render no
+   * section at all.
+   */
+  get variableMappingHeader(): Locator {
+    return this.dialog.getByText(/^Variable mapping \(\d+\)$/);
+  }
+
+  /**
+   * One Variable-mapping row, addressed by the variable's name.
+   *
+   * The row carries no data-testid, so it is identified by what it contains: a
+   * path input — nothing else in the dialog offers "a key from a recent
+   * trace/span" — beside a tag whose whole text is the variable name. The name
+   * match is anchored, so `span` cannot resolve the `spans` row.
+   *
+   * The trailing `hasNot` keeps only the INNERMOST such div. Without it the
+   * row's ancestors (the row list, the section) match too whenever they wrap a
+   * single row, since they contain the same input and the same text — an
+   * ambiguity between an element and its own ancestor, which no amount of
+   * anchoring the name fixes.
+   *
+   * A `data-testid` on the row would be better and belongs in the frontend.
+   * It is deliberately not added here: these specs are verified against an
+   * already-deployed build, which a test-only markup change cannot reach.
+   */
+  variableMappingRow(name: string): Locator {
+    const rowOrAncestor = (root: Page | Locator): Locator =>
+      root
+        .locator('div')
+        .filter({ has: this.page.getByPlaceholder(VARIABLE_PATH_PLACEHOLDER) })
+        .filter({ hasText: new RegExp(`^${escapeForRegExp(name)}$`) });
+
+    return rowOrAncestor(this.dialog).filter({ hasNot: rowOrAncestor(this.page) });
+  }
+
+  /** The extraction-path input inside a Variable-mapping row. */
+  variableMappingInput(name: string): Locator {
+    return this.variableMappingRow(name).getByPlaceholder(VARIABLE_PATH_PLACEHOLDER);
+  }
+
+  /** Every rendered Variable-mapping path input — one per visible row. */
+  private get variableMappingInputs(): Locator {
+    return this.dialog.getByPlaceholder(VARIABLE_PATH_PLACEHOLDER);
+  }
+
+  /**
+   * Assert the dialog renders exactly the `names` Variable-mapping rows, and no
+   * others.
+   *
+   * All three checks earn their place. The header is the frontend's own tally
+   * of the filtered list; the input count is the rows actually rendered (they
+   * agree only if the list and its header were derived from the same array);
+   * and the per-name lookups prove WHICH rows survived the filter, each
+   * asserting `toHaveCount(1)` so an ambiguous match fails loudly rather than
+   * quietly testing the wrong row.
+   */
+  async expectVariableMappingRows(names: string[]): Promise<void> {
+    return test.step(`expect variable mapping rows [${names.join(', ')}]`, async () => {
+      await expect(this.variableMappingHeader).toHaveText(
+        `Variable mapping (${names.length})`,
+      );
+      await expect(this.variableMappingInputs).toHaveCount(names.length);
+      for (const name of names) {
+        await expect(this.variableMappingRow(name), `row "${name}" is rendered`).toHaveCount(1);
+      }
     });
   }
 

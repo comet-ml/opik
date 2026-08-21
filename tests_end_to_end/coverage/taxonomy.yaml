@@ -636,6 +636,8 @@ areas:
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-reserved-variables.spec.ts
+      - online-evaluation/online-evaluation-edit-rule-variables.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -643,11 +645,11 @@ areas:
       python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
       list-rules:              { covered: false }
-      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
+      rule-scope-thread-span:  { covered: true,  tier: t2-cuj, note: "scope-specific reserved judge variables; thread scope renders no variable mapping" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch; binomial band 15-85%" }
       clone-rule:              { covered: false }
-      edit-rule:               { covered: false }
+      edit-rule:               { covered: true,  tier: t2-cuj, note: "re-save round-trip preserves the variable mapping, custom spans override included" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
       automation-logs:         { covered: false }
