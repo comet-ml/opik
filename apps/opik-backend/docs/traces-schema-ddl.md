@@ -74,6 +74,23 @@ Plus one obligation no table-to-table comparison can infer:
 > A **derived** (`MATERIALIZED`) column must **not** be added there — the destination recomputes it, and naming a
 > materialized column in an `INSERT` is an error.
 
+**Adding the name to the backfill list is not always enough.** `INSERT ... SELECT` copies by position and converts by
+assignment, so a name-for-name copy only works when the source value is *representable* in the destination column. CI
+checks that the names line up; it cannot tell you the values survive. Two cases need an explicit conversion in the
+`SELECT`, not just an entry in the column list:
+
+| Source → destination | What a bare copy does | What to write |
+|---|---|---|
+| `Nullable(T)` → non-nullable `T` | fails on the first NULL row | `coalesce(col, <sentinel>) AS col` — as `end_time` and `ttft` already do |
+| narrowing precision or width (`DateTime64(9)` → `DateTime64(6)`, `Int64` → `Int32`, a shorter `FixedString`) | silently truncates or overflows | convert deliberately, and confirm the loss is intended |
+
+The successor is *already* narrower than `traces` in both of these ways — microsecond rather than nanosecond timestamps,
+sentinels rather than `Nullable` — which is exactly why the shipped backfill carries `coalesce(...)` wrappers instead of
+bare column names. A new preserved column whose type differs between the two tables needs the same treatment.
+
+If a change would need a conversion that loses data, that is a design decision rather than a migration detail: raise it
+instead of encoding it in a `SELECT`.
+
 ## The pattern
 
 Ship the change as **two complementary changesets** guarded on the same runtime fact — whether `traces_local` exists —
@@ -150,7 +167,7 @@ not, and no later migration will add it. Land trace schema changes before the cu
 |---|---|
 | `TracesSchemaParityPreCutoverTest` | applies the real changelog as a fresh install does, then asserts three-way parity: `traces` ≅ the `traces_local_v2` shadow ≅ the backfill column list |
 | `TracesSchemaParityPostCutoverTest` | stops the changelog after `000114`, splices in the runbook's `EXCHANGE` + wrap, resumes — so **your** migration runs on the post-cutover topology — then asserts the wrapper exposes exactly the shard's columns |
-| `TracesMigrationPreconditionLintTest` | a fast, container-free check that a `traces`-mutating migration added after `000114` carries complementary preconditions |
+| `TracesMigrationPreconditionLintTest` | a fast, container-free check that a `traces`-mutating migration added **strictly after** `000114` carries the guard **on the mutating changeset itself**, and ships **both** complementary branches |
 | `TraceMutationRoutingArchTest` / `TraceMutationSqlRoutingTest` | runtime DAO mutations resolve their table through `TraceDAOImpl#tracesMutationTable()` and never name `traces` / `traces_local` directly |
 
 Each gate also carries negative tests that inject the drift a careless migration produces, so no assertion can quietly
