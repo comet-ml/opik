@@ -61,6 +61,22 @@ The `configure` methods will prompt you for the necessary information and save i
 opik configure --yes
 ```
 
+### Connecting your AI coding assistant
+
+At the end of setup, `opik configure` offers to register [Opik's MCP server](/mcp-server) with the AI hosts it finds on your machine, so your assistant can read traces and log scores directly from the chat.
+
+Pass `--install-mcp` to skip the prompt and register it. Unlike the interactive prompt, this flag works without a terminal, which is what makes it usable from a Dockerfile, a dotfiles script, or a coding agent:
+
+```bash
+opik configure --install-mcp
+```
+
+<Note>
+`--yes` on its own deliberately does **not** register the MCP server: it edits configuration files belonging to other tools, so it needs to be asked for explicitly. Combine the two (`opik configure --yes --install-mcp`) for a fully unattended setup, or use `--no-install-mcp` to skip the prompt entirely.
+</Note>
+
+To register the server without re-running the whole configuration, use `opik mcp configure` — see [Opik's MCP server](/mcp-server) for the `--host` flag and per-host instructions.
+
 ### TypeScript SDK
 
 For the TypeScript SDK, configuration is done through environment variables, constructor options, or configuration files.
