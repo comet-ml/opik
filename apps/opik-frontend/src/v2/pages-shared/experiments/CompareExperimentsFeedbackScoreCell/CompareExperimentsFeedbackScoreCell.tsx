@@ -39,12 +39,7 @@ const CompareExperimentsFeedbackScoreCellContent = ({
   const { rowHeight = ROW_HEIGHT.small } = (context.table.options.meta ??
     {}) as TableMeta<ExperimentsCompare>;
 
-  // a split cell shows several experiments at once, so there is no single
-  // trace to write the score back to
-  const isUserFeedbackColumn =
-    editable &&
-    Boolean(onValueChange) &&
-    experimentCompare.experiment_items.length === 1;
+  const canEditUserFeedback = editable && Boolean(onValueChange);
   const isCompact =
     rowHeight === ROW_HEIGHT.small || rowHeight === ROW_HEIGHT.medium;
 
@@ -56,7 +51,7 @@ const CompareExperimentsFeedbackScoreCellContent = ({
     if (!feedbackScore) {
       return (
         <div className="flex items-center gap-1">
-          {isUserFeedbackColumn && onValueChange && (
+          {canEditUserFeedback && onValueChange && (
             <FeedbackScoreEditDropdown
               feedbackScore={feedbackScore}
               onValueChange={onValueChange}
@@ -91,13 +86,13 @@ const CompareExperimentsFeedbackScoreCellContent = ({
           isCompact
             ? "h-4 items-center"
             : "flex-col items-end justify-start overflow-hidden",
-          isUserFeedbackColumn && "group",
+          canEditUserFeedback && "group",
         )}
       >
         <FeedbackScoreCellValue
           feedbackScore={feedbackScore}
           color={color}
-          isUserFeedbackColumn={isUserFeedbackColumn}
+          isUserFeedbackColumn={canEditUserFeedback}
           onValueChange={onValueChange}
           size={isCompact ? "sm" : "md"}
           footer={
@@ -142,16 +137,19 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
   <CompareExperimentsFeedbackScoreCellContent context={context} />
 );
 
-export const EditableCompareExperimentsFeedbackScoreCell: React.FC<
-  CellContext<ExperimentsCompare, unknown>
-> = (context) => {
+const EditableCell = ({
+  context,
+  traceId,
+}: {
+  context: CellContext<ExperimentsCompare, unknown>;
+  traceId: string;
+}) => {
   const { custom } = context.column.columnDef.meta ?? {};
   const { scoreName } = (custom ?? {}) as CustomMeta & FeedbackScoreCustomMeta;
   const experimentItem = context.row.original.experiment_items[0];
-  const traceId = experimentItem?.trace_id;
 
   const { handleValueChange } = useFeedbackScoreInlineEdit({
-    id: traceId!, // TODO: handle case where traceId is not found
+    id: traceId,
     feedbackScore: experimentItem?.feedback_scores?.find(
       (f) => f.name === scoreName,
     ),
@@ -163,6 +161,22 @@ export const EditableCompareExperimentsFeedbackScoreCell: React.FC<
       editable
       onValueChange={handleValueChange}
     />
+  );
+};
+
+// A split cell shows several experiments at once, and an experiment item can
+// carry no trace, so in both cases there is nothing to write the score back to.
+export const EditableCompareExperimentsFeedbackScoreCell: React.FC<
+  CellContext<ExperimentsCompare, unknown>
+> = (context) => {
+  const experimentItems = context.row.original.experiment_items;
+  const traceId =
+    experimentItems.length === 1 ? experimentItems[0]?.trace_id : undefined;
+
+  return traceId ? (
+    <EditableCell context={context} traceId={traceId} />
+  ) : (
+    <CompareExperimentsFeedbackScoreCellContent context={context} />
   );
 };
 
