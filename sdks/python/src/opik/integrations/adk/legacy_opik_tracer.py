@@ -26,6 +26,7 @@ from .patchers import (
     llm_response_wrapper,
 )
 from .graph import mermaid_graph_builder
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class LegacyOpikTracer:
         project_name: Optional[str] = None,
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
     ):
+        analytics.track_event("integration", "adk")
         LOGGER.warning(
             "Legacy OpikTracer for google-adk < 1.3.0 is being used. We recommend upgrading to the recent version to automatically get the best experience from Opik integration."
         )
