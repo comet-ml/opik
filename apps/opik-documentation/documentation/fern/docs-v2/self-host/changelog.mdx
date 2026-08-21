@@ -13,6 +13,23 @@ This page only lists breaking and critical changes that affect self-hosted Opik 
   If you are upgrading from Opik 1.x to Opik 2.x, follow the [Opik 2.0 migration guide](/self-host/v1-to-v2-migration).
 </Tip>
 
+## Release 2.2.36, 2026-08-21
+
+### Critical Change
+
+The backend now verifies at startup that `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` matches the actual shape of the `traces` table in ClickHouse, and **fails its readiness probe** if the two disagree. A mismatch makes every trace deletion fail, so the backend now reports that as a failed readiness check instead of accepting traffic and erroring on the first delete.
+
+**No action is needed on a default install.** The setting ships as `false` and the migrated `traces` table is a `ReplicatedMergeTree`, which is a match — the check passes and nothing changes.
+
+If you have turned the setting on, or converted `traces` into a `Distributed` wrapper, the two have to agree:
+
+| Setting | Required `traces` engine |
+| --- | --- |
+| `false` (the default) | `MergeTree` or `ReplicatedMergeTree` |
+| `true` | `Distributed`, with a `traces_local` table present |
+
+The failing check names both the setting and the engine it actually found. To fix it, set the flag to match the table and restart the backend; readiness returns on the next probe. See [Backend Not Ready: `clickhouse-traces-topology`](/self-host/troubleshooting#backend-not-ready-clickhouse-traces-topology) for the full procedure.
+
 ## Release 2.0.3 (Opik 2.0), 2026-04-20
 
 ### Backward Incompatible Change
