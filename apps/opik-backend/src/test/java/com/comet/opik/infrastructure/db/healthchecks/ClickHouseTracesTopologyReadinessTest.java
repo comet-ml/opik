@@ -70,6 +70,7 @@ class ClickHouseTracesTopologyReadinessTest {
 
     private static final String HEALTH_CHECK_NAME = "clickhouse-traces-topology";
     private static final String READY = "READY";
+    private static final String DISTRIBUTED_ENGINE = "Distributed";
 
     /**
      * Deadline for the directly constructed probe. Not the app's configured {@code healthCheckTimeout}: this one only
@@ -129,14 +130,23 @@ class ClickHouseTracesTopologyReadinessTest {
     /**
      * One method rather than two: the assertion is about the transition, and the wrap is irreversible, so the
      * before/after states cannot be independent tests over the same container.
+     *
+     * <p>The pre-wrap state is <b>read, not assumed</b>. Today the wrap is operator tooling
+     * ({@code data-migrations/traces-local-v2-cutover}), outside the {@code migrations/} directory the analytics
+     * changelog includes, so this suite starts on a {@code ReplicatedMergeTree} {@code traces} and there is a real
+     * transition to drive. The day the wrap lands as a regular migration, it starts already wrapped — and asserting
+     * "healthy first" would then fail on a correctly behaving probe. So the healthy half runs only when there is
+     * something to transition from; the mismatch half, which is the point of the test, always runs.
      */
     @Test
     @Order(1)
     void readinessFlipsToUnhealthyWhenTheWrapIsAppliedWhileTheFlagIsOff() {
-        awaitHealthCheck(true);
-        awaitReadinessProbe(HttpStatus.SC_OK);
+        if (!isWrapped()) {
+            awaitHealthCheck(true);
+            awaitReadinessProbe(HttpStatus.SC_OK);
 
-        applyDistributedWrap();
+            applyDistributedWrap();
+        }
 
         awaitHealthCheck(false);
         awaitReadinessProbe(HttpStatus.SC_SERVICE_UNAVAILABLE);
@@ -146,14 +156,17 @@ class ClickHouseTracesTopologyReadinessTest {
      * The intended post-cutover steady state: the same wrapped {@code traces}, read by a probe whose flag is on. The
      * app under test cannot supply it — {@code tracesDistributedWrapEnabled} is read once in the constructor — so the
      * probe is built directly over the app's live ClickHouse client. Ordered after
-     * {@link #readinessFlipsToUnhealthyWhenTheWrapIsAppliedWhileTheFlagIsOff}, which is what applies the wrap — the
-     * only place in this suite where execution order carries meaning, hence the explicit {@code @Order}. The engine
-     * assertion up front fails loudly rather than silently passing if that ever stops holding.
+     * {@link #readinessFlipsToUnhealthyWhenTheWrapIsAppliedWhileTheFlagIsOff} so that one still gets the pristine
+     * pre-wrap state to transition from — the only place in this suite where execution order carries meaning, hence
+     * the explicit {@code @Order}. It does not depend on that ordering to pass, though: it wraps idempotently and then
+     * asserts the topology it needs, so it is correct whichever way it is reached.
      */
     @Test
     @Order(2)
     void probeWithTheFlagOnIsHealthyOverTheWrappedTopology() {
-        assertThat(tracesEngine()).isEqualTo("Distributed");
+        applyDistributedWrap();
+
+        assertThat(tracesEngine()).isEqualTo(DISTRIBUTED_ENGINE);
 
         var healthCheck = new ClickHouseTracesTopologyHealthCheck(clickHouseClient, PROBE_TIMEOUT,
                 DatabaseAnalyticsDataModelConfig.builder().tracesDistributedWrapEnabled(true).build());
@@ -210,8 +223,16 @@ class ClickHouseTracesTopologyReadinessTest {
      * inline the same way by {@code TracesLocalV2CutoverTest.wrapInDistributed} and
      * {@code TracesDistributedWrapMutationTest.applyDistributedWrap}): build the wrapper under a temp name, then one
      * atomic multi-target {@code RENAME} rotates the data to {@code traces_local} and the wrapper into {@code traces}.
+     *
+     * <p>Idempotent: a {@code traces} that is already {@code Distributed} is left alone. Re-running the block over one
+     * would fail outright — {@code CREATE TABLE traces_dist} on the second pass, and the {@code RENAME} would rotate a
+     * wrapper on top of a wrapper — so the guard is what keeps this suite correct if the wrap ever becomes a regular
+     * migration and the container arrives already cut over.
      */
     private void applyDistributedWrap() {
+        if (isWrapped()) {
+            return;
+        }
         execute("""
                 CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
                 ENGINE = Distributed('{cluster}', '%s', 'traces_local', sipHash64(project_id))
@@ -222,6 +243,10 @@ class ClickHouseTracesTopologyReadinessTest {
                     traces_dist TO traces
                     ON CLUSTER '{cluster}'
                 """);
+    }
+
+    private boolean isWrapped() {
+        return DISTRIBUTED_ENGINE.equals(tracesEngine());
     }
 
     private String tracesEngine() {
