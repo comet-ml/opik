@@ -14,6 +14,7 @@ import {
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
 } from './poll-optimization-status';
+import { waitForSpansByName, type WaitForSpansOpts } from './wait-for-spans';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
@@ -88,6 +89,43 @@ export interface TraceDetail {
    * collapse them.
    */
   input: Record<string, unknown> | null;
+}
+
+/**
+ * One row of `GET /v1/private/spans` — the shape the Logs > Spans tab renders.
+ *
+ * `model`, `provider` and `totalEstimatedCost` are the fields OTel ingestion
+ * derives rather than copies: an unmapped provider spelling reaches the price
+ * table as-is, matches no row, and lands here as a present span with a null
+ * cost. Null is therefore a real answer from this endpoint and must not be
+ * collapsed to 0 — that is exactly the silent wrongness these reads exist to
+ * catch.
+ */
+export interface SpanRowRef {
+  id: string;
+  traceId: string;
+  name: string;
+  type: string | null;
+  model: string | null;
+  provider: string | null;
+  totalEstimatedCost: number | null;
+  usage: Record<string, number> | null;
+}
+
+/**
+ * One span to push through the OTLP ingestion endpoint.
+ *
+ * `traceId`/`spanId` are the OTel wire ids (32 and 16 hex chars). They are NOT
+ * the ids the span ends up stored under: the backend derives a UUIDv7 from the
+ * OTel id plus the trace timestamp, so a caller has to look the span back up by
+ * name rather than predict its id.
+ */
+export interface OtelSpanSeed {
+  traceId: string;
+  spanId: string;
+  name: string;
+  /** OTel attributes. Numbers are sent as OTLP `intValue`, strings as `stringValue`. */
+  attributes: Record<string, string | number>;
 }
 
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
@@ -257,6 +295,34 @@ export function makeBackendClient(apiKey: string | null = null) {
       if (isNotFoundError(err)) return null;
       throw err;
     }
+  };
+
+  // Hoisted so waitForOtelSpansByName (a free function) can call it without
+  // depending on the not-yet-constructed return object.
+  const localListSpans = async (args: {
+    projectId: string;
+    size?: number;
+  }): Promise<{ total: number; spans: SpanRowRef[] }> => {
+    const page = await opik.api.spans.getSpansByProject({
+      projectId: args.projectId,
+      size: args.size ?? 200,
+      page: 1,
+    });
+    return {
+      total: Number(page.total ?? 0),
+      spans: (page.content ?? []).map((s) => ({
+        id: String(s.id ?? ''),
+        traceId: String(s.traceId ?? ''),
+        name: s.name ?? '',
+        type: s.type ? String(s.type) : null,
+        model: s.model ?? null,
+        provider: s.provider ?? null,
+        // null and 0 are different answers here: an unpriced span carries no
+        // cost at all, which is the OPIK-7717 symptom.
+        totalEstimatedCost: s.totalEstimatedCost ?? null,
+        usage: s.usage ?? null,
+      })),
+    };
   };
 
   return {
@@ -528,6 +594,97 @@ export function makeBackendClient(apiKey: string | null = null) {
     },
 
     getTrace: localGetTrace,
+
+    listSpans: localListSpans,
+
+    /**
+     * Push a batch of spans through the OTLP/JSON ingestion endpoint,
+     * `POST /v1/private/otel/v1/traces`, into `projectName`.
+     *
+     * A raw fetch rather than an SDK call, deliberately: OTLP ingestion has no
+     * SDK surface at all — it is the wire protocol third-party instrumentation
+     * speaks, and the request body is an `ExportTraceServiceRequest`, not an
+     * Opik entity. Everything the mapper derives (span type, provider alias,
+     * price lookup) happens only on this path, so seeding the same span through
+     * `opik.api.spans` would exercise none of it. `getProjectStats` above is the
+     * existing precedent for a raw call where the SDK has no equivalent.
+     *
+     * Spans are sent in one request so a whole scenario lands atomically. The
+     * response is 200 with an empty body and the write is asynchronous — poll
+     * `waitForSpansByName` before reading anything back.
+     */
+    async ingestOtelSpans(args: {
+      projectName: string;
+      spans: OtelSpanSeed[];
+      /** Wall-clock start stamped on every span. Defaults to now. */
+      startTime?: Date;
+    }): Promise<void> {
+      const startNanos = BigInt(Math.trunc((args.startTime ?? new Date()).getTime())) * 1_000_000n;
+      const toAttribute = (key: string, value: string | number) => ({
+        key,
+        // OTLP/JSON encodes 64-bit ints as strings; the token-usage attributes
+        // are the ones that must arrive as ints or the price lookup sees none.
+        value:
+          typeof value === 'number' ? { intValue: String(value) } : { stringValue: value },
+      });
+
+      const body = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [toAttribute('service.name', 'opik-e2e')],
+            },
+            scopeSpans: [
+              {
+                scope: { name: 'opik-e2e' },
+                spans: args.spans.map((span) => ({
+                  traceId: span.traceId,
+                  spanId: span.spanId,
+                  name: span.name,
+                  // SPAN_KIND_CLIENT — what a GenAI instrumentation emits for a
+                  // call out to a model provider.
+                  kind: 3,
+                  startTimeUnixNano: String(startNanos),
+                  endTimeUnixNano: String(startNanos + 1_000_000_000n),
+                  attributes: Object.entries(span.attributes).map(([k, v]) =>
+                    toAttribute(k, v),
+                  ),
+                })),
+              },
+            ],
+          },
+        ],
+      };
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+        // The endpoint reads the target project from this header (RequestContext
+        // .PROJECT_NAME) and silently falls back to the default project without it.
+        projectName: args.projectName,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      const res = await fetch(`${env.apiBaseUrl}/v1/private/otel/v1/traces`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        throw new Error(
+          `POST /v1/private/otel/v1/traces -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+        );
+      }
+    },
+
+    async waitForSpansByName(
+      projectId: string,
+      names: string[],
+      opts: WaitForSpansOpts = {},
+    ): Promise<SpanRowRef[]> {
+      return waitForSpansByName(localListSpans, projectId, names, opts);
+    },
 
     async deleteTraces(ids: string[]): Promise<void> {
       await opik.api.traces.deleteTraces({ ids });

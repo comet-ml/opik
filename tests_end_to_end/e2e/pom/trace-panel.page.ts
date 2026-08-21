@@ -73,6 +73,22 @@ export class TracePanelPage {
     });
   }
 
+  /**
+   * Wait for a specific span to be the one the panel is inspecting.
+   *
+   * Needed when the panel was opened straight at `?trace=…&span=…`: it mounts
+   * on the trace first and swaps to the span a beat later, so a chip read taken
+   * immediately can be the trace's header rather than the span's.
+   */
+  async waitForSpanSelected(spanId: string): Promise<void> {
+    return test.step(`Wait for span ${spanId} to be selected`, async () => {
+      await this.page.waitForURL((url) => url.searchParams.get('span') === spanId);
+      await this.page
+        .getByTestId('data-viewer-created-at')
+        .waitFor({ state: 'visible', timeout: 30_000 });
+    });
+  }
+
   /** The provider/model chip shown in the inspect header for an LLM span. */
   get spanModelChip(): Locator {
     return this.root.getByTestId('data-viewer-provider-model');

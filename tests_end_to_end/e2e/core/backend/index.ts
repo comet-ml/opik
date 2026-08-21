@@ -11,6 +11,8 @@ export {
   type TestSuiteItemRef,
   type FeedbackScoreRef,
   type TraceDetail,
+  type SpanRowRef,
+  type OtelSpanSeed,
   type AutomationRuleRef,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
@@ -25,3 +27,4 @@ export {
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
 export { uuid7 } from './uuid7';
 export { type WaitForScoresSettledOpts } from './wait-for-scores-settled';
+export { type WaitForSpansOpts } from './wait-for-spans';

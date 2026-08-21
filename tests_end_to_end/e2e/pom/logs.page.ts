@@ -357,13 +357,22 @@ export class LogsPage {
   }
 
   /**
-   * Apply a single-value filter (tags, name, error type, ...): open the chip,
-   * type the value, then close so the debounced change commits.
+   * Apply a single-value filter (tags, name, provider, error type, ...): open
+   * the chip, type the value, flush it, then close.
+   *
+   * The blur is what commits the value, and it is not optional. Every value
+   * cell wraps a `DebounceInput` whose pending callback is cancelled on
+   * unmount, so closing the popover within the 300ms debounce window discards
+   * the typed value and no filter is applied at all. Blur flushes the debounce
+   * (and, on the autocomplete cells, is what commits the draft) before Escape
+   * can tear the popover down.
    */
   async applyFilter(chipId: string, value: string, rowIndex = 0): Promise<void> {
     return test.step(`Filter by ${chipId} = "${value}"`, async () => {
       await this.openFilterChip(chipId);
-      await this.filterChipRow(rowIndex).getByTestId('filter-chip-value-input').fill(value);
+      const input = this.filterChipRow(rowIndex).getByTestId('filter-chip-value-input');
+      await input.fill(value);
+      await input.blur();
       await this.closeFilterChip();
     });
   }
@@ -414,6 +423,83 @@ export class LogsPage {
     return test.step('Clear all filters', async () => {
       await this.clearAllFiltersButton.click();
       await this.clearAllFiltersButton.waitFor({ state: 'hidden' });
+    });
+  }
+
+  // --- Spans tab ---
+
+  /** The Threads/Traces/Spans tab toggle for "Spans". */
+  get spansTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Spans' });
+  }
+
+  /**
+   * Switch the open Logs view to the Spans tab by clicking the toggle, and wait
+   * for the URL to record it.
+   *
+   * Deliberately a click rather than a `goto` with `logsType=spans`: the toggle
+   * is the capability under test, and a URL-only route would still pass if the
+   * control were broken or gone.
+   */
+  async switchToSpans(): Promise<void> {
+    return test.step('Switch the Logs view to Spans', async () => {
+      await this.spansTab.click();
+      await this.page.waitForURL((url) => url.searchParams.get('logsType') === 'spans');
+    });
+  }
+
+  /**
+   * Rows of the Spans tab table. The Spans and Traces tabs render the same
+   * shared DataTable, so the hook is the same `data-row-id` — but here it
+   * carries the SPAN id, and a spec counting spans should not read `traceRows`
+   * to do it.
+   */
+  get spanRows(): Locator {
+    return this.traceRows;
+  }
+
+  /** A span row on the Spans tab, keyed by span id. */
+  spanRow(spanId: string): Locator {
+    return this.traceRow(spanId);
+  }
+
+  /**
+   * A cell of a span's row, addressed by the shared DataTable's
+   * `data-cell-id="<rowId>_<columnId>"`. Column order is user-configurable and
+   * persisted, so a positional lookup would break the moment anyone reorders.
+   */
+  spanCell(spanId: string, columnId: string): Locator {
+    return this.page.locator(`[data-cell-id="${spanId}_${columnId}"]`);
+  }
+
+  /**
+   * Wait for the Spans table to be ready. When a spanId is given, wait for that
+   * specific row — ingestion is eventually consistent, so gating on "any row"
+   * can pass before the span under test has been indexed.
+   */
+  async waitForSpansReady(spanId?: string): Promise<void> {
+    return test.step('Wait for Spans table ready', async () => {
+      const target = spanId ? this.spanRow(spanId) : this.spanRows.first();
+      await target.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Open a span's detail panel by id, returning the panel POM.
+   *
+   * Both ids are required because the panel is trace-scoped: clicking a Spans
+   * row sets `trace=<trace_id>` alongside `span=<span_id>` (see handleRowClick
+   * in TracesSpansTab), and the panel will not resolve from the span id alone.
+   */
+  async openSpanById(traceId: string, spanId: string): Promise<TracePanelPage> {
+    return test.step(`Open span ${spanId}`, async () => {
+      if (!this.projectId) {
+        throw new Error('LogsPage.openSpanById: call goto(projectId) first');
+      }
+      const env = loadEnvConfig();
+      const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?logsType=spans&trace=${traceId}&span=${spanId}`;
+      await this.page.goto(url);
+      return new TracePanelPage(this.page, traceId);
     });
   }
 
