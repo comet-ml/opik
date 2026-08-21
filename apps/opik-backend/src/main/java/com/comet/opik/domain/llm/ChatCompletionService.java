@@ -4,7 +4,14 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.google.common.base.Throwables;
+import dev.langchain4j.exception.AuthenticationException;
+import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.exception.InternalServerException;
+import dev.langchain4j.exception.InvalidRequestException;
+import dev.langchain4j.exception.ModelNotFoundException;
 import dev.langchain4j.exception.NonRetriableException;
+import dev.langchain4j.exception.RateLimitException;
+import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.internal.RetryUtils;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -27,6 +34,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
@@ -72,6 +80,8 @@ public class ChatCompletionService {
 
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
+
+            failIfProviderReportedHttpStatus(runtimeException);
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
@@ -140,6 +150,12 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
+            // No failIfProviderReportedHttpStatus here, unlike create() and the streaming handler. This method is
+            // called only by the online-scoring subscribers, never from a resource, so a recovered status reaches no
+            // HTTP client — while BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS lists ClientErrorException, so turning
+            // a rate limit into a 429 or a provider timeout into a 408 would make the subscriber ack and drop the
+            // evaluation instead of honouring onlineScoring.maxRetries. Both are RetriableException upstream, so the
+            // blanket 500 is what keeps them retryable.
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         } finally {
@@ -224,6 +240,75 @@ public class ChatCompletionService {
                 .findFirst();
     }
 
+    /**
+     * Last resort before the blanket 500. {@code getLlmProviderError} only recognises payloads it can parse into the
+     * provider's own error envelope, so it comes back empty for a plain-text body (an upstream proxy's "service
+     * temporarily unavailable", a Cloudflare "error code: 1015") or for a typed exception nested under a retry
+     * wrapper — and a caller-side fault was then reported as an Opik fault. langchain4j has already classified the
+     * response by that point: {@code ExceptionMapper} reads {@link HttpException#statusCode()} and re-raises it as one
+     * of its typed exceptions, keeping the {@code HttpException} in the chain. That verdict is recovered here and run
+     * through the same {@link #failHandlingLLMProviderError} classification a parsed envelope gets, so a provider 4xx
+     * reaches the caller as a 4xx. Failures that never reached HTTP (connection refused, closed channel) carry no
+     * status and keep falling through to the 500 below.
+     */
+    private void failIfProviderReportedHttpStatus(RuntimeException runtimeException) {
+        findProviderHttpStatus(runtimeException)
+                .ifPresent(status -> failHandlingLLMProviderError(runtimeException,
+                        new ErrorMessage(status, buildDetailedErrorMessage(runtimeException))));
+    }
+
+    /**
+     * Walks the cause chain like {@link #findUnsupportedFeature}, so the status is found whether the provider client
+     * throws bare, wraps, or is re-thrown by the retry policy. {@link HttpException} is searched for across the whole
+     * chain before any typed exception is considered, because it carries the upstream code verbatim: langchain4j's
+     * {@code ExceptionMapper} raises {@code InternalServerException(HttpException(503))}, and taking the outermost
+     * match would collapse that 503 into the flat 500 the typed exception implies.
+     */
+    private Optional<Integer> findProviderHttpStatus(Throwable throwable) {
+        List<Throwable> chain = ExceptionUtils.getThrowableList(throwable);
+
+        return chain.stream()
+                .filter(HttpException.class::isInstance)
+                .map(HttpException.class::cast)
+                .map(HttpException::statusCode)
+                .findFirst()
+                .or(() -> chain.stream()
+                        .map(this::canonicalStatusOf)
+                        .flatMap(Optional::stream)
+                        .findFirst())
+                .filter(ChatCompletionService::isErrorStatus);
+    }
+
+    /**
+     * {@link HttpException} takes any int, so an upstream that answers outside the error families — or a client that
+     * builds one for a failure that never carried a status — must not reach {@link #failHandlingLLMProviderError}:
+     * {@code ClientErrorException} and {@code ServerErrorException} both validate the family, and
+     * {@code Response.status} rejects anything outside 100-599, so an out-of-family code would leave the catch block
+     * as an {@code IllegalArgumentException} instead of the 500 the caller is promised. Anything not recognisably a
+     * 4xx or 5xx therefore keeps the existing fall-through.
+     */
+    private static boolean isErrorStatus(int status) {
+        var family = familyOf(status);
+        return family == Response.Status.Family.CLIENT_ERROR || family == Response.Status.Family.SERVER_ERROR;
+    }
+
+    /**
+     * The status langchain4j's own exception types stand for, used for providers whose clients raise them without an
+     * {@link HttpException} in the chain. {@code ContentFilteredException} is covered by its
+     * {@link InvalidRequestException} supertype.
+     */
+    private Optional<Integer> canonicalStatusOf(Throwable throwable) {
+        return switch (throwable) {
+            case InvalidRequestException ignored -> Optional.of(Response.Status.BAD_REQUEST.getStatusCode());
+            case AuthenticationException ignored -> Optional.of(Response.Status.UNAUTHORIZED.getStatusCode());
+            case ModelNotFoundException ignored -> Optional.of(Response.Status.NOT_FOUND.getStatusCode());
+            case TimeoutException ignored -> Optional.of(Response.Status.REQUEST_TIMEOUT.getStatusCode());
+            case RateLimitException ignored -> Optional.of(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+            case InternalServerException ignored -> Optional.of(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
+            default -> Optional.empty();
+        };
+    }
+
     private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
         log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
 
@@ -265,6 +350,16 @@ public class ChatCompletionService {
                     log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, userMessage);
                     handlers.handleError(
                             new ErrorMessage(userMessage.getResponse().getStatus(), userMessage.getMessage()));
+                    return;
+                }
+
+                // Same recovery as the non-streaming paths: an unparsed envelope must not downgrade a provider 4xx to
+                // the 500 that a bare ErrorMessage(String) defaults to.
+                var providerStatus = findProviderHttpStatus(throwable);
+                if (providerStatus.isPresent()) {
+                    log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+                    handlers.handleError(
+                            new ErrorMessage(providerStatus.get(), buildDetailedErrorMessage(throwable)));
                     return;
                 }
 
