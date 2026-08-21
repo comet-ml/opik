@@ -8,7 +8,9 @@ from typing import Any, get_type_hints
 # Suppress banner for helper scripts
 os.environ["OPIK_OPTIMIZER_NO_BANNER"] = "1"
 
-import opik_optimizer  # noqa: E402
+# The pre-commit mypy environment does not install opik_optimizer, so it cannot
+# resolve the package this script introspects at runtime.
+import opik_optimizer  # type: ignore[import-not-found]  # noqa: E402
 from pydantic import BaseModel
 
 
@@ -365,7 +367,9 @@ def collect_public_classes() -> list[type]:
             seen.add(id(obj))
 
     # PromptLibrary is a public customization surface but not re-exported at top-level.
-    from opik_optimizer.utils.prompt_library import PromptLibrary
+    from opik_optimizer.utils.prompt_library import (  # type: ignore[import-not-found]
+        PromptLibrary,
+    )
 
     if id(PromptLibrary) not in seen:
         classes.append(PromptLibrary)
@@ -380,6 +384,10 @@ res = """---
 title: "Opik Agent Optimizer API Reference"
 subtitle: "Technical SDK reference guide"
 ---
+
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
 
 The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizing LLM prompts and agents. This reference guide documents the standardized API that all optimizers follow, ensuring consistency and interoperability across different optimization algorithms.
 
@@ -480,10 +488,11 @@ def main() -> None:
             / "opik-documentation"
             / "documentation"
             / "fern"
-            / "docs"
-            / "agent_optimization"
-            / "opik_optimizer"
-            / "reference.mdx"
+            / "docs-v2"
+            / "development"
+            / "optimization-runs"
+            / "advanced"
+            / "api_reference.mdx"
         )
 
         # Verify the file exists before overwriting
