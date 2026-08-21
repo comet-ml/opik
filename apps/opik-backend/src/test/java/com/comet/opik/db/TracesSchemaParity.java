@@ -114,14 +114,27 @@ class TracesSchemaParity {
      * this map is not stale — an entry whose columns no longer differ must be removed — so the allowlist cannot quietly
      * grow into a blanket exemption.
      */
-    static final Map<String, String> BASELINE_TYPE_DIFFERENCES = Map.of(
-            "start_time", "nanosecond -> microsecond precision; nothing ingested needs finer (000101)",
-            "created_at", "nanosecond -> microsecond precision; nothing ingested needs finer (000101)",
-            "end_time", "Nullable -> non-nullable with an epoch sentinel, dropping the null-mask overhead (000101)",
-            "ttft", "Nullable -> non-nullable with a NaN sentinel (000101)",
-            "duration", "Nullable -> non-nullable, materialized from the sentinels rather than a null check (000101)",
-            "id_at",
-            "DateTime -> DateTime64(0), honest past 2106 so a far-future UUIDv7 partitions correctly (000114)");
+    static final Map<String, BaselineTypeDifference> BASELINE_TYPE_DIFFERENCES = Map.of(
+            "start_time", new BaselineTypeDifference("DateTime64(9, 'UTC')", "DateTime64(6, 'UTC')",
+                    "nanosecond -> microsecond precision; nothing ingested needs finer (000101)"),
+            "created_at", new BaselineTypeDifference("DateTime64(9, 'UTC')", "DateTime64(6, 'UTC')",
+                    "nanosecond -> microsecond precision; nothing ingested needs finer (000101)"),
+            "end_time", new BaselineTypeDifference("Nullable(DateTime64(9, 'UTC'))", "DateTime64(6, 'UTC')",
+                    "Nullable -> non-nullable with an epoch sentinel, dropping the null-mask overhead (000101)"),
+            "ttft", new BaselineTypeDifference("Nullable(Float64)", "Float64",
+                    "Nullable -> non-nullable with a NaN sentinel (000101)"),
+            "duration", new BaselineTypeDifference("Nullable(Float64)", "Float64",
+                    "Nullable -> non-nullable, materialized from the sentinels rather than a null check (000101)"),
+            "id_at", new BaselineTypeDifference("DateTime('UTC')", "DateTime64(0, 'UTC')",
+                    "DateTime -> DateTime64(0), honest past 2106 so a far-future UUIDv7 partitions correctly (000114)"));
+
+    /**
+     * One allowlisted difference, pinned on <b>both</b> sides rather than merely asserted to exist. Recording only that
+     * the types differ would let either side drift to an unrelated type — {@code traces.start_time} becoming
+     * {@code String}, say — while still "differing" and so still being excused.
+     */
+    record BaselineTypeDifference(String tracesType, String shadowType, String reason) {
+    }
 
     /**
      * The shipped cutover backfill, read rather than restated: this guard's whole point is that the backfill column
@@ -177,8 +190,10 @@ class TracesSchemaParity {
                     .isEqualTo(column.type());
         });
 
-        // The allowlist must not outlive the differences it excuses, or it silently becomes a blanket exemption.
-        BASELINE_TYPE_DIFFERENCES.forEach((name, reason) -> {
+        // Each allowlisted difference is pinned on both sides. Merely requiring the types to differ would excuse an
+        // unrelated drift on either table, and an entry whose columns have converged is a dead exemption that must be
+        // removed rather than left covering a column nothing checks.
+        BASELINE_TYPE_DIFFERENCES.forEach((name, expected) -> {
             var tracesColumn = traces.columnsByName().get(name);
             var shadowColumn = shadowColumns.get(name);
             assertThat(tracesColumn).as("BASELINE_TYPE_DIFFERENCES names `%s`, which must exist on `%s`", name, TRACES)
@@ -187,10 +202,16 @@ class TracesSchemaParity {
                     .isNotNull();
             assertThat(tracesColumn.type())
                     .as("""
-                            stale allowlist entry: `%s` no longer differs between `%s` and `%s` (%s). Remove the entry \
-                            so the column is type-checked like every other.\
-                            """, name, TRACES, SHADOW, reason)
-                    .isNotEqualTo(shadowColumn.type());
+                            allowlisted column `%s` must still be exactly the documented type on `%s` (%s). If it \
+                            changed, either the change is wrong or the allowlist entry needs updating — and if the two \
+                            have converged, delete the entry so the column is type-checked like every other.\
+                            """, name, TRACES, expected.reason())
+                    .isEqualTo(expected.tracesType());
+            assertThat(shadowColumn.type())
+                    .as("""
+                            allowlisted column `%s` must still be exactly the documented type on the `%s` shadow (%s)\
+                            """, name, SHADOW, expected.reason())
+                    .isEqualTo(expected.shadowType());
         });
 
         var backfillColumns = backfillColumnList();
@@ -271,7 +292,7 @@ class TracesSchemaParity {
         assertThat(wrapper.engine())
                 .as("""
                         the Distributed `%s` must front `%s` on the '{cluster}' cluster in the same database, sharded on \
-                        sipHash64(project_id) — the wrap the runbook applies. A wrapper over a different target reads \
+                        sipHash64(project_id) — the wrap applied by the runbook. A wrapper over a different target reads \
                         the wrong data while looking structurally identical.\
                         """,
                         TRACES, SHARD)

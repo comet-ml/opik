@@ -188,23 +188,43 @@ class TracesSchemaParityPreCutoverTest {
     }
 
     /**
-     * And the allowlist itself is held honest: if a baseline difference is ever removed — the shadow's `ttft` made
-     * Nullable again, say — the entry excusing it becomes a blanket exemption for a column nothing checks. Bringing the
-     * types into line must therefore fail until the entry is deleted.
+     * The allowlist is pinned on both sides, so an allowlisted column drifting away from its documented type fails even
+     * though it still "differs" from its counterpart. Making the shadow's `ttft` Nullable again exercises both halves at
+     * once: the entry no longer describes reality, and the difference it excused has gone.
      */
     @Test
     @Order(16)
-    @DisplayName("a stale type-allowlist entry is caught")
-    void staleTypeAllowlistEntryIsCaught() throws Exception {
+    @DisplayName("drift is caught: an allowlisted column that left its documented type")
+    void allowlistedColumnLeavingItsDocumentedTypeIsCaught() throws Exception {
         execute("ALTER TABLE %s.%s MODIFY COLUMN ttft Nullable(Float64)".formatted(DATABASE_NAME, SHADOW));
 
         assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("stale allowlist entry")
+                .hasMessageContaining("allowlisted column")
                 .hasMessageContaining("ttft");
 
         execute("ALTER TABLE %s.%s MODIFY COLUMN ttft Float64 DEFAULT toFloat64('nan')"
                 .formatted(DATABASE_NAME, SHADOW));
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The other side of the same pin: an allowlisted column drifting on `traces` rather than on the shadow. The two
+     * types still differ, so a "they must differ" check would pass this.
+     */
+    @Test
+    @Order(17)
+    @DisplayName("drift is caught: an allowlisted column that changed on traces")
+    void allowlistedColumnDriftingOnTracesIsCaught() throws Exception {
+        execute("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(3, 'UTC')".formatted(DATABASE_NAME, TRACES));
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("allowlisted column")
+                .hasMessageContaining("start_time");
+
+        execute("ALTER TABLE %s.%s MODIFY COLUMN start_time DateTime64(9, 'UTC') DEFAULT now64(9)"
+                .formatted(DATABASE_NAME, TRACES));
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
