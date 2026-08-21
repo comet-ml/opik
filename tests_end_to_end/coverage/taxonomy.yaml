@@ -250,6 +250,7 @@ areas:
       - trace-explore/trace-spans-depth.spec.ts
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-filters.spec.ts
+      - trace-explore/otel-span-provider.spec.ts
 
     # ---- functional dimension ----
     capabilities:
@@ -260,7 +261,7 @@ areas:
       span-model-cost-tokens: { covered: true,  tier: t2-cuj }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
-      toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
+      toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "Spans toggle + the Spans-only provider filter; the Traces/Threads toggles are covered elsewhere" }
       filter-traces:          { covered: true,  tier: t2-cuj }
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
