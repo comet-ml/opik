@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
@@ -8,6 +9,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.utils.JsonUtils;
+import dev.langchain4j.model.chat.request.ToolChoice;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -107,6 +110,30 @@ class AgenticScoringServiceTest {
         assertThat(result.spans()).isEmpty();
         // Cancelled almost immediately — a handful of elements at most, not the unbounded stream.
         assertThat(emitted.get()).isLessThan(5);
+    }
+
+    @Test
+    @DisplayName("firstRoundToolChoice forces a tool call except on providers that reject a forced choice")
+    void firstRoundToolChoicePerProvider() {
+        // Vertex AI's langchain4j model throws UnsupportedFeatureException on any explicit tool choice,
+        // which is terminal — it failed the evaluation instead of scoring it.
+        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.VERTEX_AI)).isEqualTo(ToolChoice.AUTO);
+
+        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.OPEN_AI)).isEqualTo(ToolChoice.REQUIRED);
+        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.ANTHROPIC)).isEqualTo(ToolChoice.REQUIRED);
+        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.GEMINI)).isEqualTo(ToolChoice.REQUIRED);
+        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.OPEN_ROUTER)).isEqualTo(ToolChoice.REQUIRED);
+        assertThat(agenticScoringService.firstRoundToolChoice(LlmProvider.BEDROCK)).isEqualTo(ToolChoice.REQUIRED);
+    }
+
+    @Test
+    @DisplayName("firstRoundToolChoice never forces a choice on a provider that has no tool support")
+    void firstRoundToolChoiceOnNonToolCallingProviders() {
+        Stream.of(LlmProvider.values())
+                .filter(provider -> !agenticScoringService.supportsToolCalling(provider))
+                .forEach(provider -> assertThat(agenticScoringService.firstRoundToolChoice(provider))
+                        .as("provider %s", provider)
+                        .isEqualTo(ToolChoice.AUTO));
     }
 
     private static Span spanWithInput(String payload) {
