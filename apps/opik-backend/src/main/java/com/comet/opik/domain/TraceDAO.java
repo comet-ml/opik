@@ -207,6 +207,16 @@ public interface TraceDAO {
 // TODO: after v1 drop, remove annotation_queue_filters conditions and keep only annotation_queue_id
 class TraceDAOImpl implements TraceDAO {
 
+    /**
+     * The read/insert-facing trace table, and the mutation target while the sharding-readiness wrap is off. Only
+     * {@link #tracesMutationTable()} may use these two constants to name a mutation's table — see its Javadoc and
+     * {@code TraceMutationRoutingArchTest}.
+     */
+    private static final String TRACES_TABLE = "traces";
+
+    /** The {@code MergeTree} shard beneath the {@code Distributed} wrapper, and the mutation target once it is live. */
+    private static final String TRACES_LOCAL_TABLE = "traces_local";
+
     private static final String TRACE_SEARCH_CLAUSE = """
             (ilike(id, :search_text)
             OR ilike(name, :search_text)
@@ -1931,7 +1941,7 @@ class TraceDAOImpl implements TraceDAO {
      * com.comet.opik.infrastructure.FilterUtils#ANALYTICS_DELETE_BATCH_SIZE}).
      */
     private static final String DELETE_BY_PROJECT_ID_TRACE_ID_PAIRS = """
-            DELETE FROM <if(distributed_wrap)>traces_local<else>traces<endif>
+            DELETE FROM <traces_mutation_table>
             WHERE workspace_id = :workspace_id
             AND (project_id, id) IN arrayZip(:project_ids, :trace_ids)
             SETTINGS log_comment = '<log_comment>'
@@ -1948,7 +1958,7 @@ class TraceDAOImpl implements TraceDAO {
      * upper bound advances one week so rows sharing the cutoff's week stay in scope.
      */
     private static final String DELETE_FOR_RETENTION = """
-            DELETE FROM <if(distributed_wrap)>traces_local<else>traces<endif>
+            DELETE FROM <traces_mutation_table>
             WHERE workspace_id IN :workspace_ids
             AND id >= :lower_bound
             AND id \\< :cutoff_id
@@ -3325,9 +3335,10 @@ class TraceDAOImpl implements TraceDAO {
      * Whether the sharding-readiness wrap is live. When it is, {@code traces} is a {@code Distributed} table that
      * rejects mutations (code 36 / 48), so every trace <b>mutation</b> ({@code DELETE} / {@code ALTER} /
      * {@code OPTIMIZE}) must target the {@code traces_local} shard instead; while it is off {@code traces} is still a
-     * {@code MergeTree} where deletes work directly. Reads and inserts always route through {@code traces}. Each
-     * mutation query carries both table names in an {@code <if(distributed_wrap)>traces_local<else>traces<endif>}
-     * branch and passes this flag; a new mutation path must do the same. Liquibase migrations split by kind:
+     * {@code MergeTree} where deletes work directly. Reads and inserts always route through {@code traces}. No mutation
+     * query names either table itself: {@link #tracesMutationTable()} is the only place the name is decided, and
+     * {@code TraceMutationRoutingArchTest} fails the build if a new mutation path spells one out instead. Liquibase
+     * migrations split by kind:
      * {@code DELETE} / {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code traces_local}
      * only (the Distributed {@code traces} rejects them), but {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must target
      * <b>both</b> {@code traces_local} and {@code traces} — the wrapper takes them as metadata-only, and skipping it
@@ -3345,15 +3356,28 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
-     * Selects the {@code <if(distributed_wrap)>traces_local<else>traces<endif>} branch on a mutation template by adding
-     * the {@code distributed_wrap} attribute when the wrap is live. The flag decision lives only here and in
-     * {@link #tracesDistributedWrapEnabled()}; every ST-based trace mutation routes its table through this method so the
-     * branches cannot drift apart.
+     * The physical table a trace <b>mutation</b> must target, and the <b>only</b> place that name is decided.
+     * <p>
+     * Routing used to be a two-branch {@code <if(distributed_wrap)>traces_local<else>traces<endif>} conditional repeated
+     * in every mutation template, which made a correct new mutation a matter of remembering to copy the branch — and an
+     * incorrect one indistinguishable from a correct one at a glance. Resolving to a single name here makes the
+     * mutation templates topology-agnostic ({@code DELETE FROM <traces_mutation_table>}) and leaves exactly one line to
+     * audit. {@code TraceMutationRoutingArchTest} enforces both halves: no other code unit may read the wrap flag, and
+     * no mutation SQL may spell either table name out.
+     * <p>
+     * Reads and inserts are deliberately not routed through this: they always go to {@code traces}, which is the
+     * {@code Distributed} wrapper post-cutover and the {@code MergeTree} before it, and is correct either way.
+     */
+    private String tracesMutationTable() {
+        return tracesDistributedWrapEnabled() ? TRACES_LOCAL_TABLE : TRACES_TABLE;
+    }
+
+    /**
+     * Binds the resolved mutation table onto an ST mutation template. Every ST-based trace mutation routes its table
+     * through this method, so a template can only ever name the table the flag selects.
      */
     private void selectTracesMutationTable(ST template) {
-        if (tracesDistributedWrapEnabled()) {
-            template.add("distributed_wrap", true);
-        }
+        template.add("traces_mutation_table", tracesMutationTable());
     }
 
     /**
@@ -5125,8 +5149,7 @@ class TraceDAOImpl implements TraceDAO {
         var logComment = getLogComment("retention_delete_traces_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
-        var sb = new StringBuilder(
-                tracesDistributedWrapEnabled() ? "DELETE FROM traces_local WHERE (" : "DELETE FROM traces WHERE (");
+        var sb = new StringBuilder("DELETE FROM ").append(tracesMutationTable()).append(" WHERE (");
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) sb.append(" OR ");
             sb.append("(workspace_id = :ws_").append(i)
