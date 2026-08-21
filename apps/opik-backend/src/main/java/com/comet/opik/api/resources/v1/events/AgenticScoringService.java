@@ -157,6 +157,18 @@ public interface AgenticScoringService {
     boolean supportsToolCalling(LlmProvider provider);
 
     /**
+     * Tool choice for the FIRST call of the agentic loop. {@link ToolChoice#REQUIRED} is what stops an
+     * OpenAI judge from answering straight from visible context (see {@link SupportedJudgeProvider} for
+     * the empirical asymmetry), but langchain4j's {@code VertexAiGeminiChatModel} rejects any explicit
+     * tool choice with {@code UnsupportedFeatureException} — and since that is terminal, forcing it there
+     * failed the evaluation outright instead of scoring it. Vertex therefore gets
+     * {@link ToolChoice#AUTO}: the model may skip the tool loop, which the loop already handles (a first
+     * response with no tool-execution requests finishes it), so a possibly-tool-less evaluation replaces
+     * a guaranteed failure.
+     */
+    ToolChoice firstRoundToolChoice(LlmProvider provider);
+
+    /**
      * Attach the tool specs from the registered {@link ToolRegistry} and the given {@code toolChoice} to
      * {@code request}'s parameters. Tool specs live inside {@link ChatRequestParameters}, so we copy the
      * existing parameters via {@code overrideWith} and layer tool specs on top — setting
@@ -436,6 +448,18 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
         return switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
             case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;
+        };
+    }
+
+    @Override
+    public ToolChoice firstRoundToolChoice(@NonNull LlmProvider provider) {
+        return switch (provider) {
+            // VertexAiGeminiChatModel.validate() throws UnsupportedFeatureException on any toolChoice.
+            case VERTEX_AI -> ToolChoice.AUTO;
+            case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, BEDROCK -> ToolChoice.REQUIRED;
+            // Unreachable while callers gate on supportsToolCalling first; AUTO keeps a caller that
+            // forgets the gate on the harmless side.
+            case OLLAMA, CUSTOM_LLM, OPIK_FREE -> ToolChoice.AUTO;
         };
     }
 
