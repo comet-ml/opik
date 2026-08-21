@@ -7,26 +7,28 @@ suite: opik.probe helper
 #      successThreshold 1 / failureThreshold 2).
 #   2. Full definition       — any other spec is emitted verbatim via toYaml.
 #
-# Tests target the `python-backend` component: it has NO probe defined in
-# values.yaml, so each test's `set` is a clean probe spec rather than a deep
-# merge over a pre-existing httpGet default (which would leak into full-mode
-# assertions). The deployment renders one document per enabled component, so we
-# select the python-backend deployment by name and read its single container.
+# Tests target the `frontend` component: it is the only one with NO probe
+# defined in values.yaml, so each test's `set` is a clean probe spec rather than
+# a deep merge over a pre-existing httpGet default (which would leak into
+# full-mode assertions). The deployment renders one document per enabled
+# component, so we select the frontend deployment by name and read its first
+# container. The probes that `backend` and `python-backend` ship by default are
+# asserted at the bottom of this suite instead.
 templates:
   - templates/deployment.yaml
 
-documentSelector: &pyb
+documentSelector: &frontend
   path: metadata.name
-  value: opik-python-backend
+  value: opik-frontend
 
 tests:
   # ---- Simplified mode: only path/port set ----------------------------------
   - it: simplified mode renders httpGet with the Accept header
     set:
-      component.python-backend.livenessProbe:
+      component.frontend.livenessProbe:
         path: /healthcheck
         port: 8000
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
@@ -42,10 +44,10 @@ tests:
 
   - it: simplified mode fills in the hard-coded timing defaults
     set:
-      component.python-backend.livenessProbe:
+      component.frontend.livenessProbe:
         path: /healthcheck
         port: 8000
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
@@ -62,10 +64,10 @@ tests:
 
   - it: simplified mode defaults initialDelaySeconds to 0 when unset
     set:
-      component.python-backend.livenessProbe:
+      component.frontend.livenessProbe:
         path: /healthcheck
         port: 8000
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
@@ -73,11 +75,11 @@ tests:
 
   - it: simplified mode honors initialDelaySeconds when set
     set:
-      component.python-backend.livenessProbe:
+      component.frontend.livenessProbe:
         path: /healthcheck
         port: 8000
         initialDelaySeconds: 20
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
@@ -85,14 +87,14 @@ tests:
 
   - it: simplified mode honors overridden timing fields
     set:
-      component.python-backend.readinessProbe:
+      component.frontend.readinessProbe:
         path: /healthcheck
         port: 8000
         timeoutSeconds: 5
         periodSeconds: 30
         successThreshold: 3
         failureThreshold: 6
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
@@ -110,7 +112,7 @@ tests:
   # ---- Full-definition mode: spec emitted verbatim --------------------------
   - it: full httpGet definition is emitted verbatim and not overwritten
     set:
-      component.python-backend.livenessProbe:
+      component.frontend.livenessProbe:
         httpGet:
           path: /custom/health
           port: 9999
@@ -120,7 +122,7 @@ tests:
         timeoutSeconds: 7
         periodSeconds: 11
         failureThreshold: 4
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
@@ -143,14 +145,14 @@ tests:
 
   - it: full exec definition is emitted verbatim
     set:
-      component.python-backend.livenessProbe:
+      component.frontend.livenessProbe:
         exec:
           command:
             - /bin/sh
             - -c
             - curl -f http://localhost:8000/healthcheck
         initialDelaySeconds: 15
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command
@@ -166,11 +168,11 @@ tests:
 
   - it: full tcpSocket definition is emitted verbatim
     set:
-      component.python-backend.livenessProbe:
+      component.frontend.livenessProbe:
         tcpSocket:
           port: 8000
         periodSeconds: 20
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
@@ -183,18 +185,18 @@ tests:
 
   # ---- startupProbe: renders only when defined ------------------------------
   - it: startupProbe is absent when not defined
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - notExists:
           path: spec.template.spec.containers[0].startupProbe
 
   - it: startupProbe renders in simplified mode
     set:
-      component.python-backend.startupProbe:
+      component.frontend.startupProbe:
         path: /healthcheck
         port: 8000
         failureThreshold: 30
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.httpGet.path
@@ -217,13 +219,13 @@ tests:
 
   - it: startupProbe renders in full-definition mode
     set:
-      component.python-backend.startupProbe:
+      component.frontend.startupProbe:
         httpGet:
           path: /startup
           port: 8000
         periodSeconds: 5
         failureThreshold: 60
-    documentSelector: *pyb
+    documentSelector: *frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.httpGet.path
@@ -234,3 +236,57 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.failureThreshold
           value: 60
+
+  # ---- Shipped defaults: probes the chart configures out of the box ---------
+  # python-backend previously had none, so a rolling update put pods into the
+  # Service's endpoints before gunicorn was listening and the backend's
+  # evaluator calls got "connection refused".
+  - it: python-backend ships a readiness probe on the app's readiness endpoint
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health/readiness
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 8000
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
+      # Above the 1s Kubernetes default, so a slow-but-alive gunicorn is not
+      # taken out of the endpoint list.
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 3
+
+  - it: python-backend ships a liveness probe on the app's liveness endpoint
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health/liveness
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 8000
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 15
+
+  - it: python-backend ships a preStop sleep so terminating pods drain
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value:
+            - /bin/sh
+            - -c
+            - sleep 5
