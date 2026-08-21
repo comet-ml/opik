@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
@@ -121,6 +123,52 @@ class TraceMutationSqlRoutingTest {
                 .isEmpty();
     }
 
+    /**
+     * Regression coverage for the detector itself. Every form here is a way of naming a physical trace table that a
+     * mutation could legitimately be written in, and each must be flagged — a detector that only recognises the bare,
+     * unqualified name is a guard with a hole in it rather than a guard.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "DELETE FROM traces",
+            "DELETE FROM traces_local",
+            "DELETE FROM analytics.traces",
+            "DELETE FROM analytics.traces_local",
+            "DELETE FROM `traces`",
+            "DELETE FROM \"traces_local\"",
+            "DELETE FROM `analytics`.`traces`",
+            "ALTER TABLE opik.traces_local",
+            "OPTIMIZE TABLE traces",
+            "DELETE FROM TRACES",
+            "DELETE FROM traces;",
+    })
+    @DisplayName("the detector flags every way of naming a physical trace table")
+    void detectorFlagsPhysicalTraceTables(String mutation) {
+        assertThat(namesAPhysicalTraceTable(mutation))
+                .as("`%s` names a physical trace table and must be flagged", mutation)
+                .isTrue();
+    }
+
+    /**
+     * The complement: what the detector must <b>not</b> flag. The resolver placeholder is the permitted form, the shadow
+     * and backup tables are not the mutation targets this guard governs, and a same-prefix table must not be caught by a
+     * sloppy {@code startsWith}.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "DELETE FROM <traces_mutation_table>",
+            "DELETE FROM traces_local_v2",
+            "DELETE FROM traces_pre_cutover_backup",
+            "DELETE FROM trace_threads",
+            "DELETE FROM spans",
+    })
+    @DisplayName("the detector leaves the resolver placeholder and unrelated tables alone")
+    void detectorIgnoresPermittedTargets(String mutation) {
+        assertThat(namesAPhysicalTraceTable(mutation))
+                .as("`%s` must not be flagged", mutation)
+                .isFalse();
+    }
+
     /** The {@code (statement, target)} pairs in a fragment of SQL, rendered for a failure message. */
     private static List<String> findMutations(String sql) {
         var mutations = new ArrayList<String>();
@@ -131,14 +179,32 @@ class TraceMutationSqlRoutingTest {
         return mutations;
     }
 
-    private static boolean namesAPhysicalTraceTable(String mutation) {
+    static boolean namesAPhysicalTraceTable(String mutation) {
         var target = mutation.substring(mutation.lastIndexOf(' ') + 1);
-        return PHYSICAL_TRACE_TABLES.contains(stripSqlPunctuation(target).toLowerCase());
+        return PHYSICAL_TRACE_TABLES.contains(normalizeTarget(target));
     }
 
-    /** A target token can carry trailing SQL or Java punctuation, e.g. {@code traces_local;} or {@code traces"}. */
-    private static String stripSqlPunctuation(String target) {
-        return target.replaceAll("[^A-Za-z0-9_].*$", "");
+    /**
+     * The bare, lower-cased table identifier a mutation targets.
+     *
+     * <p>Three things have to come off before the comparison, and missing any of them lets a mutation through:
+     * <ul>
+     *   <li><b>quoting</b> — ClickHouse accepts {@code `traces`} and {@code "traces"}, which would not match a bare
+     *   name;</li>
+     *   <li><b>the database qualifier</b> — {@code analytics.traces} must reduce to {@code traces}. Taking the prefix up
+     *   to the first non-word character (as this did originally) yields {@code analytics}, so a qualified mutation
+     *   escaped detection entirely;</li>
+     *   <li><b>trailing punctuation</b> — a target token can carry {@code ;} or a closing quote from the Java literal.
+     *   </li>
+     * </ul>
+     *
+     * <p>The resolver placeholder {@code <traces_mutation_table>} normalizes to empty and so is never flagged, which is
+     * the whole point: it is the only permitted way to name a mutation's table.
+     */
+    private static String normalizeTarget(String target) {
+        var unquoted = target.replaceAll("[`\"\\[\\]]", "");
+        var lastComponent = unquoted.substring(unquoted.lastIndexOf('.') + 1);
+        return lastComponent.replaceAll("[^A-Za-z0-9_].*$", "").toLowerCase();
     }
 
     private static boolean isStringConstant(java.lang.reflect.Field field) {
