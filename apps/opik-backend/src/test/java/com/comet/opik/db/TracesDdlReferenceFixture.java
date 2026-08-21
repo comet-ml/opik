@@ -53,6 +53,13 @@ class TracesDdlReferenceFixture {
     static final String DERIVED_COLUMN_TYPE = "UInt64";
     static final String DERIVED_COLUMN_DEFAULT_KIND = "MATERIALIZED";
 
+    /**
+     * The expression too, not just the kind: a {@code MATERIALIZED UInt64} computing something other than what the
+     * reference declares satisfies every other assertion while producing different values on each topology — the same
+     * class of drift {@code assertPostCutoverParity} compares expressions to catch.
+     */
+    static final String DERIVED_COLUMN_EXPRESSION = "length(name)";
+
     /** The reference index change: storage-only — it must reach the shard alone. */
     static final String STORAGE_INDEX = "idx_reference_storage";
 
@@ -63,7 +70,7 @@ class TracesDdlReferenceFixture {
     static final TableSchema.SkipIndex EXPECTED_STORAGE_INDEX = new TableSchema.SkipIndex(
             STORAGE_INDEX, "set(0)", "name", 1);
 
-    /** The column the un-guarded negative control adds to {@code traces} and nothing else. */
+    /** The column the unguarded negative control adds to {@code traces} and nothing else. */
     static final String UNGUARDED_COLUMN = "unguarded_column";
 
     /** Liquibase records a changeset whose statements ran as {@code EXECUTED}. */

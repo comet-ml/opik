@@ -23,7 +23,7 @@
 -- rejecting the absent guard and nothing else.
 --
 --changeset opik-7772-test-fixture:unguarded_traces_change
---comment: Deliberately un-guarded — the mistake the pattern exists to prevent
+--comment: Deliberately unguarded — the mistake the pattern exists to prevent
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS unguarded_column String DEFAULT '';
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS unguarded_column;
