@@ -18,35 +18,33 @@ import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { cn } from "@/lib/utils";
 import FeedbackScoreEditDropdown from "@/shared/DataTableCells/FeedbackScoreEditDropdown";
 import { ROW_HEIGHT } from "@/types/shared";
+import { USER_FEEDBACK_NAME } from "@/constants/shared";
 
-const CompareExperimentsFeedbackScoreCell: React.FC<
-  CellContext<ExperimentsCompare, unknown>
-> = (context) => {
+type CompareExperimentsFeedbackScoreCellProps = {
+  context: CellContext<ExperimentsCompare, unknown>;
+  editable?: boolean;
+  onValueChange?: (name: string, value: number) => void;
+};
+
+const CompareExperimentsFeedbackScoreCellContent = ({
+  context,
+  editable = false,
+  onValueChange,
+}: CompareExperimentsFeedbackScoreCellProps) => {
   const experimentCompare = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { scoreName, colorMap } = (custom ?? {}) as CustomMeta &
     FeedbackScoreCustomMeta;
-  const experimentItem = experimentCompare.experiment_items[0];
 
-  const feedbackScore = experimentItem?.feedback_scores?.find(
-    (f) => f.name === scoreName,
-  );
+  const { rowHeight = ROW_HEIGHT.small } = (context.table.options.meta ??
+    {}) as TableMeta<ExperimentsCompare>;
 
-  const traceId = experimentItem?.trace_id;
-
-  const { handleValueChange } = useFeedbackScoreInlineEdit({
-    id: traceId!, // TODO: handle case where traceId is not found
-    feedbackScore,
-  });
-
-  const { enableUserFeedbackEditing = false, rowHeight = ROW_HEIGHT.small } =
-    (context.table.options.meta ?? {}) as TableMeta<ExperimentsCompare>;
-
-  const isEditingEnabled =
-    experimentCompare.experiment_items.length === 1 &&
-    enableUserFeedbackEditing;
+  // a split cell shows several experiments at once, so there is no single
+  // trace to write the score back to
   const isUserFeedbackColumn =
-    isEditingEnabled && context.column.id === "feedback_scores_User feedback";
+    editable &&
+    Boolean(onValueChange) &&
+    experimentCompare.experiment_items.length === 1;
   const isCompact =
     rowHeight === ROW_HEIGHT.small || rowHeight === ROW_HEIGHT.medium;
 
@@ -58,10 +56,10 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     if (!feedbackScore) {
       return (
         <div className="flex items-center gap-1">
-          {isUserFeedbackColumn && (
+          {isUserFeedbackColumn && onValueChange && (
             <FeedbackScoreEditDropdown
               feedbackScore={feedbackScore}
-              onValueChange={handleValueChange}
+              onValueChange={onValueChange}
               size={isCompact ? "sm" : "md"}
             />
           )}
@@ -100,7 +98,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           feedbackScore={feedbackScore}
           color={color}
           isUserFeedbackColumn={isUserFeedbackColumn}
-          onValueChange={handleValueChange}
+          onValueChange={onValueChange}
           size={isCompact ? "sm" : "md"}
           footer={
             isAggregatedScore(feedbackScore)
@@ -135,5 +133,44 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     />
   );
 };
+
+// Read-only by default: only the User feedback column needs the inline-edit
+// hooks, and a table with many score columns would otherwise build them per cell
+const CompareExperimentsFeedbackScoreCell: React.FC<
+  CellContext<ExperimentsCompare, unknown>
+> = (context) => (
+  <CompareExperimentsFeedbackScoreCellContent context={context} />
+);
+
+export const EditableCompareExperimentsFeedbackScoreCell: React.FC<
+  CellContext<ExperimentsCompare, unknown>
+> = (context) => {
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { scoreName } = (custom ?? {}) as CustomMeta & FeedbackScoreCustomMeta;
+  const experimentItem = context.row.original.experiment_items[0];
+  const traceId = experimentItem?.trace_id;
+
+  const { handleValueChange } = useFeedbackScoreInlineEdit({
+    id: traceId!, // TODO: handle case where traceId is not found
+    feedbackScore: experimentItem?.feedback_scores?.find(
+      (f) => f.name === scoreName,
+    ),
+  });
+
+  return (
+    <CompareExperimentsFeedbackScoreCellContent
+      context={context}
+      editable
+      onValueChange={handleValueChange}
+    />
+  );
+};
+
+export const resolveCompareExperimentsFeedbackScoreCell = (
+  scoreName: string,
+) =>
+  scoreName === USER_FEEDBACK_NAME
+    ? EditableCompareExperimentsFeedbackScoreCell
+    : CompareExperimentsFeedbackScoreCell;
 
 export default CompareExperimentsFeedbackScoreCell;
