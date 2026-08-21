@@ -382,6 +382,7 @@ classes_to_document = collect_public_classes()
 
 res = """---
 title: "Opik Agent Optimizer API Reference"
+headline: "Opik Agent Optimizer API Reference"
 subtitle: "Technical SDK reference guide"
 ---
 

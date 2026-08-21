@@ -1838,13 +1838,143 @@ redirects:
     destination: "/docs/opik/:slug*"
     permanent: true
 
-  # Opik 1 served these paths unversioned, before the /v1/ prefix existed.
-  # They still receive inbound links, so they map onto the same Opik 2 pages.
-  - source: "/docs/opik/agent_optimization"
+  # Opik 1 served these paths unversioned, before the /v1/ prefix existed, and
+  # they still return 404 today. Listed one by one on purpose: Fern keeps its own
+  # moved-slug history for this prefix, so a wildcard would capture obsolete paths
+  # it already resolves and rewrite them onto pages that do not exist.
+
+  - source: "/docs/opik/agent_optimization/advanced/api_reference"
+    destination: "/docs/opik/development/optimization-runs/advanced/api_reference"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/advanced/chaining_optimizers"
+    destination: "/docs/opik/development/optimization-runs/advanced/chaining_optimizers"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/advanced/custom_metrics"
+    destination: "/docs/opik/development/optimization-runs/advanced/custom_metrics"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/advanced/extending_optimizers"
+    destination: "/docs/opik/development/optimization-runs/advanced/extending_optimizers"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/advanced/multiple_completions"
+    destination: "/docs/opik/development/optimization-runs/advanced/multiple_completions"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/advanced/n_samples"
+    destination: "/docs/opik/development/optimization-runs/advanced/n_samples"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/advanced/prompt_customization"
+    destination: "/docs/opik/development/optimization-runs/advanced/prompt_customization"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/benchmarks"
+    destination: "/docs/opik/development/optimization-runs/algorithms/benchmarks"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/evolutionary_optimizer"
+    destination: "/docs/opik/development/optimization-runs/algorithms/evolutionary_optimizer"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/fewshot_bayesian_optimizer"
+    destination: "/docs/opik/development/optimization-runs/algorithms/fewshot_bayesian_optimizer"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/gepa_optimizer"
+    destination: "/docs/opik/development/optimization-runs/algorithms/gepa_optimizer"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/hierarchical_adaptive_optimizer"
+    destination: "/docs/opik/development/optimization-runs/algorithms/hierarchical_adaptive_optimizer"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/metaprompt_optimizer"
+    destination: "/docs/opik/development/optimization-runs/algorithms/metaprompt_optimizer"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/overview"
+    destination: "/docs/opik/development/optimization-runs/algorithms/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/parameter_optimizer"
+    destination: "/docs/opik/development/optimization-runs/algorithms/parameter_optimizer"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/tool_optimization"
+    destination: "/docs/opik/development/optimization-runs/algorithms/tool_optimization"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/changelog"
+    destination: "/docs/opik/development/optimization-runs/changelog"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/cookbooks/arc_agi_optimizer_cookbook"
+    destination: "/docs/opik/development/optimization-runs/cookbooks/arc_agi_optimizer_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/cookbooks/multimodal_agent_optimizer_cookbook"
+    destination: "/docs/opik/development/optimization-runs/cookbooks/multimodal_agent_optimizer_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/cookbooks/optimizer_introduction_cookbook"
+    destination: "/docs/opik/development/optimization-runs/cookbooks/optimizer_introduction_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/cookbooks/synthetic_data_optimizer_cookbook"
+    destination: "/docs/opik/development/optimization-runs/cookbooks/synthetic_data_optimizer_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/faq"
+    destination: "/docs/opik/development/optimization-runs/faq"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/known_issues"
+    destination: "/docs/opik/development/optimization-runs/known_issues"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/concepts"
+    destination: "/docs/opik/development/optimization-runs/optimization/concepts"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/configure_models"
+    destination: "/docs/opik/development/optimization-runs/optimization/configure_models"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/dashboard_results"
+    destination: "/docs/opik/development/optimization-runs/optimization/dashboard_results"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/define_datasets"
+    destination: "/docs/opik/development/optimization-runs/optimization/define_datasets"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/define_metrics"
+    destination: "/docs/opik/development/optimization-runs/optimization/define_metrics"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/optimize_agents"
+    destination: "/docs/opik/development/optimization-runs/optimization/optimize_agents"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/optimize_multimodal"
+    destination: "/docs/opik/development/optimization-runs/optimization/optimize_multimodal"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/optimize_prompts"
+    destination: "/docs/opik/development/optimization-runs/optimization/optimize_prompts"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/optimize_tools"
+    destination: "/docs/opik/development/optimization-runs/optimization/optimize_tools"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization_studio"
+    destination: "/docs/opik/development/optimization-runs/optimization_studio"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/overview"
     destination: "/docs/opik/development/optimization-runs/overview"
     permanent: true
-  - source: "/docs/opik/agent_optimization/:slug*"
-    destination: "/docs/opik/development/optimization-runs/:slug*"
+  - source: "/docs/opik/agent_optimization/quickstart"
+    destination: "/docs/opik/development/optimization-runs/quickstart"
+    permanent: true
+
+  - source: "/docs/opik/evaluation/annotation_queues"
+    destination: "/docs/opik/evaluation/advanced/annotation_queues"
+    permanent: true
+  - source: "/docs/opik/evaluation/evaluate_agent_trajectory"
+    destination: "/docs/opik/evaluation/advanced/evaluate_agent_trajectory"
+    permanent: true
+  - source: "/docs/opik/evaluation/evaluate_multi_turn_agents"
+    destination: "/docs/opik/evaluation/advanced/evaluate_multi_turn_agents"
+    permanent: true
+  - source: "/docs/opik/evaluation/evaluate_multimodal"
+    destination: "/docs/opik/evaluation/overview"
+    permanent: true
+  - source: "/docs/opik/evaluation/evaluate_prompt"
+    destination: "/docs/opik/evaluation/getting-started"
+    permanent: true
+  - source: "/docs/opik/evaluation/evaluate_your_llm"
+    destination: "/docs/opik/evaluation/advanced/evaluate_your_llm"
+    permanent: true
+  - source: "/docs/opik/evaluation/log_experiments_with_rest_api"
+    destination: "/docs/opik/evaluation/advanced/log_experiments_with_rest_api"
+    permanent: true
+  - source: "/docs/opik/evaluation/manage_datasets"
+    destination: "/docs/opik/evaluation/advanced/manage_datasets"
+    permanent: true
+  - source: "/docs/opik/evaluation/update_existing_experiment"
+    destination: "/docs/opik/evaluation/advanced/evaluate_your_llm"
     permanent: true
 
   - source: "/docs/opik/opik-university/evaluation/concepts-overview"
@@ -1889,57 +2019,6 @@ redirects:
   - source: "/docs/opik/opik-university/testing/pytest-integration"
     destination: "/docs/opik/evaluation/advanced/building-test-suites"
     permanent: true
-  - source: "/docs/opik/opik-university/:slug*"
-    destination: "/docs/opik/quickstart"
-    permanent: true
-
-  - source: "/docs/opik/prompt_engineering/improve"
-    destination: "/docs/opik/development/prompt-library/overview"
-    permanent: true
-  - source: "/docs/opik/prompt_engineering/mcp_server"
-    destination: "/docs/opik/mcp-server"
-    permanent: true
-  - source: "/docs/opik/prompt_engineering/playground"
-    destination: "/docs/opik/development/prompt-playground"
-    permanent: true
-  - source: "/docs/opik/prompt_engineering/prompt_management"
-    destination: "/docs/opik/development/prompt-library/getting-started"
-    permanent: true
-  - source: "/docs/opik/prompt_engineering/:slug*"
-    destination: "/docs/opik/development/prompt-library/overview"
-    permanent: true
-
-  - source: "/docs/opik/testing/:slug*"
-    destination: "/docs/opik/evaluation/overview"
-    permanent: true
-
-  - source: "/docs/opik/evaluation/annotation_queues"
-    destination: "/docs/opik/evaluation/advanced/annotation_queues"
-    permanent: true
-  - source: "/docs/opik/evaluation/evaluate_agent_trajectory"
-    destination: "/docs/opik/evaluation/advanced/evaluate_agent_trajectory"
-    permanent: true
-  - source: "/docs/opik/evaluation/evaluate_multi_turn_agents"
-    destination: "/docs/opik/evaluation/advanced/evaluate_multi_turn_agents"
-    permanent: true
-  - source: "/docs/opik/evaluation/evaluate_multimodal"
-    destination: "/docs/opik/evaluation/overview"
-    permanent: true
-  - source: "/docs/opik/evaluation/evaluate_prompt"
-    destination: "/docs/opik/evaluation/getting-started"
-    permanent: true
-  - source: "/docs/opik/evaluation/evaluate_your_llm"
-    destination: "/docs/opik/evaluation/advanced/evaluate_your_llm"
-    permanent: true
-  - source: "/docs/opik/evaluation/log_experiments_with_rest_api"
-    destination: "/docs/opik/evaluation/advanced/log_experiments_with_rest_api"
-    permanent: true
-  - source: "/docs/opik/evaluation/manage_datasets"
-    destination: "/docs/opik/evaluation/advanced/manage_datasets"
-    permanent: true
-  - source: "/docs/opik/evaluation/update_existing_experiment"
-    destination: "/docs/opik/evaluation/advanced/evaluate_your_llm"
-    permanent: true
 
   - source: "/docs/opik/production/alerts"
     destination: "/docs/opik/production/alerts/alerts"
@@ -1961,6 +2040,23 @@ redirects:
     permanent: true
   - source: "/docs/opik/production/rules"
     destination: "/docs/opik/production/online-evaluation/rules"
+    permanent: true
+
+  - source: "/docs/opik/prompt_engineering/improve"
+    destination: "/docs/opik/development/prompt-library/overview"
+    permanent: true
+  - source: "/docs/opik/prompt_engineering/mcp_server"
+    destination: "/docs/opik/mcp-server"
+    permanent: true
+  - source: "/docs/opik/prompt_engineering/playground"
+    destination: "/docs/opik/development/prompt-playground"
+    permanent: true
+  - source: "/docs/opik/prompt_engineering/prompt_management"
+    destination: "/docs/opik/development/prompt-library/getting-started"
+    permanent: true
+
+  - source: "/docs/opik/testing/pytest_integration"
+    destination: "/docs/opik/evaluation/overview"
     permanent: true
 
   - source: "/docs/opik/tracing/annotate_traces"
