@@ -2425,6 +2425,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "sao10k/l3.3-euryale-70b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.STEALTH_OX_ALPHA,
+      label: "stealth/ox-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.STEPFUN_AI_STEP3,
       label: "stepfun-ai/step3",
     },
@@ -2447,6 +2451,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT,
       label: "tencent/hunyuan-a13b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY_MT2_1_8B,
+      label: "tencent/hy-mt2-1.8b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY_MT2_30B_A3B,
+      label: "tencent/hy-mt2-30b-a3b",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3,
