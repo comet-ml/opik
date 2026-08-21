@@ -22,7 +22,7 @@ const DashboardWidgetRoot: React.FunctionComponent<
   DashboardWidgetRootProps
 > = ({ children, className }) => {
   return (
-    <div className="group/widget h-full">
+    <div className="group/widget h-full" data-testid="dashboard-widget">
       <Card
         className={cn(
           "flex h-full flex-col gap-2 rounded-md px-2 pb-2 pt-1",

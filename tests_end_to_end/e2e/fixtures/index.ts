@@ -1,4 +1,4 @@
-export { test, expect } from './evaluated-thread.fixture';
+export { test, expect } from './token-usage-spans.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -65,4 +65,22 @@ export type {
   ThreadEvaluationRunRef,
   EvaluatedThreadFixtures,
 } from './evaluated-thread.fixture';
+export type {
+  JsonOutputExperimentRef,
+  JsonOutputExperimentFixtures,
+  JsonSortKey,
+  JsonSortPrefix,
+} from './json-output-experiment.fixture';
+export {
+  JSON_SORT_KEYS,
+  JSON_SORT_PREFIXES,
+  LABEL_COLUMN,
+} from './json-output-experiment.fixture';
+export type { GroupedDatasetRef, GroupedDatasetFixtures } from './grouped-dataset.fixture';
+export { GROUP_COLUMN, TARGET_GROUP } from './grouped-dataset.fixture';
+export type {
+  TokenUsageSpanSeed,
+  TokenUsageSpansRef,
+  TokenUsageSpansFixtures,
+} from './token-usage-spans.fixture';
 export type { ProjectRef } from '../core/backend';
