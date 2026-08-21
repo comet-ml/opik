@@ -525,6 +525,33 @@ def test_chrf_metric__char_order_and_ignore_whitespace_vary__change_score():
     assert order_1 != order_6
 
 
+def test_chrf_metric__multiple_references__scores_against_best_match():
+    # NLTK's sentence_chrf accepts only a single reference; passing the list of
+    # references straight through made it misinterpret the input and return a
+    # wrong score, even when the candidate exactly matched one reference. A
+    # candidate identical to any reference must score 1.0 (best-match semantics).
+    pytest.importorskip("nltk")
+
+    metric = ChrF(track=False)
+
+    match_second = metric.score(
+        output="hello world",
+        reference=["completely different text here", "hello world"],
+    ).value
+    match_first = metric.score(
+        output="hello world",
+        reference=["hello world", "completely different text here"],
+    ).value
+
+    assert match_second == pytest.approx(1.0)
+    assert match_first == pytest.approx(1.0)
+
+    # A perfect match against one reference must not score below matching that
+    # reference alone (the pre-fix bug returned a middling value here).
+    single = metric.score(output="hello world", reference="hello world").value
+    assert match_second == pytest.approx(single)
+
+
 def test_spearman_ranking_metric():
     metric = SpearmanRanking(track=False)
     result = metric.score(output=["b", "a", "c"], reference=["a", "b", "c"])
