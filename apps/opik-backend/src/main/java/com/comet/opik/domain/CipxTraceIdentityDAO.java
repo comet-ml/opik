@@ -64,7 +64,11 @@ public class CipxTraceIdentityDAO {
             int filesAdded,
             int filesDeleted,
             int linesAdded,
-            int linesDeleted) {
+            int linesDeleted,
+            int agentsDispatched,
+            int agentsLinked,
+            int agentsAmbiguous,
+            @NonNull String cipxVersion) {
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode session = metadata.path("cipx").path("session");
@@ -100,6 +104,21 @@ public class CipxTraceIdentityDAO {
                     .filesDeleted(repository.path("files_deleted").asInt(0))
                     .linesAdded(repository.path("lines_added").asInt(0))
                     .linesDeleted(repository.path("lines_deleted").asInt(0))
+                    // Session-grain subagent link rollup. These are the ONLY place cipx's worst
+                    // attribution failure is visible: a subagent whose dispatch was never observed
+                    // looks exactly like a main-loop turn, so no span carries a
+                    // link_failure_reason and only a missing increment here reveals it.
+                    //
+                    // They are session RUNNING TOTALS re-stamped on every trace upsert of that
+                    // session, so a session with N traces leaves N rows holding N successive
+                    // snapshots. Readers must take max() per session_id, never sum(). See the
+                    // reader constraints on migration 000119 (clamp missed at zero, guard the zero
+                    // denominator, and 0 means zero rather than unknown -- cipx_version is what
+                    // tells a daemon too old to emit these from one that dispatched nothing).
+                    .agentsDispatched(session.path("agents_dispatched").asInt(0))
+                    .agentsLinked(session.path("agents_linked").asInt(0))
+                    .agentsAmbiguous(session.path("agents_ambiguous").asInt(0))
+                    .cipxVersion(session.path("cipx_version").asText(""))
                     .build();
         }
     }
@@ -112,7 +131,8 @@ public class CipxTraceIdentityDAO {
                  user_email, user_display_name, repository, session_id, harness, schema_version,
                  billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                  branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
-                 files_added, files_deleted, lines_added, lines_deleted)
+                 files_added, files_deleted, lines_added, lines_deleted,
+                 agents_dispatched, agents_linked, agents_ambiguous, cipx_version)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -142,7 +162,11 @@ public class CipxTraceIdentityDAO {
                         :files_added<item.index>,
                         :files_deleted<item.index>,
                         :lines_added<item.index>,
-                        :lines_deleted<item.index>
+                        :lines_deleted<item.index>,
+                        :agents_dispatched<item.index>,
+                        :agents_linked<item.index>,
+                        :agents_ambiguous<item.index>,
+                        :cipx_version<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -172,7 +196,9 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 25 parameters per row tuple in template order.
+        // (repeats dedup), then 29 parameters per row tuple in template order. The bind order below
+        // must stay in lockstep with the INSERT tuple above — nothing checks it at compile time, and
+        // a mismatch silently writes each value into the neighbouring column.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
@@ -200,7 +226,11 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.filesAdded())
                     .bind(index++, row.filesDeleted())
                     .bind(index++, row.linesAdded())
-                    .bind(index++, row.linesDeleted());
+                    .bind(index++, row.linesDeleted())
+                    .bind(index++, row.agentsDispatched())
+                    .bind(index++, row.agentsLinked())
+                    .bind(index++, row.agentsAmbiguous())
+                    .bind(index++, row.cipxVersion());
         }
 
         return statement.execute();
