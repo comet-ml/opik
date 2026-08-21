@@ -27,9 +27,13 @@ import { DashboardsPage } from '@e2e/pom/dashboards.page';
  * workspace, and reads the rendered chart — so the capability tags name
  * something a browser actually exercised.
  *
- * The UI layer needs no `data-testid`: the dashboards tree has none, but every
- * control it touches exposes an accessible name, so the page object selects by
- * role and text (see `pom/dashboards.page.ts`).
+ * Selectors, in the page object: every *control* is reached by accessible role
+ * or text — the dashboards tree ships no `data-testid` and needs none for those.
+ * The one exception is the rendered widget container, which this PR gives
+ * `data-testid="dashboard-widget"`: a widget is a repeated, unlabelled box, so
+ * no role or accessible name identifies one, and every structural selector
+ * matched several nested containers and moved on re-render. See
+ * `pom/dashboards.page.ts`.
  */
 
 /**

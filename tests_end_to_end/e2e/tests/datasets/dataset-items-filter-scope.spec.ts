@@ -22,6 +22,14 @@ import { DatasetsPage } from '@e2e/pom/datasets.page';
  * two endpoints: a filter the backend cannot serve has to be refused at
  * validation (400/422) rather than failing inside the query builder (500).
  *
+ * SCOPE — these are the *ungrouped* forms of both endpoints: no
+ * `batch_group_id` is sent, so each mutation updates the latest dataset version
+ * rather than committing a new one. The UI's select-all variants do send one.
+ * Filter *scoping* is what needed covering here — an over-matching filter
+ * deletes data irreversibly — while version-commit semantics are asserted for
+ * the id-scoped paths by dataset-items and dataset-version-counters. A grouped
+ * variant is worth its own test; it is not this one.
+ *
  * Tags: `bulk-delete-items` for the filter-scoped delete, plus
  * `filter-scoped-batch-update` and `filter-scoped-mutation-validation` — both
  * added to the taxonomy with this spec, because the batch-update path and the

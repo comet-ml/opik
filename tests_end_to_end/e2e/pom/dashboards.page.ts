@@ -23,15 +23,19 @@ export class DashboardsPage {
   constructor(private readonly page: Page) {}
 
   async goto(): Promise<void> {
-    const env = loadEnvConfig();
-    await this.page.goto(`${env.baseUrl}/${env.workspace}/dashboards`);
+    return test.step('Open the Dashboards page', async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(`${env.baseUrl}/${env.workspace}/dashboards`);
+    });
   }
 
   async waitForReady(): Promise<void> {
-    await this.page
-      .getByRole('button', { name: /Create( your first)? dashboard/ })
-      .first()
-      .waitFor({ state: 'visible' });
+    return test.step('Wait for the Dashboards page to be ready', async () => {
+      await this.page
+        .getByRole('button', { name: /Create( your first)? dashboard/ })
+        .first()
+        .waitFor({ state: 'visible' });
+    });
   }
 
   /**
@@ -127,7 +131,9 @@ export class DashboardsPage {
 
   /** The date-range control's current label. */
   async selectedDateRange(): Promise<string> {
-    return (await this.page.getByRole('combobox').first().innerText()).trim();
+    return test.step('Read the selected dashboard date range', async () => {
+      return (await this.page.getByRole('combobox').first().innerText()).trim();
+    });
   }
 
   /** Picks a preset from the date-range control. */

@@ -522,6 +522,20 @@ export function makeBackendClient(apiKey: string | null = null) {
      * Delete every dataset item matching `filters` — `POST /v1/private/datasets/
      * items/delete`. Non-reversible and filter-scoped, so a test using it must
      * assert the surviving set exactly, not just that something was removed.
+     *
+     * **Ungrouped on purpose, and therefore not the UI's exact request.** No
+     * `batch_group_id` is sent, so the backend mutates the latest dataset
+     * version rather than creating a new one. The UI's select-all delete *does*
+     * send one (`DatasetItemsActionsPanel` calls `generateBatchGroupId()` when
+     * every row is selected), which commits the delete as its own version.
+     *
+     * The distinction is deliberate: what the filter-scoped endpoints needed
+     * covering is *which rows a filter selects* — the destructive part, where an
+     * over-matching filter silently deletes data. Version-commit semantics are a
+     * separate contract, already asserted by `dataset-items.spec.ts` and
+     * `dataset-version-counters.spec.ts` for the id-scoped paths. A caller that
+     * wants the grouped behaviour must pass `batchGroupId` and assert the new
+     * version; this helper does not, so do not read it as the user-facing path.
      */
     async deleteDatasetItemsByFilter(args: {
       datasetId: string;
