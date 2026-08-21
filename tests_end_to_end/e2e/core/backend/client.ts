@@ -232,6 +232,20 @@ export interface BackendSort {
   direction: 'ASC' | 'DESC';
 }
 
+/**
+ * The filter shape the SDK's dataset-item mutations accept, derived from the
+ * method signature rather than hand-written.
+ *
+ * `BackendFilter.operator` is a plain `string` (the estate's filters cover more
+ * endpoints than this one), while the SDK narrows it to a union, so a direct
+ * assignment does not type-check. Casting through this alias keeps the *field
+ * names* checked — a typo'd `feild`, or the `type` key the SDK does not accept,
+ * still fails the build — which a bare `as never` would silently swallow.
+ */
+type SdkDatasetItemFilters = NonNullable<
+  Parameters<Opik['api']['datasets']['deleteDatasetItems']>[0]
+>['filters'];
+
 /** The dashboard widget metric types these tests exercise. */
 export type WorkspaceMetricType = 'SPAN_TOKEN_USAGE';
 export type MetricInterval = 'HOURLY' | 'DAILY' | 'WEEKLY';
@@ -499,7 +513,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     }): Promise<void> {
       await opik.api.datasets.batchUpdateDatasetItems({
         datasetId: args.datasetId,
-        filters: args.filters as never,
+        filters: args.filters as SdkDatasetItemFilters,
         update: { tagsToAdd: args.tags },
       });
     },
@@ -515,7 +529,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     }): Promise<void> {
       await opik.api.datasets.deleteDatasetItems({
         datasetId: args.datasetId,
-        filters: args.filters as never,
+        filters: args.filters as SdkDatasetItemFilters,
       });
     },
 

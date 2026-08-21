@@ -36,6 +36,15 @@ const sortBy = (field: string, direction: 'ASC' | 'DESC'): BackendSort[] => [{ f
  */
 const HOSTILE_KEYS = ['a\') OR 1=1 --', '")', "a\\', 'x", ''];
 
+/**
+ * The key the readiness polls sort by before either test asserts anything.
+ *
+ * Deliberately the plain one: readiness is about the seeded JSON being
+ * queryable at all, and an awkward key here would conflate "not ingested yet"
+ * with "this key does not bind" — the very thing under test.
+ */
+const READINESS_KEY = 'plain';
+
 test.describe('Experiment comparison — JSON-key sorting', { tag: ['@t2-cuj', '@area:experiments'] }, () => {
   /**
    * Seeding five traces plus an experiment, then reading every key in both
@@ -69,14 +78,22 @@ test.describe('Experiment comparison — JSON-key sorting', { tag: ['@t2-cuj', '
         expect(itemIdsByLabelAsc, 'label order must differ from insertion order').not.toEqual(itemIds);
       });
 
-      await test.step('All five items are linked to the experiment', async () => {
-        // Experiment-item linkage is eventually consistent.
+      await test.step('All five items are linked, and their JSON is queryable', async () => {
+        // Two writes must land before any sort assertion means anything: the
+        // experiment-item linkage, and the traces whose JSON the sort extracts.
+        // Both are eventually consistent, and the sort reads the *joined* trace
+        // columns — so waiting on the row count alone lets a sort run against
+        // rows whose `output` is not queryable yet, which returns the fallback
+        // order and fails intermittently.
+        //
+        // Polling the sorted read covers both: it can only produce this order
+        // once the linkage exists AND the JSON is extractable.
         await expect
-          .poll(async () => (await read()).length, {
+          .poll(async () => read(sortBy(`output.${READINESS_KEY}`, 'ASC')), {
             timeout: 60_000,
             intervals: [500, 1_000, 2_000],
           })
-          .toBe(itemIds.length);
+          .toEqual(itemIdsByJsonValueAsc);
 
         expect([...(await read())].sort(), 'the unsorted read returns exactly the seeded items')
           .toEqual([...itemIds].sort());
@@ -121,19 +138,21 @@ test.describe('Experiment comparison — JSON-key sorting', { tag: ['@t2-cuj', '
       const { datasetId, experimentId, itemIds, itemIdsByJsonValueAsc, itemIdsByLabelAsc } =
         jsonOutputExperiment;
 
-      await test.step('All five items are linked to the experiment', async () => {
+      await test.step('All five items are linked, and their JSON is queryable', async () => {
+        // Same two-write readiness condition as the API test above: poll the
+        // sorted read, not the row count, so the grid is only opened once the
+        // JSON the sort extracts is actually queryable.
         await expect
           .poll(
             async () =>
-              (
-                await backendClient.listCompareItemIds({
-                  datasetId,
-                  experimentIds: [experimentId],
-                })
-              ).length,
+              backendClient.listCompareItemIds({
+                datasetId,
+                experimentIds: [experimentId],
+                sorting: sortBy(`output.${READINESS_KEY}`, 'ASC'),
+              }),
             { timeout: 60_000, intervals: [500, 1_000, 2_000] },
           )
-          .toBe(itemIds.length);
+          .toEqual(itemIdsByJsonValueAsc);
       });
 
       const compare = new CompareExperimentsPage(page, project.id, datasetId, [experimentId]);

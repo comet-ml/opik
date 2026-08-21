@@ -32,10 +32,10 @@ const unsupportedOperatorFilter = [{ field: 'tags', operator: '>', value: 'x' }]
 
 const APPLIED_TAG = 'filter-scoped-update';
 
-test.describe('Dataset items — filter-scoped mutations', { tag: ['@area:datasets'] }, () => {
+test.describe('Dataset items — filter-scoped mutations', { tag: ['@t3-nightly', '@area:datasets'] }, () => {
   test(
     'a filter-scoped batch update and delete change exactly the items the filter matches',
-    { tag: ['@t3-nightly', '@cap:datasets.bulk-delete-items'] },
+    { tag: ['@cap:datasets.bulk-delete-items'] },
     async ({ groupedDataset, project, backendClient, page }) => {
       const { id: datasetId, targetItemIds, bystanderItemIds, allItemIds } = groupedDataset;
       const sorted = (ids: string[]): string[] => [...ids].sort();
