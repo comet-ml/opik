@@ -106,10 +106,12 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     });
 
     // This gate runs BEFORE any trace is seeded, and it is the reason the rest
-    // of the test means anything. The dialog commits the sampling rate on blur,
-    // so a UI regression there posts the default 1.0 while still displaying the
-    // typed number. A rule silently left at 100% scores every trace — which is
-    // indistinguishable from "sampling works and we got a high draw" — so the
+    // of the test means anything. The dialog shows a percentage and the API
+    // stores a fraction, so a regression in that conversion — or any change
+    // that drops the typed value before submit — would leave the rule at the
+    // 100% default while the UI still displayed the number the test asked for.
+    // A rule silently left at 100% scores every trace, which is
+    // indistinguishable from "sampling works and we got a high draw", so the
     // whole test would pass while asserting nothing about sampling at all.
     // Checking the persisted fraction up front converts that silent no-op into
     // a loud, early failure.

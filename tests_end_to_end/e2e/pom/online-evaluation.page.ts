@@ -183,26 +183,23 @@ export class OnlineEvaluationPage {
   /**
    * Set the sampling rate to a PERCENTAGE (0-100), as the dialog displays it.
    *
-   * The blur is load-bearing, not defensive tidying. SliderInputControl commits
-   * the typed value to the form in `onBlur` (`validateAndHandleChange`), NOT in
-   * `onChange` — so filling the box and submitting straight away posts the
-   * PREVIOUS value. Verified against the live dialog: typing 25 and submitting
-   * without blurring persists `sampling_rate: 1.0`, silently discarding the
-   * input. That failure is invisible to a sampling assertion (a rule left at
-   * 100% scores everything, which is exactly what "sampling ignored" looks
-   * like), so the commit has to be forced here.
+   * SliderInputControl writes the form value in `onBlur`
+   * (`validateAndHandleChange`), not in `onChange`, so the blur is made
+   * explicit here rather than left to whatever the next interaction happens to
+   * be. A real user's click on Create blurs the field first, so this mirrors
+   * the genuine gesture — it is not working around a product bug.
    *
    * Do not "verify" the value by reading the slider's `aria-valuenow`: the
    * slider mirrors the component's local state, so it reports the typed number
-   * even when the form value is still stale. The only trustworthy check is the
-   * persisted rate on the created rule — assert that in the test.
+   * before the form value has been written. The trustworthy check is the
+   * persisted rate on the created rule — asserted in the test.
    */
   async setSamplingRatePercent(percent: number): Promise<void> {
     return test.step(`set sampling rate to ${percent}%`, async () => {
       await this.expandFilteringAndSampling();
       const input = this.samplingRateInput;
       await input.fill(String(percent));
-      // Commit via blur — see the note above; without this the value is dropped.
+      // Commit to the form explicitly, rather than relying on a later click.
       await input.blur();
       await expect(input).toHaveValue(String(percent));
     });
