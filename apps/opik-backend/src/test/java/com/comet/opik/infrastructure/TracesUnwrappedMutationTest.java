@@ -72,6 +72,12 @@ class TracesUnwrappedMutationTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
 
+    // A second workspace, so the multi-workspace retention case can assert *selective* deletion rather than merely
+    // rendering more template branches.
+    private static final String API_KEY_2 = "apiKey-" + UUID.randomUUID();
+    private static final String WORKSPACE_NAME_2 = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+    private static final String WORKSPACE_ID_2 = UUID.randomUUID().toString();
+
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -113,6 +119,7 @@ class TracesUnwrappedMutationTest {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
+        mockTargetWorkspace(wireMock.server(), API_KEY_2, WORKSPACE_NAME_2, WORKSPACE_ID_2, USER);
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
         this.traceDAO = traceDAO;
@@ -165,25 +172,40 @@ class TracesUnwrappedMutationTest {
     }
 
     /**
-     * Multiple workspaces in one call, which is the case the OR-ed per-workspace predicates exist for: a single
-     * statement whose arity varies with the input. One workspace alone would render only the first branch of the
-     * template loop and never its separator.
+     * The case the OR-ed per-workspace predicates exist for, asserting what they are actually for: each workspace
+     * carries its <b>own</b> id floor, so the same call must delete in one workspace and spare the other.
+     * <p>
+     * Both traces sit inside the shared week window, so the {@code toMonday} bounds cannot be what separates them. The
+     * only thing that can is the per-workspace {@code :lb_i}: the first workspace's floor sits below its trace, the
+     * second's above its own. A broken separator, a mis-numbered bind, or a single shared floor all collapse this to
+     * "delete both" or "delete neither".
      */
     @Test
-    void deleteForRetentionBoundedSpansSeveralWorkspaces() {
-        var window = RetentionWindow.aroundNow();
-        var trace = newTrace().id(window.middleId()).build();
-        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
-        assertThat(getTraceIds(trace.projectName())).contains(trace.id());
+    void deleteForRetentionBoundedAppliesEachWorkspacesOwnLowerBound() {
+        var now = Instant.now();
+        var floor = ID_GENERATOR.generateId(now.minusSeconds(2));
+        var deletedId = ID_GENERATOR.generateId(now.minusSeconds(1));
+        var sparedId = ID_GENERATOR.generateId(now.minusSeconds(1));
+        var aboveTheSpared = ID_GENERATOR.generateId(now);
+        var cutoff = ID_GENERATOR.generateId(now.plusSeconds(1));
 
-        // The extra workspaces hold no traces; they are here to force the multi-branch rendering.
+        var deleted = newTrace().id(deletedId).build();
+        var spared = newTrace().id(sparedId).build();
+        traceResourceClient.createTrace(deleted, API_KEY, WORKSPACE_NAME);
+        traceResourceClient.createTrace(spared, API_KEY_2, WORKSPACE_NAME_2);
+        assertThat(getTraceIds(deleted.projectName(), API_KEY, WORKSPACE_NAME)).contains(deletedId);
+        assertThat(getTraceIds(spared.projectName(), API_KEY_2, WORKSPACE_NAME_2)).contains(sparedId);
+
         traceDAO.deleteForRetentionBounded(
-                Map.of(WORKSPACE_ID, window.lowerBound(),
-                        UUID.randomUUID().toString(), window.lowerBound(),
-                        UUID.randomUUID().toString(), window.lowerBound()),
-                window.cutoffId(), window.lowerBound()).block();
+                Map.of(WORKSPACE_ID, floor, WORKSPACE_ID_2, aboveTheSpared),
+                cutoff, floor).block();
 
-        assertThat(getTraceIds(trace.projectName())).doesNotContain(trace.id());
+        assertThat(getTraceIds(deleted.projectName(), API_KEY, WORKSPACE_NAME))
+                .as("its workspace's floor sits below this trace, so it is in range")
+                .doesNotContain(deletedId);
+        assertThat(getTraceIds(spared.projectName(), API_KEY_2, WORKSPACE_NAME_2))
+                .as("its workspace's floor sits above this trace, so the same statement must spare it")
+                .contains(sparedId);
     }
 
     /**
@@ -232,8 +254,12 @@ class TracesUnwrappedMutationTest {
     }
 
     private List<UUID> getTraceIds(String projectName) {
+        return getTraceIds(projectName, API_KEY, WORKSPACE_NAME);
+    }
+
+    private List<UUID> getTraceIds(String projectName, String apiKey, String workspaceName) {
         return traceResourceClient
-                .getTraces(projectName, null, API_KEY, WORKSPACE_NAME, List.of(), List.of(), 100, Map.of())
+                .getTraces(projectName, null, apiKey, workspaceName, List.of(), List.of(), 100, Map.of())
                 .content().stream()
                 .map(Trace::id)
                 .toList();
