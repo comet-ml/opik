@@ -16,6 +16,7 @@ def run_interactive_configure(
     use_local: bool = False,
     automatic_approvals: bool = False,
     install_mcp: Optional[bool] = None,
+    install_skills: Optional[bool] = None,
 ) -> None:
     """Programmatic entry to the interactive ``opik configure`` flow.
 
@@ -28,6 +29,7 @@ def run_interactive_configure(
             force=True,
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
+            install_skills=install_skills,
         )
         return
 
@@ -41,6 +43,7 @@ def run_interactive_configure(
             self_hosted_comet=False,
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
+            install_skills=install_skills,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
         configurator = opik_configure.OpikConfigurator(
@@ -49,6 +52,7 @@ def run_interactive_configure(
             self_hosted_comet=True,
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
+            install_skills=install_skills,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
         configurator = opik_configure.OpikConfigurator(
@@ -57,6 +61,7 @@ def run_interactive_configure(
             self_hosted_comet=False,
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
+            install_skills=install_skills,
         )
     else:
         raise click.ClickException("Unknown deployment type was selected. Exiting.")
@@ -87,11 +92,22 @@ def run_interactive_configure(
     "--install-mcp/--no-install-mcp",
     default=None,
     help="Register the Opik MCP server with detected AI hosts (Claude Code, Cursor, "
-    "VS Code). When omitted, you are prompted interactively.",
+    "VS Code, Codex, opencode). When omitted, you are prompted interactively.",
+)
+@click.option(
+    "--install-skills/--no-install-skills",
+    default=None,
+    help="Install the Opik skill pack into detected AI hosts, teaching your "
+    "assistant how to instrument code with Opik. When omitted, you are prompted "
+    "interactively. Requires `npx`.",
 )
 @click.pass_context
 def configure(
-    ctx: click.Context, use_local: bool, yes: bool, install_mcp: Optional[bool]
+    ctx: click.Context,
+    use_local: bool,
+    yes: bool,
+    install_mcp: Optional[bool],
+    install_skills: Optional[bool],
 ) -> None:
     """
     Create a configuration file for the Opik Python SDK, if a configuration file already exists, it will be overwritten.
@@ -104,7 +120,10 @@ def configure(
         return
 
     run_interactive_configure(
-        use_local=use_local, automatic_approvals=yes, install_mcp=install_mcp
+        use_local=use_local,
+        automatic_approvals=yes,
+        install_mcp=install_mcp,
+        install_skills=install_skills,
     )
 
 

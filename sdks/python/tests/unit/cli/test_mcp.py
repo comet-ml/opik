@@ -206,3 +206,171 @@ class TestInstallCommand:
         assert result.exit_code == 0
         setup_spy.assert_called_once()
         assert setup_spy.call_args.kwargs["use_local"] is True
+
+
+class TestHostFlag:
+    """`--host` is what lets an agent, a Dockerfile, or CI run this at all."""
+
+    def test_configure__host_flag__passes_key_through(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", "--host", "codex"])
+
+        assert result.exit_code == 0
+        assert setup_spy.call_args.kwargs["host_keys"] == ["codex"]
+
+    def test_configure__repeated_host_flag__passes_every_key(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(
+                cli,
+                ["mcp", "configure", "--host", "codex", "--host", "cursor"],
+            )
+
+        assert result.exit_code == 0
+        assert setup_spy.call_args.kwargs["host_keys"] == ["codex", "cursor"]
+
+    def test_configure__duplicate_host_flag__deduplicates(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(
+                cli, ["mcp", "configure", "--host", "codex", "--host", "codex"]
+            )
+
+        assert result.exit_code == 0
+        assert setup_spy.call_args.kwargs["host_keys"] == ["codex"]
+
+    def test_configure__no_host_flag__leaves_detection_to_the_installer(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+
+        assert result.exit_code == 0
+        assert setup_spy.call_args.kwargs["host_keys"] is None
+
+    def test_configure__unknown_host__is_rejected_by_the_parser(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["mcp", "configure", "--host", "emacs"])
+
+        assert result.exit_code != 0
+        assert "emacs" in result.output
+
+    def test_configure__host_all__expands_to_detected_hosts(self):
+        runner = CliRunner()
+        detected = [
+            mcp_cli.mcp_targets.find_target("cursor"),
+            mcp_cli.mcp_targets.find_target("codex"),
+        ]
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(
+                mcp_cli.mcp_targets, "detected_targets", return_value=detected
+            ),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", "--host", "all"])
+
+        assert result.exit_code == 0
+        assert setup_spy.call_args.kwargs["host_keys"] == ["cursor", "codex"]
+
+    def test_configure__host_all_with_nothing_detected__errors(self):
+        runner = CliRunner()
+        with (
+            patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", "--host", "all"])
+
+        assert result.exit_code != 0
+        assert "no supported AI host" in result.output
+        setup_spy.assert_not_called()
+
+    def test_configure__non_interactive_with_host__succeeds(self):
+        """The terminal was only ever needed to ask which host to use."""
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=False
+            ),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", "--host", "codex"])
+
+        assert result.exit_code == 0
+        setup_spy.assert_called_once()
+
+    def test_configure__non_interactive_without_host__suggests_the_flag(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=False
+            ),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+
+        assert result.exit_code != 0
+        assert "--host" in result.output
+        setup_spy.assert_not_called()
+
+    def test_configure__non_interactive_host_but_unconfigured__errors_clearly(self):
+        """We cannot run the interactive configure wizard without a terminal."""
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key=None)
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=False
+            ),
+            patch.object(
+                mcp_cli.configure_cli, "run_interactive_configure"
+            ) as configure_spy,
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", "--host", "codex"])
+
+        assert result.exit_code != 0
+        assert "OPIK_API_KEY" in result.output
+        configure_spy.assert_not_called()
+        setup_spy.assert_not_called()

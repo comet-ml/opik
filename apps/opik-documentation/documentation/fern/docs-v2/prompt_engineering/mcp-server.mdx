@@ -1,21 +1,22 @@
 ---
 headline: Opik's MCP server
-og:description: Configure Opik's Python MCP server with Claude Code, Cursor, and VS Code Copilot to read traces, log scores, and manage prompts from your AI host.
+og:description: Configure Opik's Python MCP server with Claude Code, Cursor, VS Code Copilot, Codex, and opencode to read traces, log scores, and manage prompts from your AI host.
 og:site_name: Opik Documentation
 og:title: Integrate with Opik's MCP server
 title: Opik's MCP server
 ---
 
 Opik's [MCP server](https://github.com/comet-ml/opik-mcp) connects your AI host
-(Claude Code, Cursor, VS Code Copilot, MCP Inspector) directly to your Opik
-workspace — read traces, log scores, save prompt versions, and ask Ollie
+(Claude Code, Cursor, VS Code Copilot, Codex, opencode, MCP Inspector) directly to
+your Opik workspace — read traces, log scores, save prompt versions, and ask Ollie
 investigative questions, all from the chat.
 
 ## Quick setup with the Opik CLI
 
 The fastest way to connect the MCP server is the Opik CLI. It detects your AI
-host (Claude Code, Cursor, VS Code Copilot), picks the right server for your
-Opik deployment, and configures it for you.
+host (Claude Code, Cursor, VS Code Copilot, Codex, opencode), picks the right
+server for your Opik deployment, configures it, and then checks that the
+configuration it just wrote actually works.
 
 <Tip>
 Prefer not to use the CLI? You can wire up any host by hand — skip to
@@ -39,19 +40,100 @@ Prefer not to use the CLI? You can wire up any host by hand — skip to
     This reuses your existing Opik configuration (`~/.opik.config`). If you
     haven't configured Opik yet, the wizard offers to do it for you first.
 
-    `opik configure` also offers to run this for you at the end of its setup:
+    `opik configure` also offers to run this for you at the end of its setup,
+    naming the hosts it found:
 
-    > Set up the Opik MCP server for an AI assistant (Claude Code, Cursor, VS Code)? (y/N)
+    > Cursor detected. Register the Opik MCP server with it? (y/N)
   </Step>
-  <Step title="Restart your AI host and verify">
-    Restart your AI host, then ask **"list my Opik projects"** in the chat to
-    confirm it works.
+  <Step title="Restart your AI host">
+    The CLI finishes by making a real call with the credentials it wrote, so you
+    already know they work:
+
+    ```text
+    Cursor: Added 'opik-mcp' in ~/.cursor/mcp.json
+    Verified: connected to workspace acme-ai, 7 project(s) visible.
+    Restart your AI host to pick up the Opik MCP server, then ask it to 'list my Opik projects'.
+    ```
+
+    If verification fails, the CLI says why instead of reporting success — a
+    registered server whose credentials are wrong would otherwise look identical
+    to a working one until your agent hit a 401 mid-conversation.
 
     <Note>
-    If your host isn't detected, use [Manual setup](#manual-setup) below.
+    If your host isn't detected, name it with `--host` (below) or use
+    [Manual setup](#manual-setup).
     </Note>
   </Step>
 </Steps>
+
+## The skill pack
+
+The MCP server gives your assistant *tools*. The **skill pack** gives it the knowledge of how to use Opik — which integration to reach for, how to mark an entrypoint, how to build a test suite, how `opik connect` works. Most people want both:
+
+```bash
+opik skills configure
+```
+
+`opik configure` also offers it after the MCP step:
+
+> Install the Opik skill pack for Cursor? It teaches your assistant how to instrument code, run test suites, and use `opik connect`. (y/N)
+
+Skills are plain `SKILL.md` directories, and assistants have converged on a shared user-level location, so one install covers all of them:
+
+| Assistant | Reads |
+| --- | --- |
+| Cursor, VS Code Copilot, Codex, opencode | `~/.agents/skills` directly |
+| Claude Code | `~/.claude/skills`, which the CLI links to the shared copy |
+
+Because this is a user-level install, it is independent of your current directory — there is no project to be inside. It needs no Opik credentials either, so it works before `opik configure`.
+
+```bash
+opik skills configure --host codex --host claude-code   # specific assistants
+opik skills configure --host all                        # every detected assistant
+opik skills status                                      # what is installed
+opik skills remove                                      # take it back out
+```
+
+`opik configure --install-skills` does the same non-interactively, for a Dockerfile or CI.
+
+<Note>
+Already using [`npx skills add comet-ml/opik-skills`](https://github.com/comet-ml/opik-skills)? That writes to the same `~/.agents/skills` location, so the two are interchangeable. `opik skills status` reports a pack it did not install as coming from outside the CLI, and `opik skills configure` will replace it.
+</Note>
+
+## Scripts, containers, and coding agents
+
+`opik mcp configure` only needs a terminal in order to *ask* which host to use.
+Name one with `--host` and it runs headless — which is what makes "set Opik up for
+me" something a coding agent can do in one step, and what lets the command work in
+a Dockerfile, a dotfiles repo, or CI:
+
+```bash
+# One host, no prompts, no terminal required
+opik mcp configure --host claude-code
+
+# Several hosts
+opik mcp configure --host cursor --host codex
+
+# Every host detected on this machine
+opik mcp configure --host all
+```
+
+Valid values are `claude-code`, `cursor`, `vscode`, `codex`, `opencode`, and
+`all`. Naming a host installs for it whether or not it is currently detected, so
+a fresh container image can be configured before the editor is installed.
+
+`opik configure` takes `--install-mcp` for the same purpose, and it is honoured
+without a terminal too:
+
+```bash
+opik configure --install-mcp --install-skills
+```
+
+<Note>
+`opik configure -y` deliberately does **not** register the MCP server: a blanket
+yes-to-everything should not reach into another tool's configuration files. Pass
+`--install-mcp` / `--install-skills` when you want them.
+</Note>
 
 ## Check your setup
 
@@ -121,8 +203,26 @@ first connect, so:
 
 If no hosted server is available for your environment, the CLI sets up the
 **local server**, which runs on demand via `uvx opik-mcp`. This requires
-[`uv`](https://docs.astral.sh/uv/) — install it with `brew install uv` (macOS)
-or `curl -LsSf https://astral.sh/uv/install.sh | sh`.
+[`uv`](https://docs.astral.sh/uv/); if it isn't on your `PATH` the CLI stops and
+prints the exact command to install it for your platform.
+
+### Workspaces
+
+For the local server your workspace is written into the host's config, so it has
+to be the right one. If your Opik configuration doesn't name a workspace and your
+account has more than one, `opik mcp configure` **refuses to continue** rather
+than falling back to your account default:
+
+```text
+Your Opik configuration does not name a workspace, but this account has 3:
+acme-ai, acme-research, sandbox. The MCP server would fall back to your default
+workspace and silently read from the wrong place. Run `opik configure` and choose
+a workspace, then re-run `opik mcp configure`.
+```
+
+Guessing here is the one failure this CLI can produce that doesn't look like a
+failure: your agent would read real traces from the wrong workspace and report
+them confidently. Run `opik configure`, pick a workspace, and re-run.
 
 ## Manual setup
 
@@ -318,6 +418,66 @@ connect to a named cloud workspace.
 
     Reload the window. The Copilot Chat **MCP** indicator shows `opik-mcp` once
     the server is reachable. Ask in chat: **"list my Opik projects"**.
+
+    </Tab>
+    <Tab title="Codex">
+
+    Add the server with one command:
+
+    ```bash
+    codex mcp add opik-mcp \
+      --env OPIK_API_KEY=<your-key> \
+      --env OPIK_WORKSPACE=<your-workspace> \
+      -- uvx opik-mcp
+    ```
+
+    Or add an `[mcp_servers.opik-mcp]` table to `~/.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.opik-mcp]
+    command = "uvx"
+    args = ["opik-mcp"]
+
+    [mcp_servers.opik-mcp.env]
+    OPIK_API_KEY = "<your-key>"
+    OPIK_WORKSPACE = "<your-workspace>"
+    ```
+
+    Confirm with `codex mcp get opik-mcp`, then ask in the chat:
+    **"list my Opik projects"**.
+
+    <Note>
+    `opik mcp configure --host codex` drives the `codex` CLI rather than editing
+    `config.toml`, so your comments and formatting are left alone. If the `codex`
+    CLI isn't on your `PATH` it tells you to add the table by hand instead of
+    rewriting your TOML.
+    </Note>
+
+    </Tab>
+    <Tab title="opencode">
+
+    Edit `~/.config/opencode/opencode.json` (or the file in
+    `$OPENCODE_CONFIG_DIR`). Note that opencode uses its own vocabulary: `local`
+    rather than `stdio`, one `command` list holding the executable and its
+    arguments, and `environment` rather than `env`:
+
+    ```json
+    {
+      "mcp": {
+        "opik-mcp": {
+          "type": "local",
+          "command": ["uvx", "opik-mcp"],
+          "environment": {
+            "OPIK_API_KEY": "<your-key>",
+            "OPIK_WORKSPACE": "<your-workspace>"
+          },
+          "enabled": true
+        }
+      }
+    }
+    ```
+
+    Restart opencode, then ask in the chat: **"list my Opik projects"**.
 
     </Tab>
     <Tab title="MCP Inspector">
