@@ -11,6 +11,7 @@ export {
   type TestSuiteItemRef,
   type FeedbackScoreRef,
   type TraceDetail,
+  type SpanDetail,
   type AutomationRuleRef,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,

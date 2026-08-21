@@ -90,6 +90,13 @@ export interface TraceDetail {
   input: Record<string, unknown> | null;
 }
 
+/** One span of a trace, with the feedback scores attached to the span itself. */
+export interface SpanDetail {
+  id: string;
+  name: string;
+  feedbackScores: FeedbackScoreRef[];
+}
+
 /** One conversation thread as `GET /v1/private/traces/threads/retrieve` answers it. */
 export interface ThreadDetail {
   id: string;
@@ -531,6 +538,56 @@ export function makeBackendClient(apiKey: string | null = null) {
 
     async deleteTraces(ids: string[]): Promise<void> {
       await opik.api.traces.deleteTraces({ ids });
+    },
+
+    /**
+     * The spans of one trace, each with the feedback scores attached to the
+     * SPAN itself. A span's scores are a separate collection from its trace's:
+     * the Traces table surfaces them through their own "<name> (span)" columns,
+     * reading `span_feedback_scores` rather than `feedback_scores`. Comparing a
+     * span column against the trace's scores would therefore pass over exactly
+     * the mix-up the column split exists to prevent.
+     */
+    async listTraceSpans(args: { projectId: string; traceId: string }): Promise<SpanDetail[]> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        traceId: args.traceId,
+        size: 100,
+        page: 1,
+        truncate: true,
+      });
+      return (page.content ?? []).map((s) => ({
+        id: String(s.id),
+        name: s.name ?? '',
+        feedbackScores: (s.feedbackScores ?? []).map((fs) => ({
+          name: fs.name,
+          value: Number(fs.value),
+          reason: fs.reason ?? null,
+          source: String(fs.source),
+        })),
+      }));
+    },
+
+    /**
+     * Attach a feedback score to a span. The SDK bridge only seeds trace-level
+     * scores (`client.trace(feedback_scores=...)`), and a span score is what
+     * makes a "<name> (span)" column exist at all, so this write has no
+     * bridge equivalent to go through.
+     */
+    async addSpanFeedbackScore(args: {
+      spanId: string;
+      name: string;
+      value: number;
+      reason?: string;
+    }): Promise<void> {
+      await opik.api.spans.addSpanFeedbackScore(args.spanId, {
+        body: {
+          name: args.name,
+          value: args.value,
+          source: 'sdk',
+          ...(args.reason ? { reason: args.reason } : {}),
+        },
+      });
     },
 
     async pollTraceForFeedbackScore(

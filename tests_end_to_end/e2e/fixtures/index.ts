@@ -1,4 +1,4 @@
-export { test, expect } from './evaluated-thread.fixture';
+export { test, expect } from './scored-traces.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -65,4 +65,10 @@ export type {
   ThreadEvaluationRunRef,
   EvaluatedThreadFixtures,
 } from './evaluated-thread.fixture';
+export type {
+  ScoredTraceRef,
+  ScoredTraceScoreSeed,
+  ScoredSpanRef,
+  ScoredTracesFixtures,
+} from './scored-traces.fixture';
 export type { ProjectRef } from '../core/backend';

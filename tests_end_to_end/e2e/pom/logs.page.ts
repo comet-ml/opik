@@ -31,6 +31,17 @@ export class LogsPage {
     });
   }
 
+  /** Open Logs with the Spans tab active for the given project. */
+  async gotoSpans(projectId: string): Promise<void> {
+    return test.step(`Open Logs (Spans) for project ${projectId}`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=spans`,
+      );
+    });
+  }
+
   /** Open Logs with the Threads tab active for the given project. */
   async gotoThreads(projectId: string): Promise<void> {
     return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {
@@ -54,6 +65,18 @@ export class LogsPage {
         const txt = document.body.innerText;
         return /Traces\s+\d+/i.test(txt);
       });
+    });
+  }
+
+  /**
+   * Wait for the Spans table to be ready. Gated on the given span's own row
+   * rather than "any row": a span lands on the spans list a beat after its
+   * trace lands on the traces list, so waiting for the first row can return
+   * while the span under test is still missing.
+   */
+  async waitForSpansReady(spanId: string): Promise<void> {
+    return test.step('Wait for Spans table ready', async () => {
+      await this.spanRow(spanId).waitFor({ state: 'visible' });
     });
   }
 
@@ -140,6 +163,65 @@ export class LogsPage {
    */
   traceRow(traceId: string): Locator {
     return this.page.locator(`tr[data-row-id="${traceId}"]`);
+  }
+
+  /** A span row on the Spans tab, keyed by span id (the row's data-row-id IS the span id). */
+  spanRow(spanId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${spanId}"]`);
+  }
+
+  // --- Feedback-score columns ---
+
+  /**
+   * A trace- (or span-) level feedback-score cell, keyed by row id and score
+   * name.
+   *
+   * The table builds one column per score name with `accessorKey`
+   * `feedback_scores.<name>`; TanStack derives the column id from that key by
+   * replacing dots with underscores, and the shared DataTable stamps
+   * `data-cell-id="<rowId>_<columnId>"`. Addressing by that pair is what keeps
+   * the lookup independent of column order — which in this app the user
+   * configures and the app persists — and of how many score columns exist.
+   */
+  feedbackScoreCell(rowId: string, scoreName: string): Locator {
+    return this.page.locator(`[data-cell-id="${rowId}_feedback_scores_${scoreName}"]`);
+  }
+
+  /**
+   * A SPAN-level score cell on the *Traces* tab — the `"<name> (span)"` column.
+   *
+   * Deliberately a different lookup from feedbackScoreCell: the two columns can
+   * carry the same score name while reading different collections
+   * (`span_feedback_scores` vs `feedback_scores`), so a helper that collapsed
+   * them would pass over a cell rendering the wrong one.
+   */
+  spanScoreCell(traceId: string, scoreName: string): Locator {
+    return this.page.locator(`[data-cell-id="${traceId}_span_feedback_scores_${scoreName}"]`);
+  }
+
+  /**
+   * The reason indicator inside a score cell — the icon that opens the reason
+   * tooltip, rendered only when the score carries a reason.
+   *
+   * CSS by necessity: the indicator renders no text, exposes no accessible
+   * name and carries no `data-testid` on the shipped build, so the lucide icon
+   * class is the only stable handle available from outside the FE. A
+   * `data-testid` on FeedbackScoreCell's reason trigger would replace this.
+   */
+  scoreReasonIndicator(cell: Locator): Locator {
+    return cell.locator('svg.lucide-message-square-more');
+  }
+
+  /** Hover a score cell's reason indicator so its tooltip opens. */
+  async openScoreReason(cell: Locator): Promise<void> {
+    return test.step('Open a score cell reason tooltip', async () => {
+      await this.scoreReasonIndicator(cell).hover();
+    });
+  }
+
+  /** The open reason tooltip (author, when, and the reason text). */
+  get scoreReasonTooltip(): Locator {
+    return this.page.getByRole('tooltip');
   }
 
   /** Tick the selection checkbox on a trace's row. */
