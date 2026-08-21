@@ -63,7 +63,6 @@ declare module "@tanstack/react-table" {
     rowHeightStyle: React.CSSProperties;
     onCommentsReply?: (row: TData, idx?: number) => void;
     aggregationMap?: Record<string, unknown>;
-    enableUserFeedbackEditing?: boolean;
     projectId?: string;
     projectName?: string;
   }

@@ -108,7 +108,9 @@ import {
   buildSpanDurationTarget,
   buildSpanErrorTarget,
 } from "@/v2/pages/LogsPage/TracesSpansTab/explainTargets";
-import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
+import FeedbackScoreCell, {
+  resolveFeedbackScoreCell,
+} from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -1034,7 +1036,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           label,
           type: columnType,
           header: FeedbackScoreHeader as never,
-          cell: FeedbackScoreCell as never,
+          cell: resolveFeedbackScoreCell(label) as never,
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
@@ -1151,7 +1153,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       onCommentsReply: (row?: Trace | Span) => {
         handleRowClick(row, DetailsActionSection.Comments);
       },
-      enableUserFeedbackEditing: true,
     }),
     [handleRowClick],
   );
