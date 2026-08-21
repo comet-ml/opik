@@ -445,11 +445,24 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.ingress.tls.enabled | bool | `false` |  |
 | component.python-backend.ingress.tls.hosts | list | `[]` |  |
 | component.python-backend.ingress.tls.secretName | string | `""` |  |
+| component.python-backend.lifecycle.preStop.exec.command[0] | string | `"/bin/sh"` |  |
+| component.python-backend.lifecycle.preStop.exec.command[1] | string | `"-c"` |  |
+| component.python-backend.lifecycle.preStop.exec.command[2] | string | `"sleep 5"` |  |
+| component.python-backend.livenessProbe.failureThreshold | int | `3` |  |
+| component.python-backend.livenessProbe.httpGet.path | string | `"/health/liveness"` |  |
+| component.python-backend.livenessProbe.httpGet.port | int | `8000` |  |
+| component.python-backend.livenessProbe.periodSeconds | int | `15` |  |
+| component.python-backend.livenessProbe.timeoutSeconds | int | `3` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
 | component.python-backend.networkPolicy.additionalRules | list | `[]` |  |
 | component.python-backend.networkPolicy.annotations | object | `{}` |  |
 | component.python-backend.networkPolicy.enabled | bool | `false` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
+| component.python-backend.readinessProbe.failureThreshold | int | `3` |  |
+| component.python-backend.readinessProbe.httpGet.path | string | `"/health/readiness"` |  |
+| component.python-backend.readinessProbe.httpGet.port | int | `8000` |  |
+| component.python-backend.readinessProbe.periodSeconds | int | `10` |  |
+| component.python-backend.readinessProbe.timeoutSeconds | int | `3` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
 | component.python-backend.securityContext.privileged | bool | `true` |  |

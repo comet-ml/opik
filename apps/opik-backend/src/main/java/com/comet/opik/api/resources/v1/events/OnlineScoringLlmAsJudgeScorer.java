@@ -33,7 +33,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -483,8 +482,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 // for the empirical asymmetry. Follow-up rounds in handleToolCalls switch to
                 // AUTO so the model can decide when it has enough info to stop investigating;
                 // a uniform REQUIRED would loop forever because the wrap-up turn would also
-                // be forced to call a tool.
-                scoreRequest = agenticScoringService.addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
+                // be forced to call a tool. Providers that reject a forced choice outright get
+                // AUTO here too — see firstRoundToolChoice.
+                scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
+                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
             }
 
             // summarizeRequest is cheap (no per-message toString streaming since the chars-count
