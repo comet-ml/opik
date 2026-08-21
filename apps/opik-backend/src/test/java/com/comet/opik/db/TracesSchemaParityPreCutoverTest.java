@@ -150,18 +150,18 @@ class TracesSchemaParityPreCutoverTest {
     }
 
     /**
-     * The negative control that makes the pattern load-bearing: the same change written the ordinary un-guarded way
+     * The negative control that makes the pattern load-bearing: the same change written the ordinary unguarded way
      * applies without error and leaves the shadow behind, and this gate rejects it. A pull request shaped like this
      * cannot merge.
      */
     @Test
     @Order(7)
-    @DisplayName("an un-guarded traces migration is rejected: it never reaches the shadow")
+    @DisplayName("an unguarded traces migration is rejected: it never reaches the shadow")
     void unguardedMigrationIsRejected() throws Exception {
         MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
 
         assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
-                .as("the un-guarded ALTER does reach the live table — it fails silently, which is the problem")
+                .as("the unguarded ALTER does reach the live table — it fails silently, which is the problem")
                 .contains(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
         assertThat(TableSchema.read(connection, DATABASE_NAME, SHADOW).columnNames())
                 .as("...and never reaches the shadow the cutover will promote")
@@ -395,6 +395,8 @@ class TracesSchemaParityPreCutoverTest {
                 .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
         assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
                 .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+        assertThat(column.defaultExpression()).as("reference field expression on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
     }
 
     /** Likewise the index: the same name with a different type, expression or granularity is a different index. */

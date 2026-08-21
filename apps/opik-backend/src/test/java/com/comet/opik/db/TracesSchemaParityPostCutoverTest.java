@@ -193,6 +193,8 @@ class TracesSchemaParityPostCutoverTest {
                 .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
         assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
                 .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+        assertThat(column.defaultExpression()).as("reference field expression on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_EXPRESSION);
     }
 
     /**
@@ -234,17 +236,17 @@ class TracesSchemaParityPostCutoverTest {
     }
 
     /**
-     * The negative control on this topology: the un-guarded {@code ALTER TABLE traces} lands on the Distributed wrapper,
+     * The negative control on this topology: the unguarded {@code ALTER TABLE traces} lands on the Distributed wrapper,
      * which accepts it as metadata, so the column resolves on reads while no shard stores it.
      */
     @Test
     @Order(7)
-    @DisplayName("an un-guarded traces migration is rejected: it only reaches the wrapper")
+    @DisplayName("an unguarded traces migration is rejected: it only reaches the wrapper")
     void unguardedMigrationIsRejected() throws Exception {
         MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
 
         assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
-                .as("the un-guarded ALTER reaches the wrapper, so it applies without error")
+                .as("the unguarded ALTER reaches the wrapper, so it applies without error")
                 .contains(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
         assertThat(TableSchema.read(connection, DATABASE_NAME, SHARD).columnNames())
                 .as("...and never reaches the shard that would have to store it")
