@@ -1468,10 +1468,12 @@ serviceToggles:
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
   projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
-  # Default: false
+  # Default: true
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
   #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
-  agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
+  #   On by default for every deployment, self-hosted included; set TOGGLE_AGENTIC_TOOLS_ENABLED=false to force
+  #   the inline path (e.g. to keep online scoring on a single LLM round-trip).
+  agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"true"}
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces/spans.
   #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
