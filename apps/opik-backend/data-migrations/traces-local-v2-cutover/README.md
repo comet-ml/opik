@@ -212,8 +212,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > `databaseAnalyticsDataModel.tracesDistributedWrapEnabled`. Set it **`true` in lockstep with applying the wrap** so those
 > deletes run against `traces_local`; reads and inserts stay on the Distributed `traces`. The flag is **startup-bound**
 > (read once at boot; no hot-reload), so making it "live across the fleet" means a **completed rolling restart of every
-> backend instance** — there is no readiness endpoint exposing its value, so confirm via the deploy's restart completion
-> or by observing that trace deletes hit the intended table (queries are `log_comment`-tagged). A mismatch is
+> backend instance**. Since OPIK-7773 the flag's value is observable per instance: the `clickhouse-traces-topology`
+> readiness check asserts it against the live `traces` engine on every probe, so
+> `GET /health-check?name=clickhouse-traces-topology` reports which side of the cutover that instance believes it is on
+> and, on a mismatch, names both the flag and the observed engine. A mismatch is
 > **fail-loud**, not silent: a stale-`false` instance issues `DELETE` against the `Distributed` `traces` (code 36/48), a
 > stale-`true` instance against an absent `traces_local` — both 500 the delete path, so a partial rollout surfaces at
 > once and is recoverable. While it is `false` (the deploy
@@ -227,7 +229,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > the EXCHANGE. Defer the
 > wrap until the retarget flag is wired into the deploy. The wrap is the sharding-readiness layer, not the cutover.
 >
-> **"In lockstep" cannot mean simultaneous — plan for a short fail-loud delete window.** The toggle is a
+> **"In lockstep" cannot mean simultaneous — plan for a short mismatch window.** The toggle is a
 > config push plus a rolling restart; the wrap is a DDL statement. They cannot land at the same instant, so
 > one of two windows is unavoidable:
 > - **toggle first** (recommended): from the moment the last backend comes up with `true` until the wrap
@@ -236,10 +238,19 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > - **wrap first**: from the swap until the rolling restart finishes, deletes hit the `Distributed` `traces`
 >   → `Code: 36`. Same blast radius, but it also exposes the cross-node `ON CLUSTER` skew with no buffer.
 >
+> **Since OPIK-7773 the mismatch window is also a readiness window.** `clickhouse-traces-topology` is a
+> `critical`/`ready` check, so for as long as flag and topology disagree — in **either** order — every instance that
+> sees the mismatch fails `/health-check?name=all&type=ready` and Kubernetes takes it out of rotation. That is the
+> point of the check (an instance whose deletes cannot work should not serve), but it changes the cost of the window
+> from "delete-path 500s" to "no backend in rotation", so the window must sit **inside the declared maintenance window**
+> that `--confirm-maintenance` already asserts for the wrap. It is self-clearing: the probe re-evaluates continuously,
+> so rotation returns on the next successful probe after the two sides are back in step — no extra restart needed on
+> the wrap-first path, and only the already-planned restart on the toggle-first path.
+>
 > Prefer **toggle first**, have the `--wrap-only` command ready to run the moment every backend instance is up, and
-> keep the window to seconds. Both directions are delete-path-only and fail loudly rather than corrupting
-> anything, which is what makes a short window acceptable — but on a shared environment announce it, and do
-> not leave the toggle `true` without the wrap (or vice versa) for any length of time.
+> keep the window to seconds. Nothing in either direction corrupts data — that is what makes a short window
+> acceptable — but announce it on a shared environment, and do not leave the toggle `true` without the wrap (or vice
+> versa) for any length of time: with the readiness check in place that is now an outage, not a degradation.
 >
 > **Monitoring consequence of the flip:** `system.parts` only knows `traces_local` post-wrap, so the
 > `opik.clickhouse.partition.*` parts gauges relabel from `table="traces"` to `table="traces_local"`, while the
