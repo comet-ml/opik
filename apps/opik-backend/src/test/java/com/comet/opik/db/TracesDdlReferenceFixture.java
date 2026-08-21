@@ -65,12 +65,21 @@ class TracesDdlReferenceFixture {
     /**
      * How Liquibase recorded {@code changeSetId} in the ledger, or {@code null} if it recorded nothing. The ledger lives
      * in {@code default}, not the analytics database (matching {@code ChangelogRebaselineTest}).
+     *
+     * <p>The changeset id and author are <b>bound</b>, not interpolated: they are values in a predicate, which is what
+     * {@code SKILL.md}'s SQL rule reserves for binding. (Identifiers elsewhere in these gates cannot be bound —
+     * ClickHouse accepts no parameter in a table or column position — but these two can, so they are.)
      */
     static String execType(Connection connection, String changeSetId) throws SQLException {
-        var sql = "SELECT EXECTYPE FROM default.DATABASECHANGELOG WHERE ID = '%s' AND AUTHOR = '%s'"
-                .formatted(changeSetId, FIXTURE_AUTHOR);
-        try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
-            return resultSet.next() ? resultSet.getString(1) : null;
+        var sql = """
+                SELECT EXECTYPE FROM default.DATABASECHANGELOG WHERE ID = ? AND AUTHOR = ?
+                """;
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, changeSetId);
+            statement.setString(2, FIXTURE_AUTHOR);
+            try (var resultSet = statement.executeQuery()) {
+                return resultSet.next() ? resultSet.getString(1) : null;
+            }
         }
     }
 }

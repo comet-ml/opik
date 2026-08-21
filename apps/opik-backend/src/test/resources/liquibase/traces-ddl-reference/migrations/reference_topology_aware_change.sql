@@ -22,6 +22,12 @@
 -- Both branches are written with IF [NOT] EXISTS so a re-run, a partially-applied branch, or an install that reaches
 -- this migration from either side is idempotent.
 --
+-- ON CLUSTER. Every statement carries ON CLUSTER '{cluster}', as every shipped traces/spans ALTER does and as
+-- migrations.md requires: without it the DDL reaches only the node the migration connected to, leaving the other
+-- replicas short of the column while the changeset is recorded as applied. That matters twice over here — the guard
+-- branch is chosen from a LOCAL system.tables read, so on a divergent cluster one node can record MARK_RAN for a
+-- topology the others are not in. The macro is resolved server-side, so this stays portable across installs.
+--
 -- WHERE A CHANGE LANDS (the general rule):
 --   * Anything that changes the READ-FACING COLUMN LIST (a column, including MATERIALIZED / ALIAS) must be applied to
 --     the shard AND the Distributed wrapper. The wrapper stores nothing, but it resolves column names: a shard-only
@@ -49,24 +55,24 @@
 --comment: Pre-cutover branch — traces is the live MergeTree and traces_local_v2 is the shadow; apply to both
 --preconditions onFail:MARK_RAN onError:HALT onFailMessage:traces_local exists, so this install is post-cutover; the pre-cutover branch is skipped
 --precondition-sql-check expectedResult:0 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS reference_derived UInt64 MATERIALIZED length(name);
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD INDEX IF NOT EXISTS idx_reference_storage name TYPE set(0) GRANULARITY 1;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ADD COLUMN IF NOT EXISTS reference_derived UInt64 MATERIALIZED length(name);
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ADD INDEX IF NOT EXISTS idx_reference_storage name TYPE set(0) GRANULARITY 1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS reference_derived UInt64 MATERIALIZED length(name);
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD INDEX IF NOT EXISTS idx_reference_storage name TYPE set(0) GRANULARITY 1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS reference_derived UInt64 MATERIALIZED length(name);
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' ADD INDEX IF NOT EXISTS idx_reference_storage name TYPE set(0) GRANULARITY 1;
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces DROP INDEX IF EXISTS idx_reference_storage;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces DROP COLUMN IF EXISTS reference_derived;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 DROP INDEX IF EXISTS idx_reference_storage;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 DROP COLUMN IF EXISTS reference_derived;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_reference_storage;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS reference_derived;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_reference_storage;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS reference_derived;
 
 --changeset opik-7772-test-fixture:reference_topology_aware_change_post_cutover
 --comment: Post-cutover branch — traces is the Distributed wrapper over traces_local; the column goes to both, the index to the shard only
 --preconditions onFail:MARK_RAN onError:HALT onFailMessage:traces_local does not exist, so this install is pre-cutover; the post-cutover branch is skipped
 --precondition-sql-check expectedResult:1 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ADD COLUMN IF NOT EXISTS reference_derived UInt64 MATERIALIZED length(name);
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ADD INDEX IF NOT EXISTS idx_reference_storage name TYPE set(0) GRANULARITY 1;
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS reference_derived UInt64 MATERIALIZED length(name);
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS reference_derived UInt64 MATERIALIZED length(name);
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' ADD INDEX IF NOT EXISTS idx_reference_storage name TYPE set(0) GRANULARITY 1;
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS reference_derived UInt64 MATERIALIZED length(name);
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces DROP COLUMN IF EXISTS reference_derived;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local DROP INDEX IF EXISTS idx_reference_storage;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local DROP COLUMN IF EXISTS reference_derived;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS reference_derived;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_reference_storage;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS reference_derived;
