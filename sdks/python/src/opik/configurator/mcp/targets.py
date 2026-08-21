@@ -27,6 +27,10 @@ class HostTarget:
     top_level_key: str
     is_detected: Callable[[], bool]
     install: Callable[[mcp_spec.McpServerSpec], InstallResult]
+    # Hosts that do not keep their MCP registration in a plain JSON object under
+    # ``top_level_key`` (Codex uses TOML) supply their own reader; see
+    # ``read_registered_block``.
+    read_block: Optional[Callable[[], Optional[Dict[str, Any]]]] = None
 
 
 def _home() -> pathlib.Path:
@@ -51,9 +55,40 @@ def _vscode_user_config_path() -> pathlib.Path:
     return base / "Code" / "User" / "mcp.json"
 
 
-def _manual_block_text(top_level_key: str, server_spec: mcp_spec.McpServerSpec) -> str:
-    block = mcp_spec.redact_block_for_display(server_spec.to_block())
-    snippet = {top_level_key: {SERVER_NAME: block}}
+def _codex_config_path() -> pathlib.Path:
+    return _home() / ".codex" / "config.toml"
+
+
+def _opencode_config_dir() -> pathlib.Path:
+    override = os.environ.get("OPENCODE_CONFIG_DIR")
+    if override:
+        return pathlib.Path(override)
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+    if xdg_config_home:
+        return pathlib.Path(xdg_config_home) / "opencode"
+    return _home() / ".config" / "opencode"
+
+
+def _opencode_config_path() -> pathlib.Path:
+    """The opencode config file to write.
+
+    opencode accepts ``opencode.json`` or ``opencode.jsonc``. We prefer the
+    strict-JSON name, but target an existing ``.jsonc`` when that is the only one
+    present — writing a second competing file would be worse than failing with
+    manual instructions if its comments defeat the JSON parser.
+    """
+    config_dir = _opencode_config_dir()
+    json_path = config_dir / "opencode.json"
+    if json_path.exists():
+        return json_path
+    jsonc_path = config_dir / "opencode.jsonc"
+    if jsonc_path.exists():
+        return jsonc_path
+    return json_path
+
+
+def _manual_block_text(top_level_key: str, block: Dict[str, Any]) -> str:
+    snippet = {top_level_key: {SERVER_NAME: mcp_spec.redact_block_for_display(block)}}
     return json.dumps(snippet, indent=2)
 
 
@@ -61,14 +96,14 @@ def _install_via_json_file(
     config_path: pathlib.Path,
     top_level_key: str,
     display_name: str,
-    server_spec: mcp_spec.McpServerSpec,
+    server_block: Dict[str, Any],
 ) -> InstallResult:
     try:
         was_new = json_config.merge_server_into_json_file(
             config_path=config_path,
             top_level_key=top_level_key,
             server_name=SERVER_NAME,
-            server_block=server_spec.to_block(),
+            server_block=server_block,
         )
     except ValueError:  # JSONDecodeError, or non-object JSON root (see json_config)
         return InstallResult(
@@ -77,7 +112,7 @@ def _install_via_json_file(
             detail=(
                 f"{config_path} exists but is not a valid JSON object (it may "
                 f"contain comments or a non-object value). Add this entry "
-                f"manually:\n{_manual_block_text(top_level_key, server_spec)}"
+                f"manually:\n{_manual_block_text(top_level_key, server_block)}"
             ),
         )
     except OSError as error:
@@ -86,7 +121,7 @@ def _install_via_json_file(
             succeeded=False,
             detail=(
                 f"Could not write {config_path}: {error}. Add this entry "
-                f"manually:\n{_manual_block_text(top_level_key, server_spec)}"
+                f"manually:\n{_manual_block_text(top_level_key, server_block)}"
             ),
         )
 
@@ -106,7 +141,7 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             config_path=_claude_config_path(),
             top_level_key="mcpServers",
             display_name="Claude Code",
-            server_spec=server_spec,
+            server_block=server_spec.to_block(),
         )
 
     # `claude mcp add` errors if the server already exists, so remove any
@@ -146,7 +181,7 @@ def _install_cursor(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         config_path=_cursor_config_path(),
         top_level_key="mcpServers",
         display_name="Cursor",
-        server_spec=server_spec,
+        server_block=server_spec.to_block(),
     )
 
 
@@ -155,8 +190,114 @@ def _install_vscode(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         config_path=_vscode_user_config_path(),
         top_level_key="servers",
         display_name="VS Code Copilot",
-        server_spec=server_spec,
+        server_block=server_spec.to_block(),
     )
+
+
+def _install_opencode(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
+    return _install_via_json_file(
+        config_path=_opencode_config_path(),
+        top_level_key="mcp",
+        display_name="opencode",
+        server_block=server_spec.to_opencode_block(),
+    )
+
+
+def _codex_manual_instructions() -> str:
+    """What to tell the user when we cannot drive the ``codex`` CLI.
+
+    Codex stores servers in TOML, which we deliberately do not hand-edit: merging
+    into someone else's TOML without a writer risks losing their comments and
+    formatting. So when the CLI is unavailable we hand the work back rather than
+    guessing.
+    """
+    return (
+        f"the `codex` CLI was not found on your PATH, and {_codex_config_path()} is "
+        "TOML, which this installer does not edit directly. Install the Codex CLI "
+        "and re-run `opik mcp configure --host codex`, or add an "
+        f"`[mcp_servers.{SERVER_NAME}]` table to that file by hand."
+    )
+
+
+def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
+    codex_executable = shutil.which("codex")
+
+    if codex_executable is None:
+        return InstallResult(
+            target_display_name="Codex",
+            succeeded=False,
+            detail=f"Could not register '{SERVER_NAME}': {_codex_manual_instructions()}",
+        )
+
+    # `codex mcp add` refuses when the server already exists, so drop any previous
+    # entry first to keep re-runs idempotent — same shape as the Claude Code path.
+    subprocess.run(
+        [codex_executable, "mcp", "remove", SERVER_NAME],
+        capture_output=True,
+        text=True,
+    )
+
+    command = [codex_executable, "mcp", "add"] + server_spec.to_codex_add_args()
+
+    # Let `codex mcp add` print its own output so the user sees the result.
+    result = subprocess.run(command)
+    if result.returncode == 0:
+        return InstallResult(
+            target_display_name="Codex",
+            succeeded=True,
+            detail=f"Registered '{SERVER_NAME}' via `codex mcp add`",
+        )
+
+    return InstallResult(
+        target_display_name="Codex",
+        succeeded=False,
+        detail=f"`codex mcp add` failed (exit {result.returncode}) — see output above",
+    )
+
+
+def _read_codex_block() -> Optional[Dict[str, Any]]:
+    """Read Codex's registration through its own CLI and normalise the shape.
+
+    ``codex mcp get <name> --json`` reports the transport under a ``transport``
+    key using Codex's own vocabulary (``streamable_http``). We translate it into
+    the same block shape every other host records, so ``opik mcp status`` needs no
+    per-host special casing. Reading via the CLI also avoids parsing TOML, which
+    has no standard-library reader on every Python version the SDK supports.
+    """
+    codex_executable = shutil.which("codex")
+    if codex_executable is None:
+        return None
+
+    try:
+        result = subprocess.run(
+            [codex_executable, "mcp", "get", SERVER_NAME, "--json"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    try:
+        payload = json.loads(result.stdout)
+    except ValueError:
+        return None
+
+    transport = payload.get("transport") if isinstance(payload, dict) else None
+    if not isinstance(transport, dict):
+        return None
+
+    if transport.get("type") == "streamable_http":
+        return {"type": "http", "url": str(transport.get("url", ""))}
+
+    return {
+        "type": "stdio",
+        "command": transport.get("command"),
+        "args": transport.get("args") or [],
+        "env": transport.get("env") or {},
+    }
 
 
 def read_registered_block(target: "HostTarget") -> Optional[Dict[str, Any]]:
@@ -168,8 +309,12 @@ def read_registered_block(target: "HostTarget") -> Optional[Dict[str, Any]]:
 
     For Claude Code this reads ``~/.claude.json`` directly, which is where
     ``claude mcp add --scope user`` records the server, so it works whether or not
-    the ``claude`` CLI is installed.
+    the ``claude`` CLI is installed. Hosts whose config is not a JSON object
+    (Codex, which uses TOML) provide their own ``read_block``.
     """
+    if target.read_block is not None:
+        return target.read_block()
+
     config_path = target.config_path()
     try:
         if not config_path.exists() or config_path.stat().st_size == 0:
@@ -215,4 +360,38 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: _vscode_user_config_path().parent.exists(),
         install=_install_vscode,
     ),
+    HostTarget(
+        key="codex",
+        display_name="Codex",
+        config_path=_codex_config_path,
+        # Unused: Codex config is TOML, so reads go through `read_block` instead.
+        top_level_key="mcp_servers",
+        is_detected=lambda: shutil.which("codex") is not None
+        or _codex_config_path().exists(),
+        install=_install_codex,
+        read_block=_read_codex_block,
+    ),
+    HostTarget(
+        key="opencode",
+        display_name="opencode",
+        config_path=_opencode_config_path,
+        top_level_key="mcp",
+        is_detected=lambda: shutil.which("opencode") is not None
+        or _opencode_config_dir().exists(),
+        install=_install_opencode,
+    ),
 ]
+
+HOST_KEYS: List[str] = [target.key for target in HOST_TARGETS]
+
+
+def find_target(key: str) -> Optional[HostTarget]:
+    """Look a host up by its CLI key (the values accepted by ``--host``)."""
+    for target in HOST_TARGETS:
+        if target.key == key:
+            return target
+    return None
+
+
+def detected_targets() -> List[HostTarget]:
+    return [target for target in HOST_TARGETS if target.is_detected()]

@@ -62,3 +62,44 @@ def test_redact_block_for_display__masks_secret_env_values():
 def test_redact_block_for_display__no_env_is_passthrough():
     block = {"type": "http", "url": "https://example.com"}
     assert mcp_spec.redact_block_for_display(block) == block
+
+
+def test_stdio_server_spec__to_codex_add_args__name_env_then_command():
+    args = _stdio_spec().to_codex_add_args()
+
+    assert args[0] == mcp_spec.SERVER_NAME
+    assert "--env" in args
+    assert "OPIK_API_KEY=some-key" in args
+
+    separator_index = args.index("--")
+    assert args[separator_index + 1 :] == ["/usr/bin/uvx", "opik-mcp"]
+
+
+def test_remote_server_spec__to_codex_add_args__uses_url_flag():
+    server_spec = mcp_spec.RemoteServerSpec(url="https://dev.comet.com/opik/api/v1/mcp")
+
+    assert server_spec.to_codex_add_args() == [
+        mcp_spec.SERVER_NAME,
+        "--url",
+        "https://dev.comet.com/opik/api/v1/mcp",
+    ]
+
+
+def test_stdio_server_spec__to_opencode_block__uses_opencode_vocabulary():
+    """opencode says `local`, folds argv into one list, and calls env `environment`."""
+    assert _stdio_spec().to_opencode_block() == {
+        "type": "local",
+        "command": ["/usr/bin/uvx", "opik-mcp"],
+        "environment": {"OPIK_API_KEY": "some-key", "COMET_WORKSPACE": "ws"},
+        "enabled": True,
+    }
+
+
+def test_remote_server_spec__to_opencode_block__is_remote_and_enabled():
+    server_spec = mcp_spec.RemoteServerSpec(url="https://dev.comet.com/opik/api/v1/mcp")
+
+    assert server_spec.to_opencode_block() == {
+        "type": "remote",
+        "url": "https://dev.comet.com/opik/api/v1/mcp",
+        "enabled": True,
+    }

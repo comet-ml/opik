@@ -1,7 +1,7 @@
 """`opik mcp` commands for managing the Opik MCP server integration."""
 
 import logging
-from typing import Optional, TypedDict
+from typing import List, Optional, Tuple, TypedDict
 
 import click
 
@@ -12,6 +12,7 @@ from opik.cli import status_view
 from opik.configurator import interactive_helpers
 from opik.configurator import mcp as mcp_installer
 from opik.configurator.mcp import status as mcp_status
+from opik.configurator.mcp import targets as mcp_targets
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +70,33 @@ def mcp() -> None:
     """Manage the Opik MCP server integration."""
 
 
+HOST_ALL = "all"
+
+
+def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
+    """Turn ``--host`` values into the concrete host keys to install for.
+
+    ``None`` means "no hosts were named", which leaves detection and prompting to
+    the installer. ``all`` expands to every host detected on this machine, so it
+    stays a statement about this machine rather than a request to write configs
+    for tools that are not installed.
+    """
+    if len(hosts) == 0:
+        return None
+
+    if HOST_ALL in hosts:
+        detected = [target.key for target in mcp_targets.detected_targets()]
+        if len(detected) == 0:
+            raise click.ClickException(
+                "`--host all` found no supported AI host on this machine. Name one "
+                f"explicitly instead: {', '.join(mcp_targets.HOST_KEYS)}."
+            )
+        return detected
+
+    # De-duplicate while keeping the order the user typed.
+    return list(dict.fromkeys(hosts))
+
+
 @mcp.command(name="configure")
 @click.option(
     "--local-server",
@@ -77,7 +105,16 @@ def mcp() -> None:
     help="Install the local MCP server (run via uvx) instead of the Comet-hosted "
     "one, even when your deployment offers a hosted server.",
 )
-def configure(local_server: bool) -> None:
+@click.option(
+    "--host",
+    "hosts",
+    multiple=True,
+    type=click.Choice(mcp_targets.HOST_KEYS + [HOST_ALL], case_sensitive=False),
+    help="AI host to register the server with. Repeatable, or pass `all` for every "
+    "host detected on this machine. Naming a host skips the interactive picker, so "
+    "this is the flag to use from a script, a Dockerfile, or a coding agent.",
+)
+def configure(local_server: bool, hosts: Tuple[str, ...]) -> None:
     """Register the Opik MCP server with your AI assistant(s).
 
     Reuses your existing Opik configuration (~/.opik.config), so run
@@ -87,14 +124,27 @@ def configure(local_server: bool) -> None:
     one, falling back to a local server otherwise. Pass `--local-server` to force
     the local server.
     """
-    if not interactive_helpers.is_interactive():
+    host_keys = _resolve_host_keys(hosts)
+
+    # A terminal is only needed to *ask* which host to use. With `--host` the
+    # caller has already answered, so the command works headless — which is how
+    # a coding agent, a Dockerfile, or CI has to run it.
+    if host_keys is None and not interactive_helpers.is_interactive():
         raise click.ClickException(
-            "`opik mcp configure` needs an interactive terminal to pick your AI host."
+            "`opik mcp configure` needs an interactive terminal to pick your AI "
+            "host. Name one instead to run without a terminal, e.g. "
+            f"`opik mcp configure --host {mcp_targets.HOST_KEYS[0]}`."
         )
 
     params = _resolve_setup_params(opik_config.OpikConfig())
 
     if _needs_opik_configuration(params):
+        if not interactive_helpers.is_interactive():
+            raise click.ClickException(
+                "Opik is not configured yet, and configuring it needs an "
+                "interactive terminal. Set OPIK_API_KEY and OPIK_WORKSPACE, or run "
+                "`opik configure`, then re-run this command."
+            )
         if not click.confirm(
             "Opik is not configured yet. Configure it now?", default=True
         ):
@@ -110,7 +160,11 @@ def configure(local_server: bool) -> None:
                 "Opik configuration is still incomplete; aborting MCP install."
             )
 
-    mcp_installer.setup_mcp_server(**params, force_local_server=local_server)
+    mcp_installer.setup_mcp_server(
+        **params,
+        force_local_server=local_server,
+        host_keys=host_keys,
+    )
 
 
 @mcp.command(name="status")
