@@ -101,7 +101,7 @@ public class GoogleProviderResolver implements ProviderResolver {
             return host == null ? serverAddress : StringUtils.removeEnd(host, ".");
         } catch (URISyntaxException e) {
             log.debug("Could not parse server.address '{}' as a URI; matching markers on the raw value",
-                    serverAddress);
+                    serverAddress, e);
             return serverAddress;
         }
     }
