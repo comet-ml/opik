@@ -85,20 +85,31 @@ class ChrF(BaseMetric):
                     " `pip install nltk` or provide `chrf_fn`."
                 )
 
-            def _compute(candidate: Sequence[str], references: Sequence[str]) -> float:
-                try:
-                    return float(
-                        nltk_chrf_score.sentence_chrf(
-                            references,
-                            candidate,
-                            max_len=self._char_order,
-                            beta=self._beta,
-                            ignore_whitespace=self._ignore_whitespace,
-                        )
+            def _score_single(candidate: Sequence[str], reference: str) -> float:
+                # `sentence_chrf` has exposed this exact signature since NLTK 3.5,
+                # so every version installable on the Python versions this SDK
+                # supports accepts these keywords. Catching TypeError here would
+                # only mask genuine errors (and silently drop char_order/beta/
+                # ignore_whitespace), so let it propagate.
+                return float(
+                    nltk_chrf_score.sentence_chrf(
+                        reference,
+                        candidate,
+                        max_len=self._char_order,
+                        beta=self._beta,
+                        ignore_whitespace=self._ignore_whitespace,
                     )
-                except TypeError:
-                    # Older NLTK versions expose the helper with fewer keyword arguments.
-                    return float(nltk_chrf_score.sentence_chrf(references, candidate))
+                )
+
+            def _compute(candidate: Sequence[str], references: Sequence[str]) -> float:
+                # NLTK's sentence_chrf scores against a *single* reference; handing
+                # it the whole list makes NLTK join the references into one string,
+                # which drags the score down instead of rewarding the best match.
+                # Score each reference on its own and keep the highest, the standard
+                # multi-reference behaviour for chrF.
+                return max(
+                    _score_single(candidate, reference) for reference in references
+                )
 
             self._chrf_fn = _compute
 

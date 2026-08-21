@@ -1,4 +1,5 @@
 import re
+import types
 
 import pytest
 
@@ -411,6 +412,17 @@ def test_kl_divergence_avg_direction():
     assert result.value >= 0.0
 
 
+def _skip_without_wordnet() -> None:
+    """Skip when the optional `nltk` dependency or its WordNet corpus is missing."""
+    pytest.importorskip("nltk")
+    from nltk.corpus import wordnet
+
+    try:
+        wordnet.ensure_loaded()
+    except LookupError:
+        pytest.skip("NLTK WordNet corpus is not available")
+
+
 def test_meteor_metric_with_custom_fn():
     captured = []
 
@@ -431,6 +443,84 @@ def test_meteor_rejects_empty_inputs():
         metric.score(output="", reference="ref")
     with pytest.raises(MetricComputationError):
         metric.score(output="hyp", reference="   ")
+
+
+def test_meteor_metric__default_backend__hands_nltk_pretokenized_input(monkeypatch):
+    # Locks the tokenization contract with a stubbed NLTK, so this regression stays
+    # covered on a bare CI runner with neither `nltk` nor the WordNet corpus
+    # installed. Reverting the fix makes the recorded call raw strings and fails here.
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    recorded = {}
+
+    class _StubMeteor:
+        @staticmethod
+        def meteor_score(references, hypothesis, alpha, beta, gamma):
+            recorded["references"] = references
+            recorded["hypothesis"] = hypothesis
+            return 0.5
+
+    monkeypatch.setattr(meteor_module, "nltk_meteor_score", _StubMeteor)
+    monkeypatch.setattr(meteor_module, "nltk", None)
+    monkeypatch.setattr(meteor_module, "wordnet", None)
+
+    METEOR(track=False).score(output="the cat sat", reference="the cat ran")
+
+    assert recorded["hypothesis"] == ["the", "cat", "sat"]
+    assert recorded["references"] == [["the", "cat", "ran"]]
+
+
+def test_meteor_metric__legacy_nltk__raises_actionable_import_error(monkeypatch):
+    # NLTK <= 3.6.4 expects untokenized input, so the tokenizing adapter cannot
+    # work there. Fail at construction with a clear message instead of a confusing
+    # TypeError at score time.
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    monkeypatch.setattr(meteor_module, "nltk_meteor_score", object())
+    monkeypatch.setattr(
+        meteor_module, "nltk", types.SimpleNamespace(__version__="3.6.4")
+    )
+    monkeypatch.setattr(meteor_module, "wordnet", None)
+
+    with pytest.raises(ImportError, match="requires nltk >= 3.6.5"):
+        METEOR(track=False)
+
+
+def test_meteor_metric__default_nltk_backend__scores_without_error():
+    # NLTK's meteor_score requires pre-tokenized input; before the fix the default
+    # backend passed raw strings and every call raised
+    # `TypeError: "hypothesis" expects pre-tokenized hypothesis`, so the metric was
+    # unusable outside of dependency-injected tests. Needs the WordNet corpus.
+    _skip_without_wordnet()
+
+    metric = METEOR(track=False)
+
+    identical = metric.score(
+        output="the cat sat on the mat", reference="the cat sat on the mat"
+    ).value
+    different = metric.score(
+        output="the cat sat on the mat", reference="a completely unrelated sentence"
+    ).value
+
+    # METEOR always applies a fragmentation penalty, so an exact match tops out
+    # just below 1.0 rather than at it.
+    assert identical > 0.99
+    assert identical > different
+
+
+def test_meteor_metric__multiple_references__picks_best_match():
+    _skip_without_wordnet()
+
+    metric = METEOR(track=False)
+    hypothesis = "the cat sat on the mat"
+
+    best_reference_only = metric.score(output=hypothesis, reference=hypothesis).value
+    with_distractor = metric.score(
+        output=hypothesis,
+        reference=["a completely unrelated sentence", hypothesis],
+    ).value
+
+    assert with_distractor == pytest.approx(best_reference_only)
 
 
 def test_gleu_metric_with_custom_fn():
@@ -523,6 +613,52 @@ def test_chrf_metric__char_order_and_ignore_whitespace_vary__change_score():
         .value
     )
     assert order_1 != order_6
+
+
+def test_chrf_metric__default_backend__scores_each_reference_separately(monkeypatch):
+    # Locks the per-reference contract with a stubbed NLTK so it runs without the
+    # optional dependency. Before the fix NLTK received the reference list in one
+    # call and joined it; now it must be called once per reference, best score kept.
+    from opik.evaluation.metrics.heuristics import chrf as chrf_module
+
+    seen_references = []
+
+    class _StubChrf:
+        @staticmethod
+        def sentence_chrf(
+            reference,
+            hypothesis,
+            min_len=1,
+            max_len=6,
+            beta=3.0,
+            ignore_whitespace=True,
+        ):
+            seen_references.append(reference)
+            return 0.25 if reference == "first ref" else 0.75
+
+    monkeypatch.setattr(chrf_module, "nltk_chrf_score", _StubChrf)
+
+    result = ChrF(track=False).score(
+        output="hypothesis", reference=["first ref", "second ref"]
+    )
+
+    assert seen_references == ["first ref", "second ref"]
+    assert result.value == pytest.approx(0.75)
+
+
+def test_chrf_metric__multiple_references__scores_against_best_reference():
+    # NLTK's sentence_chrf takes a single reference. Before the fix the whole list
+    # was handed to it, so NLTK joined the references into one string and an exact
+    # match against one of them scored ~0.42 instead of 1.0.
+    pytest.importorskip("nltk")
+
+    metric = ChrF(track=False)
+    result = metric.score(
+        output="the cat sat on the mat",
+        reference=["totally unrelated words here", "the cat sat on the mat"],
+    )
+
+    assert result.value == pytest.approx(1.0)
 
 
 def test_spearman_ranking_metric():
