@@ -100,6 +100,97 @@ class TracesSchemaParityPreCutoverTest {
     }
 
     /**
+     * The reference migration's pre-cutover branch, applied to the topology it is written for. Proves the two facts the
+     * pattern rests on: {@code liquibase-clickhouse} honours a formatted-SQL {@code sqlCheck} precondition with
+     * {@code onFail:MARK_RAN}, so one file can serve both topologies; and the branch that does run reaches both the live
+     * table and the shadow, leaving parity intact.
+     */
+    @Test
+    @Order(5)
+    @DisplayName("the reference migration takes its pre-cutover branch and marks the other one run")
+    void referenceMigrationTakesThePreCutoverBranch() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+
+        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.PRE_CUTOVER_CHANGESET))
+                .as("on a pre-cutover install the pre-cutover branch must run")
+                .isEqualTo(TracesDdlReferenceFixture.EXECUTED);
+        assertThat(TracesDdlReferenceFixture.execType(connection, TracesDdlReferenceFixture.POST_CUTOVER_CHANGESET))
+                .as("""
+                        the post-cutover branch must be recorded MARK_RAN, not left unrun: it is marked applied without \
+                        executing, so a later startup never retries it against the wrong topology\
+                        """)
+                .isEqualTo(TracesDdlReferenceFixture.MARK_RAN);
+
+        // The read-facing field and the storage-only index both reach both tables pre-cutover.
+        var traces = TableSchema.read(connection, DATABASE_NAME, TRACES);
+        var shadow = TableSchema.read(connection, DATABASE_NAME, SHADOW);
+        assertThat(traces.columnNames()).contains(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        assertThat(shadow.columnNames()).contains(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        assertThat(traces.skipIndexNames()).contains(TracesDdlReferenceFixture.STORAGE_INDEX);
+        assertThat(shadow.skipIndexNames()).contains(TracesDdlReferenceFixture.STORAGE_INDEX);
+
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * Idempotency: the guarded branches are all {@code IF [NOT] EXISTS} and the skipped one is recorded {@code MARK_RAN},
+     * so a second apply — a restarting replica, a re-run after a partial failure — must be a no-op rather than an error.
+     */
+    @Test
+    @Order(6)
+    @DisplayName("re-applying the reference migration is a no-op")
+    void reApplyingTheReferenceMigrationIsANoOp() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.CHANGELOG);
+
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse, TracesDdlReferenceFixture.CHANGELOG))
+                .as("both branches stay recorded as applied, so nothing is left to run")
+                .isEmpty();
+
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The negative control that makes the pattern load-bearing: the same change written the ordinary un-guarded way
+     * applies without error and leaves the shadow behind, and this gate rejects it. A pull request shaped like this
+     * cannot merge.
+     */
+    @Test
+    @Order(7)
+    @DisplayName("an un-guarded traces migration is rejected: it never reaches the shadow")
+    void unguardedMigrationIsRejected() throws Exception {
+        MigrationUtils.runClickhouseChangelog(clickHouse, TracesDdlReferenceFixture.UNGUARDED_CHANGELOG);
+
+        assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
+                .as("the un-guarded ALTER does reach the live table — it fails silently, which is the problem")
+                .contains(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+        assertThat(TableSchema.read(connection, DATABASE_NAME, SHADOW).columnNames())
+                .as("...and never reaches the shadow the cutover will promote")
+                .doesNotContain(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining(TracesDdlReferenceFixture.UNGUARDED_COLUMN);
+
+        execute("ALTER TABLE %s.%s DROP COLUMN %s"
+                .formatted(DATABASE_NAME, TRACES, TracesDdlReferenceFixture.UNGUARDED_COLUMN));
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The fixtures do write Liquibase ledger rows, so this pins that they stay additive: the shipped changelog is still
+     * fully applied afterwards. Listing its unrun changesets also revalidates every recorded checksum, so a fixture
+     * that had disturbed a shipped ledger row would fail here rather than in some unrelated suite later.
+     */
+    @Test
+    @Order(8)
+    @DisplayName("applying the fixtures leaves the shipped changelog intact")
+    void applyingTheFixturesLeavesTheShippedChangelogIntact() {
+        assertThat(MigrationUtils.unrunClickhouseChangeSetIds(clickHouse))
+                .as("the shipped changelog must remain fully applied, with nothing pending or invalidated")
+                .isEmpty();
+    }
+
+    /**
      * Both directions of the same mistake — a column that reached one table and not the other — parameterized because
      * the arrange/act/assert is identical and only the target differs. Both directions are covered deliberately: a
      * migration writer is far likelier to forget the shadow, but a shadow-only change is equally broken.
