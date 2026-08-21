@@ -1111,6 +1111,7 @@ public class OnlineScoringEngine {
         }
 
         public enum Kind {
+            NO_ANSWER,
             NOT_JSON,
             NOT_A_JSON_OBJECT,
             NO_SCORE_FIELDS
@@ -1150,6 +1151,7 @@ public class OnlineScoringEngine {
 
     private static String describe(ResponseProblem problem) {
         return switch (problem.kind()) {
+            case NO_ANSWER -> "the judge returned no answer (finish reason: '%s')".formatted(problem.evidence());
             case NOT_JSON -> "the judge's answer was not valid JSON (%s)".formatted(problem.evidence());
             case NOT_A_JSON_OBJECT -> "the judge's answer was not a JSON object (%s)"
                     .formatted(problem.evidence());
@@ -1166,7 +1168,18 @@ public class OnlineScoringEngine {
     public static ParsedFeedbackScores toFeedbackScores(@NonNull ChatResponse chatResponse,
             List<LlmAsJudgeOutputSchema> schema) {
         var declaredSchemas = Objects.requireNonNullElse(schema, List.<LlmAsJudgeOutputSchema>of());
-        var content = extractJson(chatResponse.aiMessage().text());
+        // A provider can answer with no text at all — e.g. a content filter, or a reasoning model that spends its
+        // budget before emitting any. Report it as an unusable answer instead of NPE-ing on the null text, which
+        // killed the whole scoring message and left the user no trace of why nothing was scored.
+        // aiMessage itself is never null — ChatResponse.Builder rejects that — but its text is.
+        var answer = Optional.ofNullable(chatResponse.aiMessage().text())
+                .filter(StringUtils::isNotBlank);
+        if (answer.isEmpty()) {
+            log.warn("Judge returned no answer to parse: finishReason='{}'", chatResponse.finishReason());
+            return ParsedFeedbackScores.problem(ResponseProblem.Kind.NO_ANSWER,
+                    Objects.toString(chatResponse.finishReason(), "unknown"), List.of(), 0);
+        }
+        var content = extractJson(answer.get());
         JsonNode structuredResponse;
         try {
             structuredResponse = OBJECT_MAPPER.readTree(content);
