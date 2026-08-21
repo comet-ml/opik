@@ -150,8 +150,12 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            failIfProviderReportedHttpStatus(runtimeException);
-
+            // No failIfProviderReportedHttpStatus here, unlike create() and the streaming handler. This method is
+            // called only by the online-scoring subscribers, never from a resource, so a recovered status reaches no
+            // HTTP client — while BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS lists ClientErrorException, so turning
+            // a rate limit into a 429 or a provider timeout into a 408 would make the subscriber ack and drop the
+            // evaluation instead of honouring onlineScoring.maxRetries. Both are RetriableException upstream, so the
+            // blanket 500 is what keeps them retryable.
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         } finally {

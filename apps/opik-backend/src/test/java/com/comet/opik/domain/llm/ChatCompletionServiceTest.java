@@ -11,6 +11,7 @@ import dev.langchain4j.exception.InternalServerException;
 import dev.langchain4j.exception.InvalidRequestException;
 import dev.langchain4j.exception.NonRetriableException;
 import dev.langchain4j.exception.RateLimitException;
+import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -18,6 +19,7 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -576,6 +578,11 @@ class ChatCompletionServiceTest {
                             401,
                             "bad key"),
                     Arguments.of(
+                            "bare TimeoutException",
+                            new TimeoutException("provider timed out"),
+                            408,
+                            "provider timed out"),
+                    Arguments.of(
                             "typed exception wrapping an HttpException",
                             new InternalServerException(new HttpException(503, "upstream is down")),
                             503,
@@ -620,12 +627,16 @@ class ChatCompletionServiceTest {
             assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
         }
 
-        @ParameterizedTest(name = "scoreTrace: when {0}, then report status {2}")
+        @ParameterizedTest(name = "scoreTrace: when {0}, then stay a retryable 500")
         @MethodSource("providerStatusProvider")
-        @DisplayName("Online scoring reports the provider status rather than a blanket 500")
-        void scoreTrace__whenProviderErrorUnparsed__thenReportProviderStatus(
+        @DisplayName("Online scoring deliberately keeps the blanket 500, so the subscriber still retries")
+        void scoreTrace__whenProviderErrorUnparsed__thenStayRetryable(
                 String testName, RuntimeException providerFailure, int expectedStatus, String expectedMessagePart) {
-            // Given
+            // Given — scoreTrace has no JAX-RS caller: the three OnlineScoring*LlmAsJudgeScorer subscribers are the
+            // only callers, so a recovered status would reach no HTTP client. It would, however, reach
+            // BaseRedisSubscriber.NON_RETRYABLE_EXCEPTIONS, which lists ClientErrorException — so a recovered 429 or
+            // 408 (both RetriableException upstream) would be acked and dropped instead of retried up to
+            // onlineScoring.maxRetries. Whatever the provider reported, this path must stay a 500.
             var chatRequest = ChatRequest.builder().messages(UserMessage.from("score this")).build();
             var modelParameters = podamFactory.manufacturePojo(LlmAsJudgeModelParameters.class);
             var workspaceId = "test-workspace-id";
@@ -639,11 +650,13 @@ class ChatCompletionServiceTest {
             var thrown = catchThrowable(
                     () -> chatCompletionService.scoreTrace(chatRequest, modelParameters, workspaceId));
 
-            // Then
+            // Then — InternalServerErrorException is absent from NON_RETRYABLE_EXCEPTIONS, which is what keeps the
+            // evaluation retryable; expectedStatus is deliberately unused here
             assertThat(thrown)
-                    .isInstanceOf(WebApplicationException.class)
+                    .isInstanceOf(InternalServerErrorException.class)
+                    .isNotInstanceOf(ClientErrorException.class)
                     .hasMessageContaining(expectedMessagePart);
-            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(expectedStatus);
+            assertThat(((WebApplicationException) thrown).getResponse().getStatus()).isEqualTo(500);
         }
 
         @ParameterizedTest(name = "streaming: when {0}, then stream status {2}")
