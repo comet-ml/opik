@@ -6,6 +6,7 @@ import last from "lodash/last";
 import { TableBody } from "@/ui/table";
 import { DataTableBodyProps } from "@/shared/DataTable/DataTableBody";
 import usePageBodyScrollContainer from "@/contexts/usePageBodyScrollContainer";
+import { observeVerticalOffset } from "@/shared/DataTable/virtualizerOptions";
 import { cn } from "@/lib/utils";
 
 const ROW_BORDER_SIZE = 1;
@@ -39,6 +40,7 @@ export const DataTableVirtualBody = <TData,>({
     estimateSize: () => virtualRowHeight,
     paddingStart: tableOffset,
     overscan,
+    observeElementOffset: observeVerticalOffset,
   });
   const virtualRows = getVirtualItems();
   const firsRowHeight = (first(virtualRows)?.index ?? 0) * virtualRowHeight;
