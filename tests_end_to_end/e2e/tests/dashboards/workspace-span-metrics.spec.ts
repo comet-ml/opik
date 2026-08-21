@@ -1,5 +1,6 @@
 import { test, expect } from '@e2e/fixtures';
 import type { MetricInterval, MetricSeries } from '@e2e/core/backend';
+import { DashboardsPage } from '@e2e/pom/dashboards.page';
 
 /**
  * The workspace span-metrics read behind a dashboard "Span token usage" Time
@@ -18,13 +19,17 @@ import type { MetricInterval, MetricSeries } from '@e2e/core/backend';
  * the payloads below are shaped exactly as the front end emits them, extra
  * fields and all, and every assertion is on a number rather than on a 200.
  *
- * SCOPE — this spec asserts the widget's *data contract*, not its rendering.
- * It does not create a dashboard or a widget and does not open a browser. The
- * dashboards UI carries no `data-testid` anywhere, so a rendering assertion
- * would need front-end changes shipped in the same commit, which could not be
- * verified against a deployed environment before review. The numbers a chart
- * would plot are asserted here against the seed; that a chart plots them is
- * still uncovered.
+ * SCOPE — two layers, deliberately. The first three tests assert the widget's
+ * *data contract* against the endpoint directly: that is where the filter
+ * payload, the interval maths and the 400 path can be pinned to exact numbers,
+ * none of which a chart lets you read back. The last test then drives the real
+ * UI — creates a dashboard, adds the Time series widget scoped to the whole
+ * workspace, and reads the rendered chart — so the capability tags name
+ * something a browser actually exercised.
+ *
+ * The UI layer needs no `data-testid`: the dashboards tree has none, but every
+ * control it touches exposes an accessible name, so the page object selects by
+ * role and text (see `pom/dashboards.page.ts`).
  */
 
 /**
@@ -232,6 +237,81 @@ test.describe('Dashboard span metrics — data contract', { tag: ['@t2-cuj', '@a
         expect(status, `unsupported operator answered: ${message}`).toBe(400);
         expect(message, 'the rejection names the field').toContain('tags');
         expect(message, 'the rejection names the operator').toContain('>');
+      });
+    },
+  );
+
+  test(
+    'a workspace-scoped Time series widget renders the span-usage chart and honours the date range',
+    {
+      tag: [
+        '@cap:dashboards.create-dashboard',
+        '@cap:dashboards.add-widget',
+        '@cap:dashboards.widget-filters',
+        '@cap:dashboards.metric-date-range',
+      ],
+    },
+    async ({ tokenUsageSpans, backendClient, page }) => {
+      const { spanNamePrefix, totals } = tokenUsageSpans;
+      const dashboards = new DashboardsPage(page);
+      const widgetTitle = 'Span token usage';
+
+      await test.step('The seeded spans are queryable before the widget is built', async () => {
+        // Otherwise a slow ingest renders an empty chart and this fails as a UI
+        // defect, which it would not be.
+        await expect
+          .poll(
+            async () => {
+              const { status, series } = await backendClient.workspaceSpanMetric({
+                metricType: 'SPAN_TOKEN_USAGE',
+                interval: 'DAILY',
+                intervalStart: daysAgo(7),
+                intervalEnd: new Date(),
+                filters: [uiFilter('name', 'contains', spanNamePrefix)],
+              });
+              return status === 200 ? seriesTotalOrZero(series, 'total_tokens') : -1;
+            },
+            { timeout: 120_000, intervals: [1_000, 2_000, 5_000] },
+          )
+          .toBe(totals.totalTokens);
+      });
+
+      await test.step('Open Dashboards and create one', async () => {
+        await dashboards.goto();
+        await dashboards.waitForReady();
+        await dashboards.createDashboard(`${spanNamePrefix}-dash`);
+      });
+
+      await test.step('Add the workspace-scoped Span token usage widget', async () => {
+        await dashboards.addWorkspaceSpanTokenUsageWidget();
+      });
+
+      await test.step('The widget renders a chart carrying all three usage series', async () => {
+        // The series *names* are the honest UI assertion here: the chart plots
+        // points as SVG geometry, so the rendered pixels cannot be compared to a
+        // token count — that comparison is what the data-contract tests above
+        // are for. What the UI must prove is that the widget resolved its query
+        // and drew the answer rather than an empty or errored state.
+        expect(
+          await dashboards.widgetSeriesNames(widgetTitle),
+          'the chart legend names every usage series',
+        ).toEqual(['total_tokens', 'prompt_tokens', 'completion_tokens']);
+      });
+
+      await test.step('The date-range control drives the widget and defaults as documented', async () => {
+        expect(await dashboards.selectedDateRange(), 'the default preset').toBe('Past 30 days');
+
+        // Every preset must keep the widget rendering: these are the same four
+        // windows the data-contract test asserts interval-by-interval, so a
+        // preset that broke the read would show up here as a lost chart.
+        for (const range of ['Past 24 hours', 'Past 3 days', 'Past 7 days'] as const) {
+          await dashboards.selectDateRange(range);
+          expect(await dashboards.selectedDateRange(), `after picking ${range}`).toBe(range);
+          expect(
+            await dashboards.widgetSeriesNames(widgetTitle),
+            `the chart still renders over ${range}`,
+          ).toContain('total_tokens');
+        }
       });
     },
   );

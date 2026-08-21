@@ -370,14 +370,14 @@ areas:
       - dashboards/workspace-span-metrics.spec.ts
     capabilities:
       list-dashboards:      { covered: false }
-      create-dashboard:     { covered: false }
+      create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
       open-dashboard:       { covered: false }
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
-      add-widget:           { covered: false }
+      add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
       configure-widget:     { covered: false }
-      widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract only: asserts POST /workspaces/metrics/spans against the front end's own filter payload; no widget is built and no chart is read" }
-      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract only: the four dashboard presets at the interval calculateIntervalType implies" }
+      widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
+      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
 
   # ===================== DEVELOPMENT =====================
 
