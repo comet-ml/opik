@@ -66,6 +66,40 @@ Prefer not to use the CLI? You can wire up any host by hand — skip to
   </Step>
 </Steps>
 
+## The skill pack
+
+The MCP server gives your assistant *tools*. The **skill pack** gives it the knowledge of how to use Opik — which integration to reach for, how to mark an entrypoint, how to build a test suite, how `opik connect` works. Most people want both:
+
+```bash
+opik skills configure
+```
+
+`opik configure` also offers it after the MCP step:
+
+> Install the Opik skill pack for Cursor? It teaches your assistant how to instrument code, run test suites, and use `opik connect`. (y/N)
+
+Skills are plain `SKILL.md` directories, and assistants have converged on a shared user-level location, so one install covers all of them:
+
+| Assistant | Reads |
+| --- | --- |
+| Cursor, VS Code Copilot, Codex, opencode | `~/.agents/skills` directly |
+| Claude Code | `~/.claude/skills`, which the CLI links to the shared copy |
+
+Because this is a user-level install, it is independent of your current directory — there is no project to be inside. It needs no Opik credentials either, so it works before `opik configure`.
+
+```bash
+opik skills configure --host codex --host claude-code   # specific assistants
+opik skills configure --host all                        # every detected assistant
+opik skills status                                      # what is installed
+opik skills remove                                      # take it back out
+```
+
+`opik configure --install-skills` does the same non-interactively, for a Dockerfile or CI.
+
+<Note>
+Already using [`npx skills add comet-ml/opik-skills`](https://github.com/comet-ml/opik-skills)? That writes to the same `~/.agents/skills` location, so the two are interchangeable. `opik skills status` reports a pack it did not install as coming from outside the CLI, and `opik skills configure` will replace it.
+</Note>
+
 ## Scripts, containers, and coding agents
 
 `opik mcp configure` only needs a terminal in order to *ask* which host to use.
@@ -92,13 +126,13 @@ a fresh container image can be configured before the editor is installed.
 without a terminal too:
 
 ```bash
-opik configure --install-mcp
+opik configure --install-mcp --install-skills
 ```
 
 <Note>
 `opik configure -y` deliberately does **not** register the MCP server: a blanket
 yes-to-everything should not reach into another tool's configuration files. Pass
-`--install-mcp` when you want it.
+`--install-mcp` / `--install-skills` when you want them.
 </Note>
 
 ## Check your setup

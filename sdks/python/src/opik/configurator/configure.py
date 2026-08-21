@@ -1,7 +1,7 @@
 import getpass
 import logging
 import os
-from typing import Final, Optional
+from typing import Final, List, Optional
 
 import httpx
 import opik.config
@@ -15,6 +15,7 @@ from opik.configurator.interactive_helpers import (
 )
 from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
+from opik.configurator import skills
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
@@ -38,6 +39,7 @@ class OpikConfigurator:
         automatic_approvals: bool = False,
         project_name: Optional[str] = None,
         install_mcp: Optional[bool] = None,
+        install_skills: Optional[bool] = None,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -48,6 +50,7 @@ class OpikConfigurator:
         self.automatic_approvals = automatic_approvals
         self.project_name = project_name
         self.install_mcp = install_mcp
+        self.install_skills = install_skills
         # Set when the MCP consent prompt named the detected hosts, so the
         # installer can skip re-confirming the very same list.
         self._mcp_prompt_named_detected_hosts = False
@@ -88,6 +91,52 @@ class OpikConfigurator:
             self._configure_local()
 
         self._maybe_setup_mcp_server()
+        self._maybe_setup_skills()
+
+    def _maybe_setup_skills(self) -> None:
+        """Offer the Opik skill pack, which is a separate decision from the server.
+
+        Asked after MCP rather than folded into the same question: the MCP step
+        writes credentials into a config file the user already trusts with them,
+        while this fetches instruction files through a third-party CLI that run
+        with the assistant's own permissions. Same list of assistants, materially
+        different consent.
+        """
+        host_keys = self._skills_host_keys()
+        if host_keys is None:
+            return
+        skills.setup_skills(host_keys)
+
+    def _skills_host_keys(self) -> Optional[List[str]]:
+        """Hosts to install the skill pack for, or ``None`` to skip.
+
+        Mirrors ``_should_setup_mcp_server``: an explicit flag wins over the
+        interactivity guard so CI, Docker, and coding agents can opt in, ``-y``
+        alone does not, and the prompt names the assistants we actually found.
+        """
+        if self.install_skills is False:
+            return None
+
+        detected = skills.detected_host_keys()
+
+        if self.install_skills is True:
+            return detected or None
+
+        if not is_interactive():
+            return None
+
+        if self.automatic_approvals:
+            return None
+
+        if len(detected) == 0:
+            return None
+
+        names = ", ".join(skills.detected_host_names())
+        confirmed = ask_user_for_approval_default_no(
+            f"Install the Opik skill pack for {names}? It teaches your assistant "
+            "how to instrument code, run test suites, and use `opik connect`. (y/N) "
+        )
+        return detected if confirmed else None
 
     def _maybe_setup_mcp_server(self) -> None:
         if not self._should_setup_mcp_server():
@@ -690,6 +739,7 @@ def configure(
     url_override: Optional[str] = None,
     project_name: Optional[str] = None,
     install_mcp: Optional[bool] = None,
+    install_skills: Optional[bool] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -707,6 +757,7 @@ def configure(
         automatic_approvals: if True, `yes` will automatically be answered whenever a user approval is required
         project_name: The name of the project to configure. If not provided, the default project will be used.
         install_mcp: If True, register the Opik MCP server with detected AI hosts; if False, skip the step.
+        install_skills: If True, install the Opik skill pack into detected AI hosts; if False, skip the step.
             If None, the user is prompted in interactive sessions.
 
     Raises:
@@ -730,5 +781,6 @@ def configure(
         else force,
         project_name=project_name,
         install_mcp=install_mcp,
+        install_skills=install_skills,
     )
     client.configure()
