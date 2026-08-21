@@ -59,6 +59,7 @@ import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.resolveWindow;
 
 /**
  * Scheduled job for processing metrics-based alerts.
@@ -425,7 +426,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         }
         BigDecimal threshold = new BigDecimal(thresholdString);
 
-        var windowString = config.configValue().get(WINDOW_CONFIG_KEY);
+        var windowString = resolveWindow(config.configValue());
         if (windowString == null) {
             throw new IllegalArgumentException(
                     "Missing config value for key '%s' in trigger of type '%s'"
