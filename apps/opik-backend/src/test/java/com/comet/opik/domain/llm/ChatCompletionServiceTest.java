@@ -40,6 +40,7 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
@@ -583,7 +584,17 @@ class ChatCompletionServiceTest {
                             "failure that never reached HTTP",
                             new RuntimeException("Connection error", new ConnectException("Connection refused")),
                             500,
-                            "Service is unreachable"));
+                            "Service is unreachable"),
+                    Arguments.of(
+                            "status outside the error families",
+                            new RuntimeException(new HttpException(302, "moved")),
+                            500,
+                            "moved"),
+                    Arguments.of(
+                            "status outside the valid HTTP range",
+                            new RuntimeException(new HttpException(0, "no response")),
+                            500,
+                            "no response"));
         }
 
         @ParameterizedTest(name = "create: when {0}, then report status {2}")
@@ -653,8 +664,11 @@ class ChatCompletionServiceTest {
                 return null;
             }).when(llmProviderService).generateStream(any(), anyString(), any(), any(), any());
 
-            // When
-            chatCompletionService.createAndStreamResponse(request, workspaceId, handlers);
+            // When — the streaming contract is HTTP 200 with the error delivered in-stream, so recovering the status
+            // must change the ErrorMessage code only: nothing may escape here, or the playground would get an HTTP
+            // status where it expects a stream
+            assertThatCode(() -> chatCompletionService.createAndStreamResponse(request, workspaceId, handlers))
+                    .doesNotThrowAnyException();
 
             // Then
             var errorCaptor = ArgumentCaptor.forClass(ErrorMessage.class);

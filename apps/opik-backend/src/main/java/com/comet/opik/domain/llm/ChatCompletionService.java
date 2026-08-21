@@ -271,7 +271,21 @@ public class ChatCompletionService {
                 .or(() -> chain.stream()
                         .map(this::canonicalStatusOf)
                         .flatMap(Optional::stream)
-                        .findFirst());
+                        .findFirst())
+                .filter(ChatCompletionService::isErrorStatus);
+    }
+
+    /**
+     * {@link HttpException} takes any int, so an upstream that answers outside the error families — or a client that
+     * builds one for a failure that never carried a status — must not reach {@link #failHandlingLLMProviderError}:
+     * {@code ClientErrorException} and {@code ServerErrorException} both validate the family, and
+     * {@code Response.status} rejects anything outside 100-599, so an out-of-family code would leave the catch block
+     * as an {@code IllegalArgumentException} instead of the 500 the caller is promised. Anything not recognisably a
+     * 4xx or 5xx therefore keeps the existing fall-through.
+     */
+    private static boolean isErrorStatus(int status) {
+        var family = familyOf(status);
+        return family == Response.Status.Family.CLIENT_ERROR || family == Response.Status.Family.SERVER_ERROR;
     }
 
     /**
