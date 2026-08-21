@@ -71,8 +71,9 @@ Plus one obligation no table-to-table comparison can infer:
 > [`000001_backfill_traces_local_v2.sql`](../data-migrations/traces-local-v2-cutover/scripts/db-app-analytics/000001_backfill_traces_local_v2.sql).
 > Otherwise the cutover copies the column as its default and the data is silently lost.
 >
-> A **derived** (`MATERIALIZED`) column must **not** be added there — the destination recomputes it, and naming a
-> materialized column in an `INSERT` is an error.
+> A **derived** (`MATERIALIZED` **or** `ALIAS`) column must **not** be added there — the destination computes it, and
+> naming either kind in an `INSERT` column list is an error. This is the same pair the read-facing rule above names, and
+> the parity gate classifies them together: both are excluded from the insertable column set.
 
 **Adding the name to the backfill list is not always enough.** `INSERT ... SELECT` copies by position and converts by
 assignment, so a name-for-name copy only works when the source value is *representable* in the destination column. CI
@@ -149,6 +150,25 @@ conversation, not a migration.
 
 The invariant above still holds for structural changes, and the gates still enforce it — they compare the sorting and
 primary keys regardless of how a change was made.
+
+### Known limitation: the guard is evaluated on one node
+
+Liquibase evaluates the `sqlCheck` on the single JDBC connection it holds, against that server's own
+`system.tables`, and only then submits the `ALTER ... ON CLUSTER`. So the branch is selected from **one host's** view of
+the topology. If replicas are transiently skewed — mid-cutover, or with a replica catching up — one host can select a
+branch and have the complementary changeset recorded `MARK_RAN`, leaving the other hosts permanently short of the change
+with a ledger that says otherwise.
+
+Three things bound this in practice, and none of them eliminate it:
+
+* the cutover's `EXCHANGE` + wrap is itself `ON CLUSTER`, so `traces_local` appears cluster-wide rather than per node;
+* `exchange_and_wrap.sh` gates on replication settling before it proceeds;
+* the freeze rule below keeps schema DDL out of the window where skew is most likely.
+
+The candidate hardening is to evaluate the precondition over `clusterAllReplicas` instead of the local `system.tables`
+and fail on a partial answer. That is **not decided** — it changes the shipped pattern, and the failure semantics of a
+precondition that errors mid-cluster need thinking through before it becomes the rule. Until then: do not ship trace
+schema DDL against a cluster you have not confirmed is settled.
 
 ### Freeze rule: no trace schema DDL during a cutover soak
 
