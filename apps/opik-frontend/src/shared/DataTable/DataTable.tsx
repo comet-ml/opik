@@ -54,6 +54,12 @@ import {
 } from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import useCustomRowClick from "@/shared/DataTable/useCustomRowClick";
+import useColumnVirtualization, {
+  ColumnVirtualizationConfig,
+  ColumnSpacerCell,
+  isColumnSpacer,
+  sliceColumnWindow,
+} from "@/shared/DataTable/columnVirtualization";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -139,6 +145,9 @@ interface DataTableProps<TData, TValue> {
   stickyHeader?: boolean;
   TableWrapper?: React.FC<DataTableWrapperProps>;
   TableBody?: React.FC<DataTableBodyProps<TData>>;
+  // Renders only the horizontally visible columns, per table, the way
+  // TableBody={DataTableVirtualBody} opts into row virtualization
+  columnVirtualization?: ColumnVirtualizationConfig;
   meta?: Omit<
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
@@ -171,6 +180,7 @@ const DataTable = <TData, TValue>({
   autoWidth = false,
   TableWrapper = DataTableWrapper,
   TableBody = DataTableBody,
+  columnVirtualization,
   stickyHeader = false,
   meta,
   getSubRows,
@@ -254,6 +264,10 @@ const DataTable = <TData, TValue>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers, columnSizing]);
 
+  const columnWindow = useColumnVirtualization(table, columnVirtualization, {
+    supported: !isFunction(renderCustomRow),
+  });
+
   const [tableHeight, setTableHeight] = useState(0);
   const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
   const { ref: tableRef } = useObserveResizeNode<HTMLTableElement>((node) => {
@@ -311,7 +325,13 @@ const DataTable = <TData, TValue>({
             }
           : {})}
       >
-        {cells.map((cell) => renderCell(row, cell))}
+        {sliceColumnWindow(cells, columnWindow).map((cell) =>
+          isColumnSpacer(cell) ? (
+            <ColumnSpacerCell key={cell.id} spacer={cell} />
+          ) : (
+            renderCell(row, cell)
+          ),
+        )}
       </TableRow>
     );
   };
@@ -420,7 +440,7 @@ const DataTable = <TData, TValue>({
             }}
           >
             <colgroup>
-              {cols.map((i) => (
+              {sliceColumnWindow(cols, columnWindow).map((i) => (
                 <col key={i.id} style={{ width: `${i.size}px` }} />
               ))}
             </colgroup>
@@ -441,45 +461,61 @@ const DataTable = <TData, TValue>({
                       !isLastRow && "!border-b-0",
                     )}
                   >
-                    {headerGroup.headers.map((header) => {
-                      return (
-                        <TableHead
-                          key={header.id}
-                          data-header-id={header.id}
-                          style={{
-                            zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
-                            ...getCommonPinningStyles({
+                    {sliceColumnWindow(headerGroup.headers, columnWindow).map(
+                      (header) => {
+                        if (isColumnSpacer(header)) {
+                          return (
+                            <ColumnSpacerCell
+                              key={header.id}
+                              spacer={header}
+                              isHeader
+                            />
+                          );
+                        }
+
+                        return (
+                          <TableHead
+                            key={header.id}
+                            data-header-id={header.id}
+                            style={{
+                              zIndex:
+                                TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
+                              ...getCommonPinningStyles({
+                                column: header.column,
+                                isHeader: true,
+                                isLastHeaderRow: isLastRow,
+                                lastRightPinnedColumnId,
+                              }),
+                            }}
+                            className={getCommonPinningClasses({
                               column: header.column,
                               isHeader: true,
-                              isLastHeaderRow: isLastRow,
-                              lastRightPinnedColumnId,
-                            }),
-                          }}
-                          className={getCommonPinningClasses({
-                            column: header.column,
-                            isHeader: true,
-                            lastLeftPinnedColumnId,
-                          })}
-                          colSpan={header.colSpan}
-                        >
-                          {header.isPlaceholder
-                            ? ""
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                          {isResizable ? (
-                            <DataTableColumnResizer header={header} />
-                          ) : null}
-                        </TableHead>
-                      );
-                    })}
+                              lastLeftPinnedColumnId,
+                            })}
+                            colSpan={header.colSpan}
+                          >
+                            {header.isPlaceholder
+                              ? ""
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext(),
+                                )}
+                            {isResizable ? (
+                              <DataTableColumnResizer header={header} />
+                            ) : null}
+                          </TableHead>
+                        );
+                      },
+                    )}
                   </TableRow>
                 );
               })}
             </TableHeader>
             {showSkeleton ? (
-              <DataTableSkeletonBody table={table} />
+              <DataTableSkeletonBody
+                table={table}
+                columnWindow={columnWindow}
+              />
             ) : (
               <TableBody
                 table={table}
