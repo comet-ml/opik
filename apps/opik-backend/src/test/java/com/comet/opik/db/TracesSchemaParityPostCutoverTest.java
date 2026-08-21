@@ -169,22 +169,55 @@ class TracesSchemaParityPostCutoverTest {
         var wrapper = TableSchema.read(connection, DATABASE_NAME, TRACES);
         var shard = TableSchema.read(connection, DATABASE_NAME, SHARD);
 
-        assertThat(shard.columnNames())
-                .as("the read-facing field must reach the shard, which stores it")
-                .contains(TracesDdlReferenceFixture.DERIVED_COLUMN);
-        assertThat(wrapper.columnNames())
-                .as("...and the wrapper, which resolves it for reads")
-                .contains(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        // The full declared contract on both, not merely the name: a column of this name with the wrong type or
+        // default kind would satisfy a presence check while breaking what the migration promises.
+        assertReferenceFieldContract(shard, "the read-facing field must reach the shard, which stores it");
+        assertReferenceFieldContract(wrapper, "...and the wrapper, which resolves it for reads");
 
-        assertThat(shard.skipIndexNames())
-                .as("the storage-only index must reach the shard")
-                .contains(TracesDdlReferenceFixture.STORAGE_INDEX);
+        assertThat(shard.skipIndicesByName().get(TracesDdlReferenceFixture.STORAGE_INDEX))
+                .as("the storage-only index must reach the shard, defined as declared")
+                .isEqualTo(TracesDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
         assertThat(wrapper.skipIndexNames())
                 .as("...and must NOT be attempted on the Distributed wrapper, which stores no data to index")
                 .doesNotContain(TracesDdlReferenceFixture.STORAGE_INDEX);
 
         TracesSchemaParity.assertPostCutoverParity(connection, DATABASE_NAME);
         selectColumns(List.of(TracesDdlReferenceFixture.DERIVED_COLUMN));
+        assertDerivedFieldComputesThroughTheWrapper();
+    }
+
+    private void assertReferenceFieldContract(TableSchema schema, String description) {
+        var column = schema.columnsByName().get(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        assertThat(column).as(description).isNotNull();
+        assertThat(column.type()).as("reference field type on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
+        assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+    }
+
+    /**
+     * Resolving the column proves the wrapper can see it; it does not prove the expression behind it works. A
+     * materialized column with a valid name and a broken definition would pass every assertion above, so one row is
+     * written through the wrapper and its computed value read back — the reference migration declares
+     * {@code MATERIALIZED length(name)}, so a known name must yield its length.
+     */
+    private void assertDerivedFieldComputesThroughTheWrapper() throws Exception {
+        var traceId = java.util.UUID.randomUUID().toString();
+        var name = "reference-derived-probe";
+        execute("""
+                INSERT INTO %s.%s (id, workspace_id, project_id, name)
+                VALUES ('%s', 'ws-reference-probe', '%s', '%s')
+                """.formatted(DATABASE_NAME, TRACES, traceId, java.util.UUID.randomUUID(), name));
+
+        var sql = "SELECT %s FROM %s.%s WHERE id = '%s'"
+                .formatted(TracesDdlReferenceFixture.DERIVED_COLUMN, DATABASE_NAME, TRACES, traceId);
+        try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
+            assertThat(resultSet.next()).as("the probe row must be readable through the wrapper").isTrue();
+            assertThat(resultSet.getLong(1))
+                    .as("`%s` is MATERIALIZED length(name), so it must compute the probe name's length",
+                            TracesDdlReferenceFixture.DERIVED_COLUMN)
+                    .isEqualTo(name.length());
+        }
     }
 
     @Test

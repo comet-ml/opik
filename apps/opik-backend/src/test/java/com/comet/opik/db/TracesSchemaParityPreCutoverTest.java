@@ -124,10 +124,10 @@ class TracesSchemaParityPreCutoverTest {
         // The read-facing field and the storage-only index both reach both tables pre-cutover.
         var traces = TableSchema.read(connection, DATABASE_NAME, TRACES);
         var shadow = TableSchema.read(connection, DATABASE_NAME, SHADOW);
-        assertThat(traces.columnNames()).contains(TracesDdlReferenceFixture.DERIVED_COLUMN);
-        assertThat(shadow.columnNames()).contains(TracesDdlReferenceFixture.DERIVED_COLUMN);
-        assertThat(traces.skipIndexNames()).contains(TracesDdlReferenceFixture.STORAGE_INDEX);
-        assertThat(shadow.skipIndexNames()).contains(TracesDdlReferenceFixture.STORAGE_INDEX);
+        assertReferenceFieldContract(traces);
+        assertReferenceFieldContract(shadow);
+        assertReferenceIndexContract(traces);
+        assertReferenceIndexContract(shadow);
 
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
     }
@@ -378,6 +378,30 @@ class TracesSchemaParityPreCutoverTest {
 
         execute("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 0".formatted(DATABASE_NAME, SHADOW));
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
+    /**
+     * The reference field must arrive as the exact column the migration declares. Presence alone would be satisfied by
+     * a {@code UInt32}, or by an {@code ALIAS} where a {@code MATERIALIZED} was intended — both of which change the
+     * read contract while passing a name check.
+     */
+    private void assertReferenceFieldContract(TableSchema schema) {
+        var column = schema.columnsByName().get(TracesDdlReferenceFixture.DERIVED_COLUMN);
+        assertThat(column)
+                .as("`%s` must carry the reference field on `%s`", TracesDdlReferenceFixture.DERIVED_COLUMN,
+                        schema.table())
+                .isNotNull();
+        assertThat(column.type()).as("reference field type on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_TYPE);
+        assertThat(column.defaultKind()).as("reference field default kind on `%s`", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.DERIVED_COLUMN_DEFAULT_KIND);
+    }
+
+    /** Likewise the index: the same name with a different type, expression or granularity is a different index. */
+    private void assertReferenceIndexContract(TableSchema schema) {
+        assertThat(schema.skipIndicesByName().get(TracesDdlReferenceFixture.STORAGE_INDEX))
+                .as("`%s` must carry the reference index, defined as declared", schema.table())
+                .isEqualTo(TracesDdlReferenceFixture.EXPECTED_STORAGE_INDEX);
     }
 
     private boolean tableExists(String table) throws Exception {

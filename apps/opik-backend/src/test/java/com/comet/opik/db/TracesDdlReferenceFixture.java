@@ -46,8 +46,22 @@ class TracesDdlReferenceFixture {
     /** The reference field change: MATERIALIZED, so read-facing — it must reach the shard and the wrapper. */
     static final String DERIVED_COLUMN = "reference_derived";
 
+    /**
+     * The full contract the field change declares, asserted rather than merely its presence: a column of the right name
+     * but the wrong type or default kind would satisfy a name check while breaking what the migration promises.
+     */
+    static final String DERIVED_COLUMN_TYPE = "UInt64";
+    static final String DERIVED_COLUMN_DEFAULT_KIND = "MATERIALIZED";
+
     /** The reference index change: storage-only — it must reach the shard alone. */
     static final String STORAGE_INDEX = "idx_reference_storage";
+
+    /**
+     * The index's full definition. Same reasoning as the column: an index of this name with a different type,
+     * expression or granularity is not the index the migration declared.
+     */
+    static final TableSchema.SkipIndex EXPECTED_STORAGE_INDEX = new TableSchema.SkipIndex(
+            STORAGE_INDEX, "set(0)", "name", 1);
 
     /** The column the un-guarded negative control adds to {@code traces} and nothing else. */
     static final String UNGUARDED_COLUMN = "unguarded_column";
