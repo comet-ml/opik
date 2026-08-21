@@ -118,6 +118,10 @@ class ClickHouseTracesTopologyReadinessTest {
         ClientSupportUtils.config(clientSupport);
         this.template = template;
         this.clickHouseClient = clickHouseClient;
+        // applyDistributedWrap's DDL spells the database out, because SQL must not be assembled with Java string
+        // operations and ClickHouse cannot bind an identifier inside a Distributed() engine argument. This keeps that
+        // literal honest if the shared test database name ever changes.
+        assertThat(DATABASE_NAME).as("the wrap DDL hard-codes the database name").isEqualTo("opik");
     }
 
     @AfterAll
@@ -228,6 +232,10 @@ class ClickHouseTracesTopologyReadinessTest {
      * would fail outright — {@code CREATE TABLE traces_dist} on the second pass, and the {@code RENAME} would rotate a
      * wrapper on top of a wrapper — so the guard is what keeps this suite correct if the wrap ever becomes a regular
      * migration and the container arrives already cut over.
+     *
+     * <p>Both statements are literal text blocks: SQL is never assembled with Java string operations, and ClickHouse
+     * cannot bind an identifier inside a {@code Distributed()} engine argument, so the database name is spelled out
+     * and held to {@link #DATABASE_NAME} by the assertion in {@link #beforeAll} rather than interpolated in.
      */
     private void applyDistributedWrap() {
         if (isWrapped()) {
@@ -235,8 +243,8 @@ class ClickHouseTracesTopologyReadinessTest {
         }
         execute("""
                 CREATE TABLE traces_dist ON CLUSTER '{cluster}' AS traces
-                ENGINE = Distributed('{cluster}', '%s', 'traces_local', sipHash64(project_id))
-                """.formatted(DATABASE_NAME));
+                ENGINE = Distributed('{cluster}', 'opik', 'traces_local', sipHash64(project_id))
+                """);
         execute("""
                 RENAME TABLE
                     traces TO traces_local,

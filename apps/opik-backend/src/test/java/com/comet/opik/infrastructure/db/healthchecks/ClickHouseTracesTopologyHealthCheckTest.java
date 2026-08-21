@@ -94,6 +94,20 @@ class ClickHouseTracesTopologyHealthCheckTest {
                 + "fail with UNKNOWN_TABLE (60).");
     }
 
+    /**
+     * Presence of {@code traces_local} is not enough — it is where TraceDAO sends its DELETEs, so a same-named table
+     * that cannot take mutations fails exactly like an absent one.
+     */
+    @ParameterizedTest(name = "traces_local engine={0}")
+    @ValueSource(strings = {"Distributed", "View", "Log"})
+    void check__whenWrapEnabledButTracesLocalCannotTakeMutations__thenUnhealthy(String tracesLocalEngine) {
+        var actualResult = check(true, Map.of("traces", "Distributed", "traces_local", tracesLocalEngine));
+
+        assertUnhealthy(actualResult, ("%s=true routes trace mutations at 'traces_local', which exists but is a %s "
+                + "rather than a (Replicated)MergeTree. Trace deletes cannot run against that engine, so the wrap is "
+                + "pointing at the wrong table.").formatted(FLAG, tracesLocalEngine));
+    }
+
     @Test
     void check__whenWrapEnabledAndTracesIsDistributedButTracesLocalIsMissing__thenUnhealthy() {
         var actualResult = check(true, Map.of("traces", "Distributed"));
