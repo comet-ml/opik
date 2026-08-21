@@ -159,6 +159,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ALLURE_LAUNCH_NAME: "Opik v2 Post-Merge ${{ github.event.inputs.tier || 't1' }} - ${{ github.run_id }}"
           TIER: ${{ github.event.inputs.tier || 't1' }}
+          # The dockerized backend reaches the host-run mock token service via the docker0 host IP
+          MOCK_AUTH_URL_FOR_BACKEND: http://172.17.0.1:9878
         run: |
           echo "========================================"
           echo "🧪 Running v2 tier: $TIER"
