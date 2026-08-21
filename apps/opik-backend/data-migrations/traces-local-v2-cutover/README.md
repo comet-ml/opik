@@ -232,8 +232,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > point of the check (an instance whose deletes cannot work should not serve), but it changes the cost of the window
 > from "delete-path 500s" to "no backend in rotation", so the window must sit **inside the declared maintenance window**
 > that `--confirm-maintenance` already asserts for the wrap. It is self-clearing: the probe re-evaluates continuously,
-> so rotation returns on the next successful probe after the two sides are back in step — no extra restart needed on
-> the wrap-first path, and only the already-planned restart on the toggle-first path.
+> so rotation returns on the next successful probe once the two sides are back in step. **Neither ordering needs an
+> extra restart** — both spend exactly the one planned rolling restart the toggle already requires; only its position
+> differs, and with it what closes the window: on the toggle-first path the restart comes first and the **wrap DDL**
+> closes the window, on the wrap-first path the wrap comes first and the **restart completing** closes it.
 >
 > Prefer **toggle first**, have the `--wrap-only` command ready to run the moment every backend instance is up, and
 > keep the window to seconds. Nothing in either direction corrupts data — that is what makes a short window

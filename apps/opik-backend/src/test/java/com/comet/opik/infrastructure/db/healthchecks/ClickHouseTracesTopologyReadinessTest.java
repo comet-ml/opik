@@ -272,7 +272,7 @@ class ClickHouseTracesTopologyReadinessTest {
                 .flatMap(result -> Mono.from(result.getRowsUpdated()))).block();
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     private record HealthCheckResponse(String name, boolean healthy, boolean critical, String type) {
     }
 }
