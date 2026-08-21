@@ -18,8 +18,12 @@
 -- (TracesSchemaParityPreCutoverTest / TracesSchemaParityPostCutoverTest) apply this fixture and assert they reject it,
 -- which is what proves a non-conforming migration cannot merge.
 
+-- It is otherwise written correctly -- IF NOT EXISTS, ON CLUSTER '{cluster}', a real rollback -- so the precondition
+-- guard is the ONLY thing it is missing. That keeps the negative control sharp: when the gates reject it, they are
+-- rejecting the absent guard and nothing else.
+--
 --changeset opik-7772-test-fixture:unguarded_traces_change
 --comment: Deliberately un-guarded — the mistake the pattern exists to prevent
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS unguarded_column String DEFAULT '';
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS unguarded_column String DEFAULT '';
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces DROP COLUMN IF EXISTS unguarded_column;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS unguarded_column;
