@@ -1,6 +1,6 @@
 ---
 name: analytics-instrumentation
-description: Add analytics events to Opik features. Use when wiring PostHog events on the frontend or backend for product analytics tracking.
+description: Add product analytics (BI) events to Opik features. Use when wiring events on the frontend, the backend, or the Python SDK - all three report through Segment to PostHog.
 ---
 
 # Analytics Instrumentation
@@ -120,46 +120,86 @@ If you already depend on a `Schedulers.boundedElastic().schedule(() -> { ... })`
 
 ### Files
 `sdks/python/src/opik/analytics/` — `api.py` (public surface), `rules.py` (when
-reporting is allowed), `worker.py` (background thread), `posthog.py` (the HTTP call),
-`identity.py` (hashes). Config lives in `sdks/python/src/opik/config.py`, prefixed
-`analytics_`.
+reporting is allowed), `worker.py` (background thread), `comet_stats.py` (the HTTP
+call). Config lives in `sdks/python/src/opik/config.py`, prefixed `analytics_`.
+
+**Identity and environment metadata are shared with Sentry error tracking**, not
+reimplemented. Both live at the top level so neither subsystem depends on the other:
+`opik/environment.py::get_user_identifier()` (workspace name, falling back to a
+hostname/username hash) and `opik/environment_details.py` (`collect_tags_once()` /
+`collect_context_once()`). Analytics and `error_tracking/before_send.py` both read
+them, so an event carries the same user id, the same `session_id` and the same
+environment details as any error report from the same run. Add environment metadata
+there, not in either consumer.
 
 ### API
 
-Three ways to add an event, in order of preference:
+One function, called explicitly as the first line of whatever is being reported:
 
 ```python
 from opik import analytics
 
-# 1. Class decorator - one event per public method, plus `init`
-@analytics.track_public_methods("client")
-class Opik: ...
-
-# 2. Function/method decorator
-@analytics.track_call("integration", "openai")
-def track_openai(client): ...
-
-# 3. Explicit call - when a property is only known at runtime
-analytics.track_event(
-    analytics.build_event_name("evaluation", "metric_created"), {"metric": name}
-)
+analytics.track_event("client", "create_dataset")
+analytics.track_event("integration", "openai")
+analytics.track_event("evaluation", "metric_created", metric=name)
 ```
 
-`component` is a closed set (`analytics.Component`): `client`, `evaluation`,
-`integration`. Extend it there rather than passing a new string.
+No decorators, by design: the payload is written out at the call site, so what gets
+sent is whatever you can read right there.
 
-Decorators report **before** the wrapped call, so a failing call still counts as usage.
-Event names are `opik_python_sdk_{component}_{action}`; `build_event_name` composes them.
+The positional arguments form a **path**, broadest first, and go as deep as an event
+needs:
+
+```python
+analytics.track_event("integration", "bedrock")                  # the integration
+analytics.track_event("integration", "bedrock", "invoke_agent")  # one part of it
+```
+
+The first element is a closed set (`analytics.Component`): `client`, `evaluation`,
+`integration` — extend it there rather than passing a new string. Every level after
+it is free-form, and the second is normally just the method being reported.
+
+A longer path is a **different event**, not a repeat of the shorter one, so
+instrumenting part of a feature never silences the feature itself.
+
+Names are composed by joining the path with a **double** underscore —
+`opik_python_sdk__integration__bedrock__invoke_agent` — in one private helper, so the
+scheme can be changed for every event at once without touching a call site. The
+separator is doubled so the name splits back into the path: segments are method names,
+so they contain single underscores but never a pair. A test enforces that
+(`test_event_names.py`); keep it true when adding events. Extra properties are keyword
+arguments; adding one never changes the API.
 
 ### How it works
 - `track_event()` never raises, never blocks on I/O, and no-ops when reporting is off.
-- Events are sent to PostHog from a single background thread (`analytics/worker.py`).
+- **Calls Opik makes into its own API are not reported.** `evaluate_threads` calls
+  `search_threads`, `get_or_create_dataset` calls `get_dataset`, the CLI calls both —
+  35 of the 69 instrumented `Opik` methods are reachable this way. An event is dropped
+  when either the reporting function was reached from a *different* Opik module, or
+  some function further up the stack is already reporting. Being called from the
+  reporter's own module is not enough on its own, so a private helper reporting on its
+  caller's behalf (as `BaseMetric` does) still works. Internal calls record nothing, so
+  the user's own call to the same API still reports.
+- **Nothing needs decorating for that to hold.** Reporting functions are recognised by
+  code object the first time they report, so a new `track_event` call site joins in
+  automatically.
+- **Counting is safe across threads and forks.** Claiming an event is done under a lock
+  (a check-then-add lets every racing thread report a copy), and the worker is rebuilt
+  after `fork()` — with `_ALREADY_REPORTED` deliberately inherited, so a child reports
+  its own events but not the parent's. Separate processes cannot share that state, so
+  a `spawn` pool reports one copy per worker: **count `uniq(anonymous_id)`, never raw
+  event volume.**
+- Events go to Comet's stats collector from a single background thread
+  (`analytics/worker.py`), and on through Segment to PostHog — the same route the
+  backend reports through. **The collector takes no credentials**, so there is no
+  write key to configure; `OPIK_ANALYTICS_URL` alone points it somewhere else.
 - **Each event is reported once per process.** Analytics answers "how many users use
   this feature", not "how often", so `Opik.span()` in a hot loop costs one event and a
   set lookup. Events differing in their properties count as different events, so one
   name still covers variants (each metric class, say).
-- Reporting is off under pytest, when `DO_NOT_TRACK=1`, and when
-  `OPIK_ANALYTICS_ENABLE=false`. Add another process-level veto with
+- `OPIK_ANALYTICS_ENABLE=false` is the only way to switch reporting off. Reporting is
+  also skipped under pytest, which is not a user-facing switch but the thing keeping
+  test suites from making network calls. Add another process-level veto with
   `analytics.register_rule(lambda config: ...)` before the first tracked event.
 - Config is read once, on the first tracked event - not at import time - so
   `opik.configure(...)` is taken into account.
@@ -178,20 +218,19 @@ Event names are `opik_python_sdk_{component}_{action}`; `build_event_name` compo
   litellm `track_completion` case is why: `LiteLLMChatModel` calls it, so the event would
   measure Opik's own behaviour rather than the user's.
 - **Don't instrument per-callback hot paths** (e.g. an OTel `on_start`). Instrument the
-  constructor or the user-facing function instead.
+  constructor or the user-facing function instead. `Opik.trace()` and `Opik.span()` are
+  deliberately uninstrumented for the same reason - the backend already sees them.
 
 ## Environment Variables
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `OPIK_ANALYTICS_ENABLED` | `false` | Backend: controls whether analytics events are sent |
-| `OPIK_ANALYTICS_ENVIRONMENT` | empty | Both: tags events with deployment name (e.g. `staging`, `production`) |
+| `OPIK_ANALYTICS_ENVIRONMENT` | empty | Frontend and backend: tags events with deployment name (e.g. `staging`, `production`) |
 | `OPIK_POSTHOG_KEY` | — | Frontend: PostHog API key (set in `config.js`) |
 | `OPIK_POSTHOG_HOST` | — | Frontend: PostHog API host (set in `config.js`) |
 | `OPIK_ANALYTICS_ENABLE` | `true` | Python SDK: controls whether usage events are sent |
-| `DO_NOT_TRACK` | unset | Python SDK: cross-tool opt-out; `1`/`true` disables reporting |
-| `OPIK_ANALYTICS_DISABLED_EVENTS` | empty | Python SDK: comma-separated event names to drop |
-| `OPIK_ANALYTICS_POSTHOG_KEY` / `_HOST` | public write key / `us.i.posthog.com` | Python SDK: PostHog destination |
+| `OPIK_ANALYTICS_URL` | `stats.comet.com/notify/event/` | Python SDK: where events are sent. Needs no credentials; set it empty to stop reporting |
 
 Backend analytics is disabled by default; the Python SDK's is opt-out. OSS installations
 are unaffected on the backend.
@@ -201,7 +240,7 @@ are unaffected on the backend.
 ```
 Frontend custom events:  Browser → Segment → PostHog
 Backend events:          Java → comet-stats → Segment → PostHog
-Python SDK events:       Python → PostHog /batch/ (direct, background thread)
+Python SDK events:       Python → comet-stats → Segment → PostHog (background thread)
 PostHog native:          Browser → posthog-js → PostHog (pageviews, feature flags, identification)
 ```
 
