@@ -57,14 +57,17 @@ public class ClickHouseTracesTopologyHealthCheck extends AbstractClickHouseHealt
     private static final String ENGINE_COLUMN = "engine";
 
     /**
-     * Both tables in one lookup. {@code currentDatabase()} resolves to the database the v2 client was built with
-     * ({@code Client.Builder#setDefaultDatabase}), so the probe follows {@code databaseAnalytics.databaseName} without
-     * interpolating it into SQL.
+     * Both tables in one lookup, declared once as a literal text block — SQL is never assembled with Java string
+     * operations, so the table names are spelled out here rather than interpolated from the constants above (which
+     * remain the single source for the map lookups and the messages). {@code ClickHouseTracesTopologyHealthCheckTest}
+     * stubs this exact query text, so the two cannot drift apart unnoticed. {@code currentDatabase()} resolves to the
+     * database the v2 client was built with ({@code Client.Builder#setDefaultDatabase}), so the probe follows
+     * {@code databaseAnalytics.databaseName} without naming it in SQL at all.
      */
     private static final String TOPOLOGY_QUERY = """
             SELECT name, engine FROM system.tables \
-            WHERE database = currentDatabase() AND name IN ('%s', '%s')\
-            """.formatted(TRACES_TABLE, TRACES_LOCAL_TABLE);
+            WHERE database = currentDatabase() AND name IN ('traces', 'traces_local')\
+            """;
 
     private static final String HEALTHY_WRAPPED = "'%s' is %s over '%s', matching %s=true"
             .formatted(TRACES_TABLE, DISTRIBUTED_ENGINE, TRACES_LOCAL_TABLE, FLAG);
@@ -82,6 +85,10 @@ public class ClickHouseTracesTopologyHealthCheck extends AbstractClickHouseHealt
             + "expected, but table '%s' does not exist. Trace deletes fail with UNKNOWN_TABLE (60); the Distributed "
             + "wrap points at a shard table that is absent from this node.")
             .formatted(FLAG, TRACES_LOCAL_TABLE, TRACES_TABLE, DISTRIBUTED_ENGINE, TRACES_LOCAL_TABLE);
+    private static final String TRACES_LOCAL_NOT_MERGE_TREE_TEMPLATE = ("%s=true routes trace mutations at '%s', which "
+            + "exists but is a %%s rather than a (Replicated)%s. Trace deletes cannot run against that engine, so the "
+            + "wrap is pointing at the wrong table.")
+            .formatted(FLAG, TRACES_LOCAL_TABLE, MERGE_TREE_ENGINE_SUFFIX);
     private static final String WRAPPED_MESSAGE = ("%s=false routes trace mutations directly at '%s', but '%s' is a "
             + "%s table, which rejects mutations: the Distributed wrap has been applied. Set the flag to true and "
             + "restart — otherwise trace deletes fail with BAD_ARGUMENTS (36) / NOT_IMPLEMENTED (48).")
@@ -113,16 +120,22 @@ public class ClickHouseTracesTopologyHealthCheck extends AbstractClickHouseHealt
             return Result.unhealthy(MISSING_TRACES_TEMPLATE.formatted(wrapEnabled));
         }
         return wrapEnabled
-                ? checkWrapExpected(tracesEngine, engines.containsKey(TRACES_LOCAL_TABLE))
+                ? checkWrapExpected(tracesEngine, engines.get(TRACES_LOCAL_TABLE))
                 : checkWrapNotExpected(tracesEngine);
     }
 
-    private static Result checkWrapExpected(String tracesEngine, boolean tracesLocalExists) {
+    private static Result checkWrapExpected(String tracesEngine, String tracesLocalEngine) {
         if (!DISTRIBUTED_ENGINE.equals(tracesEngine)) {
             return Result.unhealthy(NOT_WRAPPED_TEMPLATE.formatted(tracesEngine));
         }
-        if (!tracesLocalExists) {
+        if (tracesLocalEngine == null) {
             return Result.unhealthy(MISSING_TRACES_LOCAL);
+        }
+        // Presence alone is not enough: the wrap's target is where TraceDAO sends its DELETEs, so a same-named View,
+        // Log or nested Distributed there fails mutations exactly like an absent table. The engine is already in the
+        // one row this probe reads, so holding it to the mutation-capable family costs nothing.
+        if (!isMergeTreeFamily(tracesLocalEngine)) {
+            return Result.unhealthy(TRACES_LOCAL_NOT_MERGE_TREE_TEMPLATE.formatted(tracesLocalEngine));
         }
         return Result.healthy(HEALTHY_WRAPPED);
     }
@@ -131,12 +144,19 @@ public class ClickHouseTracesTopologyHealthCheck extends AbstractClickHouseHealt
         if (DISTRIBUTED_ENGINE.equals(tracesEngine)) {
             return Result.unhealthy(WRAPPED_MESSAGE);
         }
-        // Accepts every MergeTree family member (MergeTree, ReplicatedMergeTree, SharedMergeTree): what matters is
-        // that the engine takes mutations directly, which is exactly what the family suffix marks.
-        if (!tracesEngine.endsWith(MERGE_TREE_ENGINE_SUFFIX)) {
+        if (!isMergeTreeFamily(tracesEngine)) {
             return Result.unhealthy(NOT_MERGE_TREE_TEMPLATE.formatted(tracesEngine));
         }
         return Result.healthy(HEALTHY_UNWRAPPED_TEMPLATE.formatted(tracesEngine));
+    }
+
+    /**
+     * Accepts every MergeTree family member — {@code MergeTree}, {@code ReplicatedReplacingMergeTree},
+     * {@code SharedMergeTree} and the rest. What the probe cares about is whether the engine takes mutations directly,
+     * and the family suffix is exactly what marks that; enumerating the variants would only go stale.
+     */
+    private static boolean isMergeTreeFamily(String engine) {
+        return engine.endsWith(MERGE_TREE_ENGINE_SUFFIX);
     }
 
     private static Map<String, String> readEngines(Records records) {
