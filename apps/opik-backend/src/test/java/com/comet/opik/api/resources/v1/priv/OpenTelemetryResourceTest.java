@@ -444,7 +444,11 @@ class OpenTelemetryResourceTest {
                             "gemini-3.1-flash-lite", null, "google_vertexai"),
                     // Names no backend on its own, so it is resolved from the endpoint host instead.
                     arguments("google + vertex host", "gen_ai.system", "google", "gemini-2.5-flash-lite",
-                            "us-east1-aiplatform.googleapis.com", "google_vertexai"));
+                            "us-east1-aiplatform.googleapis.com", "google_vertexai"),
+                    // Vertex also serves Claude, which Opik prices under a different provider than
+                    // the Gemini rows — so the Vertex alias alone would still leave this span at $0.
+                    arguments("vertex_ai + claude", "gen_ai.system", "vertex_ai", "claude-haiku-4-5", null,
+                            "anthropic_vertexai"));
         }
 
         @ParameterizedTest(name = "OTel provider {0} is stored as {5} and priced")

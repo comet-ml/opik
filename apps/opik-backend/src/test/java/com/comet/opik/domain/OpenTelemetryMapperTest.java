@@ -1445,6 +1445,70 @@ class OpenTelemetryMapperTest {
     }
 
     /**
+     * The current semconv defines {@code gen_ai.provider.name} on {@code execute_tool} and
+     * {@code invoke_agent} spans, not just inference spans, so reading it must not retype them.
+     * {@code enrichSpanWithAttributes} applies a rule's span type as it walks the attribute list,
+     * and the last type-bearing rule wins.
+     */
+    @Nested
+    class ProviderNameSpanTyping {
+
+        private Span map(KeyValue... attributes) {
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, List.of(attributes), null, null);
+
+            return spanBuilder.build();
+        }
+
+        private KeyValue attr(String key, String value) {
+            return KeyValue.newBuilder().setKey(key)
+                    .setValue(AnyValue.newBuilder().setStringValue(value)).build();
+        }
+
+        /**
+         * A fully-migrated instrumentation emits {@code gen_ai.provider.name} and no
+         * {@code gen_ai.system}, so a tool span carries the provider attribute with no inference
+         * attribute to balance it. It must stay a tool span, in either attribute order.
+         */
+        @Test
+        void executeToolSpanKeepsToolTypeRegardlessOfAttributeOrder() {
+            assertThat(map(attr("gen_ai.tool.call.arguments", "{\"q\":\"opik\"}"),
+                    attr("gen_ai.provider.name", "openai")).type())
+                    .isEqualTo(SpanType.tool);
+
+            assertThat(map(attr("gen_ai.provider.name", "openai"),
+                    attr("gen_ai.tool.call.arguments", "{\"q\":\"opik\"}")).type())
+                    .isEqualTo(SpanType.tool);
+        }
+
+        /**
+         * {@code gen_ai.tool.name} maps to metadata and carries no span type of its own, so the
+         * provider attribute is the only rule in play — and must still not claim {@code llm}.
+         */
+        @Test
+        void toolNameOnlySpanIsNotTypedAsLlm() {
+            assertThat(map(attr("gen_ai.tool.name", "search"),
+                    attr("gen_ai.provider.name", "openai")).type())
+                    .isNotEqualTo(SpanType.llm);
+        }
+
+        /** Inference spans are still typed llm — by their own model and usage attributes. */
+        @Test
+        void inferenceSpanIsStillTypedLlm() {
+            assertThat(map(attr("gen_ai.provider.name", "openai"),
+                    attr("gen_ai.request.model", "gpt-4o")).type())
+                    .isEqualTo(SpanType.llm);
+
+            assertThat(map(attr("gen_ai.system", "openai")).type()).isEqualTo(SpanType.llm);
+        }
+    }
+
+    /**
      * OTel semantic conventions spell providers differently from the Opik price-table vocabulary
      * (e.g. {@code vertex_ai} vs {@code google_vertexai}). Unambiguous values are aliased 1:1;
      * ambiguous ones fall through to {@code server.address} disambiguation.
@@ -1502,7 +1566,9 @@ class OpenTelemetryMapperTest {
         }
 
         @ParameterizedTest(name = "[{index}] {0} -> google_vertexai")
-        @CsvSource({"VERTEX_AI", "Vertex_Ai", "  vertex_ai  "})
+        // The padded case must stay quoted: @CsvSource trims unquoted columns, so an unquoted
+        // "  vertex_ai  " would reach the mapper already trimmed and merely repeat the plain case.
+        @CsvSource({"VERTEX_AI", "Vertex_Ai", "'  vertex_ai  '"})
         void aliasMatchingIsCaseAndWhitespaceInsensitive(String wireValue) {
             assertThat(map(attr("gen_ai.system", wireValue)).provider()).isEqualTo("google_vertexai");
         }
@@ -1583,6 +1649,68 @@ class OpenTelemetryMapperTest {
         void blankProviderNameDoesNotOverrideAResolvedProvider() {
             assertThat(map(attr("gen_ai.system", "vertex_ai"), attr("gen_ai.provider.name", "")).provider())
                     .isEqualTo("google_vertexai");
+        }
+
+        /**
+         * Vertex serves Claude alongside Gemini, and Opik prices the two from different rows
+         * ({@code anthropic_vertexai} vs {@code google_vertexai}). Every route into Vertex must
+         * narrow to the Anthropic provider, or the span matches no row and costs 0.
+         */
+        @ParameterizedTest(name = "[{index}] {0}={1} + {2} -> anthropic_vertexai")
+        @CsvSource({
+                "gen_ai.system,        vertex_ai,      claude-haiku-4-5",
+                "gen_ai.system,        gcp.vertex_ai,  claude-sonnet-4-5",
+                "gen_ai.provider.name, gcp.vertex_ai,  claude-opus-4-5",
+                // Version-pinned and routing-prefixed spellings must be recognized too
+                "gen_ai.system,        vertex_ai,      claude-haiku-4-5@20251001",
+                "gen_ai.system,        vertex_ai,      vertex_ai/claude-haiku-4-5",
+                "gen_ai.system,        vertex_ai,      Claude-Haiku-4-5",
+        })
+        void claudeOnVertexResolvesToAnthropicVertexAi(String providerAttr, String wireValue, String model) {
+            assertThat(map(attr(providerAttr, wireValue), attr("gen_ai.request.model", model)).provider())
+                    .isEqualTo("anthropic_vertexai");
+        }
+
+        /**
+         * The generic {@code google} / {@code gcp.gen_ai} values reach Vertex via host
+         * disambiguation rather than an alias, so the Anthropic narrowing must apply there too.
+         */
+        @ParameterizedTest(name = "[{index}] {0} + vertex host + claude -> anthropic_vertexai")
+        @CsvSource({"google", "gcp.gen_ai"})
+        void claudeOnHostDisambiguatedVertexResolvesToAnthropicVertexAi(String wireValue) {
+            assertThat(map(attr("gen_ai.system", wireValue),
+                    attr("server.address", "us-east1-aiplatform.googleapis.com"),
+                    attr("gen_ai.request.model", "claude-haiku-4-5")).provider())
+                    .isEqualTo("anthropic_vertexai");
+        }
+
+        /**
+         * Anthropic is the only non-Google family Opik loads Vertex pricing for, so nothing else on
+         * Vertex may be moved off {@code google_vertexai} — including the Gemini models that price
+         * correctly today.
+         */
+        @ParameterizedTest(name = "[{index}] {0} on vertex stays google_vertexai")
+        @CsvSource({"gemini-3.1-flash-lite", "gemini-2.5-flash", "llama-3.1-70b", "mistral-large-latest"})
+        void nonAnthropicModelsOnVertexKeepGoogleVertexAi(String model) {
+            assertThat(map(attr("gen_ai.system", "vertex_ai"), attr("gen_ai.request.model", model)).provider())
+                    .isEqualTo("google_vertexai");
+        }
+
+        /**
+         * The narrowing keys on the resolved Vertex provider, so a Claude model reported against a
+         * different backend must be left alone — Claude on Bedrock or the direct API already prices.
+         */
+        @ParameterizedTest(name = "[{index}] claude on {0} is unchanged")
+        @CsvSource({"anthropic", "bedrock", "openai"})
+        void claudeModelOffVertexIsNotRewritten(String provider) {
+            assertThat(map(attr("gen_ai.system", provider),
+                    attr("gen_ai.request.model", "claude-haiku-4-5")).provider())
+                    .isEqualTo(provider);
+        }
+
+        @Test
+        void vertexWithoutAModelStaysGoogleVertexAi() {
+            assertThat(map(attr("gen_ai.system", "vertex_ai")).provider()).isEqualTo("google_vertexai");
         }
     }
 
@@ -1670,6 +1798,34 @@ class OpenTelemetryMapperTest {
                 "https://generativelanguage.googleapis.com/v1beta/models",
         })
         void wellFormedGeminiApiAddressesStillResolve(String serverAddress) {
+            assertThat(mapGoogle(serverAddress).provider()).isEqualTo("google_ai");
+        }
+
+        /**
+         * {@code server.address} is attacker-controlled, so host extraction must not reject values
+         * the JDK's URI parser refuses but that resolve in practice (an underscore in a label), nor
+         * be confused by userinfo or an IPv6 literal.
+         */
+        @ParameterizedTest(name = "[{index}] {0} -> google_vertexai")
+        @CsvSource({
+                "my_host-aiplatform.googleapis.com",
+                "user@us-east1-aiplatform.googleapis.com",
+                "us-east1-aiplatform.googleapis.com:443/v1/projects/p",
+        })
+        void unusualButVertexAddressesStillResolve(String serverAddress) {
+            assertThat(mapGoogle(serverAddress).provider()).isEqualTo("google_vertexai");
+        }
+
+        /**
+         * A marker in the userinfo, path or query is not the host, so it must not classify the span.
+         */
+        @ParameterizedTest(name = "[{index}] {0} does not resolve to vertex")
+        @CsvSource({
+                "https://attacker.test/aiplatform.googleapis.com",
+                "aiplatform.googleapis.com@attacker.test",
+                "[::1]:443",
+        })
+        void markerOutsideTheHostIsNotClassifiedAsVertex(String serverAddress) {
             assertThat(mapGoogle(serverAddress).provider()).isEqualTo("google_ai");
         }
 

@@ -4,11 +4,9 @@ import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
-import com.comet.opik.domain.mapping.otel.ElasticInferenceServiceResolver;
 import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
-import com.comet.opik.domain.mapping.otel.GenAiProviderAliasResolver;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
-import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
+import com.comet.opik.domain.mapping.otel.ProviderResolvers;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -289,20 +287,13 @@ public class OpenTelemetryMapper {
             provider = providerName;
         }
 
-        // Rewrite Elastic Inference Service model/provider into the underlying provider so
-        // that cost lookup and provider-based filtering see the real upstream. Records the
-        // original values in metadata for traceability. Returns the (possibly unchanged) pair.
-        var resolved = ElasticInferenceServiceResolver.resolve(model, provider, metadata);
+        // Normalize the reported model/provider onto Opik's canonical vocabulary — gateway
+        // rewrites, semconv aliases and backend disambiguation — otherwise cost lookup and
+        // provider-based filtering see a name that matches no price row. See ProviderResolvers
+        // for the steps and why their order matters.
+        var resolved = ProviderResolvers.resolve(model, provider, metadata);
         model = resolved.model();
         provider = resolved.provider();
-
-        // Map the OTel semantic-convention provider vocabulary onto Opik's canonical names
-        // (e.g. 'vertex_ai' -> 'google_vertexai'), otherwise cost lookup matches no price row.
-        provider = GenAiProviderAliasResolver.resolve(provider);
-
-        // Values that name no specific Google backend ('google', 'gcp.gen_ai') can only be
-        // disambiguated into Vertex AI vs Gemini API by server.address.
-        provider = GoogleProviderResolver.resolve(provider, metadata);
 
         // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
         // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.
