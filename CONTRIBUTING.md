@@ -82,7 +82,7 @@ java.sql.Date sqlDate; // NOPMD - collides with the imported java.util.Date
 java.sql.Date sqlDate;
 ```
 
-The reason is enforced, not just expected: a bare suppression fails the hook. The marker is required because an ordinary nearby comment can't be told apart from unrelated Javadoc. Both forms are scoped and visible in review; don't disable the rule repo-wide. Suppressions of *other* PMD rules are unaffected — the check only inspects suppressions PMD attributes to this rule.
+The reason is enforced, not just expected: a bare suppression fails the hook. The marker is required because an ordinary nearby comment can't be told apart from unrelated Javadoc. Both forms are scoped and visible in review; don't disable the rule repo-wide. The check only inspects suppressions that target this rule, so suppressions of *other* PMD rules are unaffected — and, like the gate itself, it only looks at suppressions your change actually touches.
 
 Nested-type access (`Alert.View.Public.class`, `Schema.AccessMode.READ_ONLY`) is not an inline FQN and is not reported. Neither are FQNs inside comments, javadoc, or string literals — the rule matches the parsed AST, so MapStruct's `@Mapping(expression = "java(java.util.Map.of())")`, where the FQN is required and no import can satisfy it, passes as-is. Inline `com.comet.opik.*` self-references are the same smell but are currently out of scope.
 

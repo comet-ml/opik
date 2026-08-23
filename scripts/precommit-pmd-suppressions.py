@@ -44,7 +44,9 @@ Exits 1 with one diagnostic per offending suppression; 0 when clean. Unreadable
 or malformed input is a failure, never a silent pass.
 """
 
+import os
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
@@ -71,12 +73,71 @@ def has_reason(text: str) -> bool:
     return bool(WORDS.search(text.replace("*/", " ")))
 
 
+def changed_lines(path: str) -> set[int] | None:
+    """Line numbers of `path` added/modified versus the merge-base, or None.
+
+    None means "couldn't determine" — not in a repo, git missing, file untracked
+    — and callers then validate every annotation rather than skipping the check.
+
+    PMD reports no line for @SuppressWarnings suppressions, so without this the
+    whole file is validated and a bare annotation predating the hook would fail
+    every later edit to that file. The gate is going-forward-only, so only
+    suppressions the current change actually touches are its business.
+    """
+    # Test seam: supply the scope directly instead of shelling out to git. Keeps
+    # the scoping tests free of a fixture repo — a nested one is fragile enough
+    # that it twice leaked commits into the surrounding repository. Values are
+    # "L1,L2,…" for a known scope, or "unknown" for the can't-determine path.
+    override = os.environ.get("PMD_SUPPRESSION_CHANGED_LINES")
+    if override is not None:
+        if override.strip().lower() == "unknown":
+            return None
+        return {int(n) for n in override.replace(",", " ").split()}
+
+    base = os.environ.get("PMD_SUPPRESSION_DIFF_BASE", "")
+    if base:
+        # CI passes the PR/push base, so the scope is the whole branch.
+        revs = [f"{base}...HEAD"]
+    else:
+        # Locally the scope is what this commit will contain: staged changes,
+        # plus unstaged edits so a bare `pre-commit run --files` behaves the same.
+        revs = ["HEAD"]
+
+    try:
+        out = subprocess.run(
+            ["git", "diff", "--unified=0", "--no-color", *revs, "--", path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, ValueError):
+        return None
+    if out.returncode != 0:
+        # Not a repo, no such rev, untracked file — can't scope, so validate all.
+        return None
+
+    lines: set[int] = set()
+    for hunk in re.finditer(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", out.stdout, re.M):
+        start = int(hunk.group(1))
+        count = int(hunk.group(2) or 1)
+        lines.update(range(start, start + count))
+
+    # An empty diff means this file carries no changes relative to the scope, so
+    # none of its suppressions belong to the current change. In CI that scope is
+    # the PR base (see PMD_SUPPRESSION_DIFF_BASE, set by the Code Quality
+    # workflow), which is what keeps a newly added bare annotation in scope there
+    # — without the base ref, CI's clean merge-commit checkout would diff to
+    # nothing and the gate would miss it.
+    return lines
+
+
 def annotation_reason(path: str, hint: str) -> bool:
     """True when an explicit suppression note sits next to the annotation.
 
-    PMD does not report a line for @SuppressWarnings suppressions, so the whole
-    file is scanned for annotations naming this rule; each must have a marker
-    comment carrying prose on its own line or on the line above.
+    PMD does not report a line for @SuppressWarnings suppressions, so the file is
+    scanned for annotations naming this rule. Only annotations on lines the
+    current change touches are validated (see changed_lines) — a pre-existing
+    bare annotation is left alone until someone edits it.
     """
     try:
         with open(path, encoding="utf-8") as fh:
@@ -85,9 +146,15 @@ def annotation_reason(path: str, hint: str) -> bool:
         print(f"{path}: cannot read file to validate {hint}: {exc}", file=sys.stderr)
         return False
 
+    touched = changed_lines(path)
     ok = True
     for i, line in enumerate(lines):
         if RULE not in line or "@SuppressWarnings" not in line:
+            continue
+        # A suppression spans its marker comment (line above), the annotation
+        # itself, and the declaration it applies to (line below). Touching any of
+        # the three makes it part of the current change and therefore in scope.
+        if touched is not None and not ({i, i + 1, i + 2} & touched):
             continue
         candidates = [line]
         if i > 0:

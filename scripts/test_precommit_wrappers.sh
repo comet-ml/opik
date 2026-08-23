@@ -154,6 +154,42 @@ check_empty "fails closed on a malformed report" \
 	"$(python3 "$sup" "$pmd_fix/bad.xml" >/dev/null 2>&1 && echo accepted)"
 check_empty "fails closed with no argument" \
 	"$(python3 "$sup" >/dev/null 2>&1 && echo accepted)"
+
+# Going-forward-only scoping: an annotation suppression is validated only when the
+# current change touches it (OPIK-7832 review). The scope normally comes from
+# `git diff`; here it is injected via PMD_SUPPRESSION_CHANGED_LINES so the cases
+# stay hermetic. An earlier version built a nested fixture repo, which twice
+# leaked commits into the surrounding repository — a test must not be able to
+# write to the repo it is testing.
+echo "precommit-pmd-suppressions.py (changed-line scoping):"
+
+# L.java layout: 1 class, 2 legacy annotation, 3 legacy decl,
+#                4 marker comment, 5 new annotation, 6 new decl, 7 }
+printf 'class L {\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date old;\n    // NOPMD - collides with the imported java.util.Date\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date added;\n}\n' >"$pmd_fix/L.java"
+report "$pmd_fix/L.java" "@suppresswarnings" ""
+
+# The legacy annotation (line 2, no marker) is only in scope when the change
+# touches lines 1-3; the marked one (lines 4-6) is always fine.
+check "legacy annotation passes when untouched" "ok" \
+	"$(PMD_SUPPRESSION_CHANGED_LINES=7 python3 "$sup" "$pmd_fix/report.xml" 2>/dev/null && echo ok)"
+check "legacy annotation passes on an unrelated edit" "ok" \
+	"$(PMD_SUPPRESSION_CHANGED_LINES=4,5,6 python3 "$sup" "$pmd_fix/report.xml" 2>/dev/null && echo ok)"
+check_empty "legacy annotation flagged when its declaration is edited" \
+	"$(PMD_SUPPRESSION_CHANGED_LINES=3 python3 "$sup" "$pmd_fix/report.xml" >/dev/null 2>&1 && echo accepted)"
+check_empty "legacy annotation flagged when the annotation itself is edited" \
+	"$(PMD_SUPPRESSION_CHANGED_LINES=2 python3 "$sup" "$pmd_fix/report.xml" >/dev/null 2>&1 && echo accepted)"
+check_empty "legacy annotation flagged when the line above is edited" \
+	"$(PMD_SUPPRESSION_CHANGED_LINES=1 python3 "$sup" "$pmd_fix/report.xml" >/dev/null 2>&1 && echo accepted)"
+
+# Scope unknown (no repo / no git) must validate everything, never skip.
+check_empty "validates all annotations when scope is unknown" \
+	"$(PMD_SUPPRESSION_CHANGED_LINES=unknown python3 "$sup" "$pmd_fix/report.xml" >/dev/null 2>&1 && echo accepted)"
+
+# A file whose only suppression carries a marker passes at any scope.
+printf 'class M {\n    // NOPMD - collides with the imported java.util.Date\n    @SuppressWarnings("PMD.InlineFullyQualifiedName")\n    java.sql.Date d;\n}\n' >"$pmd_fix/M.java"
+report "$pmd_fix/M.java" "@suppresswarnings" ""
+check "a marked annotation passes even when in scope" "ok" \
+	"$(PMD_SUPPRESSION_CHANGED_LINES=2,3,4 python3 "$sup" "$pmd_fix/report.xml" 2>/dev/null && echo ok)"
 rm -rf "$pmd_fix"
 
 echo "precommit-fe-lint.sh:"
