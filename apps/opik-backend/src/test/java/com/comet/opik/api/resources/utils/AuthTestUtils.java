@@ -8,6 +8,7 @@ import lombok.experimental.UtilityClass;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -40,6 +41,29 @@ public class AuthTestUtils {
     public static void mockTargetWorkspace(WireMockServer server, String apiKey, String workspaceName,
             String workspaceId, String user) {
         mockTargetWorkspace(server, apiKey, workspaceName, workspaceId, user, null);
+    }
+
+    /**
+     * Stubs the auth call so it returns the caller's workspace permissions, the way the platform does. Pass
+     * the granted permission names; anything omitted is simply absent, which is how a withheld permission
+     * reaches the backend.
+     */
+    public static void mockTargetWorkspaceWithPermissions(WireMockServer server, String apiKey,
+            String workspaceName, String workspaceId, String user, List<String> grantedPermissions) {
+        var response = new LinkedHashMap<String, Object>();
+        response.put("user", user);
+        response.put("workspaceId", workspaceId);
+        response.put("workspaceName", workspaceName);
+        response.put("quotas", null);
+        response.put("permissions", grantedPermissions.stream()
+                .map(name -> Map.of("permissionName", name, "permissionValue", "true"))
+                .toList());
+
+        server.stubFor(
+                post(urlPathEqualTo("/opik/auth"))
+                        .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                        .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .willReturn(okJson(JsonUtils.writeValueAsString(response))));
     }
 
     public static void mockTargetWorkspace(

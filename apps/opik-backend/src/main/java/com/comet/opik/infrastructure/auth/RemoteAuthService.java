@@ -100,7 +100,20 @@ class RemoteAuthService implements AuthService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder(toBuilder = true)
     record AuthResponse(
-            String user, String workspaceId, String workspaceName, List<Quota> quotas) {
+            String user, String workspaceId, String workspaceName, List<Quota> quotas,
+            List<WorkspacePermission> permissions) {
+    }
+
+    /**
+     * One resolved permission as the platform reports it. The value is carried as text because that is the
+     * platform's representation; only {@code "true"} grants.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record WorkspacePermission(String permissionName, String permissionValue) {
+
+        boolean granted() {
+            return Boolean.parseBoolean(permissionValue);
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -113,7 +126,8 @@ class RemoteAuthService implements AuthService {
             String userName,
             String workspaceId,
             String workspaceName,
-            List<Quota> quotas) {
+            List<Quota> quotas,
+            List<String> permissions) {
 
         static ValidatedAuthCredentials from(AuthResponse authResponse) {
             return ValidatedAuthCredentials.builder()
@@ -122,7 +136,18 @@ class RemoteAuthService implements AuthService {
                     .workspaceId(authResponse.workspaceId())
                     .workspaceName(authResponse.workspaceName())
                     .quotas(authResponse.quotas())
+                    .permissions(grantedNames(authResponse.permissions()))
                     .build();
+        }
+
+        /** Only the granted names are kept; a permission reported as false is the same as absent. */
+        private static List<String> grantedNames(List<WorkspacePermission> permissions) {
+            return permissions == null
+                    ? List.of()
+                    : permissions.stream()
+                            .filter(WorkspacePermission::granted)
+                            .map(WorkspacePermission::permissionName)
+                            .toList();
         }
 
         static ValidatedAuthCredentials from(CacheService.AuthCredentials authCredentials) {
@@ -132,6 +157,7 @@ class RemoteAuthService implements AuthService {
                     .workspaceId(authCredentials.workspaceId())
                     .workspaceName(authCredentials.workspaceName())
                     .quotas(authCredentials.quotas())
+                    .permissions(authCredentials.permissions())
                     .build();
         }
 
@@ -141,6 +167,7 @@ class RemoteAuthService implements AuthService {
                     .workspaceId(workspaceId)
                     .workspaceName(workspaceName)
                     .quotas(quotas)
+                    .permissions(permissions)
                     .build();
         }
     }
@@ -483,6 +510,9 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setWorkspaceName(workspaceName);
         requestContext.get().setQuotas(credentials.quotas());
         requestContext.get().setApiKey(apiKey);
+        requestContext.get().setPermissions(credentials.permissions() == null
+                ? Set.of()
+                : Set.copyOf(credentials.permissions()));
     }
 
     private boolean isEndpointPublic(ContextInfoHolder contextInfo) {

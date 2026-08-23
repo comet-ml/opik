@@ -1,8 +1,14 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.redaction.JsonNodeRedactor;
+import com.comet.opik.infrastructure.redaction.RedactionRules;
+import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +24,16 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class Streamer {
 
+    private final RedactionService redactionService;
+    private final Provider<RequestContext> requestContext;
+
+    @Inject
+    public Streamer(@NonNull RedactionService redactionService,
+            @NonNull Provider<RequestContext> requestContext) {
+        this.redactionService = redactionService;
+        this.requestContext = requestContext;
+    }
+
     public <T> ChunkedOutput<JsonNode> getOutputStream(@NonNull Flux<T> flux) {
         return getOutputStream(flux, () -> {
         });
@@ -25,8 +41,11 @@ public class Streamer {
 
     public <T> ChunkedOutput<JsonNode> getOutputStream(@NonNull Flux<T> flux, Runnable onCompleted) {
         var outputStream = new ChunkedOutput<JsonNode>(JsonNode.class, "\r\n");
+        // Resolved here, while still on the request thread: the items below are built and written on a
+        // scheduler thread, where neither the request scope nor the writer interceptor's thread-local exists.
+        var rules = resolveRules();
         Schedulers.boundedElastic()
-                .schedule(() -> flux.doOnNext(item -> sendItem(item, outputStream))
+                .schedule(() -> flux.doOnNext(item -> sendItem(item, outputStream, rules))
                         .onErrorResume(throwable -> handleError(throwable, outputStream))
                         .doFinally(signalType -> {
                             close(outputStream);
@@ -36,9 +55,25 @@ public class Streamer {
         return outputStream;
     }
 
-    private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream) {
+    private RedactionRules resolveRules() {
+        if (!redactionService.isEnabled()) {
+            return RedactionRules.empty();
+        }
+
         try {
-            outputStream.write(JsonUtils.readTree(item));
+            var context = requestContext.get();
+            return context != null && context.isRedactResponse()
+                    ? redactionService.rules()
+                    : RedactionRules.empty();
+        } catch (RuntimeException outsideRequestScope) {
+            // No caller to decide against: redact, because this path cannot prove the reader is permitted.
+            return redactionService.rules();
+        }
+    }
+
+    private <T> void sendItem(T item, ChunkedOutput<JsonNode> outputStream, RedactionRules rules) {
+        try {
+            outputStream.write(JsonNodeRedactor.redact(JsonUtils.readTree(item), rules));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }

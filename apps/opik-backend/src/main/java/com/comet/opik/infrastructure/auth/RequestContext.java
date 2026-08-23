@@ -10,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Set;
 
 @RequestScoped
 @Data
@@ -47,6 +48,19 @@ public class RequestContext {
     private List<Quota> quotas;
     private Visibility visibility;
     private String workspaceFallbackMessage;
+
+    /**
+     * Whether this caller's response content must be redacted. Resolved once, after authentication, because
+     * serialization happens long after the resource method has returned.
+     */
+    private boolean redactResponse;
+
+    /**
+     * The workspace permissions the platform resolved for this caller, as returned by the authentication
+     * call. Empty when authentication is disabled, since there is no identity to attach a role to.
+     */
+    @Builder.Default
+    private Set<String> permissions = Set.of();
 
     public void setWorkspaceFallbackFor(String entityType, String entityName) {
         this.workspaceFallbackMessage = WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted(entityType, entityName);

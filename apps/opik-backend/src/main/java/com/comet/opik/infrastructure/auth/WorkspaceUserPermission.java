@@ -18,6 +18,7 @@ public enum WorkspaceUserPermission {
     TRACE_SPAN_THREAD_LOG("trace_span_thread_log"),
     TRACE_SPAN_THREAD_ANNOTATE("trace_span_thread_annotate"),
     TRACE_DELETE("trace_delete"),
+    TRACE_ORIGINAL_DATA_VIEW("trace_original_data_view"),
 
     ONLINE_EVALUATION_RULE_UPDATE("online_evaluation_rule_update"),
     ALERT_UPDATE("alert_update"),

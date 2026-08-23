@@ -1838,3 +1838,21 @@ agentConfig:
   # Default: 5000ms
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: ${OPIK_AGENT_CONFIG_BLUEPRINT_LOCK_DURATION:-5000ms}
+
+# Read-time redaction: rewrites trace and span content on the way out for callers who may not see the
+# originals. Data is stored as sent; nothing is rewritten at ingestion. With enabled=false no serializer is
+# registered and every response is byte-identical to before this feature existed.
+redaction:
+  # Default: false
+  # Description: Master switch. Also gates the workspace settings that expose this in the UI.
+  enabled: ${OPIK_REDACTION_ENABLED:-false}
+  # Default: [] (no rules, so nothing is redacted even when enabled)
+  # Description: JSON array of {"regex", "replace"} applied in order to every string in a response, each rule
+  # seeing the previous rule's output — the same semantics as the SDK anonymizer, so an existing rule set ports
+  # across unchanged. Callable rules have no equivalent here: the server only runs regexes. A malformed regex
+  # fails startup rather than silently disabling redaction.
+  # Structural properties (project_name, thread_id, model, sortable_by and similar lookup keys) are exempt:
+  # rewriting them conceals nothing and breaks navigation. Content carried as JSON is always redacted, whatever
+  # its keys are named. Anchor patterns so they cannot start mid-token — an unanchored local part such as
+  # [\w.+-]+@... is quadratic on long base64 payloads and will stall reads.
+  rules: '${OPIK_REDACTION_RULES:-[]}'
