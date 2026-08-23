@@ -1,5 +1,10 @@
 package com.comet.opik.infrastructure.redaction;
 
+import com.comet.opik.api.Dataset;
+import com.comet.opik.api.Environment;
+import com.comet.opik.api.Experiment;
+import com.comet.opik.api.Project;
+import com.comet.opik.api.Prompt;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.BeanDescription;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -61,6 +66,22 @@ public class RedactionModule extends SimpleModule {
             // Pure API metadata, never caller content.
             "sortable_by", "sortableBy");
 
+    /**
+     * Entities whose {@code name} addresses them in the API, so it has to survive.
+     * <p>
+     * Their create endpoints are get-or-create and the SDK replays the name it was handed, so a rewritten one
+     * does not fail — it quietly creates a second entity under the replacement text and writes there. Kept as
+     * an explicit list rather than "everything except traces and spans" so a new entity stays redacted until
+     * someone decides otherwise; the cost is that a new name-addressed entity has to be added here.
+     * <p>
+     * {@code Trace.name} and {@code Span.name} are deliberately absent: those are free text the caller writes
+     * per call, and can carry content.
+     */
+    private static final Set<Class<?>> NAME_ADDRESSED_ENTITIES = Set.of(
+            Dataset.class, Project.class, Prompt.class, Experiment.class, Environment.class);
+
+    private static final String NAME_PROPERTY = "name";
+
     public RedactionModule() {
         addSerializer(String.class, new RedactingStringSerializer());
         addSerializer(JsonNode.class, new RedactingJsonNodeSerializer());
@@ -78,7 +99,7 @@ public class RedactionModule extends SimpleModule {
                 List<BeanPropertyWriter> beanProperties) {
 
             for (BeanPropertyWriter property : beanProperties) {
-                if (!EXEMPT_PROPERTIES.contains(property.getName())) {
+                if (!isExempt(beanDesc, property.getName())) {
                     continue;
                 }
 
@@ -94,6 +115,12 @@ public class RedactionModule extends SimpleModule {
             }
 
             return beanProperties;
+        }
+
+        private boolean isExempt(BeanDescription beanDesc, String propertyName) {
+            return EXEMPT_PROPERTIES.contains(propertyName)
+                    || (NAME_PROPERTY.equals(propertyName)
+                            && NAME_ADDRESSED_ENTITIES.contains(beanDesc.getBeanClass()));
         }
     }
 

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.redaction;
 
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Trace;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -207,5 +208,24 @@ class RedactionModuleTest {
 
         // Sort keys are what the UI sends straight back as query parameters; rewriting them breaks sorting.
         assertThat(written).contains("start_time").contains("last_updated_at").doesNotContain("[X]");
+    }
+
+    @Test
+    @DisplayName("a name that addresses an entity is exempt, while a trace name is not")
+    void nameIsExemptOnlyWhereItAddressesAnEntity() throws Exception {
+        RedactionContext.set(new RedactionRules(List.of(RedactionRule.of("[a-z-]{4,}", "[X]"))));
+
+        // Dataset names are replayed by the SDK against a get-or-create endpoint, so a rewritten one silently
+        // creates a second dataset instead of failing.
+        var dataset = mapper.writeValueAsString(Dataset.builder().name("customer-records").build());
+        assertThat(dataset).contains("customer-records").doesNotContain("[X]");
+
+        // A trace name is free text the caller writes per call, so it stays redacted.
+        var trace = mapper.writeValueAsString(Trace.builder()
+                .id(UUID.randomUUID())
+                .name("refund-for-someone")
+                .startTime(Instant.now())
+                .build());
+        assertThat(trace).doesNotContain("refund-for-someone").contains("[X]");
     }
 }
