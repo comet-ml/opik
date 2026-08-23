@@ -5572,6 +5572,36 @@ class DatasetVersionResourceTest {
         }
 
         @Test
+        @DisplayName("Success: NULL counters are treated as zero rather than staying NULL")
+        void incrementCounts__whenCountersAreNull__thenTreatedAsZero() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // The counter columns are `INT DEFAULT 0` -- nullable, since DEFAULT only applies when the
+            // column is omitted on INSERT. A bare `col + :delta` would leave NULL as NULL, which then
+            // unboxes to an NPE on the Integer-typed record. The absolute update this replaced happened
+            // to repair a NULL by overwriting it, so the increment has to COALESCE explicitly.
+            int nulled = mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = NULL, items_added = NULL, items_modified = NULL, items_deleted = NULL
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+            assertThat(nulled).isOne();
+
+            assertThat(incrementCounts(versionId, 3, 3, 1, 0)).isOne();
+
+            var updated = getLatestVersion(datasetId);
+            assertThat(updated)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded,
+                            DatasetVersion::itemsModified, DatasetVersion::itemsDeleted)
+                    .containsExactly(3, 3, 1, 0);
+        }
+
+        @Test
         @DisplayName("Success: increment against an unknown version affects no rows")
         void incrementCounts__whenVersionDoesNotExist__thenNoRowsAffected() {
             assertThat(incrementCounts(UUID.randomUUID(), 1, 1, 0, 0)).isZero();
