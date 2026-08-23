@@ -1848,9 +1848,10 @@ redaction:
   enabled: ${OPIK_REDACTION_ENABLED:-false}
   # Default: [] (no rules, so nothing is redacted even when enabled)
   # Description: JSON array of {"regex", "replace"} applied in order to every string in a response, each rule
-  # seeing the previous rule's output — the same semantics as the SDK anonymizer, so an existing rule set ports
-  # across unchanged. Callable rules have no equivalent here: the server only runs regexes. A malformed regex
-  # fails startup rather than silently disabling redaction.
+  # seeing the previous rule's output. "replace" is literal text: unlike the SDK anonymizer, backreferences are
+  # not expanded, so a partial-mask replacement such as "\1***@\2" is emitted verbatim rather than substituted.
+  # Callable rules have no equivalent here either: the server only runs regexes. A malformed regex fails startup
+  # rather than silently disabling redaction.
   # Structural properties (project_name, thread_id, model, sortable_by and similar lookup keys) are exempt:
   # rewriting them conceals nothing and breaks navigation. Content carried as JSON is always redacted, whatever
   # its keys are named. Anchor patterns so they cannot start mid-token — an unanchored local part such as

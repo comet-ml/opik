@@ -30,14 +30,22 @@ import java.util.Set;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class RedactionRequestFilter implements ContainerRequestFilter {
 
-    private static final String VERSIONED_API = "/v1/";
-
     /**
-     * Paths under the versioned API that must be written as stored. Kept to what genuinely cannot carry
-     * caller content: a redirect has no body worth rewriting, and resolving a decision for it would add a
-     * permission lookup to a hot path for nothing.
+     * The paths that carry stored content to an authenticated caller.
+     * <p>
+     * Redaction only means something where there is a caller to decide about, so this tracks what
+     * {@code AuthFilter} authenticates rather than the whole versioned API. Covering more than that redacts
+     * responses with no identity behind them: {@code /v1/internal/usage/*} is unauthenticated, and its
+     * per-user rows would come back masked, collapsing the platform's usage attribution into one bucket.
+     * <p>
+     * {@code /v1/internal/analytics-queries} is named explicitly because it is authenticated and returns
+     * stored trace content from caller-supplied SQL — a private-prefix test alone would miss it. A new
+     * authenticated content path has to be added here, which is the same deliberate act as adding it to
+     * {@code AuthFilter}.
      */
-    private static final Set<String> EXEMPT_PATHS = Set.of("/v1/session/redirect");
+    private static final Set<String> COVERED_PATHS = Set.of(
+            "/v1/private/",
+            "/v1/internal/analytics-queries");
 
     private final @NonNull RedactionService redactionService;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -56,16 +64,10 @@ public class RedactionRequestFilter implements ContainerRequestFilter {
     }
 
     /**
-     * Whether redaction covers this path.
-     * <p>
-     * Phrased as "the whole versioned API, less a named exemption list" rather than "only {@code /v1/private}".
-     * The narrower form silently missed {@code /v1/internal/analytics-queries}, which returns stored trace
-     * content from caller-supplied SQL, and would have missed every future route outside the private prefix the
-     * same way — a route is only as protected as somebody's memory of adding it. Anything outside the versioned
-     * API is left alone deliberately: the OAuth endpoints return tokens, and a rule written to catch a bearer
-     * token or a JWT would happily destroy one.
+     * Whether redaction covers this path. See {@link #COVERED_PATHS} for why this is not simply the whole
+     * versioned API.
      */
     static boolean coversPath(@NonNull String path) {
-        return path.contains(VERSIONED_API) && EXEMPT_PATHS.stream().noneMatch(path::contains);
+        return COVERED_PATHS.stream().anyMatch(path::contains);
     }
 }

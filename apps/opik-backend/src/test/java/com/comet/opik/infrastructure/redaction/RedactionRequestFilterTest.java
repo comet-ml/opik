@@ -13,7 +13,7 @@ class RedactionRequestFilterTest {
 
     @ParameterizedTest(name = "{0} -> covered={1}")
     @MethodSource
-    @DisplayName("redaction covers the versioned API, minus the named exemptions")
+    @DisplayName("redaction covers the authenticated paths that carry stored content, and nothing else")
     void coversPath(String path, boolean expected) {
         assertThat(RedactionRequestFilter.coversPath(path)).isEqualTo(expected);
     }
@@ -27,7 +27,10 @@ class RedactionRequestFilterTest {
                 // The route that made the previous private-only predicate a bypass: caller-supplied SQL
                 // returning stored trace content.
                 Arguments.of("/v1/internal/analytics-queries/projects/01a0", true),
-                Arguments.of("/v1/internal/usage/workspace-trace-counts", true),
+                // Unauthenticated, so there is no caller to decide about — and its rows carry a per-user
+                // identifier the platform's usage attribution depends on.
+                Arguments.of("/v1/internal/usage/workspace-trace-counts", false),
+                Arguments.of("/v1/internal/usage/bi-traces", false),
                 // A redirect carries nothing worth rewriting.
                 Arguments.of("/v1/session/redirect", false),
                 // Outside the versioned API: these return tokens and metadata, and the rule set includes
