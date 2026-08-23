@@ -2,10 +2,10 @@
 --changeset aadereiko:000120_add_link_failure_reason_and_widen_trigger_detail
 --comment: Add link_failure_reason to cipx_spends and widen trigger_detail to String
 --
--- Two changes 000118 should have carried but could not. It was already applied in
--- developer environments by the time they were identified, and an edit to an
+-- Two changes that 000118 should have carried. By the time they were identified,
+-- 000118 had already been applied in developer environments, and editing an
 -- already-applied changeset fails liquibase's checksum validation, which aborts
--- every migration after it. Landing them here is the only safe form.
+-- every migration after it. A new changeset is the only safe way to land them.
 --
 --   link_failure_reason  why LINK declined, when it did: no_dispatch_captured |
 --                        ambiguous_prompt | replay_path | parent_unresolved. Closed
