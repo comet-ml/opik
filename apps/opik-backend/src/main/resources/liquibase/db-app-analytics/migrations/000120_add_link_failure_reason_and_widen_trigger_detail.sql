@@ -10,11 +10,20 @@
 --   link_failure_reason  why LINK declined, when it did: no_dispatch_captured |
 --                        ambiguous_prompt | replay_path | parent_unresolved. Closed
 --                        enum -> LowCardinality. Empty when the call linked, and
---                        empty is NOT a census of success: the reason is only
---                        stamped on calls that ship as trigger='subagent', so a
---                        call the shape check never recognised as an agent carries
---                        no reason even when it was refused. Read it as a
---                        diagnosis, never as a complete failure count.
+--                        empty is NOT a census of success.
+--
+--                        Where each value appears differs. ambiguous_prompt sits
+--                        on ANY trigger, because it is a positive observation
+--                        (two agents dispatched under one prompt hash) and the
+--                        agent types that carry the Agent tool ship their refused
+--                        calls as trigger='tool_continuation'. So count it
+--                        WITHOUT a trigger filter or you miss most of it. Every
+--                        other value sits only on trigger='subagent' and is
+--                        already scoped by construction.
+--
+--                        Either way a call the shape check never recognised as an
+--                        agent carries no reason even when it was refused. Read
+--                        this column as a diagnosis, never as a failure count.
 --
 --   trigger_detail       widened LowCardinality(String) -> String. It holds MCP
 --                        tool names and user-authored agent names, so the value
