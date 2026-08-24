@@ -86,6 +86,42 @@ describe("sliceColumnWindow", () => {
     ]);
   });
 
+  it("returns only spacers for an empty items array", () => {
+    const window: ColumnWindow = {
+      active: true,
+      leftCount: 0,
+      centerCount: 0,
+      start: 0,
+      end: -1,
+      leadingWidth: 100,
+      trailingWidth: 50,
+    };
+
+    expect(sliceColumnWindow([], window)).toEqual([
+      { id: "__column_spacer_lead", size: 100, isColumnSpacer: true },
+      { id: "__column_spacer_trail", size: 50, isColumnSpacer: true },
+    ]);
+  });
+
+  it("does not throw when start/end exceed the actual item count", () => {
+    const window: ColumnWindow = {
+      active: true,
+      leftCount: 2,
+      centerCount: 100,
+      start: 90,
+      end: 120,
+      leadingWidth: 100,
+      trailingWidth: 0,
+    };
+
+    expect(() => sliceColumnWindow(items, window)).not.toThrow();
+    expect(sliceColumnWindow(items, window)).toEqual([
+      "l0",
+      "l1",
+      { id: "__column_spacer_lead", size: 100, isColumnSpacer: true },
+    ]);
+  });
+
   it("keeps all pinned left and right columns outside the windowed range", () => {
     const window: ColumnWindow = {
       active: true,

@@ -28,9 +28,10 @@ const DataTableSkeletonBody = <TData,>({
   table,
   columnWindow,
 }: DataTableSkeletonBodyProps<TData>) => {
-  const columns = sliceColumnWindow(
-    table.getVisibleLeafColumns(),
-    columnWindow,
+  const visibleColumns = table.getVisibleLeafColumns();
+  const columns = useMemo(
+    () => sliceColumnWindow(visibleColumns, columnWindow),
+    [visibleColumns, columnWindow],
   );
   const rowHeightEnum = table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
   const rowHeightStyle = table.options.meta?.rowHeightStyle;
