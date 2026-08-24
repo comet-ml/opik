@@ -132,15 +132,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            var expectedMessage = TraceToScoreUserDefinedMetricPython.builder()
-                    .trace(trace)
-                    .ruleId(evaluator.getId())
-                    .ruleName(evaluator.getName())
-                    .code(evaluator.getCode())
-                    .workspaceId(workspaceId)
-                    .userName(userName)
-                    .build();
-            verify(onlineScorePublisher).enqueueMessage(List.of(expectedMessage),
+            verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
                     AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
         }
 
@@ -526,8 +518,8 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verify(onlineScorePublisher).enqueueMessage(any(),
-                    eq(AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON));
+            verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
         }
 
         @Test
@@ -810,6 +802,18 @@ class OnlineScoringSamplerTest {
                 .userName(userName)
                 .scoreNameMapping(Map.of())
                 .promptType(PromptType.MUSTACHE)
+                .build();
+    }
+
+    private TraceToScoreUserDefinedMetricPython toPythonMessage(
+            AutomationRuleEvaluatorUserDefinedMetricPython evaluator, Trace trace) {
+        return TraceToScoreUserDefinedMetricPython.builder()
+                .trace(trace)
+                .ruleId(evaluator.getId())
+                .ruleName(evaluator.getName())
+                .code(evaluator.getCode())
+                .workspaceId(workspaceId)
+                .userName(userName)
                 .build();
     }
 
