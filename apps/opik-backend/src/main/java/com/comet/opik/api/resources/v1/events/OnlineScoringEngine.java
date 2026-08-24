@@ -884,7 +884,7 @@ public class OnlineScoringEngine {
             }
         }
 
-        Object forcedObject;
+        Object jsonValue;
         try {
             // JsonPath didn't work with JsonNode, even explicitly using
             // JacksonJsonProvider, so we convert to a plain Object: a Map for an object node, a List for
@@ -893,7 +893,7 @@ public class OnlineScoringEngine {
             // IllegalArgumentException) whenever the section was NOT an object — e.g. a trace whose
             // output is the bare string "how can I help?" — and that escaped prepareLlmRequest and failed
             // the whole evaluation before the LLM was ever called.
-            forcedObject = OBJECT_MAPPER.convertValue(json, Object.class);
+            jsonValue = OBJECT_MAPPER.convertValue(json, Object.class);
         } catch (IllegalArgumentException e) {
             log.warn("failed to parse json, json={}", json, e);
             return null;
@@ -902,7 +902,7 @@ public class OnlineScoringEngine {
         try {
             // JsonPath.read throws PathNotFoundException on a non-container (a scalar section has no
             // nested path to walk), which lands on the fallback below rather than propagating.
-            var value = JsonPath.parse(forcedObject).read(path);
+            var value = JsonPath.parse(jsonValue).read(path);
             return value != null ? serializeToJsonString(value) : null;
         } catch (PathNotFoundException e) {
             // DEBUG, and without the throwable: a scalar/array section reaches this line by design (it
@@ -911,7 +911,7 @@ public class OnlineScoringEngine {
             // at all. The PathNotFoundException message says nothing the log line does not.
             log.debug("couldn't find path inside json, trying flat structure, path={}, nodeType={}",
                     path, json.getNodeType());
-            return flatFallback(forcedObject, path, json);
+            return flatFallback(jsonValue, path, json);
         } catch (Exception e) {
             // Anything else means the path itself didn't parse — JsonPath raises InvalidPathException for
             // a malformed expression, and the path is user-supplied ({@code toVariableMapping} builds it
@@ -920,7 +920,7 @@ public class OnlineScoringEngine {
             // it. Message without the stack trace: a bad mapping fires on every trace the rule scores.
             log.warn("invalid json path, trying flat structure, path={}, nodeType={}, error={}",
                     path, json.getNodeType(), e.getMessage());
-            return flatFallback(forcedObject, path, json);
+            return flatFallback(jsonValue, path, json);
         }
     }
 
@@ -929,10 +929,12 @@ public class OnlineScoringEngine {
      * name, which is how a mapping like {@code output.flat.key} finds a property actually called
      * "flat.key". Only meaningful for an object section — a scalar or a list has no properties.
      */
-    private static String flatFallback(Object forcedObject, String path, JsonNode json) {
-        return Optional.ofNullable(forcedObject)
+    private static String flatFallback(Object jsonValue, String path, JsonNode json) {
+        return Optional.ofNullable(jsonValue)
                 .filter(Map.class::isInstance)
-                .map(object -> ((Map<?, ?>) object).get(path.replace("$.", "")))
+                // Strip only the leading "$." — replace() would rewrite a key that itself
+                // contains "$." (a mapping of "output.a$.b" looked up "ab") and miss it.
+                .map(object -> ((Map<?, ?>) object).get(StringUtils.removeStart(path, "$.")))
                 .map(OnlineScoringEngine::serializeToJsonString)
                 .orElseGet(() -> {
                     // The node's type, not its content: this is a trace's input/output/metadata, so it

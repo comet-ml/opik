@@ -1,23 +1,31 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.utils.JsonUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
- * Variable extraction out of a trace's input/output/metadata section. Pure static functions, so no
- * containers here — see {@link OnlineScoringEngineTest} for the end-to-end scoring flow.
+ * Variable extraction out of a trace's or span's input/output/metadata section. Pure static functions,
+ * so no containers here — see {@link OnlineScoringEngineTest} for the end-to-end scoring flow.
  * <p>
- * The scalar-section cases are the regression: a trace whose section is a bare JSON string (or array)
- * used to blow up {@code toReplacements} with a {@code MismatchedInputException}, which propagated out
- * of {@code prepareLlmRequest} and failed the whole evaluation before the LLM was ever called.
+ * The non-object-section cases are the regression: a section that is a bare JSON string (or array) used
+ * to blow up {@code toReplacements} with a {@code MismatchedInputException}, which propagated out of
+ * {@code prepareLlmRequest} and failed the whole evaluation before the LLM was ever called.
  */
 @DisplayName("OnlineScoringEngine variable extraction")
 class OnlineScoringEngineExtractFromJsonTest {
@@ -32,14 +40,51 @@ class OnlineScoringEngineExtractFromJsonTest {
                 .build();
     }
 
-    @Test
-    @DisplayName("nested path against a bare-string section drops the variable instead of throwing")
-    void nestedPathOnStringSection() {
-        var trace = traceWithOutput("\"Motor, elektrik, vites veya gövde?\"");
-        var variables = Map.of("answer", "output.answer");
+    private static Span spanWithOutput(String outputJson) {
+        return Span.builder()
+                .id(UUID.randomUUID())
+                .name("span")
+                .type(SpanType.llm)
+                .startTime(Instant.now())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .output(JsonUtils.getJsonNodeFromString(outputJson))
+                .build();
+    }
+
+    /**
+     * Section shapes that carry no nested path: the mapping cannot resolve, and the contract is that the
+     * variable is dropped rather than the evaluation failing.
+     */
+    static Stream<Arguments> unresolvableSections() {
+        return Stream.of(
+                arguments("bare string", "\"Motor, elektrik, vites veya gövde?\"", "output.answer"),
+                arguments("number", "42", "output.score"),
+                arguments("boolean", "true", "output.flag"),
+                arguments("null", "null", "output.answer"),
+                arguments("array, field path", "[\"a\", \"b\"]", "output.name"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("unresolvableSections")
+    @DisplayName("an unresolvable path drops the variable instead of throwing")
+    void unresolvablePathDropsTheVariable(String shape, String outputJson, String mapping) {
+        var trace = traceWithOutput(outputJson);
+        var variables = Map.of("variable", mapping);
 
         assertThatCode(() -> OnlineScoringEngine.toReplacements(variables, trace)).doesNotThrowAnyException();
-        assertThat(OnlineScoringEngine.toReplacements(variables, trace)).doesNotContainKey("answer");
+        assertThat(OnlineScoringEngine.toReplacements(variables, trace)).doesNotContainKey("variable");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("unresolvableSections")
+    @DisplayName("the span overload behaves the same for an unresolvable path")
+    void unresolvablePathOnSpanDropsTheVariable(String shape, String outputJson, String mapping) {
+        var span = spanWithOutput(outputJson);
+        var variables = Map.of("variable", mapping);
+
+        assertThatCode(() -> OnlineScoringEngine.toReplacements(variables, span)).doesNotThrowAnyException();
+        assertThat(OnlineScoringEngine.toReplacements(variables, span)).doesNotContainKey("variable");
     }
 
     @Test
@@ -53,16 +98,6 @@ class OnlineScoringEngineExtractFromJsonTest {
     }
 
     @Test
-    @DisplayName("nested path against a numeric section drops the variable instead of throwing")
-    void nestedPathOnNumericSection() {
-        var trace = traceWithOutput("42");
-
-        var replacements = OnlineScoringEngine.toReplacements(Map.of("score", "output.score"), trace);
-
-        assertThat(replacements).doesNotContainKey("score");
-    }
-
-    @Test
     @DisplayName("indexed path against an array section resolves the element")
     void indexedPathOnArraySection() {
         var trace = traceWithOutput("[{\"name\": \"first\"}, {\"name\": \"second\"}]");
@@ -70,16 +105,6 @@ class OnlineScoringEngineExtractFromJsonTest {
         var replacements = OnlineScoringEngine.toReplacements(Map.of("name", "output.[0].name"), trace);
 
         assertThat(replacements).containsEntry("name", "first");
-    }
-
-    @Test
-    @DisplayName("field path against an array section drops the variable instead of throwing")
-    void fieldPathOnArraySection() {
-        var trace = traceWithOutput("[\"a\", \"b\"]");
-
-        var replacements = OnlineScoringEngine.toReplacements(Map.of("name", "output.name"), trace);
-
-        assertThat(replacements).doesNotContainKey("name");
     }
 
     @Test
@@ -117,5 +142,17 @@ class OnlineScoringEngineExtractFromJsonTest {
         // JsonPath reads "$.flat.key" as a nested miss, then the flat-structure fallback finds the
         // literal "flat.key" property.
         assertThat(replacements).containsEntry("flat", "flat value");
+    }
+
+    @Test
+    @DisplayName("a flat key containing \"$.\" resolves — only the leading prefix is stripped")
+    void flatKeyContainingTheRootPrefix() {
+        // Stripping every "$." rather than the leading one rewrote the lookup key ("$.a$.b" -> "ab")
+        // and missed a property that is present.
+        var trace = traceWithOutput("{\"a$.b\": \"present\"}");
+
+        var replacements = OnlineScoringEngine.toReplacements(Map.of("weird", "output.a$.b"), trace);
+
+        assertThat(replacements).containsEntry("weird", "present");
     }
 }

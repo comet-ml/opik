@@ -454,12 +454,12 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     @Override
     public ToolChoice firstRoundToolChoice(@NonNull LlmProvider provider) {
         return switch (provider) {
-            // VertexAiGeminiChatModel.validate() throws UnsupportedFeatureException on any toolChoice.
-            case VERTEX_AI -> ToolChoice.AUTO;
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, BEDROCK -> ToolChoice.REQUIRED;
-            // Unreachable while callers gate on supportsToolCalling first; AUTO keeps a caller that
-            // forgets the gate on the harmless side.
-            case OLLAMA, CUSTOM_LLM, OPIK_FREE -> ToolChoice.AUTO;
+            // VERTEX_AI: VertexAiGeminiChatModel.validate() throws UnsupportedFeatureException on any
+            // toolChoice other than AUTO, even though the provider does support tools. The rest have no
+            // tool support at all, so callers gate them out before reaching here; AUTO keeps a caller
+            // that forgets the gate on the harmless side.
+            case VERTEX_AI, OLLAMA, CUSTOM_LLM, OPIK_FREE -> ToolChoice.AUTO;
         };
     }
 
