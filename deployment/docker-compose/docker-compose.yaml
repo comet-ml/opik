@@ -188,6 +188,11 @@ services:
       # Flip TRACES_DISTRIBUTED_WRAP_ENABLED to true in lockstep with applying the Distributed wrap: it routes trace
       # delete/retention mutations to traces_local, since a Distributed traces rejects mutations.
       ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED: ${ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED:-false}
+      # Flip TRACES_WEEKLY_PARTITION_PRUNING_ENABLED to true only once the EXCHANGE has put the weekly partitioned
+      # successor under `traces`: it lets a trace DELETE prune to the partitions its own ids resolve to. It enables the
+      # PRUNING, not the partitioning - setting it does not create or activate anything. Purely an optimisation - false
+      # keeps the always-correct unbounded mutation.
+      ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED: ${ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED:-false}
       # Readiness probes for the Hyperscale topology, both off for the single-node Compose stack: the cluster probe
       # checks the Distributed cluster definition is visible, the cold-storage probe checks the cold_s3 tiered disk.
       ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}

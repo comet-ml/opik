@@ -128,6 +128,20 @@ databaseAnalyticsDataModel:
   #   MODIFY TTL target `traces_local` only (the Distributed `traces` rejects them); ADD/DROP/MODIFY COLUMN must target
   #   both `traces_local` and `traces`, else reads can't see the column (code 47).
   tracesDistributedWrapEnabled: false
+  #  Default: false
+  #  Description: Enables partition-aware PRUNING of trace deletes - it does NOT create or activate any partitioning.
+  #   With it on, a trace DELETE bounds itself to the weekly partitions its own ids resolve to instead of being planned
+  #   against every part of the table. Turning it on therefore ASSERTS a schema fact rather than causing one: that the
+  #   live mutation target already IS the weekly partitioned successor, id_at as DateTime64(0,'UTC') under
+  #   PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))). Installing that schema is the
+  #   EXCHANGE step of the cutover, never this flag. Purely an optimisation: false keeps the unbounded mutation, which
+  #   is always correct and merely slower. A third flag on purpose - the partitioning appears at the EXCHANGE, and
+  #   neither sibling marks it:
+  #   traceColumnsNonNullable must be rolled out BEFORE the EXCHANGE, tracesDistributedWrapEnabled flips at the wrap,
+  #   which may be deferred long after it. Leave false at deploy time; set true once the EXCHANGE is confirmed, and back
+  #   to false BEFORE a rollback promotes the original `traces` (legacy `traces` has no PARTITION BY and a 32-bit
+  #   DateTime id_at that overflows past 2106, so the predicate would silently match zero rows for a far-future id).
+  tracesWeeklyPartitionPruningEnabled: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
