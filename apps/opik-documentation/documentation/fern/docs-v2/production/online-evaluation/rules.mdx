@@ -88,9 +88,9 @@ For a span-scope rule, use `{{span}}` instead. To inject the trace's spans as pl
   Agent as a Judge needs a model that supports tool calling. On a model that does not, the rule falls back to a single call with a truncated trace.
 </Note>
 
-Cost scales with trace size. A small trace fits in the prompt and the judge answers in one call. A larger trace is truncated in the prompt, and the judge makes extra tool calls to read the rest.
+Agent as a Judge is built to keep the cost bounded. Opik truncates the trace it puts in the prompt and points the judge at targeted reads instead of loading everything up front. A small trace fits in the prompt and the judge answers in a single call. On a larger one, the judge reads only the parts it needs.
 
-Use **Max cost per evaluation (USD)** to cap that spend. Once an evaluation reaches the cap, the judge wraps up and returns the scores it has. Leave it empty for no limit.
+You can also set a hard limit with **Max cost per evaluation (USD)**. Once an evaluation reaches it, the judge wraps up and returns the scores it has. Leave it empty for no limit.
 
 ### Evaluating traces with images
 
