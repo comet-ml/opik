@@ -346,7 +346,11 @@ class TestInstallCodex:
         result = targets._install_codex(SERVER_SPEC)
 
         assert result.succeeded is True
-        remove_cmd, add_cmd = (call.args[0] for call in run_mock.call_args_list)
+        # get (was it already there?) -> remove (idempotency) -> add
+        get_cmd, remove_cmd, add_cmd = (
+            call.args[0] for call in run_mock.call_args_list
+        )
+        assert get_cmd[1:] == ["mcp", "get", "opik-mcp", "--json"]
         assert remove_cmd[1:] == ["mcp", "remove", "opik-mcp"]
         assert add_cmd[1:3] == ["mcp", "add"]
         assert "opik-mcp" in add_cmd
@@ -457,3 +461,85 @@ class TestReadCodexBlock:
             "type": "stdio",
             "command": "x",
         }
+
+
+class TestInstallOutcomeVocabulary:
+    """Every host reports the same thing: whether this was new or a replacement.
+
+    "Registered" used to mean "we drove the host's CLI instead of writing the
+    file" — a mechanism, mixed into a column that otherwise reported an outcome,
+    and it hid new-vs-updated for exactly the hosts that use a CLI.
+    """
+
+    def test_json_host__new_entry__is_added(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(targets, "_cursor_config_path", lambda: tmp_path / "m.json")
+
+        assert targets._install_cursor(SERVER_SPEC).summary == "Added"
+
+    def test_json_host__existing_entry__is_updated(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "m.json"
+        monkeypatch.setattr(targets, "_cursor_config_path", lambda: config_path)
+        targets._install_cursor(SERVER_SPEC)
+
+        assert targets._install_cursor(SERVER_SPEC).summary == "Updated"
+
+    def _codex_run(self, monkeypatch, already_there):
+        payload = json.dumps(
+            {"transport": {"type": "stdio", "command": "uvx", "args": ["opik-mcp"]}}
+        )
+
+        def run(command, **kwargs):
+            if command[1:3] == ["mcp", "get"]:
+                return subprocess.CompletedProcess(
+                    command, 0 if already_there else 1, stdout=payload, stderr=""
+                )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/codex")
+        monkeypatch.setattr(targets.subprocess, "run", run)
+
+    def test_codex__not_registered_yet__is_added(self, monkeypatch):
+        self._codex_run(monkeypatch, already_there=False)
+
+        assert targets._install_codex(SERVER_SPEC).summary == "Added"
+
+    def test_codex__already_registered__is_updated(self, monkeypatch):
+        """Read before the remove, which would otherwise erase the evidence."""
+        self._codex_run(monkeypatch, already_there=True)
+
+        assert targets._install_codex(SERVER_SPEC).summary == "Updated"
+
+    def test_claude_code_via_cli__not_registered_yet__is_added(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(targets, "_claude_config_path", lambda: tmp_path / "c.json")
+        monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/claude")
+        monkeypatch.setattr(
+            targets.subprocess,
+            "run",
+            lambda *a, **k: subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+        )
+
+        assert targets._install_claude_code(SERVER_SPEC).summary == "Added"
+
+    def test_claude_code_via_cli__already_registered__is_updated(
+        self, tmp_path, monkeypatch
+    ):
+        config_path = tmp_path / "c.json"
+        config_path.write_text(
+            json.dumps({"mcpServers": {"opik-mcp": {"type": "stdio"}}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(targets, "_claude_config_path", lambda: config_path)
+        monkeypatch.setattr(targets.shutil, "which", lambda name: "/usr/bin/claude")
+        monkeypatch.setattr(
+            targets.subprocess,
+            "run",
+            lambda *a, **k: subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+        )
+
+        assert targets._install_claude_code(SERVER_SPEC).summary == "Updated"
+
+    def test_no_host_reports_the_mechanism_as_its_outcome(self):
+        """The plan block already says "via `claude mcp add`"; the result must not."""
+        assert "Registered" not in pathlib.Path(targets.__file__).read_text()

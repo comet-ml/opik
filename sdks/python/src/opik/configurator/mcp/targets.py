@@ -142,12 +142,20 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     claude_executable = shutil.which("claude")
 
     if claude_executable is None:
+        # The file path works out new-vs-existing itself.
         return _install_via_json_file(
             config_path=_claude_config_path(),
             top_level_key="mcpServers",
             display_name="Claude Code",
             server_block=server_spec.to_block(),
         )
+
+    # Read before writing, so the result can say whether this replaced an existing
+    # registration. `claude mcp add` cannot tell us — we remove first to keep the
+    # step idempotent, which erases the evidence.
+    was_registered = (
+        _read_block_from_json_file(_claude_config_path(), "mcpServers") is not None
+    )
 
     # `claude mcp add` errors if the server already exists, so remove any
     # previous entry first to keep the step idempotent.
@@ -171,8 +179,11 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         return InstallResult(
             target_display_name="Claude Code",
             succeeded=True,
-            detail=f"Registered '{SERVER_NAME}' via `claude mcp add` (user scope)",
-            summary="Registered",
+            detail=(
+                f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
+                f"`claude mcp add` (user scope)"
+            ),
+            summary="Updated" if was_registered else "Added",
         )
 
     return InstallResult(
@@ -235,6 +246,10 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             detail=f"Could not register '{SERVER_NAME}': {_codex_manual_instructions()}",
         )
 
+    # Read before the remove below erases the evidence, so the result can say
+    # whether this replaced an existing registration.
+    was_registered = _read_codex_block() is not None
+
     # `codex mcp add` refuses when the server already exists, so drop any previous
     # entry first to keep re-runs idempotent — same shape as the Claude Code path.
     subprocess.run(
@@ -251,8 +266,11 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         return InstallResult(
             target_display_name="Codex",
             succeeded=True,
-            detail=f"Registered '{SERVER_NAME}' via `codex mcp add`",
-            summary="Registered",
+            detail=(
+                f"{'Updated' if was_registered else 'Added'} '{SERVER_NAME}' via "
+                f"`codex mcp add`"
+            ),
+            summary="Updated" if was_registered else "Added",
         )
 
     return InstallResult(
@@ -322,7 +340,12 @@ def read_registered_block(target: "HostTarget") -> Optional[Dict[str, Any]]:
     if target.read_block is not None:
         return target.read_block()
 
-    config_path = target.config_path()
+    return _read_block_from_json_file(target.config_path(), target.top_level_key)
+
+
+def _read_block_from_json_file(
+    config_path: pathlib.Path, top_level_key: str
+) -> Optional[Dict[str, Any]]:
     try:
         if not config_path.exists() or config_path.stat().st_size == 0:
             return None
@@ -333,7 +356,7 @@ def read_registered_block(target: "HostTarget") -> Optional[Dict[str, Any]]:
     if not isinstance(data, dict):
         return None
 
-    servers = data.get(target.top_level_key)
+    servers = data.get(top_level_key)
     if not isinstance(servers, dict):
         return None
 
