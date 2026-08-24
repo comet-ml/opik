@@ -15,6 +15,7 @@ back to the numbered menu rather than failing.
 """
 
 import dataclasses
+import select
 import sys
 from typing import Callable, Iterable, List, Optional, Sequence, Set
 
@@ -24,6 +25,15 @@ from rich import console as console_module
 from rich import table, text
 
 console = rich.console.Console()
+
+#: How long to wait for an escape sequence's continuation before concluding the
+#: user pressed a bare Escape. What matters is the gap *within* one burst, not
+#: network latency: a terminal writes "\x1b[A" in a single write, and SSH delays
+#: the whole burst rather than spacing its bytes out, so the real gap is ~0. The
+#: window is generous because the only cost of a large one is that a bare Escape
+#: takes this long to register, while the cost of too small a one is an arrow key
+#: being misread as cancellation.
+ESCAPE_WINDOW = 0.12
 
 CURSOR = "❯"
 CHECKED = "◉"
@@ -174,15 +184,18 @@ def _key_reader() -> Optional[Callable[[], str]]:
     return _read_key_windows
 
 
-def _has_pending_input(descriptor: int, timeout: float = 0.05) -> bool:
+def _has_pending_input(descriptor: int, timeout: float = ESCAPE_WINDOW) -> bool:
     """Whether more bytes are already waiting, so ESC can be told from ESC-[.
 
     A terminal emits an arrow key's whole escape sequence in one burst, while a
-    bare Escape arrives alone. A short select() is enough to tell them apart and
-    keeps Escape responsive instead of blocking on the next keypress.
-    """
-    import select
+    bare Escape arrives alone. A short select() tells them apart and keeps Escape
+    responsive instead of blocking on the next keypress.
 
+    POSIX only, and only ever reached from :func:`_read_key_posix`: on Windows
+    ``select()`` accepts sockets rather than arbitrary descriptors, and the
+    ``msvcrt`` reader needs none of this — there, arrows arrive behind a
+    ``\x00``/``\xe0`` prefix instead of behind Escape, so nothing is ambiguous.
+    """
     ready, _, _ = select.select([descriptor], [], [], timeout)
     return bool(ready)
 

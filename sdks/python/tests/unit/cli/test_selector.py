@@ -1,6 +1,7 @@
 """Tests for the arrow-key multi-select prompt."""
 
 import os
+import sys
 
 from unittest import mock
 
@@ -280,6 +281,11 @@ class TestFooter:
         assert "(all)" in selector._footer(_choices(), selected, 0)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="select() takes sockets, not pipes, on Windows — and the msvcrt reader "
+    "never calls this: arrows arrive behind \\x00/\\xe0, not behind Escape.",
+)
 class TestPendingInput:
     """`_has_pending_input` is what lets Escape be told from an arrow key.
 
