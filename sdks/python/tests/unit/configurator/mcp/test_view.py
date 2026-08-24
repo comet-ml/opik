@@ -68,10 +68,18 @@ class TestLoggingInstallView:
         logger.warning.assert_not_called()
         assert "7 projects visible" in str(logger.info.call_args)
 
-    def test_next_steps__no_assistants__still_reads(self, logger):
-        mcp_view.LoggingInstallView().next_steps([])
+    def test_done__no_assistants__still_reads(self, logger):
+        mcp_view.LoggingInstallView().done(["MCP server"], [])
 
         assert "your AI host" in str(logger.info.call_args)
+
+    def test_done__names_what_was_set_up(self, logger):
+        mcp_view.LoggingInstallView().done(["MCP server", "skill pack"], ["Cursor"])
+
+        logged = str(logger.info.call_args)
+        assert "MCP server" in logged
+        assert "skill pack" in logged
+        assert "Cursor" in logged
 
 
 class TestTargetResult:
@@ -159,11 +167,23 @@ class TestRichInstallView:
         assert "Not working" in out
         assert "HTTP 401" in out
 
-    def test_next_steps__joins_names_readably(self, view):
+    def test_done__joins_names_readably_and_marks_completion(self, view):
         with view.console.capture() as capture:
-            view.RichInstallView().next_steps(["Cursor", "Claude Code", "Codex"])
+            view.RichInstallView().done(
+                ["MCP server", "skill pack"], ["Cursor", "Claude Code", "Codex"]
+            )
 
-        assert "Cursor, Claude Code and Codex" in capture.get()
+        out = capture.get()
+        assert "Done" in out
+        assert "MCP server and skill pack" in out
+        assert "Cursor, Claude Code and Codex" in out
+        assert "list my Opik projects" in out
+
+    def test_done__single_assistant__says_restart_it(self, view):
+        with view.console.capture() as capture:
+            view.RichInstallView().done(["MCP server"], ["Cursor"])
+
+        assert "Restart it" in capture.get()
 
     def test_step__propagates_exceptions(self, view):
         with pytest.raises(ValueError):

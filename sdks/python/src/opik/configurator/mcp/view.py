@@ -82,8 +82,8 @@ class InstallView(abc.ABC):
         """Report whether the registration actually works."""
 
     @abc.abstractmethod
-    def next_steps(self, assistants: List[str]) -> None:
-        """Tell the user the one thing left to do."""
+    def done(self, components: List[str], assistants: List[str]) -> None:
+        """Close the run: what was set up, for whom, and what is left to do."""
 
     @abc.abstractmethod
     def skipped(self, message: str) -> None:
@@ -145,11 +145,13 @@ class LoggingInstallView(InstallView):
                 detail,
             )
 
-    def next_steps(self, assistants: List[str]) -> None:
+    def done(self, components: List[str], assistants: List[str]) -> None:
         LOGGER.info(
-            "Restart %s to pick up the Opik MCP server, then ask it to "
-            "'list my Opik projects'.",
-            ", ".join(assistants) if assistants else "your AI host",
+            "Done. %s set up for %s. Restart %s, then ask it to 'list my Opik "
+            "projects'.",
+            " and ".join(components) or "Nothing",
+            ", ".join(assistants) or "your AI host",
+            "them" if len(assistants) > 1 else "it",
         )
 
     def skipped(self, message: str) -> None:

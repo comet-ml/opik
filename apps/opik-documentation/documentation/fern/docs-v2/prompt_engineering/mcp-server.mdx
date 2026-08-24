@@ -1,22 +1,80 @@
 ---
 headline: Opik's MCP server
-og:description: Configure Opik's Python MCP server with Claude Code, Cursor, VS Code Copilot, Codex, and opencode to read traces, log scores, and manage prompts from your AI host.
+og:description: One command connects your AI coding assistant to Opik — it instruments your code, verifies the traces itself, and keeps working with your real data as you build.
 og:site_name: Opik Documentation
 og:title: Integrate with Opik's MCP server
 title: Opik's MCP server
 ---
 
-Opik's [MCP server](https://github.com/comet-ml/opik-mcp) connects your AI host
-(Claude Code, Cursor, VS Code Copilot, Codex, opencode, MCP Inspector) directly to
-your Opik workspace — read traces, log scores, save prompt versions, and ask Ollie
-investigative questions, all from the chat.
+One command turns your coding assistant into one that can see what your app
+actually does.
+
+```bash
+opik mcp configure
+```
+
+That gives it two things: the **MCP server**, so it can read your traces, scores
+and experiments from chat, and the **skill pack**, so it knows how to instrument
+your code with Opik in the first place. Together they close the loop — your
+assistant writes the instrumentation, then reads the traces to check its own work,
+instead of handing you a diff and hoping.
+
+## What this unlocks
+
+Once it is set up, these are things you can ask for and get in one turn, without
+leaving your editor or opening the Opik UI:
+
+<CardGroup cols={2}>
+  <Card title="Instrument this project" icon="fa-solid fa-wand-magic-sparkles">
+    Your assistant adds tracing in the right places for your framework, runs the
+    app, and confirms the traces arrived.
+  </Card>
+  <Card title="Why did this get worse?" icon="fa-solid fa-magnifying-glass-chart">
+    It reads the failing traces and their scores directly, instead of you pasting
+    screenshots into chat.
+  </Card>
+  <Card title="Build me a test suite" icon="fa-solid fa-vial">
+    From traces you already have, so the cases are real ones your app hit.
+  </Card>
+  <Card title="Keep an eye on this" icon="fa-solid fa-gauge-high">
+    Every later change can be checked against real traces as you make it.
+  </Card>
+</CardGroup>
+
+### Try it right after setup
+
+Copy any of these into your assistant once the command finishes. Start with the
+first — it exercises the whole loop, so if it works, everything is wired up:
+
+```text
+Add Opik tracing to this project, then run it and show me the trace you created.
+```
+
+```text
+List my Opik projects and tell me which one this repo is logging to.
+```
+
+```text
+Look at the last 20 traces in Opik and tell me what's slowest and what's failing.
+```
+
+```text
+Build an Opik test suite from my recent traces, then run it and show me the scores.
+```
+
+From then on your assistant can check its own work against real traces every time
+you change something.
+
+<Tip>
+Nothing to restart mid-flow, but assistants read their configuration at startup —
+**start a new chat session** after setup, then paste one of the prompts above.
+</Tip>
 
 ## Quick setup with the Opik CLI
 
-The fastest way to connect the MCP server is the Opik CLI. It detects your AI
-host (Claude Code, Cursor, VS Code Copilot, Codex, opencode), picks the right
-server for your Opik deployment, configures it, and then checks that the
-configuration it just wrote actually works.
+The CLI detects your AI host (Claude Code, Cursor, VS Code Copilot, Codex,
+opencode), picks the right server for your Opik deployment, configures it, and
+then checks that the configuration it just wrote actually works.
 
 <Tip>
 Prefer not to use the CLI? You can wire up any host by hand — skip to

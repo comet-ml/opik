@@ -5,8 +5,11 @@ from typing import List, Optional, Tuple
 
 import click
 
+from opik.cli import assistants
+from opik.cli import mcp_view as mcp_rich_view
 from opik.cli import selector
 from opik.cli import status_view
+from opik.configurator import interactive_helpers
 from opik.configurator import skills as skills_installer
 from opik.configurator.skills import manifest as skills_manifest
 from opik.configurator.skills import roots as skills_roots
@@ -39,21 +42,6 @@ def _sentence(text: str) -> str:
     return text if text.endswith(".") else f"{text}."
 
 
-def resolve_hosts_interactively() -> Optional[List[str]]:
-    """Detect assistants and ask which to install the pack for.
-
-    Shared with ``opik mcp configure`` for the case where only the pack was
-    selected, so there is no server step whose host choice can be reused.
-    """
-    detected = skills_roots.detected_host_keys()
-    if len(detected) == 0:
-        raise click.ClickException(
-            "No supported AI host was detected. Name one explicitly: "
-            f"`opik skills configure --host {HOST_KEYS[0]}`."
-        )
-    return _ask_which_hosts(detected)
-
-
 def _ask_which_hosts(detected: List[str]) -> Optional[List[str]]:
     """Which detected assistants to install for.
 
@@ -61,6 +49,14 @@ def _ask_which_hosts(detected: List[str]) -> Optional[List[str]]:
     on, and a user may well want it in the editor they use for Opik work and not
     in every assistant on the machine.
     """
+    # Without a terminal there is nobody to ask, and asking anyway aborts the
+    # command. Naming assistants with `--host` is the answer in that case.
+    if not interactive_helpers.is_interactive():
+        raise click.ClickException(
+            "`opik skills configure` needs an interactive terminal to pick your "
+            f"assistants. Name them instead, e.g. `--host {detected[0]}`."
+        )
+
     if len(detected) == 1 or not selector.is_supported():
         # One candidate needs no list, and a terminal that cannot host a picker
         # would otherwise be stuck; both fall back to a plain confirmation.
@@ -120,10 +116,14 @@ def configure(hosts: Tuple[str, ...]) -> None:
             click.echo("No assistants selected; nothing was installed.")
             return
 
-    if not skills_installer.setup_skills(host_keys):
-        raise click.ClickException(
-            "The Opik skill pack was not installed — see the messages above."
-        )
+    view = mcp_rich_view.RichInstallView()
+    with view.step("Fetching the Opik skill pack"):
+        result = skills_installer.setup_skills(host_keys)
+
+    if not assistants.render_skill_pack(result, view):
+        raise click.ClickException("The Opik skill pack was not installed.")
+
+    view.done(["skill pack"], skills_roots.display_names(host_keys))
 
 
 @skills.command(name="update")
@@ -170,6 +170,12 @@ def remove(yes: bool) -> None:
     if not installed:
         click.echo("No Opik-installed skills found; nothing to remove.")
         return
+
+    if not yes and not interactive_helpers.is_interactive():
+        raise click.ClickException(
+            "Removing the skill pack needs a confirmation. Re-run with `-y` to "
+            "confirm without a terminal."
+        )
 
     if not yes and not click.confirm(
         f"Remove {', '.join(installed)} from {skills_roots.shared_skills_dir()}?",

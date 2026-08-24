@@ -23,7 +23,7 @@ import dataclasses
 import logging
 import pathlib
 import shutil
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from opik.configurator.skills import manifest as skills_manifest
 from opik.configurator.skills import pack as skills_pack
@@ -32,36 +32,51 @@ from opik.configurator.skills import roots as skills_roots
 LOGGER = logging.getLogger(__name__)
 
 
+@dataclasses.dataclass
+class InstallResult:
+    """What an install did, for the caller to report however it renders.
+
+    Returned rather than logged: deciding what the user sees belongs to the
+    caller, and mixing the two in here is what made the skill pack land as raw
+    log lines in the middle of an otherwise formatted run.
+    """
+
+    succeeded: bool
+    skills: List[str] = dataclasses.field(default_factory=list)
+    shared_dir: Optional[pathlib.Path] = None
+    linked: Dict[str, List[str]] = dataclasses.field(default_factory=dict)
+    link_errors: Dict[str, str] = dataclasses.field(default_factory=dict)
+    error: Optional[str] = None
+    plugin_overlap: bool = False
+
+
 def setup_skills(
     host_keys: List[str],
     ref: str = skills_pack.DEFAULT_REF,
-    announce_next_steps: bool = True,
-) -> bool:
-    """Install the Opik skill pack for ``host_keys``. Returns True on success.
+) -> InstallResult:
+    """Install the Opik skill pack for ``host_keys``.
 
-    Never raises: the skill pack is an enhancement, and failing to install it must
-    not fail the surrounding configure run.
+    Never raises: the pack is an enhancement, and failing to install it must not
+    fail the surrounding configure run. Every outcome is described by the returned
+    :class:`InstallResult`.
     """
     supported = [key for key in host_keys if key in skills_roots.SUPPORTED_HOST_KEYS]
     if len(supported) == 0:
-        LOGGER.warning(
-            "Skipping the Opik skill pack: none of the requested hosts (%s) have a "
-            "known skills location.",
-            ", ".join(host_keys) or "none",
-        )
         # ANALYTICS: skills install skipped, reason="no_supported_host".
-        return False
-
-    display = ", ".join(skills_roots.display_names(supported))
-    LOGGER.info("Installing the Opik skill pack for %s...", display)
+        return InstallResult(
+            succeeded=False,
+            error=(
+                f"none of the requested assistants ({', '.join(host_keys) or 'none'}) "
+                "have a known skills location"
+            ),
+        )
 
     # ANALYTICS: skills install started, with the host count.
     try:
         pack = skills_pack.download(ref=ref)
     except skills_pack.PackError as error:
-        LOGGER.warning("Could not install the Opik skill pack: %s.", error)
         # ANALYTICS: skills install failed, reason="download_failed".
-        return False
+        return InstallResult(succeeded=False, error=str(error))
 
     shared_dir = skills_roots.shared_skills_dir()
     try:
@@ -69,11 +84,10 @@ def setup_skills(
         for name, files in pack.skills.items():
             skills_pack.write_skill(shared_dir, name, files)
     except OSError as error:
-        LOGGER.warning(
-            "Could not write the Opik skill pack to %s: %s.", shared_dir, error
-        )
         # ANALYTICS: skills install failed, reason="write_failed".
-        return False
+        return InstallResult(
+            succeeded=False, error=f"could not write {shared_dir}: {error}"
+        )
 
     skills_manifest.write(
         names=pack.names,
@@ -82,52 +96,56 @@ def setup_skills(
         hosts=supported,
     )
 
-    LOGGER.info(
-        "Installed the Opik skill pack (%s) in %s.",
-        ", ".join(pack.names),
-        shared_dir,
-    )
-
+    linked: Dict[str, List[str]] = {}
+    link_errors: Dict[str, str] = {}
     for host_key in supported:
         if skills_roots.reads_shared_dir(host_key):
             continue
-        _link_for_host(host_key, pack.names, shared_dir)
+        names, failure = _link_for_host(host_key, pack.names, shared_dir)
+        if names:
+            linked[host_key] = names
+        if failure is not None:
+            link_errors[host_key] = failure
 
-    if announce_next_steps:
-        LOGGER.info(
-            "Restart your AI host, then ask it to 'add Opik tracing to this project'."
-        )
-    _warn_on_claude_code_plugin_overlap(supported)
     # ANALYTICS: skills install completed, with the host count and skill names.
-    return True
+    return InstallResult(
+        succeeded=True,
+        skills=pack.names,
+        shared_dir=shared_dir,
+        linked=linked,
+        link_errors=link_errors,
+        plugin_overlap=_claude_code_plugin_ships_its_own_skill(supported),
+    )
 
 
-def _link_for_host(host_key: str, names: List[str], shared_dir: pathlib.Path) -> None:
-    """Point a host's own skills directory at the shared install."""
+def _link_for_host(
+    host_key: str, names: List[str], shared_dir: pathlib.Path
+) -> Tuple[List[str], Optional[str]]:
+    """Point a host's own skills directory at the shared install.
+
+    Returns the skills linked and the first failure, if any — facts for the caller
+    to word, rather than prose written here.
+    """
     link_root = skills_roots.link_dir(host_key)
     if link_root is None:
-        return
+        return [], None
 
-    display = ", ".join(skills_roots.display_names([host_key]))
     linked: List[str] = []
+    failure: Optional[str] = None
     for name in names:
         try:
             link_root.mkdir(parents=True, exist_ok=True)
             _replace_with_link(link_root / name, shared_dir / name)
             linked.append(name)
         except OSError as error:
-            LOGGER.warning(
-                "Could not link %s into %s for %s: %s. The skill is installed in "
-                "%s; link it by hand to use it there.",
-                name,
-                link_root,
-                display,
-                error,
-                shared_dir,
-            )
             # ANALYTICS: skills link failed for this host.
-    if linked:
-        LOGGER.info("%s: linked %s in %s.", display, ", ".join(linked), link_root)
+            LOGGER.debug("Could not link %s into %s", name, link_root, exc_info=True)
+            if failure is None:
+                failure = (
+                    f"could not link into {link_root} ({error}); the skills are "
+                    f"installed in {shared_dir}"
+                )
+    return linked, failure
 
 
 def _replace_with_link(link_path: pathlib.Path, target: pathlib.Path) -> None:
@@ -149,17 +167,18 @@ def _replace_with_link(link_path: pathlib.Path, target: pathlib.Path) -> None:
         shutil.copytree(target, link_path)
 
 
-def _warn_on_claude_code_plugin_overlap(host_keys: List[str]) -> None:
-    """Flag the one known duplicate: Claude Code's Opik plugin ships its own skill.
+def _claude_code_plugin_ships_its_own_skill(host_keys: List[str]) -> bool:
+    """Whether Claude Code will now carry two overlapping ``opik`` skills.
 
     ``opik-claude-code-plugin`` bundles a skill also called ``opik`` whose content
     has drifted from the one in the pack. Claude Code namespaces plugin skills, so
     both can coexist without breaking — but the assistant then carries two similar
-    Opik skills, and the user should know which is which.
+    Opik skills, and the user should be told which is which, by whoever is doing
+    the telling.
     """
     if "claude-code" not in host_keys:
-        return
-    plugin_skill = (
+        return False
+    return (
         pathlib.Path.home()
         / ".claude"
         / "plugins"
@@ -167,14 +186,7 @@ def _warn_on_claude_code_plugin_overlap(host_keys: List[str]) -> None:
         / "opik"
         / "skills"
         / "opik"
-    )
-    if not plugin_skill.exists():
-        return
-    LOGGER.info(
-        "Note: the Opik Claude Code plugin also ships an `opik` skill, so Claude "
-        "Code now has both. They overlap; remove the plugin's copy with "
-        "`/plugin uninstall opik` if you prefer the pack alone."
-    )
+    ).exists()
 
 
 @dataclasses.dataclass

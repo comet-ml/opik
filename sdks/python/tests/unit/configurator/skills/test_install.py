@@ -28,7 +28,7 @@ def fake_pack(monkeypatch):
 
 class TestSetupSkills:
     def test_setup_skills__writes_to_the_shared_directory(self, fake_home, fake_pack):
-        assert install.setup_skills(["codex"]) is True
+        assert install.setup_skills(["codex"]).succeeded is True
 
         shared = fake_home / ".agents" / "skills"
         assert (shared / "opik" / "SKILL.md").read_bytes() == b"opik body"
@@ -65,13 +65,13 @@ class TestSetupSkills:
         monkeypatch.setattr(
             pack, "download", mock.Mock(side_effect=pack.PackError("network is down"))
         )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-        assert install.setup_skills(["codex"]) is False
+        result = install.setup_skills(["codex"])
+
+        assert result.succeeded is False
         assert not (fake_home / ".agents").exists()
-        warned = " ".join(str(c) for c in logger_spy.warning.call_args_list)
-        assert "network is down" in warned
+        # Returned, not logged: the caller decides how to word it.
+        assert result.error == "network is down"
 
     def test_setup_skills__write_failure__returns_false(
         self, fake_home, fake_pack, monkeypatch
@@ -82,7 +82,7 @@ class TestSetupSkills:
             mock.Mock(side_effect=OSError("read-only file system")),
         )
 
-        assert install.setup_skills(["codex"]) is False
+        assert install.setup_skills(["codex"]).succeeded is False
 
     def test_setup_skills__no_supported_host__returns_false(
         self, fake_home, monkeypatch
@@ -90,18 +90,18 @@ class TestSetupSkills:
         download_spy = mock.Mock()
         monkeypatch.setattr(pack, "download", download_spy)
 
-        assert install.setup_skills(["emacs"]) is False
+        assert install.setup_skills(["emacs"]).succeeded is False
         download_spy.assert_not_called()
 
     def test_setup_skills__empty_host_list__returns_false(self, fake_home, monkeypatch):
         monkeypatch.setattr(pack, "download", mock.Mock())
-        assert install.setup_skills([]) is False
+        assert install.setup_skills([]).succeeded is False
 
     def test_setup_skills__rerun__replaces_and_stays_idempotent(
         self, fake_home, fake_pack
     ):
         install.setup_skills(["claude-code"])
-        assert install.setup_skills(["claude-code"]) is True
+        assert install.setup_skills(["claude-code"]).succeeded is True
 
         link = fake_home / ".claude" / "skills" / "opik"
         assert link.is_symlink()
@@ -149,23 +149,32 @@ class TestLinking:
 
         assert existing.is_symlink()
 
-    def test_link_for_host__failure_is_reported_not_raised(
+    def test_link_for_host__failure_is_returned_not_logged_as_prose(
         self, fake_home, monkeypatch
     ):
+        """Business logic hands back facts; the caller words them."""
         monkeypatch.setattr(
             install,
             "_replace_with_link",
             mock.Mock(side_effect=OSError("permission denied")),
         )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-        install._link_for_host(
+        linked, failure = install._link_for_host(
             "claude-code", ["opik"], fake_home / ".agents" / "skills"
         )
 
-        warned = " ".join(str(c) for c in logger_spy.warning.call_args_list)
-        assert "Could not link" in warned
+        assert linked == []
+        assert failure is not None
+        assert "permission denied" in failure
+
+    def test_link_for_host__success_returns_the_names(self, fake_home):
+        shared = fake_home / ".agents" / "skills"
+        (shared / "opik").mkdir(parents=True)
+
+        linked, failure = install._link_for_host("claude-code", ["opik"], shared)
+
+        assert linked == ["opik"]
+        assert failure is None
 
 
 class TestUninstall:
@@ -191,39 +200,32 @@ class TestUninstall:
         assert install.uninstall_skills() == []
 
 
-class TestPluginOverlapWarning:
-    def test_warn__claude_code_with_plugin_skill__notes_the_overlap(
-        self, fake_home, monkeypatch
+class TestPluginOverlapDetection:
+    def test_claude_code_with_plugin_skill__is_flagged(self, fake_home):
+        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
+            parents=True
+        )
+
+        assert install._claude_code_plugin_ships_its_own_skill(["claude-code"]) is True
+
+    def test_no_plugin__is_not_flagged(self, fake_home):
+        assert install._claude_code_plugin_ships_its_own_skill(["claude-code"]) is False
+
+    def test_claude_code_not_targeted__is_not_flagged(self, fake_home):
+        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
+            parents=True
+        )
+
+        assert install._claude_code_plugin_ships_its_own_skill(["codex"]) is False
+
+    def test_setup_skills__surfaces_the_overlap_on_the_result(
+        self, fake_home, fake_pack
     ):
         (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
             parents=True
         )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-        install._warn_on_claude_code_plugin_overlap(["claude-code"])
-
-        logged = " ".join(str(c) for c in logger_spy.info.call_args_list)
-        assert "also ships an `opik` skill" in logged
-
-    def test_warn__no_plugin__stays_quiet(self, fake_home, monkeypatch):
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
-
-        install._warn_on_claude_code_plugin_overlap(["claude-code"])
-
-        logger_spy.info.assert_not_called()
-
-    def test_warn__claude_code_not_targeted__stays_quiet(self, fake_home, monkeypatch):
-        (fake_home / ".claude/plugins/marketplaces/opik/skills/opik").mkdir(
-            parents=True
-        )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
-
-        install._warn_on_claude_code_plugin_overlap(["codex"])
-
-        logger_spy.info.assert_not_called()
+        assert install.setup_skills(["claude-code"]).plugin_overlap is True
 
 
 class TestUpdateSkills:

@@ -119,16 +119,25 @@ class RichInstallView(mcp_view.InstallView):
             )
         console.print(padding.Padding(row, (0, 0, 0, 2), expand=False))
 
-    def next_steps(self, assistants: List[str]) -> None:
-        names = _join(assistants) or "your AI host"
+    def done(self, components: List[str], assistants: List[str]) -> None:
         console.print()
         console.print(
+            text.Text.assemble(("✓ ", "green bold"), ("Done", "bold")),
+        )
+        grid = table.Table.grid(padding=(0, 2))
+        grid.add_column(style=_KEY_STYLE, no_wrap=True)
+        grid.add_column(overflow="fold")
+        grid.add_row("Set up", _join(components) or "nothing")
+        grid.add_row("For", _join(assistants) or "your AI host")
+        grid.add_row(
+            "Next",
             text.Text.assemble(
                 ("Restart ", ""),
-                (names, "bold"),
-                (', then ask: "list my Opik projects"', ""),
-            )
+                ("them" if len(assistants) > 1 else "it", "bold"),
+                (', then ask "list my Opik projects"', ""),
+            ),
         )
+        console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
         console.print()
 
     def skipped(self, message: str) -> None:

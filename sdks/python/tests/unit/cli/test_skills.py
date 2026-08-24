@@ -3,18 +3,38 @@
 import pathlib
 from unittest.mock import patch
 
+import pytest
+
 from click.testing import CliRunner
 
 from opik.cli import cli
 from opik.cli import skills as skills_cli
+from opik.configurator.skills import install as skills_install
 from opik.configurator.skills import manifest as skills_manifest
+
+
+def _ok(skills=("opik", "instrument")):
+    return skills_install.InstallResult(
+        succeeded=True,
+        skills=list(skills),
+        shared_dir=pathlib.Path("/h/.agents/skills"),
+    )
+
+
+def _failed(error="boom"):
+    return skills_install.InstallResult(succeeded=False, error=error)
+
+
+@pytest.fixture(autouse=True)
+def interactive(monkeypatch):
+    monkeypatch.setattr(skills_cli.interactive_helpers, "is_interactive", lambda: True)
 
 
 class TestConfigureCommand:
     def test_configure__host_flag__installs_for_that_host_only(self):
         runner = CliRunner()
         with patch.object(
-            skills_cli.skills_installer, "setup_skills", return_value=True
+            skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
             result = runner.invoke(cli, ["skills", "configure", "--host", "codex"])
 
@@ -24,7 +44,7 @@ class TestConfigureCommand:
     def test_configure__repeated_host_flag__installs_for_each(self):
         runner = CliRunner()
         with patch.object(
-            skills_cli.skills_installer, "setup_skills", return_value=True
+            skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
             result = runner.invoke(
                 cli,
@@ -37,7 +57,7 @@ class TestConfigureCommand:
     def test_configure__duplicate_host__deduplicates(self):
         runner = CliRunner()
         with patch.object(
-            skills_cli.skills_installer, "setup_skills", return_value=True
+            skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
             result = runner.invoke(
                 cli, ["skills", "configure", "--host", "codex", "--host", "codex"]
@@ -53,7 +73,7 @@ class TestConfigureCommand:
                 skills_cli.skills_roots, "detected_host_keys", return_value=["cursor"]
             ),
             patch.object(
-                skills_cli.skills_installer, "setup_skills", return_value=True
+                skills_cli.skills_installer, "setup_skills", return_value=_ok()
             ) as setup_spy,
         ):
             result = runner.invoke(cli, ["skills", "configure"])
@@ -70,7 +90,7 @@ class TestConfigureCommand:
                 return_value=["cursor", "codex"],
             ),
             patch.object(
-                skills_cli.skills_installer, "setup_skills", return_value=True
+                skills_cli.skills_installer, "setup_skills", return_value=_ok()
             ) as setup_spy,
         ):
             result = runner.invoke(cli, ["skills", "configure", "--host", "all"])
@@ -116,7 +136,7 @@ class TestConfigureCommand:
     def test_configure__install_fails__exits_nonzero(self):
         runner = CliRunner()
         with patch.object(
-            skills_cli.skills_installer, "setup_skills", return_value=False
+            skills_cli.skills_installer, "setup_skills", return_value=_failed()
         ):
             result = runner.invoke(cli, ["skills", "configure", "--host", "codex"])
 
@@ -126,7 +146,7 @@ class TestConfigureCommand:
         """Skills are documentation; they must install before `opik configure`."""
         runner = CliRunner()
         with patch.object(
-            skills_cli.skills_installer, "setup_skills", return_value=True
+            skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
             result = runner.invoke(cli, ["skills", "configure", "--host", "codex"])
 
@@ -302,3 +322,76 @@ class TestUpdateCommand:
             result = runner.invoke(cli, ["skills", "update"])
 
         assert ".." not in result.output
+
+
+class TestNonInteractiveEnvironments:
+    """A closed stdin must produce an actionable error, never `Aborted!`.
+
+    Both of these used to reach `click.confirm`, which aborts on EOF — and for
+    `mcp configure` that happened *after* the server had already been registered.
+    """
+
+    @pytest.fixture(autouse=True)
+    def non_interactive(self, monkeypatch):
+        monkeypatch.setattr(
+            skills_cli.interactive_helpers, "is_interactive", lambda: False
+        )
+
+    def test_configure__no_host__errors_pointing_at_the_flag(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                skills_cli.skills_roots,
+                "detected_host_keys",
+                return_value=["cursor", "codex"],
+            ),
+            patch.object(skills_cli.skills_installer, "setup_skills") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["skills", "configure"])
+
+        assert result.exit_code != 0
+        assert "--host" in result.output
+        assert "Aborted" not in result.output
+        setup_spy.assert_not_called()
+
+    def test_configure__with_host__still_works(self):
+        runner = CliRunner()
+        with patch.object(
+            skills_cli.skills_installer, "setup_skills", return_value=_ok()
+        ) as setup_spy:
+            result = runner.invoke(cli, ["skills", "configure", "--host", "cursor"])
+
+        assert result.exit_code == 0
+        setup_spy.assert_called_once()
+
+    def test_remove__without_yes__errors_pointing_at_the_flag(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                skills_manifest,
+                "collect_status",
+                return_value=[
+                    skills_manifest.SkillStatus(
+                        name="opik",
+                        path=pathlib.Path("/h/.agents/skills/opik"),
+                        content_hash="abc",
+                        installed_at=None,
+                        installed_by_opik=True,
+                    )
+                ],
+            ),
+            patch.object(skills_cli.skills_installer, "uninstall_skills") as spy,
+        ):
+            result = runner.invoke(cli, ["skills", "remove"])
+
+        assert result.exit_code != 0
+        assert "-y" in result.output
+        assert "Aborted" not in result.output
+        spy.assert_not_called()
+
+    def test_status__works_without_a_terminal(self):
+        runner = CliRunner()
+        with patch.object(skills_manifest, "collect_status", return_value=[]):
+            result = runner.invoke(cli, ["skills", "status"])
+
+        assert result.exit_code == 0

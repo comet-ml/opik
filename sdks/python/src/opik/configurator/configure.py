@@ -145,7 +145,16 @@ class OpikConfigurator:
         host_keys = self._skills_host_keys()
         if host_keys is None:
             return
-        skills.setup_skills(host_keys)
+
+        result = skills.setup_skills(host_keys)
+        if result.succeeded:
+            LOGGER.info(
+                "Installed the Opik skill pack (%s) in %s.",
+                ", ".join(result.skills),
+                result.shared_dir,
+            )
+        else:
+            LOGGER.warning("Could not install the Opik skill pack: %s.", result.error)
 
     def _skills_host_keys(self) -> Optional[List[str]]:
         """Hosts to install the skill pack for, or ``None`` to skip.
