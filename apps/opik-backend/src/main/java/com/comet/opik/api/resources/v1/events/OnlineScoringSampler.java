@@ -362,6 +362,7 @@ public class OnlineScoringSampler {
                     trace.id(), evaluator.getName());
         }
 
+        // The sampling rate thins a production stream, so it applies to SDK traces only.
         if (!Source.isLoggingSource(trace.source())) {
             logForUser(workspaceId, evaluator, trace,
                     "The traceId '{}' is scored for rule: '{}' regardless of the sampling rate '{}',"
