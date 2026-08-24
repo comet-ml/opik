@@ -51,17 +51,25 @@ public class RedactionModule extends SimpleModule {
      * wire. The camel-case spellings are kept alongside so a DTO that does not apply the naming strategy is
      * covered by the same set.
      */
+    /**
+     * Properties the API addresses by, where rewriting the value breaks a round trip: a caller who reads a
+     * project name back redacted can no longer query with it.
+     * <p>
+     * Deliberately not here: {@code model}, {@code provider}, {@code providers} and {@code environment}. Those
+     * are caller-supplied on spans and threads, so exempting them by name would let anything placed in them
+     * through unredacted. They are filter facets rather than addresses, and their legitimate values — "gpt-4o",
+     * "openai", "production" — cannot match a redaction rule, so leaving them redactable costs nothing real.
+     */
     private static final Set<String> EXEMPT_PROPERTIES = Set.of(
             // Resolved by name elsewhere in the API; redacting them breaks lookup.
             "project_name", "projectName",
             "dataset_name", "datasetName",
             "prompt_name", "promptName",
             "thread_id", "threadId",
-            "environment",
             // Identifiers that happen to be typed as String rather than UUID.
             "id", "workspace_id", "workspaceId",
             // Version and cost lookup keys.
-            "commit", "version_number", "versionNumber", "model", "provider", "providers",
+            "commit", "version_number", "versionNumber",
             "total_estimated_cost_version", "totalEstimatedCostVersion",
             // Pure API metadata, never caller content.
             "sortable_by", "sortableBy");

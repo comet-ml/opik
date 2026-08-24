@@ -1,7 +1,9 @@
 package com.comet.opik.infrastructure.redaction;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -178,6 +180,32 @@ class RedactionModuleTest {
         assertThat(written).doesNotContain("secret-content");
         // A non-exempt property is still redacted.
         assertThat(written).doesNotContain("refund-trace");
+    }
+
+    @Test
+    @DisplayName("caller-supplied span fields are redacted, so a name-based exemption cannot be used as a bypass")
+    void callerSuppliedSpanFieldsAreRedacted() throws Exception {
+        // model, provider and environment are set by whoever logs the span, so a caller could put anything
+        // there. Exempting them by property name would hand that value straight back to a reader who is not
+        // permitted to see stored content.
+        RedactionContext.set(new RedactionRules(
+                List.of(RedactionRule.of("(?<![\\w.+-])[\\w.+-]+@[\\w-]+\\.[\\w.]+", "[EMAIL]"))));
+
+        var written = mapper.writeValueAsString(Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectName("refund-project")
+                .name("llm-call")
+                .type(SpanType.llm)
+                .startTime(Instant.now())
+                .model("alice.brown@example.com")
+                .provider("bob.jones@example.com")
+                .build());
+
+        assertThat(written).doesNotContain("alice.brown@example.com").doesNotContain("bob.jones@example.com");
+        assertThat(written).contains("[EMAIL]");
+        // The genuine lookup key is still spared.
+        assertThat(written).contains("refund-project");
     }
 
     @Test

@@ -1852,7 +1852,11 @@ redaction:
   # not expanded, so a partial-mask replacement such as "\1***@\2" is emitted verbatim rather than substituted.
   # Callable rules have no equivalent here either: the server only runs regexes. A malformed regex fails startup
   # rather than silently disabling redaction.
-  # Structural properties (project_name, thread_id, model, sortable_by and similar lookup keys) are exempt:
+  # Object keys are never rewritten, only values: a key is part of the document's shape, and rewriting it would
+  # break lookups into that object. Sensitive data therefore has to be in values, not field names.
+  # Callers with no credentials reading a public project are redacted too: an anonymous reader cannot hold the
+  # permission, so the public view shows the redacted content rather than what is stored.
+  # Structural properties (project_name, thread_id, dataset_name and similar lookup keys) are exempt:
   # rewriting them conceals nothing and breaks navigation. Content carried as JSON is always redacted, whatever
   # its keys are named. Anchor patterns so they cannot start mid-token — an unanchored local part such as
   # [\w.+-]+@... is quadratic on long base64 payloads and will stall reads.
