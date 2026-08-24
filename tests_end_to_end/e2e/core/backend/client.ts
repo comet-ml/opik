@@ -14,6 +14,7 @@ import {
   type OptimizationStatus,
   type PollOptimizationStatusOpts,
 } from './poll-optimization-status';
+import { uuid7 } from './uuid7';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
@@ -102,6 +103,19 @@ export interface AutomationRuleRef {
   name: string;
   projectIds: string[];
   enabled: boolean;
+}
+
+/**
+ * One row of an automation rule's user-facing log — the same payload the
+ * Automation logs page renders, from `GET /automations/evaluators/{id}/logs`.
+ *
+ * `markers` is where the per-trace attribution lives (`trace_id`), which is what
+ * makes "this trace failed and that one did not" assertable at all.
+ */
+export interface AutomationRuleLogRef {
+  level: string;
+  message: string;
+  markers: Record<string, string>;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -257,6 +271,56 @@ export function makeBackendClient(apiKey: string | null = null) {
       if (isNotFoundError(err)) return null;
       throw err;
     }
+  };
+
+  // Hoisted so createPythonAutomationRule can read its own rule back without
+  // going through the not-yet-constructed return object.
+  const localListAutomationRules = async (projectId: string): Promise<AutomationRuleRef[]> => {
+    const page = await opik.api.automationRuleEvaluators.findEvaluators({
+      projectId,
+      size: 500,
+    });
+    return (page.content ?? []).map((r) => ({
+      id: String(r.id),
+      name: r.name,
+      projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
+      enabled: r.enabled ?? true,
+    }));
+  };
+
+  /**
+   * Raw REST against the traces resource, for the payload shapes the pinned TS
+   * SDK's types cannot express.
+   *
+   * `TraceWrite.output` is typed `Record<string, unknown> | Record<string,
+   * unknown>[] | string`, so a trace whose output is a bare JSON number or an
+   * array of scalars is unrepresentable — and those shapes are exactly what the
+   * scalar-section specs exist to drive. Same escape hatch, and same reason, as
+   * `getProjectStats` below.
+   */
+  const rawTraceFetch = async (
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+  ): Promise<unknown> => {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Comet-Workspace': env.workspace,
+    };
+    const key = apiKey ?? env.apiKey;
+    if (key) headers['Authorization'] = key;
+
+    const res = await fetch(`${env.apiBaseUrl}${path}`, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`${method} ${path} -> ${res.status}: ${text.slice(0, 300)}`);
+    }
+    return text.trim() ? JSON.parse(text) : null;
   };
 
   return {
@@ -548,19 +612,7 @@ export function makeBackendClient(apiKey: string | null = null) {
       return waitForTraceScoresSettled(localGetTrace, traceId, opts);
     },
 
-    async listAutomationRulesForProject(projectId: string): Promise<AutomationRuleRef[]> {
-      const page = await opik.api.automationRuleEvaluators.findEvaluators({
-        projectId,
-        size: 500,
-      });
-      const content = page.content ?? [];
-      return content.map((r) => ({
-        id: String(r.id),
-        name: r.name,
-        projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
-        enabled: r.enabled ?? true,
-      }));
-    },
+    listAutomationRulesForProject: localListAutomationRules,
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
       try {
@@ -572,6 +624,65 @@ export function makeBackendClient(apiKey: string | null = null) {
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * Create a Python-code online-evaluation rule and return it, id included.
+     *
+     * The API rather than the create-rule dialog because these specs are about
+     * what the scoring engine extracts, not about the dialog: the dialog owns
+     * the variable mapping (`OnlineEvaluationPage.setVariableMapping` always
+     * writes `output.output`), so a spec that needs the whole-section mapping
+     * `output` can only state it here. Driving the dialog is covered by
+     * online-evaluation-smoke.
+     *
+     * `createAutomationRuleEvaluator` answers 201 with no body, so the rule is
+     * read back by name — which doubles as proof it landed on this project.
+     */
+    async createPythonAutomationRule(args: {
+      projectId: string;
+      name: string;
+      /** Full Python source of a single `BaseMetric` subclass. */
+      metric: string;
+      /** Variable mapping: `score()` parameter name -> trace path. */
+      metricArguments: Record<string, string>;
+      samplingRate?: number;
+    }): Promise<AutomationRuleRef> {
+      await opik.api.automationRuleEvaluators.createAutomationRuleEvaluator({
+        type: 'user_defined_metric_python',
+        action: 'evaluator',
+        name: args.name,
+        projectIds: [args.projectId],
+        enabled: true,
+        samplingRate: args.samplingRate ?? 1.0,
+        code: { metric: args.metric, arguments: args.metricArguments },
+      });
+
+      const rules = await localListAutomationRules(args.projectId);
+      const created = rules.find((r) => r.name === args.name);
+      if (!created) {
+        throw new Error(
+          `createPythonAutomationRule: rule '${args.name}' is not listed under project ` +
+            `${args.projectId} after a successful create — it did not land on this project.`,
+        );
+      }
+      return created;
+    },
+
+    /**
+     * Every user-facing log line a rule has emitted, newest first.
+     *
+     * Read as one page (the endpoint defaults to 1000 rows and these specs
+     * produce single digits) so a caller can assert on the WHOLE set — "no ERROR
+     * row for this trace" is only true if nothing was left unread.
+     */
+    async listAutomationRuleLogs(ruleId: string): Promise<AutomationRuleLogRef[]> {
+      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId);
+      return (page.content ?? []).map((item) => ({
+        level: String(item.level ?? ''),
+        message: item.message ?? '',
+        markers: item.markers ?? {},
+      }));
     },
 
     /**
@@ -716,6 +827,61 @@ export function makeBackendClient(apiKey: string | null = null) {
         ...(args.output ? { output: args.output } : {}),
       });
       return args.id;
+    },
+
+    /**
+     * Create a completed trace whose `output` is an arbitrary JSON value — a
+     * bare string, a number, an array, or an object.
+     *
+     * Neither the Python bridge nor the typed client can produce these shapes:
+     * `@opik.track` wraps a scalar return as `{"output": ...}` before it ever
+     * reaches the wire, and `TraceWrite.output`'s type union excludes numbers
+     * and scalar arrays. A trace whose output is a bare JSON value is an
+     * ordinary production shape (any non-decorated ingestion writes one), and it
+     * takes a different branch of the online-scoring extractor, so it has to be
+     * seedable.
+     *
+     * `endTime` is always sent: `OnlineScoringSampler.onTracesCreated` drops
+     * every trace with a null `end_time` as incomplete, so a trace seeded
+     * without one is silently never scored — which reads as "the rule is broken"
+     * rather than "the fixture was".
+     */
+    async createTraceWithRawOutput(args: {
+      projectName: string;
+      name: string;
+      output: unknown;
+      input?: Record<string, unknown>;
+      /** Defaults to a fresh v7 id, returned so the caller can assert on it. */
+      id?: string;
+      startTime?: Date;
+    }): Promise<string> {
+      const id = args.id ?? uuid7();
+      const startTime = args.startTime ?? new Date();
+      await rawTraceFetch('POST', '/v1/private/traces', {
+        id,
+        project_name: args.projectName,
+        name: args.name,
+        start_time: startTime.toISOString(),
+        end_time: new Date(startTime.getTime() + 1_000).toISOString(),
+        ...(args.input ? { input: args.input } : {}),
+        output: args.output,
+      });
+      return id;
+    },
+
+    /**
+     * The trace's `output` exactly as stored, with no type coercion.
+     *
+     * `getTrace` cannot answer this: `TraceDetail.output` would have to be typed
+     * through the same union that made the write unrepresentable. Specs use this
+     * to prove the seeded shape really survived ingestion before asserting on
+     * what the scoring engine did with it — a bare string that had been wrapped
+     * into an object on the way in would leave the spec asserting the object
+     * branch while claiming to cover the scalar one.
+     */
+    async getTraceRawOutput(traceId: string): Promise<unknown> {
+      const trace = await rawTraceFetch('GET', `/v1/private/traces/${traceId}`);
+      return (trace as { output?: unknown } | null)?.output;
     },
 
     /**

@@ -12,6 +12,7 @@ export {
   type FeedbackScoreRef,
   type TraceDetail,
   type AutomationRuleRef,
+  type AutomationRuleLogRef,
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
   type ThreadRowRef,

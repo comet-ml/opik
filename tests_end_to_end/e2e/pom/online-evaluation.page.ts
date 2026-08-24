@@ -1,6 +1,7 @@
 import { test, type Page, type Locator } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { AutomationLogsPage } from './automation-logs.page';
 
 export interface CreateRuleDialogLLMJudgeFields {
   name: string;
@@ -119,6 +120,39 @@ export class OnlineEvaluationPage {
 
       await confirm.waitFor({ state: 'hidden' });
       await row.waitFor({ state: 'detached' });
+    });
+  }
+
+  /**
+   * The row's "Show logs" link (`RuleLogsCell`). It is a real link in its own
+   * cell, NOT an item in the row's kebab menu — a spec that looks for it there
+   * will not find it.
+   */
+  showLogsLink(ruleName: string): Locator {
+    return this.ruleRow(ruleName).getByRole('link', { name: 'Show logs' });
+  }
+
+  /**
+   * Follow a rule row's "Show logs" link and return the Automation logs page it
+   * opens.
+   *
+   * The link carries `target="_blank"`, so the destination is a NEW tab on the
+   * same context; waiting for the `page` event is the only way to get a handle
+   * on it. Navigating to the route directly (`AutomationLogsPage.goto`) would
+   * skip the part of the journey that can actually break — the link is how a
+   * user reaches these logs at all, and it is the only place the rule id is
+   * turned into a `rule_id` query param.
+   */
+  async openLogsForRule(ruleName: string): Promise<AutomationLogsPage> {
+    return test.step(`open the Automation logs for rule "${ruleName}"`, async () => {
+      const link = this.showLogsLink(ruleName);
+      await expect(link).toHaveCount(1);
+      const [logsTab] = await Promise.all([
+        this.page.context().waitForEvent('page'),
+        link.click(),
+      ]);
+      await logsTab.waitForLoadState('domcontentloaded');
+      return new AutomationLogsPage(logsTab);
     });
   }
 
