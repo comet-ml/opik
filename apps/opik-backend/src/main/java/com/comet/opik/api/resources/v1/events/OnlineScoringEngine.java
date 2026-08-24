@@ -17,12 +17,10 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import com.google.api.gax.rpc.InvalidArgumentException;
 import com.google.common.annotations.VisibleForTesting;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.AudioContent;
@@ -885,23 +883,31 @@ public class OnlineScoringEngine {
             }
         }
 
-        Map<String, Object> forcedObject;
+        Object forcedObject;
         try {
             // JsonPath didn't work with JsonNode, even explicitly using
-            // JacksonJsonProvider, so we convert to a Map
-            forcedObject = OBJECT_MAPPER.convertValue(json, new TypeReference<>() {
-            });
-        } catch (InvalidArgumentException e) {
+            // JacksonJsonProvider, so we convert to a plain Object: a Map for an object node, a List for
+            // an array node, and the scalar itself for anything else. Converting straight to
+            // Map<String, Object> instead threw MismatchedInputException (wrapped in
+            // IllegalArgumentException) whenever the section was NOT an object — e.g. a trace whose
+            // output is the bare string "how can I help?" — and that escaped prepareLlmRequest and failed
+            // the whole evaluation before the LLM was ever called.
+            forcedObject = OBJECT_MAPPER.convertValue(json, Object.class);
+        } catch (IllegalArgumentException e) {
             log.warn("failed to parse json, json={}", json, e);
             return null;
         }
 
         try {
+            // JsonPath.parse rejects a non-container (a scalar section has no nested path to walk), which
+            // lands on the fallback below rather than propagating.
             var value = JsonPath.parse(forcedObject).read(path);
             return value != null ? serializeToJsonString(value) : null;
         } catch (Exception e) {
             log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
-            return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
+            return Optional.ofNullable(forcedObject)
+                    .filter(Map.class::isInstance)
+                    .map(object -> ((Map<?, ?>) object).get(path.replace("$.", "")))
                     .map(OnlineScoringEngine::serializeToJsonString)
                     .orElseGet(() -> {
                         log.info("couldn't find flat or nested path in json, path={}, json={}", path, json);
