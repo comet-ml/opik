@@ -47,18 +47,19 @@ import java.util.Set;
 public class RedactionModule extends SimpleModule {
 
     /**
-     * Held in the serialized form, since that is what the generator reports — these DTOs are snake_case on the
-     * wire. The camel-case spellings are kept alongside so a DTO that does not apply the naming strategy is
-     * covered by the same set.
-     */
-    /**
      * Properties the API addresses by, where rewriting the value breaks a round trip: a caller who reads a
      * project name back redacted can no longer query with it.
      * <p>
+     * Held in the serialized form, since that is what the generator reports — these DTOs are snake_case on the
+     * wire. The camel-case spellings are kept alongside so a DTO that does not apply the naming strategy is
+     * covered by the same set.
+     * <p>
      * Deliberately not here: {@code model}, {@code provider}, {@code providers} and {@code environment}. Those
      * are caller-supplied on spans and threads, so exempting them by name would let anything placed in them
-     * through unredacted. They are filter facets rather than addresses, and their legitimate values — "gpt-4o",
-     * "openai", "production" — cannot match a redaction rule, so leaving them redactable costs nothing real.
+     * through unredacted. They are filter facets rather than addresses, and their legitimate values are unlikely
+     * to match a well-scoped rule — though not guaranteed to escape a loose one, since a dated model id such as
+     * {@code gpt-4o-2024-08-06} will match a rule written for dates. Losing a facet value to redaction is a
+     * cosmetic cost; letting caller content through is not.
      */
     private static final Set<String> EXEMPT_PROPERTIES = Set.of(
             // Resolved by name elsewhere in the API; redacting them breaks lookup.

@@ -1855,7 +1855,12 @@ redaction:
   # Object keys are never rewritten, only values: a key is part of the document's shape, and rewriting it would
   # break lookups into that object. Sensitive data therefore has to be in values, not field names.
   # Callers with no credentials reading a public project are redacted too: an anonymous reader cannot hold the
-  # permission, so the public view shows the redacted content rather than what is stored.
+  # permission, so the public view shows the redacted content rather than what is stored. The MCP OAuth route resolves the
+  # caller from a username header rather than an authenticated principal, so on a deployment that enables it the
+  # gate is only as strong as the network boundary in front of the platform's auth endpoint.
+  # An environment name auto-created from a trace is exempt as an entity name, so a value that survives the
+  # ^[A-Za-z0-9_-]+$ filter can read redacted on the trace and verbatim on /v1/private/environments. Digits and
+  # hyphens pass that filter, so a rule written for dates or national identifiers can differ across the two.
   # Structural properties (project_name, thread_id, dataset_name and similar lookup keys) are exempt:
   # rewriting them conceals nothing and breaks navigation. Content carried as JSON is always redacted, whatever
   # its keys are named. Anchor patterns so they cannot start mid-token — an unanchored local part such as
