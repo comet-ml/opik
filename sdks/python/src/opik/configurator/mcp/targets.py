@@ -91,6 +91,14 @@ def _opencode_config_path() -> pathlib.Path:
     return json_path
 
 
+def _first_line(output: Optional[str]) -> str:
+    """The first meaningful line of a captured stream, for an error detail."""
+    for line in (output or "").splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
 def _manual_block_text(top_level_key: str, block: Dict[str, Any]) -> str:
     snippet = {top_level_key: {SERVER_NAME: mcp_spec.redact_block_for_display(block)}}
     return json.dumps(snippet, indent=2)
@@ -173,8 +181,10 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
         "user",
     ] + server_spec.to_claude_add_args()
 
-    # Let `claude mcp add` print its own output so the user sees the result.
-    result = subprocess.run(command)
+    # Captured, not streamed: we report the outcome ourselves, and its own
+    # "Added HTTP MCP server … / File modified: …" lines landed unstyled in the
+    # middle of the wizard. On failure the captured text goes into the detail.
+    result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode == 0:
         return InstallResult(
             target_display_name="Claude Code",
@@ -189,7 +199,10 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     return InstallResult(
         target_display_name="Claude Code",
         succeeded=False,
-        detail=f"`claude mcp add` failed (exit {result.returncode}) — see output above",
+        detail=(
+            f"`claude mcp add` failed (exit {result.returncode}): "
+            f"{_first_line(result.stderr) or _first_line(result.stdout) or 'no output'}"
+        ),
     )
 
 
@@ -260,8 +273,7 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
 
     command = [codex_executable, "mcp", "add"] + server_spec.to_codex_add_args()
 
-    # Let `codex mcp add` print its own output so the user sees the result.
-    result = subprocess.run(command)
+    result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode == 0:
         return InstallResult(
             target_display_name="Codex",
@@ -276,7 +288,10 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     return InstallResult(
         target_display_name="Codex",
         succeeded=False,
-        detail=f"`codex mcp add` failed (exit {result.returncode}) — see output above",
+        detail=(
+            f"`codex mcp add` failed (exit {result.returncode}): "
+            f"{_first_line(result.stderr) or _first_line(result.stdout) or 'no output'}"
+        ),
     )
 
 

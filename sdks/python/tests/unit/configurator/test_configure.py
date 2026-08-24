@@ -2537,7 +2537,11 @@ class TestShouldSetupMcpServer:
     ):
         configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
         assert configurator._should_setup_mcp_server() is True
-        assert "Cursor detected" in mock_prompt.call_args.args[0]
+        prompt = mock_prompt.call_args.args[0]
+        assert "Found Cursor." in prompt
+        # Framed as its own block, not appended to the configuration log.
+        assert prompt.startswith("\n")
+        assert "AI assistants" in prompt
         assert configurator._mcp_prompt_named_detected_hosts is True
 
     @patch(
@@ -2646,7 +2650,7 @@ class TestSkillsHostKeys:
         mock_prompt.assert_not_called()
 
     @patch(
-        "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]
+        "opik.configurator.configure.mcp.detected_host_names", return_value=["Codex"]
     )
     @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
@@ -2661,7 +2665,29 @@ class TestSkillsHostKeys:
     ):
         configurator = OpikConfigurator(install_skills=None)
         assert configurator._skills_host_keys() == ["codex"]
-        assert "Codex" in mock_prompt.call_args.args[0]
+        assert "Found Codex." in mock_prompt.call_args.args[0]
+
+    @patch(
+        "opik.configurator.configure.mcp.detected_host_names", return_value=["Codex"]
+    )
+    @patch(
+        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
+    )
+    @patch(
+        "opik.configurator.configure.ask_user_for_approval_default_no",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_library_path__server_and_pack_share_one_question(
+        self, mock_is_interactive, mock_prompt, mock_keys, mock_names
+    ):
+        """Two prompts in a row asked the same decision twice."""
+        configurator = OpikConfigurator(install_mcp=None, install_skills=None)
+
+        assert configurator._should_setup_mcp_server() is True
+        assert configurator._skills_host_keys() == ["codex"]
+
+        mock_prompt.assert_called_once()
 
     @patch(
         "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]

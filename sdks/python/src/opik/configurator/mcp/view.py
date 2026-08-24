@@ -66,12 +66,12 @@ class InstallView(abc.ABC):
         deployment: str,
         transport: str,
         targets: List[PlannedTarget],
-        extras: Sequence[str] = (),
+        extras: Sequence[PlannedTarget] = (),
     ) -> None:
         """Announce what is about to happen, before anything is written.
 
-        ``extras`` names anything this run will do besides registering the server
-        — the skill pack, today — so one confirmation covers the whole change.
+        ``extras`` are further rows for the same block — the skill pack, today —
+        so one confirmation covers the whole change.
         """
 
     @abc.abstractmethod
@@ -121,14 +121,14 @@ class LoggingInstallView(InstallView):
         deployment: str,
         transport: str,
         targets: List[PlannedTarget],
-        extras: Sequence[str] = (),
+        extras: Sequence[PlannedTarget] = (),
     ) -> None:
         LOGGER.info(
             "Setting up the Opik MCP server (%s, %s) for: %s%s",
             deployment,
             transport,
             ", ".join(f"{t.display_name} -> {t.location}" for t in targets),
-            f". Also: {', '.join(extras)}" if extras else "",
+            f". Also: {', '.join(e.display_name for e in extras)}" if extras else "",
         )
 
     @contextlib.contextmanager

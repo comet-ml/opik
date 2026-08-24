@@ -32,7 +32,11 @@ from opik.configurator.skills import roots as skills_roots
 LOGGER = logging.getLogger(__name__)
 
 
-def setup_skills(host_keys: List[str], ref: str = skills_pack.DEFAULT_REF) -> bool:
+def setup_skills(
+    host_keys: List[str],
+    ref: str = skills_pack.DEFAULT_REF,
+    announce_next_steps: bool = True,
+) -> bool:
     """Install the Opik skill pack for ``host_keys``. Returns True on success.
 
     Never raises: the skill pack is an enhancement, and failing to install it must
@@ -89,9 +93,10 @@ def setup_skills(host_keys: List[str], ref: str = skills_pack.DEFAULT_REF) -> bo
             continue
         _link_for_host(host_key, pack.names, shared_dir)
 
-    LOGGER.info(
-        "Restart your AI host, then ask it to 'add Opik tracing to this project'."
-    )
+    if announce_next_steps:
+        LOGGER.info(
+            "Restart your AI host, then ask it to 'add Opik tracing to this project'."
+        )
     _warn_on_claude_code_plugin_overlap(supported)
     # ANALYTICS: skills install completed, with the host count and skill names.
     return True

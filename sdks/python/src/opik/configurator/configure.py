@@ -1,7 +1,7 @@
 import getpass
 import logging
 import os
-from typing import Final, List, Optional
+from typing import Any, Callable, Dict, Final, List, Optional
 
 import httpx
 import opik.config
@@ -20,6 +20,18 @@ from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
 
+
+def _readable_list(names: List[str]) -> str:
+    """ "a", "a and b", "a, b and c" — a list a person would read aloud."""
+    if len(names) <= 1:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+#: Runs the assistant setup on the caller's behalf. Takes the resolved connection
+#: block, the ``--install-mcp`` / ``--install-skills`` tri-states and whether ``-y``
+#: was passed. Injected by the CLI so the configurator itself never renders.
+AssistantSetup = Callable[[Dict[str, Any], Optional[bool], Optional[bool], bool], None]
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +52,7 @@ class OpikConfigurator:
         project_name: Optional[str] = None,
         install_mcp: Optional[bool] = None,
         install_skills: Optional[bool] = None,
+        assistant_setup: Optional[AssistantSetup] = None,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -51,9 +64,13 @@ class OpikConfigurator:
         self.project_name = project_name
         self.install_mcp = install_mcp
         self.install_skills = install_skills
-        # Set when the MCP consent prompt named the detected hosts, so the
-        # installer can skip re-confirming the very same list.
+        self.assistant_setup = assistant_setup
+        # Set when the consent prompt named the detected hosts, so the installer
+        # can skip re-confirming the very same list.
         self._mcp_prompt_named_detected_hosts = False
+        # One answer covers the server and the skill pack; cached so the second
+        # step reuses it instead of asking again.
+        self._assistant_consent: Optional[bool] = None
 
         # Handle URL
         #
@@ -89,6 +106,33 @@ class OpikConfigurator:
         else:
             # LOCAL OPIK DEPLOYMENT
             self._configure_local()
+
+        self._setup_assistants()
+
+    def _setup_assistants(self) -> None:
+        """Register the MCP server and install the skill pack.
+
+        Delegated when the caller supplied a renderer — that is how the CLI gets
+        its selectors and formatted output. ``opik.configure()`` has no renderer
+        and keeps the plain-text prompts, since a library must not take over the
+        caller's terminal.
+        """
+        if self.assistant_setup is not None:
+            self.assistant_setup(
+                {
+                    "api_key": self.api_key,
+                    "workspace": self.workspace,
+                    "base_url": self.base_url,
+                    "api_url": self.api_url,
+                    "use_local": self.use_local,
+                    "self_hosted_comet": self.self_hosted_comet,
+                    "check_tls_certificate": self.current_config.check_tls_certificate,
+                },
+                self.install_mcp,
+                self.install_skills,
+                self.automatic_approvals,
+            )
+            return
 
         self._maybe_setup_mcp_server()
         self._maybe_setup_skills()
@@ -130,12 +174,7 @@ class OpikConfigurator:
         if len(detected) == 0:
             return None
 
-        names = ", ".join(skills.detected_host_names())
-        confirmed = ask_user_for_approval_default_no(
-            f"Install the Opik skill pack for {names}? It teaches your assistant "
-            "how to instrument code, run test suites, and use `opik connect`. (y/N) "
-        )
-        return detected if confirmed else None
+        return detected if self._ask_about_assistants() else None
 
     def _maybe_setup_mcp_server(self) -> None:
         if not self._should_setup_mcp_server():
@@ -187,16 +226,46 @@ class OpikConfigurator:
             return False
 
         self._mcp_prompt_named_detected_hosts = True
-        if len(detected) == 1:
-            question = (
-                f"{detected[0]} detected. Register the Opik MCP server with it? (y/N) "
-            )
-        else:
-            question = (
-                f"Detected {', '.join(detected)}. Register the Opik MCP server "
-                "with them? (y/N) "
-            )
-        return ask_user_for_approval_default_no(question)
+        return self._ask_about_assistants()
+
+    def _ask_about_assistants(self) -> bool:
+        """Ask once whether to set Opik up for the assistants we found.
+
+        One question for the server and the skill pack, cached across both steps.
+        Two prompts in a row asked the user to make the same decision twice, and
+        arrived immediately after the configuration log with nothing separating
+        them — a wall of output ending in a bare y/N.
+        """
+        if self._assistant_consent is not None:
+            return self._assistant_consent
+
+        self._assistant_consent = ask_user_for_approval_default_no(
+            self._assistant_prompt()
+        )
+        return self._assistant_consent
+
+    def _assistant_prompt(self) -> str:
+        """The prompt text, framed so it does not read as one more log line.
+
+        Plain text with blank lines and an indent rather than anything richer:
+        this runs from ``opik.configure()`` too, which must not take over the
+        caller's stdout with a rendered panel.
+        """
+        names = _readable_list(mcp.detected_host_names())
+        return (
+            "\n"
+            "  ─── AI assistants ───────────────────────────────────────────\n"
+            "\n"
+            f"  Found {names}.\n"
+            "\n"
+            "  Opik can set these up for them:\n"
+            "    · MCP server — read traces, log scores and run experiments\n"
+            "                   from your assistant's chat\n"
+            "    · Skill pack — teaches your assistant how to instrument\n"
+            "                   your code with Opik\n"
+            "\n"
+            "  Set them up? (y/N) "
+        )
 
     def _configure_cloud(self) -> None:
         """
@@ -739,6 +808,7 @@ def configure(
     project_name: Optional[str] = None,
     install_mcp: Optional[bool] = None,
     install_skills: Optional[bool] = None,
+    assistant_setup: Optional[AssistantSetup] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -757,6 +827,8 @@ def configure(
         project_name: The name of the project to configure. If not provided, the default project will be used.
         install_mcp: If True, register the Opik MCP server with detected AI hosts; if False, skip the step.
         install_skills: If True, install the Opik skill pack into detected AI hosts; if False, skip the step.
+        assistant_setup: Renderer for the assistant step. The CLI injects one; a
+            library call leaves it unset and gets plain-text prompts.
             If None, the user is prompted in interactive sessions.
 
     Raises:
@@ -781,5 +853,6 @@ def configure(
         project_name=project_name,
         install_mcp=install_mcp,
         install_skills=install_skills,
+        assistant_setup=assistant_setup,
     )
     client.configure()

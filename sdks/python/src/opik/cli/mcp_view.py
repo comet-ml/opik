@@ -47,7 +47,7 @@ class RichInstallView(mcp_view.InstallView):
         deployment: str,
         transport: str,
         targets: List[mcp_view.PlannedTarget],
-        extras: Sequence[str] = (),
+        extras: Sequence[mcp_view.PlannedTarget] = (),
     ) -> None:
         console.print()
         console.print(text.Text("Opik MCP server setup", style="bold"))
@@ -69,7 +69,7 @@ class RichInstallView(mcp_view.InstallView):
         for target in targets:
             files.add_row(target.display_name, target.location)
         for extra in extras:
-            files.add_row("", text.Text(extra, style="dim"))
+            files.add_row(extra.display_name, extra.location)
         console.print(padding.Padding(files, _FIELDS_INDENT, expand=False))
         console.print()
 

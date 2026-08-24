@@ -1,15 +1,43 @@
 """Configure command for Opik CLI."""
 
 import logging
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import click
 
 import opik.config as opik_config
+from opik.cli import assistants
 from opik.cli import status_view
 from opik.configurator import configure as opik_configure, interactive_helpers
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _setup_assistants(
+    setup_params: Mapping[str, Any],
+    install_mcp: Optional[bool],
+    install_skills: Optional[bool],
+    automatic_approvals: bool,
+) -> None:
+    """The CLI's assistant step: selectors and formatted output.
+
+    `-y` deliberately does not reach into another tool's configuration, and an
+    explicit `--no-install-mcp` with `--no-install-skills` means neither.
+    """
+    if install_mcp is False and install_skills is False:
+        return
+    if install_mcp is None and install_skills is None and automatic_approvals:
+        return
+
+    skills_flag = install_skills
+    if install_mcp is False:
+        # Server declined outright: only the pack is on the table.
+        if skills_flag is False:
+            return
+        assistants.setup(setup_params, skills_flag=True, host_keys=None)
+        return
+
+    assistants.setup(setup_params, skills_flag=skills_flag)
 
 
 def run_interactive_configure(
@@ -30,6 +58,7 @@ def run_interactive_configure(
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
+            assistant_setup=_setup_assistants,
         )
         return
 
@@ -44,6 +73,7 @@ def run_interactive_configure(
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
+            assistant_setup=_setup_assistants,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
         configurator = opik_configure.OpikConfigurator(
@@ -53,6 +83,7 @@ def run_interactive_configure(
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
+            assistant_setup=_setup_assistants,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
         configurator = opik_configure.OpikConfigurator(
@@ -62,6 +93,7 @@ def run_interactive_configure(
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
+            assistant_setup=_setup_assistants,
         )
     else:
         raise click.ClickException("Unknown deployment type was selected. Exiting.")

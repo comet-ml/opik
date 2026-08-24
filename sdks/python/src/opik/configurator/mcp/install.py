@@ -43,7 +43,8 @@ def setup_mcp_server(
     host_keys: Optional[List[str]] = None,
     assume_confirmed: bool = False,
     view: Optional[mcp_view.InstallView] = None,
-    plan_extras: Sequence[str] = (),
+    plan_extras: Sequence[mcp_view.PlannedTarget] = (),
+    announce_next_steps: bool = True,
 ) -> List[str]:
     """Register the Opik MCP server with the user's AI host(s).
 
@@ -65,9 +66,9 @@ def setup_mcp_server(
     ``view`` decides how the flow narrates itself; it defaults to the logger so
     that ``opik.configure()`` stays library-safe. The CLI passes a ``rich`` view.
 
-    ``plan_extras`` names anything the caller will do to the same hosts afterwards
-    (the skill pack), so it appears in the plan and one confirmation covers the
-    whole change.
+    ``plan_extras`` are extra plan rows for anything the caller will do to the
+    same hosts afterwards (the skill pack), so one confirmation covers the whole
+    change.
 
     Returns the host keys actually registered, so a caller can act on the same set
     without asking the user a second time.
@@ -189,7 +190,7 @@ def setup_mcp_server(
                 check_tls_certificate=check_tls_certificate,
             )
         display.verification(verification.succeeded, verification.detail)
-        if verification.succeeded:
+        if verification.succeeded and announce_next_steps:
             display.next_steps(
                 [result.target_display_name for result in results if result.succeeded]
             )
