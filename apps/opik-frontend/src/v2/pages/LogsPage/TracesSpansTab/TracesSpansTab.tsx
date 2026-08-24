@@ -76,7 +76,10 @@ import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
-import { generateSelectColumDef } from "@/shared/DataTable/utils";
+import {
+  generateSelectColumDef,
+  getVirtualizationConfig,
+} from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
@@ -1342,21 +1345,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataColumnsOrder,
   ]);
 
-  const cellCount = columns.length * rows.length;
-
-  // One decision drives both axes: the table is windowed or it isn't. Either
-  // axis crossing its own count, or the combined cell count crossing the
-  // shared budget, is enough — an AND here would block a lopsided table like
-  // 1000 columns × 10 rows from windowing at all. The budget sits above the
-  // default view (~15 columns × 100 rows = 1500) so normal tables stay fully
-  // rendered. Below 15 on both axes, there's nothing meaningful to skip.
   const virtualization = useMemo(
-    () => ({
-      enabled:
-        (columns.length >= 15 || rows.length >= 15) &&
-        (columns.length > 50 || rows.length > 25 || cellCount > 3000),
-    }),
-    [columns.length, rows.length, cellCount],
+    () => getVirtualizationConfig(columns.length, rows.length || (size ?? 0)),
+    [columns.length, rows.length, size],
   );
 
   const columnsToExport = useMemo(() => {
