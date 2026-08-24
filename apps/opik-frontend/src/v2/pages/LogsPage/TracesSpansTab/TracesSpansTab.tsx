@@ -284,9 +284,6 @@ const METADATA_MAIN_COLUMN_DATA: ColumnData<BaseTraceData>[] = [
   },
 ];
 
-const VIRTUALIZATION_MIN_COLUMNS = 50;
-const VIRTUALIZATION_MIN_ROWS = 25;
-
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
   right: [],
@@ -1345,13 +1342,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataColumnsOrder,
   ]);
 
-  const virtualization = useMemo(
+  const cellCount = columns.length * rows.length;
+
+  // Each axis decides on its own count or on total cells crossing the combined
+  // budget (50 columns × 25 rows), so a lopsided table like 1000 columns × 10
+  // rows still windows the axis that needs it instead of being blocked by the
+  // other axis's count. Below 15, an axis is never windowed: with this few
+  // columns/rows there's nothing meaningful on screen to skip.
+  const columnVirtualization = useMemo(
     () => ({
       enabled:
-        columns.length > VIRTUALIZATION_MIN_COLUMNS &&
-        rows.length >= VIRTUALIZATION_MIN_ROWS,
+        columns.length >= 15 && (columns.length > 50 || cellCount > 1250),
     }),
-    [columns.length, rows.length],
+    [columns.length, cellCount],
+  );
+
+  const rowVirtualization = useMemo(
+    () => ({
+      enabled: rows.length >= 15 && (rows.length > 25 || cellCount > 1250),
+    }),
+    [rows.length, cellCount],
   );
 
   const columnsToExport = useMemo(() => {
@@ -1624,8 +1634,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           }
           TableWrapper={PageBodyStickyTableWrapper}
           TableBody={DataTableVirtualBody}
-          columnVirtualization={virtualization}
-          rowVirtualization={virtualization}
+          columnVirtualization={columnVirtualization}
+          rowVirtualization={rowVirtualization}
           stickyHeader
           meta={meta}
           showLoadingOverlay={isPlaceholderData && isFetching}
