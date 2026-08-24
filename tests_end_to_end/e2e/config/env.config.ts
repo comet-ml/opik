@@ -11,6 +11,17 @@ export interface EnvConfig {
   userName: string | null;
   apiKey: string | null;
 
+  // Org-admin credentials for workspace-role permission tests (Configuration →
+  // Members, assigning Manage/Write/Annotate/Read). Distinct from
+  // userEmail/userPassword above, which is a *non-admin* workspace member.
+  // adminApiKey is the superuser admin-API-key used for disposable-user
+  // cleanup only, against adminBaseUrl; unrelated to adminEmail/adminPassword's
+  // org-admin session.
+  adminEmail: string | null;
+  adminPassword: string | null;
+  adminApiKey: string | null;
+  adminBaseUrl: string | null;
+
   features: {
     ollie: boolean;
     opikConnect: boolean;
@@ -78,6 +89,18 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
 
   const apiKey = env.OPIK_API_KEY ?? null;
 
+  // Same secrets comet-automation-tests' config.admin_api_key / org-admin
+  // login already use — kept as their existing names rather than introducing
+  // OPIK_-prefixed duplicates. adminBaseUrl has no established default (it's
+  // a distinct internal admin host in comet-automation-tests' env config, not
+  // necessarily rootBase) — leave null until wired for real in CI; consumers
+  // must treat a missing adminBaseUrl/adminApiKey as "cleanup unavailable",
+  // not throw.
+  const adminEmail = env.USER_EMAIL ?? null;
+  const adminPassword = env.PASSWORD ?? null;
+  const adminApiKey = env.ADMIN_API_KEY ?? null;
+  const adminBaseUrl = env.ADMIN_BASE_URL ?? null;
+
   // For cloud/self-hosted we always need a way to mint a browser session,
   // because the UI sits behind an auth wall. Two paths:
   //   1. (Canonical CI path) OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD —
@@ -124,6 +147,10 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     userPassword,
     userName,
     apiKey,
+    adminEmail,
+    adminPassword,
+    adminApiKey,
+    adminBaseUrl,
     features: {
       ollie: boolFromEnv(env.OLLIE_ENABLED, defaults.ollie),
       opikConnect: boolFromEnv(env.OPIK_CONNECT_ENABLED, defaults.opikConnect),
