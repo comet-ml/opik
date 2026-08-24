@@ -22,75 +22,44 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Applies the active rule set to every string a response writes.
+ * Applies the active rule set to every string a response writes, on the mapper that serializes responses, so a
+ * new endpoint is covered the moment it exists.
  * <p>
- * Registered on the mapper that serializes responses, so a new endpoint is covered the moment it exists —
- * unlike an allowlist of fields, which protects only what somebody remembered to list.
+ * Two serializers, because a {@code JsonNode} writes its own children through {@code JsonSerializable}: the one
+ * registered for {@code String} is never consulted for trace and span payloads, so the tree is walked by hand.
+ * Only values are rewritten; field names are written verbatim.
  * <p>
- * Two serializers are needed. {@code String} covers ordinary properties. {@code JsonNode} covers trace and
- * span payloads, and it has to walk the tree by hand: a node writes its own children through
- * {@code JsonSerializable}, so nothing registered for the scalar types is ever consulted, and the strings
- * inside an input or output would sail straight through untouched.
- * <p>
- * Only values are rewritten — field names are written back verbatim.
- * <p>
- * A small set of structural properties is exempt. These are lookup keys and API metadata rather than content:
- * rewriting a {@code projectName} or a {@code threadId} does not conceal anything a caller could not obtain
- * anyway, and it breaks navigation and filtering with no error to show for it.
- * <p>
- * The exemption is applied through a {@link BeanSerializerModifier}, which reaches declared bean properties and
- * nothing else. That distinction is load-bearing: several DTOs carry {@code Map<String, String>} metadata whose
- * keys the caller chooses, and a name-based check against the generator's current field would exempt the value
- * of any entry a caller happened to call {@code id} or {@code model}. Matching on properties instead means map
- * entries and {@code JsonNode} content are redacted whatever they are named.
+ * Exemptions go through a {@link BeanSerializerModifier} so they reach declared properties and nothing else.
+ * Several DTOs carry {@code Map<String, String>} metadata whose keys the caller chooses, and a name-based check
+ * would exempt the value of any entry a caller happened to call {@code id} or {@code model}.
  */
 public class RedactionModule extends SimpleModule {
 
     /**
-     * Properties the API addresses by, where rewriting the value breaks a round trip: a caller who reads a
-     * project name back redacted can no longer query with it.
-     * <p>
-     * Held in the serialized form, since that is what the generator reports — these DTOs are snake_case on the
-     * wire. The camel-case spellings are kept alongside so a DTO that does not apply the naming strategy is
-     * covered by the same set.
-     * <p>
-     * {@code model}, {@code provider} and {@code providers} are here by decision rather than by mechanism. They
-     * are caller-supplied on spans, so nothing stops someone putting content in them — but they name a vendor
-     * and a model from what is in practice a closed vocabulary, not a field anyone carries personal data in, and
-     * they are what the UI filters and groups by. Redacting them also rewrites legitimate identifiers: a dated
-     * model id such as {@code gpt-4o-2024-08-06} matches a rule written for dates, leaving a facet value that no
-     * longer selects its own spans. The trade is accepted knowingly: content placed in these two fields is
-     * returned as stored.
-     * <p>
-     * {@code environment} is not here, unlike those two: it is free text the caller invents rather than a name
-     * drawn from a vendor's catalogue, so it stays redactable.
+     * Values that must survive redaction because something resolves by them. Listed in both spellings, since
+     * a DTO that does not apply the naming strategy reports camelCase.
      */
     private static final Set<String> EXEMPT_PROPERTIES = Set.of(
-            // Resolved by name elsewhere in the API; redacting them breaks lookup.
+            // Addressed by name; redacting them breaks lookup.
             "project_name", "projectName",
             "dataset_name", "datasetName",
             "prompt_name", "promptName",
             "thread_id", "threadId",
-            // Identifiers that happen to be typed as String rather than UUID.
+            // Identifiers typed as String rather than UUID.
             "id", "workspace_id", "workspaceId",
-            // Vendor identifiers the UI filters and groups by; see the note above on the trade-off.
+            // Vendor names the UI filters by. Exempt by decision: anything put here is returned as stored.
             "model", "provider", "providers",
             // Version and cost lookup keys.
             "commit", "version_number", "versionNumber",
             "total_estimated_cost_version", "totalEstimatedCostVersion",
-            // Pure API metadata, never caller content.
+            // API metadata, never caller content.
             "sortable_by", "sortableBy");
 
     /**
-     * Entities whose {@code name} addresses them in the API, so it has to survive.
-     * <p>
-     * Their create endpoints are get-or-create and the SDK replays the name it was handed, so a rewritten one
-     * does not fail — it quietly creates a second entity under the replacement text and writes there. Kept as
-     * an explicit list rather than "everything except traces and spans" so a new entity stays redacted until
-     * someone decides otherwise; the cost is that a new name-addressed entity has to be added here.
-     * <p>
-     * {@code Trace.name} and {@code Span.name} are deliberately absent: those are free text the caller writes
-     * per call, and can carry content.
+     * Entities whose {@code name} addresses them, so it has to survive. Their create endpoints are get-or-create and
+     * the SDK replays the name it was handed, so a rewritten one does not fail — it quietly creates a second entity
+     * under the replacement text. Listed explicitly so a new entity stays redacted until someone decides otherwise.
+     * {@code Trace.name} and {@code Span.name} are absent: free text the caller writes per call.
      */
     private static final Set<Class<?>> NAME_ADDRESSED_ENTITIES = Set.of(
             Dataset.class, Project.class, Prompt.class, Experiment.class, Environment.class);
@@ -104,8 +73,7 @@ public class RedactionModule extends SimpleModule {
     }
 
     /**
-     * Swaps in a pass-through serializer for the exempt properties, covering both a bare {@code String} and a
-     * collection of them ({@code sortableBy}, {@code providers}).
+     * Covers both a bare {@code String} and a collection of them ({@code sortableBy}, {@code providers}).
      */
     private static class ExemptStructuralProperties extends BeanSerializerModifier {
 
@@ -140,8 +108,7 @@ public class RedactionModule extends SimpleModule {
     }
 
     /**
-     * Writes text straight to the generator. Values written that way never reach a registered serializer,
-     * which is the same reason a {@code UUID} or an {@code Instant} is already immune to redaction.
+     * Writes straight to the generator, which is why a {@code UUID} or an {@code Instant} is already immune.
      */
     private static class VerbatimSerializer extends JsonSerializer<Object> {
 
