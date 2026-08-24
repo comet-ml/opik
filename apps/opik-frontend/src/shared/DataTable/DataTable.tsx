@@ -60,6 +60,7 @@ import useColumnVirtualization, {
   ColumnSpacerCell,
   isColumnSpacer,
   sliceColumnWindow,
+  sliceColumnWindowHeaders,
 } from "@/shared/DataTable/columnVirtualization";
 
 declare module "@tanstack/react-table" {
@@ -462,52 +463,54 @@ const DataTable = <TData, TValue>({
                       !isLastRow && "!border-b-0",
                     )}
                   >
-                    {sliceColumnWindow(headerGroup.headers, columnWindow).map(
-                      (header) => {
-                        if (isColumnSpacer(header)) {
-                          return (
-                            <ColumnSpacerCell
-                              key={header.id}
-                              spacer={header}
-                              isHeader
-                            />
-                          );
-                        }
-
+                    {sliceColumnWindowHeaders(
+                      headerGroup.headers,
+                      columnWindow,
+                    ).map((entry) => {
+                      if (isColumnSpacer(entry)) {
                         return (
-                          <TableHead
-                            key={header.id}
-                            data-header-id={header.id}
-                            style={{
-                              zIndex:
-                                TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
-                              ...getCommonPinningStyles({
-                                column: header.column,
-                                isHeader: true,
-                                isLastHeaderRow: isLastRow,
-                                lastRightPinnedColumnId,
-                              }),
-                            }}
-                            className={getCommonPinningClasses({
+                          <ColumnSpacerCell
+                            key={entry.id}
+                            spacer={entry}
+                            isHeader
+                          />
+                        );
+                      }
+
+                      const { header, colSpan } = entry;
+
+                      return (
+                        <TableHead
+                          key={header.id}
+                          data-header-id={header.id}
+                          style={{
+                            zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
+                            ...getCommonPinningStyles({
                               column: header.column,
                               isHeader: true,
-                              lastLeftPinnedColumnId,
-                            })}
-                            colSpan={header.colSpan}
-                          >
-                            {header.isPlaceholder
-                              ? ""
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext(),
-                                )}
-                            {isResizable ? (
-                              <DataTableColumnResizer header={header} />
-                            ) : null}
-                          </TableHead>
-                        );
-                      },
-                    )}
+                              isLastHeaderRow: isLastRow,
+                              lastRightPinnedColumnId,
+                            }),
+                          }}
+                          className={getCommonPinningClasses({
+                            column: header.column,
+                            isHeader: true,
+                            lastLeftPinnedColumnId,
+                          })}
+                          colSpan={colSpan}
+                        >
+                          {header.isPlaceholder
+                            ? ""
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                          {isResizable ? (
+                            <DataTableColumnResizer header={header} />
+                          ) : null}
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
                 );
               })}

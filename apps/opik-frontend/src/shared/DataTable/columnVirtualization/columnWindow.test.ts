@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   sliceColumnWindow,
+  sliceColumnWindowHeaders,
   isColumnSpacer,
   INACTIVE_COLUMN_WINDOW,
   ColumnWindow,
@@ -153,5 +154,89 @@ describe("isColumnSpacer", () => {
     expect(isColumnSpacer(null)).toBe(false);
     expect(isColumnSpacer(undefined)).toBe(false);
     expect(isColumnSpacer({ id: "s", size: 10 })).toBe(false);
+  });
+});
+
+describe("sliceColumnWindowHeaders", () => {
+  const groupRow = [
+    { id: "select", colSpan: 1 },
+    { id: "dataset", colSpan: 2 },
+    { id: "evaluation", colSpan: 4 },
+    { id: "scores", colSpan: 320 },
+  ];
+
+  it("passes headers through untouched when the window is inactive", () => {
+    expect(sliceColumnWindowHeaders(groupRow, INACTIVE_COLUMN_WINDOW)).toEqual(
+      groupRow.map((header) => ({ header, colSpan: header.colSpan })),
+    );
+  });
+
+  it("shrinks a group to the leaves inside the window and drops the rest", () => {
+    const window: ColumnWindow = {
+      active: true,
+      leftCount: 1,
+      centerCount: 326,
+      start: 100,
+      end: 114,
+      leadingWidth: 5000,
+      trailingWidth: 9000,
+    };
+
+    const result = sliceColumnWindowHeaders(groupRow, window);
+
+    expect(result).toEqual([
+      { header: groupRow[0], colSpan: 1 },
+      { id: "__column_spacer_lead", size: 5000, isColumnSpacer: true },
+      { header: groupRow[3], colSpan: 15 },
+      { id: "__column_spacer_trail", size: 9000, isColumnSpacer: true },
+    ]);
+  });
+
+  it("keeps every group whose leaves straddle the window edges", () => {
+    const window: ColumnWindow = {
+      active: true,
+      leftCount: 1,
+      centerCount: 326,
+      start: 0,
+      end: 8,
+      leadingWidth: 0,
+      trailingWidth: 9000,
+    };
+
+    const result = sliceColumnWindowHeaders(groupRow, window);
+
+    expect(result).toEqual([
+      { header: groupRow[0], colSpan: 1 },
+      { header: groupRow[1], colSpan: 2 },
+      { header: groupRow[2], colSpan: 4 },
+      { header: groupRow[3], colSpan: 3 },
+      { id: "__column_spacer_trail", size: 9000, isColumnSpacer: true },
+    ]);
+  });
+
+  it("slices a leaf header row the same way sliceColumnWindow does", () => {
+    const leaves = items.map((id) => ({ id, colSpan: 1 }));
+    const window: ColumnWindow = {
+      active: true,
+      leftCount: 2,
+      centerCount: 5,
+      start: 1,
+      end: 3,
+      leadingWidth: 100,
+      trailingWidth: 50,
+    };
+
+    const result = sliceColumnWindowHeaders(leaves, window);
+
+    expect(result).toEqual([
+      { header: leaves[0], colSpan: 1 },
+      { header: leaves[1], colSpan: 1 },
+      { id: "__column_spacer_lead", size: 100, isColumnSpacer: true },
+      { header: leaves[3], colSpan: 1 },
+      { header: leaves[4], colSpan: 1 },
+      { header: leaves[5], colSpan: 1 },
+      { id: "__column_spacer_trail", size: 50, isColumnSpacer: true },
+      { header: leaves[7], colSpan: 1 },
+    ]);
   });
 });
