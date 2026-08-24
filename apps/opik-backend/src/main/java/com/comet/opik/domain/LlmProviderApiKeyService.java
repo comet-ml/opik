@@ -176,15 +176,10 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             var authConfigUpdate = resolveAuthConfigUpdate(providerApiKeyUpdate, providerApiKey);
 
-            var update = providerApiKeyUpdate;
-            if (authConfigUpdate.authConfig() != null && update.apiKey() == null) {
-                update = update.toBuilder().apiKey(EncryptionUtils.encrypt("")).build();
-            }
-
             repository.update(providerApiKey.id(),
                     workspaceId,
                     userName,
-                    update,
+                    authConfigUpdate.effectiveUpdate(),
                     authConfigUpdate.clear(),
                     authConfigUpdate.authConfig());
 
@@ -228,7 +223,15 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         return mergeSecretSentinels(incoming, stored);
     }
 
-    private record AuthConfigUpdate(boolean clear, ProviderAuthConfig authConfig) {
+    /**
+     * The resolved auth_config decision plus the effective update to persist. The api_key /
+     * auth_config mutual exclusion is enforced entirely inside
+     * {@link #resolveAuthConfigUpdate}: it both validates the incoming pair and blanks the
+     * stored key when the update switches to token auth, so callers persist
+     * {@code effectiveUpdate} as-is and cannot hold the invariant wrong.
+     */
+    private record AuthConfigUpdate(ProviderApiKeyUpdate effectiveUpdate, boolean clear,
+            ProviderAuthConfig authConfig) {
     }
 
     /**
@@ -241,10 +244,10 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         if (incoming == null) {
             validateNoStaticKeyConflict(
                     update.apiKey() != null ? update.apiKey() : stored.apiKey(), stored.authConfig());
-            return new AuthConfigUpdate(false, null);
+            return new AuthConfigUpdate(update, false, null);
         }
         if (incoming.isEmpty()) {
-            return new AuthConfigUpdate(true, null);
+            return new AuthConfigUpdate(update, true, null);
         }
         if (!stored.provider().supportsDynamicTokenAuth()) {
             throw new BadRequestException(
@@ -254,9 +257,15 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         if (!errors.isEmpty()) {
             throw new BadRequestException(String.join("; ", errors));
         }
+        // only an api_key set in this same request conflicts: an update carrying none switches
+        // the provider to token auth, which implicitly clears the stored static key below —
+        // the dialog hides the key field in token mode, so the swap must be self-contained
         validateNoStaticKeyConflict(update.apiKey(), incoming);
         var merged = mergeSecretSentinels(incoming, stored.authConfig());
-        return new AuthConfigUpdate(false, merged);
+        var effectiveUpdate = update.apiKey() == null
+                ? update.toBuilder().apiKey(EncryptionUtils.encrypt("")).build()
+                : update;
+        return new AuthConfigUpdate(effectiveUpdate, false, merged);
     }
 
     private void validateNoStaticKeyConflict(String encryptedApiKey, ProviderAuthConfig authConfig) {

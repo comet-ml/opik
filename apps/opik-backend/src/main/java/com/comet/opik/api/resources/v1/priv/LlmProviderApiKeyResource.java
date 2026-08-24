@@ -135,7 +135,7 @@ public class LlmProviderApiKeyResource {
     @PATCH
     @Path("{id}")
     @RequiredPermissions(WorkspaceUserPermission.AI_PROVIDER_UPDATE)
-    @Operation(operationId = "updateLlmProviderApiKey", summary = "Update LLM Provider's ApiKey", description = "Update LLM Provider's ApiKey", responses = {
+    @Operation(operationId = "updateLlmProviderApiKey", summary = "Update LLM Provider's ApiKey", description = "Update LLM Provider's ApiKey. api_key and auth_config are mutually exclusive: setting a valid auth_config on a provider that holds a static api_key clears the stored key; send auth_config as an empty object to clear the recipe and switch back to a static key", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "401", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
