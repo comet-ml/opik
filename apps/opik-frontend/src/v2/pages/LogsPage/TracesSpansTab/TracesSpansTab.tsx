@@ -17,6 +17,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
 import uniq from "lodash/uniq";
 import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
@@ -121,6 +122,7 @@ import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/Thre
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -928,7 +930,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [setSearch, clearAllChips, setEnvironment, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
-    () => data?.content ?? [],
+    () => uniqBy(data?.content ?? [], "id"),
     [data?.content],
   );
 
@@ -1340,6 +1342,23 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataColumnsOrder,
   ]);
 
+  const cellCount = columns.length * rows.length;
+
+  // One decision drives both axes: the table is windowed or it isn't. Either
+  // axis crossing its own count, or the combined cell count crossing the
+  // shared budget, is enough — an AND here would block a lopsided table like
+  // 1000 columns × 10 rows from windowing at all. The budget sits above the
+  // default view (~15 columns × 100 rows = 1500) so normal tables stay fully
+  // rendered. Below 15 on both axes, there's nothing meaningful to skip.
+  const virtualization = useMemo(
+    () => ({
+      enabled:
+        (columns.length >= 15 || rows.length >= 15) &&
+        (columns.length > 50 || rows.length > 25 || cellCount > 3000),
+    }),
+    [columns.length, rows.length, cellCount],
+  );
+
   const columnsToExport = useMemo(() => {
     return columns
       .map((c) => get(c, "accessorKey", ""))
@@ -1609,6 +1628,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             />
           }
           TableWrapper={PageBodyStickyTableWrapper}
+          TableBody={DataTableVirtualBody}
+          columnVirtualization={virtualization}
+          rowVirtualization={virtualization}
           stickyHeader
           meta={meta}
           showLoadingOverlay={isPlaceholderData && isFetching}
