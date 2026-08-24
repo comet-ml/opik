@@ -37,7 +37,7 @@ When creating a new rule, you will be presented with the following options:
 2. **Sampling rate:** The percentage of traces to score. When set to `100%`, all traces will be scored.
 3. **Model:** The model to use to run the LLM as a Judge metric. For evaluating traces with images, make sure to select a model that supports vision capabilities.
 4. **Prompt:** The LLM as a Judge prompt to use. Opik provides a set of base prompts (Hallucination, Moderation, Answer Relevance) that you can use or you can define your own. Variables in the prompt should be in `{{variable_name}}` format.
-5. **Variable mapping:** Where each prompt variable reads from in the trace. Not needed when you use Agent as a Judge — see [Giving the judge your trace data](#giving-the-judge-your-trace-data).
+5. **Variable mapping:** Where each prompt variable reads from in the trace. Not needed when you use Agent as a Judge — see [Writing your own LLM as a Judge metric](#writing-your-own-llm-as-a-judge-metric).
 6. **Score definition:** This is the format of the output of the LLM as a Judge metric. By adding more than one score, you can define LLM as a Judge metrics that score an LLM output along different dimensions.
 
 ### Opik's built-in LLM as a Judge metrics
@@ -63,14 +63,9 @@ We typically recommend that you experiment with LLM as a Judge metrics during de
   <img src="/img/production/online_evaluation_custom_judge.png" />
 </Frame>
 When writing your own LLM as a Judge metric you will need to specify the prompt variables using the mustache syntax, ie.
-`{{ variable_name }}`. How Opik fills those variables in is covered in
-[Giving the judge your trace data](#giving-the-judge-your-trace-data) below.
+`{{ variable_name }}`. You control the scores it returns with the `Scoring definition` parameter. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the LLM as a Judge metric always returns trace scores.
 
-You can control the format of the output using the `Scoring definition` parameter. This is where you can define the scores you want the LLM as a Judge metric to return. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the LLM as a Judge metric always returns trace scores.
-
-### Giving the judge your trace data
-
-For trace and span rules there are two ways to give a judge what it needs. Both work with the built-in metrics and with your own.
+That leaves one decision: where the judge gets its data. For trace and span rules there are two ways, and both work with the built-in metrics as well as your own.
 
 - **Agent as a Judge** — start here. No mapping to fill in, works on any trace shape, handles nesting and attachments. Best while you are still exploring what to measure.
 - **Variable mapping** — use when the judge should see exactly one field, every time.
