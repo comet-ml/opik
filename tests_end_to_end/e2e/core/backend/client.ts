@@ -102,6 +102,13 @@ export interface AutomationRuleRef {
   name: string;
   projectIds: string[];
   enabled: boolean;
+  /**
+   * The stored variable mapping of a `user_defined_metric_python` rule — each
+   * of the metric's `score(...)` parameters against the trace path that feeds
+   * it. Null for every other rule type, so a spec asserting on a mapping has to
+   * assert the mapping is there rather than defaulting it away.
+   */
+  pythonMetricArguments: Record<string, string> | null;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -559,7 +566,112 @@ export function makeBackendClient(apiKey: string | null = null) {
         name: r.name,
         projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
         enabled: r.enabled ?? true,
+        pythonMetricArguments:
+          r.type === 'user_defined_metric_python' ? (r.code?.arguments ?? null) : null,
       }));
+    },
+
+    /**
+     * A trace's `input` and `output` sections exactly as stored — no shaping.
+     *
+     * `TraceDetail.input` is typed `Record<string, unknown>`, which is the right
+     * answer for almost every caller but cannot represent a section that is a
+     * bare scalar or an array. A spec that seeds those shapes has to be able to
+     * prove the write kept them, so this returns them untyped.
+     */
+    async getTraceSections(
+      traceId: string,
+    ): Promise<{ input: unknown; output: unknown } | null> {
+      try {
+        const t = await opik.api.traces.getTraceById(traceId);
+        return { input: t.input ?? null, output: t.output ?? null };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
+     * Create a trace-scope `user_defined_metric_python` rule with an explicit
+     * variable mapping.
+     *
+     * The create-rule dialog can only express the shapes its form offers, and a
+     * spec that needs one specific mapping per rule (a JsonPath under test)
+     * would spend most of its runtime driving that dialog. Rule *creation*
+     * through the UI is already covered by
+     * `@cap:online-evaluation.create-python-rule` in the smoke spec, so seeding
+     * these through the API is setup, not a coverage gap.
+     *
+     * `arguments` maps each of the metric's `score(...)` keyword parameters to a
+     * trace path (`output`, `output.a.b`, `input.q`, …). A path that does not
+     * resolve is dropped from the payload the metric is called with, so the
+     * parameter falls back to its Python default — that drop is the observable
+     * this rule shape exists to expose.
+     */
+    async createPythonMetricRule(args: {
+      projectId: string;
+      name: string;
+      metric: string;
+      arguments: Record<string, string>;
+    }): Promise<void> {
+      await opik.api.automationRuleEvaluators.createAutomationRuleEvaluator({
+        type: 'user_defined_metric_python',
+        action: 'evaluator',
+        name: args.name,
+        projectId: args.projectId,
+        projectIds: [args.projectId],
+        samplingRate: 1.0,
+        enabled: true,
+        code: { metric: args.metric, arguments: args.arguments },
+      });
+    },
+
+    /**
+     * Create a trace whose `output` section is an arbitrary JSON value —
+     * including a bare scalar or an array, not just an object.
+     *
+     * Written as a raw REST call rather than through `opik.api.traces.createTrace`
+     * on purpose: the generated client types `output` as
+     * `Record<string, unknown> | Record<string, unknown>[] | string`, so a
+     * section like `"the answer"` or `["first", "second"]` cannot be expressed
+     * without lying to the type. Those are exactly the sections this seeds, so
+     * the write goes over the wire verbatim (same reasoning as
+     * `getProjectStats` above, which also drops to `fetch`).
+     *
+     * The id is caller-supplied because the write answers 201 with no body.
+     */
+    async createTraceWithRawOutput(args: {
+      id: string;
+      projectName: string;
+      name: string;
+      input: unknown;
+      output: unknown;
+    }): Promise<string> {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      const res = await fetch(`${env.apiBaseUrl}/v1/private/traces`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          id: args.id,
+          project_name: args.projectName,
+          name: args.name,
+          start_time: new Date().toISOString(),
+          input: args.input,
+          output: args.output,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          `POST /v1/private/traces -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+        );
+      }
+      return args.id;
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
