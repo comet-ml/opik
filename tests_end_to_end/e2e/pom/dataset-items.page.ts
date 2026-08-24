@@ -2,6 +2,17 @@ import { test } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
+export type DatasetVersionChange = 'added' | 'modified' | 'deleted';
+
+/** U+2212 MINUS SIGN — what VersionChangeSummaryCell prints, not a hyphen. */
+const DELETED_TAG_SYMBOL = '−';
+
+const CHANGE_TAG_SYMBOL: Record<DatasetVersionChange, string> = {
+  added: '+',
+  modified: '~',
+  deleted: DELETED_TAG_SYMBOL,
+};
+
 export class DatasetItemsPage {
   constructor(
     private readonly page: Page,
@@ -51,6 +62,65 @@ export class DatasetItemsPage {
 
   itemRowById(id: string): Locator {
     return this.itemsTableBody.locator(`tr[data-row-id="${id}"]`);
+  }
+
+  /** Second tab of the dataset page: one row per version, with its counters. */
+  async openVersionHistory(): Promise<void> {
+    return test.step('Open the Version history tab', async () => {
+      await this.page.getByRole('tab', { name: 'Version history' }).click();
+      const realRow = this.versionsTableBody.locator('tr[data-row-id]').first();
+      const emptyState = this.page.getByText('No version history yet');
+      await Promise.race([
+        realRow.waitFor({ state: 'visible' }),
+        emptyState.waitFor({ state: 'visible' }),
+      ]);
+    });
+  }
+
+  versionHistoryRow(versionName: string): Locator {
+    return this.versionsTableBody
+      .locator('tr[data-row-id]')
+      .filter({ has: this.page.getByRole('cell', { name: versionName, exact: true }) });
+  }
+
+  /**
+   * The "Item count" cell of a version row, as rendered — thousands-separated
+   * ("1,800"), because the column formats through toLocaleString().
+   *
+   * Addressed by the table's own `data-cell-id` (`<rowId>_<columnId>`) rather
+   * than a positional nth(): the version table has no per-cell testid, and
+   * column order is user-configurable, so position is not stable.
+   */
+  versionItemCount(versionName: string): Locator {
+    return this.versionHistoryRow(versionName).locator('[data-cell-id$="_items_total"]');
+  }
+
+  /**
+   * The "Changes summary" cell of a version row. It renders one tag per
+   * non-zero counter — `+ N` added, `~ N` modified, `− N` deleted (U+2212, not
+   * a hyphen) — and a single "-" when every counter is zero.
+   */
+  versionChangeSummary(versionName: string): Locator {
+    return this.versionHistoryRow(versionName).locator('[data-cell-id$="_change_summary"]');
+  }
+
+  /**
+   * Every change tag in that cell. The regex matches the tag elements only —
+   * their container's text is the tags run together, which never matches —
+   * so a caller can assert the exact set and catch a tag that should not be
+   * there, not just the ones it expected.
+   */
+  versionChangeTags(versionName: string): Locator {
+    return this.versionChangeSummary(versionName).getByText(
+      new RegExp(`^\\s*[+~${DELETED_TAG_SYMBOL}]\\s*\\d+\\s*$`),
+    );
+  }
+
+  versionChangeTag(versionName: string, change: DatasetVersionChange, count: number): Locator {
+    return this.versionChangeSummary(versionName).getByText(
+      `${CHANGE_TAG_SYMBOL[change]} ${count}`,
+      { exact: true },
+    );
   }
 
   async clickAddItem(): Promise<void> {
@@ -212,6 +282,10 @@ export class DatasetItemsPage {
 
   private get itemsTableBody(): Locator {
     return this.page.getByRole('tabpanel', { name: 'Records' }).locator('tbody');
+  }
+
+  private get versionsTableBody(): Locator {
+    return this.page.getByRole('tabpanel', { name: 'Version history' }).locator('tbody');
   }
 
   /** Panel stays mounted; open/closed is animated via CSS transform, not display/visibility. */
