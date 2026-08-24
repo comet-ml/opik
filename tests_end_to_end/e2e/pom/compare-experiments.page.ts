@@ -1,6 +1,44 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
+/** Slot marker for a virtualization spacer cell — a rendered gap, not a column. */
+export const COLUMN_SPACER = '__spacer__';
+
+/** One rendered body cell of the Results grid. */
+export interface ResultsGridCell {
+  rowId: string;
+  columnId: string;
+  /** The whole cell's text — what an unsplit column (a dataset field) shows. */
+  text: string;
+  /**
+   * Per-experiment band text, indexed by the experiment's position in the
+   * `experiments` query array. Sparse where a band did not render.
+   */
+  bands: string[];
+}
+
+/**
+ * Everything the Results grid has in the DOM at one horizontal scroll offset.
+ *
+ * Column virtualization means "in the DOM" is a moving subset of the grid, so a
+ * scan is taken per offset and the assertions are about what each scan contains
+ * and how its parts line up.
+ */
+export interface ResultsGridScan {
+  scrollLeft: number;
+  scrollWidth: number;
+  clientWidth: number;
+  /** Section title per column slot; `''` where the column sits under no section. */
+  groupSlots: string[];
+  /** Leaf column id per column slot, in the same slot order as `groupSlots`. */
+  columnSlots: string[];
+  /** Slot counts that must agree: the colgroup, every header row, every body row. */
+  slotCounts: { colgroup: number; headerRows: number[]; bodyRows: number[] };
+  cells: ResultsGridCell[];
+  /** True once the rendered window spans the scroller's whole visible width. */
+  windowCoversViewport: boolean;
+}
+
 /**
  * The compare view lives at /experiments/{datasetId}/compare?experiments=[...]
  * and renders the SAME page in single- and multi-experiment mode. This POM
@@ -205,6 +243,203 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * Read the whole rendered window of the Results grid in one round trip.
+   *
+   * Deliberately one `evaluate` rather than a locator per cell: the grid this
+   * exists for is ~40 columns wide and is scanned at a dozen scroll offsets, so
+   * per-cell locators would be thousands of round trips — and, worse, the DOM
+   * could re-window between two of them, which would make a mismatch a race
+   * rather than a finding. A single snapshot is internally consistent.
+   *
+   * Structural attributes (`data-row-id`, `data-cell-id`, `data-virtual-row-id`,
+   * `aria-hidden` on spacers) are what the shared DataTable stamps; there is no
+   * testid on this table, and these are the same hooks the rest of this POM
+   * already addresses cells by.
+   */
+  async scanResultsGrid(): Promise<ResultsGridScan> {
+    return test.step('scan the rendered Results grid window', async () => {
+      return this.readResultsGrid(null);
+    });
+  }
+
+  /**
+   * Scroll the Results grid horizontally and wait for the column window to
+   * catch up. `Number.MAX_SAFE_INTEGER` scrolls to the far right edge.
+   *
+   * The wait is on the window covering the viewport rather than on a timeout:
+   * mid-render the DOM still holds the previous window, and a scan taken then
+   * would describe a grid nobody is looking at.
+   */
+  async scrollResultsGridTo(target: number): Promise<ResultsGridScan> {
+    return test.step(`scroll the Results grid to ${target}`, async () => {
+      let scan = await this.readResultsGrid(target);
+      await expect
+        .poll(
+          async () => {
+            scan = await this.readResultsGrid(null);
+            return scan.windowCoversViewport;
+          },
+          { message: `column window covers the viewport at scrollLeft ${target}` },
+        )
+        .toBe(true);
+      return scan;
+    });
+  }
+
+  /**
+   * Wait until a given column is reachable at the grid's far-right edge.
+   *
+   * The Results grid builds its feedback-score columns from a second request
+   * that resolves after the rows do, so "rows are visible" is not "the grid is
+   * as wide as it will get". A sweep started before that lands would scan a
+   * narrower table and conclude columns had been dropped.
+   */
+  async waitForRightmostColumn(columnId: string): Promise<void> {
+    await test.step(`wait for column "${columnId}" at the grid's right edge`, async () => {
+      await expect
+        .poll(
+          async () => {
+            const scan = await this.scrollResultsGridTo(Number.MAX_SAFE_INTEGER);
+            return scan.columnSlots.includes(columnId);
+          },
+          { message: `column "${columnId}" rendered at the far right of the Results grid` },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * Optionally scroll, then snapshot. Both halves live in one in-page routine
+   * because both need the same scroller — the nearest horizontally scrollable
+   * ancestor of the table — and resolving it twice invites the two halves to
+   * disagree about which element they are talking about.
+   */
+  private async readResultsGrid(scrollTo: number | null): Promise<ResultsGridScan> {
+    await expect(this.resultsTable, 'exactly one Results grid on the page').toHaveCount(1);
+    return this.resultsTable.evaluate(
+      (table: HTMLTableElement, { spacerMarker, scrollTo: x }) => {
+        const isHorizontallyScrollable = (el: HTMLElement): boolean => {
+          const overflowX = window.getComputedStyle(el).overflowX;
+          return (
+            (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth
+          );
+        };
+
+        let scroller: HTMLElement | null = table.parentElement;
+        while (scroller && !isHorizontallyScrollable(scroller)) {
+          scroller = scroller.parentElement;
+        }
+        if (!scroller) {
+          throw new Error(
+            'readResultsGrid: no horizontally scrollable ancestor — the grid does not overflow its viewport',
+          );
+        }
+        if (x !== null) scroller.scrollLeft = x;
+
+        const headerRows = Array.from(table.querySelectorAll('thead tr'));
+        const bodyRows = Array.from(
+          table.querySelectorAll<HTMLTableRowElement>('tbody tr[data-row-id]'),
+        );
+
+        /** Expand a rendered row into one entry per column slot, honouring colSpan. */
+        const slotsOf = (cells: Element[], valueOf: (cell: Element) => string): string[] =>
+          cells.flatMap((cell) =>
+            cell.hasAttribute('aria-hidden')
+              ? [spacerMarker]
+              : new Array<string>(
+                  Math.max((cell as HTMLTableCellElement).colSpan || 1, 1),
+                ).fill(valueOf(cell)),
+          );
+
+        const groupSlots = slotsOf(Array.from(headerRows[0]?.children ?? []), (cell) =>
+          (cell.textContent ?? '').trim(),
+        );
+
+        const columnIdOf = (cell: Element, rowId: string): string =>
+          (cell.getAttribute('data-cell-id') ?? '').slice(rowId.length + 1);
+
+        const firstBodyRow = bodyRows[0];
+        const columnSlots = firstBodyRow
+          ? slotsOf(Array.from(firstBodyRow.children), (cell) =>
+              columnIdOf(cell, firstBodyRow.getAttribute('data-row-id') ?? ''),
+            )
+          : [];
+
+        const cells: Array<{
+          rowId: string;
+          columnId: string;
+          text: string;
+          bands: string[];
+        }> = [];
+        for (const row of bodyRows) {
+          const rowId = row.getAttribute('data-row-id') ?? '';
+          for (const cell of Array.from(row.children)) {
+            if (cell.hasAttribute('aria-hidden')) continue;
+            const bands: string[] = [];
+            for (const band of Array.from(
+              cell.querySelectorAll<HTMLElement>('div[data-virtual-row-id]'),
+            )) {
+              const suffix = (band.getAttribute('data-virtual-row-id') ?? '').slice(
+                rowId.length + 1,
+              );
+              const index = Number(suffix);
+              if (Number.isInteger(index)) bands[index] = (band.textContent ?? '').trim();
+            }
+            cells.push({
+              rowId,
+              columnId: columnIdOf(cell, rowId),
+              text: (cell.textContent ?? '').trim(),
+              bands,
+            });
+          }
+        }
+
+        // The window has settled once the columns in the DOM span the scroller's
+        // whole visible width: a lagging window leaves the far edge uncovered.
+        // Left-pinned columns are sticky and always rendered, so they are
+        // measured as a width to skip rather than as coverage.
+        const tableRight = table.getBoundingClientRect().right;
+        const scrollerRect = scroller.getBoundingClientRect();
+        let stickyWidth = 0;
+        let minLeft = Number.POSITIVE_INFINITY;
+        let maxRight = Number.NEGATIVE_INFINITY;
+        for (const cell of Array.from(headerRows[headerRows.length - 1]?.children ?? [])) {
+          if (cell.hasAttribute('aria-hidden')) continue;
+          const rect = cell.getBoundingClientRect();
+          if (window.getComputedStyle(cell).position === 'sticky') {
+            stickyWidth += rect.width;
+            continue;
+          }
+          minLeft = Math.min(minLeft, rect.left);
+          maxRight = Math.max(maxRight, rect.right);
+        }
+
+        return {
+          scrollLeft: Math.round(scroller.scrollLeft),
+          scrollWidth: Math.round(scroller.scrollWidth),
+          clientWidth: Math.round(scroller.clientWidth),
+          groupSlots,
+          columnSlots,
+          slotCounts: {
+            colgroup: table.querySelectorAll('colgroup > col').length,
+            headerRows: headerRows.map(
+              (row) => slotsOf(Array.from(row.children), () => '').length,
+            ),
+            bodyRows: bodyRows.map(
+              (row) => slotsOf(Array.from(row.children), () => '').length,
+            ),
+          },
+          cells,
+          windowCoversViewport:
+            minLeft <= scrollerRect.left + stickyWidth + 1 &&
+            maxRight >= Math.min(scrollerRect.right, tableRight) - 1,
+        };
+      },
+      { spacerMarker: COLUMN_SPACER, scrollTo },
+    );
+  }
+
   /** Dataset-item ids in current row order, top to bottom. */
   async itemRowOrder(): Promise<string[]> {
     return test.step('read the current row order', async () => {
@@ -226,6 +461,11 @@ export class CompareExperimentsPage {
 
   private get itemRows(): Locator {
     return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  /** The Results grid itself — the one table on the page that has item rows. */
+  private get resultsTable(): Locator {
+    return this.page.locator('table').filter({ has: this.page.locator('tbody tr[data-row-id]') });
   }
 
   /**

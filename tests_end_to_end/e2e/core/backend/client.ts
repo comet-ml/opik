@@ -45,6 +45,26 @@ export interface DatasetItemWithTagsRef {
   tags: string[];
 }
 
+/** One experiment's result for a shared dataset item, as the compare read returns it. */
+export interface CompareExperimentItemRef {
+  experimentId: string;
+  /** The evaluation task's output object, keyed by output column name. */
+  output: Record<string, unknown>;
+  /** Feedback score value keyed by metric name. */
+  feedbackScores: Record<string, number>;
+}
+
+/**
+ * One row of the experiment-comparison grid, with the values the grid renders.
+ * `listCompareItemIds` deliberately drops everything but the ids; this is the
+ * same read kept whole, for specs that assert what the cells contain.
+ */
+export interface CompareItemRef {
+  id: string;
+  data: Record<string, unknown>;
+  experimentItems: CompareExperimentItemRef[];
+}
+
 /** A raw REST answer, kept as status + message so a negative path can assert both. */
 export interface RawApiResult {
   status: number;
@@ -625,6 +645,40 @@ export function makeBackendClient(apiKey: string | null = null) {
     },
 
     /**
+     * The same compare read as `listCompareItemIds`, kept whole: every shared
+     * dataset item with each experiment's output and feedback scores, plus the
+     * dataset column names the grid builds its `data.*` columns from.
+     *
+     * This is the grid's own source of truth, so a spec asserting what the
+     * cells render can compare against what the page was served rather than
+     * only against what the fixture believes it seeded.
+     */
+    async getCompareItems(args: {
+      datasetId: string;
+      experimentIds: string[];
+      size?: number;
+    }): Promise<{ items: CompareItemRef[]; datasetColumnNames: string[] }> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        size: args.size ?? 200,
+        page: 1,
+      });
+      const items = (page.content ?? []).map((item) => ({
+        id: String(item.id),
+        data: (item.data ?? {}) as Record<string, unknown>,
+        experimentItems: (item.experimentItems ?? []).map((ei) => ({
+          experimentId: String(ei.experimentId),
+          output: (ei.output ?? {}) as Record<string, unknown>,
+          feedbackScores: Object.fromEntries(
+            (ei.feedbackScores ?? []).map((fs) => [fs.name, Number(fs.value)]),
+          ),
+        })),
+      }));
+      const datasetColumnNames = (page.columns ?? []).map((c) => String(c.name));
+      return { items, datasetColumnNames };
+    },
+
+    /**
      * `POST /v1/private/workspaces/metrics/spans` — the aggregation a dashboard
      * Time series widget plots when it is scoped to "All projects in the
      * workspace". Raw fetch because the pinned SDK has no binding for it, and
@@ -1000,6 +1054,30 @@ export function makeBackendClient(apiKey: string | null = null) {
         ...(args.metadata ? { metadata: args.metadata } : {}),
       });
       return args.id;
+    },
+
+    /**
+     * Write feedback scores onto existing traces in one call —
+     * `PUT /v1/private/traces/feedback-scores`.
+     *
+     * Batched rather than one call per score because a compare grid wide enough
+     * to virtualize its columns needs one score per metric per trace, which is
+     * hundreds of writes. Order matters at the call site: the comparison read
+     * snapshots an experiment item's scores when the item is linked, so scores
+     * have to land before `createExperimentItems`.
+     */
+    async scoreTraces(
+      scores: Array<{ traceId: string; projectName: string; name: string; value: number }>,
+    ): Promise<void> {
+      await opik.api.traces.scoreBatchOfTraces({
+        scores: scores.map((s) => ({
+          id: s.traceId,
+          projectName: s.projectName,
+          name: s.name,
+          value: s.value,
+          source: 'sdk',
+        })),
+      });
     },
 
     /**

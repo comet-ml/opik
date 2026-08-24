@@ -1,4 +1,4 @@
-export { test, expect } from './automation-rules.fixture';
+export { test, expect } from './wide-comparison.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -84,4 +84,17 @@ export type {
   TokenUsageSpansFixtures,
 } from './token-usage-spans.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
+export type {
+  WideComparisonRef,
+  WideComparisonExperimentRef,
+  WideComparisonFixtures,
+} from './wide-comparison.fixture';
+export {
+  OUTPUT_KEY,
+  datasetFieldValue,
+  metricScoreValue,
+  taskOutputValue,
+  wideComparisonDatasetFields,
+  wideComparisonMetricNames,
+} from './wide-comparison.fixture';
 export type { ProjectRef } from '../core/backend';

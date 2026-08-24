@@ -562,9 +562,14 @@ areas:
       - experiments/experiments-compare.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
       - experiments/compare-json-key-sorting.spec.ts
+      - experiments/compare-grid-column-virtualization.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
+      # Two specs, two regimes: experiments-compare.spec.ts asserts the compared
+      # values on a grid that fits one viewport; compare-grid-column-virtualization
+      # .spec.ts asserts header-to-column alignment and value integrity on one
+      # wide enough that only a window of its columns is in the DOM.
       compare-side-by-side:    { covered: true,  tier: t2-cuj }
       compare-sort-search:     { covered: true,  tier: t2-cuj }
       compare-feedback-tab:    { covered: true,  tier: t2-cuj }
