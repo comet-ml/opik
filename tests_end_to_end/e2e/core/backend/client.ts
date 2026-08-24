@@ -252,6 +252,60 @@ type SdkDatasetItemFilters = NonNullable<
   Parameters<Opik['api']['datasets']['deleteDatasetItems']>[0]
 >['filters'];
 
+/** One row of an AI provider's dynamic-token-auth recipe. */
+export interface ProviderCredentialRef {
+  key: string;
+  /**
+   * As the API answers it. A credential stored with `secret: true` always reads
+   * back as `__SECRET__` — never the stored value — so this is deliberately not
+   * typed as "the secret".
+   */
+  value: string;
+  secret: boolean;
+}
+
+/** A provider's `auth_config` recipe as the API answers it. */
+export interface ProviderAuthConfigRef {
+  tokenUrl: string | null;
+  sendAs: string | null;
+  credentials: ProviderCredentialRef[];
+  tokenField: string | null;
+  expiresField: string | null;
+  fallbackTtlSeconds: number | null;
+}
+
+/**
+ * One configured AI provider, as `GET /v1/private/llm-provider-key` answers it.
+ *
+ * `apiKey` and `authConfig` are both nullable and the null genuinely means
+ * *absent*, not empty: a static-key provider carries no `auth_config` at all and
+ * a token-auth provider carries no `api_key` at all, and the two being mutually
+ * exclusive is the contract under test. Collapsing absent into a default here
+ * would make that assertion unwritable.
+ */
+export interface ProviderKeyRef {
+  id: string;
+  provider: string;
+  providerName: string | null;
+  baseUrl: string | null;
+  /** The masked form the API answers with (`sk-****242`); the key never reads back. */
+  apiKey: string | null;
+  authConfig: ProviderAuthConfigRef | null;
+}
+
+/**
+ * A rejected write, carrying both shapes the backend uses.
+ *
+ * Bean validation answers 422 `{errors: [...]}`; a service-level
+ * `BadRequestException` answers 400 `{message: "..."}`. The dialog's error
+ * handler reads `data.message ?? data.errors[0]`, so *which* shape a given
+ * rejection uses is part of the contract — a rule that moved between the two
+ * would still be "an error" while quietly changing what the user is shown.
+ */
+export interface ProviderKeyWriteResult extends RawApiResult {
+  errors: string[];
+}
+
 /** The dashboard widget metric types these tests exercise. */
 export type WorkspaceMetricType = 'SPAN_TOKEN_USAGE';
 export type MetricInterval = 'HOURLY' | 'DAILY' | 'WEEKLY';
@@ -305,7 +359,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
-  ): Promise<RawApiResult & { json: unknown }> => {
+  ): Promise<RawApiResult & { json: unknown; location: string | null }> => {
     const headers: Record<string, string> = {
       Accept: 'application/json',
       'Content-Type': 'application/json',
@@ -330,7 +384,48 @@ export function makeBackendClient(apiKey: string | null = null) {
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
     }
-    return { status: res.status, message, json };
+    // Creates answer 201 with an empty body and the new id only in `Location`.
+    return { status: res.status, message, json, location: res.headers.get('location') };
+  };
+
+  /**
+   * Shape one `llm_provider_api_key` row.
+   *
+   * `?? null` on `api_key`/`auth_config` is not a default masking a missing
+   * value: the API omits each property entirely in the mode where it does not
+   * apply, and the specs assert on exactly that absence.
+   */
+  const toProviderKeyRef = (raw: Record<string, unknown>): ProviderKeyRef => {
+    const rawAuth = raw.auth_config as Record<string, unknown> | undefined;
+    return {
+      id: String(raw.id ?? ''),
+      provider: String(raw.provider ?? ''),
+      providerName: (raw.provider_name as string | undefined) ?? null,
+      baseUrl: (raw.base_url as string | undefined) ?? null,
+      apiKey: (raw.api_key as string | undefined) ?? null,
+      authConfig: rawAuth
+        ? {
+            tokenUrl: (rawAuth.token_url as string | undefined) ?? null,
+            sendAs: (rawAuth.send_as as string | undefined) ?? null,
+            credentials: ((rawAuth.credentials as Array<Record<string, unknown>> | undefined) ?? []).map(
+              (credential) => ({
+                key: String(credential.key ?? ''),
+                value: String(credential.value ?? ''),
+                secret: credential.secret === true,
+              }),
+            ),
+            tokenField: (rawAuth.token_field as string | undefined) ?? null,
+            expiresField: (rawAuth.expires_field as string | undefined) ?? null,
+            fallbackTtlSeconds: (rawAuth.fallback_ttl_seconds as number | undefined) ?? null,
+          }
+        : null,
+    };
+  };
+
+  /** The `errors` array of a 422 bean-validation answer; empty for any other shape. */
+  const validationErrors = (json: unknown): string[] => {
+    const errors = (json as { errors?: unknown } | null)?.errors;
+    return Array.isArray(errors) ? errors.map(String) : [];
   };
 
   /**
@@ -635,6 +730,101 @@ export function makeBackendClient(apiKey: string | null = null) {
      * route the widget to `/projects/{id}/metrics` instead — a different
      * endpoint entirely.
      */
+    /**
+     * Configure an AI provider. Raw so a rejection is a value, not a throw —
+     * every negative path of the provider contract answers 4xx with a body that
+     * is itself under test.
+     *
+     * The body is passed through verbatim (snake_case, as the front end sends
+     * it) rather than being assembled from named arguments: these specs assert
+     * on payloads the API must *refuse*, and a typed builder could not express
+     * them.
+     */
+    async createProviderKey(
+      body: Record<string, unknown>,
+    ): Promise<ProviderKeyWriteResult & { id: string | null }> {
+      const { status, message, json, location } = await rawFetch(
+        'POST',
+        '/v1/private/llm-provider-key',
+        { body },
+      );
+      return {
+        status,
+        message,
+        errors: validationErrors(json),
+        id: location ? (location.split('/').pop() ?? null) : null,
+      };
+    },
+
+    async updateProviderKey(
+      id: string,
+      body: Record<string, unknown>,
+    ): Promise<ProviderKeyWriteResult> {
+      const { status, message, json } = await rawFetch(
+        'PATCH',
+        `/v1/private/llm-provider-key/${id}`,
+        { body },
+      );
+      return { status, message, errors: validationErrors(json) };
+    },
+
+    async getProviderKey(id: string): Promise<ProviderKeyRef> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/llm-provider-key/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/llm-provider-key/${id} -> ${status}: ${message}`);
+      }
+      return toProviderKeyRef((json ?? {}) as Record<string, unknown>);
+    },
+
+    async listProviderKeys(): Promise<ProviderKeyRef[]> {
+      const { status, message, json } = await rawFetch('GET', '/v1/private/llm-provider-key');
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/llm-provider-key -> ${status}: ${message}`);
+      }
+      const content =
+        (json as { content?: Array<Record<string, unknown>> } | null)?.content ?? [];
+      return content.map(toProviderKeyRef);
+    },
+
+    async deleteProviderKeys(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      const { status, message } = await rawFetch(
+        'POST',
+        '/v1/private/llm-provider-key/delete',
+        { body: { ids } },
+      );
+      if (status !== 204) {
+        throw new Error(`POST /v1/private/llm-provider-key/delete -> ${status}: ${message}`);
+      }
+    },
+
+    /**
+     * Run a provider's token fetch once, backend-side. Raw for the same reason
+     * as `createProviderKey`: a refused check is a 400 whose message the dialog
+     * shows verbatim, so both status and message are the answer.
+     *
+     * `lifetimeSeconds` is null when the check did not return one — never 0, so
+     * "no answer" can't be read as "a token that expires immediately".
+     */
+    async testProviderAuthConfig(
+      body: Record<string, unknown>,
+    ): Promise<RawApiResult & { lifetimeSeconds: number | null }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        '/v1/private/llm-provider-key/auth-config/test',
+        { body },
+      );
+      const lifetime = (json as { lifetime_seconds?: unknown } | null)?.lifetime_seconds;
+      return {
+        status,
+        message,
+        lifetimeSeconds: typeof lifetime === 'number' ? lifetime : null,
+      };
+    },
+
     async workspaceSpanMetric(args: {
       metricType: WorkspaceMetricType;
       interval: MetricInterval;

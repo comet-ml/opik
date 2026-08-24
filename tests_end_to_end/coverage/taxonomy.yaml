@@ -740,7 +740,10 @@ areas:
     label: Configuration
     nav_group: Workspace
     routes: ["/$workspaceName/configuration"]
-    specs: []
+    spec_dir: configuration
+    specs:
+      - configuration/ai-provider-auth-config.spec.ts
+      - configuration/ai-provider-static-key-edit.spec.ts
     # A configuration.page.ts POM exists with no spec using it — half-built surface.
     # Split per-tab: the page has 5 distinct tabs (CONFIGURATION_TABS), each with
     # its own CRUD surface, so one capability per tab was too coarse. Capabilities
@@ -759,8 +762,8 @@ areas:
       environment-delete:       { covered: false }
       # -- AI providers tab --
       ai-provider-list:         { covered: false }
-      ai-provider-add:          { covered: false, note: "exercised indirectly by playground provider setup (configuration.page.ts), never asserted here" }
-      ai-provider-edit:         { covered: false }
+      ai-provider-add:          { covered: true,  tier: t2-cuj, note: "API-level: the dynamic-token-auth write contract (api_key/auth_config mutual exclusion, token_url scheme, empty credentials, the __SECRET__ sentinel on create, auth_config on a first-party provider, the test-connection endpoint's empty-body 400) plus a token-auth provider created and read back masked. The add dialog itself is still uncovered." }
+      ai-provider-edit:         { covered: true,  tier: t2-cuj, note: "a UI edit of a static-key provider asserting the PATCH carries no api_key and the stored key is unchanged, plus API-level sentinel resolution on update (kept where a secret is stored, refused where none is, never downgradeable to readable)" }
       ai-provider-delete:       { covered: false }
       # -- Workspace preferences tab --
       pref-thread-timeout:      { covered: false, note: "EditThreadTimeoutDialog" }

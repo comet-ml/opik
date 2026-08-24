@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
@@ -201,6 +201,71 @@ export class ConfigurationPage {
         .toBe(true);
       return true;
     });
+  }
+
+  /**
+   * The providers table row for one provider, addressed by the name it shows.
+   *
+   * By identity, not position: this table's column order is user-configurable,
+   * so `td:first-child` would break the moment anyone reordered it. The name is
+   * matched as an exact accessible name rather than as a substring, so a row
+   * named `<prefix>` cannot be reached by looking for `<prefix>-oauth`.
+   */
+  private customProviderRow(providerName: string): Locator {
+    return this.page
+      .getByRole('row')
+      .filter({ has: this.page.getByRole('cell', { name: providerName, exact: true }) });
+  }
+
+  /**
+   * Open a configured provider's edit dialog from its row actions menu.
+   *
+   * Asserts the name resolved to exactly one row rather than taking `.first()`:
+   * an ambiguous match should fail here, loudly, instead of quietly editing a
+   * different provider and reporting a pass.
+   */
+  async openEditDialog(providerName: string): Promise<Locator> {
+    return test.step(`open the edit dialog for "${providerName}"`, async () => {
+      await this.waitForProvidersTableSettled();
+      const row = this.customProviderRow(providerName);
+      await expect(row, `"${providerName}" matches exactly one provider row`).toHaveCount(1);
+
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+
+      const dialog = this.page.getByTestId('add-provider-dialog');
+      await dialog.waitFor({ state: 'visible' });
+      await expect(
+        dialog.getByText('Edit provider configuration'),
+        'the dialog opened in edit mode, not add mode',
+      ).toBeVisible();
+      return dialog;
+    });
+  }
+
+  /**
+   * Change only the URL of a configured custom provider and save.
+   *
+   * "Only" is the point: the API key field renders empty on reopen (the stored
+   * key never reads back), so this is the ordinary edit during which a stored
+   * key must not be disturbed.
+   */
+  async editCustomProviderUrl(providerName: string, newUrl: string): Promise<void> {
+    return test.step(`edit "${providerName}" to URL "${newUrl}"`, async () => {
+      const dialog = await this.openEditDialog(providerName);
+      await dialog.getByRole('textbox', { name: 'URL', exact: true }).fill(newUrl);
+      await dialog.getByRole('button', { name: 'Update configuration', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The API key field of an open edit dialog. Exposed so a spec can assert the
+   * stored key is genuinely absent from the form — the precondition that makes
+   * "the save must not send api_key" the right contract.
+   */
+  apiKeyField(dialog: Locator): Locator {
+    return dialog.getByRole('textbox', { name: 'API key', exact: true });
   }
 
   /**
