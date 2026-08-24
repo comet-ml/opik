@@ -118,11 +118,13 @@ Prompt:
 ```
 Decide whether the answer below is helpful.
 
-{{answer}}
+Question: {{question}}
+Answer: {{answer}}
 ```
 
 Variable mapping:
 
+- `question` → `input.messages[0].content`
 - `answer` → `output.messages[0].parts[0].content`
 
 Use it when a metric should score the same field on every trace. Because the input is fixed, the scores stay comparable over time, and each evaluation is a single call with no drill-down.
