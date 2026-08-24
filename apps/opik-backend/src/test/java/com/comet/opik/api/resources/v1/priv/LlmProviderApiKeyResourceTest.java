@@ -772,6 +772,32 @@ class LlmProviderApiKeyResourceTest {
         }
 
         @Test
+        @DisplayName("switching a keyed provider to token auth clears the stored static key")
+        void switchFromStaticKeyToTokenAuthClearsTheStoredKey() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var created = llmProviderApiKeyResourceClient.createProviderApiKey(
+                    customProviderWithAuthConfig().toBuilder()
+                            .apiKey("legacy-static-key")
+                            .authConfig(null)
+                            .build(),
+                    apiKey, workspaceName, HttpStatus.SC_CREATED);
+
+            // the dialog hides the api_key field in token mode, so the update carries none
+            var update = ProviderApiKeyUpdate.builder().authConfig(tokenAuthConfig()).build();
+            llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var actual = llmProviderApiKeyResourceClient.getById(created.id(), workspaceName, apiKey,
+                    HttpStatus.SC_OK);
+            assertThat(actual.authConfig()).isNotNull();
+            checkEncryption(created.id(), workspaceId, "");
+        }
+
+        @Test
         @DisplayName("setting a static key while token auth is configured is rejected")
         void updateApiKeyWhileTokenModeActiveIsRejected() {
             String workspaceName = UUID.randomUUID().toString();

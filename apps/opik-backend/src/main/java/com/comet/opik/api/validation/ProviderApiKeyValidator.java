@@ -70,7 +70,7 @@ public class ProviderApiKeyValidator
         }
 
         boolean valid = true;
-        for (String error : authConfig.validationErrors()) {
+        for (String error : ProviderAuthConfigValidator.validationErrors(authConfig)) {
             context.buildConstraintViolationWithTemplate(error)
                     .addPropertyNode("authConfig")
                     .addConstraintViolation();

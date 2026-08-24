@@ -22,7 +22,11 @@ const useProviderKeysUpdateMutation = () => {
       const { data } = await api.patch(
         `${PROVIDER_KEYS_REST_ENDPOINT}${providerKey.id}`,
         {
-          ...(providerKey.apiKey && { api_key: providerKey.apiKey }),
+          // "" clears the stored key when switching to token auth, so
+          // the check is on undefined, not truthiness
+          ...(providerKey.apiKey !== undefined && {
+            api_key: providerKey.apiKey,
+          }),
           ...(providerKey.base_url && { base_url: providerKey.base_url }),
           ...(providerKey?.configuration && {
             configuration: providerKey.configuration,
@@ -37,11 +41,11 @@ const useProviderKeysUpdateMutation = () => {
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "errors", "0"],
-        error.message,
-      );
+      // the backend 400s in two shapes: bean validation -> {errors: [...]},
+      // service BadRequestException -> {message: "..."} (Dropwizard ErrorMessage)
+      const message =
+        get(error, ["response", "data", "message"]) ??
+        get(error, ["response", "data", "errors", "0"], error.message);
 
       toast({
         title: "Error",

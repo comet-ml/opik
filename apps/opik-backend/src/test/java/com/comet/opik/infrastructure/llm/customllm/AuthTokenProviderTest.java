@@ -322,7 +322,7 @@ class AuthTokenProviderTest {
         var recipe = oauthRecipe().build();
 
         provider.bearer("ws", providerId, recipe);
-        provider.invalidate(providerId, recipe);
+        provider.invalidateAfterGatewayRejection("ws", providerId, recipe);
         provider.bearer("ws", providerId, recipe);
 
         wireMock.verify(exactly(2), postRequestedFor(urlEqualTo(TOKEN_PATH)));
@@ -352,6 +352,38 @@ class AuthTokenProviderTest {
                 .hasMessageContaining("access_token")
                 .hasMessageContaining("[token, ttl]")
                 .satisfies(exception -> assertThat(exception.getMessage()).doesNotContain("the-actual-token"));
+    }
+
+    @Test
+    @DisplayName("rotating a secret changes the cache key, so a stale cached token is never served")
+    void rotatedSecretChangesTheCacheKey() {
+        stubToken("{\"access_token\": \"tok-rotation\", \"expires_in\": 3600}");
+        UUID providerId = UUID.randomUUID();
+
+        provider.bearer("ws", providerId, oauthRecipe().build());
+        provider.bearer("ws", providerId, oauthRecipe().build());
+
+        var rotated = oauthRecipe()
+                .credentials(List.of(
+                        credential("grant_type", "client_credentials", false),
+                        credential("client_id", "opik-prod", false),
+                        credential("client_secret", "rotated-" + SECRET_VALUE, true)))
+                .build();
+        provider.bearer("ws", providerId, rotated);
+
+        // the hash covers unmasked values: fetch 1 (cold), cache hit, fetch 2 (rotated secret).
+        // Load-bearing — masking earlier in the chain would silently keep serving the stale token.
+        wireMock.verify(2, postRequestedFor(urlEqualTo(TOKEN_PATH)));
+    }
+
+    @Test
+    @DisplayName("a non-http(s) token_url surfaces as a clear auth error, never a raw exception")
+    void nonHttpTokenUrlIsRejected() {
+        var recipe = oauthRecipe().tokenUrl("mailto:auth@example.com").build();
+
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), recipe))
+                .isInstanceOf(AuthTokenException.class)
+                .hasMessageContaining("not a usable http(s) URL");
     }
 
     @Test

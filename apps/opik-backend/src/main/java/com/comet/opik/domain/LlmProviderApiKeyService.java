@@ -7,6 +7,7 @@ import com.comet.opik.api.ProviderAuthCheck;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.validation.ProviderAuthConfigValidator;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
@@ -161,10 +162,15 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
             var authConfigUpdate = resolveAuthConfigUpdate(providerApiKeyUpdate, providerApiKey);
 
+            var update = providerApiKeyUpdate;
+            if (authConfigUpdate.authConfig() != null && update.apiKey() == null) {
+                update = update.toBuilder().apiKey(EncryptionUtils.encrypt("")).build();
+            }
+
             repository.update(providerApiKey.id(),
                     workspaceId,
                     userName,
-                    providerApiKeyUpdate,
+                    update,
                     authConfigUpdate.clear(),
                     authConfigUpdate.authConfig());
 
@@ -198,7 +204,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             return stored;
         }
 
-        var errors = incoming.validationErrors();
+        var errors = ProviderAuthConfigValidator.validationErrors(incoming);
         if (!errors.isEmpty()) {
             throw new BadRequestException(String.join("; ", errors));
         }
@@ -229,11 +235,11 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         if (!stored.provider().supportsProviderName()) {
             throw new BadRequestException("auth_config is only supported for providers with provider_name");
         }
-        var errors = incoming.validationErrors();
+        var errors = ProviderAuthConfigValidator.validationErrors(incoming);
         if (!errors.isEmpty()) {
             throw new BadRequestException(String.join("; ", errors));
         }
-        validateNoStaticKeyConflict(update.apiKey() != null ? update.apiKey() : stored.apiKey(), incoming);
+        validateNoStaticKeyConflict(update.apiKey(), incoming);
         var merged = mergeSecretSentinels(incoming, stored.authConfig());
         return new AuthConfigUpdate(false, merged);
     }
