@@ -24,7 +24,7 @@ The data landing in Opik is the same as the plugin produces. What differs is how
 | --- | --- | --- |
 | How traffic arrives | Agent is pointed at a local port | The OS diverts the flows |
 | Captures | Claude Code CLI | CLI **and** the Claude Code desktop app |
-| Configuration touches | The agent's settings | The app only — the agent is untouched |
+| Configuration touches | The agent's settings | Certificate trust only, set up by the app |
 | Delivered via | MDM or Claude managed settings | MDM |
 | TLS | Not intercepted | Terminated locally |
 | Platforms | macOS, Linux, Windows | macOS only |

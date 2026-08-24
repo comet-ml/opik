@@ -29,11 +29,13 @@ Delivery is automatic once you are set up. Bootstrap configuration (workspace, A
 
 <Note>
   **Disabling a skill doesn't take it away.** The most common recommendation —
-  turning off unused skills and MCP servers — only keeps them out of the
+  turning off unused skills and MCP servers — removes their weight from the
   context that ships with every request. Nothing is uninstalled, and a disabled
   skill stays callable: when a developer asks for it by name, Claude Code
-  re-enables it and uses it. The saving comes from the thousands of requests
-  that never needed it, not from taking capability away.
+  re-enables it and uses it. A denied MCP server does stay off until the policy
+  changes, which is why the recommendation only targets servers nobody has been
+  using. The saving comes from the thousands of requests that never needed
+  them.
 </Note>
 
 ## Grant exceptions per user

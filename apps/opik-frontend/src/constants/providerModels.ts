@@ -644,6 +644,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash-0731",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP,
+      label: "deepseek/deepseek-v4-flash-vision-exp",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
       label: "deepseek/deepseek-v4-flash:free",
     },
@@ -1094,6 +1098,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_2,
       label: "meta/muse-spark-1.2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_2_CONTRIBUTOR,
+      label: "meta/muse-spark-1.2-contributor",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
@@ -2461,6 +2469,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "tencent/hy-mt2-30b-a3b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY_MT2_7B,
+      label: "tencent/hy-mt2-7b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3,
       label: "tencent/hy3",
     },
@@ -2505,8 +2517,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "thinkingmachines/inkling-small",
     },
     {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_SMALL_FREE,
+      label: "thinkingmachines/inkling-small:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_BATCH,
       label: "thinkingmachines/inkling:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING_FREE,
+      label: "thinkingmachines/inkling:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
