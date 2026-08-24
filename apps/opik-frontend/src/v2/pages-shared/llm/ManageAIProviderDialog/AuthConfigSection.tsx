@@ -217,11 +217,14 @@ const AuthConfigSection: React.FC<AuthConfigSectionProps> = ({
                         placeholder={
                           isStoredSecret ? "stored, write-only" : "Value"
                         }
-                        value={value}
+                        // Emptying a saved secret reverts to the sentinel (= keep stored).
+                        value={isStoredSecret ? "" : value}
                         onChange={(e) =>
                           form.setValue(
                             `authCredentials.${index}.value`,
-                            e.target.value,
+                            e.target.value === "" && isSaved
+                              ? AUTH_SECRET_SENTINEL
+                              : e.target.value,
                           )
                         }
                       />

@@ -148,7 +148,8 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         if (config.authConfig() == null) {
             return null;
         }
-        return () -> authTokenProvider.invalidate(config.providerId(), config.authConfig());
+        return () -> authTokenProvider.invalidateAfterGatewayRejection(config.workspaceId(), config.providerId(),
+                config.authConfig());
     }
 
     /**

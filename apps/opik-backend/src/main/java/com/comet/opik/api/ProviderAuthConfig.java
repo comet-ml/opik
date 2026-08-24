@@ -1,6 +1,5 @@
 package com.comet.opik.api;
 
-import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -19,7 +18,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -38,14 +36,14 @@ public record ProviderAuthConfig(
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @Schema(description = "How credentials are sent: form body (default), JSON body, or basic auth (id/secret in an HTTP Basic header, remaining fields in the form body)") SendAs sendAs,
         @JsonView({ProviderApiKey.View.Public.class,
-                ProviderApiKey.View.Write.class}) @Valid @Schema(description = "Fields sent to the token URL. Values flagged as secret are write-only: they read back as the '"
+                ProviderApiKey.View.Write.class}) @Valid @Size(max = 20) @Schema(description = "Fields sent to the token URL. Values flagged as secret are write-only: they read back as the '"
                         + ProviderAuthConfig.SECRET_SENTINEL + "' sentinel") List<Credential> credentials,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @Size(max = 250) @Schema(description = "Field holding the token in the reply; dot-path for nested replies", example = "access_token") String tokenField,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @Size(max = 250) @Schema(description = "Field holding the token lifetime in seconds in the reply; dot-path for nested replies", example = "expires_in") String expiresField,
         @JsonView({ProviderApiKey.View.Public.class,
-                ProviderApiKey.View.Write.class}) @Min(0) @Max(31_536_000) @Schema(description = "Lifetime in seconds assumed when the reply doesn't state one, capped at one year; 0 means such tokens are not cached (fetched per call)") Long fallbackTtlSeconds) {
+                ProviderApiKey.View.Write.class}) @Min(0) @Max(31_536_000) @Schema(description = "Lifetime in seconds assumed when the reply doesn't state one, capped at one year; 0 disables caching for such replies. A reply-stated lifetime always wins") Long fallbackTtlSeconds) {
 
     public static final String SECRET_SENTINEL = "__SECRET__";
     private static final ProviderAuthConfig EMPTY = ProviderAuthConfig.builder().build();
@@ -57,7 +55,8 @@ public record ProviderAuthConfig(
             @JsonView({
                     ProviderApiKey.View.Public.class,
                     ProviderApiKey.View.Write.class}) @NotBlank @Size(max = 250) String key,
-            @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) String value,
+            @JsonView({ProviderApiKey.View.Public.class,
+                    ProviderApiKey.View.Write.class}) @Size(max = 2000) String value,
             @JsonView({ProviderApiKey.View.Public.class,
                     ProviderApiKey.View.Write.class}) @Schema(description = "Secret values are encrypted at rest and never read back; once true it cannot be unset") boolean secret) {
 
@@ -94,22 +93,6 @@ public record ProviderAuthConfig(
     @JsonIgnore
     public boolean isEmpty() {
         return equals(EMPTY);
-    }
-
-    /**
-     * Requiredness rules shared by the create validator and the update path. Field-level Jakarta
-     * annotations can't carry these because the empty clear-object must pass bean validation.
-     */
-    @JsonIgnore
-    public List<String> validationErrors() {
-        var errors = new ArrayList<String>();
-        if (!ValidationUtils.isAbsoluteUri(tokenUrl)) {
-            errors.add("auth_config.token_url must be a valid absolute URI");
-        }
-        if (CollectionUtils.isEmpty(credentials)) {
-            errors.add("auth_config.credentials must not be empty");
-        }
-        return errors;
     }
 
     /**

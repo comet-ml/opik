@@ -22,7 +22,9 @@ import java.net.URISyntaxException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 /**
  * HTTP client decorator for the Custom LLM provider that mutates outgoing
@@ -69,6 +71,12 @@ class InterceptingHttpClient implements HttpClient {
 
     private static final TypeReference<Map<String, String>> QUERY_PARAMS_TYPE = new TypeReference<>() {
     };
+
+    // RFC 6750 signals a token problem via WWW-Authenticate error="invalid_token", but the
+    // http client abstraction surfaces only status + body; gateways typically echo the marker
+    // in the body, so that is the signal available here.
+    private static final Pattern TOKEN_REJECTION_HINT = Pattern.compile("invalid_token|expired|revoked",
+            Pattern.CASE_INSENSITIVE);
 
     private final @NonNull HttpClient delegate;
     private final Map<String, String> configuration;
@@ -119,9 +127,20 @@ class InterceptingHttpClient implements HttpClient {
         delegate.execute(mutate(request), parser, new RetryOnAuthFailureListener(request, parser, listener));
     }
 
+    /**
+     * 401 is unambiguous. A 403 is usually a policy/quota/WAF decision, so reying only when
+     * the response body hints the token itself was rejected.
+     */
     private boolean shouldRetryWithFreshToken(HttpException exception) {
-        return tokenSupplier != null
-                && (exception.statusCode() == 401 || exception.statusCode() == 403);
+        if (tokenSupplier == null) {
+            return false;
+        }
+        if (exception.statusCode() == 401) {
+            return true;
+        }
+        return exception.statusCode() == 403
+                && exception.getMessage() != null
+                && TOKEN_REJECTION_HINT.matcher(exception.getMessage()).find();
     }
 
     private void invalidateToken() {
@@ -141,29 +160,29 @@ class InterceptingHttpClient implements HttpClient {
         private final HttpRequest originalRequest;
         private final ServerSentEventParser parser;
         private final ServerSentEventListener downstream;
-        private boolean delivered;
+        private final AtomicBoolean delivered = new AtomicBoolean(false);
 
         @Override
         public void onOpen(SuccessfulHttpResponse response) {
-            delivered = true;
+            delivered.set(true);
             downstream.onOpen(response);
         }
 
         @Override
         public void onEvent(ServerSentEvent event, ServerSentEventContext context) {
-            delivered = true;
+            delivered.set(true);
             downstream.onEvent(event, context);
         }
 
         @Override
         public void onEvent(ServerSentEvent event) {
-            delivered = true;
+            delivered.set(true);
             downstream.onEvent(event);
         }
 
         @Override
         public void onError(Throwable throwable) {
-            if (!delivered && throwable instanceof HttpException httpException
+            if (!delivered.get() && throwable instanceof HttpException httpException
                     && shouldRetryWithFreshToken(httpException)) {
                 invalidateToken();
                 try {

@@ -350,7 +350,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       : undefined;
     // token mode and static key are mutually exclusive on the API
     const isTokenMode = isCustomLike && form.getValues("authMode") === "token";
-    const effectiveApiKey = isTokenMode ? "" : apiKey;
+    const effectiveApiKey = isTokenMode ? "" : apiKey || undefined;
 
     if (providerKey || calculatedProviderKey) {
       updateMutate({
