@@ -81,6 +81,16 @@ Thread rules have no mapping to choose. They always use `{{context}}`, which rea
 
 Add `{{trace}}` to the prompt. There is nothing to map, so the same rule works whatever shape your traces have.
 
+Prompt:
+
+```
+Read the trace below and decide whether the assistant answered the user's question.
+
+{{trace}}
+```
+
+Variable mapping: nothing to fill in.
+
 The judge reads the trace itself, using these tools:
 
 - `read` — read the trace or one of its spans
@@ -101,7 +111,19 @@ You can also set a hard limit with **Max cost per evaluation (USD)**. Once an ev
 
 #### Variable mapping
 
-Point each prompt variable at a field in the trace, for example `output.messages[0].parts[0].content`. The judge then receives that field and nothing else.
+Point each prompt variable at a field in the trace. The judge then receives that field and nothing else.
+
+Prompt:
+
+```
+Decide whether the answer below is helpful.
+
+{{answer}}
+```
+
+Variable mapping:
+
+- `answer` → `output.messages[0].parts[0].content`
 
 Use it when a metric should score the same field on every trace. Because the input is fixed, the scores stay comparable over time, and each evaluation is a single call with no drill-down.
 
