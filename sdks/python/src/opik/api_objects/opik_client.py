@@ -3537,6 +3537,7 @@ def get_current_client_raw() -> Optional[Opik]:
     return _global_singleton
 
 
+@analytics.internal
 def get_global_client() -> Opik:
     """Get the active Opik client, creating one if needed.
 

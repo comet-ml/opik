@@ -11,7 +11,7 @@ Reporting happens on a background thread, is switched off by
 `OPIK_ANALYTICS_ENABLE=false`, and never raises into calling code.
 """
 
-from .api import Component, flush, shutdown, track_event
+from .api import Component, flush, internal, shutdown, track_event
 from .rules import register_rule
 from .worker import PropertyValue
 
@@ -19,6 +19,7 @@ __all__ = [
     "Component",
     "PropertyValue",
     "flush",
+    "internal",
     "register_rule",
     "shutdown",
     "track_event",

@@ -5,13 +5,15 @@ import re
 import sys
 import threading
 import types
-from typing import Any, Literal, Optional, Set, Tuple
+from typing import Any, Callable, Literal, Optional, Set, Tuple, TypeVar
 
 from . import comet_stats, rules, worker
 from .worker import PropertyValue
 from .. import config
 
 LOGGER = logging.getLogger(__name__)
+
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 _SDK_MODULE_PREFIXES = ("opik.", "_opik")
 
@@ -63,6 +65,10 @@ _ALREADY_REPORTED: Set[Tuple[Any, ...]] = set()
 # reported call happening inside another - see `_reported_from_inside_the_sdk`.
 _REPORTING_CODE: Set[types.CodeType] = set()
 
+# Functions marked with `@internal`. Anything reported beneath one of these is
+# Opik acting on its own behalf, see `internal`.
+_INTERNAL_CODE: Set[types.CodeType] = set()
+
 
 def _build_event_name(component: Component, path: Tuple[str, ...]) -> str:
     """
@@ -90,6 +96,21 @@ def _collapse_underscores(segment: str) -> str:
     return re.sub(r"_{2,}", "_", segment)
 
 
+def internal(func: _F) -> _F:
+    """
+    Marks a function whose callees are Opik using itself, not the user using Opik.
+
+    Needed where the module test in `_reported_from_inside_the_sdk` cannot help: an
+    internal caller that happens to live in the same module as the thing it calls
+    looks exactly like a user calling it. `get_global_client` building an `Opik` is
+    that case - both are in `opik_client`, so without this a bare `@track` function
+    reports `client__init` and the event counts every user of the SDK rather than
+    the ones who built a client.
+    """
+    _INTERNAL_CODE.add(func.__code__)
+    return func
+
+
 def _is_sdk_module(module: str) -> bool:
     return module == "opik" or module.startswith(_SDK_MODULE_PREFIXES)
 
@@ -111,9 +132,10 @@ def _reported_from_inside_the_sdk() -> bool:
       no reported call above them at all, such as the message processor updating a
       span. Arriving from the reporter's own module does not count: that is a private
       helper reporting on its caller's behalf, as `BaseMetric.__init__` does.
-    - Some function further up the stack is already reporting. This catches the rest,
-      including one `Opik` method calling another on `self` - same module, so the test
-      above cannot see it - and calls that reach across several modules on the way.
+    - Some function further up the stack is already reporting, or is marked
+      `@internal`. This catches the rest, including one `Opik` method calling another
+      on `self` - same module, so the test above cannot see it - and calls that reach
+      across several modules on the way.
     """
     try:
         # 0 is this function, 1 is `track_event`, 2 is whatever reported.
@@ -137,7 +159,7 @@ def _reported_from_inside_the_sdk() -> bool:
 
     frame: Optional[types.FrameType] = caller
     while frame is not None:
-        if frame.f_code in _REPORTING_CODE:
+        if frame.f_code in _REPORTING_CODE or frame.f_code in _INTERNAL_CODE:
             return True
         frame = frame.f_back
 
