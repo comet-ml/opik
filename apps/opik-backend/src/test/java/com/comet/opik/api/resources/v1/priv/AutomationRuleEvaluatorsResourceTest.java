@@ -1051,6 +1051,92 @@ class AutomationRuleEvaluatorsResourceTest {
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Sampling rate validation")
+    class SamplingRateValidation {
+
+        /**
+         * The rate is injected verbatim so a test can send what a client actually sends, including values no
+         * float field can hold: {@code 1e40} overflows to Infinity on parse, and Jackson maps the strings
+         * {@code "NaN"} / {@code "Infinity"} onto the matching float constants.
+         */
+        private static final String RULE_WITH_SAMPLING_RATE = """
+                {
+                  "name": "%s",
+                  "project_ids": ["%s"],
+                  "type": "llm_as_judge",
+                  "sampling_rate": %s,
+                  "enabled": true,
+                  "code": %s
+                }
+                """;
+
+        /**
+         * Every one of these reached MySQL before the bounds were enforced. The non-finite ones are the
+         * interesting half: the driver renders them as the bare tokens {@code Infinity} / {@code NaN}, so the
+         * insert came back as "Unknown column 'Infinity' in 'field list'" — a SQLSyntaxErrorException surfaced
+         * as a 500 instead of a rejected request.
+         */
+        private static Stream<String> hostileSamplingRates() {
+            return Stream.of("1.5", "-0.5", "1e40", "-1e40", "\"NaN\"", "\"Infinity\"", "\"-Infinity\"");
+        }
+
+        private String ruleBody(UUID projectId, String samplingRate) {
+            return RULE_WITH_SAMPLING_RATE.formatted(
+                    "Sampling probe " + UUID.randomUUID(), projectId, samplingRate, LLM_AS_A_JUDGE_EVALUATOR);
+        }
+
+        private UUID createProject() {
+            return projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+        }
+
+        @ParameterizedTest
+        @MethodSource("hostileSamplingRates")
+        @DisplayName("create evaluator: when the sampling rate is out of range, then reject at the API boundary")
+        void createEvaluator__whenSamplingRateIsOutOfRange__thenReturnUnprocessableEntity(String samplingRate) {
+            var projectId = createProject();
+
+            try (var response = evaluatorsResourceClient.callCreateEvaluatorWithJsonBody(
+                    ruleBody(projectId, samplingRate), WORKSPACE_NAME, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                        .isNotEmpty();
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("hostileSamplingRates")
+        @DisplayName("update evaluator: when the sampling rate is out of range, then reject at the API boundary")
+        void updateEvaluator__whenSamplingRateIsOutOfRange__thenReturnUnprocessableEntity(String samplingRate) {
+            var projectId = createProject();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name("Sampling probe " + UUID.randomUUID())
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluatorWithJsonBody(
+                    id, ruleBody(projectId, samplingRate), WORKSPACE_NAME, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"0", "0.5", "1", "1.0"})
+        @DisplayName("create evaluator: a rate on or inside the bounds is still accepted")
+        void createEvaluator__whenSamplingRateIsInRange__thenCreated(String samplingRate) {
+            var projectId = createProject();
+
+            try (var response = evaluatorsResourceClient.callCreateEvaluatorWithJsonBody(
+                    ruleBody(projectId, samplingRate), WORKSPACE_NAME, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CREATED);
+            }
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindEvaluator {
 
         Stream<Class<? extends AutomationRuleEvaluator<?, ?>>> find() {

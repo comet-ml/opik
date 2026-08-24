@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -21,6 +23,9 @@ import lombok.experimental.SuperBuilder;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.MAX_SAMPLING_RATE;
+import static com.comet.opik.utils.ValidationUtils.MIN_SAMPLING_RATE;
 
 @AllArgsConstructor
 @SuperBuilder(toBuilder = true)
@@ -54,7 +59,9 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T, E extends Filter> 
     // the API boundary instead of failing the update (OPIK-7371).
     @NotBlank @Size(max = 150, message = "cannot exceed 150 characters") private final String name;
 
-    private final float samplingRate;
+    // Bounded to match the automation_rules.sampling_rate CHECK constraint, so an out-of-range rate — or a NaN /
+    // overflowed-to-Infinity float — is rejected on update instead of failing the update, matching the create path.
+    @DecimalMin(MIN_SAMPLING_RATE) @DecimalMax(MAX_SAMPLING_RATE) private final float samplingRate;
 
     @Builder.Default
     private final boolean enabled = true;

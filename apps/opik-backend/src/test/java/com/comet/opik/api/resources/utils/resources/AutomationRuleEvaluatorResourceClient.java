@@ -4,6 +4,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -58,6 +59,33 @@ public class AutomationRuleEvaluatorResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(evaluator));
+    }
+
+    /**
+     * Posts a body written as JSON text, for payloads a typed DTO cannot express — e.g. a sampling rate sent
+     * as {@code 1e40} or {@code "NaN"}, which only exist on the wire. The text is parsed to a tree so it is
+     * sent as a JSON object (a String entity would be written as a JSON string literal instead); number and
+     * string forms survive that round trip.
+     */
+    public Response callCreateEvaluatorWithJsonBody(String body, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(JsonUtils.getJsonNodeFromString(body)));
+    }
+
+    /** The update counterpart of {@link #callCreateEvaluatorWithJsonBody}. */
+    public Response callUpdateEvaluatorWithJsonBody(UUID evaluatorId, String body, String workspaceName,
+            String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(evaluatorId.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(JsonUtils.getJsonNodeFromString(body)));
     }
 
     public Response callUpdateEvaluator(UUID evaluatorId, String workspaceName,

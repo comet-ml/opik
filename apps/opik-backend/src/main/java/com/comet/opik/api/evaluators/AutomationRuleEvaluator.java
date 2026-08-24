@@ -12,6 +12,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -26,6 +28,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.MAX_SAMPLING_RATE;
+import static com.comet.opik.utils.ValidationUtils.MIN_SAMPLING_RATE;
 
 @Data
 @SuperBuilder(toBuilder = true)
@@ -80,7 +85,12 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     @NotBlank @Size(max = 150, message = "cannot exceed 150 characters") private final String name;
 
     @JsonView({View.Public.class, View.Write.class})
-    private final float samplingRate;
+    // Bounded to match the automation_rules.sampling_rate CHECK constraint, so an out-of-range rate is rejected at
+    // the API boundary instead of failing the insert. A float also lets a caller overflow to Infinity (e.g. 1e40) or
+    // send a NaN literal, which the MySQL driver renders as a bare `Infinity`/`NaN` token — a SQLSyntaxErrorException
+    // ("Unknown column 'Infinity' in 'field list'") rather than a 4xx. @DecimalMin/@DecimalMax reject both: Hibernate
+    // Validator treats NaN as out of bounds and +/-Infinity as greater/less than any bound.
+    @DecimalMin(MIN_SAMPLING_RATE) @DecimalMax(MAX_SAMPLING_RATE) private final float samplingRate;
 
     @JsonView({View.Public.class, View.Write.class})
     @Builder.Default

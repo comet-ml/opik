@@ -42,6 +42,13 @@ public class ValidationUtils {
     public static final int SCALE = 9;
 
     /**
+     * Bounds of an automation rule's sampling rate, matching the
+     * {@code automation_rules.sampling_rate FLOAT NOT NULL CHECK (sampling_rate >= 0 AND sampling_rate <= 1)} column.
+     */
+    public static final String MIN_SAMPLING_RATE = "0.0";
+    public static final String MAX_SAMPLING_RATE = "1.0";
+
+    /**
      * We're using FixedString(36) to store UUIDs in Clickhouse. This isn't a nullable field, but it can be null under
      * certain circumstances, mostly during LEFT JOIN statements when there are no matching records from the table on
      * the right.
