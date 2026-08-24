@@ -170,6 +170,17 @@ if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset_after_fork)
 
 
+def _disable_after_rejection() -> None:
+    """
+    Called from the worker thread when the destination has told us to stop. Turning
+    `_DISABLED` on makes `track_event` return on its first line, so the rest of the
+    process costs nothing rather than queueing events nobody will accept.
+    """
+    global _DISABLED
+
+    _DISABLED = True
+
+
 def _start_worker() -> Optional[worker.Worker]:
     global _WORKER, _DISABLED
 
@@ -211,6 +222,7 @@ def _start_worker() -> Optional[worker.Worker]:
             max_queue_size=MAX_QUEUE_SIZE,
             max_batch_size=MAX_BATCH_SIZE,
             batch_timeout_seconds=BATCH_TIMEOUT_SECONDS,
+            on_rejected=_disable_after_rejection,
         )
         _WORKER.start()
         atexit.register(shutdown, ATEXIT_FLUSH_TIMEOUT_SECONDS)

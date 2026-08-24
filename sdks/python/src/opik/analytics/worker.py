@@ -41,6 +41,13 @@ def session_properties() -> Dict[str, PropertyValue]:
     return properties
 
 
+class ReportingRejected(Exception):
+    """
+    Raised by a sender when the destination has told us to stop, as opposed to a
+    request that merely failed. Retrying will not help and the process gives up.
+    """
+
+
 class _Flush:
     """Queue marker asking the worker to send what it has and say when it's done."""
 
@@ -63,9 +70,11 @@ class Worker(threading.Thread):
         max_queue_size: int,
         max_batch_size: int,
         batch_timeout_seconds: float,
+        on_rejected: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(daemon=True, name="opik-analytics-worker")
         self._send = send
+        self._on_rejected = on_rejected
         self._max_batch_size = max_batch_size
         self._batch_timeout_seconds = batch_timeout_seconds
         self._queue: queue.Queue[Union[Event, _Flush]] = queue.Queue(
@@ -135,6 +144,14 @@ class Worker(threading.Thread):
         try:
             if batch:
                 self._send([self._enrich(event) for event in batch])
+        except ReportingRejected:
+            # The destination has retired us. Stop the thread and tell the caller
+            # side to stop handing us events, rather than spending the rest of the
+            # process making requests that are already known to be unwanted.
+            LOGGER.debug("Analytics reporting rejected by the destination, stopping")
+            self._stopped.set()
+            if self._on_rejected is not None:
+                self._on_rejected()
         except Exception:
             LOGGER.debug(
                 "Failed to report %d analytics event(s)", len(batch), exc_info=True

@@ -23,6 +23,12 @@ REQUEST_TIMEOUT_SECONDS = 10
 
 LIBRARY_NAME = "opik-python-sdk"
 
+# Statuses that mean "do not send this again", as opposed to "that attempt failed".
+# The destination can retire a whole SDK, or one version of it, by answering with one
+# of these - it identifies both from the `User-Agent` this client sends.
+# 429 and 5xx are deliberately absent: they say try later, not stop.
+REJECTED_STATUSES = frozenset({401, 403, 404, 410})
+
 
 def _to_payload(event: worker.Event) -> Dict[str, Any]:
     """The shape the collector accepts, matching the backend's `BiEvent`."""
@@ -56,6 +62,11 @@ class Sender:
                     "Failed to report analytics event %s", event.name, exc_info=True
                 )
                 continue
+
+            if response.status_code in REJECTED_STATUSES:
+                raise worker.ReportingRejected(
+                    f"destination answered {response.status_code}"
+                )
 
             if response.status_code >= 400:
                 LOGGER.debug(
