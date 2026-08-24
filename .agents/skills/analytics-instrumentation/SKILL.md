@@ -187,7 +187,7 @@ arguments; adding one never changes the API.
    `try`/`except` and do not guard it with a config check; it already swallows
    everything and no-ops when reporting is off.
 
-4. **Decide the properties, if any.** Keyword arguments, scalars only. 96 of the 97
+4. **Decide the properties, if any.** Keyword arguments, scalars only. 97 of the 98
    events carry none — reach for one only when the event genuinely has variants worth
    splitting, as `metric_created` does. Never a value the user chose: report the
    Opik-owned name and `"custom"` otherwise.
@@ -201,22 +201,34 @@ arguments; adding one never changes the API.
    exact payload without sending anything:
 
    ```python
-   import os, json, httpx
+   import json, os, unittest.mock
+   import httpx
+
    os.environ["OPIK_ANALYTICS_ENABLE"] = "true"
 
    sent = []
-   httpx.Client.post = lambda self, url, **kw: (
-       sent.append(kw["json"]), type("R", (), {"status_code": 201})()
-   )[1]
 
-   from opik import analytics
-   ...                                  # exercise your new call site
-   analytics.flush(timeout=10)          # events are batched; nothing appears without this
+   def fake_post(self, url, **kwargs):
+       sent.append(kwargs["json"])
+       return type("R", (), {"status_code": 201})()
+
+   # Patched for the block only. Replacing `post` outright leaves every later
+   # request in the process - the SDK's own included - talking to the stub.
+   with unittest.mock.patch.object(httpx.Client, "post", fake_post):
+       from opik import analytics
+
+       ...                              # exercise your new call site
+       analytics.flush(timeout=10)      # batched; nothing appears without this
+
    print(json.dumps(sent, indent=2))
    ```
 
    Reporting is off under pytest, so this has to be a plain script, not a test. Then
-   run `pytest tests/unit/analytics` (49 tests) before committing.
+   run the suite from the SDK directory, where it lives:
+
+   ```bash
+   cd sdks/python && pytest tests/unit/analytics    # 67 tests
+   ```
 
 7. **Know how it will be read.** The event surfaces on the
    [Python SDK Usage dashboard](https://us.posthog.com/project/222582/dashboard/2025904),

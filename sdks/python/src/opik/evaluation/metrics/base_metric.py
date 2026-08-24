@@ -53,6 +53,11 @@ class BaseMetric(_opik_base_metric.BaseMetric):
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> None:
+        # First, before any of the setup below: a metric whose construction goes on
+        # to fail was still a metric the user reached for, and reporting is meant to
+        # count that. Only needs the class.
+        _track_metric_creation(type(self))
+
         super().__init__(name=name, track=track, project_name=project_name)
 
         config = opik_config.OpikConfig()
@@ -64,8 +69,6 @@ class BaseMetric(_opik_base_metric.BaseMetric):
             track_decorator = opik.track(name=self.name, project_name=project_name)
             self.score = track_decorator(self.score)  # type: ignore
             self.ascore = track_decorator(self.ascore)  # type: ignore
-
-        _track_metric_creation(type(self))
 
     def score(
         self, *args: Any, **kwargs: Any

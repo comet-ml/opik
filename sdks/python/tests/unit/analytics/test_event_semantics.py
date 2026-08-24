@@ -13,6 +13,8 @@ and had no event of its own, so nothing counted the people using it.
 
 import types
 
+import pytest
+
 from opik.analytics import api
 
 
@@ -103,3 +105,26 @@ def test_get_global_client__builds_a_client_for_the_sdk__does_not_report_init(
     user_code()
 
     assert "opik_python_sdk__client__init" not in recording_worker.names
+
+
+def test_metric_created__construction_fails__still_reported(recording_worker):
+    """
+    Reporting goes on the first line of the function it reports on, so a call that
+    goes on to fail still counts as usage - the rule the instrumentation skill
+    documents. `BaseMetric` reported last, so a metric rejected by its own
+    validation went uncounted even though the user clearly reached for it.
+    """
+    from opik.evaluation.metrics import base_metric
+
+    class Scored(base_metric.BaseMetric):
+        def score(self, *args, **kwargs):
+            return None
+
+    def user_code():
+        with pytest.raises(ValueError):
+            # project_name is only allowed when track is on
+            Scored(name="x", track=False, project_name="rejected")
+
+    user_code()
+
+    assert "opik_python_sdk__evaluation__metric_created" in recording_worker.names
