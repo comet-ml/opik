@@ -51,11 +51,14 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanEnrichmentOptions;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.TraceEnrichmentOptions;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -152,9 +155,10 @@ class DatasetVersionResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private TransactionTemplate mySqlTemplate;
+    private ExperimentAggregatesService experimentAggregatesService;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.mySqlTemplate = mySqlTemplate;
 
@@ -166,6 +170,7 @@ class DatasetVersionResourceTest {
         experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         traceResourceClient = new TraceResourceClient(client, baseURI);
         spanResourceClient = new SpanResourceClient(client, baseURI);
+        experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
     }
 
     @AfterAll
@@ -3572,6 +3577,15 @@ class DatasetVersionResourceTest {
                 experimentResourceClient.createExperimentItem(Set.of(item), API_KEY, TEST_WORKSPACE);
             });
 
+            // Materialize experiment_item_aggregates so the query takes the push-top-limit branch
+            // (applyPushTopLimit requires hasAggregated && !hasRaw); otherwise it falls back to the raw
+            // path with an ordinary OFFSET and the push-top-limit CTE would go untested.
+            experimentAggregatesService.populateAggregations(experimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                    .block();
+
             // Baseline fetch (no sorting) captures the full objects as returned; the assertion only tests order.
             var baseline = datasetResourceClient.getDatasetItemsWithExperimentItems(
                     datasetId, List.of(experimentId), null, null, null, API_KEY, TEST_WORKSPACE).content();
@@ -3591,6 +3605,15 @@ class DatasetVersionResourceTest {
             assertThat(sorted.content())
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
                     .containsExactlyElementsOf(expected);
+
+            // Page boundary: with size=2, page 2 returns only the trailing item in sort order, exercising the
+            // push-top-limit OFFSET :top_offset + outer LIMIT path; total stays at the full matching count.
+            var pageTwo = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), null, null, sorting, 2, 2, API_KEY, TEST_WORKSPACE);
+            assertThat(pageTwo.total()).isEqualTo(count);
+            assertThat(pageTwo.content())
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactly(expected.get(count - 1));
         }
 
         @Test
