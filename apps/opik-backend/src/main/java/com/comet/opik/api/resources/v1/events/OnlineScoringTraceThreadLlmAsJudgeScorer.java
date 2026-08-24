@@ -28,7 +28,6 @@ import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
@@ -439,7 +438,10 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 // REQUIRED on the first call only — same reasoning as the trace scorer: forces
                 // ≥1 tool call before the model can answer from skeleton alone. Follow-up rounds
                 // switch to AUTO so the wrap-up turn can emit JSON without invoking a tool.
-                scoreRequest = agenticScoringService.addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
+                // Providers that reject a forced choice outright get AUTO here too — see
+                // firstRoundToolChoice.
+                scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
+                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
             }
 
             // summarizeRequest is cheap (no per-message toString streaming). At INFO to mirror
