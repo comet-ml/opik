@@ -17,6 +17,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
 import uniq from "lodash/uniq";
 import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
@@ -121,6 +122,7 @@ import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/Thre
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -281,6 +283,9 @@ const METADATA_MAIN_COLUMN_DATA: ColumnData<BaseTraceData>[] = [
     cell: CodeCell as never,
   },
 ];
+
+const VIRTUALIZATION_MIN_COLUMNS = 50;
+const VIRTUALIZATION_MIN_ROWS = 25;
 
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
@@ -928,7 +933,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [setSearch, clearAllChips, setEnvironment, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
-    () => data?.content ?? [],
+    () => uniqBy(data?.content ?? [], "id"),
     [data?.content],
   );
 
@@ -1340,6 +1345,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataColumnsOrder,
   ]);
 
+  const virtualization = useMemo(
+    () => ({
+      enabled:
+        columns.length > VIRTUALIZATION_MIN_COLUMNS &&
+        rows.length >= VIRTUALIZATION_MIN_ROWS,
+    }),
+    [columns.length, rows.length],
+  );
+
   const columnsToExport = useMemo(() => {
     return columns
       .map((c) => get(c, "accessorKey", ""))
@@ -1609,6 +1623,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             />
           }
           TableWrapper={PageBodyStickyTableWrapper}
+          TableBody={DataTableVirtualBody}
+          columnVirtualization={virtualization}
+          rowVirtualization={virtualization}
           stickyHeader
           meta={meta}
           showLoadingOverlay={isPlaceholderData && isFetching}
