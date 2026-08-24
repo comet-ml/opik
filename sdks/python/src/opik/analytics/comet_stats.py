@@ -55,6 +55,10 @@ class Sender:
             headers={"User-Agent": f"{LIBRARY_NAME}/{package_version.VERSION}"},
         )
 
+    def close(self) -> None:
+        """Releases the connection pool. Safe to call more than once."""
+        self._client.close()
+
     def send(self, events: List[worker.Event]) -> None:
         for event in events:
             # Per event rather than around the loop: the collector takes one event per

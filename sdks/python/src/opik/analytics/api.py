@@ -53,6 +53,7 @@ _LEVEL_SEPARATOR = "__"
 
 _LOCK = threading.Lock()
 _WORKER: Optional[worker.Worker] = None
+_SENDER: Optional[comet_stats.Sender] = None
 _DISABLED = False
 
 # Which events were already reported, see `track_event`. Guarded by its own lock so
@@ -183,9 +184,12 @@ def _reset_after_fork() -> None:
     they come from `environment_details`, which clears its own cache on its own fork
     hook, for error reports as well.
     """
-    global _WORKER, _LOCK, _REPORTED_LOCK
+    global _WORKER, _SENDER, _LOCK, _REPORTED_LOCK
 
     _WORKER = None
+    # Dropped rather than closed: the socket underneath belongs to the parent, and
+    # the child builds its own on the next event.
+    _SENDER = None
     _LOCK = threading.Lock()
     _REPORTED_LOCK = threading.Lock()
 
@@ -203,10 +207,26 @@ def _disable_after_rejection() -> None:
     global _DISABLED
 
     _DISABLED = True
+    _close_sender()
+
+
+def _close_sender() -> None:
+    """
+    Releases the connection pool. Nothing reopens it: both callers have switched
+    reporting off for good, so the sender is finished with either way.
+    """
+    global _SENDER
+
+    sender, _SENDER = _SENDER, None
+    if sender is not None:
+        try:
+            sender.close()
+        except Exception:
+            LOGGER.debug("Failed to close the analytics connection", exc_info=True)
 
 
 def _start_worker() -> Optional[worker.Worker]:
-    global _WORKER, _DISABLED
+    global _WORKER, _SENDER, _DISABLED
 
     if _DISABLED:
         return None
@@ -236,7 +256,7 @@ def _start_worker() -> Optional[worker.Worker]:
             _DISABLED = True
             return None
 
-        sender = comet_stats.Sender(url=config_.analytics_url)
+        sender = _SENDER = comet_stats.Sender(url=config_.analytics_url)
 
         _WORKER = worker.Worker(
             send=sender.send,
@@ -360,5 +380,7 @@ def shutdown(timeout: Optional[float] = DEFAULT_FLUSH_TIMEOUT_SECONDS) -> None:
 
         if worker_ is not None:
             worker_.close(timeout)
+
+        _close_sender()
     except Exception:
         LOGGER.debug("Failed to shut analytics down", exc_info=True)

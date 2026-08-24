@@ -120,12 +120,12 @@ def test_worker__ordinary_failure__keeps_running():
         worker.close(timeout=5)
 
 
-def test_track_event__destination_rejects__whole_process_stops_reporting(monkeypatch):
+@pytest.fixture
+def rejecting_collector():
     """
-    The end-to-end path, through the real composition `_start_worker` builds rather
-    than a stand-in worker: a rejection has to stop `track_event` itself, not just
-    the pieces underneath it. Nothing here would notice `on_rejected` being wired
-    up wrongly, or not at all, if the other tests were the only ones.
+    A collector that turns everything down, torn down completely: `shutdown()` alone
+    stops `serve_forever` but leaves the listening socket and its thread behind, so a
+    failing assertion here would leak both into every test that runs afterwards.
     """
     requests = []
 
@@ -140,13 +140,32 @@ def test_track_event__destination_rejects__whole_process_stops_reporting(monkeyp
             pass
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    url = f"http://127.0.0.1:{server.server_address[1]}/notify/event/"
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}/notify/event/", requests
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_track_event__destination_rejects__whole_process_stops_reporting(
+    rejecting_collector, monkeypatch
+):
+    """
+    The end-to-end path, through the real composition `_start_worker` builds rather
+    than a stand-in worker: a rejection has to stop `track_event` itself, not just
+    the pieces underneath it. Nothing here would notice `on_rejected` being wired
+    up wrongly, or not at all, if the other tests were the only ones.
+    """
+    url, requests = rejecting_collector
 
     # Reporting is off under pytest by design, so the rule is stubbed rather than
     # the machinery: everything below `track_event` stays the real thing.
     monkeypatch.setattr(api.rules, "reporting_allowed", lambda config_: True)
     monkeypatch.setattr(api, "_WORKER", None)
+    monkeypatch.setattr(api, "_SENDER", None)
     monkeypatch.setattr(api, "_DISABLED", False)
     monkeypatch.setattr(api, "_ALREADY_REPORTED", set())
     monkeypatch.setattr(api, "_REPORTING_CODE", set())
@@ -164,6 +183,9 @@ def test_track_event__destination_rejects__whole_process_stops_reporting(monkeyp
 
         assert requests == ["opik_python_sdk__client__first"]
         assert api._DISABLED is True
+        # The rejection releases the connection pool rather than leaving it open
+        # for a process that will never send again.
+        assert api._SENDER is None
 
         # A later event must cost nothing: no request, and nothing queued either.
         for i in range(10):
@@ -173,4 +195,3 @@ def test_track_event__destination_rejects__whole_process_stops_reporting(monkeyp
         assert requests == ["opik_python_sdk__client__first"]
     finally:
         api.shutdown(timeout=5)
-        server.shutdown()

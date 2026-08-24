@@ -53,8 +53,11 @@ def test_track_decorator__used_by_a_user__reports_client_track(recording_worker)
 
     @opik.track
     def a_function_the_user_wrote(x):
-        return x
+        return x + 1
 
+    # Called, not just decorated: a decorator that reported the event and then
+    # returned a broken wrapper would otherwise pass this.
+    assert a_function_the_user_wrote(1) == 2
     assert "opik_python_sdk__client__track" in recording_worker.names
 
 
