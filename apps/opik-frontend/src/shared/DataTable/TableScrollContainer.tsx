@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import noop from "lodash/noop";
 
 import { PageBodyScrollContainerContext } from "@/contexts/usePageBodyScrollContainer";
@@ -19,24 +19,22 @@ const TableScrollContainer: React.FC<TableScrollContainerProps> = ({
   const [horizontalScrollContainer, setHorizontalScrollContainer] =
     useState<HTMLElement | null>(null);
 
-  const registerHorizontalScrollContainer = useCallback(
-    (element: HTMLElement | null) => setHorizontalScrollContainer(element),
-    [],
-  );
-
   return (
     <PageBodyScrollContainerContext.Provider
       value={{
         scrollContainer,
         horizontalScrollContainer,
-        registerHorizontalScrollContainer,
+        registerHorizontalScrollContainer: setHorizontalScrollContainer,
         tableOffset: 0,
         recalculateOffsets: noop,
       }}
     >
       <div
         ref={setScrollContainer}
-        className={cn("min-h-0 flex-1 overflow-auto", className)}
+        className={cn(
+          "min-h-0 flex-1 overflow-x-hidden overflow-y-auto",
+          className,
+        )}
       >
         {children}
       </div>

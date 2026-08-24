@@ -1346,8 +1346,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   ]);
 
   const virtualization = useMemo(
-    () => getVirtualizationConfig(columns.length, rows.length),
-    [columns.length, rows.length],
+    () => getVirtualizationConfig(columns.length, rows.length || (size ?? 0)),
+    [columns.length, rows.length, size],
   );
 
   const columnsToExport = useMemo(() => {
