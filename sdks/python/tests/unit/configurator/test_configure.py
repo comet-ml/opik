@@ -2664,10 +2664,11 @@ class TestSkillsHostKeys:
         assert configurator._skills_host_keys() == ["codex"]
 
         prompt = mock_prompt.call_args.args[0]
-        assert "Codex" in prompt
         # Recommended, so the default answer is yes — hence the (Y/n) helper.
         assert "Recommended" in prompt
         assert "(Y/n)" in prompt
+        # The server step just named the assistants; do not relist them.
+        assert "Codex" not in prompt
 
     @patch(
         "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]

@@ -173,9 +173,9 @@ class OpikConfigurator:
 
         # Asked after the server step, so the user answers with its output in
         # front of them. Recommended, hence the default yes.
+        # The assistants are not named again — the server step just listed them.
         confirmed = ask_user_for_approval(
-            "\n  Recommended: also install the Opik skill pack for "
-            f"{_readable_list(skills.detected_host_names())}?\n"
+            "\n  Recommended: also install the Opik skill pack?\n"
             "  It teaches your assistant how to instrument code with Opik, wire\n"
             "  up integrations, and run test suites. (Y/n) "
         )

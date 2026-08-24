@@ -138,19 +138,17 @@ class TestSetup:
 
 class TestWantsSkillPack:
     def test_explicit_true__no_question(self, confirm):
-        assert assistants._wants_skill_pack(True, ["cursor"]) is True
+        assert assistants._wants_skill_pack(True) is True
         confirm.assert_not_called()
 
     def test_explicit_false__no_question(self, confirm):
-        assert assistants._wants_skill_pack(False, ["cursor"]) is False
+        assert assistants._wants_skill_pack(False) is False
         confirm.assert_not_called()
 
-    def test_unset__asks_and_names_the_assistants(self, confirm, monkeypatch):
-        monkeypatch.setattr(
-            assistants.skills_roots, "display_names", lambda keys: ["Cursor", "Codex"]
-        )
-
-        assistants._wants_skill_pack(None, ["cursor", "codex"])
+    def test_unset__asks_without_relisting_the_assistants(self, confirm):
+        """The results table right above already names them."""
+        assistants._wants_skill_pack(None)
 
         prompt = confirm.call_args.args[0]
-        assert "Cursor, Codex" in prompt
+        assert "skill pack" in prompt
+        assert "Cursor" not in prompt

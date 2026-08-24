@@ -57,7 +57,7 @@ def setup(
         # the installer has already explained why.
         return
 
-    if _wants_skill_pack(skills_flag, configured_hosts):
+    if _wants_skill_pack(skills_flag):
         skills_installer.setup_skills(configured_hosts, announce_next_steps=False)
 
     mcp_rich_view.RichInstallView().next_steps(
@@ -65,7 +65,7 @@ def setup(
     )
 
 
-def _wants_skill_pack(skills_flag: Optional[bool], hosts: List[str]) -> bool:
+def _wants_skill_pack(skills_flag: Optional[bool]) -> bool:
     """Whether to add the skill pack, asking only when the flags left it open.
 
     Recommended, and so defaulted to yes: the server gives an assistant the tools
@@ -75,11 +75,12 @@ def _wants_skill_pack(skills_flag: Optional[bool], hosts: List[str]) -> bool:
     if skills_flag is not None:
         return skills_flag
 
-    names = ", ".join(skills_roots.display_names(hosts))
+    # The assistants are not named again: the results table directly above this
+    # already lists them, and repeating three of them buries the question.
     mcp_rich_view.console.print()
     return click.confirm(
         click.style("Recommended", fg="green")
-        + f": also install the Opik skill pack for {names}?\n"
+        + ": also install the Opik skill pack?\n"
         + click.style(SKILL_PACK_PITCH, dim=True),
         default=True,
     )
