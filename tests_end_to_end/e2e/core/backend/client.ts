@@ -52,6 +52,57 @@ export interface RawApiResult {
   message: string;
 }
 
+/** One credential row of a provider's dynamic-token-auth recipe. */
+export interface ProviderAuthCredentialRef {
+  key: string;
+  /**
+   * As the API answered it. Secret values read back as the `__SECRET__`
+   * sentinel and never in the clear — asserting on that is the point of
+   * carrying the value through rather than dropping it.
+   */
+  value: string;
+  secret: boolean;
+}
+
+/** A provider's dynamic-token-auth recipe (`auth_config`), as the API answers it. */
+export interface ProviderAuthConfigRef {
+  tokenUrl: string | null;
+  sendAs: string | null;
+  credentials: ProviderAuthCredentialRef[];
+}
+
+/**
+ * One configured AI provider.
+ *
+ * `apiKey` and `authConfig` are both nullable and both meaningful: the two are
+ * mutually exclusive on the backend, so which one is absent is exactly what a
+ * mode-switch test asserts. They must not be collapsed to a single "auth" field.
+ */
+export interface ProviderKeyRef {
+  id: string;
+  provider: string;
+  providerName: string | null;
+  /**
+   * The stored static key as the *list* endpoint masks it (`sk-***…`), `''`
+   * once cleared, or null when the endpoint omits it. Never the plaintext.
+   */
+  apiKey: string | null;
+  authConfig: ProviderAuthConfigRef | null;
+}
+
+/**
+ * A provider read, paired with the untouched response text.
+ *
+ * The raw body is carried because "no plaintext secret appears anywhere in the
+ * response" is a claim about the whole payload, not about the fields a mapper
+ * happened to pick out — a leak in a field this client does not model would be
+ * invisible to a structural assertion.
+ */
+export interface ProviderKeyRead<T> {
+  value: T;
+  rawBody: string;
+}
+
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   versionName: string;
@@ -305,7 +356,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
-  ): Promise<RawApiResult & { json: unknown }> => {
+  ): Promise<RawApiResult & { json: unknown; text: string; location: string | null }> => {
     const headers: Record<string, string> = {
       Accept: 'application/json',
       'Content-Type': 'application/json',
@@ -330,7 +381,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
     }
-    return { status: res.status, message, json };
+    return { status: res.status, message, json, text, location: res.headers.get('location') };
   };
 
   /**
@@ -723,6 +774,133 @@ export function makeBackendClient(apiKey: string | null = null) {
           (item.feedback_scores ?? []).map((s) => [s.name, Number(s.value)]),
         ),
       }));
+    },
+
+    /**
+     * Create an AI provider key — `POST /v1/private/llm-provider-key`.
+     *
+     * Raw fetch, like `getProjectStats` above and for the same reason: the
+     * pinned TS SDK's provider-key request type predates `auth_config`
+     * (OPIK-7940) and its serialiser would drop the field silently, which is
+     * the one thing a token-auth test cannot tolerate. Switch to the typed call
+     * once the SDK carries the recipe.
+     *
+     * `authConfig` is `unknown` on purpose: the negative paths deliberately send
+     * shapes the API must reject (an api_key alongside a recipe, a literal `{}`
+     * to clear one), which no valid recipe type can express.
+     */
+    async createProviderKey(args: {
+      provider: string;
+      providerName: string;
+      baseUrl: string;
+      /** Comma-separated, already API-prefixed (`custom-llm/<providerName>/<model>`). */
+      models: string;
+      apiKey?: string;
+      authConfig?: unknown;
+    }): Promise<RawApiResult & { id: string | null }> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/llm-provider-key', {
+        body: {
+          provider: args.provider,
+          provider_name: args.providerName,
+          base_url: args.baseUrl,
+          configuration: { models: args.models },
+          ...(args.apiKey === undefined ? {} : { api_key: args.apiKey }),
+          ...(args.authConfig === undefined ? {} : { auth_config: args.authConfig }),
+        },
+      });
+      // 201 carries the new id only in the Location header; the body is empty.
+      const id = location ? (location.split('/').pop() ?? null) : null;
+      return { status, message, id };
+    },
+
+    /**
+     * `PATCH /v1/private/llm-provider-key/{id}` without throwing.
+     *
+     * Status and message are both part of the contract under test: setting a
+     * static key and a token recipe in one request must be refused at 400 with
+     * a message naming the conflict, not silently applied.
+     */
+    async updateProviderKey(args: {
+      id: string;
+      apiKey?: string;
+      authConfig?: unknown;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'PATCH',
+        `/v1/private/llm-provider-key/${args.id}`,
+        {
+          body: {
+            ...(args.apiKey === undefined ? {} : { api_key: args.apiKey }),
+            ...(args.authConfig === undefined ? {} : { auth_config: args.authConfig }),
+          },
+        },
+      );
+      return { status, message };
+    },
+
+    /** One provider by id, with the untouched response text — see `ProviderKeyRead`. */
+    async getProviderKey(id: string): Promise<ProviderKeyRead<ProviderKeyRef> | null> {
+      const { status, json, text } = await rawFetch(
+        'GET',
+        `/v1/private/llm-provider-key/${id}`,
+      );
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/llm-provider-key/${id} -> ${status}: ${text.slice(0, 300)}`);
+      }
+      return { value: toProviderKeyRef(json), rawBody: text };
+    },
+
+    /** Every configured provider, with the untouched response text. */
+    async listProviderKeys(): Promise<ProviderKeyRead<ProviderKeyRef[]>> {
+      const { status, json, text } = await rawFetch('GET', '/v1/private/llm-provider-key');
+      if (status !== 200) {
+        throw new Error(`GET /v1/private/llm-provider-key -> ${status}: ${text.slice(0, 300)}`);
+      }
+      const content = (json as { content?: unknown[] } | null)?.content ?? [];
+      return { value: content.map(toProviderKeyRef), rawBody: text };
+    },
+
+    /**
+     * `POST /v1/private/llm-provider-key/auth-config/test` without throwing.
+     *
+     * The backend performs the token fetch, so a success here needs an auth
+     * service *it* can reach. What this estate uses it for is the DB-level
+     * refusals that happen before any network call — e.g. a provider that no
+     * longer holds a recipe.
+     */
+    async testProviderAuthConfig(args: {
+      providerId?: string;
+      authConfig?: unknown;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'POST',
+        '/v1/private/llm-provider-key/auth-config/test',
+        {
+          body: {
+            ...(args.providerId === undefined ? {} : { provider_id: args.providerId }),
+            ...(args.authConfig === undefined ? {} : { auth_config: args.authConfig }),
+          },
+        },
+      );
+      return { status, message };
+    },
+
+    /**
+     * Delete provider keys — `POST /v1/private/llm-provider-key/delete`.
+     *
+     * Provider keys are workspace-scoped: they cascade with nothing and the
+     * run-prefix sweep in global-teardown does not know about them, so whatever
+     * creates one has to delete it explicitly.
+     */
+    async deleteProviderKeys(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      const { status, text } = await rawFetch('POST', '/v1/private/llm-provider-key/delete', {
+        body: { ids },
+      });
+      if (status !== 204 && status !== 200) {
+        throw new Error(`POST /v1/private/llm-provider-key/delete -> ${status}: ${text.slice(0, 300)}`);
+      }
     },
 
     async findExperimentByName(name: string): Promise<ExperimentRefDetail | null> {
@@ -1145,6 +1323,46 @@ export function makeBackendClient(apiKey: string | null = null) {
         return { url, urlReachable: false, content: null };
       }
     },
+  };
+}
+
+/**
+ * Map one provider-key payload onto `ProviderKeyRef`.
+ *
+ * Absent and empty are kept apart everywhere here: `api_key: ''` is what a
+ * cleared static key reads back as, `auth_config: null` is a provider that
+ * holds no recipe, and a `??` that folded either into the other would make the
+ * mode-switch assertions unable to fail.
+ */
+function toProviderKeyRef(raw: unknown): ProviderKeyRef {
+  const key = (raw ?? {}) as {
+    id?: string;
+    provider?: string;
+    provider_name?: string | null;
+    api_key?: string | null;
+    auth_config?: {
+      token_url?: string | null;
+      send_as?: string | null;
+      credentials?: Array<{ key?: string; value?: string; secret?: boolean }> | null;
+    } | null;
+  };
+  const authConfig = key.auth_config;
+  return {
+    id: String(key.id ?? ''),
+    provider: String(key.provider ?? ''),
+    providerName: key.provider_name ?? null,
+    apiKey: key.api_key ?? null,
+    authConfig: authConfig
+      ? {
+          tokenUrl: authConfig.token_url ?? null,
+          sendAs: authConfig.send_as ?? null,
+          credentials: (authConfig.credentials ?? []).map((credential) => ({
+            key: String(credential.key ?? ''),
+            value: String(credential.value ?? ''),
+            secret: Boolean(credential.secret),
+          })),
+        }
+      : null,
   };
 }
 

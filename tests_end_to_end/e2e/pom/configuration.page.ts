@@ -1,6 +1,7 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { AiProviderDialog } from './ai-provider-dialog.page';
 
 /**
  * Provider name as shown in the FE. Must match `ProviderGridOption.label`
@@ -200,6 +201,49 @@ export class ConfigurationPage {
         })
         .toBe(true);
       return true;
+    });
+  }
+
+  /**
+   * The table row of one Custom provider, addressed by its `provider_name`.
+   *
+   * By identity, not position: the row is picked out by the `data-provider`
+   * marker its first cell carries plus an exact-match on the name text, so a
+   * reordered or re-sorted table still finds the right row. The name match is
+   * exact for the same reason a cell filter must be — `hasText: 'qa-oauth'`
+   * would also match `qa-oauth-2`.
+   */
+  customProviderRow(providerName: string): Locator {
+    return this.page
+      .getByTestId('ai-provider-row-cell')
+      .and(this.page.locator(`[data-provider="${CUSTOM_PROVIDER_TYPE}"]`))
+      .locator('xpath=ancestor::tr')
+      .filter({ has: this.page.getByText(providerName, { exact: true }) });
+  }
+
+  /**
+   * Open Edit on one Custom provider's row and return the dialog page object.
+   *
+   * `providerId` is threaded through so the dialog can wait on *this*
+   * provider's update request rather than on any PATCH that happens to fly.
+   */
+  async openEditDialogForCustomProvider(
+    providerName: string,
+    providerId: string,
+  ): Promise<AiProviderDialog> {
+    return test.step(`open Edit for custom provider "${providerName}"`, async () => {
+      await this.waitForProvidersTableSettled();
+      const row = this.customProviderRow(providerName);
+      // Resolve to exactly one row rather than taking .first(): an ambiguous
+      // match must fail here, not silently edit somebody else's provider.
+      await expect(row, `exactly one row for custom provider "${providerName}"`).toHaveCount(1);
+
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+
+      const dialog = new AiProviderDialog(this.page, providerId);
+      await dialog.waitForReady();
+      return dialog;
     });
   }
 

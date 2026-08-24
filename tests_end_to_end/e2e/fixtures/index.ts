@@ -1,4 +1,4 @@
-export { test, expect } from './automation-rules.fixture';
+export { test, expect } from './ai-provider-key.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -84,4 +84,9 @@ export type {
   TokenUsageSpansFixtures,
 } from './token-usage-spans.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
+export type {
+  TokenAuthProviderRef,
+  StaticKeyProviderRef,
+  AiProviderKeyFixtures,
+} from './ai-provider-key.fixture';
 export type { ProjectRef } from '../core/backend';
