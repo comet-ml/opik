@@ -1,0 +1,45 @@
+---
+title: Opik Agent Skills
+---
+
+**Agent Skills** teach your coding agent how to work with Opik — add tracing, find and explain failures, turn them into tests, and compare fixes — right in your editor. They're portable Markdown ([agentskills.io](https://agentskills.io)) picked up by ~40 agents. The workspace-facing skills work best with the hosted [Opik MCP server](/mcp-server) connected (recommended); they also run over your SDK config — the path for OSS / self-hosted. Because a model doesn't know Opik from training the way it knows `git`, the skills are what let it use Opik without fumbling.
+
+## Install
+
+```bash
+npx skills add comet-ml/opik-skills
+```
+
+Skills install into your agent's skills directory and are picked up automatically by Claude Code, Cursor, VS Code (Copilot), Codex, Gemini CLI, and more.
+
+## Available skills
+
+You rarely call these by name — describe the task and your agent picks the right one. Start with `/instrument`.
+
+| Skill | Purpose |
+|---|---|
+| `/instrument` | Add Opik tracing to your app and verify a real trace lands (runs `opik configure` first if the project isn't set up). **Start here.** |
+| `/find` | Surface the traces worth your attention — errors, regressions, outliers, low online-eval scores. |
+| `/explain` | Root-cause a specific trace — what went wrong, and why. |
+| `/test` | Turn a failing case into a repeatable check (creates a dataset + test suite). |
+| `/compare` | Run a candidate against the baseline over a test suite and show you the numbers. |
+| `/evaluate` | Build an LLM evaluation and run it against your app — judges, datasets, RAG — and return an experiment with scores. |
+| `/opik` | **Reference** — Opik SDK knowledge (tracing, span types, integrations, threads, prompts) plus best practices. Consulted automatically; you rarely invoke it. |
+
+<Note>
+`/explain` runs the investigation itself — the agent fetches the trace (and, for a pattern, a broader set) via the SDK and root-causes it **against your code**. No MCP required. When the hosted [Opik MCP server](/mcp-server) is connected, it can optionally hand off to **Ollie** as an alternative reasoner — a convenience, not a requirement.
+</Note>
+
+## Using skills
+
+Invoke a skill by name — `/find` — or just describe the task ("why are my `demo` traces failing?") and your agent picks the right one. A typical debugging pass flows `/find` → `/explain` → `/test` → `/compare`. Start with `/instrument`; everything builds on the traces it produces.
+
+## Learn more
+
+- **Recommended:** connect the hosted [Opik MCP server](/mcp-server) for live data, in-chat tool calls, and Ollie.
+- **Self-hosting Opik (OSS)?** The skills run over your SDK config — run `opik configure` and choose self-hosted.
+- [Opik documentation](https://www.comet.com/docs/opik/)
+
+<Note>
+Coming next: deciding whether a change is **safe to ship**, and confirming it **held in production**.
+</Note>

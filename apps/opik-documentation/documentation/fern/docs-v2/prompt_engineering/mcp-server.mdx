@@ -341,6 +341,34 @@ available on Comet Cloud only — on self-hosted those calls fail at dispatch;
 use `read` / `list` / `write` directly.
 </Tip>
 
+## Skills for coding agents
+
+Beyond the tools, Opik ships **agent skills** that teach a coding agent _how_ to
+use Opik — add tracing, find and explain failures, test and compare fixes —
+installable in one command:
+
+```bash
+npx skills add comet-ml/opik-skills
+```
+
+The workspace-facing skills **work best with this server connected** (the
+recommended path); they also run over your Opik SDK config — the fallback for
+OSS / self-hosted / CI. See **[Agent Skills](/agent-skills)** for the full list
+and usage. A connected agent can also pull the skills on demand (served as
+cacheable resources) — nothing to install.
+
+## What's unique to the MCP
+
+Traces, datasets, test suites, experiments — even Diagnostics — are all
+reachable through the Opik SDK too. Connect the MCP for what only it gives you:
+
+- **In-chat tool calls** — your agent acts directly, instead of writing and
+  running throwaway scripts.
+- **Governance** — per-user OAuth and audit, rather than a shared API key.
+- **Ollie (optional)** — `ask_ollie` is the one tool with no SDK path: an
+  alternative reasoner. It's a convenience, not a gate — `/explain` and `/find`
+  investigate over SDK-fetched data without it, so nothing is MCP-only.
+
 ## Using the MCP server
 
 ### The tools at a glance
