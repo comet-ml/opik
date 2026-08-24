@@ -31,6 +31,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -58,6 +59,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -732,15 +734,79 @@ class RemoteAuthServiceTest {
         return paramMap;
     }
 
-    @Test
-    void authRequestAsksForPermissionsOnlyWhenRedactionIsEnabled() {
-        // Resolving permissions costs the platform an extra read on the path every Opik request takes, so a
-        // deployment with redaction off must send exactly the payload it sent before the feature existed.
-        var off = RemoteAuthService.AuthRequest.builder()
-                .workspaceName("ws").path("/v1/private/traces").includePermissions(false).build();
-        var on = off.toBuilder().includePermissions(true).build();
+    /**
+     * Every path that produces credentials must ask for permissions when redaction is on. Dropping the flag
+     * from one of them would redact administrators on that path alone — the failure the session-cookie route
+     * already produced once — while the other paths kept working and the suite stayed green.
+     * <p>
+     * Asserted against the bytes WireMock actually received, not against a mapper chosen here: the outbound
+     * client is built with its own camelCase mapper, so serializing by hand in the test would prove nothing
+     * about the field name the platform binds.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"/opik/auth", "/opik/auth-session", "/opik/auth-by-username"})
+    void authRequestAsksForPermissionsOnEveryPath_whenRedactionIsEnabled(String emPath)
+            throws JsonProcessingException {
+        authenticateVia(emPath, serviceRequestingPermissions(true));
 
-        assertThat(JsonUtils.writeValueAsString(off)).doesNotContain("permissions");
-        assertThat(JsonUtils.writeValueAsString(on)).contains("include_permissions");
+        // The field name is asserted as the platform sees it: LlmAuthRequest binds includePermissions,
+        // so a rename here silently stops permissions resolving and everyone reads redacted content.
+        var body = OBJECT_MAPPER.readTree(requestBodySentTo(emPath));
+        assertThat(body.has("includePermissions")).isTrue();
+        assertThat(body.get("includePermissions").asBoolean()).isTrue();
+    }
+
+    /**
+     * With redaction off the payload must be exactly what it was before this feature existed, so the platform
+     * skips the permission lookup and older platforms see nothing new.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"/opik/auth", "/opik/auth-session", "/opik/auth-by-username"})
+    void authRequestOmitsThePermissionsFlagEntirely_whenRedactionIsDisabled(String emPath)
+            throws JsonProcessingException {
+        authenticateVia(emPath, serviceRequestingPermissions(false));
+
+        // Asserted on the parsed field, not the raw text: absent is the requirement, and a substring
+        // check would pass just as happily for a payload carrying the flag explicitly as false.
+        assertThat(OBJECT_MAPPER.readTree(requestBodySentTo(emPath)).has("includePermissions")).isFalse();
+    }
+
+    private RemoteAuthService serviceRequestingPermissions(boolean includePermissions) {
+        return new RemoteAuthService(TestHttpClientUtils.client(),
+                new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
+                () -> requestContext,
+                new NoopCacheService(), includePermissions);
+    }
+
+    /** Drives the entry point that reaches {@code emPath}, so the flag is observed on a real request. */
+    private void authenticateVia(String emPath, RemoteAuthService service) throws JsonProcessingException {
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
+        WIRE_MOCK.server().stubFor(post(emPath)
+                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
+
+        var contextInfo = ContextInfoHolder.builder()
+                .uriInfo(createMockUriInfo("/priv/something"))
+                .method("GET")
+                .build();
+        var workspaceName = "workspace-" + UUID.randomUUID();
+
+        switch (emPath) {
+            case "/opik/auth" -> service.authenticate(
+                    getHeadersMock(workspaceName, "apiKey-" + UUID.randomUUID()), null, contextInfo);
+            case "/opik/auth-session" -> service.authenticate(
+                    getHeadersMock(workspaceName, ""), sessionCookie("session-" + UUID.randomUUID()),
+                    contextInfo);
+            case "/opik/auth-by-username" -> service.authorizeOAuth(ValidatedToken.builder()
+                    .userName("oauth-user-" + UUID.randomUUID())
+                    .workspaceName(workspaceName)
+                    .build(), contextInfo);
+            default -> throw new IllegalArgumentException("Unhandled auth path: " + emPath);
+        }
+    }
+
+    private String requestBodySentTo(String emPath) {
+        var requests = WIRE_MOCK.server().findAll(postRequestedFor(urlPathEqualTo(emPath)));
+        assertThat(requests).as("a request should have reached %s", emPath).hasSize(1);
+        return requests.getFirst().getBodyAsString();
     }
 }
