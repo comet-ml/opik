@@ -29,6 +29,31 @@ export interface DatasetItemRef {
   data: Record<string, unknown>;
 }
 
+/**
+ * One row of a dataset's version history. `itemsTotal` is what the Version
+ * history tab renders as "Item count"; added/modified/deleted are the `+ / ~ /
+ * −` tags of its "Changes summary" column.
+ *
+ * `id` is carried so a caller can assert that a write *mutated* the latest
+ * version rather than cutting a new one — an ungrouped write (no
+ * `batchGroupId`) must never change it.
+ */
+export interface DatasetVersionRef {
+  id: string;
+  versionName: string;
+  itemsTotal: number;
+  itemsAdded: number;
+  itemsModified: number;
+  itemsDeleted: number;
+  isLatest: boolean;
+}
+
+/** One item of a write batch. Re-sending an existing `id` is an upsert. */
+export interface DatasetItemWriteRef {
+  id?: string;
+  data: Record<string, unknown>;
+}
+
 export interface ExperimentRefDetail {
   id: string;
   name: string;
@@ -227,6 +252,79 @@ export function makeBackendClient(apiKey: string | null = null) {
         id: String(item.id),
         data: (item.data ?? {}) as Record<string, unknown>,
       }));
+    },
+
+    async getDatasetVersions(datasetId: string): Promise<DatasetVersionRef[]> {
+      const page = await opik.api.datasets.listDatasetVersions(datasetId, { size: 100 });
+      const content = page.content ?? [];
+      return content.map((v) => ({
+        id: String(v.id ?? ''),
+        versionName: String(v.versionName ?? ''),
+        itemsTotal: Number(v.itemsTotal ?? 0),
+        itemsAdded: Number(v.itemsAdded ?? 0),
+        itemsModified: Number(v.itemsModified ?? 0),
+        itemsDeleted: Number(v.itemsDeleted ?? 0),
+        isLatest: Boolean(v.isLatest),
+      }));
+    },
+
+    /**
+     * Every item id actually stored in the dataset, paged out in full. This is
+     * the ground truth a version's `items_total` is supposed to agree with, so
+     * it must not be capped at a page — hence the loop. `truncate` drops the
+     * item payloads we don't need, keeping the read cheap.
+     */
+    async listDatasetItemIds(datasetId: string): Promise<string[]> {
+      const pageSize = 1000;
+      const ids: string[] = [];
+      for (let page = 1; ; page++) {
+        const result = await opik.api.datasets.getDatasetItems(datasetId, {
+          page,
+          size: pageSize,
+          truncate: true,
+        });
+        const content = result.content ?? [];
+        ids.push(...content.map((item) => String(item.id)));
+        if (content.length < pageSize) return ids;
+      }
+    },
+
+    /**
+     * Writes items into the dataset's *latest* version — `PUT /v1/private/
+     * datasets/items` with no `batch_group_id`, which mutates that version in
+     * place instead of cutting a new one. An item carrying an existing `id` is
+     * an update (counts as modified), one without is an addition.
+     *
+     * This is deliberately the ungrouped form. The grouped form (a
+     * `batch_group_id`, which is what the Python SDK's `insert()` sends) is a
+     * separate contract with different version semantics, and a caller that
+     * wants it must not reach for this helper.
+     */
+    async upsertDatasetItemsIntoLatestVersion(args: {
+      datasetId: string;
+      items: DatasetItemWriteRef[];
+    }): Promise<void> {
+      await opik.api.datasets.createOrUpdateDatasetItems({
+        datasetId: args.datasetId,
+        items: args.items.map((item) => ({
+          ...(item.id ? { id: item.id } : {}),
+          source: 'manual' as const,
+          data: item.data,
+        })),
+      });
+    },
+
+    /**
+     * Deletes dataset items by id, again ungrouped so the latest version is
+     * mutated in place. Returns the HTTP status rather than void: deleting ids
+     * that are already gone is specified to be a no-op 204, and a caller
+     * checking that needs to tell it from a 404.
+     */
+    async deleteDatasetItemsByIds(itemIds: string[]): Promise<number> {
+      const { rawResponse } = await opik.api.datasets
+        .deleteDatasetItems({ itemIds })
+        .withRawResponse();
+      return rawResponse.status;
     },
 
     async findExperimentByName(name: string): Promise<ExperimentRefDetail | null> {

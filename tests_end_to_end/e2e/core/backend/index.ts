@@ -4,6 +4,8 @@ export {
   type ProjectRef,
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
+  type DatasetItemWriteRef,
+  type DatasetVersionRef,
   type ExperimentRefDetail,
   type TestSuiteRef as BackendTestSuiteRef,
   type TestSuiteItemRef,
