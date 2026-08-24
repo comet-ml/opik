@@ -41,9 +41,12 @@ const useProviderKeysCreateMutation = () => {
     onError: (error: AxiosError) => {
       // the backend 400s in two shapes: bean validation -> {errors: [...]},
       // service BadRequestException -> {message: "..."} (Dropwizard ErrorMessage)
+      const errors = get(error, ["response", "data", "errors"]);
       const message =
         get(error, ["response", "data", "message"]) ??
-        get(error, ["response", "data", "errors", "0"], error.message);
+        (Array.isArray(errors) && errors.length > 0
+          ? errors.join("; ")
+          : error.message);
 
       toast({
         title: "Error",

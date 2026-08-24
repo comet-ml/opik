@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.ProviderAuthCheck;
@@ -74,7 +75,7 @@ public class LlmProviderApiKeyResource {
                                 ? maskApiKey(decrypt(providerApiKey.apiKey()))
                                 : "null")
                         .authConfig(providerApiKey.authConfig() != null
-                                ? providerApiKey.authConfig().mask()
+                                ? EncryptedAuthConfig.of(providerApiKey.authConfig().value().mask())
                                 : null)
                         .build())
                 .toList();
@@ -106,7 +107,9 @@ public class LlmProviderApiKeyResource {
 
         return Response.ok().entity(providerApiKey.toBuilder()
                 .apiKey(providerApiKey.apiKey() != null ? maskApiKey(decrypt(providerApiKey.apiKey())) : null)
-                .authConfig(providerApiKey.authConfig() != null ? providerApiKey.authConfig().mask() : null)
+                .authConfig(providerApiKey.authConfig() != null
+                        ? EncryptedAuthConfig.of(providerApiKey.authConfig().value().mask())
+                        : null)
                 .build()).build();
     }
 

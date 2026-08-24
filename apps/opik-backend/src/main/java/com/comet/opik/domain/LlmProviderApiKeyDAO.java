@@ -4,6 +4,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.ProviderAuthConfig;
+import com.comet.opik.infrastructure.db.EncryptedAuthConfigArgumentFactory;
 import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.ProviderAuthConfigArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
@@ -25,6 +26,7 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(MapFlatArgumentFactory.class)
 @RegisterArgumentFactory(ProviderAuthConfigArgumentFactory.class)
+@RegisterArgumentFactory(EncryptedAuthConfigArgumentFactory.class)
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
 public interface LlmProviderApiKeyDAO {
 

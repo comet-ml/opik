@@ -126,9 +126,9 @@ export const createCustomProviderDetailsFormSchema = (
       authCredentials: z
         .array(
           z.object({
-            // max mirrors the backend's @Size(max = 250) on Credential.key
+            // maxes mirror the backend's @Size(max = 250 / 2000) on Credential
             key: z.string().max(250),
-            value: z.string(),
+            value: z.string().max(2000),
             secret: z.boolean(),
             saved: z.boolean(),
             id: z.string(),
@@ -193,10 +193,14 @@ export const createCustomProviderDetailsFormSchema = (
 
         const fallbackTtl = (data.authFallbackTtl ?? "").trim();
         // digits-only implies non-negative; no separate sign/number check needed
-        if (fallbackTtl.length > 0 && !/^\d+$/.test(fallbackTtl)) {
+        if (
+          fallbackTtl.length > 0 &&
+          (!/^\d+$/.test(fallbackTtl) || Number(fallbackTtl) > 31_536_000)
+        ) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "Fallback lifetime must be a whole number of seconds",
+            message:
+              "Fallback lifetime must be a whole number of seconds, at most 31,536,000 (one year)",
             path: ["authFallbackTtl"],
           });
         }

@@ -45,7 +45,7 @@ public record ProviderApiKey(
         @JsonView({View.Public.class,
                 View.Write.class}) @Valid @Schema(description = "Dynamic token auth recipe. When set, Opik fetches a short-lived bearer from the configured auth service instead of using a static api_key. "
                         +
-                        "Only supported for custom providers. Secret credential values read back masked.") ProviderAuthConfig authConfig,
+                        "Only supported for custom providers. Secret credential values read back masked.", implementation = ProviderAuthConfig.class) EncryptedAuthConfig authConfig,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
@@ -25,6 +26,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -124,7 +126,7 @@ public class AuthTokenProvider {
      * @throws AuthTokenException with a redacted, user-facing message when the fetch fails
      */
     public String bearer(@NonNull String workspaceId, @NonNull UUID providerId,
-            @NonNull ProviderAuthConfig authConfig) {
+            @NonNull EncryptedAuthConfig authConfig) {
         String cacheKey = cacheKey(providerId, authConfig);
         String cached = readCache(cacheKey);
         if (cached != null) {
@@ -162,7 +164,7 @@ public class AuthTokenProvider {
                     exception);
         }
 
-        String token = fetchToken(authConfig).token();
+        String token = fetchToken(authConfig.value()).token();
         recordRequestMetric(workspaceId, providerId, "degraded_direct");
         return token;
     }
@@ -174,7 +176,7 @@ public class AuthTokenProvider {
      * failure here only delays the cleanup until the bucket's own expiry.
      */
     public void invalidateAfterGatewayRejection(@NonNull String workspaceId, @NonNull UUID providerId,
-            @NonNull ProviderAuthConfig authConfig) {
+            @NonNull EncryptedAuthConfig authConfig) {
         recordRequestMetric(workspaceId, providerId, "gateway_rejected");
         String cacheKey = cacheKey(providerId, authConfig);
         try {
@@ -184,13 +186,13 @@ public class AuthTokenProvider {
         }
     }
 
-    private String refreshUnderLock(String cacheKey, ProviderAuthConfig authConfig) {
+    private String refreshUnderLock(String cacheKey, EncryptedAuthConfig authConfig) {
         // another pod may have refreshed while this one waited on the lock
         String cached = readCache(cacheKey);
         if (cached != null) {
             return cached;
         }
-        FetchedToken fetched = fetchToken(authConfig);
+        FetchedToken fetched = fetchToken(authConfig.value());
         writeCache(cacheKey, fetched);
         return fetched.token();
     }
@@ -223,8 +225,8 @@ public class AuthTokenProvider {
         }
     }
 
-    private String cacheKey(UUID providerId, ProviderAuthConfig authConfig) {
-        return CACHE_KEY_FORMAT.formatted(providerId, DigestUtils.sha256Hex(JsonUtils.writeValueAsString(authConfig)));
+    private String cacheKey(UUID providerId, EncryptedAuthConfig authConfig) {
+        return CACHE_KEY_FORMAT.formatted(providerId, DigestUtils.sha256Hex(authConfig.hashSource()));
     }
 
     /**
@@ -254,9 +256,15 @@ public class AuthTokenProvider {
                     exception);
         }
         HttpRequest request = buildRequest(authConfig);
-        HttpResponse<String> response;
+        HttpResponse<InputStream> response;
+        byte[] bodyBytes;
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            // bounded read: at most cap+1 bytes ever reach the heap; closing the stream
+            // cancels whatever the endpoint is still sending
+            try (InputStream bodyStream = response.body()) {
+                bodyBytes = bodyStream.readNBytes(config.getMaxResponseChars() + 1);
+            }
         } catch (IOException exception) {
             recordFetchMetric(startNanos, "unreachable", origin);
             throw new AuthTokenException("token fetch failed: could not reach '%s': %s"
@@ -266,17 +274,17 @@ public class AuthTokenProvider {
             recordFetchMetric(startNanos, "interrupted", origin);
             throw new AuthTokenException("token fetch was interrupted", exception);
         }
+        if (bodyBytes.length > config.getMaxResponseChars()) {
+            recordFetchMetric(startNanos, "oversized_reply", origin);
+            throw new AuthTokenException("token reply from '%s' exceeds the maximum accepted size"
+                    .formatted(authConfig.tokenUrl()));
+        }
 
-        String body = Optional.ofNullable(response.body()).orElse("");
+        String body = new String(bodyBytes, StandardCharsets.UTF_8);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             recordFetchMetric(startNanos, "upstream_error", origin);
             throw new AuthTokenException("token fetch failed with status '%d' from '%s': %s"
                     .formatted(response.statusCode(), authConfig.tokenUrl(), redact(authConfig, body)));
-        }
-        if (body.length() > config.getMaxResponseChars()) {
-            recordFetchMetric(startNanos, "oversized_reply", origin);
-            throw new AuthTokenException("token reply from '%s' exceeds the maximum accepted size"
-                    .formatted(authConfig.tokenUrl()));
         }
 
         JsonNode root;
@@ -424,16 +432,16 @@ public class AuthTokenProvider {
         if (isBlank(text)) {
             return "";
         }
-        String result = text.length() > ERROR_BODY_SNIPPET_CHARS
-                ? text.substring(0, ERROR_BODY_SNIPPET_CHARS) + "…"
-                : text;
+        String result = text;
         for (var credential : Optional.ofNullable(authConfig.credentials())
                 .orElse(List.<ProviderAuthConfig.Credential>of())) {
             if (isNotBlank(credential.value())) {
                 result = result.replace(credential.value(), REDACTED);
             }
         }
-        return result;
+        return result.length() > ERROR_BODY_SNIPPET_CHARS
+                ? result.substring(0, ERROR_BODY_SNIPPET_CHARS) + "…"
+                : result;
     }
 
     private void recordRequestMetric(String workspaceId, UUID providerId, String outcome) {
@@ -445,4 +453,5 @@ public class AuthTokenProvider {
         fetchDurationMs.record((System.nanoTime() - startNanos) / 1_000_000,
                 Attributes.of(OUTCOME, outcome, ORIGIN, origin));
     }
+
 }

@@ -64,10 +64,10 @@ public class ProviderApiKeyValidator
     }
 
     private boolean isValidAuthConfig(ProviderApiKey providerApiKey, ConstraintValidatorContext context) {
-        var authConfig = providerApiKey.authConfig();
-        if (authConfig == null) {
+        if (providerApiKey.authConfig() == null) {
             return true;
         }
+        var authConfig = providerApiKey.authConfig().value();
 
         boolean valid = true;
         for (String error : ProviderAuthConfigValidator.validationErrors(authConfig)) {

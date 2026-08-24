@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.infrastructure.EncryptionUtils;
@@ -154,6 +155,11 @@ class AuthTokenProviderTest {
         wireMock.resetAll();
     }
 
+    /** Wraps a parsed recipe the way request-path code receives it. */
+    private static EncryptedAuthConfig wrap(ProviderAuthConfig config) {
+        return EncryptedAuthConfig.of(config);
+    }
+
     private ProviderAuthConfig.ProviderAuthConfigBuilder oauthRecipe() {
         return ProviderAuthConfig.builder()
                 .tokenUrl(wireMock.baseUrl() + TOKEN_PATH)
@@ -186,8 +192,8 @@ class AuthTokenProviderTest {
         var providerId = UUID.randomUUID();
         var recipe = oauthRecipe().build();
 
-        assertThat(provider.bearer("ws", providerId, recipe)).isEqualTo("tok-1");
-        assertThat(provider.bearer("ws", providerId, recipe)).isEqualTo("tok-1");
+        assertThat(provider.bearer("ws", providerId, wrap(recipe))).isEqualTo("tok-1");
+        assertThat(provider.bearer("ws", providerId, wrap(recipe))).isEqualTo("tok-1");
 
         wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH))
                 .withHeader("Content-Type", equalTo("application/x-www-form-urlencoded"))
@@ -214,7 +220,7 @@ class AuthTokenProviderTest {
                         credential("client_secret", SECRET_VALUE, true)))
                 .build();
 
-        assertThat(provider.bearer("ws", UUID.randomUUID(), recipe)).isEqualTo("tok-basic");
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("tok-basic");
 
         String expectedBasic = "Basic " + Base64.getEncoder()
                 .encodeToString(("opik-prod:" + SECRET_VALUE).getBytes());
@@ -229,7 +235,7 @@ class AuthTokenProviderTest {
         stubToken("{\"access_token\": \"tok-json\", \"expires_in\": 3600}");
         var recipe = oauthRecipe().sendAs(ProviderAuthConfig.SendAs.JSON).build();
 
-        assertThat(provider.bearer("ws", UUID.randomUUID(), recipe)).isEqualTo("tok-json");
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("tok-json");
 
         wireMock.verify(postRequestedFor(urlEqualTo(TOKEN_PATH))
                 .withHeader("Content-Type", equalTo("application/json"))
@@ -248,7 +254,7 @@ class AuthTokenProviderTest {
                 .fallbackTtlSeconds(90_000L)
                 .build();
 
-        assertThat(provider.bearer("ws", UUID.randomUUID(), recipe)).isEqualTo("tok-nested");
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("tok-nested");
     }
 
     @Test
@@ -258,8 +264,8 @@ class AuthTokenProviderTest {
         var providerId = UUID.randomUUID();
         var recipe = oauthRecipe().fallbackTtlSeconds(0L).build();
 
-        provider.bearer("ws", providerId, recipe);
-        provider.bearer("ws", providerId, recipe);
+        provider.bearer("ws", providerId, wrap(recipe));
+        provider.bearer("ws", providerId, wrap(recipe));
 
         wireMock.verify(exactly(2), postRequestedFor(urlEqualTo(TOKEN_PATH)));
         assertThat(cachedKeys(providerId)).isEmpty();
@@ -272,8 +278,8 @@ class AuthTokenProviderTest {
         var providerId = UUID.randomUUID();
         var recipe = oauthRecipe().fallbackTtlSeconds(0L).build();
 
-        provider.bearer("ws", providerId, recipe);
-        provider.bearer("ws", providerId, recipe);
+        provider.bearer("ws", providerId, wrap(recipe));
+        provider.bearer("ws", providerId, wrap(recipe));
 
         wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH)));
         assertThat(cachedKeys(providerId)).hasSize(1);
@@ -287,12 +293,12 @@ class AuthTokenProviderTest {
         var providerId = UUID.randomUUID();
         var recipe = oauthRecipe().build();
 
-        provider.bearer("ws", providerId, recipe);
-        provider.bearer("ws", providerId, recipe);
+        provider.bearer("ws", providerId, wrap(recipe));
+        provider.bearer("ws", providerId, wrap(recipe));
         wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH)));
 
         Thread.sleep(800);
-        provider.bearer("ws", providerId, recipe);
+        provider.bearer("ws", providerId, wrap(recipe));
 
         wireMock.verify(exactly(2), postRequestedFor(urlEqualTo(TOKEN_PATH)));
     }
@@ -303,13 +309,13 @@ class AuthTokenProviderTest {
         stubToken("{\"access_token\": \"tok-cfg\", \"expires_in\": 3600}");
         var providerId = UUID.randomUUID();
 
-        provider.bearer("ws", providerId, oauthRecipe().build());
-        provider.bearer("ws", providerId, oauthRecipe()
+        provider.bearer("ws", providerId, wrap(oauthRecipe().build()));
+        provider.bearer("ws", providerId, wrap(oauthRecipe()
                 .credentials(List.of(
                         credential("grant_type", "client_credentials", false),
                         credential("client_id", "opik-prod", false),
                         credential("client_secret", "rotated-secret", true)))
-                .build());
+                .build()));
 
         wireMock.verify(exactly(2), postRequestedFor(urlEqualTo(TOKEN_PATH)));
     }
@@ -321,9 +327,9 @@ class AuthTokenProviderTest {
         var providerId = UUID.randomUUID();
         var recipe = oauthRecipe().build();
 
-        provider.bearer("ws", providerId, recipe);
-        provider.invalidateAfterGatewayRejection("ws", providerId, recipe);
-        provider.bearer("ws", providerId, recipe);
+        provider.bearer("ws", providerId, wrap(recipe));
+        provider.invalidateAfterGatewayRejection("ws", providerId, wrap(recipe));
+        provider.bearer("ws", providerId, wrap(recipe));
 
         wireMock.verify(exactly(2), postRequestedFor(urlEqualTo(TOKEN_PATH)));
     }
@@ -335,7 +341,7 @@ class AuthTokenProviderTest {
                 .withStatus(401)
                 .withBody("{\"error\": \"invalid_client\", \"echo\": \"%s\"}".formatted(SECRET_VALUE))));
 
-        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("401")
                 .hasMessageContaining("invalid_client")
@@ -343,11 +349,35 @@ class AuthTokenProviderTest {
     }
 
     @Test
+    @DisplayName("an oversized 200 reply is refused while streaming")
+    void oversizedReplyIsRefused() {
+        stubToken("{\"access_token\": \"%s\"}".formatted("x".repeat(1_100_000)));
+
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
+                .isInstanceOf(AuthTokenException.class)
+                .hasMessageContaining("exceeds the maximum accepted size");
+    }
+
+    @Test
+    @DisplayName("a secret straddling the error-snippet boundary never leaks its prefix")
+    void secretStraddlingSnippetBoundaryIsRedacted() {
+        // the secret starts 5 chars before the 500-char cut: truncate-then-redact would leave "super"
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withStatus(401)
+                .withBody("x".repeat(495) + SECRET_VALUE)));
+
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
+                .isInstanceOf(AuthTokenException.class)
+                .satisfies(exception -> assertThat(exception.getMessage())
+                        .doesNotContain(SECRET_VALUE.substring(0, 5)));
+    }
+
+    @Test
     @DisplayName("a missing token field names the reply's top-level fields, never values")
     void missingTokenFieldListsTopLevelKeys() {
         stubToken("{\"token\": \"the-actual-token\", \"ttl\": 60}");
 
-        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("access_token")
                 .hasMessageContaining("[token, ttl]")
@@ -369,11 +399,11 @@ class AuthTokenProviderTest {
         org.mockito.Mockito.when(timedOutLock.executeWithLockCustomExpire(
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any()))
-                .thenAnswer(invocation -> Mono.fromRunnable(() -> holder.bearer("ws", providerId, recipe))
+                .thenAnswer(invocation -> Mono.fromRunnable(() -> holder.bearer("ws", providerId, wrap(recipe)))
                         .then(Mono.empty()));
         var waiter = new AuthTokenProvider(stringRedisClient, timedOutLock, relaxedConfig());
 
-        assertThat(waiter.bearer("ws", providerId, recipe)).isEqualTo("tok-held");
+        assertThat(waiter.bearer("ws", providerId, wrap(recipe))).isEqualTo("tok-held");
         // one fetch total (the holder's); the waiter recovered from the cache
         wireMock.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)));
     }
@@ -384,8 +414,8 @@ class AuthTokenProviderTest {
         stubToken("{\"access_token\": \"tok-rotation\", \"expires_in\": 3600}");
         UUID providerId = UUID.randomUUID();
 
-        provider.bearer("ws", providerId, oauthRecipe().build());
-        provider.bearer("ws", providerId, oauthRecipe().build());
+        provider.bearer("ws", providerId, wrap(oauthRecipe().build()));
+        provider.bearer("ws", providerId, wrap(oauthRecipe().build()));
 
         var rotated = oauthRecipe()
                 .credentials(List.of(
@@ -393,7 +423,7 @@ class AuthTokenProviderTest {
                         credential("client_id", "opik-prod", false),
                         credential("client_secret", "rotated-" + SECRET_VALUE, true)))
                 .build();
-        provider.bearer("ws", providerId, rotated);
+        provider.bearer("ws", providerId, wrap(rotated));
 
         // the hash covers unmasked values: fetch 1 (cold), cache hit, fetch 2 (rotated secret).
         // Load-bearing — masking earlier in the chain would silently keep serving the stale token.
@@ -405,7 +435,7 @@ class AuthTokenProviderTest {
     void nonHttpTokenUrlIsRejected() {
         var recipe = oauthRecipe().tokenUrl("mailto:auth@example.com").build();
 
-        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), recipe))
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(recipe)))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("not a usable http(s) URL");
     }
@@ -415,7 +445,7 @@ class AuthTokenProviderTest {
     void oversizedLifetimeIsRejected() {
         stubToken("{\"access_token\": \"tok-huge\", \"expires_in\": 9223372036854775807}");
 
-        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("outside the accepted range");
     }
@@ -425,7 +455,7 @@ class AuthTokenProviderTest {
     void missingLifetimeWithoutFallbackIsRejected() {
         stubToken("{\"access_token\": \"tok-nolife\"}");
 
-        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("expires_in")
                 .hasMessageContaining("no fallback lifetime");
@@ -438,7 +468,7 @@ class AuthTokenProviderTest {
                 .withStatus(200)
                 .withBody("<html>gateway login page</html>")));
 
-        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("non-JSON reply");
     }
@@ -448,7 +478,7 @@ class AuthTokenProviderTest {
     void unreachableTokenUrlIsRejected() {
         var recipe = oauthRecipe().tokenUrl("http://localhost:1/token").build();
 
-        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), recipe))
+        assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(recipe)))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("could not reach");
     }
@@ -460,7 +490,7 @@ class AuthTokenProviderTest {
         strictConfig.setDestinationGuard(DestinationGuard.Mode.STRICT);
         var strictProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, strictConfig);
 
-        assertThatThrownBy(() -> strictProvider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+        assertThatThrownBy(() -> strictProvider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("only https");
         wireMock.verify(exactly(0), postRequestedFor(urlEqualTo(TOKEN_PATH)));
@@ -485,7 +515,7 @@ class AuthTokenProviderTest {
 
             stubToken("{\"access_token\": \"tok-degraded\", \"expires_in\": 3600}");
 
-            assertThat(flakyProvider.bearer("ws", UUID.randomUUID(), oauthRecipe().build()))
+            assertThat(flakyProvider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                     .isEqualTo("tok-degraded");
             wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH)));
         } finally {

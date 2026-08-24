@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
@@ -653,13 +654,13 @@ class LlmProviderApiKeyResourceTest {
                     .provider(LlmProvider.CUSTOM_LLM)
                     .providerName(UUID.randomUUID().toString())
                     .apiKey(null)
-                    .authConfig(tokenAuthConfig())
+                    .authConfig(EncryptedAuthConfig.of(tokenAuthConfig()))
                     .build();
         }
 
         private ProviderAuthConfig storedAuthConfig(UUID id, String workspaceId) {
             return mySqlTemplate.inTransaction(READ_ONLY,
-                    handle -> handle.attach(LlmProviderApiKeyDAO.class).findById(id, workspaceId).authConfig());
+                    handle -> handle.attach(LlmProviderApiKeyDAO.class).findById(id, workspaceId).authConfig().value());
         }
 
         @Test
@@ -675,12 +676,12 @@ class LlmProviderApiKeyResourceTest {
 
             var actual = llmProviderApiKeyResourceClient.getById(created.id(), workspaceName, apiKey,
                     HttpStatus.SC_OK);
-            assertThat(actual.authConfig()).isEqualTo(tokenAuthConfig().mask());
-            assertThat(actual.authConfig().credentials().getLast().value())
+            assertThat(actual.authConfig().value()).isEqualTo(tokenAuthConfig().mask());
+            assertThat(actual.authConfig().value().credentials().getLast().value())
                     .isEqualTo(ProviderAuthConfig.SECRET_SENTINEL);
 
             var page = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
-            assertThat(page.content().getFirst().authConfig()).isEqualTo(tokenAuthConfig().mask());
+            assertThat(page.content().getFirst().authConfig().value()).isEqualTo(tokenAuthConfig().mask());
 
             String rawColumn = mySqlTemplate.inTransaction(READ_ONLY, handle -> handle
                     .createQuery("SELECT auth_config FROM llm_provider_api_key WHERE id = :id")
@@ -825,7 +826,7 @@ class LlmProviderApiKeyResourceTest {
 
             // create
             llmProviderApiKeyResourceClient.createProviderApiKey(
-                    createProviderApiKey().toBuilder().authConfig(tokenAuthConfig()).build(),
+                    createProviderApiKey().toBuilder().authConfig(EncryptedAuthConfig.of(tokenAuthConfig())).build(),
                     apiKey, workspaceName, HttpStatus.SC_UNPROCESSABLE_CONTENT);
 
             // update
@@ -839,6 +840,35 @@ class LlmProviderApiKeyResourceTest {
         }
 
         @Test
+        @DisplayName("update with the sentinel can't change token_url: a new destination needs full credentials")
+        void updateSentinelWithChangedTokenUrlIsRejected() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var created = llmProviderApiKeyResourceClient.createProviderApiKey(
+                    customProviderWithAuthConfig(), apiKey, workspaceName, HttpStatus.SC_CREATED);
+
+            // stored secret via the sentinel, but pointed at a different destination
+            var update = ProviderApiKeyUpdate.builder()
+                    .authConfig(tokenAuthConfig().toBuilder()
+                            .tokenUrl("https://attacker.example.com/token")
+                            .credentials(List.of(
+                                    credential("client_secret", ProviderAuthConfig.SECRET_SENTINEL, true)))
+                            .build())
+                    .build();
+            try (var response = llmProviderApiKeyResourceClient.callUpdateProviderApiKey(created.id(), update,
+                    apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class).getMessage()).contains("token_url");
+            }
+
+            var stored = storedAuthConfig(created.id(), workspaceId);
+            assertThat(stored.tokenUrl()).isEqualTo(tokenAuthConfig().tokenUrl());
+        }
+
+        @Test
         @DisplayName("create rejects the sentinel, both credentials set, and an invalid token URL")
         void createInvalidAuthConfigIsRejected() {
             String workspaceName = UUID.randomUUID().toString();
@@ -848,10 +878,10 @@ class LlmProviderApiKeyResourceTest {
 
             // sentinel on create: nothing stored to keep
             var withSentinel = customProviderWithAuthConfig().toBuilder()
-                    .authConfig(tokenAuthConfig().toBuilder()
+                    .authConfig(EncryptedAuthConfig.of(tokenAuthConfig().toBuilder()
                             .credentials(List.of(
                                     credential("client_secret", ProviderAuthConfig.SECRET_SENTINEL, true)))
-                            .build())
+                            .build()))
                     .build();
             llmProviderApiKeyResourceClient.createProviderApiKey(withSentinel, apiKey, workspaceName,
                     HttpStatus.SC_UNPROCESSABLE_CONTENT);
@@ -863,7 +893,7 @@ class LlmProviderApiKeyResourceTest {
 
             // token URL that isn't an absolute URI
             var withBadUrl = customProviderWithAuthConfig().toBuilder()
-                    .authConfig(tokenAuthConfig().toBuilder().tokenUrl("not a uri").build())
+                    .authConfig(EncryptedAuthConfig.of(tokenAuthConfig().toBuilder().tokenUrl("not a uri").build()))
                     .build();
             llmProviderApiKeyResourceClient.createProviderApiKey(withBadUrl, apiKey, workspaceName,
                     HttpStatus.SC_UNPROCESSABLE_CONTENT);
@@ -913,7 +943,7 @@ class LlmProviderApiKeyResourceTest {
                     .provider(LlmProvider.CUSTOM_LLM)
                     .providerName(UUID.randomUUID().toString())
                     .apiKey(null)
-                    .authConfig(authConfig)
+                    .authConfig(EncryptedAuthConfig.of(authConfig))
                     .build();
             return llmProviderApiKeyResourceClient.createProviderApiKey(provider, apiKey, workspaceName,
                     HttpStatus.SC_CREATED);
@@ -987,6 +1017,29 @@ class LlmProviderApiKeyResourceTest {
         }
 
         @Test
+        @DisplayName("sentinels are refused when the submitted token_url differs from the stored one")
+        void testSentinelWithDifferentTokenUrlIsRejected() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String tokenPath = stubTokenEndpoint("{\"access_token\": \"tok\", \"expires_in\": 60}", 200);
+            var created = createCustomProvider(recipe(tokenUrl(tokenPath), SECRET_VALUE), apiKey, workspaceName);
+
+            // a stored provider's id paired with a caller-controlled destination must not
+            // resolve the stored secret: that would exfiltrate it to the caller's server
+            var request = ProviderAuthCheck.builder()
+                    .providerId(created.id())
+                    .authConfig(recipe("https://attacker.example.com/token", ProviderAuthConfig.SECRET_SENTINEL))
+                    .build();
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class).getMessage()).contains("token_url");
+            }
+        }
+
+        @Test
         @DisplayName("sentinels without a provider id are rejected: there is nothing stored to resolve against")
         void testSentinelWithoutIdIsRejected() {
             String workspaceName = UUID.randomUUID().toString();
@@ -1025,6 +1078,26 @@ class LlmProviderApiKeyResourceTest {
         }
 
         @Test
+        @DisplayName("without the provider-update permission the test endpoint denies before any token fetch")
+        void testRequiresAiProviderUpdatePermission() {
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String apiKey = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.AI_PROVIDER_UPDATE.getValue());
+
+            String tokenPath = stubTokenEndpoint("{\"access_token\": \"tok\", \"expires_in\": 60}", 200);
+            var request = ProviderAuthCheck.builder()
+                    .authConfig(recipe(tokenUrl(tokenPath), SECRET_VALUE))
+                    .build();
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(request, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+
+            // the denial must hold before the endpoint does anything with the credentials
+            wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(tokenPath)));
+        }
+
+        @Test
         @DisplayName("a request with neither id nor auth config, or an id without a stored recipe, is rejected")
         void testInvalidRequestsAreRejected() {
             String workspaceName = UUID.randomUUID().toString();
@@ -1038,10 +1111,27 @@ class LlmProviderApiKeyResourceTest {
                 assertThat(response.readEntity(String.class)).contains("either provider_id or auth_config");
             }
 
+            // a provider type that can't hold an auth_config at all
             var staticProvider = llmProviderApiKeyResourceClient.createProviderApiKey(
                     createProviderApiKey(), apiKey, workspaceName, HttpStatus.SC_CREATED);
             try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(
                     ProviderAuthCheck.builder().providerId(staticProvider.id()).build(),
+                    apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class).getMessage())
+                        .contains("auth_config is only supported");
+            }
+
+            // a supporting provider type that simply has no recipe stored
+            var keyOnlyCustom = factory.manufacturePojo(ProviderApiKey.class).toBuilder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(UUID.randomUUID().toString())
+                    .authConfig(null)
+                    .build();
+            var customProvider = llmProviderApiKeyResourceClient.createProviderApiKey(
+                    keyOnlyCustom, apiKey, workspaceName, HttpStatus.SC_CREATED);
+            try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(
+                    ProviderAuthCheck.builder().providerId(customProvider.id()).build(),
                     apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(response.readEntity(ErrorMessage.class).getMessage()).contains("no auth_config");

@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
@@ -29,6 +30,7 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -206,19 +208,25 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
      * the rules that read the DB remain here.
      */
     private ProviderAuthConfig resolveAuthConfigForTest(ProviderAuthCheck request, String workspaceId) {
+        ProviderApiKey storedProvider = request.providerId() != null
+                ? find(request.providerId(), workspaceId)
+                : null;
+        if (storedProvider != null && !storedProvider.provider().supportsDynamicTokenAuth()) {
+            throw new BadRequestException(
+                    "auth_config is only supported for custom LLM, Bedrock, and Ollama providers");
+        }
+
         ProviderAuthConfig incoming = request.authConfig();
         if (incoming == null || incoming.isEmpty()) {
-            ProviderAuthConfig stored = find(request.providerId(), workspaceId).authConfig();
+            EncryptedAuthConfig stored = storedProvider.authConfig();
             if (stored == null) {
                 throw new BadRequestException("the provider has no auth_config to test");
             }
-            return stored;
+            return stored.value();
         }
 
-        ProviderAuthConfig stored = request.providerId() != null
-                ? find(request.providerId(), workspaceId).authConfig()
-                : null;
-        return mergeSecretSentinels(incoming, stored);
+        EncryptedAuthConfig stored = storedProvider == null ? null : storedProvider.authConfig();
+        return mergeSecretSentinels(incoming, stored == null ? null : stored.value());
     }
 
     private record AuthConfigUpdate(ProviderApiKeyUpdate effectiveUpdate, boolean clear,
@@ -234,7 +242,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         ProviderAuthConfig incoming = update.authConfig();
         if (incoming == null) {
             validateNoStaticKeyConflict(
-                    update.apiKey() != null ? update.apiKey() : stored.apiKey(), stored.authConfig());
+                    update.apiKey() != null ? update.apiKey() : stored.apiKey(), stored.authConfig() != null);
             return new AuthConfigUpdate(update, false, null);
         }
         if (incoming.isEmpty()) {
@@ -251,16 +259,17 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         // only an api_key set in this same request conflicts: an update carrying none switches
         // the provider to token auth, which implicitly clears the stored static key below —
         // the dialog hides the key field in token mode, so the swap must be self-contained
-        validateNoStaticKeyConflict(update.apiKey(), incoming);
-        var merged = mergeSecretSentinels(incoming, stored.authConfig());
+        validateNoStaticKeyConflict(update.apiKey(), true);
+        var merged = mergeSecretSentinels(incoming,
+                stored.authConfig() == null ? null : stored.authConfig().value());
         var effectiveUpdate = update.apiKey() == null
                 ? update.toBuilder().apiKey(EncryptionUtils.encrypt("")).build()
                 : update;
         return new AuthConfigUpdate(effectiveUpdate, false, merged);
     }
 
-    private void validateNoStaticKeyConflict(String encryptedApiKey, ProviderAuthConfig authConfig) {
-        if (authConfig != null && encryptedApiKey != null
+    private void validateNoStaticKeyConflict(String encryptedApiKey, boolean authConfigPresent) {
+        if (authConfigPresent && encryptedApiKey != null
                 && StringUtils.isNotBlank(EncryptionUtils.decrypt(encryptedApiKey))) {
             throw new BadRequestException(
                     "api_key and auth_config cannot both be set; clear one of them (send auth_config as an empty object to clear it)");
@@ -274,6 +283,13 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
      * can never be confused with "unchanged".
      */
     private ProviderAuthConfig mergeSecretSentinels(ProviderAuthConfig incoming, ProviderAuthConfig stored) {
+        boolean hasSentinel = incoming.credentials().stream()
+                .anyMatch(credential -> ProviderAuthConfig.SECRET_SENTINEL.equals(credential.value()));
+        if (hasSentinel && stored != null && !Objects.equals(incoming.tokenUrl(), stored.tokenUrl())) {
+            throw new BadRequestException(
+                    "auth_config uses the secret sentinel with a different token_url; changing the destination requires resubmitting full credentials");
+        }
+
         Map<String, ProviderAuthConfig.Credential> storedByKey = stored == null || stored.credentials() == null
                 ? Map.of()
                 : stored.credentials().stream()
