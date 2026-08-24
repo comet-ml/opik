@@ -3502,10 +3502,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         //
         // Count DISTINCT stable ids, not rows handed in (OPIK-7891): reads collapse a repeated
         // dataset_item_id to one row via LIMIT 1 BY, so counting the raw list inflates every
-        // version total derived from this value. Callers set datasetItemId before inserting;
-        // fall back to id so an unnormalized item still counts as itself rather than as null.
+        // version total derived from this value. Counting the same field the INSERT binds below
+        // keeps one definition of identity -- every caller normalizes datasetItemId first, and a
+        // null would fail at the bind regardless, so there is nothing to fall back to.
         long itemCount = items.stream()
-                .map(item -> item.datasetItemId() != null ? item.datasetItemId() : item.id())
+                .map(DatasetItem::datasetItemId)
                 .distinct()
                 .count();
 
