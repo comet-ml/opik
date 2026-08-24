@@ -1,5 +1,7 @@
 package com.comet.opik.db;
 
+import lombok.Builder;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
@@ -74,7 +76,8 @@ class TracesMigrationPreconditionLint {
 
     private static final Set<String> REQUIRED_BRANCHES = Set.of("0", "1");
 
-    private record ChangeSet(String name, String body) {
+    @Builder(toBuilder = true)
+    private record ChangeSet(@NonNull String name, @NonNull String body) {
     }
 
     /**
@@ -143,7 +146,10 @@ class TracesMigrationPreconditionLint {
         var changeSets = new ArrayList<ChangeSet>();
         for (int i = 0; i < names.size(); i++) {
             int bodyEnd = i + 1 < headerStarts.size() ? headerStarts.get(i + 1) : sql.length();
-            changeSets.add(new ChangeSet(names.get(i), sql.substring(headerEnds.get(i), bodyEnd)));
+            changeSets.add(ChangeSet.builder()
+                    .name(names.get(i))
+                    .body(sql.substring(headerEnds.get(i), bodyEnd))
+                    .build());
         }
         return changeSets;
     }
