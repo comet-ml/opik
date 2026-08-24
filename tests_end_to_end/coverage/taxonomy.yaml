@@ -629,12 +629,13 @@ areas:
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
+      - online-evaluation/online-evaluation-odd-shaped-sections.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
-      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0" }
-      scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; plus a t2-cuj 4x4 mapping/section-shape matrix (scalar + array output sections still score)" }
+      scores-in-trace-panel:   { covered: true,  tier: t1-smoke, note: "plus the odd-shaped-sections spec asserting an unresolved-mapping score renders on a scalar-output trace" }
       list-rules:              { covered: false }
       rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
       rule-filters:            { covered: false }
