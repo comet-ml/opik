@@ -205,6 +205,17 @@ class RedactionModuleTest {
 
         assertThat(written).contains("\"model\":\"alice.brown@example.com\"");
         assertThat(written).contains("\"provider\":\"bob.jones@example.com\"");
+
+        // providers is a collection, which the modifier reaches through a separate condition to the scalar one.
+        var trace = mapper.writeValueAsString(Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName("refund-project")
+                .name("trace for dave.green@example.com")
+                .startTime(Instant.now())
+                .providers(List.of("carol.white@example.com", "openai"))
+                .build());
+        assertThat(trace).contains("\"providers\":[\"carol.white@example.com\",\"openai\"]");
+        assertThat(trace).contains("\"name\":\"trace for [EMAIL]\"");
         // A caller-supplied field that is not exempt is still redacted, so the exemption is scoped and not
         // a hole that swallowed the whole span.
         assertThat(written).contains("\"name\":\"call for [EMAIL]\"");
