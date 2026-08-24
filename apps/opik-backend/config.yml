@@ -1861,6 +1861,9 @@ redaction:
   # An environment name auto-created from a trace is exempt as an entity name, so a value that survives the
   # ^[A-Za-z0-9_-]+$ filter can read redacted on the trace and verbatim on /v1/private/environments. Digits and
   # hyphens pass that filter, so a rule written for dates or national identifiers can differ across the two.
+  # A span's model and provider are exempt by decision: they name a vendor and a model rather than carry personal
+  # data, and the UI filters and groups by them, so redacting them would rewrite legitimate identifiers such as
+  # gpt-4o-2024-08-06 under a date rule. Content placed in those two fields is therefore returned as stored.
   # Structural properties (project_name, thread_id, dataset_name and similar lookup keys) are exempt:
   # rewriting them conceals nothing and breaks navigation. Content carried as JSON is always redacted, whatever
   # its keys are named. Anchor patterns so they cannot start mid-token — an unanchored local part such as

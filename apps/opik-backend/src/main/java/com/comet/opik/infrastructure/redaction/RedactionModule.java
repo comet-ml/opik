@@ -54,12 +54,16 @@ public class RedactionModule extends SimpleModule {
      * wire. The camel-case spellings are kept alongside so a DTO that does not apply the naming strategy is
      * covered by the same set.
      * <p>
-     * Deliberately not here: {@code model}, {@code provider}, {@code providers} and {@code environment}. Those
-     * are caller-supplied on spans and threads, so exempting them by name would let anything placed in them
-     * through unredacted. They are filter facets rather than addresses, and their legitimate values are unlikely
-     * to match a well-scoped rule — though not guaranteed to escape a loose one, since a dated model id such as
-     * {@code gpt-4o-2024-08-06} will match a rule written for dates. Losing a facet value to redaction is a
-     * cosmetic cost; letting caller content through is not.
+     * {@code model}, {@code provider} and {@code providers} are here by decision rather than by mechanism. They
+     * are caller-supplied on spans, so nothing stops someone putting content in them — but they name a vendor
+     * and a model from what is in practice a closed vocabulary, not a field anyone carries personal data in, and
+     * they are what the UI filters and groups by. Redacting them also rewrites legitimate identifiers: a dated
+     * model id such as {@code gpt-4o-2024-08-06} matches a rule written for dates, leaving a facet value that no
+     * longer selects its own spans. The trade is accepted knowingly: content placed in these two fields is
+     * returned as stored.
+     * <p>
+     * {@code environment} is not here, unlike those two: it is free text the caller invents rather than a name
+     * drawn from a vendor's catalogue, so it stays redactable.
      */
     private static final Set<String> EXEMPT_PROPERTIES = Set.of(
             // Resolved by name elsewhere in the API; redacting them breaks lookup.
@@ -69,6 +73,8 @@ public class RedactionModule extends SimpleModule {
             "thread_id", "threadId",
             // Identifiers that happen to be typed as String rather than UUID.
             "id", "workspace_id", "workspaceId",
+            // Vendor identifiers the UI filters and groups by; see the note above on the trade-off.
+            "model", "provider", "providers",
             // Version and cost lookup keys.
             "commit", "version_number", "versionNumber",
             "total_estimated_cost_version", "totalEstimatedCostVersion",

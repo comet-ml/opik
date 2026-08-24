@@ -183,11 +183,12 @@ class RedactionModuleTest {
     }
 
     @Test
-    @DisplayName("caller-supplied span fields are redacted, so a name-based exemption cannot be used as a bypass")
-    void callerSuppliedSpanFieldsAreRedacted() throws Exception {
-        // model, provider and environment are set by whoever logs the span, so a caller could put anything
-        // there. Exempting them by property name would hand that value straight back to a reader who is not
-        // permitted to see stored content.
+    @DisplayName("a span's model and provider are returned as stored, even when a rule would match them")
+    void vendorIdentifiersAreExemptEvenWhenARuleMatches() throws Exception {
+        // Exempting these is a decision, not an oversight: they name a vendor and a model, the UI filters and
+        // groups by them, and redacting them would rewrite legitimate identifiers such as gpt-4o-2024-08-06
+        // under a date rule. The cost is that content placed in them is returned as stored — asserted here so
+        // that nobody later reads it as a leak and 'fixes' it.
         RedactionContext.set(new RedactionRules(
                 List.of(RedactionRule.of("(?<![\\w.+-])[\\w.+-]+@[\\w-]+\\.[\\w.]+", "[EMAIL]"))));
 
@@ -195,17 +196,18 @@ class RedactionModuleTest {
                 .id(UUID.randomUUID())
                 .traceId(UUID.randomUUID())
                 .projectName("refund-project")
-                .name("llm-call")
+                .name("call for alice.brown@example.com")
                 .type(SpanType.llm)
                 .startTime(Instant.now())
                 .model("alice.brown@example.com")
                 .provider("bob.jones@example.com")
                 .build());
 
-        assertThat(written).doesNotContain("alice.brown@example.com").doesNotContain("bob.jones@example.com");
-        assertThat(written).contains("[EMAIL]");
-        // The genuine lookup key is still spared.
-        assertThat(written).contains("refund-project");
+        assertThat(written).contains("\"model\":\"alice.brown@example.com\"");
+        assertThat(written).contains("\"provider\":\"bob.jones@example.com\"");
+        // A caller-supplied field that is not exempt is still redacted, so the exemption is scoped and not
+        // a hole that swallowed the whole span.
+        assertThat(written).contains("\"name\":\"call for [EMAIL]\"");
     }
 
     @Test
