@@ -170,6 +170,59 @@ so they contain single underscores but never a pair. A test enforces that
 (`test_event_names.py`); keep it true when adding events. Extra properties are keyword
 arguments; adding one never changes the API.
 
+### Adding an event
+
+1. **Pick the path.** First element from the closed `analytics.Component` set —
+   `client`, `evaluation`, `integration`. Second is normally the method being
+   reported. Add further levels only to narrow a feature down
+   (`"integration", "bedrock", "invoke_agent"`), remembering a longer path is a
+   separate event, not a repeat of the shorter one.
+
+2. **Check the segments.** No level may contain a double underscore, because that is
+   the separator the name is joined with. Method names never do, so this is normally
+   free — `test_event_names.py` fails the build if it is ever not.
+
+3. **Put the call on the first line** of the user-facing function, before it does its
+   work, so a call that goes on to fail still counts as usage. Do not wrap it in
+   `try`/`except` and do not guard it with a config check; it already swallows
+   everything and no-ops when reporting is off.
+
+4. **Decide the properties, if any.** Keyword arguments, scalars only. 96 of the 97
+   events carry none — reach for one only when the event genuinely has variants worth
+   splitting, as `metric_created` does. Never a value the user chose: report the
+   Opik-owned name and `"custom"` otherwise.
+
+5. **Check it should be reported at all.** Skip it if Opik calls the same entry point
+   internally (litellm's `track_completion`), or if it is a per-call hot path
+   (`Opik.trace()`, `Opik.span()`, an OTel `on_start`) — instrument the constructor or
+   the user-facing function instead.
+
+6. **Verify it locally.** Intercepting the HTTP call is the quickest way to see the
+   exact payload without sending anything:
+
+   ```python
+   import os, json, httpx
+   os.environ["OPIK_ANALYTICS_ENABLE"] = "true"
+
+   sent = []
+   httpx.Client.post = lambda self, url, **kw: (
+       sent.append(kw["json"]), type("R", (), {"status_code": 201})()
+   )[1]
+
+   from opik import analytics
+   ...                                  # exercise your new call site
+   analytics.flush(timeout=10)          # events are batched; nothing appears without this
+   print(json.dumps(sent, indent=2))
+   ```
+
+   Reporting is off under pytest, so this has to be a plain script, not a test. Then
+   run `pytest tests/unit/analytics` (49 tests) before committing.
+
+7. **Know how it will be read.** The event surfaces on the
+   [Python SDK Usage dashboard](https://us.posthog.com/project/222582/dashboard/2025904),
+   where every tile counts `uniq(distinct_id)`. A new event needs no dashboard change
+   to appear in the adoption tiles, which group on the name.
+
 ### How it works
 - `track_event()` never raises, never blocks on I/O, and no-ops when reporting is off.
 - **Calls Opik makes into its own API are not reported.** `evaluate_threads` calls
