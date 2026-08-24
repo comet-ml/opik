@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validation.ProviderAuthCheckValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -18,6 +19,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+@ProviderAuthCheckValidation
 public record ProviderAuthCheck(
         @Schema(description = "Test the stored auth config of this provider; also the sentinel-resolution target when auth_config is sent") UUID providerId,
         @Valid @Schema(description = "Auth config to test as-submitted; omit to test the stored one") ProviderAuthConfig authConfig) {

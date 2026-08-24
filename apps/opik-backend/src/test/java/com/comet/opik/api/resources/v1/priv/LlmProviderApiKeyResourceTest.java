@@ -1034,9 +1034,8 @@ class LlmProviderApiKeyResourceTest {
 
             try (var response = llmProviderApiKeyResourceClient.callTestAuthConfig(
                     ProviderAuthCheck.builder().build(), apiKey, workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                assertThat(response.readEntity(ErrorMessage.class).getMessage())
-                        .contains("either provider_id or auth_config");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                assertThat(response.readEntity(String.class)).contains("either provider_id or auth_config");
             }
 
             var staticProvider = llmProviderApiKeyResourceClient.createProviderApiKey(

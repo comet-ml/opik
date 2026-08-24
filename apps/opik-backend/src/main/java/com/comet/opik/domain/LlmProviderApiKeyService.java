@@ -200,12 +200,14 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         }
     }
 
+    /**
+     * Request-only validation (provider_id-or-auth_config, recipe validity) lives in
+     * {@link com.comet.opik.api.validation.ProviderAuthCheckValidator} at the API boundary; only
+     * the rules that read the DB remain here.
+     */
     private ProviderAuthConfig resolveAuthConfigForTest(ProviderAuthCheck request, String workspaceId) {
         ProviderAuthConfig incoming = request.authConfig();
         if (incoming == null || incoming.isEmpty()) {
-            if (request.providerId() == null) {
-                throw new BadRequestException("either provider_id or auth_config must be provided");
-            }
             ProviderAuthConfig stored = find(request.providerId(), workspaceId).authConfig();
             if (stored == null) {
                 throw new BadRequestException("the provider has no auth_config to test");
@@ -213,23 +215,12 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             return stored;
         }
 
-        var errors = ProviderAuthConfigValidator.validationErrors(incoming);
-        if (!errors.isEmpty()) {
-            throw new BadRequestException(String.join("; ", errors));
-        }
         ProviderAuthConfig stored = request.providerId() != null
                 ? find(request.providerId(), workspaceId).authConfig()
                 : null;
         return mergeSecretSentinels(incoming, stored);
     }
 
-    /**
-     * The resolved auth_config decision plus the effective update to persist. The api_key /
-     * auth_config mutual exclusion is enforced entirely inside
-     * {@link #resolveAuthConfigUpdate}: it both validates the incoming pair and blanks the
-     * stored key when the update switches to token auth, so callers persist
-     * {@code effectiveUpdate} as-is and cannot hold the invariant wrong.
-     */
     private record AuthConfigUpdate(ProviderApiKeyUpdate effectiveUpdate, boolean clear,
             ProviderAuthConfig authConfig) {
     }

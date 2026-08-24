@@ -161,7 +161,8 @@ public class LlmProviderApiKeyResource {
             +
             "Send provider_id to test the stored config, auth_config to test submitted values, or both to resolve secret sentinels against the stored config.", responses = {
                     @ApiResponse(responseCode = "200", description = "Token fetched", content = @Content(schema = @Schema(implementation = ProviderAuthCheck.Result.class))),
-                    @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "400", description = "Bad Request — the token fetch itself failed (unreachable URL, rejected credentials, malformed reply)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "422", description = "Unprocessable Content — the request is invalid (neither provider_id nor auth_config, or an invalid auth_config)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
             })

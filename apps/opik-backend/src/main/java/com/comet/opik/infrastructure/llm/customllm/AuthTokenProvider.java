@@ -330,7 +330,7 @@ public class AuthTokenProvider {
                 String clientSecret = credentialValue(credentials, CLIENT_SECRET_KEY);
                 if (clientId == null || clientSecret == null) {
                     throw new AuthTokenException(
-                            "basic auth mode requires '%s' and '%s' credentials".formatted(CLIENT_ID_KEY,
+                            "requires '%s' and '%s' credentials".formatted(CLIENT_ID_KEY,
                                     CLIENT_SECRET_KEY));
                 }
                 var bodyCredentials = credentials.stream()
