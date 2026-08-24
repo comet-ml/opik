@@ -40,17 +40,26 @@ def register_rule(rule: Rule) -> None:
     _RULES.append(rule)
 
 
+def _describe(rule: Rule) -> str:
+    """
+    A name for the log line. `register_rule` takes any callable, and a callable
+    object has no `__name__` - reading it directly made the handler for a failing
+    rule fail in turn, which is the one place that must not.
+    """
+    return getattr(rule, "__name__", type(rule).__name__)
+
+
 def reporting_allowed(config_: config.OpikConfig) -> bool:
     """True when every rule agrees analytics may run in this process."""
     for rule in _RULES:
         try:
             if not rule(config_):
-                LOGGER.debug("Analytics disabled by rule %s", rule.__name__)
+                LOGGER.debug("Analytics disabled by rule %s", _describe(rule))
                 return False
         except Exception:
             LOGGER.debug(
                 "Analytics rule %s failed, disabling analytics",
-                rule.__name__,
+                _describe(rule),
                 exc_info=True,
             )
             return False

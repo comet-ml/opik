@@ -2,8 +2,8 @@
 
 import pytest
 
-from opik import analytics, environment_details
-from opik.analytics import api, comet_stats, worker as worker_module
+from opik import analytics, config, environment_details
+from opik.analytics import api, comet_stats, rules, worker as worker_module
 
 
 def test_build_event_name__runtime_segment_with_the_separator__stays_splittable():
@@ -112,3 +112,34 @@ def test_reset_after_fork__session_properties_rebuilt(fresh_context):
 
     assert after["session_id"] != before["session_id"]
     assert after["pid"] == before["pid"]  # same process here; the id is what proves it
+
+
+@pytest.mark.parametrize("action", [None, 123, object(), b"bytes"])
+def test_track_event__action_is_not_a_string__does_not_raise(action, recording_worker):
+    """
+    `track_event` runs inside the user-facing methods it reports on, so a bad call
+    site must degrade to reporting nothing rather than breaking the method. Composing
+    the name is where that used to escape.
+    """
+    api.track_event("client", action)
+
+    assert recording_worker.names == []
+
+
+def test_reporting_allowed__rule_without_a_name__still_decides(monkeypatch):
+    """
+    `register_rule` takes any callable, and a callable object has no `__name__`.
+    Reading it in the failure handler made the handler fail in turn.
+    """
+
+    class Boom:
+        def __call__(self, config_):
+            raise RuntimeError("boom")
+
+    class Quiet:
+        def __call__(self, config_):
+            return False
+
+    for rule in (Boom(), Quiet()):
+        monkeypatch.setattr(rules, "_RULES", [rule])
+        assert rules.reporting_allowed(config.OpikConfig()) is False

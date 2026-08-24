@@ -308,10 +308,16 @@ def track_event(
     if _DISABLED:
         return
 
-    path = (action, *sub_actions)
-    name = _build_event_name(component, path)
+    # Inside the try, not before it: composing the name is not obviously fallible,
+    # but a call site passing something that is not a string makes it so, and this
+    # runs inside the user-facing methods it reports on. Reporting must never be
+    # what breaks one of them.
+    name = "<unnamed>"
 
     try:
+        path = (action, *sub_actions)
+        name = _build_event_name(component, path)
+
         already_reported = (name, *sorted(properties.items()))
 
         # Lock-free fast path. It is allowed to let several threads through on the
