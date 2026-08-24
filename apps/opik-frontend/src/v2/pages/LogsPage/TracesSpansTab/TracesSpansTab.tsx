@@ -1344,24 +1344,19 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const cellCount = columns.length * rows.length;
 
-  // Each axis decides on its own count or on total cells crossing the combined
-  // budget (50 columns × 25 rows), so a lopsided table like 1000 columns × 10
-  // rows still windows the axis that needs it instead of being blocked by the
-  // other axis's count. Below 15, an axis is never windowed: with this few
-  // columns/rows there's nothing meaningful on screen to skip.
-  const columnVirtualization = useMemo(
+  // One decision drives both axes: the table is windowed or it isn't. Either
+  // axis crossing its own count, or the combined cell count crossing the
+  // shared budget, is enough — an AND here would block a lopsided table like
+  // 1000 columns × 10 rows from windowing at all. The budget sits above the
+  // default view (~15 columns × 100 rows = 1500) so normal tables stay fully
+  // rendered. Below 15 on both axes, there's nothing meaningful to skip.
+  const virtualization = useMemo(
     () => ({
       enabled:
-        columns.length >= 15 && (columns.length > 50 || cellCount > 1250),
+        (columns.length >= 15 || rows.length >= 15) &&
+        (columns.length > 50 || rows.length > 25 || cellCount > 3000),
     }),
-    [columns.length, cellCount],
-  );
-
-  const rowVirtualization = useMemo(
-    () => ({
-      enabled: rows.length >= 15 && (rows.length > 25 || cellCount > 1250),
-    }),
-    [rows.length, cellCount],
+    [columns.length, rows.length, cellCount],
   );
 
   const columnsToExport = useMemo(() => {
@@ -1634,8 +1629,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           }
           TableWrapper={PageBodyStickyTableWrapper}
           TableBody={DataTableVirtualBody}
-          columnVirtualization={columnVirtualization}
-          rowVirtualization={rowVirtualization}
+          columnVirtualization={virtualization}
+          rowVirtualization={virtualization}
           stickyHeader
           meta={meta}
           showLoadingOverlay={isPlaceholderData && isFetching}
