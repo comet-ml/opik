@@ -26,15 +26,12 @@ export const MOCK_AUTH_CLIENT_SECRET = 'opik-secret';
 export const mockTokenUrlForBackend = `${mockAuthBaseUrlForBackend}/oauth/token`;
 export const mockGatewayUrlForBackend = `${mockAuthBaseUrlForBackend}/v1`;
 
-export interface MockAuthStats {
-  tokens_issued?: number;
-  token_refused?: number;
-  chat_ok?: number;
-  chat_refused_missing?: number;
-  chat_refused_unknown?: number;
-  chat_refused_expired?: number;
-  revocations?: number;
-}
+/**
+ * Counter map from /stats. Global outcome counters (tokens_issued, chat_ok,
+ * chat_refused_unknown, ...) plus model-scoped variants (`chat_ok:<model>`) so
+ * parallel specs can assert on their own traffic via unique model names.
+ */
+export type MockAuthStats = Record<string, number>;
 
 export async function mockAuthStats(): Promise<MockAuthStats> {
   const response = await fetch(`${mockAuthBaseUrl}/stats`);

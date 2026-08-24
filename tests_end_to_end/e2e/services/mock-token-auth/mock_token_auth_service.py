@@ -154,11 +154,23 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def _handle_chat(self, raw_body):
+        try:
+            request = json.loads(raw_body)
+        except Exception:
+            request = {}
+        model = request.get("model", "mock-model")
+
+        # counters are kept globally AND per model: parallel specs use unique model
+        # names, so the model-scoped counters let each spec assert on its own traffic
+        def count(outcome):
+            STATS[outcome] += 1
+            STATS[f"{outcome}:{model}"] += 1
+
         auth = self.headers.get("Authorization") or ""
         token = auth.removeprefix("Bearer ") if auth.startswith("Bearer ") else None
         if token is None:
-            STATS["chat_refused_missing"] += 1
-            log("chat request REFUSED: missing bearer token")
+            count("chat_refused_missing")
+            log(f"chat request REFUSED: missing bearer token (model={model})")
             self._reply(401, {"error": {"message": "missing bearer token", "type": "invalid_request_error"}})
             return
         if token == STATIC_API_KEY:
@@ -166,24 +178,19 @@ class Handler(BaseHTTPRequestHandler):
         else:
             expiry = ISSUED_TOKENS.get(token)
         if expiry is None:
-            STATS["chat_refused_unknown"] += 1
-            log("chat request REFUSED: unknown bearer token")
+            count("chat_refused_unknown")
+            log(f"chat request REFUSED: unknown bearer token (model={model})")
             self._reply(401, {"error": {"message": "invalid bearer token", "type": "invalid_request_error"}})
             return
         if expiry < time.time():
-            STATS["chat_refused_expired"] += 1
-            log(f"chat request REFUSED: expired token ...{token[-8:]}")
+            count("chat_refused_expired")
+            log(f"chat request REFUSED: expired token ...{token[-8:]} (model={model})")
             self._reply(401, {"error": {"message": "token expired", "type": "invalid_request_error"}})
             return
 
-        try:
-            request = json.loads(raw_body)
-        except Exception:
-            request = {}
-        model = request.get("model", "mock-model")
         content = json.dumps(synthesize_reply(request))
         usage = {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}
-        STATS["chat_ok"] += 1
+        count("chat_ok")
 
         if request.get("stream"):
             log(f"chat request OK (streaming) with token ...{token[-8:]}")

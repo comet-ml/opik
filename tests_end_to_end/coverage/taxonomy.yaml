@@ -740,8 +740,9 @@ areas:
     label: Configuration
     nav_group: Workspace
     routes: ["/$workspaceName/configuration"]
-    specs: []
-    # A configuration.page.ts POM exists with no spec using it — half-built surface.
+    specs:
+      - ai-providers/token-auth-dialog.spec.ts
+      - ai-providers/token-auth-refetch.spec.ts
     # Split per-tab: the page has 5 distinct tabs (CONFIGURATION_TABS), each with
     # its own CRUD surface, so one capability per tab was too coarse. Capabilities
     # below are read off the tab components on origin/main.
@@ -759,10 +760,10 @@ areas:
       environment-delete:       { covered: false }
       # -- AI providers tab --
       ai-provider-list:         { covered: false }
-      ai-provider-add:          { covered: false, note: "exercised indirectly by playground provider setup (configuration.page.ts), never asserted here" }
-      ai-provider-edit:         { covered: false }
-      ai-provider-delete:       { covered: false }
-      ai-provider-token-refetch: { covered: false, note: "OAuth2 token auth (OPIK-7940): gateway-revoked bearer is refetched and the request retried transparently" }
+      ai-provider-add:          { covered: true,  tier: t1-smoke }
+      ai-provider-edit:         { covered: true,  tier: t1-smoke }
+      ai-provider-delete:       { covered: false, note: "exercised as spec teardown (token-auth-dialog.spec.ts), never asserted" }
+      ai-provider-token-refetch: { covered: true,  tier: t1-smoke, note: "OAuth2 token auth (OPIK-7940): gateway-revoked bearer is refetched and the request retried transparently" }
       # -- Workspace preferences tab --
       pref-thread-timeout:      { covered: false, note: "EditThreadTimeoutDialog" }
       pref-truncation-toggle:   { covered: false, note: "EditTruncationToggleDialog" }
