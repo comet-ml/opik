@@ -6,6 +6,7 @@ attach to what they send, so the two describe the same session identically.
 import importlib.metadata
 import logging
 import functools
+import os
 import random
 import string
 import importlib
@@ -29,6 +30,19 @@ def collect_context_once() -> Dict[str, Any]:
     result.update(installed_packages_details)
 
     return result
+
+
+def _reset_after_fork() -> None:
+    """
+    `pid` and `session_id` describe one process, and the cache holding them survives
+    `fork()`. Without this a child keeps reporting its parent's values, so its error
+    reports and its usage events are indistinguishable from the parent's.
+    """
+    collect_context_once.cache_clear()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_after_fork)
 
 
 @functools.lru_cache

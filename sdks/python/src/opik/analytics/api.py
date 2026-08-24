@@ -1,6 +1,7 @@
 import atexit
 import logging
 import os
+import re
 import sys
 import threading
 import types
@@ -69,8 +70,21 @@ def _build_event_name(component: Component, path: Tuple[str, ...]) -> str:
     Splitting that on `__` gives the path back, so the hierarchy survives into
     whatever reads the events. The scheme lives here alone, so it can be changed for
     every event at once without touching a single call site.
+
+    Runs of underscores inside a segment are collapsed first. Every call site passes
+    a literal today, and a test keeps those separator-free, but a segment built at
+    runtime would otherwise split into levels that were never meant to exist.
     """
-    return _LEVEL_SEPARATOR.join((_EVENT_NAME_PREFIX, component, *path))
+    segments = (
+        _EVENT_NAME_PREFIX,
+        component,
+        *(_collapse_underscores(p) for p in path),
+    )
+    return _LEVEL_SEPARATOR.join(segments)
+
+
+def _collapse_underscores(segment: str) -> str:
+    return re.sub(r"_{2,}", "_", segment)
 
 
 def _is_sdk_module(module: str) -> bool:
@@ -139,12 +153,17 @@ def _reset_after_fork() -> None:
     deliberately kept: the child inherits what the parent has already reported and
     must not report it again. The lock is replaced because a fork can happen while
     another thread holds it, which would leave it locked forever in the child.
+
+    The session properties are dropped too, so the child picks up its own `pid` and
+    `session_id` rather than reporting under its parent's. `environment_details`
+    clears the cache underneath on its own fork hook, for error reports as well.
     """
     global _WORKER, _LOCK, _REPORTED_LOCK
 
     _WORKER = None
     _LOCK = threading.Lock()
     _REPORTED_LOCK = threading.Lock()
+    worker.session_properties.cache_clear()
 
 
 if hasattr(os, "register_at_fork"):
@@ -171,6 +190,14 @@ def _start_worker() -> Optional[worker.Worker]:
         config_ = config.OpikConfig()
 
         if not rules.reporting_allowed(config_):
+            _DISABLED = True
+            return None
+
+        # Not a second opt-out - `OPIK_ANALYTICS_ENABLE` is that. Without a
+        # destination every batch would fail and be swallowed, so there is no point
+        # starting a thread to produce them.
+        if not config_.analytics_url:
+            LOGGER.debug("No analytics URL configured, not reporting")
             _DISABLED = True
             return None
 
@@ -258,7 +285,11 @@ def track_event(
                 return
             _ALREADY_REPORTED.add(already_reported)
 
-        worker_.enqueue(worker.Event(name=name, properties=dict(properties)))
+        if not worker_.enqueue(worker.Event(name=name, properties=dict(properties))):
+            # The queue was full, so nothing was recorded. Releasing the claim lets a
+            # later call report it rather than the event being lost for the process.
+            with _REPORTED_LOCK:
+                _ALREADY_REPORTED.discard(already_reported)
     except Exception:
         LOGGER.debug("Failed to track analytics event %s", name)
 

@@ -46,7 +46,17 @@ class Sender:
 
     def send(self, events: List[worker.Event]) -> None:
         for event in events:
-            response = self._client.post(self._url, json=_to_payload(event))
+            # Per event rather than around the loop: the collector takes one event per
+            # request, so letting a single failed request escape would discard every
+            # event queued behind it, and they are only ever reported once.
+            try:
+                response = self._client.post(self._url, json=_to_payload(event))
+            except Exception:
+                LOGGER.debug(
+                    "Failed to report analytics event %s", event.name, exc_info=True
+                )
+                continue
+
             if response.status_code >= 400:
                 LOGGER.debug(
                     "Analytics event %s rejected with status %d",

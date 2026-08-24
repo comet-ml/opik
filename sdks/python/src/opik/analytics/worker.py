@@ -73,11 +73,14 @@ class Worker(threading.Thread):
         )
         self._stopped = threading.Event()
 
-    def enqueue(self, event: Event) -> None:
+    def enqueue(self, event: Event) -> bool:
+        """False when the queue was full and the event was dropped."""
         try:
             self._queue.put_nowait(event)
+            return True
         except queue.Full:
             LOGGER.debug("Analytics queue is full, dropping event %s", event.name)
+            return False
 
     def flush(self, timeout: Optional[float]) -> bool:
         """Waits for everything enqueued so far to be sent. False on timeout."""

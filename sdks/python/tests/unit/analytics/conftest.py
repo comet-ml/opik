@@ -9,6 +9,9 @@ class RecordingWorker:
 
     def enqueue(self, event):
         self.events.append(event)
+        # The real worker returns whether it accepted the event; a falsy return
+        # here would look like a full queue and release the caller's claim.
+        return True
 
     @property
     def names(self):
