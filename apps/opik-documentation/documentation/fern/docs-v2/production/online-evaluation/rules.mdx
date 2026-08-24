@@ -70,10 +70,12 @@ You can control the format of the output using the `Scoring definition` paramete
 
 ### Giving the judge your trace data
 
-There are two ways to give a judge what it needs. Both work with the built-in metrics and with your own.
+For trace and span rules there are two ways to give a judge what it needs. Both work with the built-in metrics and with your own.
 
 - **Agent as a Judge** — start here. No mapping to fill in, works on any trace shape, handles nesting and attachments. Best while you are still exploring what to measure.
 - **Variable mapping** — use when the judge should see exactly one field, every time.
+
+Thread rules have no mapping to choose. They always use `{{context}}`, which reads the conversation the same way — see [Online thread evaluation rules](#online-thread-evaluation-rules).
 
 #### Agent as a Judge
 
