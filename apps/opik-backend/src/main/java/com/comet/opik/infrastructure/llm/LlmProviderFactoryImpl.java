@@ -30,7 +30,9 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.encrypt;
@@ -59,6 +61,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .orElseThrow(() -> new LlmProviderUnsupportedException(
                         "LLM provider not supported: %s".formatted(llmProvider)));
     }
+
+    private static final Set<LlmProvider> NAMED_PROVIDERS = Arrays.stream(LlmProvider.values())
+            .filter(LlmProvider::supportsProviderName)
+            .collect(Collectors.toUnmodifiableSet());
 
     private LlmProviderClientApiConfig buildConfig(ProviderApiKey providerConfig, String workspaceId) {
         var configuration = Optional.ofNullable(providerConfig.configuration()).orElse(Map.of());
@@ -174,25 +180,17 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                     .build();
         }
 
-        return llmProviderApiKeyService.find(workspaceId).content().stream()
-                .filter(providerApiKey -> {
-                    // For providers that support naming, match the model against configured models
-                    // Both CUSTOM_LLM and BEDROCK use the same "custom-llm/" prefix for models
-                    if (llmProvider.supportsProviderName()) {
-                        // Match against providers that support naming since they share the model prefix
-                        if (!providerApiKey.provider().supportsProviderName()) {
-                            return false;
-                        }
-                        return isModelConfiguredForProvider(model, providerApiKey);
-                    }
+        // Provider-type filtering happens in SQL so this per-request read never loads — and the
+        // row mapper never decrypts — the auth_config of providers that can't match. Named
+        // providers share the "custom-llm/" model prefix, so they're fetched as one family and
+        // matched by model in memory (the models list lives inside the configuration JSON).
+        Set<LlmProvider> candidates = llmProvider.supportsProviderName()
+                ? NAMED_PROVIDERS
+                : Set.of(llmProvider);
 
-                    // Match provider type for non-custom providers
-                    if (!llmProvider.equals(providerApiKey.provider())) {
-                        return false;
-                    }
-
-                    return true;
-                })
+        return llmProviderApiKeyService.findByProviders(workspaceId, candidates).stream()
+                .filter(providerApiKey -> !llmProvider.supportsProviderName()
+                        || isModelConfiguredForProvider(model, providerApiKey))
                 .findFirst()
                 .orElseThrow(() -> new BadRequestException(
                         "API key not configured for LLM. provider='%s', model='%s'".formatted(

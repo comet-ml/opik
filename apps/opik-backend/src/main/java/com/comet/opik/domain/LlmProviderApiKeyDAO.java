@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.ProviderAuthConfig;
@@ -71,6 +72,11 @@ public interface LlmProviderApiKeyDAO {
     @SqlQuery("SELECT * FROM llm_provider_api_key " +
             " WHERE workspace_id = :workspaceId ")
     List<ProviderApiKey> find(@Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("SELECT * FROM llm_provider_api_key " +
+            " WHERE workspace_id = :workspaceId AND provider IN (<providers>) ")
+    List<ProviderApiKey> findByProviders(@Bind("workspaceId") String workspaceId,
+            @BindList("providers") Set<LlmProvider> providers);
 
     @SqlUpdate("DELETE FROM llm_provider_api_key WHERE id IN (<ids>) AND workspace_id = :workspaceId")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);

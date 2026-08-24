@@ -44,9 +44,9 @@ public class ProviderApiKeyValidator
             return isValidAuthConfig(providerApiKey, context);
         }
 
-        if (providerApiKey.authConfig() != null) {
+        if (providerApiKey.authConfig() != null && !provider.supportsDynamicTokenAuth()) {
             context.buildConstraintViolationWithTemplate(
-                    "auth_config is only supported for providers with provider_name (custom LLM, Bedrock, Ollama)")
+                    "auth_config is only supported for custom LLM, Bedrock, and Ollama providers")
                     .addPropertyNode("authConfig")
                     .addConstraintViolation();
             return false;

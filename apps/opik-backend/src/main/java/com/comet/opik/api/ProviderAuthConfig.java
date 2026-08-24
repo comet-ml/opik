@@ -64,6 +64,15 @@ public record ProviderAuthConfig(
         public String toString() {
             return "Credential{key='" + key + "', value='*******', secret=" + secret + '}';
         }
+
+        // Hand-declared so Lombok skips its generated toString(), which would print the
+        // plaintext value — reachable via toBuilder() in mask() and the sentinel merge
+        public static class CredentialBuilder {
+            @Override
+            public String toString() {
+                return "CredentialBuilder{key='" + key + "', value='*******', secret=" + secret + '}';
+            }
+        }
     }
 
     @Getter

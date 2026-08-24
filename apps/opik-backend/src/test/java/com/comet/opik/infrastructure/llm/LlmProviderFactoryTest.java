@@ -49,6 +49,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -89,15 +91,11 @@ class LlmProviderFactoryTest {
         String workspaceId = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
 
-        when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
-                .content(List.of(ProviderApiKey.builder()
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
                         .provider(llmProvider)
                         .apiKey(EncryptionUtils.encrypt(apiKey))
-                        .build()))
-                .total(1)
-                .page(1)
-                .size(1)
-                .build());
+                        .build()));
 
         // SUT - use config with disabled free model to not interfere with other tests
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
@@ -163,18 +161,14 @@ class LlmProviderFactoryTest {
         String workspaceId = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
 
-        when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
-                .content(List.of(ProviderApiKey.builder()
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
                         .provider(LlmProvider.CUSTOM_LLM)
                         .providerName(providerName)
                         .apiKey(EncryptionUtils.encrypt(apiKey))
                         .baseUrl("http://localhost:11434/v1")
                         .configuration(Map.of("models", configuredModels))
-                        .build()))
-                .total(1)
-                .page(1)
-                .size(1)
-                .build());
+                        .build()));
 
         // SUT - use config with disabled free model
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
@@ -204,18 +198,14 @@ class LlmProviderFactoryTest {
         String workspaceId = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
 
-        when(llmProviderApiKeyService.find(workspaceId)).thenReturn(ProviderApiKey.ProviderApiKeyPage.builder()
-                .content(List.of(ProviderApiKey.builder()
+        when(llmProviderApiKeyService.findByProviders(eq(workspaceId), anySet()))
+                .thenReturn(List.of(ProviderApiKey.builder()
                         .provider(LlmProvider.CUSTOM_LLM)
                         .providerName(providerName)
                         .apiKey(EncryptionUtils.encrypt(apiKey))
                         .baseUrl("http://localhost:11434/v1")
                         .configuration(Map.of("models", configuredModels))
-                        .build()))
-                .total(1)
-                .page(1)
-                .size(1)
-                .build());
+                        .build()));
 
         // SUT - use config with disabled free model
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");

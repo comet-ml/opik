@@ -44,6 +44,8 @@ class ProviderAuthConfigTest {
     @Test
     void toStringNeverExposesCredentialValues() {
         assertThat(AUTH_CONFIG.toString()).doesNotContain("s3cr3t", "opik-prod", "client_credentials");
+        // Lombok builders don't inherit the record's toString() override; the builder skeleton does
+        assertThat(credential("client_secret", "s3cr3t", true).toBuilder().toString()).doesNotContain("s3cr3t");
         assertThat(AUTH_CONFIG.credentials().getLast().toString()).doesNotContain("s3cr3t");
     }
 }

@@ -45,6 +45,8 @@ public interface LlmProviderApiKeyService {
 
     ProviderApiKey.ProviderApiKeyPage find(String workspaceId);
 
+    List<ProviderApiKey> findByProviders(String workspaceId, Set<LlmProvider> providers);
+
     ProviderApiKey saveApiKey(ProviderApiKey providerApiKey, String userName, String workspaceId);
 
     void updateApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String userName, String workspaceId);
@@ -73,6 +75,18 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
             return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
+        });
+    }
+
+    /**
+     * Narrow read for the LLM request path: only the candidate provider types are loaded, so the
+     * row mapper never decrypts the auth_config of providers that can't match the request.
+     */
+    @Override
+    public List<ProviderApiKey> findByProviders(@NonNull String workspaceId, @NonNull Set<LlmProvider> providers) {
+        return template.inTransaction(READ_ONLY, handle -> {
+            var repository = handle.attach(LlmProviderApiKeyDAO.class);
+            return repository.findByProviders(workspaceId, providers);
         });
     }
 
@@ -232,8 +246,9 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
         if (incoming.isEmpty()) {
             return new AuthConfigUpdate(true, null);
         }
-        if (!stored.provider().supportsProviderName()) {
-            throw new BadRequestException("auth_config is only supported for providers with provider_name");
+        if (!stored.provider().supportsDynamicTokenAuth()) {
+            throw new BadRequestException(
+                    "auth_config is only supported for custom LLM, Bedrock, and Ollama providers");
         }
         var errors = ProviderAuthConfigValidator.validationErrors(incoming);
         if (!errors.isEmpty()) {

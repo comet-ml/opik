@@ -43,6 +43,19 @@ class ProviderAuthConfigValidatorTest {
         assertThat(ProviderAuthConfigValidator.validationErrors(ProviderAuthConfig.builder().build())).hasSize(2);
     }
 
+    @Test
+    void duplicateCredentialKeysAreRejected() {
+        var config = AUTH_CONFIG.toBuilder()
+                .credentials(List.of(
+                        credential("client_id", "first", false),
+                        credential("client_id", "second", false),
+                        credential("client_secret", "s3cr3t", true)))
+                .build();
+
+        assertThat(ProviderAuthConfigValidator.validationErrors(config))
+                .containsExactly("auth_config.credentials contains duplicate key 'client_id'");
+    }
+
     // any single field set means "not the clear convention" — the update path must
     // route these through validationErrors(), never silently clear the stored recipe
     static Stream<Arguments> partialConfigs() {

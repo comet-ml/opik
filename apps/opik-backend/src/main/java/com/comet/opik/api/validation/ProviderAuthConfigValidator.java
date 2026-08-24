@@ -7,7 +7,9 @@ import org.apache.commons.collections4.CollectionUtils;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Requiredness rules for {@link ProviderAuthConfig}, shared by the create validator and the
@@ -31,6 +33,14 @@ public final class ProviderAuthConfigValidator {
         }
         if (CollectionUtils.isEmpty(authConfig.credentials())) {
             errors.add("auth_config.credentials must not be empty");
+        } else {
+            Set<String> seen = new HashSet<>();
+            authConfig.credentials().stream()
+                    .map(ProviderAuthConfig.Credential::key)
+                    .filter(key -> !seen.add(key))
+                    .distinct()
+                    .forEach(duplicate -> errors
+                            .add("auth_config.credentials contains duplicate key '%s'".formatted(duplicate)));
         }
         return errors;
     }

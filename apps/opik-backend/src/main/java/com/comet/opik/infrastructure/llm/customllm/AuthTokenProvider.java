@@ -19,6 +19,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -32,12 +33,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.Builder;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Base64;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,9 +65,6 @@ import static org.apache.commons.lang3.StringUtils.isNotBlank;
 public class AuthTokenProvider {
 
     record FetchedToken(String token, long ttlSeconds) {
-    }
-
-    record CachedToken(String token, long expiresAtEpochMs, long ttlSeconds) {
     }
 
     private static final String CACHE_KEY_FORMAT = "llm_auth_token:%s:%s";
@@ -132,10 +126,10 @@ public class AuthTokenProvider {
     public String bearer(@NonNull String workspaceId, @NonNull UUID providerId,
             @NonNull ProviderAuthConfig authConfig) {
         String cacheKey = cacheKey(providerId, authConfig);
-        CachedToken cached = readCache(cacheKey);
-        if (isFresh(cached)) {
+        String cached = readCache(cacheKey);
+        if (cached != null) {
             recordRequestMetric(workspaceId, providerId, "cache_hit");
-            return cached.token();
+            return cached;
         }
 
         try {
@@ -149,6 +143,15 @@ public class AuthTokenProvider {
             if (token != null) {
                 recordRequestMetric(workspaceId, providerId, "fetched");
                 return token;
+            }
+            // Empty result = we gave up waiting for the lock holder, who has likely written the
+            // token by now — re-read before fetching. Distinct metric so a rising rate can flag
+            // a mistuned lockTimeout. Known gap: if the holder's fetch failed, waiters still
+            // fall through and fetch directly.
+            String refreshed = readCache(cacheKey);
+            if (refreshed != null) {
+                recordRequestMetric(workspaceId, providerId, "lock_timeout_recovered");
+                return refreshed;
             }
             log.warn("Timed out waiting for the token fetch lock for provider '{}'; fetching directly", providerId);
         } catch (AuthTokenException exception) {
@@ -183,62 +186,45 @@ public class AuthTokenProvider {
 
     private String refreshUnderLock(String cacheKey, ProviderAuthConfig authConfig) {
         // another pod may have refreshed while this one waited on the lock
-        CachedToken cached = readCache(cacheKey);
-        if (isFresh(cached)) {
-            return cached.token();
+        String cached = readCache(cacheKey);
+        if (cached != null) {
+            return cached;
         }
         FetchedToken fetched = fetchToken(authConfig);
-        // a resolved lifetime of 0 (the fallback for a reply that states none) means: don't cache
-        if (fetched.ttlSeconds() > 0) {
-            writeCache(cacheKey, fetched);
-        }
+        writeCache(cacheKey, fetched);
         return fetched.token();
     }
 
-    private boolean isFresh(CachedToken cached) {
-        if (cached == null) {
-            return false;
-        }
-        long refreshWindowMs = (long) (cached.ttlSeconds() * 1_000 * config.getRefreshFraction());
-        return Instant.now().toEpochMilli() < cached.expiresAtEpochMs() - refreshWindowMs;
-    }
-
-    private CachedToken readCache(String cacheKey) {
+    private String readCache(String cacheKey) {
         try {
             String encrypted = redisClient.getBucket(cacheKey).get();
-            if (encrypted == null) {
-                return null;
-            }
-            return JsonUtils.readValue(EncryptionUtils.decryptGcm(encrypted), CachedToken.class);
+            return encrypted == null ? null : EncryptionUtils.decryptGcm(encrypted);
         } catch (RuntimeException exception) {
             log.warn("Failed to read the cached token for key '{}': {}", cacheKey, exception.getMessage());
             return null;
         }
     }
 
+    /**
+     * The bucket's own TTL is the refresh point ({@code lifetime * (1 - refreshFraction)}), so
+     * freshness is simply key existence and Redis's clock is the single source of truth.
+     */
     private void writeCache(String cacheKey, FetchedToken fetched) {
+        long refreshPointMs = (long) (fetched.ttlSeconds() * 1_000 * (1 - config.getRefreshFraction()));
+        // a resolved lifetime of 0 (the fallback for a reply that states none) means: don't cache
+        if (refreshPointMs <= 0) {
+            return;
+        }
         try {
-            var entry = new CachedToken(fetched.token(),
-                    Instant.now().toEpochMilli() + fetched.ttlSeconds() * 1_000, fetched.ttlSeconds());
             redisClient.getBucket(cacheKey)
-                    .set(EncryptionUtils.encryptGcm(JsonUtils.writeValueAsString(entry)),
-                            Duration.ofSeconds(fetched.ttlSeconds()));
+                    .set(EncryptionUtils.encryptGcm(fetched.token()), Duration.ofMillis(refreshPointMs));
         } catch (RuntimeException exception) {
             log.warn("Failed to cache the token for key '{}'; the token is still returned", cacheKey, exception);
         }
     }
 
     private String cacheKey(UUID providerId, ProviderAuthConfig authConfig) {
-        return CACHE_KEY_FORMAT.formatted(providerId, sha256Hex(JsonUtils.writeValueAsString(authConfig)));
-    }
-
-    private static String sha256Hex(String value) {
-        try {
-            return HexFormat.of()
-                    .formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException(exception);
-        }
+        return CACHE_KEY_FORMAT.formatted(providerId, DigestUtils.sha256Hex(JsonUtils.writeValueAsString(authConfig)));
     }
 
     /**

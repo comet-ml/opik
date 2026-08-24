@@ -355,6 +355,30 @@ class AuthTokenProviderTest {
     }
 
     @Test
+    @DisplayName("a lock-wait timeout recovers from the holder's cache write instead of fetching directly")
+    void lockTimeoutRecoversFromTheHoldersCacheWrite() {
+        stubToken("{\"access_token\": \"tok-held\", \"expires_in\": 3600}");
+        var recipe = oauthRecipe().build();
+        UUID providerId = UUID.randomUUID();
+
+        // the "holder": a normal provider sharing the same Redis, whose fetch caches tok-held
+        var holder = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
+        // the "waiter": its lock wait elapses (empty result), but only after the holder has
+        // written — exactly the sequence the timed-out-waiter re-read is for
+        LockService timedOutLock = org.mockito.Mockito.mock(LockService.class);
+        org.mockito.Mockito.when(timedOutLock.executeWithLockCustomExpire(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> Mono.fromRunnable(() -> holder.bearer("ws", providerId, recipe))
+                        .then(Mono.empty()));
+        var waiter = new AuthTokenProvider(stringRedisClient, timedOutLock, relaxedConfig());
+
+        assertThat(waiter.bearer("ws", providerId, recipe)).isEqualTo("tok-held");
+        // one fetch total (the holder's); the waiter recovered from the cache
+        wireMock.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)));
+    }
+
+    @Test
     @DisplayName("rotating a secret changes the cache key, so a stale cached token is never served")
     void rotatedSecretChangesTheCacheKey() {
         stubToken("{\"access_token\": \"tok-rotation\", \"expires_in\": 3600}");
