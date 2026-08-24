@@ -36,18 +36,18 @@ Things you can ask for and get in one turn, without leaving your editor:
 
 ## Quick setup with the Opik CLI
 
-The CLI detects your AI host (Claude Code, Cursor, VS Code Copilot, Codex,
+The CLI detects your AI client (Claude Code, Cursor, VS Code Copilot, Codex,
 opencode), picks the right server for your Opik deployment, configures it, and
 then checks that the configuration it just wrote actually works.
 
 <Tip>
-Prefer not to use the CLI? You can wire up any host by hand — skip to
+Prefer not to use the CLI? You can wire up any client by hand — skip to
 [Manual setup](#manual-setup).
 </Tip>
 
 <Note>
 Setup runs **only in an interactive terminal**. It writes into your AI
-assistant's own configuration, so it is skipped in CI, a Docker build, or a cron
+client's own configuration, so it is skipped in CI, a Docker build, or a cron
 job rather than editing those files unattended. For an image or a script, use
 [Manual setup](#manual-setup) to write the config block yourself.
 </Note>
@@ -55,7 +55,7 @@ job rather than editing those files unattended. For an image or a script, use
 <Steps>
   <Step title="Install the Opik CLI">
     The CLI ships with the `opik` Python package. `--upgrade` installs the latest
-    release, which is what you want — these commands gain hosts and flags often:
+    release, which is what you want — these commands gain clients and flags often:
 
     ```bash
     pip install --upgrade opik
@@ -70,16 +70,16 @@ job rather than editing those files unattended. For an image or a script, use
     haven't configured Opik yet, the wizard offers to do it for you first.
 
     <Tip>
-    You'll choose your AI assistant from a list, then confirm the MCP server and
+    You'll choose your AI client from a list, then confirm the MCP server and
     the Opik skill pack for it.
     </Tip>
   </Step>
-  <Step title="Restart your AI host">
+  <Step title="Restart your AI client">
     Assistants read their configuration at startup, so **start a new session**
     before trying the prompts in [Start using it](#start-using-it).
 
     <Note>
-    If your host isn't detected, name it with `--host claude-code` (and see
+    If your client isn't detected, name it with `--ai-client claude-code` (and see
     `opik mcp configure --help`) or use [Manual setup](#manual-setup).
     </Note>
   </Step>
@@ -87,16 +87,16 @@ job rather than editing those files unattended. For an image or a script, use
 
 ## Check your setup
 
-Each AI host keeps its own copy of the MCP configuration, which isn't updated
+Each AI client keeps its own copy of the MCP configuration, which isn't updated
 automatically when your Opik configuration changes. To see what every detected
-host points at — and whether it still matches your current Opik configuration —
+client points at — and whether it still matches your current Opik configuration —
 run:
 
 ```bash
 opik mcp status
 ```
 
-It prints your active Opik configuration, then each assistant that has the Opik
+It prints your active Opik configuration, then each AI client that has the Opik
 MCP server configured: the config file it lives in, the server it reports to
 (hosted or local), its workspace, and whether it has drifted from your Opik
 configuration.
@@ -107,7 +107,7 @@ Your Opik configuration
     Environment   https://www.comet.com/opik/api
     Workspace     my-workspace
 
-Opik MCP server — configured for 1 AI assistant:
+Opik MCP server — configured for 1 AI client:
 
   Claude Code
     Config        ~/.claude.json
@@ -116,13 +116,13 @@ Opik MCP server — configured for 1 AI assistant:
     Status        ✓ in sync with your Opik configuration
 ```
 
-A host that has drifted is flagged `✗ OUT OF SYNC` — re-run
+A client that has drifted is flagged `✗ OUT OF SYNC` — re-run
 `opik mcp configure` to fix it.
 
 <Warning>
-A host keeps its MCP connection for the lifetime of its process. After changing
+A client keeps its MCP connection for the lifetime of its process. After changing
 your Opik configuration or re-running `opik mcp configure`, **restart your AI
-host** so it reconnects with the updated settings.
+client** so it reconnects with the updated settings.
 </Warning>
 
 To view just your active Opik configuration (file path, environment, workspace):
@@ -187,10 +187,10 @@ automatically.
 ### Opik Cloud (hosted server)
 
 On [Opik Cloud](https://www.comet.com/opik), the CLI registers the **hosted MCP
-server** over HTTP. Your AI host signs in with a browser-based OAuth flow on
+server** over HTTP. Your AI client signs in with a browser-based OAuth flow on
 first connect, so:
 
-- **No API key is stored** in the host's config — you authenticate through OAuth
+- **No API key is stored** in the client's config — you authenticate through OAuth
   in the browser.
 - **`uv` is not required** — there is no local process to run.
 - Your workspace is selected during the OAuth sign-in, so a hosted server shows
@@ -205,7 +205,7 @@ prints the exact command to install it for your platform.
 
 ### Workspaces
 
-For the local server your workspace is written into the host's config, so it has
+For the local server your workspace is written into the client's config, so it has
 to be the right one. If your Opik configuration doesn't name a workspace and your
 account has more than one, `opik mcp configure` **refuses to continue** rather
 than falling back to your account default:
@@ -223,24 +223,24 @@ them confidently. Run `opik configure`, pick a workspace, and re-run.
 
 ## Manual setup
 
-Prefer to wire it up yourself, or your host wasn't detected? Configure any host
+Prefer to wire it up yourself, or your client wasn't detected? Configure any client
 by hand below.
 
 <Note>
 There are two servers you can add by hand. [`opik mcp configure`](#quick-setup-with-the-opik-cli)
 picks the right one for you, but you can also add either directly in your AI
-host's MCP settings:
+client's MCP settings:
 
 - **Hosted server** (HTTP + OAuth) — available on Opik Cloud and any deployment
-  that provides it. No API key is stored; your host signs in through the browser.
+  that provides it. No API key is stored; your client signs in through the browser.
 - **Local server** (`uvx opik-mcp`, stdio) — runs on your machine with your
-  credentials in the host's `env` block.
+  credentials in the client's `env` block.
 </Note>
 
 ### Hosted server (Opik Cloud)
 
 The hosted server connects over HTTP and signs in with a browser-based OAuth
-flow on first connect — no API key is stored in the host config. Point your host
+flow on first connect — no API key is stored in the client config. Point your client
 at your deployment's MCP endpoint, which is your Opik API base plus `/v1/mcp`. On
 Opik Cloud that is `https://www.comet.com/opik/api/v1/mcp`.
 
@@ -312,7 +312,7 @@ Opik Cloud that is `https://www.comet.com/opik/api/v1/mcp`.
 
 The local server runs on demand via `uvx opik-mcp` (requires
 [`uv`](https://docs.astral.sh/uv/)), with your credentials passed through the
-host's `env` block.
+client's `env` block.
 
 <Note>
 `opik-mcp` is now a Python package. If you previously ran the npx-based
@@ -388,7 +388,7 @@ connect to a named cloud workspace.
     <Tip>
     **Cursor 60s timeout.** Cursor enforces a hard tool-call timeout that does
     not reset on progress notifications. Long `ask_ollie` turns will fail on
-    Cursor — see [Known host limits](#known-host-limits).
+    Cursor — see [Known client limits](#known-client-limits).
     </Tip>
 
     </Tab>
@@ -444,7 +444,7 @@ connect to a named cloud workspace.
     **"list my Opik projects"**.
 
     <Note>
-    `opik mcp configure --host codex` drives the `codex` CLI rather than editing
+    `opik mcp configure --ai-client codex` drives the `codex` CLI rather than editing
     `config.toml`, so your comments and formatting are left alone. If the `codex`
     CLI isn't on your `PATH` it tells you to add the table by hand instead of
     rewriting your TOML.
@@ -513,7 +513,7 @@ errors that you can re-issue manually.
 self-hosted those calls fail at dispatch; use `read` / `list` / `write`
 directly.
 
-## Known host limits
+## Known client limits
 
 - **Cursor enforces a 60-second hard tool-call timeout** that does not reset on
   progress notifications. Long `ask_ollie` turns will fail on Cursor. For

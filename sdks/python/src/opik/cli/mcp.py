@@ -74,10 +74,10 @@ HOST_ALL = "all"
 
 
 def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
-    """Turn ``--host`` values into the concrete host keys to install for.
+    """Turn ``--ai-client`` values into the concrete host keys to install for.
 
-    ``None`` means "no hosts were named", which leaves detection and prompting to
-    the installer. ``all`` expands to every host detected on this machine, so it
+    ``None`` means "no client was named", which leaves detection and prompting to
+    the installer. ``all`` expands to every client detected on this machine, so it
     stays a statement about this machine rather than a request to write configs
     for tools that are not installed.
     """
@@ -88,7 +88,7 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
         detected = [target.key for target in mcp_targets.detected_targets()]
         if len(detected) == 0:
             raise click.ClickException(
-                "`--host all` found no supported AI host on this machine. Name one "
+                "`--ai-client all` found no supported AI client on this machine. Name one "
                 f"explicitly instead: {', '.join(mcp_targets.HOST_KEYS)}."
             )
         return detected
@@ -106,25 +106,25 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     "one, even when your deployment offers a hosted server.",
 )
 @click.option(
-    "--host",
+    "--ai-client",
     "hosts",
     multiple=True,
     type=click.Choice(mcp_targets.HOST_KEYS + [HOST_ALL], case_sensitive=False),
-    help="AI host to register the server with. Repeatable, or pass `all` for every "
-    "host detected on this machine. Naming a host skips the interactive picker, so "
-    "this is the flag to use from a script, a Dockerfile, or a coding agent.",
+    help="AI client to register the server with. Repeatable, or pass `all` for "
+    "every one detected on this machine. Naming a client skips the picker; it does "
+    "not skip the terminal requirement.",
 )
 @click.option(
     "--skills/--no-skills",
     "skills_flag",
     default=None,
-    help="Also install the Opik skill pack for the same assistants. Default: yes. "
+    help="Also install the Opik skill pack for the same clients. Default: yes. "
     "When omitted you are asked, with both pre-selected.",
 )
 def configure(
     local_server: bool, hosts: Tuple[str, ...], skills_flag: Optional[bool]
 ) -> None:
-    """Register the Opik MCP server with your AI assistant(s).
+    """Register the Opik MCP server with your AI client(s).
 
     Reuses your existing Opik configuration (~/.opik.config), so run
     `opik configure` first if you have not configured Opik yet.
@@ -135,12 +135,12 @@ def configure(
     """
     host_keys = _resolve_host_keys(hosts)
     # Registering the server edits another tool's configuration files, so it only
-    # happens in a session a user is actually present for. `--host` says *which*
-    # assistant, not *whether* — it does not stand in for a terminal.
+    # happens in a session a user is actually present for. `--ai-client` says *which*
+    # client, not *whether* — it does not stand in for a terminal.
     if not interactive_helpers.is_interactive():
         raise click.ClickException(
             "`opik mcp configure` only runs in an interactive terminal: it writes "
-            "into your AI assistant's own configuration, which should not happen "
+            "into your AI client's own configuration, which should not happen "
             "unattended in CI, a Docker build, or a cron job. Run it from a shell."
         )
 
@@ -178,10 +178,10 @@ def configure(
 
 @mcp.command(name="status")
 def status() -> None:
-    """Show which AI assistants the Opik MCP server is configured for.
+    """Show which AI clients the Opik MCP server is configured for.
 
-    Each AI assistant keeps its own MCP config, written at install time and not
-    kept in sync with ~/.opik.config afterwards. This lists every assistant that
+    Each AI client keeps its own MCP config, written at install time and not
+    kept in sync with ~/.opik.config afterwards. This lists every AI client that
     has the Opik MCP server set up, what it points at, and whether that still
     matches your Opik configuration.
     """

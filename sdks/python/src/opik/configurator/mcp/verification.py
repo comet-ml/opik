@@ -66,7 +66,7 @@ def verify_local_credentials(
         return VerificationResult(
             succeeded=False,
             detail=(
-                f"could not reach {api_url} ({error}). Your AI host will hit the "
+                f"could not reach {api_url} ({error}). Your AI client will hit the "
                 "same failure — check the URL and your network, then re-run "
                 "`opik mcp configure`."
             ),
@@ -146,7 +146,7 @@ def verify_hosted_endpoint(
         return VerificationResult(
             succeeded=False,
             detail=(
-                f"could not reach {mcp_url} ({error}). Your AI host will hit the "
+                f"could not reach {mcp_url} ({error}). Your AI client will hit the "
                 "same failure when it tries to sign in."
             ),
         )
@@ -164,7 +164,7 @@ def verify_hosted_endpoint(
     return VerificationResult(
         succeeded=True,
         detail=(
-            f"hosted server reachable at {mcp_url}; your AI host will prompt you "
+            f"hosted server reachable at {mcp_url}; your AI client will prompt you "
             "to sign in through the browser on first connect"
         ),
     )

@@ -63,7 +63,7 @@ opik configure --yes
 
 ### Connecting your AI coding assistant
 
-At the end of setup, `opik configure` offers to register [Opik's MCP server](/mcp-server) with the AI hosts it finds on your machine, so your assistant can read traces and log scores directly from the chat.
+At the end of setup, `opik configure` offers to register [Opik's MCP server](/mcp-server) with the AI clients it finds on your machine, so your assistant can read traces and log scores directly from the chat.
 
 Pass `--install-mcp` to skip the prompt and register it:
 
@@ -81,7 +81,7 @@ opik configure --install-mcp --install-skills
 
 <Warning>
 **Both steps only run in an interactive terminal.** They write into configuration
-files owned by your AI assistant, so they are skipped in CI, a Docker build, or a
+files owned by your AI client, so they are skipped in CI, a Docker build, or a
 cron job — the flags above express a preference, not permission to write
 unattended. There is no headless way to register the server; run it from a shell.
 </Warning>
@@ -93,7 +93,7 @@ explicitly. Use `--no-install-mcp` / `--no-install-skills` to skip the prompts
 without being asked.
 </Note>
 
-To manage either without re-running the whole configuration, use `opik mcp configure` and `opik skills configure` — see [Opik's MCP server](/mcp-server) for the `--host` flag, the skill pack, and per-host instructions.
+To manage either without re-running the whole configuration, use `opik mcp configure` and `opik skills configure` — see [Opik's MCP server](/mcp-server) for the `--ai-client` flag, the skill pack, and per-host instructions.
 
 ### TypeScript SDK
 

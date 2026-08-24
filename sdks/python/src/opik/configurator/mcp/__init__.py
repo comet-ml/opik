@@ -7,7 +7,7 @@ __all__ = ["detected_host_names", "setup_mcp_server"]
 
 
 def detected_host_names() -> List[str]:
-    """Display names of the AI hosts present on this machine.
+    """Display names of the AI clients present on this machine.
 
     Used by the configurator to name what it found in the consent prompt instead
     of listing every host Opik happens to support.

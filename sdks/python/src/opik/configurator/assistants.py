@@ -73,7 +73,7 @@ def mcp_prompt(detected: List[str]) -> str:
     """
     return (
         "\n"
-        "  ─── AI assistants ───────────────────────────────────────────\n"
+        "  ─── AI clients ───────────────────────────────────────────\n"
         "\n"
         f"  Found {readable_list(detected)}.\n"
         "\n"
@@ -112,9 +112,9 @@ def skills_decision(
 
 SKILLS_PROMPT: str = (
     "\n  Recommended: also install the Opik skill pack?\n"
-    "  It teaches your assistant how to instrument code with Opik, wire\n"
+    "  It teaches your AI client how to instrument code with Opik, wire\n"
     "  up integrations, and run test suites. (Y/n) "
 )
 """Asked after the server step, so the user answers with its output in front of
-them, and recommended — hence the default yes. The assistants are not named again
+them, and recommended — hence the default yes. The clients are not named again
 because the server step just listed them."""

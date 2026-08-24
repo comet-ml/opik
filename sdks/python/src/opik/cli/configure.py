@@ -71,7 +71,7 @@ def _confirm_assistant_step() -> bool:
 
     console = install_view.console
     console.print()
-    console.print("  Set Opik up for your AI assistant?", style="bold")
+    console.print("  Set Opik up for your AI client?", style="bold")
     # One sentence per print: the host list varies in length, and folding it into
     # a line with a hardcoded wrap pushed the rest past the terminal width and
     # lost the indent on the continuation.
@@ -170,14 +170,14 @@ def run_interactive_configure(
 @click.option(
     "--install-mcp/--no-install-mcp",
     default=None,
-    help="Register the Opik MCP server with detected AI hosts (Claude Code, Cursor, "
+    help="Register the Opik MCP server with detected AI clients (Claude Code, Cursor, "
     "VS Code, Codex, opencode). When omitted, you are prompted interactively.",
 )
 @click.option(
     "--install-skills/--no-install-skills",
     default=None,
-    help="Install the Opik skill pack into detected AI hosts, teaching your "
-    "assistant how to instrument code with Opik. When omitted, you are prompted "
+    help="Install the Opik skill pack into detected AI clients, teaching your "
+    "AI client how to instrument code with Opik. When omitted, you are prompted "
     "interactively.",
 )
 @click.pass_context

@@ -150,7 +150,7 @@ class LoggingInstallView(InstallView):
             "Done. %s set up for %s. Restart %s, then ask it to 'list my Opik "
             "projects'.",
             " and ".join(components) or "Nothing",
-            ", ".join(assistants) or "your AI host",
+            ", ".join(assistants) or "your AI client",
             "them" if len(assistants) > 1 else "it",
         )
 

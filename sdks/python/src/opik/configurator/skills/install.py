@@ -1,4 +1,4 @@
-"""Install the Opik skill pack into the user's AI assistant(s).
+"""Install the Opik skill pack into the user's AI client(s).
 
 Where the MCP server gives an assistant *tools*, the skill pack gives it the
 knowledge of how to use Opik — how to instrument a codebase, wire up an

@@ -130,7 +130,7 @@ class RichInstallView(mcp_view.InstallView):
         grid.add_column(style=_KEY_STYLE, no_wrap=True)
         grid.add_column(overflow="fold")
         grid.add_row("Set up", _join(components) or "nothing")
-        grid.add_row("For", _join(assistants) or "your AI host")
+        grid.add_row("For", _join(assistants) or "your AI client")
         grid.add_row(
             "Next",
             text.Text.assemble(

@@ -1,4 +1,4 @@
-"""Register the Opik MCP server with the user's AI host(s).
+"""Register the Opik MCP server with the user's AI client(s).
 
 Analytics note — the installer is currently unmeasured. Every MCP metric we have
 is emitted by the ``opik-mcp`` server, which can only report once it exists, so
@@ -46,7 +46,7 @@ def setup_mcp_server(
     view: Optional[mcp_view.InstallView] = None,
     announce_next_steps: bool = True,
 ) -> List[str]:
-    """Register the Opik MCP server with the user's AI host(s).
+    """Register the Opik MCP server with the user's AI client(s).
 
     The decision of *whether* to run this lives in the callers; by the time this
     is called the user has opted in.
@@ -57,11 +57,11 @@ def setup_mcp_server(
     ``self_hosted_comet``) keeps working. ``force_local_server`` skips the
     hosted-server probe and always installs the local ``uvx`` server.
 
-    ``host_keys`` names the hosts to install for explicitly, which is what makes
-    this usable from CI, a Dockerfile, or a coding agent: given it, nothing is
-    detected and nothing is prompted. ``assume_confirmed`` suppresses the target
-    confirmation when the caller already showed the user a prompt naming the same
-    hosts, so consent is collected once rather than twice.
+    ``host_keys`` names the AI clients to install for explicitly, which skips
+    detection and the picker — but not the terminal requirement above.
+    ``assume_confirmed`` suppresses the target confirmation when the caller
+    already showed the user a prompt naming the same clients, so consent is
+    collected once rather than twice.
 
     ``view`` decides how the flow narrates itself; it defaults to the logger so
     that ``opik.configure()`` stays library-safe. The CLI passes a ``rich`` view.
@@ -132,7 +132,7 @@ def setup_mcp_server(
     if len(candidates) == 0:
         if host_keys:
             display.problem(
-                f"None of the requested hosts are known. Known hosts: "
+                f"None of the requested AI clients are known. Known clients: "
                 f"{', '.join(mcp_targets.HOST_KEYS)}."
             )
         else:
@@ -289,9 +289,8 @@ def _candidate_targets(
 
     Split from the confirmation so the plan — including the exact files — can be
     shown *before* the prompt. An explicit ``host_keys`` bypasses detection
-    entirely: naming a host is the caller stating a fact, and requiring the host
-    to be installed first would defeat the point in a Dockerfile or a fresh CI
-    image.
+    entirely: naming a client is the caller stating a fact, so a client that is
+    installed but not yet detectable can still be configured.
     """
     if host_keys:
         explicit: List[mcp_targets.HostTarget] = []
@@ -300,7 +299,7 @@ def _candidate_targets(
             if target is None:
                 # Unreachable through the CLI, which validates against HOST_KEYS;
                 # reachable from a direct library call.
-                LOGGER.debug("Unknown AI host %r requested", key)
+                LOGGER.debug("Unknown AI client %r requested", key)
                 continue
             explicit.append(target)
         return explicit
@@ -323,7 +322,7 @@ def _confirm_targets(
         return candidates
 
     chosen = display.choose_hosts(
-        title="Which AI assistant should the Opik MCP server be set up for?",
+        title="Which AI client should the Opik MCP server be set up for?",
         candidates=[
             mcp_view.HostChoice(key=target.key, label=target.display_name)
             for target in candidates
@@ -346,10 +345,10 @@ def _report_no_host_detected(
     block = mcp_spec.redact_block_for_display(server_spec.to_block())
     manual_config = json.dumps({"mcpServers": {"opik-mcp": block}}, indent=2)
     display.problem(
-        f"No supported AI host was detected "
+        f"No supported AI client was detected "
         f"({', '.join(target.display_name for target in mcp_targets.HOST_TARGETS)}).\n\n"
         f"Name one directly:\n"
-        f"    opik mcp configure --host claude-code\n\n"
+        f"    opik mcp configure --ai-client claude-code\n\n"
         f"Or add this to your host's MCP config by hand "
         f'(VS Code uses "servers" instead of "mcpServers"):\n{manual_config}\n\n'
         f"See {MCP_DOCS_URL} for per-host instructions."
@@ -377,7 +376,7 @@ def _verify(
 
 
 def _prefetch_opik_mcp() -> None:
-    """Download opik-mcp now so the AI host connects instantly on first launch.
+    """Download opik-mcp now so the AI client connects instantly on first launch.
 
     Hosts run ``uvx opik-mcp``, which otherwise fetches the package and a
     Python 3.13 interpreter lazily on first use — slow, and any failure surfaces
@@ -397,7 +396,7 @@ def _prefetch_opik_mcp() -> None:
         result = subprocess.run([uv_executable, "tool", "install", "opik-mcp"])
     except OSError as error:
         LOGGER.warning(
-            "Could not pre-fetch opik-mcp: %s. Your AI host will download it on "
+            "Could not pre-fetch opik-mcp: %s. Your AI client will download it on "
             "first use instead.",
             error,
         )
@@ -406,7 +405,7 @@ def _prefetch_opik_mcp() -> None:
     if result.returncode != 0:
         LOGGER.warning(
             "Could not pre-fetch opik-mcp (`uv tool install opik-mcp` exited %s, "
-            "see its output above). Your AI host will download it on first use "
+            "see its output above). Your AI client will download it on first use "
             "instead.",
             result.returncode,
         )

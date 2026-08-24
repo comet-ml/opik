@@ -69,7 +69,7 @@ def render_config_summary(config: opik_config.OpikConfig) -> None:
 def render_mcp_status(
     config: opik_config.OpikConfig, host_statuses: List[mcp_status.HostStatus]
 ) -> None:
-    """Print the Opik config summary plus each assistant that has the MCP server.
+    """Print the Opik config summary plus each AI client that has the MCP server.
 
     Assistants without an Opik MCP registration are omitted.
     """
@@ -78,12 +78,12 @@ def render_mcp_status(
 
     configured = [host for host in host_statuses if host.registered]
     if not configured:
-        console.print("The Opik MCP server is not configured for any AI assistant.")
+        console.print("The Opik MCP server is not configured for any AI client.")
         console.print("Run [bold]opik mcp configure[/bold] to set it up.")
         return
 
     count = len(configured)
-    noun = "assistant" if count == 1 else "assistants"
+    noun = "client" if count == 1 else "clients"
     console.print(
         text.Text(f"Opik MCP server — configured for {count} AI {noun}:", style="bold")
     )
@@ -145,7 +145,7 @@ def render_skills_status(
     console.print(
         padding.Padding(
             text.Text(
-                f"Shared with every supported assistant from {shared_dir}", style="dim"
+                f"Shared with every supported AI client from {shared_dir}", style="dim"
             ),
             (0, 0, 0, 2),
             expand=False,
@@ -190,7 +190,7 @@ def _render_skill(skill: skills_manifest.SkillStatus) -> None:
                 text.Text("✓ linked", style="green")
                 if linked
                 else text.Text(
-                    f"not linked — run `opik skills configure --host {host_key}`",
+                    f"not linked — run `opik skills configure --ai-client {host_key}`",
                     style="yellow",
                 ),
             )

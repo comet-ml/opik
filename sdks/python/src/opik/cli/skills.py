@@ -20,7 +20,7 @@ HOST_KEYS: List[str] = list(skills_roots.SUPPORTED_HOST_KEYS)
 
 
 def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
-    """Turn ``--host`` values into host keys, or ``None`` when none were named."""
+    """Turn ``--ai-client`` values into host keys, or ``None`` when none were named."""
     if len(hosts) == 0:
         return None
 
@@ -28,7 +28,7 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
         detected = skills_roots.detected_host_keys()
         if len(detected) == 0:
             raise click.ClickException(
-                "`--host all` found no supported AI host on this machine. Name one "
+                "`--ai-client all` found no supported AI client on this machine. Name one "
                 f"explicitly instead: {', '.join(HOST_KEYS)}."
             )
         return detected
@@ -42,18 +42,18 @@ def _sentence(text: str) -> str:
 
 
 def _ask_which_hosts(detected: List[str]) -> Optional[List[str]]:
-    """Which detected assistants to install for.
+    """Which detected AI clients to install for.
 
-    Asked rather than assumed: the skill pack is guidance the assistant will act
+    Asked rather than assumed: the skill pack is guidance the AI client will act
     on, and a user may well want it in the editor they use for Opik work and not
-    in every assistant on the machine.
+    in every client on the machine.
     """
     # Without a terminal there is nobody to ask, and asking anyway aborts the
-    # command. Naming assistants with `--host` is the answer in that case.
+    # command. Naming clients with `--ai-client` is the answer in that case.
     if not interactive_helpers.is_interactive():
         raise click.ClickException(
             "`opik skills configure` needs an interactive terminal to pick your "
-            f"assistants. Name them instead, e.g. `--host {detected[0]}`."
+            f"assistants. Name them instead, e.g. `--ai-client {detected[0]}`."
         )
 
     if len(detected) == 1 or not selector.is_supported():
@@ -65,7 +65,7 @@ def _ask_which_hosts(detected: List[str]) -> Optional[List[str]]:
         return []
 
     return selector.multiselect(
-        title="Which AI assistant should the Opik skill pack be installed for?",
+        title="Which AI client should the Opik skill pack be installed for?",
         choices=[
             selector.Choice(key=key, label=label)
             for key, label in zip(detected, skills_roots.display_names(detected))
@@ -81,19 +81,19 @@ def skills() -> None:
 
 @skills.command(name="configure")
 @click.option(
-    "--host",
+    "--ai-client",
     "hosts",
     multiple=True,
     type=click.Choice(HOST_KEYS + [HOST_ALL], case_sensitive=False),
-    help="AI host to install the skill pack for. Repeatable, or pass `all` for "
+    help="AI client to install the skill pack for. Repeatable, or pass `all` for "
     "every host detected on this machine. Defaults to every detected host.",
 )
 def configure(hosts: Tuple[str, ...]) -> None:
-    """Install the Opik skill pack into your AI assistant(s).
+    """Install the Opik skill pack into your AI client(s).
 
-    The pack teaches your assistant how to instrument code with Opik, wire up
+    The pack teaches your AI client how to instrument code with Opik, wire up
     framework integrations, build test suites, and use `opik connect`. It is
-    separate from the MCP server, which gives the assistant tools rather than
+    separate from the MCP server, which gives the client tools rather than
     knowledge — most people want both (`opik mcp configure`).
 
     Skills install for your user account, not a project, so this can be run from
@@ -102,7 +102,7 @@ def configure(hosts: Tuple[str, ...]) -> None:
     if not interactive_helpers.is_interactive():
         raise click.ClickException(
             "`opik skills configure` only runs in an interactive terminal: the "
-            "pack is guidance your assistant acts on, and installing it "
+            "pack is guidance your AI client acts on, and installing it "
             "unattended in CI or a Docker build is not something to do silently. "
             "Run it from a shell."
         )
@@ -113,14 +113,14 @@ def configure(hosts: Tuple[str, ...]) -> None:
         detected = skills_roots.detected_host_keys()
         if len(detected) == 0:
             raise click.ClickException(
-                "No supported AI host was detected. Name one explicitly: "
-                f"`opik skills configure --host {HOST_KEYS[0]}`."
+                "No supported AI client was detected. Name one explicitly: "
+                f"`opik skills configure --ai-client {HOST_KEYS[0]}`."
             )
         host_keys = _ask_which_hosts(detected)
         if host_keys is None:
             raise click.ClickException("Cancelled; nothing was installed.")
         if len(host_keys) == 0:
-            click.echo("No assistants selected; nothing was installed.")
+            click.echo("No AI clients selected; nothing was installed.")
             return
 
     view = install_view.RichInstallView()
@@ -152,7 +152,7 @@ def update() -> None:
         click.echo(f"  added:   {', '.join(result.added)}")
     if result.removed:
         click.echo(f"  removed: {', '.join(result.removed)}")
-    click.echo("Restart your AI host to pick up the change.")
+    click.echo("Restart your AI client to pick up the change.")
 
 
 @skills.command(name="remove")

@@ -1,4 +1,4 @@
-"""Where each AI assistant looks for user-level skills.
+"""Where each AI client looks for user-level skills.
 
 Skills are plain ``SKILL.md`` directories, and the assistants have converged on a
 shared user-level location — ``~/.agents/skills`` — rather than each inventing its

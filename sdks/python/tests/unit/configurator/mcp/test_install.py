@@ -509,7 +509,7 @@ class TestExplicitHosts:
         install.setup_mcp_server(**(args := _make_args()), host_keys=["emacs"])
 
         install_spy.assert_not_called()
-        assert "Known hosts" in args["view"].said
+        assert "Known clients" in args["view"].said
 
 
 class TestAssumeConfirmed:
@@ -771,7 +771,7 @@ def test_setup_mcp_server__no_host__manual_instructions_mention_the_host_flag(
     install.setup_mcp_server(**(args := _make_args()))
 
     logged = args["view"].said
-    assert "--host" in logged
+    assert "--ai-client" in logged
 
 
 class TestPlanLabels:

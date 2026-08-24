@@ -36,7 +36,7 @@ class TestConfigureCommand:
         with patch.object(
             skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
-            result = runner.invoke(cli, ["skills", "configure", "--host", "codex"])
+            result = runner.invoke(cli, ["skills", "configure", "--ai-client", "codex"])
 
         assert result.exit_code == 0
         assert setup_spy.call_args.args[0] == ["codex"]
@@ -48,7 +48,14 @@ class TestConfigureCommand:
         ) as setup_spy:
             result = runner.invoke(
                 cli,
-                ["skills", "configure", "--host", "codex", "--host", "claude-code"],
+                [
+                    "skills",
+                    "configure",
+                    "--ai-client",
+                    "codex",
+                    "--ai-client",
+                    "claude-code",
+                ],
             )
 
         assert result.exit_code == 0
@@ -60,7 +67,8 @@ class TestConfigureCommand:
             skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
             result = runner.invoke(
-                cli, ["skills", "configure", "--host", "codex", "--host", "codex"]
+                cli,
+                ["skills", "configure", "--ai-client", "codex", "--ai-client", "codex"],
             )
 
         assert result.exit_code == 0
@@ -96,7 +104,7 @@ class TestConfigureCommand:
                 skills_cli.skills_installer, "setup_skills", return_value=_ok()
             ) as setup_spy,
         ):
-            result = runner.invoke(cli, ["skills", "configure", "--host", "all"])
+            result = runner.invoke(cli, ["skills", "configure", "--ai-client", "all"])
 
         assert result.exit_code == 0
         assert setup_spy.call_args.args[0] == ["cursor", "codex"]
@@ -109,10 +117,10 @@ class TestConfigureCommand:
             ),
             patch.object(skills_cli.skills_installer, "setup_skills") as setup_spy,
         ):
-            result = runner.invoke(cli, ["skills", "configure", "--host", "all"])
+            result = runner.invoke(cli, ["skills", "configure", "--ai-client", "all"])
 
         assert result.exit_code != 0
-        assert "no supported AI host" in result.output
+        assert "no supported AI client" in result.output
         setup_spy.assert_not_called()
 
     def test_configure__nothing_detected_and_no_flag__errors_with_a_suggestion(self):
@@ -126,12 +134,12 @@ class TestConfigureCommand:
             result = runner.invoke(cli, ["skills", "configure"])
 
         assert result.exit_code != 0
-        assert "--host" in result.output
+        assert "--ai-client" in result.output
         setup_spy.assert_not_called()
 
     def test_configure__unknown_host__rejected_by_the_parser(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["skills", "configure", "--host", "emacs"])
+        result = runner.invoke(cli, ["skills", "configure", "--ai-client", "emacs"])
 
         assert result.exit_code != 0
         assert "emacs" in result.output
@@ -141,7 +149,7 @@ class TestConfigureCommand:
         with patch.object(
             skills_cli.skills_installer, "setup_skills", return_value=_failed()
         ):
-            result = runner.invoke(cli, ["skills", "configure", "--host", "codex"])
+            result = runner.invoke(cli, ["skills", "configure", "--ai-client", "codex"])
 
         assert result.exit_code != 0
 
@@ -151,7 +159,7 @@ class TestConfigureCommand:
         with patch.object(
             skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
-            result = runner.invoke(cli, ["skills", "configure", "--host", "codex"])
+            result = runner.invoke(cli, ["skills", "configure", "--ai-client", "codex"])
 
         assert result.exit_code == 0
         setup_spy.assert_called_once()
@@ -288,7 +296,7 @@ class TestUpdateCommand:
 
         assert result.exit_code == 0
         assert "updated to abcdef123456" in result.output
-        assert "Restart your AI host" in result.output
+        assert "Restart your AI client" in result.output
 
     def test_update__lists_added_and_removed_skills(self):
         runner = CliRunner()
@@ -363,7 +371,9 @@ class TestNonInteractiveEnvironments:
         with patch.object(
             skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
-            result = runner.invoke(cli, ["skills", "configure", "--host", "cursor"])
+            result = runner.invoke(
+                cli, ["skills", "configure", "--ai-client", "cursor"]
+            )
 
         assert result.exit_code != 0
         assert "interactive terminal" in result.output

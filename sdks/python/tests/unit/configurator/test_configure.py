@@ -2542,7 +2542,7 @@ class TestShouldSetupMcpServer:
         assert "Found Cursor." in prompt
         # Framed as its own block, not appended to the configuration log.
         assert prompt.startswith("\n")
-        assert "AI assistants" in prompt
+        assert "AI clients" in prompt
         assert configurator._mcp_prompt_named_detected_hosts is True
 
     @patch(

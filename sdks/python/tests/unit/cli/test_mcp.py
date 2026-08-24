@@ -167,7 +167,7 @@ class TestInstallCommand:
 
         assert result.exit_code == 0
         assert "Your Opik configuration" in result.output
-        assert "configured for 1 AI assistant" in result.output
+        assert "configured for 1 AI client" in result.output
         assert "Claude Code" in result.output
         assert "OUT OF SYNC with your Opik configuration" in result.output
         assert "http://localhost:5173/api/" in result.output
@@ -184,7 +184,7 @@ class TestInstallCommand:
             result = runner.invoke(cli, ["mcp", "status"])
 
         assert result.exit_code == 0
-        assert "not configured for any AI assistant" in result.output
+        assert "not configured for any AI client" in result.output
         assert "opik mcp configure" in result.output
 
     def test_install__local_without_api_key__proceeds(self):
@@ -223,7 +223,7 @@ class TestHostFlag:
             ),
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "configure", "--host", "codex"])
+            result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "codex"])
 
         assert result.exit_code == 0
         assert setup_spy.call_args.kwargs["host_keys"] == ["codex"]
@@ -241,7 +241,7 @@ class TestHostFlag:
         ):
             result = runner.invoke(
                 cli,
-                ["mcp", "configure", "--host", "codex", "--host", "cursor"],
+                ["mcp", "configure", "--ai-client", "codex", "--ai-client", "cursor"],
             )
 
         assert result.exit_code == 0
@@ -259,7 +259,8 @@ class TestHostFlag:
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
             result = runner.invoke(
-                cli, ["mcp", "configure", "--host", "codex", "--host", "codex"]
+                cli,
+                ["mcp", "configure", "--ai-client", "codex", "--ai-client", "codex"],
             )
 
         assert result.exit_code == 0
@@ -283,7 +284,7 @@ class TestHostFlag:
 
     def test_configure__unknown_host__is_rejected_by_the_parser(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["mcp", "configure", "--host", "emacs"])
+        result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "emacs"])
 
         assert result.exit_code != 0
         assert "emacs" in result.output
@@ -306,7 +307,7 @@ class TestHostFlag:
             ),
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "configure", "--host", "all"])
+            result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "all"])
 
         assert result.exit_code == 0
         assert setup_spy.call_args.kwargs["host_keys"] == ["cursor", "codex"]
@@ -317,10 +318,10 @@ class TestHostFlag:
             patch.object(mcp_cli.mcp_targets, "detected_targets", return_value=[]),
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "configure", "--host", "all"])
+            result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "all"])
 
         assert result.exit_code != 0
-        assert "no supported AI host" in result.output
+        assert "no supported AI client" in result.output
         setup_spy.assert_not_called()
 
     def test_configure__non_interactive_with_host__refuses(self):
@@ -335,7 +336,7 @@ class TestHostFlag:
             ),
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "configure", "--host", "codex"])
+            result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "codex"])
 
         assert result.exit_code != 0
         assert "interactive terminal" in result.output
@@ -370,7 +371,7 @@ class TestHostFlag:
             ) as configure_spy,
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
-            result = runner.invoke(cli, ["mcp", "configure", "--host", "codex"])
+            result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "codex"])
 
         assert result.exit_code != 0
         # The terminal gate fires before Opik's own configuration is considered,
@@ -395,7 +396,7 @@ class TestDelegatesToTheSharedStep:
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
             result = runner.invoke(
-                cli, ["mcp", "configure", "--host", "cursor", "--no-skills"]
+                cli, ["mcp", "configure", "--ai-client", "cursor", "--no-skills"]
             )
 
         assert result.exit_code == 0
@@ -416,7 +417,7 @@ class TestDelegatesToTheSharedStep:
             patch.object(mcp_cli.assistants, "setup") as setup_spy,
         ):
             runner.invoke(
-                cli, ["mcp", "configure", "--host", "cursor", "--local-server"]
+                cli, ["mcp", "configure", "--ai-client", "cursor", "--local-server"]
             )
 
         assert setup_spy.call_args.kwargs["force_local_server"] is True

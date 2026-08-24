@@ -71,7 +71,7 @@ class TestLoggingInstallView:
     def test_done__no_assistants__still_reads(self, logger):
         mcp_view.LoggingInstallView().done(["MCP server"], [])
 
-        assert "your AI host" in str(logger.info.call_args)
+        assert "your AI client" in str(logger.info.call_args)
 
     def test_done__names_what_was_set_up(self, logger):
         mcp_view.LoggingInstallView().done(["MCP server", "skill pack"], ["Cursor"])
