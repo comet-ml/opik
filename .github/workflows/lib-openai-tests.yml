@@ -15,6 +15,7 @@ env:
   GOOGLE_GENAI_USE_VERTEXAI: TRUE
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   OPIK_TEST_EXPENSIVE: ${{ inputs.run_expensive_tests }}
 on:
   workflow_call:
