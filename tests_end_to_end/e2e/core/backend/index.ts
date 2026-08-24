@@ -4,6 +4,7 @@ export {
   type ProjectRef,
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
+  type DatasetVersionRef,
   type ExperimentRefDetail,
   type TestSuiteRef as BackendTestSuiteRef,
   type TestSuiteItemRef,
@@ -13,4 +14,5 @@ export {
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
 } from './client';
+export { uuid7 } from './uuid7';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';

@@ -49,6 +49,18 @@ export interface PythonSdkClient {
     items?: Array<Record<string, unknown>>;
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
+  /**
+   * One `Dataset.insert(...)` into an existing dataset — and therefore exactly
+   * one new dataset version, however many 1000-item batches the SDK splits the
+   * payload into. `num_threads` > 1 uploads those batches in parallel.
+   */
+  insertDatasetItems(args: {
+    dataset_name: string;
+    project_name: string;
+    items: Array<Record<string, unknown>>;
+    num_threads?: number;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number }>;
   evaluateExperiment(args: {
     project_name: string;
     dataset_name: string;
@@ -181,10 +193,12 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     method: 'GET' | 'POST' | 'DELETE',
     path: string,
     body?: unknown,
+    opts: { timeoutMs?: number } = {},
   ): Promise<TResponse> {
     const endpoint = `${method} ${path}`;
+    const timeoutMs = opts.timeoutMs ?? REQUEST_TIMEOUT_MS;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const headers: Record<string, string> = {};
       if (body !== undefined) headers['content-type'] = 'application/json';
@@ -206,7 +220,7 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
             status: 0,
             endpoint,
             detail: 'client-timeout',
-            message: `opik-sdk-driver ${endpoint} aborted after ${REQUEST_TIMEOUT_MS}ms (client-side timeout — the bridge or backend did not respond in time)`,
+            message: `opik-sdk-driver ${endpoint} aborted after ${timeoutMs}ms (client-side timeout — the bridge or backend did not respond in time)`,
           });
         }
         throw err;
@@ -258,6 +272,17 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createDataset(args) {
       return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async insertDatasetItems(args) {
+      // Multi-batch inserts against a cloud backend outlive the default budget
+      // when the workspace is being rate-limited, and a client-side abort here
+      // would leave a half-written dataset behind.
+      return request<{ dataset_id: string; inserted: number }>(
+        'POST',
+        '/datasets/insert-items',
+        args,
+        { timeoutMs: 180_000 },
+      );
     },
     async compareSeed(args) {
       return request<{

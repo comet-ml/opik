@@ -422,6 +422,7 @@ areas:
     specs:
       - datasets/dataset-crud-smoke.spec.ts
       - datasets/dataset-items.spec.ts
+      - datasets/dataset-version-duplicate-ids.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
@@ -432,7 +433,7 @@ areas:
       bulk-delete-items:      { covered: true,  tier: t3-nightly }
       search-items:           { covered: true,  tier: t3-nightly }
       sdk-round-trip:         { covered: true,  tier: t1-smoke }
-      version-history-view:   { covered: false }
+      version-history-view:   { covered: true,  tier: t2-cuj, note: "items_total on both version-creating paths (createFirstVersion / applyDelta) when a batch repeats an item id, plus the Item count column; the un-versioned PUT path (no batch_group_id) is NOT covered" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
