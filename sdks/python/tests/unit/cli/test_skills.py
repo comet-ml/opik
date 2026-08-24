@@ -76,7 +76,10 @@ class TestConfigureCommand:
                 skills_cli.skills_installer, "setup_skills", return_value=_ok()
             ) as setup_spy,
         ):
-            result = runner.invoke(cli, ["skills", "configure"])
+            # One detected host takes the plain confirmation rather than the
+            # picker, so answer it. Relying on click returning `default` at EOF
+            # was version-dependent: 8.1 did, 8.4 aborts.
+            result = runner.invoke(cli, ["skills", "configure"], input="y\n")
 
         assert result.exit_code == 0
         assert setup_spy.call_args.args[0] == ["cursor"]

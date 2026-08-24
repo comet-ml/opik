@@ -37,7 +37,9 @@ class VerificationResult:
     detail: str
 
 
-def _client(api_key: Optional[str], workspace: Optional[str], check_tls: bool):
+def _client(
+    api_key: Optional[str], workspace: Optional[str], check_tls: bool
+) -> httpx.Client:
     return httpx_client.get(
         workspace=workspace,
         api_key=api_key,

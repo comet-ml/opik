@@ -210,12 +210,9 @@ class TestListWorkspaces:
     def test_list_workspaces__ok__returns_names(self, patch_client):
         patch_client(_FakeClient(_response(200, {"workspaceNames": ["a", "b"]})))
 
-        assert (
-            verification.list_workspaces(
-                api_key="key", base_url="https://www.comet.com/", check_tls_certificate=True
-            )
-            == ["a", "b"]
-        )
+        assert verification.list_workspaces(
+            api_key="key", base_url="https://www.comet.com/", check_tls_certificate=True
+        ) == ["a", "b"]
 
     @pytest.mark.parametrize(
         "response",
@@ -234,7 +231,9 @@ class TestListWorkspaces:
 
         assert (
             verification.list_workspaces(
-                api_key="key", base_url="https://www.comet.com/", check_tls_certificate=True
+                api_key="key",
+                base_url="https://www.comet.com/",
+                check_tls_certificate=True,
             )
             is None
         )
@@ -244,17 +243,23 @@ class TestListWorkspaces:
 
         assert (
             verification.list_workspaces(
-                api_key="key", base_url="https://www.comet.com/", check_tls_certificate=True
+                api_key="key",
+                base_url="https://www.comet.com/",
+                check_tls_certificate=True,
             )
             is None
         )
 
     def test_list_workspaces__sends_the_api_key_not_a_workspace(self, monkeypatch):
-        client_spy = mock.Mock(return_value=_FakeClient(_response(200, {"workspaceNames": []})))
+        client_spy = mock.Mock(
+            return_value=_FakeClient(_response(200, {"workspaceNames": []}))
+        )
         monkeypatch.setattr(verification, "_client", client_spy)
 
         verification.list_workspaces(
-            api_key="key", base_url="https://www.comet.com/", check_tls_certificate=False
+            api_key="key",
+            base_url="https://www.comet.com/",
+            check_tls_certificate=False,
         )
 
         assert client_spy.call_args.args == ("key", None, False)
