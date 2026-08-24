@@ -4,11 +4,13 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.api.ProviderAuthCheck;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -71,6 +73,9 @@ public class LlmProviderApiKeyResource {
                         .apiKey(providerApiKey.apiKey() != null
                                 ? maskApiKey(decrypt(providerApiKey.apiKey()))
                                 : "null")
+                        .authConfig(providerApiKey.authConfig() != null
+                                ? providerApiKey.authConfig().mask()
+                                : null)
                         .build())
                 .toList();
 
@@ -101,6 +106,7 @@ public class LlmProviderApiKeyResource {
 
         return Response.ok().entity(providerApiKey.toBuilder()
                 .apiKey(providerApiKey.apiKey() != null ? maskApiKey(decrypt(providerApiKey.apiKey())) : null)
+                .authConfig(providerApiKey.authConfig() != null ? providerApiKey.authConfig().mask() : null)
                 .build()).build();
     }
 
@@ -145,6 +151,30 @@ public class LlmProviderApiKeyResource {
         log.info("Updated api key for LLM provider with id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/auth-config/test")
+    @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.AI_PROVIDER_UPDATE)
+    @Operation(operationId = "testLlmProviderAuthConfig", summary = "Test a provider's dynamic token auth", description = "Runs the token fetch once, backend-side, and reports the token lifetime. The token itself is never returned. "
+            +
+            "Send provider_id to test the stored config, auth_config to test submitted values, or both to resolve secret sentinels against the stored config.", responses = {
+                    @ApiResponse(responseCode = "200", description = "Token fetched", content = @Content(schema = @Schema(implementation = ProviderAuthCheck.Result.class))),
+                    @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+            })
+    public Response testAuthConfig(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = ProviderAuthCheck.class))) @Valid ProviderAuthCheck providerAuthTest) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Testing LLM provider auth config on workspace_id '{}'", workspaceId);
+        ProviderAuthCheck.Result result = llmProviderApiKeyService.testAuthConfig(providerAuthTest, workspaceId);
+        log.info("Tested LLM provider auth config on workspace_id '{}': token received, lifetime '{}'s",
+                workspaceId, result.lifetimeSeconds());
+
+        return Response.ok(result).build();
     }
 
     @POST

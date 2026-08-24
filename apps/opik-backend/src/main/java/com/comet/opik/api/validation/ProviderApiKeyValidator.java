@@ -1,9 +1,13 @@
 package com.comet.opik.api.validation;
 
 import com.comet.opik.api.ProviderApiKey;
+import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
+
+import java.util.List;
+import java.util.Optional;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
@@ -37,7 +41,15 @@ public class ProviderApiKeyValidator
             }
 
             // If provider supports naming, no need to validate api key
-            return true;
+            return isValidAuthConfig(providerApiKey, context);
+        }
+
+        if (providerApiKey.authConfig() != null) {
+            context.buildConstraintViolationWithTemplate(
+                    "auth_config is only supported for providers with provider_name (custom LLM, Bedrock, Ollama)")
+                    .addPropertyNode("authConfig")
+                    .addConstraintViolation();
+            return false;
         }
 
         // Validate API key for non-custom providers
@@ -49,5 +61,41 @@ public class ProviderApiKeyValidator
         }
 
         return true;
+    }
+
+    private boolean isValidAuthConfig(ProviderApiKey providerApiKey, ConstraintValidatorContext context) {
+        var authConfig = providerApiKey.authConfig();
+        if (authConfig == null) {
+            return true;
+        }
+
+        boolean valid = true;
+        for (String error : ProviderAuthConfigValidator.validationErrors(authConfig)) {
+            context.buildConstraintViolationWithTemplate(error)
+                    .addPropertyNode("authConfig")
+                    .addConstraintViolation();
+            valid = false;
+        }
+
+        // The sentinel means "keep the stored secret" — meaningless on create, where nothing is stored yet
+        boolean hasSentinel = Optional.ofNullable(authConfig.credentials()).orElse(List.of()).stream()
+                .anyMatch(credential -> ProviderAuthConfig.SECRET_SENTINEL.equals(credential.value()));
+        if (hasSentinel) {
+            context.buildConstraintViolationWithTemplate(
+                    "auth_config credential values must not be the '%s' sentinel on create"
+                            .formatted(ProviderAuthConfig.SECRET_SENTINEL))
+                    .addPropertyNode("authConfig")
+                    .addConstraintViolation();
+            valid = false;
+        }
+
+        if (providerApiKey.apiKey() != null && !isBlank(EncryptionUtils.decrypt(providerApiKey.apiKey()))) {
+            context.buildConstraintViolationWithTemplate("api_key must not be set when auth_config is set")
+                    .addPropertyNode("apiKey")
+                    .addConstraintViolation();
+            valid = false;
+        }
+
+        return valid;
     }
 }
