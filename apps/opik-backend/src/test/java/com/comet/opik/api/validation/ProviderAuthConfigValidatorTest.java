@@ -38,6 +38,9 @@ class ProviderAuthConfigValidatorTest {
         assertThat(ProviderAuthConfigValidator
                 .validationErrors(AUTH_CONFIG.toBuilder().tokenUrl("ftp://auth.example.com/token").build()))
                 .containsExactly("auth_config.token_url must use http or https");
+        assertThat(
+                ProviderAuthConfigValidator.validationErrors(AUTH_CONFIG.toBuilder().tokenUrl("https:token").build()))
+                .containsExactly("auth_config.token_url must include a host");
         assertThat(ProviderAuthConfigValidator.validationErrors(AUTH_CONFIG.toBuilder().credentials(List.of()).build()))
                 .containsExactly("auth_config.credentials must not be empty");
         assertThat(ProviderAuthConfigValidator.validationErrors(ProviderAuthConfig.builder().build())).hasSize(2);

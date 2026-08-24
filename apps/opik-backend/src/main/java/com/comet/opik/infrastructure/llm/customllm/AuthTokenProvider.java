@@ -112,7 +112,7 @@ public class AuthTokenProvider {
         this.tokenRequests = meter.counterBuilder("llm_provider_token_requests")
                 .setDescription("Bearer requests against the token cache, by outcome")
                 .build();
-        this.fetchDurationMs = meter.histogramBuilder("llm_provider_token_fetch_duration_ms")
+        this.fetchDurationMs = meter.histogramBuilder("llm_provider_token_fetch_duration")
                 .setDescription("Duration of HTTP fetches against customers' auth services")
                 .setUnit("ms")
                 .ofLongs()

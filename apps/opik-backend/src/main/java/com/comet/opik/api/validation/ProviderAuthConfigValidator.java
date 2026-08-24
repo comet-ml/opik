@@ -26,9 +26,12 @@ public final class ProviderAuthConfigValidator {
         if (!ValidationUtils.isAbsoluteUri(authConfig.tokenUrl())) {
             errors.add("auth_config.token_url must be a valid absolute URI");
         } else {
-            String scheme = URI.create(authConfig.tokenUrl()).getScheme();
+            URI uri = URI.create(authConfig.tokenUrl());
+            String scheme = uri.getScheme();
             if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
                 errors.add("auth_config.token_url must use http or https");
+            } else if (uri.getHost() == null) {
+                errors.add("auth_config.token_url must include a host");
             }
         }
         if (CollectionUtils.isEmpty(authConfig.credentials())) {
