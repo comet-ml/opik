@@ -110,6 +110,37 @@ export class DatasetItemsPage {
     });
   }
 
+  /** Second tab of the dataset page: one row per committed version. */
+  async openVersionHistory(): Promise<void> {
+    return test.step('Open the Version history tab', async () => {
+      await this.page.getByRole('tab', { name: 'Version history' }).click();
+      const realRow = this.versionsTableBody.locator('tr[data-row-id]').first();
+      const emptyState = this.page.getByText('No version history yet');
+      await Promise.race([
+        realRow.waitFor({ state: 'visible' }),
+        emptyState.waitFor({ state: 'visible' }),
+      ]);
+    });
+  }
+
+  versionHistoryRow(versionName: string): Locator {
+    return this.versionsTableBody
+      .locator('tr[data-row-id]')
+      .filter({ has: this.page.getByRole('cell', { name: versionName, exact: true }) });
+  }
+
+  /**
+   * The "Item count" cell of a version row, as rendered — thousands-separated
+   * ("1,800"), because the column formats through toLocaleString().
+   *
+   * Addressed by the table's own `data-cell-id` (`<rowId>_<columnId>`) rather
+   * than a positional nth(): the version table has no per-cell testid, and
+   * column order is user-configurable, so position is not stable.
+   */
+  versionItemCount(versionName: string): Locator {
+    return this.versionHistoryRow(versionName).locator('[data-cell-id$="_items_total"]');
+  }
+
   async search(term: string): Promise<void> {
     return test.step(`Search items for "${term}"`, async () => {
       await this.page.getByTestId('search-input').fill(term);
@@ -212,6 +243,10 @@ export class DatasetItemsPage {
 
   private get itemsTableBody(): Locator {
     return this.page.getByRole('tabpanel', { name: 'Records' }).locator('tbody');
+  }
+
+  private get versionsTableBody(): Locator {
+    return this.page.getByRole('tabpanel', { name: 'Version history' }).locator('tbody');
   }
 
   /** Panel stays mounted; open/closed is animated via CSS transform, not display/visibility. */

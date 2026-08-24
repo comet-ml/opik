@@ -126,6 +126,26 @@ class DatasetResponse(BaseModel):
     name: str
 
 
+class DatasetInsertItemsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    items: list[dict[str, Any]]
+    # Worker threads Dataset.insert uses to upload this call's batches. 1 (the
+    # SDK default) uploads them sequentially; >1 uploads them in parallel, and
+    # both paths must land in ONE dataset version with identical counters.
+    # Parallel upload needs a backend >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
+    # (2.2.8); against an older one the SDK silently falls back to sequential.
+    num_threads: int = 1
+    workspace: str | None = None
+
+
+class DatasetInsertItemsResponse(BaseModel):
+    dataset_id: str
+    inserted: int
+
+
 class ExperimentItemSeed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
