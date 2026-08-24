@@ -45,6 +45,13 @@ Prefer not to use the CLI? You can wire up any host by hand — skip to
 [Manual setup](#manual-setup).
 </Tip>
 
+<Note>
+Setup runs **only in an interactive terminal**. It writes into your AI
+assistant's own configuration, so it is skipped in CI, a Docker build, or a cron
+job rather than editing those files unattended. For an image or a script, use
+[Manual setup](#manual-setup) to write the config block yourself.
+</Note>
+
 <Steps>
   <Step title="Install the Opik CLI">
     The CLI ships with the `opik` Python package. `--upgrade` installs the latest

@@ -43,20 +43,23 @@ def mcp_decision(
     """Whether to register the MCP server, ask first, or leave it alone.
 
     - ``install_mcp is False``: skip.
-    - ``install_mcp is True``: proceed, terminal or not. An explicit flag *is* the
-      user asking, and this is the path CI, Docker and coding agents take — it
-      used to be dead because the interactivity guard was checked first.
-    - No terminal and no flag: skip. We cannot ask, and this step mutates
-      configuration files owned by external tools.
+    - **No terminal: skip, whatever the flags say.** Registering a server edits
+      configuration files owned by other tools, and that is not something to do
+      to a machine nobody is sitting at — a CI runner, a Docker build, a cron
+      job. A flag expresses a preference, not a licence to write outside a
+      session the user is present for.
+    - ``install_mcp is True`` in a session: proceed without asking.
     - ``automatic_approvals`` (``-y``): skip. A blanket yes-to-everything should
       not reach into another tool's config.
     - Nothing detected: skip. There is nothing worth asking about.
     """
     if install_mcp is False:
         return Decision.SKIP
+    if not interactive:
+        return Decision.SKIP
     if install_mcp is True:
         return Decision.PROCEED
-    if not interactive or automatic_approvals or len(detected) == 0:
+    if automatic_approvals or len(detected) == 0:
         return Decision.SKIP
     return Decision.ASK
 
@@ -90,17 +93,19 @@ def skills_decision(
 ) -> Decision:
     """Whether to install the skill pack, ask first, or leave it alone.
 
-    Mirrors :func:`mcp_decision` deliberately — the two steps carry the same
-    consent shape, and the skill pack is a separate decision from the server: the
-    MCP step writes credentials into a file the user already trusts with them,
-    while this writes instruction files the assistant then acts on with its own
-    permissions. Same assistants, materially different permission.
+    Mirrors :func:`mcp_decision` deliberately, including the absolute terminal
+    requirement — the two steps carry the same consent shape, and the skill pack
+    is if anything the more invasive of the two: the MCP step writes credentials
+    into a file the user already trusts with them, while this writes instruction
+    files the assistant then acts on with its own permissions.
     """
     if install_skills is False:
         return Decision.SKIP
+    if not interactive:
+        return Decision.SKIP
     if install_skills is True:
         return Decision.PROCEED if detected else Decision.SKIP
-    if not interactive or automatic_approvals or len(detected) == 0:
+    if automatic_approvals or len(detected) == 0:
         return Decision.SKIP
     return Decision.ASK
 

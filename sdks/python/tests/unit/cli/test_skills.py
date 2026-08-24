@@ -328,10 +328,11 @@ class TestUpdateCommand:
 
 
 class TestNonInteractiveEnvironments:
-    """A closed stdin must produce an actionable error, never `Aborted!`.
+    """Installing is a session-only operation, and saying so beats `Aborted!`.
 
-    Both of these used to reach `click.confirm`, which aborts on EOF — and for
-    `mcp configure` that happened *after* the server had already been registered.
+    The pack is guidance the assistant acts on with its own permissions, so it is
+    never written unattended. `--host` names an assistant; it does not stand in
+    for a terminal.
     """
 
     @pytest.fixture(autouse=True)
@@ -340,7 +341,7 @@ class TestNonInteractiveEnvironments:
             skills_cli.interactive_helpers, "is_interactive", lambda: False
         )
 
-    def test_configure__no_host__errors_pointing_at_the_flag(self):
+    def test_configure__no_host__refuses_with_a_reason(self):
         runner = CliRunner()
         with (
             patch.object(
@@ -353,19 +354,20 @@ class TestNonInteractiveEnvironments:
             result = runner.invoke(cli, ["skills", "configure"])
 
         assert result.exit_code != 0
-        assert "--host" in result.output
+        assert "interactive terminal" in result.output
         assert "Aborted" not in result.output
         setup_spy.assert_not_called()
 
-    def test_configure__with_host__still_works(self):
+    def test_configure__with_host__also_refuses(self):
         runner = CliRunner()
         with patch.object(
             skills_cli.skills_installer, "setup_skills", return_value=_ok()
         ) as setup_spy:
             result = runner.invoke(cli, ["skills", "configure", "--host", "cursor"])
 
-        assert result.exit_code == 0
-        setup_spy.assert_called_once()
+        assert result.exit_code != 0
+        assert "interactive terminal" in result.output
+        setup_spy.assert_not_called()
 
     def test_remove__without_yes__errors_pointing_at_the_flag(self):
         runner = CliRunner()

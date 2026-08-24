@@ -72,6 +72,17 @@ def setup_mcp_server(
     """
     display = view if view is not None else mcp_view.default_view()
 
+    # The backstop for every caller, library included. Writing into a config file
+    # another tool owns is only done in a session someone is present for; flags
+    # and `host_keys` choose *which* assistant, never *whether* without a user.
+    if not interactive_helpers.is_interactive():
+        display.skipped(
+            "Skipping MCP server setup: no interactive terminal. Run "
+            "`opik mcp configure` from a shell to set it up."
+        )
+        # ANALYTICS: install skipped, reason="non_interactive".
+        return []
+
     ambiguity = _workspace_ambiguity(
         api_key=api_key,
         workspace=workspace,
@@ -309,12 +320,6 @@ def _confirm_targets(
     agreement — so neither re-prompts.
     """
     if host_keys or assume_confirmed:
-        return candidates
-
-    # Reaching here without a terminal means the caller opted in through a flag
-    # (`--install-mcp`) rather than a prompt: the interactive paths refuse earlier.
-    # Asking anyway raised EOFError, which failed the run instead of installing.
-    if not interactive_helpers.is_interactive():
         return candidates
 
     chosen = display.choose_hosts(

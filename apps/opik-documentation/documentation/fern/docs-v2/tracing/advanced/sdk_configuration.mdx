@@ -71,22 +71,27 @@ Pass `--install-mcp` to skip the prompt and register it:
 opik configure --install-mcp
 ```
 
-For a headless setup — a Dockerfile, CI, a dotfiles script — use `opik mcp configure` instead. `opik configure` still needs a terminal for its own deployment and workspace questions:
-
-```bash
-export OPIK_API_KEY=... OPIK_WORKSPACE=...
-opik mcp configure --host claude-code --skills
-```
-
-<Note>
-`--yes` on its own deliberately registers neither the MCP server nor the skill pack: both write into configuration owned by other tools, so they need to be asked for explicitly. Combine the flags (`opik configure --yes --install-mcp --install-skills`) for a fully unattended setup, or use `--no-install-mcp` / `--no-install-skills` to skip the prompts entirely.
-</Note>
-
-`opik configure` also offers the **Opik skill pack**, which teaches your assistant how to instrument code, run test suites, and use `opik connect`. `--install-skills` installs it without the prompt:
+`opik configure` also offers the **Opik skill pack**, which teaches your assistant
+how to instrument code, run test suites, and use `opik connect`.
+`--install-skills` installs it without the prompt:
 
 ```bash
 opik configure --install-mcp --install-skills
 ```
+
+<Warning>
+**Both steps only run in an interactive terminal.** They write into configuration
+files owned by your AI assistant, so they are skipped in CI, a Docker build, or a
+cron job — the flags above express a preference, not permission to write
+unattended. There is no headless way to register the server; run it from a shell.
+</Warning>
+
+<Note>
+`--yes` on its own deliberately registers neither the MCP server nor the skill
+pack: both reach into another tool's configuration, so they have to be asked for
+explicitly. Use `--no-install-mcp` / `--no-install-skills` to skip the prompts
+without being asked.
+</Note>
 
 To manage either without re-running the whole configuration, use `opik mcp configure` and `opik skills configure` — see [Opik's MCP server](/mcp-server) for the `--host` flag, the skill pack, and per-host instructions.
 

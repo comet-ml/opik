@@ -747,9 +747,6 @@ def configure(
     automatic_approvals: Optional[bool] = None,
     url_override: Optional[str] = None,
     project_name: Optional[str] = None,
-    install_mcp: Optional[bool] = None,
-    install_skills: Optional[bool] = None,
-    assistant_setup: Optional[AssistantSetup] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -766,11 +763,6 @@ def configure(
                without user confirmation if `automatic_approvals` is not set to `False`.
         automatic_approvals: if True, `yes` will automatically be answered whenever a user approval is required
         project_name: The name of the project to configure. If not provided, the default project will be used.
-        install_mcp: If True, register the Opik MCP server with detected AI hosts; if False, skip the step.
-        install_skills: If True, install the Opik skill pack into detected AI hosts; if False, skip the step.
-        assistant_setup: Renderer for the assistant step. The CLI injects one; a
-            library call leaves it unset and gets plain-text prompts.
-            If None, the user is prompted in interactive sessions.
 
     Raises:
         ConfigurationError
@@ -792,8 +784,5 @@ def configure(
         if automatic_approvals is not None
         else force,
         project_name=project_name,
-        install_mcp=install_mcp,
-        install_skills=install_skills,
-        assistant_setup=assistant_setup,
     )
     client.configure()

@@ -96,14 +96,17 @@ def run_interactive_configure(
     configuration when no ~/.opik.config is present.
     """
     if use_local:
-        opik_configure.configure(
+        # The configurator class rather than the `configure()` helper: the skills
+        # flag and the renderer are CLI-internal wiring, not part of the public
+        # library signature.
+        opik_configure.OpikConfigurator(
             use_local=True,
             force=True,
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=_setup_assistants,
-        )
+        ).configure()
         return
 
     deployment_type_choice = interactive_helpers.ask_user_for_deployment_type()

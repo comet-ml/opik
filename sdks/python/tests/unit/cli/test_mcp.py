@@ -323,8 +323,8 @@ class TestHostFlag:
         assert "no supported AI host" in result.output
         setup_spy.assert_not_called()
 
-    def test_configure__non_interactive_with_host__succeeds(self):
-        """The terminal was only ever needed to ask which host to use."""
+    def test_configure__non_interactive_with_host__refuses(self):
+        """`--host` says which assistant, not whether we may write unattended."""
         runner = CliRunner()
         with (
             patch.object(
@@ -337,10 +337,11 @@ class TestHostFlag:
         ):
             result = runner.invoke(cli, ["mcp", "configure", "--host", "codex"])
 
-        assert result.exit_code == 0
-        setup_spy.assert_called_once()
+        assert result.exit_code != 0
+        assert "interactive terminal" in result.output
+        setup_spy.assert_not_called()
 
-    def test_configure__non_interactive_without_host__suggests_the_flag(self):
+    def test_configure__non_interactive_without_host__refuses(self):
         runner = CliRunner()
         with (
             patch.object(
@@ -351,11 +352,11 @@ class TestHostFlag:
             result = runner.invoke(cli, ["mcp", "configure"])
 
         assert result.exit_code != 0
-        assert "--host" in result.output
+        assert "interactive terminal" in result.output
         setup_spy.assert_not_called()
 
-    def test_configure__non_interactive_host_but_unconfigured__errors_clearly(self):
-        """We cannot run the interactive configure wizard without a terminal."""
+    def test_configure__non_interactive_host_but_unconfigured__refuses(self):
+        """Refused for the terminal before Opik configuration is even considered."""
         runner = CliRunner()
         with (
             patch.object(
@@ -372,7 +373,9 @@ class TestHostFlag:
             result = runner.invoke(cli, ["mcp", "configure", "--host", "codex"])
 
         assert result.exit_code != 0
-        assert "OPIK_API_KEY" in result.output
+        # The terminal gate fires before Opik's own configuration is considered,
+        # so this is the message even with credentials missing.
+        assert "interactive terminal" in result.output
         configure_spy.assert_not_called()
         setup_spy.assert_not_called()
 

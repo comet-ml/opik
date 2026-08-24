@@ -134,14 +134,14 @@ def configure(
     the local server.
     """
     host_keys = _resolve_host_keys(hosts)
-    # A terminal is only needed to *ask* which host to use. With `--host` the
-    # caller has already answered, so the command works headless — which is how
-    # a coding agent, a Dockerfile, or CI has to run it.
-    if host_keys is None and not interactive_helpers.is_interactive():
+    # Registering the server edits another tool's configuration files, so it only
+    # happens in a session a user is actually present for. `--host` says *which*
+    # assistant, not *whether* — it does not stand in for a terminal.
+    if not interactive_helpers.is_interactive():
         raise click.ClickException(
-            "`opik mcp configure` needs an interactive terminal to pick your AI "
-            "host. Name one instead to run without a terminal, e.g. "
-            f"`opik mcp configure --host {mcp_targets.HOST_KEYS[0]}`."
+            "`opik mcp configure` only runs in an interactive terminal: it writes "
+            "into your AI assistant's own configuration, which should not happen "
+            "unattended in CI, a Docker build, or a cron job. Run it from a shell."
         )
 
     params = _resolve_setup_params(opik_config.OpikConfig())

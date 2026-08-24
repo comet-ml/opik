@@ -2478,24 +2478,25 @@ class TestShouldSetupMcpServer:
         assert configurator._should_setup_mcp_server() is False
 
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_should_setup_mcp_server__non_interactive_explicit_flag__returns_true(
+    def test_should_setup_mcp_server__non_interactive_explicit_flag__returns_false(
         self, mock_is_interactive
     ):
-        """An explicit `--install-mcp` is the user asking, so it survives no TTY.
+        """The flag chooses *whether* the user wants it, not whether we may.
 
-        This is the CI / Docker / coding-agent path. It used to be unreachable
-        because the interactivity guard was checked before the flag.
+        Registering the server edits another tool's config file, so it never
+        happens outside a session someone is present for — a CI runner, a Docker
+        build, a cron job all skip regardless of the flag.
         """
         configurator = OpikConfigurator(install_mcp=True)
-        assert configurator._should_setup_mcp_server() is True
+        assert configurator._should_setup_mcp_server() is False
 
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_should_setup_mcp_server__non_interactive_flag_with_yes__returns_true(
+    def test_should_setup_mcp_server__non_interactive_flag_with_yes__returns_false(
         self, mock_is_interactive
     ):
-        """`-y` alone still skips MCP, but it must not veto an explicit flag."""
+        """No terminal skips regardless of the flag, with or without `-y`."""
         configurator = OpikConfigurator(install_mcp=True, automatic_approvals=True)
-        assert configurator._should_setup_mcp_server() is True
+        assert configurator._should_setup_mcp_server() is False
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     def test_should_setup_mcp_server__install_mcp_true__returns_true(
@@ -2591,22 +2592,22 @@ class TestSkillsHostKeys:
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__non_interactive_explicit_flag__installs(
+    def test_skills_host_keys__non_interactive_explicit_flag__returns_none(
         self, mock_is_interactive, mock_detected
     ):
-        """The CI / Docker / coding-agent path, same as --install-mcp."""
+        """Same absolute terminal requirement as the server step."""
         configurator = OpikConfigurator(install_skills=True)
-        assert configurator._skills_host_keys() == ["codex"]
+        assert configurator._skills_host_keys() is None
 
     @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__flag_with_yes__still_installs(
+    def test_skills_host_keys__flag_with_yes__returns_none(
         self, mock_is_interactive, mock_detected
     ):
         configurator = OpikConfigurator(install_skills=True, automatic_approvals=True)
-        assert configurator._skills_host_keys() == ["codex"]
+        assert configurator._skills_host_keys() is None
 
     @patch("opik.configurator.configure.skills.detected_host_keys", return_value=[])
     @patch("opik.configurator.configure.is_interactive", return_value=False)
@@ -2707,9 +2708,9 @@ class TestSkillsHostKeys:
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_maybe_setup_skills__flag__installs_for_detected_hosts(
+    def test_maybe_setup_skills__flag_without_terminal__installs_nothing(
         self, mock_is_interactive, mock_detected, mock_setup
     ):
         configurator = OpikConfigurator(install_skills=True)
         configurator._maybe_setup_skills()
-        mock_setup.assert_called_once_with(["codex"])
+        mock_setup.assert_not_called()

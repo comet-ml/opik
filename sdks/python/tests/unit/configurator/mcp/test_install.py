@@ -916,29 +916,72 @@ class TestCandidateAndConfirm:
         assert view.choose_calls
 
 
-class TestHeadlessConsent:
-    """`--install-mcp` must not fall into a prompt it cannot answer.
+class TestTerminalRequired:
+    """The installer refuses outside an interactive session, whatever the flags.
 
-    Reported on the PR: with an explicit flag and no `--host`, `_confirm_targets`
-    reached the numbered menu and `input()` raised EOFError in CI, failing a run
-    that should have installed.
+    Registering the server edits configuration files owned by other tools. That
+    is not done to a machine nobody is sitting at, so neither `--install-mcp` nor
+    `--host` gets past the gate: they choose *which* assistant, not *whether*.
     """
 
-    def test_confirm_targets__no_terminal__treats_the_flag_as_the_consent(
-        self, monkeypatch
-    ):
+    def test_setup_mcp_server__no_terminal__installs_nothing(self, monkeypatch):
         monkeypatch.setattr(
             install.interactive_helpers, "is_interactive", lambda: False
         )
+        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
         monkeypatch.setattr(
             "builtins.input", mock.Mock(side_effect=AssertionError("must not prompt"))
         )
-        candidates = [_target("cursor", True, mock.Mock())]
-
-        assert (
-            install._confirm_targets(candidates, None, False, RecordingView())
-            == candidates
+        install_spy = mock.Mock()
+        monkeypatch.setattr(
+            install.mcp_targets,
+            "detected_targets",
+            lambda: [_target("cursor", True, install_spy)],
         )
+        view = RecordingView()
+
+        result = install.setup_mcp_server(
+            api_key="k",
+            workspace="ws",
+            base_url="https://x/opik",
+            api_url="https://x/opik/api",
+            use_local=False,
+            self_hosted_comet=False,
+            view=view,
+        )
+
+        assert result == []
+        install_spy.assert_not_called()
+        assert view.skips, "the user is told why nothing happened"
+
+    def test_setup_mcp_server__no_terminal_with_host__still_installs_nothing(
+        self, monkeypatch
+    ):
+        """`--host` names an assistant; it is not a substitute for a session."""
+        monkeypatch.setattr(
+            install.interactive_helpers, "is_interactive", lambda: False
+        )
+        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+        install_spy = mock.Mock()
+        monkeypatch.setattr(
+            install.mcp_targets,
+            "find_target",
+            lambda key: _target("cursor", True, install_spy),
+        )
+
+        result = install.setup_mcp_server(
+            api_key="k",
+            workspace="ws",
+            base_url="https://x/opik",
+            api_url="https://x/opik/api",
+            use_local=False,
+            self_hosted_comet=False,
+            host_keys=["cursor"],
+            view=RecordingView(),
+        )
+
+        assert result == []
+        install_spy.assert_not_called()
 
     def test_confirm_targets__terminal__still_asks(self, monkeypatch):
         monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: True)
@@ -948,26 +991,3 @@ class TestHeadlessConsent:
 
         assert install._confirm_targets(candidates, None, False, view) == []
         assert view.choose_calls
-
-    def test_setup_mcp_server__no_terminal_no_host__installs_for_detected(
-        self, monkeypatch
-    ):
-        """The end-to-end shape of the reported bug."""
-        monkeypatch.setattr(
-            install.interactive_helpers, "is_interactive", lambda: False
-        )
-        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
-        monkeypatch.setattr(
-            "builtins.input", mock.Mock(side_effect=AssertionError("must not prompt"))
-        )
-        install_spy = mock.Mock(
-            return_value=targets.InstallResult("Cursor", True, "Added", "Added")
-        )
-        monkeypatch.setattr(
-            targets, "HOST_TARGETS", [_target("cursor", True, install_spy)]
-        )
-
-        configured = install.setup_mcp_server(**_make_args())
-
-        install_spy.assert_called_once()
-        assert configured == ["cursor"]

@@ -99,6 +99,14 @@ def configure(hosts: Tuple[str, ...]) -> None:
     Skills install for your user account, not a project, so this can be run from
     anywhere. No Opik credentials are required.
     """
+    if not interactive_helpers.is_interactive():
+        raise click.ClickException(
+            "`opik skills configure` only runs in an interactive terminal: the "
+            "pack is guidance your assistant acts on, and installing it "
+            "unattended in CI or a Docker build is not something to do silently. "
+            "Run it from a shell."
+        )
+
     host_keys = _resolve_host_keys(hosts)
 
     if host_keys is None:
