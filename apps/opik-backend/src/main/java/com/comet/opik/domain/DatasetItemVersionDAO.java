@@ -3683,7 +3683,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
         // Note: ClickHouse with async inserts returns 0 immediately before commit.
         // We return the count of items we're inserting instead of relying on getRowsUpdated.
-        long itemCount = items.size();
+        //
+        // Count DISTINCT stable ids, not rows handed in (OPIK-7891): reads collapse a repeated
+        // dataset_item_id to one row via LIMIT 1 BY, so counting the raw list inflates every
+        // version total derived from this value. Callers set datasetItemId before inserting;
+        // fall back to id so an unnormalized item still counts as itself rather than as null.
+        long itemCount = items.stream()
+                .map(item -> item.datasetItemId() != null ? item.datasetItemId() : item.id())
+                .distinct()
+                .count();
 
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
