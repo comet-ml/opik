@@ -314,6 +314,36 @@ class InterceptingHttpClientTest {
     }
 
     @Test
+    void a403WithATokenRejectionHintIsRetried() {
+        var invalidated = new java.util.concurrent.atomic.AtomicBoolean();
+        when(delegate.execute(any(HttpRequest.class)))
+                .thenThrow(new HttpException(403,
+                        "{\"error\": \"invalid_token\", \"error_description\": \"The access token expired\"}"))
+                .thenReturn(ok());
+        var client = new InterceptingHttpClient(delegate, Map.of(), null, () -> "tok", () -> invalidated.set(true));
+
+        client.execute(chatRequest());
+
+        assertThat(invalidated).isTrue();
+        verify(delegate, times(2)).execute(any(HttpRequest.class));
+    }
+
+    @Test
+    void aPolicy403IsNotRetried() {
+        // a policy/quota/WAF 403 must not replay a non-idempotent LLM request
+        // nor invalidate the shared token cache
+        var invalidated = new java.util.concurrent.atomic.AtomicBoolean();
+        when(delegate.execute(any(HttpRequest.class)))
+                .thenThrow(new HttpException(403, "request blocked by content policy"));
+        var client = new InterceptingHttpClient(delegate, Map.of(), null, () -> "tok", () -> invalidated.set(true));
+
+        assertThatThrownBy(() -> client.execute(chatRequest()))
+                .isInstanceOf(HttpException.class);
+        assertThat(invalidated).isFalse();
+        verify(delegate, times(1)).execute(any(HttpRequest.class));
+    }
+
+    @Test
     void authFailureIsRetriedExactlyOnce() {
         when(delegate.execute(any(HttpRequest.class))).thenThrow(new HttpException(401, "still rejected"));
         var client = new InterceptingHttpClient(delegate, Map.of(), null, () -> "tok", () -> {

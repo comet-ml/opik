@@ -29,6 +29,7 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.Builder;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -84,6 +85,7 @@ public class AuthTokenProvider {
 
     private static final AttributeKey<String> OUTCOME = AttributeKey.stringKey("outcome");
     private static final AttributeKey<String> WORKSPACE_ID = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> PROVIDER_ID = AttributeKey.stringKey("provider_id");
     private static final AttributeKey<String> ORIGIN = AttributeKey.stringKey("origin");
     private static final String ORIGIN_REQUEST = "request";
     private static final String ORIGIN_TEST = "test";
@@ -132,7 +134,7 @@ public class AuthTokenProvider {
         String cacheKey = cacheKey(providerId, authConfig);
         CachedToken cached = readCache(cacheKey);
         if (isFresh(cached)) {
-            recordRequestMetric(workspaceId, "cache_hit");
+            recordRequestMetric(workspaceId, providerId, "cache_hit");
             return cached.token();
         }
 
@@ -145,12 +147,12 @@ public class AuthTokenProvider {
                     .block(Duration.ofMillis(
                             config.getLockTimeout().toMilliseconds() + config.getFetchTimeout().toMilliseconds()));
             if (token != null) {
-                recordRequestMetric(workspaceId, "fetched");
+                recordRequestMetric(workspaceId, providerId, "fetched");
                 return token;
             }
             log.warn("Timed out waiting for the token fetch lock for provider '{}'; fetching directly", providerId);
         } catch (AuthTokenException exception) {
-            recordRequestMetric(workspaceId, "failed");
+            recordRequestMetric(workspaceId, providerId, "failed");
             throw exception;
         } catch (RuntimeException exception) {
             log.warn("Token cache unavailable for provider '{}'; falling back to a direct fetch", providerId,
@@ -158,16 +160,19 @@ public class AuthTokenProvider {
         }
 
         String token = fetchToken(authConfig).token();
-        recordRequestMetric(workspaceId, "degraded_direct");
+        recordRequestMetric(workspaceId, providerId, "degraded_direct");
         return token;
     }
 
     /**
-     * Drops the cached token — for the 401-retry path, so a revocation discovered by one pod is
-     * seen by all of them at once. Best-effort: a Redis failure here only delays the cleanup until
-     * the bucket's own expiry.
+     * The LLM gateway rejected the current bearer (401, or 403 with a token-rejection hint):
+     * records the "is this integration broken" signal, then drops the cached token so a revocation
+     * discovered by one pod is seen by all of them at once. The drop is best-effort: a Redis
+     * failure here only delays the cleanup until the bucket's own expiry.
      */
-    public void invalidate(@NonNull UUID providerId, @NonNull ProviderAuthConfig authConfig) {
+    public void invalidateAfterGatewayRejection(@NonNull String workspaceId, @NonNull UUID providerId,
+            @NonNull ProviderAuthConfig authConfig) {
+        recordRequestMetric(workspaceId, providerId, "gateway_rejected");
         String cacheKey = cacheKey(providerId, authConfig);
         try {
             redisClient.getBucket(cacheKey).delete();
@@ -316,8 +321,14 @@ public class AuthTokenProvider {
                 .orElse(List.of());
         var sendAs = Optional.ofNullable(authConfig.sendAs()).orElse(ProviderAuthConfig.SendAs.FORM);
 
-        var builder = HttpRequest.newBuilder(URI.create(authConfig.tokenUrl()))
-                .timeout(Duration.ofMillis(config.getFetchTimeout().toMilliseconds()));
+        Builder builder;
+        try {
+            builder = HttpRequest.newBuilder(URI.create(authConfig.tokenUrl()))
+                    .timeout(Duration.ofMillis(config.getFetchTimeout().toMilliseconds()));
+        } catch (IllegalArgumentException exception) {
+            throw new AuthTokenException(
+                    "token_url '%s' is not a usable http(s) URL".formatted(authConfig.tokenUrl()), exception);
+        }
 
         switch (sendAs) {
             case FORM -> builder
@@ -439,8 +450,9 @@ public class AuthTokenProvider {
         return result;
     }
 
-    private void recordRequestMetric(String workspaceId, String outcome) {
-        tokenRequests.add(1, Attributes.of(OUTCOME, outcome, WORKSPACE_ID, workspaceId));
+    private void recordRequestMetric(String workspaceId, UUID providerId, String outcome) {
+        tokenRequests.add(1, Attributes.of(
+                OUTCOME, outcome, WORKSPACE_ID, workspaceId, PROVIDER_ID, providerId.toString()));
     }
 
     private void recordFetchMetric(long startNanos, String outcome, String origin) {

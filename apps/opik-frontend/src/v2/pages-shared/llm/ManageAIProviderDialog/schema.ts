@@ -150,6 +150,12 @@ export const createCustomProviderDetailsFormSchema = (
             message: "Token URL must be a valid URL",
             path: ["authTokenUrl"],
           });
+        } else if (!/^https?:\/\//i.test(tokenUrl)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Token URL must use http or https",
+            path: ["authTokenUrl"],
+          });
         }
 
         const credentials = data.authCredentials ?? [];
