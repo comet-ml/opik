@@ -12,6 +12,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -81,7 +83,7 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
 
     @JsonView({View.Public.class, View.Write.class})
     @Schema(description = "Fraction of production (SDK-logged) traces the rule scores, from 0 to 1. Experiment, playground and optimization traces are always scored in full and ignore this value.")
-    private final float samplingRate;
+    @DecimalMin("0") @DecimalMax("1") private final float samplingRate;
 
     @JsonView({View.Public.class, View.Write.class})
     @Builder.Default
