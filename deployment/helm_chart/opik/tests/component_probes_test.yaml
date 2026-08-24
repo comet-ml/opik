@@ -42,9 +42,12 @@ tests:
       path: metadata.name
       value: opik-python-backend
     asserts:
+      # /health/liveness, not /health/readiness: the latter pings Redis when the RQ worker is
+      # enabled (the default), which would let one Redis blip evict every replica from the
+      # Service at once. Endpoint membership must depend only on this pod serving HTTP.
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
-          value: /health/readiness
+          value: /health/liveness
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.port
           value: 8000

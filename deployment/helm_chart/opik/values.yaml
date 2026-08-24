@@ -291,9 +291,17 @@ component:
       # a second to answer, and a probe timeout counts as a failure.
       timeoutSeconds: 3
       failureThreshold: 3
+    # Deliberately /health/liveness, not /health/readiness: the latter pings Redis whenever the RQ
+    # worker is enabled, which it is by default (RQ_WORKER_ENABLED defaults to "true" and this chart
+    # never sets it). That would put a shared dependency in the endpoint-membership decision, so a
+    # Redis blip would fail readiness on every replica at once and leave the backend's evaluator
+    # calls with no endpoints — the same outage this probe exists to prevent. Code execution needs
+    # no Redis; only the Optimization Studio worker does, and that is not what Service endpoints
+    # gate. (REDIS_TIMEOUT_SECONDS also defaults to 5s, above the timeout below, so a slow Redis
+    # would trip the probe before the handler could answer.)
     readinessProbe:
       httpGet:
-        path: /health/readiness
+        path: /health/liveness
         port: 8000
       periodSeconds: 10
       timeoutSeconds: 3

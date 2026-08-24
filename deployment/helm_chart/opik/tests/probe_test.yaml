@@ -319,7 +319,7 @@ tests:
       # Only the named field changes; the shipped endpoint survives.
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
-          value: /health/readiness
+          value: /health/liveness
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.periodSeconds
           value: 30

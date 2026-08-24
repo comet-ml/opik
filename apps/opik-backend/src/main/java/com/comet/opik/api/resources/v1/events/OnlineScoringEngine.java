@@ -899,12 +899,16 @@ public class OnlineScoringEngine {
         }
 
         try {
-            // JsonPath.parse rejects a non-container (a scalar section has no nested path to walk), which
-            // lands on the fallback below rather than propagating.
+            // JsonPath.read throws PathNotFoundException on a non-container (a scalar section has no
+            // nested path to walk), which lands on the fallback below rather than propagating.
             var value = JsonPath.parse(forcedObject).read(path);
             return value != null ? serializeToJsonString(value) : null;
         } catch (Exception e) {
-            log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
+            // INFO without the throwable: since a scalar/array section reaches this line by design
+            // (it has no nested path), a WARN with a PathNotFoundException stack trace would fire on
+            // every unresolved variable of every scored trace, and the exception message says nothing
+            // the log line does not. Matches the terminal "couldn't find flat or nested path" line below.
+            log.info("couldn't find path inside json, trying flat structure, path={}, json={}", path, json);
             return Optional.ofNullable(forcedObject)
                     .filter(Map.class::isInstance)
                     .map(object -> ((Map<?, ?>) object).get(path.replace("$.", "")))

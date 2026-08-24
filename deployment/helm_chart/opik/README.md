@@ -459,7 +459,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.networkPolicy.enabled | bool | `false` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.python-backend.readinessProbe.failureThreshold | int | `3` |  |
-| component.python-backend.readinessProbe.httpGet.path | string | `"/health/readiness"` |  |
+| component.python-backend.readinessProbe.httpGet.path | string | `"/health/liveness"` |  |
 | component.python-backend.readinessProbe.httpGet.port | int | `8000` |  |
 | component.python-backend.readinessProbe.periodSeconds | int | `10` |  |
 | component.python-backend.readinessProbe.timeoutSeconds | int | `3` |  |

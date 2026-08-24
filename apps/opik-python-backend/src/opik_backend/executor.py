@@ -92,12 +92,21 @@ class CodeExecutorBase(ABC):
                 logger.warning("Execution returned exit code 0 with no output")
                 return {"code": 400, "error": "Execution failed: the metric produced no output"}
             try:
-                return json.loads(lines[-1])
+                parsed = json.loads(lines[-1])
             except json.JSONDecodeError as e:
                 # Same reasoning: exit code 0 whose last line is not the result JSON means the
                 # client's metric printed something else last, not that the server misbehaved.
                 logger.warning(f"Failed to parse execution result as JSON: {e}")
                 return {"code": 400, "error": "Execution failed: the metric returned an unparseable result"}
+            if not isinstance(parsed, dict):
+                # Valid JSON that is not an object (`null`, `42`, `"done"`, `[1, 2]`) would reach
+                # the HTTP layer and blow up there instead — `"error" in response` raises TypeError
+                # for the non-iterables and `response.get` raises AttributeError for the rest, both
+                # surfacing as a 500. Reject it here, where the contract of this function (-> dict)
+                # is stated.
+                logger.warning(f"Execution result is not a JSON object: {type(parsed).__name__}")
+                return {"code": 400, "error": "Execution failed: the metric did not return a JSON object"}
+            return parsed
         else:
             logger.warning(f"Execution failed (Code: {result.exit_code}):\n{result.output.decode('utf-8')}")
             try:

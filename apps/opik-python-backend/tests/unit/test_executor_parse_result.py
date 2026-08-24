@@ -1,6 +1,8 @@
 """Tests for CodeExecutorBase.parse_execution_result"""
 import json
 
+import pytest
+
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
 
 
@@ -40,6 +42,19 @@ def test_success_with_non_json_last_line_reports_a_client_error():
     result = parse(0, b"not json at all")
 
     assert result == {"code": 400, "error": "Execution failed: the metric returned an unparseable result"}
+
+
+@pytest.mark.parametrize(
+    "last_line",
+    ["null", "123", "true", '"done"', "[1, 2]"],
+    ids=["null", "int", "bool", "str", "list"],
+)
+def test_success_with_non_object_json_reports_a_client_error(last_line):
+    # Valid JSON that is not an object used to be handed straight to the HTTP layer, which then
+    # raised TypeError ("error" in None) or AttributeError (str/list have no .get) and returned 500.
+    result = parse(0, last_line.encode("utf-8"))
+
+    assert result == {"code": 400, "error": "Execution failed: the metric did not return a JSON object"}
 
 
 def test_failure_surfaces_the_user_error_as_400():
