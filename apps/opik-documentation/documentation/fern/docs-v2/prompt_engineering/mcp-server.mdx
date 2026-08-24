@@ -127,9 +127,14 @@ Prefer not to use the CLI? You can wire up any host by hand — skip to
     already know they work:
 
     ```text
-    Cursor: Added 'opik-mcp' in ~/.cursor/mcp.json
-    Verified: connected to workspace acme-ai, 7 project(s) visible.
-    Restart your AI host to pick up the Opik MCP server, then ask it to 'list my Opik projects'.
+      ✓  Cursor  Added
+
+      ✓  Verified  connected to workspace acme-ai, 7 project(s) visible
+
+    ✓ Done
+        Set up  MCP server and skill pack
+        For     Cursor
+        Next    Restart it, then ask "list my Opik projects"
     ```
 
     If verification fails, the CLI says why instead of reporting success — a
@@ -166,10 +171,6 @@ Which AI assistants should the Opik skill pack be installed for?
   ↑↓ move · space select · a all · enter confirm
 ```
 
-`opik configure` also offers it after the MCP step:
-
-> Install the Opik skill pack for Cursor? It teaches your assistant how to instrument code, run test suites, and use `opik connect`. (y/N)
-
 Skills are plain `SKILL.md` directories, and assistants have converged on a shared user-level location, so one install covers all of them:
 
 | Assistant | Reads |
@@ -187,8 +188,7 @@ opik skills update                                      # pull the latest pack
 opik skills remove                                      # take it back out
 ```
 
-`opik skills configure --host …` and `opik configure --install-skills` both skip
-the prompt, for a Dockerfile or CI.
+`opik skills configure --host …` skips the prompt, for a Dockerfile or CI.
 
 <Note>
 In a terminal that cannot host an interactive list — a pipe, a CI log — the CLI

@@ -65,10 +65,17 @@ opik configure --yes
 
 At the end of setup, `opik configure` offers to register [Opik's MCP server](/mcp-server) with the AI hosts it finds on your machine, so your assistant can read traces and log scores directly from the chat.
 
-Pass `--install-mcp` to skip the prompt and register it. Unlike the interactive prompt, this flag works without a terminal, which is what makes it usable from a Dockerfile, a dotfiles script, or a coding agent:
+Pass `--install-mcp` to skip the prompt and register it:
 
 ```bash
 opik configure --install-mcp
+```
+
+For a headless setup — a Dockerfile, CI, a dotfiles script — use `opik mcp configure` instead. `opik configure` still needs a terminal for its own deployment and workspace questions:
+
+```bash
+export OPIK_API_KEY=... OPIK_WORKSPACE=...
+opik mcp configure --host claude-code --skills
 ```
 
 <Note>

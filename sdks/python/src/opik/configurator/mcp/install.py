@@ -17,6 +17,7 @@ import sys
 from typing import List, Optional, Tuple
 
 import opik.config as opik_config
+from opik.configurator import interactive_helpers
 from opik.configurator.mcp import detection as mcp_detection
 from opik.configurator.mcp import env as mcp_env
 from opik.configurator.mcp import spec as mcp_spec
@@ -186,8 +187,9 @@ def setup_mcp_server(
             )
         display.verification(verification.succeeded, verification.detail)
         if verification.succeeded and announce_next_steps:
-            display.next_steps(
-                [result.target_display_name for result in results if result.succeeded]
+            display.done(
+                ["MCP server"],
+                [result.target_display_name for result in results if result.succeeded],
             )
 
     # ANALYTICS: one install completed/failed event per host in `selected_targets`,
@@ -307,6 +309,12 @@ def _confirm_targets(
     agreement — so neither re-prompts.
     """
     if host_keys or assume_confirmed:
+        return candidates
+
+    # Reaching here without a terminal means the caller opted in through a flag
+    # (`--install-mcp`) rather than a prompt: the interactive paths refuse earlier.
+    # Asking anyway raised EOFError, which failed the run instead of installing.
+    if not interactive_helpers.is_interactive():
         return candidates
 
     chosen = display.choose_hosts(

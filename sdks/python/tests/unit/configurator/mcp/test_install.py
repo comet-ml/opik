@@ -22,7 +22,7 @@ class RecordingView(mcp_view.LoggingInstallView):
         self.steps = []
         self.target_results = []
         self.verifications = []
-        self.next_step_calls = []
+        self.done_calls = []
         self.skips = []
         self.problems = []
         self.notes = []
@@ -42,8 +42,8 @@ class RecordingView(mcp_view.LoggingInstallView):
     def verification(self, succeeded, detail):
         self.verifications.append((succeeded, detail))
 
-    def next_steps(self, assistants):
-        self.next_step_calls.append(list(assistants))
+    def done(self, components, assistants):
+        self.done_calls.append((list(components), list(assistants)))
 
     def skipped(self, message):
         self.skips.append(message)
@@ -79,6 +79,16 @@ class RecordingView(mcp_view.LoggingInstallView):
 # network-safety mock every other test relies on.
 _REAL_VERIFY = install._verify
 _REAL_WORKSPACE_AMBIGUITY = install._workspace_ambiguity
+
+
+@pytest.fixture(autouse=True)
+def interactive(monkeypatch):
+    """Default to a terminal; the headless cases opt out explicitly.
+
+    Pytest runs with stdin detached, so without this the new headless guard would
+    silently rewrite what every prompt-driven test is exercising.
+    """
+    monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: True)
 
 
 @pytest.fixture(autouse=True)
@@ -560,7 +570,7 @@ class TestVerification:
         verify.assert_called_once()
         view = args["view"]
         assert view.verifications == [(True, "connected to workspace ws")]
-        assert view.next_step_calls == [["Cursor"]]
+        assert view.done_calls == [(["MCP server"], ["Cursor"])]
 
     def test_setup_mcp_server__verification_fails__warns_instead_of_claiming_success(
         self, monkeypatch, verify
@@ -588,7 +598,7 @@ class TestVerification:
         view = args["view"]
         assert view.verifications[0][0] is False
         # A failed check must never be followed by "restart, it works".
-        assert view.next_step_calls == []
+        assert view.done_calls == []
 
     def test_setup_mcp_server__every_host_failed__does_not_verify(
         self, monkeypatch, verify
@@ -904,3 +914,60 @@ class TestCandidateAndConfirm:
 
         assert install._confirm_targets(candidates, None, False, view) == []
         assert view.choose_calls
+
+
+class TestHeadlessConsent:
+    """`--install-mcp` must not fall into a prompt it cannot answer.
+
+    Reported on the PR: with an explicit flag and no `--host`, `_confirm_targets`
+    reached the numbered menu and `input()` raised EOFError in CI, failing a run
+    that should have installed.
+    """
+
+    def test_confirm_targets__no_terminal__treats_the_flag_as_the_consent(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            install.interactive_helpers, "is_interactive", lambda: False
+        )
+        monkeypatch.setattr(
+            "builtins.input", mock.Mock(side_effect=AssertionError("must not prompt"))
+        )
+        candidates = [_target("cursor", True, mock.Mock())]
+
+        assert (
+            install._confirm_targets(candidates, None, False, RecordingView())
+            == candidates
+        )
+
+    def test_confirm_targets__terminal__still_asks(self, monkeypatch):
+        monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: True)
+        candidates = [_target("cursor", True, mock.Mock())]
+        view = RecordingView()
+        view.host_choice = []
+
+        assert install._confirm_targets(candidates, None, False, view) == []
+        assert view.choose_calls
+
+    def test_setup_mcp_server__no_terminal_no_host__installs_for_detected(
+        self, monkeypatch
+    ):
+        """The end-to-end shape of the reported bug."""
+        monkeypatch.setattr(
+            install.interactive_helpers, "is_interactive", lambda: False
+        )
+        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+        monkeypatch.setattr(
+            "builtins.input", mock.Mock(side_effect=AssertionError("must not prompt"))
+        )
+        install_spy = mock.Mock(
+            return_value=targets.InstallResult("Cursor", True, "Added", "Added")
+        )
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("cursor", True, install_spy)]
+        )
+
+        configured = install.setup_mcp_server(**_make_args())
+
+        install_spy.assert_called_once()
+        assert configured == ["cursor"]
