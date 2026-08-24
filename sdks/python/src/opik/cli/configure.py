@@ -99,7 +99,7 @@ def run_interactive_configure(
     default=None,
     help="Install the Opik skill pack into detected AI hosts, teaching your "
     "assistant how to instrument code with Opik. When omitted, you are prompted "
-    "interactively. Requires `npx`.",
+    "interactively.",
 )
 @click.pass_context
 def configure(

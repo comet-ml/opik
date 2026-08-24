@@ -17,7 +17,6 @@ import sys
 from typing import List, Optional, Tuple
 
 import opik.config as opik_config
-from opik.configurator import interactive_helpers
 from opik.configurator.mcp import detection as mcp_detection
 from opik.configurator.mcp import env as mcp_env
 from opik.configurator.mcp import spec as mcp_spec
@@ -141,7 +140,9 @@ def setup_mcp_server(
     # ANALYTICS: install started. Carries the transport ("http" for the hosted
     # server, "stdio" for uvx), the deployment class, and how many hosts were
     # detected — the denominator every later stage is measured against.
-    selected_targets = _confirm_targets(candidates, host_keys, assume_confirmed)
+    selected_targets = _confirm_targets(
+        candidates, host_keys, assume_confirmed, display
+    )
     if len(selected_targets) == 0:
         display.skipped(
             "Skipped MCP server setup. Run `opik mcp configure` anytime to set it up."
@@ -287,6 +288,7 @@ def _confirm_targets(
     candidates: List[mcp_targets.HostTarget],
     host_keys: Optional[List[str]],
     assume_confirmed: bool,
+    display: mcp_view.InstallView,
 ) -> List[mcp_targets.HostTarget]:
     """Narrow the candidates to what the user actually agreed to.
 
@@ -295,7 +297,21 @@ def _confirm_targets(
     """
     if host_keys or assume_confirmed:
         return candidates
-    return _select_targets(candidates)
+
+    chosen = display.choose_hosts(
+        title="Which AI assistants should the Opik MCP server be set up for?",
+        candidates=[
+            mcp_view.HostChoice(key=target.key, label=target.display_name)
+            for target in candidates
+        ],
+        # Everything detected, pre-ticked: the common answer is "all of them",
+        # and this keeps Enter meaning what the old menu's "All" option meant.
+        preselected=[target.key for target in candidates],
+    )
+    if chosen is None:
+        return []
+    by_key = {target.key: target for target in candidates}
+    return [by_key[key] for key in chosen if key in by_key]
 
 
 def _report_no_host_detected(
@@ -434,50 +450,3 @@ def _create_server_spec(
         )
 
     raise ValueError(f"Unsupported MCP connection mode: {connection_mode}")
-
-
-def _select_targets(
-    detected_targets: List[mcp_targets.HostTarget],
-) -> List[mcp_targets.HostTarget]:
-    """Ask the user which detected host(s) to install for.
-
-    A single detected host is a simple yes/no confirm. With more than one, a
-    numbered menu doubles as the list of detected hosts and accepts a single
-    number, a comma-separated list (e.g. ``1,2``), "All", or "Skip".
-    """
-    if len(detected_targets) == 1:
-        target = detected_targets[0]
-        confirmed = interactive_helpers.ask_user_for_approval(
-            f"Detected {target.display_name}. Install the Opik MCP server for it? (Y/n) "
-        )
-        return [target] if confirmed else []
-
-    host_count = len(detected_targets)
-    all_choice = host_count + 1
-    skip_choice = host_count + 2
-
-    lines = ["Which AI host(s) should the Opik MCP server be installed for?"]
-    for index, target in enumerate(detected_targets, start=1):
-        lines.append(f"  {index} - {target.display_name}")
-    lines.append(f"  {all_choice} - All of the above")
-    lines.append(f"  {skip_choice} - Skip")
-    lines.append("\nEnter a number, or several separated by commas (e.g. 1,2)\n> ")
-    prompt = "\n".join(lines)
-
-    while True:
-        choices = [token.strip() for token in input(prompt).split(",") if token.strip()]
-
-        if not choices or not all(token.isdigit() for token in choices):
-            LOGGER.error("Wrong choice. Please try again.\n")
-            continue
-
-        numbers = [int(token) for token in choices]
-
-        if skip_choice in numbers:
-            return []
-        if all_choice in numbers:
-            return list(detected_targets)
-        if all(1 <= number <= host_count for number in numbers):
-            return [detected_targets[number - 1] for number in dict.fromkeys(numbers)]
-
-        LOGGER.error("Wrong choice. Please try again.\n")

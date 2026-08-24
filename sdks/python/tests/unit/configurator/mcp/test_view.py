@@ -205,3 +205,138 @@ class TestRichInstallView:
             )
 
         assert "~/.cursor/mcp.json" in capture.get()
+
+
+class TestChooseHosts:
+    """Selection is presentation, so it lives with the views."""
+
+    def _candidates(self):
+        return [
+            mcp_view.HostChoice("claude-code", "Claude Code"),
+            mcp_view.HostChoice("cursor", "Cursor"),
+            mcp_view.HostChoice("codex", "Codex"),
+        ]
+
+    def test_logging_view__single_candidate__is_a_yes_no(self, monkeypatch):
+        """A one-item numbered menu would be silly."""
+        monkeypatch.setattr("builtins.input", lambda prompt: "y")
+
+        chosen = mcp_view.LoggingInstallView().choose_hosts(
+            "pick", [mcp_view.HostChoice("cursor", "Cursor")], ["cursor"]
+        )
+
+        assert chosen == ["cursor"]
+
+    def test_logging_view__single_candidate_declined(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda prompt: "n")
+
+        chosen = mcp_view.LoggingInstallView().choose_hosts(
+            "pick", [mcp_view.HostChoice("cursor", "Cursor")], []
+        )
+
+        assert chosen == []
+
+    def test_logging_view__menu_lists_every_candidate(self, monkeypatch):
+        prompts = []
+
+        def fake_input(prompt):
+            prompts.append(prompt)
+            return "5"  # Skip (3 hosts -> 4 all, 5 skip)
+
+        monkeypatch.setattr("builtins.input", fake_input)
+
+        mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates(), [])
+
+        assert "Claude Code" in prompts[0]
+        assert "All of the above" in prompts[0]
+
+    def test_logging_view__all_of_the_above(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda prompt: "4")
+
+        chosen = mcp_view.LoggingInstallView().choose_hosts(
+            "pick", self._candidates(), []
+        )
+
+        assert chosen == ["claude-code", "cursor", "codex"]
+
+    def test_logging_view__comma_separated_subset(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda prompt: "1,3")
+
+        chosen = mcp_view.LoggingInstallView().choose_hosts(
+            "pick", self._candidates(), []
+        )
+
+        assert chosen == ["claude-code", "codex"]
+
+    def test_logging_view__skip(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda prompt: "5")
+
+        assert (
+            mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates(), [])
+            == []
+        )
+
+    def test_logging_view__invalid_then_valid__retries(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", mock.Mock(side_effect=["x", "99", "2"]))
+
+        chosen = mcp_view.LoggingInstallView().choose_hosts(
+            "pick", self._candidates(), []
+        )
+
+        assert chosen == ["cursor"]
+
+    def test_rich_view__uses_the_picker_when_the_terminal_allows(self, monkeypatch):
+        from opik.cli import mcp_view as rich_view
+        from opik.cli import selector
+
+        monkeypatch.setattr(selector, "is_supported", lambda: True)
+        monkeypatch.setattr(selector, "multiselect", lambda **kwargs: ["codex"])
+
+        chosen = rich_view.RichInstallView().choose_hosts(
+            "pick", self._candidates(), ["claude-code"]
+        )
+
+        assert chosen == ["codex"]
+
+    def test_rich_view__no_picker_support__falls_back_to_the_menu(self, monkeypatch):
+        from opik.cli import mcp_view as rich_view
+        from opik.cli import selector
+
+        monkeypatch.setattr(selector, "is_supported", lambda: False)
+        monkeypatch.setattr("builtins.input", lambda prompt: "4")
+
+        chosen = rich_view.RichInstallView().choose_hosts(
+            "pick", self._candidates(), []
+        )
+
+        assert chosen == ["claude-code", "cursor", "codex"]
+
+    def test_rich_view__single_candidate__skips_the_picker(self, monkeypatch):
+        from opik.cli import mcp_view as rich_view
+        from opik.cli import selector
+
+        monkeypatch.setattr(selector, "is_supported", lambda: True)
+        monkeypatch.setattr(
+            selector,
+            "multiselect",
+            mock.Mock(side_effect=AssertionError("no picker for one item")),
+        )
+        monkeypatch.setattr("builtins.input", lambda prompt: "y")
+
+        chosen = rich_view.RichInstallView().choose_hosts(
+            "pick", [mcp_view.HostChoice("cursor", "Cursor")], ["cursor"]
+        )
+
+        assert chosen == ["cursor"]
+
+    def test_rich_view__cancelled_picker__propagates_none(self, monkeypatch):
+        from opik.cli import mcp_view as rich_view
+        from opik.cli import selector
+
+        monkeypatch.setattr(selector, "is_supported", lambda: True)
+        monkeypatch.setattr(selector, "multiselect", lambda **kwargs: None)
+
+        assert (
+            rich_view.RichInstallView().choose_hosts("pick", self._candidates(), [])
+            is None
+        )

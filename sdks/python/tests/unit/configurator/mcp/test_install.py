@@ -9,10 +9,14 @@ from opik.configurator.mcp import install, spec, targets, verification
 from opik.configurator.mcp import view as mcp_view
 
 
-class RecordingView(mcp_view.InstallView):
+class RecordingView(mcp_view.LoggingInstallView):
     """Captures narration so tests assert on intent, not on log strings."""
 
+    #: Set to script the host prompt; ``None`` uses the inherited numbered menu.
+    host_choice = None
+
     def __init__(self):
+        self.choose_calls = []
         self.plans = []
         self.steps = []
         self.target_results = []
@@ -47,6 +51,12 @@ class RecordingView(mcp_view.InstallView):
 
     def note(self, message):
         self.notes.append(message)
+
+    def choose_hosts(self, title, candidates, preselected):
+        self.choose_calls.append((title, list(candidates), list(preselected)))
+        if self.host_choice is not None:
+            return list(self.host_choice)
+        return super().choose_hosts(title, candidates, preselected)
 
     @property
     def said(self) -> str:
@@ -869,7 +879,10 @@ class TestCandidateAndConfirm:
         )
         candidates = [_target("codex", True, mock.Mock())]
 
-        assert install._confirm_targets(candidates, ["codex"], False) == candidates
+        assert (
+            install._confirm_targets(candidates, ["codex"], False, RecordingView())
+            == candidates
+        )
 
     def test_confirm_targets__assume_confirmed__does_not_prompt(self, monkeypatch):
         monkeypatch.setattr(
@@ -877,10 +890,15 @@ class TestCandidateAndConfirm:
         )
         candidates = [_target("codex", True, mock.Mock())]
 
-        assert install._confirm_targets(candidates, None, True) == candidates
+        assert (
+            install._confirm_targets(candidates, None, True, RecordingView())
+            == candidates
+        )
 
     def test_confirm_targets__interactive__asks(self, monkeypatch):
-        monkeypatch.setattr("builtins.input", lambda message: "n")
         candidates = [_target("codex", True, mock.Mock())]
+        view = RecordingView()
+        view.host_choice = []
 
-        assert install._confirm_targets(candidates, None, False) == []
+        assert install._confirm_targets(candidates, None, False, view) == []
+        assert view.choose_calls

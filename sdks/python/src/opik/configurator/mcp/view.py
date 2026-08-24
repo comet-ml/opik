@@ -22,7 +22,18 @@ import logging
 import pathlib
 from typing import Iterator, List, Optional
 
+from opik.configurator import interactive_helpers
+
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass
+class HostChoice:
+    """One selectable AI host, for the target-selection prompt."""
+
+    key: str
+    label: str
+    hint: str = ""
 
 
 @dataclasses.dataclass
@@ -83,6 +94,16 @@ class InstallView(abc.ABC):
     def note(self, message: str) -> None:
         """Something worth knowing that does not change the outcome."""
 
+    @abc.abstractmethod
+    def choose_hosts(
+        self, title: str, candidates: List[HostChoice], preselected: List[str]
+    ) -> Optional[List[str]]:
+        """Ask which hosts to install for.
+
+        Returns the chosen keys, or ``None`` if the user cancelled — distinct
+        from an empty list, which means "none of them, deliberately".
+        """
+
 
 class LoggingInstallView(InstallView):
     """The library-safe default: everything through the logger, no cursor control."""
@@ -133,6 +154,56 @@ class LoggingInstallView(InstallView):
 
     def note(self, message: str) -> None:
         LOGGER.info(message)
+
+    def choose_hosts(
+        self, title: str, candidates: List[HostChoice], preselected: List[str]
+    ) -> Optional[List[str]]:
+        return numbered_menu(title, candidates)
+
+
+def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str]]:
+    """The portable fallback: type a number.
+
+    A module-level function rather than a base-class method so the rich view can
+    fall back to it without inheriting a logging view it otherwise overrides
+    entirely. A single candidate is a yes/no rather than a one-item menu.
+    """
+    if len(candidates) == 1:
+        confirmed = interactive_helpers.ask_user_for_approval(
+            f"Detected {candidates[0].label}. Install the Opik MCP server "
+            f"for it? (Y/n) "
+        )
+        return [candidates[0].key] if confirmed else []
+
+    host_count = len(candidates)
+    all_choice = host_count + 1
+    skip_choice = host_count + 2
+
+    lines = [title]
+    for index, candidate in enumerate(candidates, start=1):
+        lines.append(f"  {index} - {candidate.label}")
+    lines.append(f"  {all_choice} - All of the above")
+    lines.append(f"  {skip_choice} - Skip")
+    lines.append("\nEnter a number, or several separated by commas (e.g. 1,2)\n> ")
+    prompt = "\n".join(lines)
+
+    while True:
+        raw = [token.strip() for token in input(prompt).split(",") if token.strip()]
+
+        if not raw or not all(token.isdigit() for token in raw):
+            LOGGER.error("Wrong choice. Please try again.\n")
+            continue
+
+        numbers = [int(token) for token in raw]
+
+        if skip_choice in numbers:
+            return []
+        if all_choice in numbers:
+            return [candidate.key for candidate in candidates]
+        if all(1 <= number <= host_count for number in numbers):
+            return [candidates[number - 1].key for number in dict.fromkeys(numbers)]
+
+        LOGGER.error("Wrong choice. Please try again.\n")
 
 
 def display_path(path: pathlib.Path) -> str:

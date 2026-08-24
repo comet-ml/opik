@@ -98,9 +98,8 @@ class OpikConfigurator:
 
         Asked after MCP rather than folded into the same question: the MCP step
         writes credentials into a config file the user already trusts with them,
-        while this fetches instruction files through a third-party CLI that run
-        with the assistant's own permissions. Same list of assistants, materially
-        different consent.
+        while this writes instruction files the assistant then acts on with its
+        own permissions. Same list of assistants, materially different consent.
         """
         host_keys = self._skills_host_keys()
         if host_keys is None:

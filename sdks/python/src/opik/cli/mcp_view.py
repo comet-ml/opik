@@ -8,11 +8,12 @@ logger-based default.
 
 import contextlib
 import pathlib
-from typing import Iterator, List
+from typing import Iterator, List, Optional
 
 import rich.console
 from rich import padding, table, text
 
+from opik.cli import selector
 from opik.configurator.mcp import view as mcp_view
 
 console = rich.console.Console()
@@ -139,6 +140,26 @@ class RichInstallView(mcp_view.InstallView):
         console.print()
         console.print(text.Text(_collapse_home(message), style="yellow"))
         console.print()
+
+    def choose_hosts(
+        self,
+        title: str,
+        candidates: List[mcp_view.HostChoice],
+        preselected: List[str],
+    ) -> Optional[List[str]]:
+        # A one-item list is not worth arrow keys; and a terminal that cannot host
+        # a picker still gets the inherited numbered menu rather than an error.
+        if len(candidates) == 1 or not selector.is_supported():
+            return mcp_view.numbered_menu(title, candidates)
+
+        return selector.multiselect(
+            title=title,
+            choices=[
+                selector.Choice(key=c.key, label=c.label, hint=c.hint)
+                for c in candidates
+            ],
+            preselected=preselected,
+        )
 
     def note(self, message: str) -> None:
         console.print(padding.Padding(text.Text(message, style="dim"), (0, 0, 0, 2)))

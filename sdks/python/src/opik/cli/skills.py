@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple
 
 import click
 
+from opik.cli import selector
 from opik.cli import status_view
 from opik.configurator import skills as skills_installer
 from opik.configurator.skills import manifest as skills_manifest
@@ -31,6 +32,31 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
         return detected
 
     return list(dict.fromkeys(hosts))
+
+
+def _ask_which_hosts(detected: List[str]) -> Optional[List[str]]:
+    """Which detected assistants to install for.
+
+    Asked rather than assumed: the skill pack is guidance the assistant will act
+    on, and a user may well want it in the editor they use for Opik work and not
+    in every assistant on the machine.
+    """
+    if len(detected) == 1 or not selector.is_supported():
+        # One candidate needs no list, and a terminal that cannot host a picker
+        # would otherwise be stuck; both fall back to a plain confirmation.
+        names = ", ".join(skills_roots.display_names(detected))
+        if click.confirm(f"Install the Opik skill pack for {names}?", default=True):
+            return detected
+        return []
+
+    return selector.multiselect(
+        title="Which AI assistants should the Opik skill pack be installed for?",
+        choices=[
+            selector.Choice(key=key, label=label)
+            for key, label in zip(detected, skills_roots.display_names(detected))
+        ],
+        preselected=detected,
+    )
 
 
 @click.group(name="skills")
@@ -61,12 +87,18 @@ def configure(hosts: Tuple[str, ...]) -> None:
     host_keys = _resolve_host_keys(hosts)
 
     if host_keys is None:
-        host_keys = skills_roots.detected_host_keys()
-        if len(host_keys) == 0:
+        detected = skills_roots.detected_host_keys()
+        if len(detected) == 0:
             raise click.ClickException(
                 "No supported AI host was detected. Name one explicitly: "
                 f"`opik skills configure --host {HOST_KEYS[0]}`."
             )
+        host_keys = _ask_which_hosts(detected)
+        if host_keys is None:
+            raise click.ClickException("Cancelled; nothing was installed.")
+        if len(host_keys) == 0:
+            click.echo("No assistants selected; nothing was installed.")
+            return
 
     if not skills_installer.setup_skills(host_keys):
         raise click.ClickException(
