@@ -348,6 +348,42 @@ class CostIntelligenceIngestionTest {
             });
         }
 
+        @Test
+        @DisplayName("slash_command lands in user_prompts keyed by command name; identity_context framing lands in static_overhead")
+        void slashCommandAndIdentityContextLanes() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(slashCommandCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                // raw idx 1 (identity_context/identity_context) is dropped at ingestion;
+                // the two remaining blocks must not fall to 'unattributed' (OPIK-8065).
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(2);
+
+                var slashCommand = rows.getFirst();
+                assertThat(slashCommand.category()).isEqualTo("slash_command");
+                assertThat(slashCommand.lane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.bdLane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.label()).isEqualTo("commit-helper");
+                assertThat(slashCommand.isDefinition()).isEqualTo(0);
+
+                // identity_context whose parent is another category: framing carved out of
+                // that parent — kept, and folded under static_overhead like the other riders.
+                var identityContext = rows.getLast();
+                assertThat(identityContext.category()).isEqualTo("identity_context");
+                assertThat(identityContext.lane()).isEqualTo("static_overhead");
+                assertThat(identityContext.bdLane()).isEqualTo("static_overhead");
+                assertThat(identityContext.label()).isEqualTo("identity_context");
+                assertThat(identityContext.isDefinition()).isEqualTo(0);
+            });
+        }
+
         @DisplayName("write blocks inherit the span's cache TTL (1h vs 5m)")
         @ParameterizedTest
         @CsvSource({
@@ -614,6 +650,31 @@ class CostIntelligenceIngestionTest {
                               {"category":"system_tools_deferred","side":"input","cache_status":"read","parent_category":"context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"system_prompt","side":"input","cache_status":"read","parent_category":"context","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"env_info","side":"input","cache_status":"read","parent_category":"context","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
+    private static JsonNode slashCommandCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              }
+                            },
+                            "blocks": [
+                              {"category":"slash_command","side":"input","cache_status":"read","parent_category":"user_prompts","chars":150,"tool_name":"","tool_server":"","tool_use_id":"","resource":"commit-helper","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"user_prompts","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
                             ]
                           }
                         }
