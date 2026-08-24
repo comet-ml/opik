@@ -417,6 +417,7 @@ areas:
     specs:
       - playground/playground-smoke.spec.ts
       - playground/playground-providers.spec.ts
+      - playground/playground-model-settings.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts
@@ -430,7 +431,7 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      configure-model-settings:  { covered: false, note: "PromptModelSettings / providerConfigs" }
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs: per-panel id/testid uniqueness + label resolution (the #7929 regression class), plus a set-and-reopen round trip" }
 
     visual:
       playground-default: { covered: false, state: default }
@@ -636,6 +637,7 @@ areas:
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-automation-logs.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -650,7 +652,7 @@ areas:
       edit-rule:               { covered: false }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
-      automation-logs:         { covered: false }
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "LLM-judge lifecycle for one trace: Evaluating -> Sending to LLM -> Scores stored, asserted at the API and re-read in the view; no row above INFO" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }

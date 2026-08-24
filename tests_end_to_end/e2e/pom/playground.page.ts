@@ -24,6 +24,34 @@ export interface RunSimplePromptResult {
   isError: boolean;
 }
 
+/** One `<label for=...>` in the model-settings panel, with what it resolves to. */
+export interface ModelSettingsLabel {
+  text: string;
+  htmlFor: string;
+  /** How many elements in the DOCUMENT carry that id — 1 is the only correct answer. */
+  matchingElements: number;
+}
+
+/**
+ * A structural inventory of the open model-settings panel.
+ *
+ * Read in one DOM pass because the properties worth asserting are about the
+ * panel as a whole (are these ids unique? does every label resolve?), not about
+ * any single control — and a per-control walk could not express "no id appears
+ * twice" at all.
+ */
+export interface ModelSettingsPanelWiring {
+  /** Every `id` inside the panel, in DOM order, duplicates included. */
+  ids: string[];
+  /** Every `data-testid` inside the panel, in DOM order, duplicates included. */
+  testIds: string[];
+  labels: ModelSettingsLabel[];
+  /** `temperature` for a slider rendered with `id="temperature-slider"`. */
+  sliderControlIds: string[];
+  /** `temperature` for an input rendered with `data-testid="temperature-input"`. */
+  inputControlIds: string[];
+}
+
 /**
  * Prompt Playground page object. Two distinct user-modes:
  *   - "free" (no dataset/suite loaded): variants run against ad-hoc prompts; results
@@ -410,6 +438,118 @@ export class PlaygroundPage {
     return test.step('open Playground logs panel', async () => {
       await this.page.getByTestId('playground-logs-sidebar-button').click();
     });
+  }
+
+  /**
+   * The model-parameters (Settings2) dropdown trigger in a variant card header.
+   *
+   * There is no data-testid on it, and the button carries no accessible name —
+   * its only content is an icon, and the "Model parameters" tooltip is rendered
+   * in a portal rather than as an aria-label. A `data-testid` on
+   * `PromptModelConfigs`' trigger would be the right fix; it is not made here
+   * because these specs are verified against a deployed environment whose
+   * frontend this change cannot rebuild.
+   *
+   * It is instead addressed by what it belongs to: `PromptModelConfigs` renders
+   * immediately after `PromptModelSelect` as its sibling, so this is "the button
+   * right after this variant's model picker" — and, as a cross-check that the
+   * sibling really is the settings menu, one that advertises
+   * `aria-haspopup="menu"`. Scoping by that attribute alone is NOT enough: each
+   * message row carries its own role dropdown ("User"/"System"), which is also a
+   * menu trigger inside the card. Callers assert `toHaveCount(1)` so a reorder
+   * fails loudly instead of silently retargeting.
+   */
+  modelSettingsTrigger(index: number): Locator {
+    return this.variantCard(index)
+      .getByTestId('select-a-llm-model')
+      .locator('xpath=ancestor::button[1]/following-sibling::button[1]')
+      .and(this.page.locator('button[aria-haspopup="menu"]'));
+  }
+
+  /**
+   * Open the model-settings panel for a variant and return its root.
+   *
+   * The panel is portalled out of the card, so it is found through the
+   * trigger's own `aria-controls` — an exact handle Radix publishes while the
+   * menu is open — rather than by hunting for a `role=menu` that another open
+   * menu could also satisfy.
+   *
+   * The trigger is `disabled` until a model is selected; that is asserted here
+   * rather than left to time out on the click.
+   */
+  async openModelSettings(index: number): Promise<Locator> {
+    return test.step(`open the model-settings panel for variant ${index}`, async () => {
+      const trigger = this.modelSettingsTrigger(index);
+      await expect(trigger, 'exactly one model-parameters trigger in the card header').toHaveCount(
+        1,
+      );
+      await expect(trigger, 'the trigger is enabled once a model is selected').toBeEnabled();
+
+      // Same first-click-swallowed behaviour as the model picker above.
+      //
+      // `aria-expanded`, NOT `data-state`: the tooltip trigger and the menu
+      // trigger are both `asChild` on this one Button, so they share a
+      // `data-state` attribute and the tooltip wins it — it reads
+      // "instant-open" / "delayed-open" / "closed" and says nothing about the
+      // menu. Only `aria-expanded` is the menu's.
+      await expect(async () => {
+        await trigger.click();
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true', { timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      const contentId = await trigger.getAttribute('aria-controls');
+      if (!contentId) {
+        throw new Error(
+          'model-settings trigger reports aria-expanded=true but publishes no aria-controls — ' +
+            'cannot identify the panel it opened.',
+        );
+      }
+      const panel = this.page.locator(`[id="${contentId}"]`);
+      await panel.waitFor({ state: 'visible' });
+      return panel;
+    });
+  }
+
+  /**
+   * Inventory the open model-settings panel's control wiring.
+   *
+   * `matchingElements` is counted against the whole DOCUMENT, not the panel,
+   * because that is the scope `<label for>` resolves in: a label pointing at an
+   * id that is duplicated elsewhere on the page is just as broken as one
+   * pointing at nothing.
+   */
+  async readModelSettingsWiring(panel: Locator): Promise<ModelSettingsPanelWiring> {
+    return test.step('inventory the model-settings panel wiring', async () =>
+      panel.evaluate((root) => {
+        const elements = Array.from(root.querySelectorAll('*'));
+
+        const ids = elements.map((el) => el.id).filter((id): id is string => Boolean(id));
+        const testIds = elements
+          .map((el) => el.getAttribute('data-testid'))
+          .filter((v): v is string => Boolean(v));
+
+        const labels = Array.from(root.querySelectorAll('label[for]')).map((label) => {
+          const htmlFor = label.getAttribute('for') ?? '';
+          return {
+            text: (label.textContent ?? '').trim(),
+            htmlFor,
+            matchingElements: document.querySelectorAll(
+              `[id="${htmlFor.replace(/"/g, '\\"')}"]`,
+            ).length,
+          };
+        });
+
+        const suffix = (values: string[], end: string) =>
+          values.filter((v) => v.endsWith(end)).map((v) => v.slice(0, -end.length));
+
+        return {
+          ids,
+          testIds,
+          labels,
+          sliderControlIds: suffix(ids, '-slider'),
+          inputControlIds: suffix(testIds, '-input'),
+        };
+      }));
   }
 
   /** Set a single model-config option (e.g., temperature, max_tokens) on a variant. */

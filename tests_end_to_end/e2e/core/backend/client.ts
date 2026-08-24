@@ -129,6 +129,23 @@ export interface AutomationRuleRef {
   samplingRate: number;
 }
 
+/**
+ * One row of an automation rule's user-facing log, as
+ * `GET /v1/private/automations/evaluators/{id}/logs` answers it — the same read
+ * the Automation logs view issues.
+ *
+ * Every field is required here even though the generated REST type marks them
+ * optional: a log row with no level or no message cannot support any assertion
+ * about the scoring lifecycle, so an absent one is a failure to surface rather
+ * than a value to default (see `requireLogField`).
+ */
+export interface AutomationRuleLogRef {
+  /** ISO-8601, as returned. Only used for ordering assertions. */
+  timestamp: string;
+  level: string;
+  message: string;
+}
+
 export interface AnnotationQueueReviewerRef {
   username: string;
   itemsScored: number;
@@ -348,6 +365,21 @@ export function makeBackendClient(apiKey: string | null = null) {
       );
     }
     return rate;
+  };
+
+  /**
+   * The generated `LogItem` marks timestamp, level and message optional. A row
+   * missing any of them would silently weaken every automation-logs assertion
+   * built on it — an absent `level` would read as "not an ERROR", which is
+   * exactly the claim those specs exist to make. Fail loudly instead.
+   */
+  const requireLogField = (value: unknown, field: string, ruleId: string): string => {
+    if (typeof value === 'string' && value.length > 0) return value;
+    if (value instanceof Date) return value.toISOString();
+    throw new Error(
+      `getAutomationRuleLogs: rule '${ruleId}' returned a log row with no '${field}' — ` +
+        `cannot assert on the scoring lifecycle.`,
+    );
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -842,6 +874,55 @@ export function makeBackendClient(apiKey: string | null = null) {
         enabled: r.enabled ?? true,
         samplingRate: requireSamplingRate(r.samplingRate, r.name),
       }));
+    },
+
+    /**
+     * The model id an LLM-judge rule was persisted with (`code.model.name`) —
+     * e.g. `claude-haiku-4-5-20251001`.
+     *
+     * Read back from the rule rather than mapped from the picker's display
+     * name ("Claude Haiku 4.5"): the engine logs the id, and a hand-written
+     * display-name → id table in a spec is a second source of truth that goes
+     * stale the moment the registry adds a model.
+     */
+    async getLlmJudgeModelName(projectId: string, ruleId: string): Promise<string> {
+      const rule = await opik.api.automationRuleEvaluators.getEvaluatorById(ruleId, {
+        projectId,
+      });
+      if (rule.type !== 'llm_as_judge') {
+        throw new Error(
+          `getLlmJudgeModelName: rule '${rule.name}' is of type '${rule.type}', not llm_as_judge.`,
+        );
+      }
+      const name = rule.code?.model?.name;
+      if (!name) {
+        throw new Error(
+          `getLlmJudgeModelName: rule '${rule.name}' returned no code.model.name — ` +
+            `cannot assert which model the engine was asked to use.`,
+        );
+      }
+      return name;
+    },
+
+    /**
+     * One page of an automation rule's user-facing log — the read behind the
+     * Automation logs view (`/$workspaceName/automation-logs?rule_id=...`).
+     *
+     * Returned oldest-first so lifecycle-ordering assertions read naturally;
+     * the backend's own ordering is not part of the contract under test (the
+     * page sorts newest-first for display).
+     */
+    async getAutomationRuleLogs(ruleId: string, size = 500): Promise<AutomationRuleLogRef[]> {
+      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
+        size,
+      });
+      return (page.content ?? [])
+        .map((item) => ({
+          timestamp: requireLogField(item.timestamp, 'timestamp', ruleId),
+          level: requireLogField(item.level, 'level', ruleId),
+          message: requireLogField(item.message, 'message', ruleId),
+        }))
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
