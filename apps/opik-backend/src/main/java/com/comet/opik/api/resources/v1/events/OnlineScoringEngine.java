@@ -16,6 +16,7 @@ import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.comet.opik.utils.ValidationUtils;
+import com.comet.opik.utils.VariablePathUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -882,6 +883,17 @@ public class OnlineScoringEngine {
                 log.warn("failed to serialize entire json object, json={}", json, e);
                 return null;
             }
+        }
+
+        // Rules are validated on write (@SupportedVariablePaths), but ones stored before that existed
+        // still arrive here, so the grammar is enforced at the point of use too. Recursive descent and
+        // filter predicates walk the whole section, and scoring shares a scheduler across workspaces, so
+        // the cost of one rule's expression is not confined to that rule.
+        var unsupported = VariablePathUtils.findUnsupportedConstructInJsonPath(path);
+        if (unsupported.isPresent()) {
+            log.warn("unsupported construct '{}' in json path, dropping variable, path={}, nodeType={}",
+                    unsupported.get(), path, json.getNodeType());
+            return null;
         }
 
         Object jsonValue;

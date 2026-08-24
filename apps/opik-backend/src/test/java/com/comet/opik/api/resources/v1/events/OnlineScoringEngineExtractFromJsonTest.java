@@ -145,6 +145,30 @@ class OnlineScoringEngineExtractFromJsonTest {
     }
 
     @Test
+    @DisplayName("a recursive-descent path is dropped at extraction, not evaluated")
+    void recursiveDescentIsRejected() {
+        // Rules are validated on write, but ones stored before that validation existed still reach the
+        // engine, so the grammar is enforced here too: the variable is dropped and scoring continues.
+        var trace = traceWithOutput("{\"a\": {\"b\": {\"content\": \"deep\"}}}");
+        var variables = Map.of("content", "output..content");
+
+        assertThatCode(() -> OnlineScoringEngine.toReplacements(variables, trace)).doesNotThrowAnyException();
+        assertThat(OnlineScoringEngine.toReplacements(variables, trace)).doesNotContainKey("content");
+    }
+
+    @Test
+    @DisplayName("a single-level wildcard still resolves — only unbounded traversal is rejected")
+    void singleLevelWildcardStillResolves() {
+        // Shape taken from a rule in the field: results[*].content. Bounded by one level's child count,
+        // so it stays supported.
+        var trace = traceWithOutput("{\"results\": [{\"content\": \"first\"}, {\"content\": \"second\"}]}");
+
+        var replacements = OnlineScoringEngine.toReplacements(Map.of("all", "output.results[*].content"), trace);
+
+        assertThat(replacements.get("all")).contains("first").contains("second");
+    }
+
+    @Test
     @DisplayName("a flat key containing \"$.\" resolves — only the leading prefix is stripped")
     void flatKeyContainingTheRootPrefix() {
         // Stripping every "$." rather than the leading one rewrote the lookup key ("$.a$.b" -> "ab")
