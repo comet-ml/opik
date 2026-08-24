@@ -1,4 +1,4 @@
-"""Tests for the shared "set Opik up for your AI assistants" step."""
+"""Tests for the shared "set Opik up for your AI assistant" step."""
 
 from unittest import mock
 

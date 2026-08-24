@@ -1,4 +1,4 @@
-"""The shared "set Opik up for your AI assistants" step.
+"""The shared "set Opik up for your AI assistant" step.
 
 Both ``opik mcp configure`` and the tail of ``opik configure`` do the same thing —
 register the server, then offer the skill pack — so it lives here once rather than

@@ -37,6 +37,8 @@ class TestMultiselect:
         assert result == ["claude-code"]
 
     def test_space_twice__deselects_again(self):
+        # Toggling back to nothing leaves an empty set, so Enter falls through to
+        # the cursor row rather than returning nothing at all.
         result = selector.multiselect(
             "pick",
             _choices(),
@@ -44,7 +46,42 @@ class TestMultiselect:
             read_key=_driver(selector.TOGGLE, selector.TOGGLE, selector.ACCEPT),
         )
 
-        assert result == []
+        assert result == ["claude-code"]
+
+    def test_accept_with_nothing_selected__takes_the_cursor_row(self):
+        # The reported bug: with every row pre-ticked, landing on Claude Code and
+        # pressing Enter registered all three assistants. A cursor sitting on a
+        # checkbox list reads as a radio list, so Enter has to mean "this one".
+        result = selector.multiselect(
+            "pick",
+            _choices(),
+            [],
+            read_key=_driver(selector.ACCEPT),
+        )
+
+        assert result == ["claude-code"]
+
+    def test_accept_with_nothing_selected__takes_the_row_moved_to(self):
+        result = selector.multiselect(
+            "pick",
+            _choices(),
+            [],
+            read_key=_driver(selector.DOWN, selector.ACCEPT),
+        )
+
+        assert result == ["cursor"]
+
+    def test_an_explicit_tick_beats_the_cursor_row(self):
+        result = selector.multiselect(
+            "pick",
+            _choices(),
+            [],
+            read_key=_driver(
+                selector.DOWN, selector.TOGGLE, selector.UP, selector.ACCEPT
+            ),
+        )
+
+        assert result == ["cursor"]
 
     def test_down_then_toggle__selects_the_second_row(self):
         result = selector.multiselect(
@@ -93,6 +130,7 @@ class TestMultiselect:
         assert result == ["claude-code", "cursor", "codex"]
 
     def test_toggle_all_when_everything_is_selected__clears(self):
+        # `a` still clears the set; Enter on an empty set then takes the cursor row.
         result = selector.multiselect(
             "pick",
             _choices(),
@@ -100,7 +138,7 @@ class TestMultiselect:
             read_key=_driver(selector.TOGGLE_ALL, selector.ACCEPT),
         )
 
-        assert result == []
+        assert result == ["claude-code"]
 
     def test_toggle_all_from_partial__selects_everything(self):
         result = selector.multiselect(
@@ -113,7 +151,11 @@ class TestMultiselect:
         assert result == ["claude-code", "cursor", "codex"]
 
     def test_cancel__returns_none_not_an_empty_list(self):
-        """`None` means "I backed out"; `[]` means "none of them, deliberately"."""
+        """`None` means "I backed out" — now the only way to pick nothing.
+
+        Enter can no longer return `[]`: on an empty set it takes the cursor row.
+        Escape is the deliberate no-op, and callers already report it as one.
+        """
         result = selector.multiselect(
             "pick", _choices(), ["cursor"], read_key=_driver(selector.CANCEL)
         )
@@ -220,3 +262,17 @@ class TestNormalise:
     def test_arrow_tables_cover_both_platforms(self):
         assert selector._ARROWS == {"A": selector.UP, "B": selector.DOWN}
         assert selector._WINDOWS_ARROWS == {"H": selector.UP, "P": selector.DOWN}
+
+
+class TestFooter:
+    """The footer names what Enter will take, so it is never guessed at."""
+
+    def test_nothing_selected__names_the_cursor_row(self):
+        assert "(Claude Code)" in selector._footer(_choices(), set(), 0)
+
+    def test_partial_selection__reports_the_count(self):
+        assert "(2 selected)" in selector._footer(_choices(), {"cursor", "codex"}, 0)
+
+    def test_everything_selected__says_all(self):
+        selected = {"claude-code", "cursor", "codex"}
+        assert "(all)" in selector._footer(_choices(), selected, 0)

@@ -318,14 +318,16 @@ def _confirm_targets(
         return candidates
 
     chosen = display.choose_hosts(
-        title="Which AI assistants should the Opik MCP server be set up for?",
+        title="Which AI assistant should the Opik MCP server be set up for?",
         candidates=[
             mcp_view.HostChoice(key=target.key, label=target.display_name)
             for target in candidates
         ],
-        # Everything detected, pre-ticked: the common answer is "all of them",
-        # and this keeps Enter meaning what the old menu's "All" option meant.
-        preselected=[target.key for target in candidates],
+        # Nothing pre-ticked. Registering a server edits another tool's config
+        # file, so Enter must not do it to every assistant found on the machine
+        # by default — the same reason `opik configure -y` refuses to. Enter
+        # takes the highlighted row; `a` is there when the answer really is all.
+        preselected=[],
     )
     if chosen is None:
         return []

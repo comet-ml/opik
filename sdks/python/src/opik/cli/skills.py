@@ -66,12 +66,12 @@ def _ask_which_hosts(detected: List[str]) -> Optional[List[str]]:
         return []
 
     return selector.multiselect(
-        title="Which AI assistants should the Opik skill pack be installed for?",
+        title="Which AI assistant should the Opik skill pack be installed for?",
         choices=[
             selector.Choice(key=key, label=label)
             for key, label in zip(detected, skills_roots.display_names(detected))
         ],
-        preselected=detected,
+        preselected=[],
     )
 
 

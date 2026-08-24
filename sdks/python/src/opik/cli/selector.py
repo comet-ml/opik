@@ -64,6 +64,13 @@ def multiselect(
     user cancelled (Escape or Ctrl-C) — which is distinct from an empty list,
     meaning "I deliberately chose nothing".
 
+    With nothing ticked, Enter takes the row under the cursor. A checkbox list
+    with a cursor on it reads as a radio list to plenty of people, so "move to
+    Claude Code, press Enter" has to mean Claude Code — it previously confirmed
+    the whole pre-ticked set and wrote into three tools' configs at once. Ticking
+    anything switches to the subset the user built, and the footer names whichever
+    of the two Enter is about to do.
+
     ``read_key`` is injectable so the interaction can be tested without a tty.
     """
     if len(choices) == 0:
@@ -104,7 +111,20 @@ def multiselect(
 
             live.update(_render(title, choices, selected, cursor), refresh=True)
 
+    if len(selected) == 0:
+        return [choices[cursor].key]
     return [choice.key for choice in choices if choice.key in selected]
+
+
+def _footer(choices: Sequence[Choice], selected: Set[str], cursor: int) -> str:
+    """Spell out what Enter will take, so it is never guessed at."""
+    if len(selected) == 0:
+        target = choices[cursor].label
+    elif len(selected) == len(choices):
+        target = "all"
+    else:
+        target = f"{len(selected)} selected"
+    return f"  ↑↓ move · space select · a all · enter confirm ({target})"
 
 
 def _render(
@@ -133,7 +153,7 @@ def _render(
     return console_module.Group(
         text.Text(title, style="bold"),
         grid,
-        text.Text("  ↑↓ move · space select · a all · enter confirm", style="dim"),
+        text.Text(_footer(choices, selected, cursor), style="dim"),
     )
 
 

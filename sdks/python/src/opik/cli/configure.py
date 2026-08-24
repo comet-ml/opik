@@ -1,14 +1,16 @@
 """Configure command for Opik CLI."""
 
 import logging
-from typing import Any, Mapping, Optional
+from typing import Any, List, Mapping, Optional
 
 import click
 
 import opik.config as opik_config
 from opik.cli import assistants
+from opik.cli import mcp_view as mcp_rich_view
 from opik.cli import status_view
 from opik.configurator import configure as opik_configure, interactive_helpers
+from opik.configurator import mcp as mcp_installer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,7 +39,55 @@ def _setup_assistants(
         assistants.setup(setup_params, skills_flag=True, host_keys=None)
         return
 
+    if install_mcp is None and not _confirm_assistant_step():
+        return
+
     assistants.setup(setup_params, skills_flag=skills_flag)
+
+
+def _confirm_assistant_step() -> bool:
+    """Ask before touching any assistant's configuration.
+
+    `opik configure` is about writing ``~/.opik.config``; registering an MCP
+    server edits files owned by other tools, which is a different kind of
+    permission and should not be assumed just because the user configured Opik.
+    Dropping straight into the host picker made the wider question unaskable —
+    there was no way to answer "no, just configure Opik".
+
+    Not asked on `opik mcp configure`: running that command *is* the answer.
+    Defaults to no, matching `opik configure -y`'s refusal to reach into
+    another tool's config.
+    """
+    detected = mcp_installer.detected_host_names()
+    if len(detected) == 0:
+        # Nothing found to register, so there is nothing worth asking about.
+        return False
+
+    if not interactive_helpers.is_interactive():
+        # No terminal to ask in. `--install-mcp` is how a script opts in, and it
+        # skips this path entirely by setting `install_mcp` to True.
+        return False
+
+    console = mcp_rich_view.console
+    console.print()
+    console.print("  Set Opik up for your AI assistant?", style="bold")
+    # One sentence per print: the host list varies in length, and folding it into
+    # a line with a hardcoded wrap pushed the rest past the terminal width and
+    # lost the indent on the continuation.
+    console.print(f"  Found {_readable_list(detected)}.", style="dim")
+    console.print(
+        "  The Opik MCP server lets it read traces, log scores and run\n"
+        "  experiments from chat.",
+        style="dim",
+    )
+    return click.confirm("", default=False)
+
+
+def _readable_list(names: List[str]) -> str:
+    """``a``, ``a and b``, ``a, b and c`` — the prompt reads as a sentence."""
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 def run_interactive_configure(
