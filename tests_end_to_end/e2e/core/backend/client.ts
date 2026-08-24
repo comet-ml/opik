@@ -1003,6 +1003,58 @@ export function makeBackendClient(apiKey: string | null = null) {
     },
 
     /**
+     * Create many traces in one write.
+     *
+     * The per-trace `createTraceWithSource` above is a round trip each; a table
+     * big enough to exercise virtualization needs three figures of them, and
+     * seeding those one at a time costs more than the test that follows. Ids are
+     * caller-supplied for the same reason as there — the write answers 204 with
+     * no body, and these tests assert on exact ids.
+     */
+    async createTracesBatch(
+      traces: Array<{
+        id: string;
+        projectName: string;
+        name: string;
+        startTime: Date;
+        endTime?: Date;
+        input?: Record<string, unknown>;
+        output?: Record<string, unknown>;
+      }>,
+    ): Promise<void> {
+      await opik.api.traces.createTraces({
+        traces: traces.map((t) => ({
+          id: t.id,
+          projectName: t.projectName,
+          name: t.name,
+          startTime: t.startTime,
+          ...(t.endTime ? { endTime: t.endTime } : {}),
+          ...(t.input ? { input: t.input } : {}),
+          ...(t.output ? { output: t.output } : {}),
+        })),
+      });
+    },
+
+    /**
+     * Attach feedback scores to traces in one write. A distinct score *name* is
+     * what makes the Logs table grow a dynamic column, so this is how a fixture
+     * widens the table without touching the UI.
+     */
+    async scoreTracesBatch(
+      scores: Array<{ traceId: string; projectName: string; name: string; value: number }>,
+    ): Promise<void> {
+      await opik.api.traces.scoreBatchOfTraces({
+        scores: scores.map((s) => ({
+          id: s.traceId,
+          projectName: s.projectName,
+          name: s.name,
+          value: s.value,
+          source: 'sdk',
+        })),
+      });
+    },
+
+    /**
      * Create an optimization run row directly. Seeding the row rather than
      * launching a real run keeps the trial-scoping tests deterministic and
      * LLM-free — the thing under test is which traces a trial's Logs overlay

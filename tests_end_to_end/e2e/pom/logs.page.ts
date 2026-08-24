@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator, type ElementHandle } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
@@ -23,11 +23,18 @@ export class LogsPage {
 
   constructor(private readonly page: Page) {}
 
-  async goto(projectId: string): Promise<void> {
+  /**
+   * Open Logs for a project. `pageSize` pins the pagination size in the URL —
+   * the control otherwise remembers the last value in local storage, so a spec
+   * whose assertions depend on how many rows the table holds should say what it
+   * wants rather than inherit it.
+   */
+  async goto(projectId: string, opts: { pageSize?: number } = {}): Promise<void> {
     return test.step(`Open Logs for project ${projectId}`, async () => {
       this.projectId = projectId;
       const env = loadEnvConfig();
-      await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/logs`);
+      const query = opts.pageSize ? `?size=${opts.pageSize}` : '';
+      await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/logs${query}`);
     });
   }
 
@@ -495,6 +502,350 @@ export class LogsPage {
       const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?logsType=threads&thread=${threadId}`;
       await this.page.goto(url);
       return new ThreadPanelPage(this.page, threadId);
+    });
+  }
+
+  // --- Column configuration ---
+
+  /** The "Columns N/M" control that opens the column picker. */
+  get columnsButton(): Locator {
+    return this.page.getByTestId('columns-button');
+  }
+
+  /**
+   * The selected/total column counts the Columns control reports. Both move with
+   * the project's data — a feedback score name or a metadata key each add a
+   * dynamic column — so specs that care about the table's width read them here
+   * instead of hard-coding a number that the next FE column would invalidate.
+   */
+  async readColumnCounts(): Promise<{ selected: number; total: number }> {
+    return test.step('Read the Columns selected/total counts', async () => {
+      const text = (await this.columnsButton.textContent()) ?? '';
+      const match = text.match(/(\d+)\s*\/\s*(\d+)/);
+      if (!match) {
+        throw new Error(`LogsPage.readColumnCounts: no "N/M" badge in "${text}"`);
+      }
+      return { selected: Number(match[1]), total: Number(match[2]) };
+    });
+  }
+
+  /**
+   * Turn on every column via the picker's select-all row.
+   *
+   * The row is the menu's own checkbox item, matched on the "N of M selected"
+   * label it renders; it is the only item in the menu whose label has that
+   * shape, and unlike the per-column items its text does not depend on which
+   * columns the project happens to have.
+   */
+  async selectAllColumns(): Promise<void> {
+    return test.step('Select every column', async () => {
+      await this.columnsButton.click();
+      const selectAll = this.page
+        .getByRole('menuitemcheckbox')
+        .filter({ hasText: /^\d+ of \d+ selected$/ });
+      await expect(selectAll).toHaveCount(1);
+      await selectAll.click();
+      await this.page.keyboard.press('Escape');
+      await expect(selectAll).toBeHidden();
+      await expect
+        .poll(async () => {
+          const { selected, total } = await this.readColumnCounts();
+          return selected === total;
+        })
+        .toBe(true);
+    });
+  }
+
+  // --- Row selection ---
+
+  /** The header checkbox that selects every row in the current page. */
+  get selectAllRowsCheckbox(): Locator {
+    return this.page.getByRole('checkbox', { name: 'Select all' });
+  }
+
+  /**
+   * The "Selected: N" summary in the bulk-actions bar. Text-matched: the bar has
+   * no testid, and the count is exactly what these specs are asserting on.
+   */
+  get selectionSummary(): Locator {
+    return this.page.getByText(/^Selected: \d+$/);
+  }
+
+  // --- Free-text search ---
+
+  /**
+   * The "Search by anything" box above the table. Every SearchInput in the app
+   * carries this testid, including the one inside the column picker — so call
+   * this only with that menu closed, which `selectAllColumns()` guarantees.
+   */
+  get searchInput(): Locator {
+    return this.page.getByTestId('search-input');
+  }
+
+  async searchTraces(term: string): Promise<void> {
+    return test.step(`Search traces for "${term}"`, async () => {
+      await this.searchInput.fill(term);
+    });
+  }
+
+  async clearTraceSearch(): Promise<void> {
+    return test.step('Clear the trace search', async () => {
+      await this.searchInput.fill('');
+    });
+  }
+
+  // --- Table virtualization ---
+  //
+  // Past a fixed budget (`columns × rows`, see `getVirtualizationConfig` in
+  // shared/DataTable/utils.tsx) the table renders only a window of its rows and
+  // columns. The helpers below are what let a spec assert on the WHOLE table
+  // anyway: sweep the scroll container and collect what each window rendered.
+
+  /** Header cells currently in the DOM. Spacer cells carry no `data-header-id`. */
+  get renderedHeaders(): Locator {
+    return this.page.locator('thead th[data-header-id]');
+  }
+
+  async renderedHeaderIds(): Promise<string[]> {
+    return test.step('Read rendered column ids', async () =>
+      this.renderedHeaders.evaluateAll((cells) =>
+        cells.map((c) => c.getAttribute('data-header-id') ?? ''),
+      ));
+  }
+
+  /**
+   * The dynamic feedback-score columns currently in the DOM, one per score name
+   * the project has seen. They arrive on their own query and are selected as
+   * they land, so a spec whose sizing depends on them has a real state to wait
+   * on rather than a guess about when the page has finished widening.
+   */
+  async renderedFeedbackScoreColumnIds(): Promise<string[]> {
+    return test.step('Read rendered feedback-score column ids', async () => {
+      const ids = await this.renderedHeaderIds();
+      return ids.filter((id) => id.startsWith('feedback_scores_'));
+    });
+  }
+
+  /**
+   * The zero-height filler rows the row virtualizer mounts in place of the rows
+   * outside its window. Their presence is the tell that windowing is on; real
+   * rows always carry a `data-row-id`.
+   */
+  get spacerRows(): Locator {
+    return this.page.locator('tbody tr:not([data-row-id])');
+  }
+
+  /**
+   * The element that scrolls the Logs table, on both axes.
+   *
+   * It is the page-body scroll container, which carries no testid — and this
+   * suite runs against pre-built deployments, so one cannot be added here and
+   * observed there. Rather than pin a structural CSS path (the container is
+   * identified only by the Tailwind height/overflow classes the layout owns),
+   * resolve it the way the FE's own virtualizer does: the nearest scrollable
+   * ancestor of the table. A `data-testid` on PageBodyScrollContainer would let
+   * this be a plain locator and is worth adding next time the FE is touched.
+   */
+  private async scrollContainer(): Promise<ElementHandle<HTMLElement>> {
+    const handle = await this.page.evaluateHandle(() => {
+      let el: HTMLElement | null = document.querySelector('table')?.parentElement ?? null;
+      while (el && el !== document.documentElement) {
+        const style = getComputedStyle(el);
+        if (/auto|scroll/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1) {
+          return el;
+        }
+        el = el.parentElement;
+      }
+      return null;
+    });
+    const element = handle.asElement() as ElementHandle<HTMLElement> | null;
+    if (!element) {
+      throw new Error('LogsPage.scrollContainer: the Logs table has no scrollable ancestor');
+    }
+    return element;
+  }
+
+  /**
+   * Scroll the table from top to bottom in half-viewport steps, collecting every
+   * row that renders on the way.
+   *
+   * `orderedIds` is the order the table is expected to list, and it does more
+   * than name the rows: after each step this waits until the rendered window is
+   * a contiguous run of that order which starts no later than one row past where
+   * the previous step ended. That is a real state to wait on rather than a
+   * sleep, and it is also the assertion — a window that jumped a row cannot
+   * satisfy it, so the sweep hangs and fails instead of quietly returning a set
+   * that is missing one.
+   */
+  async sweepRowsVertically(
+    orderedIds: string[],
+  ): Promise<{ seenIds: Set<string>; blankRows: number }> {
+    return test.step('Scroll the table top to bottom, collecting every row', async () => {
+      const container = await this.scrollContainer();
+      const seenIds = new Set<string>();
+      let blankRows = 0;
+      let previousLastIndex = -1;
+      let target = 0;
+
+      for (let step = 0; ; step++) {
+        if (step > orderedIds.length) {
+          throw new Error('LogsPage.sweepRowsVertically: scrolled more steps than there are rows');
+        }
+        const geometry = await container.evaluate((el, top) => {
+          el.scrollTop = top;
+          return {
+            top: el.scrollTop,
+            max: el.scrollHeight - el.clientHeight,
+            step: Math.floor(el.clientHeight / 2),
+          };
+        }, target);
+
+        await expect
+          .poll(
+            async () =>
+              container.evaluate(
+                (el, [ids, lastIndex]: [string[], number]) => {
+                  const rows = Array.from(
+                    document.querySelectorAll<HTMLElement>('tbody tr[data-row-id]'),
+                  );
+                  if (rows.length === 0) return false;
+                  const indices = rows.map((r) => ids.indexOf(r.getAttribute('data-row-id') ?? ''));
+                  if (indices.some((i) => i < 0)) return false;
+                  if (indices.some((v, k) => k > 0 && v !== indices[k - 1] + 1)) return false;
+                  if (indices[0] > lastIndex + 1) return false;
+                  // The window has settled once it reaches the bottom of the
+                  // viewport — or once it has rendered the last row there is.
+                  const bottom = rows[rows.length - 1].getBoundingClientRect().bottom;
+                  return (
+                    bottom >= el.getBoundingClientRect().bottom - 1 ||
+                    indices[indices.length - 1] === ids.length - 1
+                  );
+                },
+                [orderedIds, previousLastIndex] as [string[], number],
+              ),
+            {
+              timeout: 30_000,
+              message:
+                `the row window never settled into a gapless run continuing from index ` +
+                `${previousLastIndex} and covering the viewport`,
+            },
+          )
+          .toBe(true);
+
+        const rendered = await this.page.evaluate((ids: string[]) => {
+          const rows = Array.from(document.querySelectorAll<HTMLElement>('tbody tr[data-row-id]'));
+          return {
+            ids: rows.map((r) => r.getAttribute('data-row-id') ?? ''),
+            blanks: rows.filter((r) => (r.textContent ?? '').trim() === '').length,
+            lastIndex: ids.indexOf(rows[rows.length - 1].getAttribute('data-row-id') ?? ''),
+          };
+        }, orderedIds);
+        rendered.ids.forEach((id) => seenIds.add(id));
+        blankRows += rendered.blanks;
+        previousLastIndex = rendered.lastIndex;
+
+        if (previousLastIndex === orderedIds.length - 1 || geometry.top >= geometry.max - 1) break;
+        target = geometry.top + geometry.step;
+      }
+
+      return { seenIds, blankRows };
+    });
+  }
+
+  /**
+   * Scroll the table left to right in half-viewport steps, collecting every
+   * column that renders on the way, and report where the right-most header ends
+   * up once the scroll is exhausted.
+   *
+   * `lastHeaderRight` vs `containerRight` is what catches a mis-sized trailing
+   * spacer: the window can render every column and still leave the last one
+   * stranded past the edge of what the container can scroll to.
+   */
+  async sweepColumnsHorizontally(): Promise<{
+    headerIds: Set<string>;
+    lastHeaderRight: number;
+    containerRight: number;
+  }> {
+    return test.step('Scroll the table left to right, collecting every column', async () => {
+      const container = await this.scrollContainer();
+      const headerIds = new Set<string>();
+      let target = 0;
+      let edges = { lastHeaderRight: 0, containerRight: 0 };
+
+      for (let step = 0; ; step++) {
+        if (step > 200) {
+          throw new Error('LogsPage.sweepColumnsHorizontally: scroll never reached the right edge');
+        }
+        const geometry = await container.evaluate((el, left) => {
+          el.scrollLeft = left;
+          return {
+            left: el.scrollLeft,
+            max: el.scrollWidth - el.clientWidth,
+            step: Math.floor(el.clientWidth / 2),
+          };
+        }, target);
+
+        await expect
+          .poll(
+            async () =>
+              container.evaluate((el) => {
+                const headers = Array.from(
+                  document.querySelectorAll<HTMLElement>('thead th[data-header-id]'),
+                );
+                if (headers.length === 0) return false;
+                const right = headers[headers.length - 1].getBoundingClientRect().right;
+                return (
+                  right >= el.getBoundingClientRect().right - 1 ||
+                  el.scrollLeft >= el.scrollWidth - el.clientWidth - 1
+                );
+              }),
+            {
+              timeout: 30_000,
+              message: 'the column window never settled with its last header at the right edge',
+            },
+          )
+          .toBe(true);
+
+        const rendered = await container.evaluate((el) => {
+          const headers = Array.from(
+            document.querySelectorAll<HTMLElement>('thead th[data-header-id]'),
+          );
+          return {
+            ids: headers.map((h) => h.getAttribute('data-header-id') ?? ''),
+            lastHeaderRight: headers[headers.length - 1].getBoundingClientRect().right,
+            containerRight: el.getBoundingClientRect().right,
+          };
+        });
+        rendered.ids.forEach((id) => headerIds.add(id));
+        edges = {
+          lastHeaderRight: rendered.lastHeaderRight,
+          containerRight: rendered.containerRight,
+        };
+
+        if (geometry.left >= geometry.max - 1) break;
+        target = geometry.left + geometry.step;
+      }
+
+      return { headerIds, ...edges };
+    });
+  }
+
+  /** Scroll the table back to its top-left corner. */
+  async resetTableScroll(): Promise<void> {
+    return test.step('Scroll the table back to the top left', async () => {
+      const container = await this.scrollContainer();
+      await container.evaluate((el) => {
+        el.scrollTop = 0;
+        el.scrollLeft = 0;
+      });
+    });
+  }
+
+  /** How far down the table is scrolled, in pixels. */
+  async tableScrollTop(): Promise<number> {
+    return test.step('Read the table scroll offset', async () => {
+      const container = await this.scrollContainer();
+      return container.evaluate((el) => el.scrollTop);
     });
   }
 }
