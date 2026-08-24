@@ -477,11 +477,11 @@ const DataTable = <TData, TValue>({
                         );
                       }
 
-                      const { header, colSpan } = entry;
+                      const { header, colSpan, key } = entry;
 
                       return (
                         <TableHead
-                          key={header.id}
+                          key={key ?? header.id}
                           data-header-id={header.id}
                           style={{
                             zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),

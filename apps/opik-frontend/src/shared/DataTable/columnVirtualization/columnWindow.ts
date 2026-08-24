@@ -36,6 +36,7 @@ const createSpacer = (id: string, size: number): ColumnSpacer => ({
 export type WindowedHeader<THeader> = {
   header: THeader;
   colSpan: number;
+  key?: string;
 };
 
 export const sliceColumnWindow = <T>(
@@ -60,7 +61,9 @@ export const sliceColumnWindow = <T>(
   ];
 };
 
-export const sliceColumnWindowHeaders = <THeader extends { colSpan: number }>(
+export const sliceColumnWindowHeaders = <
+  THeader extends { id: string; colSpan: number },
+>(
   headers: THeader[],
   window: ColumnWindow,
 ): (WindowedHeader<THeader> | ColumnSpacer)[] => {
@@ -71,6 +74,8 @@ export const sliceColumnWindowHeaders = <THeader extends { colSpan: number }>(
   const leafSlots = headers.flatMap((header) =>
     new Array<THeader>(Math.max(header.colSpan, 1)).fill(header),
   );
+
+  const segments = new Map<THeader, number>();
 
   return sliceColumnWindow(leafSlots, window).reduce<
     (WindowedHeader<THeader> | ColumnSpacer)[]
@@ -84,9 +89,17 @@ export const sliceColumnWindowHeaders = <THeader extends { colSpan: number }>(
 
     if (!isColumnSpacer(previous) && previous?.header === entry) {
       previous.colSpan += 1;
-    } else {
-      acc.push({ header: entry, colSpan: 1 });
+      return acc;
     }
+
+    const segment = (segments.get(entry) ?? 0) + 1;
+    segments.set(entry, segment);
+
+    acc.push({
+      header: entry,
+      colSpan: 1,
+      ...(segment > 1 && { key: `${entry.id}__${segment}` }),
+    });
 
     return acc;
   }, []);

@@ -214,6 +214,31 @@ describe("sliceColumnWindowHeaders", () => {
     ]);
   });
 
+  it("gives each segment of a group split by a pinned boundary its own key", () => {
+    const straddling = [
+      { id: "select", colSpan: 1 },
+      { id: "scores", colSpan: 4 },
+    ];
+    const window: ColumnWindow = {
+      active: true,
+      leftCount: 1,
+      centerCount: 3,
+      start: 0,
+      end: 1,
+      leadingWidth: 0,
+      trailingWidth: 700,
+    };
+
+    const result = sliceColumnWindowHeaders(straddling, window);
+
+    expect(result).toEqual([
+      { header: straddling[0], colSpan: 1 },
+      { header: straddling[1], colSpan: 2 },
+      { id: "__column_spacer_trail", size: 700, isColumnSpacer: true },
+      { header: straddling[1], colSpan: 1, key: "scores__2" },
+    ]);
+  });
+
   it("slices a leaf header row the same way sliceColumnWindow does", () => {
     const leaves = items.map((id) => ({ id, colSpan: 1 }));
     const window: ColumnWindow = {
