@@ -119,7 +119,7 @@ class TestRichInstallView:
 
     @pytest.fixture
     def view(self):
-        from opik.cli import mcp_view as rich_view
+        from opik.cli import install_view as rich_view
 
         return rich_view
 
@@ -306,7 +306,7 @@ class TestChooseHosts:
         assert chosen == ["cursor"]
 
     def test_rich_view__uses_the_picker_when_the_terminal_allows(self, monkeypatch):
-        from opik.cli import mcp_view as rich_view
+        from opik.cli import install_view as rich_view
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)
@@ -319,7 +319,7 @@ class TestChooseHosts:
         assert chosen == ["codex"]
 
     def test_rich_view__no_picker_support__falls_back_to_the_menu(self, monkeypatch):
-        from opik.cli import mcp_view as rich_view
+        from opik.cli import install_view as rich_view
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: False)
@@ -332,7 +332,7 @@ class TestChooseHosts:
         assert chosen == ["claude-code", "cursor", "codex"]
 
     def test_rich_view__single_candidate__skips_the_picker(self, monkeypatch):
-        from opik.cli import mcp_view as rich_view
+        from opik.cli import install_view as rich_view
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)
@@ -350,7 +350,7 @@ class TestChooseHosts:
         assert chosen == ["cursor"]
 
     def test_rich_view__cancelled_picker__propagates_none(self, monkeypatch):
-        from opik.cli import mcp_view as rich_view
+        from opik.cli import install_view as rich_view
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)

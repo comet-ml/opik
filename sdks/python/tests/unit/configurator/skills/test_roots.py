@@ -38,11 +38,6 @@ def test_reads_shared_dir__true_for_every_host_except_claude_code():
         assert roots.reads_shared_dir(host_key) is expected
 
 
-def test_needs_link__only_claude_code():
-    assert roots.needs_link("claude-code") is True
-    assert roots.needs_link("codex") is False
-
-
 def test_link_dir__claude_code_gets_a_directory(monkeypatch, tmp_path):
     monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
     assert roots.link_dir("claude-code") == tmp_path / ".claude" / "skills"

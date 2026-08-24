@@ -5,8 +5,7 @@ from typing import List, Optional, Tuple
 
 import click
 
-from opik.cli import assistants
-from opik.cli import mcp_view as mcp_rich_view
+from opik.cli import install_view
 from opik.cli import selector
 from opik.cli import status_view
 from opik.configurator import interactive_helpers
@@ -116,11 +115,11 @@ def configure(hosts: Tuple[str, ...]) -> None:
             click.echo("No assistants selected; nothing was installed.")
             return
 
-    view = mcp_rich_view.RichInstallView()
+    view = install_view.RichInstallView()
     with view.step("Fetching the Opik skill pack"):
         result = skills_installer.setup_skills(host_keys)
 
-    if not assistants.render_skill_pack(result, view):
+    if not install_view.render_skill_pack(result, view):
         raise click.ClickException("The Opik skill pack was not installed.")
 
     view.done(["skill pack"], skills_roots.display_names(host_keys))

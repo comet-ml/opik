@@ -15,6 +15,8 @@ from rich import padding, table, text
 
 from opik.cli import selector
 from opik.configurator.mcp import view as mcp_view
+from opik.configurator.skills import install as skills_install
+from opik.configurator.skills import roots as skills_roots
 
 console = rich.console.Console()
 
@@ -172,3 +174,33 @@ class RichInstallView(mcp_view.InstallView):
 
     def note(self, message: str) -> None:
         console.print(padding.Padding(text.Text(message, style="dim"), (0, 0, 0, 2)))
+
+
+def render_skill_pack(
+    result: skills_install.InstallResult, view: mcp_view.InstallView
+) -> bool:
+    """Report a skill-pack install. Returns whether it succeeded."""
+    if not result.succeeded:
+        view.problem(f"Could not install the Opik skill pack: {result.error}.")
+        return False
+
+    view.results(
+        [
+            mcp_view.TargetResult(
+                display_name="Skill pack",
+                detail=f"{', '.join(result.skills)} in {result.shared_dir}",
+                succeeded=True,
+                summary=", ".join(result.skills),
+            )
+        ]
+    )
+    for host_key, message in result.link_errors.items():
+        label = ", ".join(skills_roots.display_names([host_key]))
+        view.problem(f"{label}: {message}")
+    if result.plugin_overlap:
+        view.note(
+            "The Opik Claude Code plugin also ships an `opik` skill, so Claude "
+            "Code now has both. Remove the plugin's copy with "
+            "`/plugin uninstall opik` if you prefer the pack alone."
+        )
+    return True

@@ -1,14 +1,15 @@
 """Configure command for Opik CLI."""
 
 import logging
-from typing import Any, List, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 import click
 
 import opik.config as opik_config
 from opik.cli import assistants
-from opik.cli import mcp_view as mcp_rich_view
+from opik.cli import install_view
 from opik.cli import status_view
+from opik.configurator import assistants as assistant_policy
 from opik.configurator import configure as opik_configure, interactive_helpers
 from opik.configurator import mcp as mcp_installer
 
@@ -68,26 +69,19 @@ def _confirm_assistant_step() -> bool:
         # skips this path entirely by setting `install_mcp` to True.
         return False
 
-    console = mcp_rich_view.console
+    console = install_view.console
     console.print()
     console.print("  Set Opik up for your AI assistant?", style="bold")
     # One sentence per print: the host list varies in length, and folding it into
     # a line with a hardcoded wrap pushed the rest past the terminal width and
     # lost the indent on the continuation.
-    console.print(f"  Found {_readable_list(detected)}.", style="dim")
+    console.print(f"  Found {assistant_policy.readable_list(detected)}.", style="dim")
     console.print(
         "  The Opik MCP server lets it read traces, log scores and run\n"
         "  experiments from chat.",
         style="dim",
     )
     return click.confirm("", default=False)
-
-
-def _readable_list(names: List[str]) -> str:
-    """``a``, ``a and b``, ``a, b and c`` — the prompt reads as a sentence."""
-    if len(names) == 1:
-        return names[0]
-    return f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 def run_interactive_configure(

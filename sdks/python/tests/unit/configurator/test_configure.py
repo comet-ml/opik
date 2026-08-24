@@ -2650,15 +2650,12 @@ class TestSkillsHostKeys:
         mock_prompt.assert_not_called()
 
     @patch(
-        "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]
-    )
-    @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
     @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_skills_host_keys__prompt_yes__names_the_host_and_installs(
-        self, mock_is_interactive, mock_prompt, mock_detected, mock_names
+    def test_skills_host_keys__prompt_yes__installs(
+        self, mock_is_interactive, mock_prompt, mock_detected
     ):
         configurator = OpikConfigurator(install_skills=None)
         assert configurator._skills_host_keys() == ["codex"]
@@ -2671,15 +2668,12 @@ class TestSkillsHostKeys:
         assert "Codex" not in prompt
 
     @patch(
-        "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]
-    )
-    @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     def test_library_path__pack_is_a_follow_up_not_a_choice_up_front(
-        self, mock_is_interactive, mock_prompt, mock_keys, mock_names
+        self, mock_is_interactive, mock_prompt, mock_keys
     ):
         """The pack is offered after the server step, with its output in view."""
         configurator = OpikConfigurator(install_skills=None)
@@ -2689,15 +2683,12 @@ class TestSkillsHostKeys:
         assert mock_prompt.call_args.args[0].lstrip().startswith("Recommended")
 
     @patch(
-        "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]
-    )
-    @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     def test_skills_host_keys__prompt_no__returns_none(
-        self, mock_is_interactive, mock_prompt, mock_detected, mock_names
+        self, mock_is_interactive, mock_prompt, mock_detected
     ):
         configurator = OpikConfigurator(install_skills=None)
         assert configurator._skills_host_keys() is None

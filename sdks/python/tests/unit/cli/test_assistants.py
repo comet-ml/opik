@@ -54,7 +54,7 @@ def rich_view(monkeypatch):
     view = mock.MagicMock()
     view.step.return_value.__enter__ = mock.Mock(return_value=None)
     view.step.return_value.__exit__ = mock.Mock(return_value=False)
-    monkeypatch.setattr(assistants.mcp_rich_view, "RichInstallView", lambda: view)
+    monkeypatch.setattr(assistants.install_view, "RichInstallView", lambda: view)
     return view
 
 

@@ -13,19 +13,13 @@ from opik.configurator.interactive_helpers import (
     ask_user_for_approval_default_no,
     is_interactive,
 )
+from opik.configurator import assistants as assistant_policy
 from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
 from opik.configurator import skills
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
-
-
-def _readable_list(names: List[str]) -> str:
-    """ "a", "a and b", "a, b and c" — a list a person would read aloud."""
-    if len(names) <= 1:
-        return "".join(names)
-    return f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 #: Runs the assistant setup on the caller's behalf. Takes the resolved connection
@@ -157,38 +151,21 @@ class OpikConfigurator:
             LOGGER.warning("Could not install the Opik skill pack: %s.", result.error)
 
     def _skills_host_keys(self) -> Optional[List[str]]:
-        """Hosts to install the skill pack for, or ``None`` to skip.
-
-        Mirrors ``_should_setup_mcp_server``: an explicit flag wins over the
-        interactivity guard so CI, Docker, and coding agents can opt in, ``-y``
-        alone does not, and the prompt names the assistants we actually found.
-        """
-        if self.install_skills is False:
-            return None
-
+        """Hosts to install the skill pack for, or ``None`` to skip."""
         detected = skills.detected_host_keys()
-
-        if self.install_skills is True:
-            return detected or None
-
-        if not is_interactive():
-            return None
-
-        if self.automatic_approvals:
-            return None
-
-        if len(detected) == 0:
-            return None
-
-        # Asked after the server step, so the user answers with its output in
-        # front of them. Recommended, hence the default yes.
-        # The assistants are not named again — the server step just listed them.
-        confirmed = ask_user_for_approval(
-            "\n  Recommended: also install the Opik skill pack?\n"
-            "  It teaches your assistant how to instrument code with Opik, wire\n"
-            "  up integrations, and run test suites. (Y/n) "
+        decision = assistant_policy.skills_decision(
+            install_skills=self.install_skills,
+            automatic_approvals=self.automatic_approvals,
+            interactive=is_interactive(),
+            detected=detected,
         )
-        return detected if confirmed else None
+        if decision is assistant_policy.Decision.SKIP:
+            return None
+        if decision is assistant_policy.Decision.PROCEED:
+            return detected
+        return (
+            detected if ask_user_for_approval(assistant_policy.SKILLS_PROMPT) else None
+        )
 
     def _maybe_setup_mcp_server(self) -> None:
         if not self._should_setup_mcp_server():
@@ -211,56 +188,25 @@ class OpikConfigurator:
     def _should_setup_mcp_server(self) -> bool:
         """Decide whether to offer registering the Opik MCP server.
 
-        - ``install_mcp is False``: skip.
-        - ``install_mcp is True``: proceed. An explicit flag *is* the user asking,
-          so it is honoured even without a TTY — this is the path CI, Docker and
-          coding agents take, and it used to be dead because the interactivity
-          guard was checked first.
-        - Non-interactive with no explicit flag: skip. We cannot ask, and this step
-          mutates configuration files owned by external tools.
-        - ``automatic_approvals`` (the ``-y`` / preflight path): skip. A blanket
-          yes-to-everything should not reach into another tool's config.
-        - Otherwise: ask, naming the hosts we actually found, defaulting to "no".
+        The rules and the wording live in ``configurator.assistants``; this only
+        wires them to the configurator's state and does the asking.
         """
-        if self.install_mcp is False:
-            return False
-
-        if self.install_mcp is True:
-            return True
-
-        if not is_interactive():
-            return False
-
-        if self.automatic_approvals:
-            return False
-
         detected = mcp.detected_host_names()
-        if len(detected) == 0:
-            # Nothing to register, so there is nothing worth asking about.
-            return False
+        decision = assistant_policy.mcp_decision(
+            install_mcp=self.install_mcp,
+            automatic_approvals=self.automatic_approvals,
+            interactive=is_interactive(),
+            detected=detected,
+        )
+        if decision is not assistant_policy.Decision.ASK:
+            return decision is assistant_policy.Decision.PROCEED
 
         self._mcp_prompt_named_detected_hosts = True
-        return ask_user_for_approval_default_no(self._mcp_prompt())
+        return ask_user_for_approval_default_no(assistant_policy.mcp_prompt(detected))
 
     def _mcp_prompt(self) -> str:
-        """The prompt text, framed so it does not read as one more log line.
-
-        Plain text with blank lines and an indent rather than anything richer:
-        this runs from ``opik.configure()`` too, which must not take over the
-        caller's stdout with a rendered panel.
-        """
-        names = _readable_list(mcp.detected_host_names())
-        return (
-            "\n"
-            "  ─── AI assistants ───────────────────────────────────────────\n"
-            "\n"
-            f"  Found {names}.\n"
-            "\n"
-            "  The Opik MCP server lets them read traces, log scores and run\n"
-            "  experiments from chat.\n"
-            "\n"
-            "  Register it with them? (y/N) "
-        )
+        """Kept as a seam for tests that assert on the prompt wording."""
+        return assistant_policy.mcp_prompt(mcp.detected_host_names())
 
     def _configure_cloud(self) -> None:
         """

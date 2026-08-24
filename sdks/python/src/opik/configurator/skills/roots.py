@@ -47,10 +47,6 @@ def reads_shared_dir(host_key: str) -> bool:
     return host_key in SUPPORTED_HOST_KEYS and host_key not in LINKED_HOST_KEYS
 
 
-def needs_link(host_key: str) -> bool:
-    return host_key in LINKED_HOST_KEYS
-
-
 def link_dir(host_key: str) -> Optional[pathlib.Path]:
     """Where ``host_key`` needs its own link, or ``None`` if it reads the shared dir."""
     if host_key == "claude-code":
