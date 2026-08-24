@@ -6,23 +6,16 @@ og:title: Integrate with Opik's MCP server
 title: Opik's MCP server
 ---
 
-One command turns your coding assistant into one that can see what your app
-actually does.
+One command connects your coding assistant to your traces — and teaches it how to
+create them in the first place:
 
 ```bash
 opik mcp configure
 ```
 
-That gives it two things: the **MCP server**, so it can read your traces, scores
-and experiments from chat, and the **skill pack**, so it knows how to instrument
-your code with Opik in the first place. Together they close the loop — your
-assistant writes the instrumentation, then reads the traces to check its own work,
-instead of handing you a diff and hoping.
-
 ## What this unlocks
 
-Once it is set up, these are things you can ask for and get in one turn, without
-leaving your editor or opening the Opik UI:
+Things you can ask for and get in one turn, without leaving your editor:
 
 <CardGroup cols={2}>
   <Card title="Instrument this project" icon="fa-solid fa-wand-magic-sparkles">
@@ -41,35 +34,6 @@ leaving your editor or opening the Opik UI:
   </Card>
 </CardGroup>
 
-### Try it right after setup
-
-Copy any of these into your assistant once the command finishes. Start with the
-first — it exercises the whole loop, so if it works, everything is wired up:
-
-```text
-Add Opik tracing to this project, then run it and show me the trace you created.
-```
-
-```text
-List my Opik projects and tell me which one this repo is logging to.
-```
-
-```text
-Look at the last 20 traces in Opik and tell me what's slowest and what's failing.
-```
-
-```text
-Build an Opik test suite from my recent traces, then run it and show me the scores.
-```
-
-From then on your assistant can check its own work against real traces every time
-you change something.
-
-<Tip>
-Nothing to restart mid-flow, but assistants read their configuration at startup —
-**start a new chat session** after setup, then paste one of the prompts above.
-</Tip>
-
 ## Quick setup with the Opik CLI
 
 The CLI detects your AI host (Claude Code, Cursor, VS Code Copilot, Codex,
@@ -83,11 +47,11 @@ Prefer not to use the CLI? You can wire up any host by hand — skip to
 
 <Steps>
   <Step title="Install the Opik CLI">
-    The CLI ships with the `opik` Python package. The `opik mcp` commands require
-    **version 2.1.3 or later**:
+    The CLI ships with the `opik` Python package. `--upgrade` installs the latest
+    release, which is what you want — these commands gain hosts and flags often:
 
     ```bash
-    pip install --upgrade "opik>=2.1.3"
+    pip install --upgrade opik
     ```
   </Step>
   <Step title="Configure the MCP server">
@@ -95,155 +59,24 @@ Prefer not to use the CLI? You can wire up any host by hand — skip to
     opik mcp configure
     ```
 
-    This reuses your existing Opik configuration (`~/.opik.config`). If you
+    This reuses your existing Opik configuration (`~/.opik.config`); if you
     haven't configured Opik yet, the wizard offers to do it for you first.
 
-    When several assistants are found you pick which ones from a list:
-
-    ```text
-    Which AI assistants should the Opik MCP server be set up for?
-    ❯  ◉  Claude Code
-       ◉  Cursor
-       ◯  Codex
-      ↑↓ move · space select · a all · enter confirm
-    ```
-
-    Once the server is registered, the same command offers the
-    [skill pack](#the-skill-pack) for those assistants:
-
-    ```text
-    Recommended: also install the Opik skill pack?
-    It teaches your assistant how to instrument code with Opik, wire up
-    integrations, and run test suites. [Y/n]:
-    ```
-
-    Pass `--no-skills` to skip the offer, or `--skills` to accept it without
-    being asked.
-
-    `opik configure` also offers to run this for you at the end of its setup.
+    <Tip>
+    You'll choose your AI assistant from a list, then confirm the MCP server and
+    the Opik skill pack for it.
+    </Tip>
   </Step>
   <Step title="Restart your AI host">
-    The CLI finishes by making a real call with the credentials it wrote, so you
-    already know they work:
-
-    ```text
-      ✓  Cursor  Added
-
-      ✓  Verified  connected to workspace acme-ai, 7 project(s) visible
-
-    ✓ Done
-        Set up  MCP server and skill pack
-        For     Cursor
-        Next    Restart it, then ask "list my Opik projects"
-    ```
-
-    If verification fails, the CLI says why instead of reporting success — a
-    registered server whose credentials are wrong would otherwise look identical
-    to a working one until your agent hit a 401 mid-conversation.
+    Assistants read their configuration at startup, so **start a new session**
+    before trying the prompts in [Start using it](#start-using-it).
 
     <Note>
-    If your host isn't detected, name it with `--host` (below) or use
-    [Manual setup](#manual-setup).
+    If your host isn't detected, name it with `--host claude-code` (and see
+    `opik mcp configure --help`) or use [Manual setup](#manual-setup).
     </Note>
   </Step>
 </Steps>
-
-## The skill pack
-
-The MCP server gives your assistant *tools*. The **skill pack** gives it the knowledge of how to use Opik — which integration to reach for, how to mark an entrypoint, how to build a test suite, how `opik connect` works. Most people want both:
-
-`opik mcp configure` installs it alongside the server by default, so you rarely
-need this command on its own. It exists for installing the pack without the
-server, and for `update` / `remove`:
-
-```bash
-opik skills configure
-```
-
-It asks which assistants to install for rather than installing everywhere — the
-pack is guidance your assistant acts on, and you may want it only in the editor
-you use for Opik work:
-
-```text
-Which AI assistants should the Opik skill pack be installed for?
-  ◉ Claude Code
-❯ ◯ Codex
-  ↑↓ move · space select · a all · enter confirm
-```
-
-Skills are plain `SKILL.md` directories, and assistants have converged on a shared user-level location, so one install covers all of them:
-
-| Assistant | Reads |
-| --- | --- |
-| Cursor, VS Code Copilot, Codex, opencode | `~/.agents/skills` directly |
-| Claude Code | `~/.claude/skills`, which the CLI links to the shared copy |
-
-Because this is a user-level install, it is independent of your current directory — there is no project to be inside. It needs no Opik credentials either, so it works before `opik configure`.
-
-```bash
-opik skills configure --host codex --host claude-code   # specific assistants
-opik skills configure --host all                        # every detected assistant
-opik skills status                                      # what is installed
-opik skills update                                      # pull the latest pack
-opik skills remove                                      # take it back out
-```
-
-`opik skills configure --host …` skips the prompt, for a Dockerfile or CI.
-
-<Note>
-In a terminal that cannot host an interactive list — a pipe, a CI log — the CLI
-falls back to a numbered menu automatically. Naming hosts with `--host` skips the
-question entirely.
-</Note>
-
-`opik skills update` rewrites only if the pack actually changed, so it is cheap to
-run on a schedule, and it removes skills the pack has dropped rather than leaving
-the old names for your assistant to keep reading.
-
-<Warning>
-Assistants read their skills at session start. After installing or updating,
-**start a new session** — a running one will not pick them up, and
-`opik skills status` showing `✓ linked` is the check that the files are in place.
-</Warning>
-
-<Note>
-Already using [`npx skills add comet-ml/opik-skills`](https://github.com/comet-ml/opik-skills)? That writes to the same `~/.agents/skills` location, so the two are interchangeable. `opik skills status` reports a pack it did not install as coming from outside the CLI, and `opik skills configure` will replace it.
-</Note>
-
-## Scripts, containers, and coding agents
-
-`opik mcp configure` only needs a terminal in order to *ask* which host to use.
-Name one with `--host` and it runs headless — which is what makes "set Opik up for
-me" something a coding agent can do in one step, and what lets the command work in
-a Dockerfile, a dotfiles repo, or CI:
-
-```bash
-# One host, no prompts, no terminal required
-opik mcp configure --host claude-code
-
-# Several hosts
-opik mcp configure --host cursor --host codex
-
-# Every host detected on this machine
-opik mcp configure --host all
-```
-
-Valid values are `claude-code`, `cursor`, `vscode`, `codex`, `opencode`, and
-`all`. Naming a host installs for it whether or not it is currently detected, so
-a fresh container image can be configured before the editor is installed.
-
-`opik configure` takes `--install-mcp` for the same purpose, and it is honoured
-without a terminal too:
-
-```bash
-opik configure --install-mcp --install-skills
-```
-
-<Note>
-`opik configure -y` deliberately does **not** register the MCP server: a blanket
-yes-to-everything should not reach into another tool's configuration files. Pass
-`--install-mcp` / `--install-skills` when you want them.
-</Note>
 
 ## Check your setup
 
@@ -290,6 +123,53 @@ To view just your active Opik configuration (file path, environment, workspace):
 ```bash
 opik configure status
 ```
+
+<Note>
+The skill pack installed alongside the server is refreshed with
+`opik skills update`, which rewrites only if it actually changed. Assistants read
+their skills at session start, so start a new session afterwards.
+</Note>
+
+## Start using it
+
+Paste any of these into your assistant. Start with the first — it exercises the
+whole loop, so if it works, everything is wired up.
+
+```text title="Instrument this project, end to end"
+Add Opik tracing to this project, then run it and show me the trace you created.
+```
+
+```text title="Confirm where this repo is logging"
+List my Opik projects and tell me which one this repo is logging to.
+```
+
+```text title="Find what's slow or failing"
+Look at the last 20 traces in Opik and tell me what's slowest and what's failing.
+```
+
+```text title="Turn real traces into a test suite"
+Build an Opik test suite from my recent traces, then run it and show me the scores.
+```
+
+From then on your assistant can check its own work against real traces every time
+you change something.
+
+### The tools you'll have
+
+Your assistant gets six tools. It picks between them on its own — this is here so
+you know what it can reach for:
+
+| Tool | What your assistant can do with it |
+|---|---|
+| `read` | Fetch one thing by id, name, or `opik://` URI — a trace, span, project, experiment, prompt, or test suite. |
+| `list` | Page through any of those, optionally filtered by name. |
+| `write` | Log traces and spans, score, comment, save prompt versions, manage test suites and experiments. |
+| `schema` | Look up the exact payload shape for a write, so it constructs valid ones. |
+| `ask_ollie` | Investigate or synthesize across entities via Opik's in-product assistant. |
+| `run_experiment` | Run an evaluation experiment end to end. |
+
+To see a payload shape yourself, ask **"show me the schema for trace.create"** —
+or read the [full list](https://github.com/comet-ml/opik-mcp#tools).
 
 ## Opik Cloud and self-hosted deployments
 
@@ -610,52 +490,6 @@ if Opik lives at a non-default path). `ask_ollie` and `run_experiment` are
 available on Comet Cloud only — on self-hosted those calls fail at dispatch;
 use `read` / `list` / `write` directly.
 </Tip>
-
-## Using the MCP server
-
-### The tools at a glance
-
-| Tool | Purpose |
-|---|---|
-| `read` | Universal read by id / name / `opik://` URI. |
-| `list` | Universal list with optional name filter and pagination. |
-| `ask_ollie` | Investigate or synthesize via the Opik in-product assistant. |
-| `write` | Universal write — log traces/spans, score, comment, save prompts, manage test suites and experiments. |
-| `schema` | Introspect write-operation schemas (used by the LLM to construct valid payloads). |
-| `run_experiment` | Run an evaluation experiment end-to-end via Ollie. |
-
-### Browsing your workspace
-
-> list my Opik projects
-
-> what was the most recent trace logged to the "demo" project?
-
-> show me trace `<trace-id>`
-
-### Scoring, commenting, saving prompts
-
-> score trace `<trace-id>` 0.9 on helpfulness with reason "great recovery"
-
-> comment "retry with temperature=0" on span `<span-id>`
-
-> save the following text as a new version of the "rerank-system" prompt: ...
-
-For the full set of write operations and their payload shapes, ask the host
-**"show me the schema for trace.create"** (calls the `schema` tool) or see the
-[README](https://github.com/comet-ml/opik-mcp#tools).
-
-### Asking Ollie
-
-For investigative or cross-entity questions:
-
-> why are spans in the "demo" project slower this week than last?
-
-> compare experiments "rerank-v2" and "rerank-v3" on factuality
-
-`ask_ollie` returns a `thread_id` you can pass back on follow-ups to preserve
-context. For more about Ollie itself, see [Ollie](/ollie).
-See [Ollie & auto-approve](#ollie--auto-approve) below before running
-write-style prompts in shared workspaces.
 
 ## Ollie & auto-approve
 
