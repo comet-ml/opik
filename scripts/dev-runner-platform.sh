@@ -149,7 +149,11 @@ platform_backend_running() {
 # outside dev-runner (e.g. from IntelliJ) so we reuse it instead of colliding.
 platform_backend_healthy() {
     command -v curl >/dev/null 2>&1 || return 1
-    curl -sf --max-time 2 "http://localhost:${PLATFORM_BACKEND_PORT}/auth/test" >/dev/null 2>&1
+    # Dropwizard's admin /ping answers as soon as the server is up, without evaluating health checks or
+    # touching application code. /auth/test cannot be used: it calls validateLicense(), which blocks on a
+    # license service no dev machine can reach, so the probe never returned and the readiness wait burned
+    # its whole budget on every start — taking the EM frontend and proxy down with it.
+    curl -sf --max-time 2 "http://localhost:${PLATFORM_BACKEND_ADMIN_PORT}/ping" >/dev/null 2>&1
 }
 
 platform_frontend_running() {
@@ -294,6 +298,35 @@ generate_platform_backend_config() {
     log_debug "Generated EM backend config: $PLATFORM_BACKEND_CONFIG_FILE"
 }
 
+# Four settings the EM backend needs on a dev machine, passed to the JVM below:
+#
+#   FEATURE_TOGGLE_ACCESS_KEY  The Opik UI's comet plugin calls GET /auth/test on bootstrap, which fetches
+#                              feature toggles over an HTTP client with no connect timeout. The real toggles
+#                              host is unreachable from a dev machine, so that request hangs forever and the
+#                              UI renders blank. Pointing it at a local endpoint makes the fetch fail fast,
+#                              so toggles fall back to their defaults and /auth/test answers.
+#   SAGEMAKER_INTEGRATION      Skips the on-prem license check, which no dev machine has a token for.
+#                              comet-backend's own ReactServerTestBase sets this for the same reason.
+#   MINIO_PORT                 The EM config resolves object storage to ${MINIO_HOST}:${MINIO_PORT:-9000}, and
+#                              MinIO's API is published on a worktree-offset host port, not 9000 — where
+#                              another container answers with a non-S3 400. Without this, every S3 call fails
+#                              with "Unable to execute HTTP request", and because AuthEndpoint.auth() wraps its
+#                              body in catch(Exception) and clears the session cookie on any failure, a profile
+#                              image lookup that cannot reach the bucket presents as "login does not work":
+#                              /auth/login returns 200, then /auth/test wipes the cookie and the UI bounces
+#                              back to the login page. The sed at generate_platform_backend_config is meant to
+#                              cover this but cannot match — the config text is ":${MINIO_PORT:-9000}", so the
+#                              ":9000" pattern never fires.
+#   SAGEMAKER_MAX_ALLOWED_USERS  The seat count SagemakerService.getMaxUserAllowed falls back to, which
+#                              defaults to 1 — so the second user to sign in gets 401 "Licensed user limit
+#                              reached" and any multi-user test is impossible. Raising it is enough; the
+#                              other way past that cap is SAGEMAKER_PRICING_MODEL=usage-based, but that also
+#                              makes ReactWebappServerApplication start the Hadron usage meter, which now
+#                              hard-requires an S3 metering URI and dimension and aborts startup without
+#                              them. Override with PLATFORM_MAX_USERS if 100 is ever not enough.
+#
+# Keep comments out of the assignment chain itself: a comment between backslash-continued assignments ends
+# the command there, so everything above it never reaches the process.
 start_platform_backend_local() {
     if ! platform_stack_enabled; then
         return 0
@@ -340,7 +373,7 @@ start_platform_backend_local() {
         MYSQL_HOST=localhost MYSQL_PORT="$MYSQL_PORT" MYSQL_DB=logger \
         MYSQL_RW_USER=user MYSQL_RO_USER=user-ro MYSQL_PASSWORD=pass \
         REDIS_HOST=localhost REDIS_PORT="$REDIS_PORT" REDIS_USER=default REDIS_TOKEN=opik \
-        MINIO_HOST=localhost MINIO_HOST_VIEW=localhost \
+        MINIO_HOST=localhost MINIO_HOST_VIEW=localhost MINIO_PORT="$MINIO_API_PORT" \
         CASSANDRA_ENABLED=false MPM_ENABLED=false \
         FORCE_FAIL_ON_TIMEZONE_MISMATCH=False \
         MYSQL_MIN_MAX_ALLOWED_PACKET_MB=3 \
@@ -355,6 +388,9 @@ start_platform_backend_local() {
         COMET_REDIRECT_URL_SEGMENT=":$PLATFORM_PROXY_PORT" \
         OPIK_BASE_URL="http://localhost:${BACKEND_PORT}/" \
         COMET_LLM_INTEGRATION=true \
+        FEATURE_TOGGLE_ACCESS_KEY="http://localhost:${PLATFORM_BACKEND_ADMIN_PORT}/ping" \
+        SAGEMAKER_INTEGRATION=true \
+        SAGEMAKER_MAX_ALLOWED_USERS="${PLATFORM_MAX_USERS:-100}" \
         JAVA_HOME="$em_jh" \
         nohup "$em_jh/bin/java" -jar "$PLATFORM_BACKEND_JAR" server "$PLATFORM_BACKEND_CONFIG_FILE" \
             > "$PLATFORM_BACKEND_LOG_FILE" 2>&1 &
@@ -472,6 +508,22 @@ EOF
     log_debug "Generated comet-react config.js -> $cfg (backend :${PLATFORM_BACKEND_PORT})"
 }
 
+# comet-react declares engines.node 18.x, and its webpack config imports extensionless TypeScript
+# modules that Node's native ESM loader (18 uses ts-node, 20+ does not) cannot resolve. Opik's own
+# frontend needs a current Node, so the two cannot share one. Resolve an nvm-installed 18.x for the
+# EM frontend only and prepend it to PATH for that process; everything else is untouched.
+platform_frontend_node_bin() {
+    local override="${PLATFORM_FRONTEND_NODE_BIN:-}"
+    if [ -n "$override" ]; then
+        printf '%s\n' "$override"
+        return 0
+    fi
+    local candidate
+    candidate=$(find "$HOME/.nvm/versions/node" -maxdepth 1 -type d -name 'v18.*' 2>/dev/null \
+        | sort -V | tail -n 1)
+    [ -n "$candidate" ] && printf '%s\n' "$candidate/bin"
+}
+
 start_platform_frontend_local() {
     if ! platform_frontend_enabled; then
         if platform_stack_enabled; then
@@ -494,9 +546,18 @@ start_platform_frontend_local() {
 
     generate_platform_frontend_config
 
+    local node_bin
+    node_bin=$(platform_frontend_node_bin)
+    if [ -n "$node_bin" ]; then
+        log_debug "EM frontend will run under $("$node_bin/node" --version 2>/dev/null) ($node_bin)"
+    else
+        log_warning "No nvm-installed Node 18.x found; comet-react may fail to load its webpack config"
+    fi
+
     log_info "Starting comet-react dev server on port ${PLATFORM_FRONTEND_PORT}..."
     (
         cd "$COMET_REACT_PATH" || exit 1
+        [ -n "$node_bin" ] && export PATH="$node_bin:$PATH"
         CI=true REACT_DEV_SERVER_PORT="$PLATFORM_FRONTEND_PORT" \
         ROOT_URL="http://localhost:${PLATFORM_PROXY_PORT}/" \
         BASE_URL="http://localhost:${PLATFORM_PROXY_PORT}/api/" \
