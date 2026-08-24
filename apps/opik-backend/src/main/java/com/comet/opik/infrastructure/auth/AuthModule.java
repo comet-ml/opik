@@ -5,6 +5,7 @@ import com.comet.opik.domain.RemoteWorkspacePermissionsService;
 import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RedactionConfig;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
 import jakarta.inject.Provider;
@@ -26,7 +27,8 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
             @Config("authentication") AuthenticationConfig config,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull RedissonReactiveClient redissonClient,
-            @NonNull Client client) {
+            @NonNull Client client,
+            @Config("redaction") RedactionConfig redactionConfig) {
 
         if (!config.isEnabled()) {
             return new AuthServiceImpl(requestContext);
@@ -42,7 +44,8 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
                 ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
                 : new NoopCacheService();
 
-        return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService);
+        return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService,
+                redactionConfig.isEnabled());
     }
 
     @Provides

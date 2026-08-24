@@ -92,9 +92,19 @@ class RemoteAuthService implements AuthService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull CacheService cacheService;
 
+    /**
+     * Whether to ask the platform for the caller's workspace permissions.
+     * <p>
+     * Only read-time redaction needs them, and resolving them costs the platform an extra read on the path
+     * every Opik request takes. So it is requested only where something will act on the answer; with the
+     * feature off the auth call is exactly what it was before.
+     */
+    private final boolean includePermissions;
+
     @Builder(toBuilder = true)
     record AuthRequest(String workspaceName, String path,
-            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> requiredPermissions) {
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> requiredPermissions,
+            @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean includePermissions) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -254,6 +264,7 @@ class RemoteAuthService implements AuthService {
                         .workspaceName(token.workspaceName())
                         .path(path)
                         .requiredPermissions(contextInfo.requiredPermissions())
+                        .includePermissions(includePermissions)
                         .build()))) {
             var authResponse = verifyResponse(response);
             var credentials = ValidatedAuthCredentials.from(authResponse);
@@ -427,6 +438,7 @@ class RemoteAuthService implements AuthService {
                         .workspaceName(workspaceName)
                         .path(path)
                         .requiredPermissions(requiredPermissions)
+                        .includePermissions(includePermissions)
                         .build()))) {
             var authResponse = verifyResponse(response);
             var credentials = ValidatedAuthCredentials.from(authResponse);
@@ -468,6 +480,7 @@ class RemoteAuthService implements AuthService {
                             .workspaceName(workspaceName)
                             .path(path)
                             .requiredPermissions(requiredPermissions)
+                            .includePermissions(includePermissions)
                             .build()))) {
                 var authResponse = verifyResponse(response);
                 return ValidatedAuthCredentials.from(authResponse);

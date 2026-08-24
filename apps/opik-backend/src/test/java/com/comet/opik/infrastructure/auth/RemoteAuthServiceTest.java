@@ -89,7 +89,7 @@ class RemoteAuthServiceTest {
         remoteAuthService = new RemoteAuthService(client,
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
-                new NoopCacheService());
+                new NoopCacheService(), false);
     }
 
     @AfterAll
@@ -185,7 +185,7 @@ class RemoteAuthServiceTest {
         var cachingService = new RemoteAuthService(TestHttpClientUtils.client(),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
-                mockCache);
+                mockCache, false);
         var contextInfo = ContextInfoHolder.builder()
                 .uriInfo(createMockUriInfo("/priv/something"))
                 .method("GET")
@@ -271,7 +271,7 @@ class RemoteAuthServiceTest {
         var gzipEnabledAuthService = new RemoteAuthService(newGzipEnabledClient(),
                 new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
                 () -> requestContext,
-                new NoopCacheService());
+                new NoopCacheService(), false);
 
         gzipEnabledAuthService.authenticate(
                 getHeadersMock(workspaceName, apiKey), null,
@@ -730,5 +730,17 @@ class RemoteAuthServiceTest {
         }
 
         return paramMap;
+    }
+
+    @Test
+    void authRequestAsksForPermissionsOnlyWhenRedactionIsEnabled() {
+        // Resolving permissions costs the platform an extra read on the path every Opik request takes, so a
+        // deployment with redaction off must send exactly the payload it sent before the feature existed.
+        var off = RemoteAuthService.AuthRequest.builder()
+                .workspaceName("ws").path("/v1/private/traces").includePermissions(false).build();
+        var on = off.toBuilder().includePermissions(true).build();
+
+        assertThat(JsonUtils.writeValueAsString(off)).doesNotContain("permissions");
+        assertThat(JsonUtils.writeValueAsString(on)).contains("include_permissions");
     }
 }
