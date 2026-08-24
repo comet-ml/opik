@@ -40,10 +40,17 @@ Prefer not to use the CLI? You can wire up any host by hand — skip to
     This reuses your existing Opik configuration (`~/.opik.config`). If you
     haven't configured Opik yet, the wizard offers to do it for you first.
 
-    `opik configure` also offers to run this for you at the end of its setup,
-    naming the hosts it found:
+    When several assistants are found, you pick which ones from a list:
 
-    > Cursor detected. Register the Opik MCP server with it? (y/N)
+    ```text
+    Which AI assistants should the Opik MCP server be set up for?
+      ◉ Claude Code
+    ❯ ◉ Cursor
+      ◯ Codex
+      ↑↓ move · space select · a all · enter confirm
+    ```
+
+    `opik configure` also offers to run this for you at the end of its setup.
   </Step>
   <Step title="Restart your AI host">
     The CLI finishes by making a real call with the credentials it wrote, so you
@@ -74,6 +81,17 @@ The MCP server gives your assistant *tools*. The **skill pack** gives it the kno
 opik skills configure
 ```
 
+It asks which assistants to install for rather than installing everywhere — the
+pack is guidance your assistant acts on, and you may want it only in the editor
+you use for Opik work:
+
+```text
+Which AI assistants should the Opik skill pack be installed for?
+  ◉ Claude Code
+❯ ◯ Codex
+  ↑↓ move · space select · a all · enter confirm
+```
+
 `opik configure` also offers it after the MCP step:
 
 > Install the Opik skill pack for Cursor? It teaches your assistant how to instrument code, run test suites, and use `opik connect`. (y/N)
@@ -94,7 +112,14 @@ opik skills status                                      # what is installed
 opik skills remove                                      # take it back out
 ```
 
-`opik configure --install-skills` does the same non-interactively, for a Dockerfile or CI.
+`opik skills configure --host …` and `opik configure --install-skills` both skip
+the prompt, for a Dockerfile or CI.
+
+<Note>
+In a terminal that cannot host an interactive list — a pipe, a CI log — the CLI
+falls back to a numbered menu automatically. Naming hosts with `--host` skips the
+question entirely.
+</Note>
 
 <Note>
 Already using [`npx skills add comet-ml/opik-skills`](https://github.com/comet-ml/opik-skills)? That writes to the same `~/.agents/skills` location, so the two are interchangeable. `opik skills status` reports a pack it did not install as coming from outside the CLI, and `opik skills configure` will replace it.
