@@ -1,4 +1,4 @@
-export { test, expect } from './evaluated-thread.fixture';
+export { test, expect } from './python-metric-rule.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -65,4 +65,10 @@ export type {
   ThreadEvaluationRunRef,
   EvaluatedThreadFixtures,
 } from './evaluated-thread.fixture';
+export type {
+  PythonMetricRuleRef,
+  PythonMetricRuleFactory,
+  PythonMetricRuleFixtures,
+  CreatePythonMetricRuleSeed,
+} from './python-metric-rule.fixture';
 export type { ProjectRef } from '../core/backend';
