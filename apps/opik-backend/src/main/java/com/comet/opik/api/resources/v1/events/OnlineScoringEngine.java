@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.common.annotations.VisibleForTesting;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.PathNotFoundException;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ImageContent;
@@ -903,27 +904,45 @@ public class OnlineScoringEngine {
             // nested path to walk), which lands on the fallback below rather than propagating.
             var value = JsonPath.parse(forcedObject).read(path);
             return value != null ? serializeToJsonString(value) : null;
-        } catch (Exception e) {
+        } catch (PathNotFoundException e) {
             // DEBUG, and without the throwable: a scalar/array section reaches this line by design (it
             // has no nested path), so at production volumes this fires for every unresolved variable of
             // every scored trace — and when the flat fallback below succeeds there is nothing to report
             // at all. The PathNotFoundException message says nothing the log line does not.
             log.debug("couldn't find path inside json, trying flat structure, path={}, nodeType={}",
                     path, json.getNodeType());
-            return Optional.ofNullable(forcedObject)
-                    .filter(Map.class::isInstance)
-                    .map(object -> ((Map<?, ?>) object).get(path.replace("$.", "")))
-                    .map(OnlineScoringEngine::serializeToJsonString)
-                    .orElseGet(() -> {
-                        // The node's type, not its content: this is a trace's input/output/metadata, so
-                        // it carries customer prompts and completions that have no business in the
-                        // application log. The rule's own user-facing log already tells the customer
-                        // which variable failed to resolve.
-                        log.info("couldn't find flat or nested path in json, path={}, nodeType={}",
-                                path, json.getNodeType());
-                        return null;
-                    });
+            return flatFallback(forcedObject, path, json);
+        } catch (Exception e) {
+            // Anything else means the path itself didn't parse — JsonPath raises InvalidPathException for
+            // a malformed expression, and the path is user-supplied ({@code toVariableMapping} builds it
+            // from the rule's variable mapping), so a typo lands here. That is a config error rather than
+            // an expected shape, and only the parser's message says where the expression broke, so keep
+            // it. Message without the stack trace: a bad mapping fires on every trace the rule scores.
+            log.warn("invalid json path, trying flat structure, path={}, nodeType={}, error={}",
+                    path, json.getNodeType(), e.getMessage());
+            return flatFallback(forcedObject, path, json);
         }
+    }
+
+    /**
+     * Last resort when the JsonPath lookup didn't resolve: treat the path's tail as a literal property
+     * name, which is how a mapping like {@code output.flat.key} finds a property actually called
+     * "flat.key". Only meaningful for an object section — a scalar or a list has no properties.
+     */
+    private static String flatFallback(Object forcedObject, String path, JsonNode json) {
+        return Optional.ofNullable(forcedObject)
+                .filter(Map.class::isInstance)
+                .map(object -> ((Map<?, ?>) object).get(path.replace("$.", "")))
+                .map(OnlineScoringEngine::serializeToJsonString)
+                .orElseGet(() -> {
+                    // The node's type, not its content: this is a trace's input/output/metadata, so it
+                    // carries customer prompts and completions that have no business in the application
+                    // log. The rule's own user-facing log already tells the customer which variable
+                    // failed to resolve.
+                    log.info("couldn't find flat or nested path in json, path={}, nodeType={}",
+                            path, json.getNodeType());
+                    return null;
+                });
     }
 
     /**

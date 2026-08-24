@@ -83,6 +83,18 @@ class OnlineScoringEngineExtractFromJsonTest {
     }
 
     @Test
+    @DisplayName("a malformed path drops the variable instead of throwing")
+    void malformedPath() {
+        // The path comes from the rule's variable mapping, so a user typo reaches JsonPath as an
+        // unparseable expression (InvalidPathException) rather than a simple miss.
+        var trace = traceWithOutput("{\"k\": [{\"x\": 1}]}");
+        var variables = Map.of("broken", "output.k[?(@.x");
+
+        assertThatCode(() -> OnlineScoringEngine.toReplacements(variables, trace)).doesNotThrowAnyException();
+        assertThat(OnlineScoringEngine.toReplacements(variables, trace)).doesNotContainKey("broken");
+    }
+
+    @Test
     @DisplayName("nested and flat paths against an object section keep working")
     void objectSectionStillResolves() {
         var trace = traceWithOutput("""
