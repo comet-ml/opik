@@ -129,6 +129,43 @@ export interface AutomationRuleRef {
   samplingRate: number;
 }
 
+/**
+ * Which trace sources a rule fires on. Mirrors the backend's `EvalTriggerScope`
+ * (`production` / `experiment` / `both`); the pinned SDK's write type has no
+ * field for it, which is why rule creation goes through the raw REST write.
+ */
+export type EvalTriggerScope = 'production' | 'experiment' | 'both';
+
+/**
+ * A rule as the raw REST layer answers it. Separate from `AutomationRuleRef`
+ * because it carries `triggerScope`, which the generated SDK type drops — a
+ * spec whose whole subject is scope routing has to be able to assert the scope
+ * it asked for is the scope that persisted.
+ */
+export interface AutomationRuleDetail {
+  id: string;
+  name: string;
+  /** Fraction in [0, 1] — the backend's own units, as on `AutomationRuleRef`. */
+  samplingRate: number;
+  triggerScope: EvalTriggerScope;
+}
+
+/**
+ * One line of a rule's user-facing automation log, as the automation-logs page
+ * renders it.
+ *
+ * `traceId` is lifted out of the `markers` map rather than left inside it: the
+ * page turns each marker key into its own column ("Trace Id"), and every line
+ * the online-scoring path emits is written inside a trace logging context, so a
+ * line without one means the log shape changed. Modelling it as required makes
+ * that a loud failure instead of an `undefined` a spec would have to code around.
+ */
+export interface AutomationRuleLogEntry {
+  level: string;
+  message: string;
+  traceId: string;
+}
+
 export interface AnnotationQueueReviewerRef {
   username: string;
   itemsScored: number;
@@ -348,6 +385,66 @@ export function makeBackendClient(apiKey: string | null = null) {
       );
     }
     return rate;
+  };
+
+  /**
+   * A rule's markers must carry `trace_id`. Defaulting a missing one to `''`
+   * would let a spec "match" every log line against a trace it never named, so
+   * an absent marker fails here, naming the rule, instead of silently degrading
+   * an assertion about which traces were logged.
+   */
+  const requireTraceMarker = (
+    markers: Record<string, string> | undefined,
+    ruleId: string,
+  ): string => {
+    const traceId = markers?.['trace_id'];
+    if (!traceId) {
+      throw new Error(
+        `getAutomationRuleLogs: rule '${ruleId}' returned a log line with no trace_id marker ` +
+          `(markers: ${JSON.stringify(markers ?? {})}) — cannot attribute the line to a trace.`,
+      );
+    }
+    return traceId;
+  };
+
+  /**
+   * Rules for a project, read raw so `trigger_scope` survives. Hoisted so
+   * `createAutomationRule` can read its own write back without depending on the
+   * not-yet-constructed return object.
+   */
+  const listAutomationRuleDetails = async (
+    projectId: string,
+  ): Promise<AutomationRuleDetail[]> => {
+    const query = new URLSearchParams({ project_id: projectId, size: '500' });
+    const res = await rawFetch('GET', '/v1/private/automations/evaluators', { query });
+    if (res.status !== 200) {
+      throw new Error(
+        `listAutomationRuleDetails(${projectId}) answered ${res.status}: ${res.message}`,
+      );
+    }
+    const content =
+      (res.json as { content?: Array<Record<string, unknown>> } | null)?.content ?? [];
+    return content.map((rule) => {
+      const name = String(rule.name);
+      const rate = rule.sampling_rate;
+      if (typeof rate !== 'number' || Number.isNaN(rate)) {
+        throw new Error(
+          `listAutomationRuleDetails: rule '${name}' returned no sampling_rate — ` +
+            'cannot assert on sampling behaviour.',
+        );
+      }
+      // `trigger_scope` is @Builder.Default PRODUCTION on the backend and always
+      // serialised, so an absent value means the contract moved, not that the
+      // rule is production-scoped. Fail rather than assume the default.
+      const scope = rule.trigger_scope;
+      if (scope !== 'production' && scope !== 'experiment' && scope !== 'both') {
+        throw new Error(
+          `listAutomationRuleDetails: rule '${name}' returned trigger_scope ` +
+            `${JSON.stringify(scope)} — not one of production/experiment/both.`,
+        );
+      }
+      return { id: String(rule.id), name, samplingRate: rate, triggerScope: scope };
+    });
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -844,6 +941,84 @@ export function makeBackendClient(apiKey: string | null = null) {
       }));
     },
 
+    /**
+     * Create a Python-code online-evaluation rule through the raw REST write.
+     *
+     * Goes through `rawFetch` rather than the typed client for one reason: the
+     * pinned SDK's `AutomationRuleEvaluatorWrite` carries no `triggerScope`
+     * field, and the trigger scope is the axis these specs are about. Same
+     * reason `getProjectStats` and the filter-validation reads use `rawFetch`.
+     *
+     * Seeding a rule this way, rather than driving the create dialog, is
+     * deliberate: the dialog has no trigger-scope control at all, and a rule is
+     * a *precondition* for the routing behaviour under test, not the behaviour
+     * itself (`online-evaluation-smoke` already covers dialog creation).
+     *
+     * The rule is read back rather than assumed: `id` is READ_ONLY on the write
+     * view — so the caller cannot mint one — and reading it back also returns
+     * the persisted `sampling_rate`/`trigger_scope`, which is what lets a spec
+     * prove the rule really is configured the way its assertions depend on.
+     */
+    async createAutomationRule(args: {
+      projectId: string;
+      /** Must be unique within the project — the rule is looked up by it. */
+      name: string;
+      /** Python metric source; exactly one `BaseMetric` subclass, no extra imports. */
+      metric: string;
+      /** Variable mapping: `score()` parameter -> extraction path (e.g. `output.output`). */
+      metricArguments: Record<string, string>;
+      /** Fraction in [0, 1] — the backend's units, not the dialog's percentage. */
+      samplingRate: number;
+      /** Omit to let the backend apply its `production` default. */
+      triggerScope?: EvalTriggerScope;
+    }): Promise<AutomationRuleDetail> {
+      const res = await rawFetch('POST', '/v1/private/automations/evaluators', {
+        body: {
+          type: 'user_defined_metric_python',
+          action: 'evaluator',
+          name: args.name,
+          project_ids: [args.projectId],
+          sampling_rate: args.samplingRate,
+          enabled: true,
+          ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+          code: { metric: args.metric, arguments: args.metricArguments },
+        },
+      });
+      if (res.status !== 201) {
+        throw new Error(
+          `createAutomationRule '${args.name}' answered ${res.status}: ${res.message}`,
+        );
+      }
+      const rules = await listAutomationRuleDetails(args.projectId);
+      const created = rules.find((r) => r.name === args.name);
+      if (!created) {
+        throw new Error(
+          `createAutomationRule '${args.name}' answered 201 but the rule is absent from ` +
+            `project ${args.projectId} (found: ${rules.map((r) => r.name).join(', ') || 'none'})`,
+        );
+      }
+      return created;
+    },
+
+    /**
+     * A rule's user-facing automation log — the exact read behind the
+     * `/$workspaceName/automation-logs?rule_id=…` page.
+     *
+     * Returned oldest-first as the backend orders them; the page sorts by
+     * timestamp descending itself, so a spec comparing the two must compare
+     * sets, not sequences.
+     */
+    async getAutomationRuleLogs(ruleId: string): Promise<AutomationRuleLogEntry[]> {
+      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
+        size: 1000,
+      });
+      return (page.content ?? []).map((item) => ({
+        level: String(item.level ?? ''),
+        message: item.message ?? '',
+        traceId: requireTraceMarker(item.markers, ruleId),
+      }));
+    },
+
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
       try {
         await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({
@@ -988,6 +1163,14 @@ export function makeBackendClient(apiKey: string | null = null) {
       output?: Record<string, unknown>;
       metadata?: Record<string, unknown>;
       startTime?: Date;
+      /**
+       * Required for the trace to reach online scoring: `OnlineScoringSampler`
+       * drops every trace with a null `end_time` as incomplete, so a rule will
+       * silently never see one. Left optional because the existing callers seed
+       * traces only to be *listed*, and defaulting it would change their rows'
+       * duration from absent to zero.
+       */
+      endTime?: Date;
     }): Promise<string> {
       await opik.api.traces.createTrace({
         id: args.id,
@@ -995,11 +1178,37 @@ export function makeBackendClient(apiKey: string | null = null) {
         name: args.name,
         source: args.source,
         startTime: args.startTime ?? new Date(),
+        ...(args.endTime ? { endTime: args.endTime } : {}),
         ...(args.input ? { input: args.input } : {}),
         ...(args.output ? { output: args.output } : {}),
         ...(args.metadata ? { metadata: args.metadata } : {}),
       });
       return args.id;
+    },
+
+    /**
+     * A trace's `source` as `GET /v1/private/traces/{id}` answers it.
+     *
+     * Read raw because the pinned SDK's `TracePublic` declares no `source`,
+     * even though the endpoint returns one. Exists so a spec about
+     * source-dependent routing can prove its seeded traces really carry the
+     * sources it asked for *before* drawing any conclusion from which of them
+     * were scored — otherwise a write that silently dropped `source` would look
+     * exactly like the routing rule under test.
+     */
+    async getTraceSource(traceId: string): Promise<string> {
+      const res = await rawFetch('GET', `/v1/private/traces/${traceId}`);
+      if (res.status !== 200) {
+        throw new Error(`getTraceSource(${traceId}) answered ${res.status}: ${res.message}`);
+      }
+      const source = (res.json as { source?: unknown } | null)?.source;
+      if (typeof source !== 'string' || source === '') {
+        throw new Error(
+          `getTraceSource(${traceId}) returned ${JSON.stringify(source)} for source — ` +
+            'cannot assert source-dependent routing.',
+        );
+      }
+      return source;
     },
 
     /**

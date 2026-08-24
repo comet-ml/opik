@@ -22,6 +22,19 @@ export interface CreateRuleDialogPythonEqualsFields {
 }
 
 /**
+ * Variable mapping for the Python-Equals metric: its single `score(output)`
+ * parameter, bound to the trace's `output.output`.
+ *
+ * The path matters. Per `OnlineScoringEngine.toVariableMapping`, a dot-containing
+ * path resolves to `$.output` — the bare string — while the bare path `output`
+ * resolves to `$`, handing the metric the whole JSON node `{"output": "…"}`. A
+ * rule seeded with the wrong one scores 0.0 on traces that should score 1.0, so
+ * the dialog path and the REST path share this constant rather than each
+ * repeating the string.
+ */
+export const PYTHON_EQUALS_ARGUMENTS: Record<string, string> = { output: 'output.output' };
+
+/**
  * Build the deterministic Python-Equals metric snippet. The score name is
  * interpolated into the source so the metric's internal
  * `ScoreResult(name=...)` matches the rule's UI-form name (the engine ignores
@@ -32,8 +45,13 @@ export interface CreateRuleDialogPythonEqualsFields {
  * heuristic): the python_evaluator backend's get_metric_class iterates module
  * classes alphabetically and picks the first BaseMetric subclass — an import
  * would shadow the user's class.
+ *
+ * Exported because rules are also seeded through the REST write
+ * (`backendClient.createAutomationRule`) when the dialog has no control for the
+ * field under test — those rules must run the identical metric, or a spec
+ * comparing them to a dialog-created rule would be comparing two things.
  */
-function buildPythonEqualsMetric(scoreName: string, reference: string): string {
+export function buildPythonEqualsMetric(scoreName: string, reference: string): string {
   return `from typing import Any
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -325,7 +343,9 @@ export class OnlineEvaluationPage {
     // FE re-parses the score() signature; for our snippet it produces a
     // single `output` variable-mapping row. Wait for the variable-mapping
     // input to settle to the new shape, then override its path.
-    await this.setVariableMapping('output', 'output.output');
+    for (const [variableName, path] of Object.entries(PYTHON_EQUALS_ARGUMENTS)) {
+      await this.setVariableMapping(variableName, path);
+    }
 
     // Set the rate last: the sampling control lives in a collapsed accordion
     // below the code editor, and switching TYPE / re-parsing the snippet
