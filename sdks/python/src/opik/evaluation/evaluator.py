@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import (
+    Literal,
     Any,
     Callable,
     Dict,
@@ -1312,7 +1313,7 @@ def evaluate_optimization_trial(
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
-    experiment_type: Optional[str] = None,
+    experiment_type: Optional[Literal["regular", "trial", "mini-batch"]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
