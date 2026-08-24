@@ -291,7 +291,7 @@ def track_event(
             with _REPORTED_LOCK:
                 _ALREADY_REPORTED.discard(already_reported)
     except Exception:
-        LOGGER.debug("Failed to track analytics event %s", name)
+        LOGGER.debug("Failed to track analytics event %s", name, exc_info=True)
 
 
 def flush(timeout: Optional[float] = DEFAULT_FLUSH_TIMEOUT_SECONDS) -> bool:
@@ -302,7 +302,7 @@ def flush(timeout: Optional[float] = DEFAULT_FLUSH_TIMEOUT_SECONDS) -> bool:
     try:
         return _WORKER.flush(timeout) if _WORKER is not None else True
     except Exception:
-        LOGGER.debug("Failed to flush analytics events")
+        LOGGER.debug("Failed to flush analytics events", exc_info=True)
         return False
 
 
@@ -318,4 +318,4 @@ def shutdown(timeout: Optional[float] = DEFAULT_FLUSH_TIMEOUT_SECONDS) -> None:
         if worker_ is not None:
             worker_.close(timeout)
     except Exception:
-        LOGGER.debug("Failed to shut analytics down")
+        LOGGER.debug("Failed to shut analytics down", exc_info=True)

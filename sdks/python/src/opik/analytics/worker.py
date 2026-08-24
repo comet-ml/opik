@@ -136,7 +136,9 @@ class Worker(threading.Thread):
             if batch:
                 self._send([self._enrich(event) for event in batch])
         except Exception:
-            LOGGER.debug("Failed to report %d analytics event(s)", len(batch))
+            LOGGER.debug(
+                "Failed to report %d analytics event(s)", len(batch), exc_info=True
+            )
         finally:
             for marker in markers:
                 marker.done.set()

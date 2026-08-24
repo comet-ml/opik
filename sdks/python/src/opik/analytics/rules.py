@@ -48,7 +48,11 @@ def reporting_allowed(config_: config.OpikConfig) -> bool:
                 LOGGER.debug("Analytics disabled by rule %s", rule.__name__)
                 return False
         except Exception:
-            LOGGER.debug("Analytics rule %s failed, disabling analytics", rule.__name__)
+            LOGGER.debug(
+                "Analytics rule %s failed, disabling analytics",
+                rule.__name__,
+                exc_info=True,
+            )
             return False
 
     return True
