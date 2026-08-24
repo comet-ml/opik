@@ -161,6 +161,20 @@ def verify_hosted_endpoint(
             ),
         )
 
+    # Only the auth challenge proves a *working* endpoint. Treating everything
+    # except 404 as success meant a 500 or a 502 reported "reachable", and the
+    # user found out when their client failed to sign in.
+    if response.status_code not in (401, 403):
+        return VerificationResult(
+            succeeded=False,
+            detail=(
+                f"{mcp_url} returned HTTP {response.status_code}, not the sign-in "
+                "challenge a healthy hosted server answers with. The server is "
+                "registered but may not work; check the deployment, then re-run "
+                "`opik mcp status`."
+            ),
+        )
+
     return VerificationResult(
         succeeded=True,
         detail=(

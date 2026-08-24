@@ -174,6 +174,19 @@ def _key_reader() -> Optional[Callable[[], str]]:
     return _read_key_windows
 
 
+def _has_pending_input(descriptor: int, timeout: float = 0.05) -> bool:
+    """Whether more bytes are already waiting, so ESC can be told from ESC-[.
+
+    A terminal emits an arrow key's whole escape sequence in one burst, while a
+    bare Escape arrives alone. A short select() is enough to tell them apart and
+    keeps Escape responsive instead of blocking on the next keypress.
+    """
+    import select
+
+    ready, _, _ = select.select([descriptor], [], [], timeout)
+    return bool(ready)
+
+
 def _read_key_posix() -> str:
     import termios
     import tty
@@ -186,8 +199,13 @@ def _read_key_posix() -> str:
         tty.setcbreak(descriptor)
         first = sys.stdin.read(1)
         if first == "\x1b":
-            # Either a bare Escape or the start of a cursor-key sequence. The
-            # bracket-then-letter form is what every terminal we care about sends.
+            # Either a bare Escape or the start of a cursor-key sequence. A blind
+            # `read(1)` here blocked until the *next* keypress, so Escape appeared
+            # to do nothing and then swallowed whatever was pressed after it.
+            # An arrow key delivers its whole sequence at once, so if nothing is
+            # already buffered this was a bare Escape.
+            if not _has_pending_input(descriptor):
+                return CANCEL
             if sys.stdin.read(1) != "[":
                 return CANCEL
             return _ARROWS.get(sys.stdin.read(1), "")

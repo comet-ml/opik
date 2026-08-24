@@ -1,5 +1,7 @@
 """Tests for the arrow-key multi-select prompt."""
 
+import os
+
 from unittest import mock
 
 import pytest
@@ -276,3 +278,29 @@ class TestFooter:
     def test_everything_selected__says_all(self):
         selected = {"claude-code", "cursor", "codex"}
         assert "(all)" in selector._footer(_choices(), selected, 0)
+
+
+class TestPendingInput:
+    """`_has_pending_input` is what lets Escape be told from an arrow key.
+
+    A blind second `read(1)` after `\\x1b` blocked until the next keypress, so
+    Escape appeared to do nothing and then swallowed whatever followed it.
+    """
+
+    def test_no_bytes_waiting__is_false(self):
+        read_fd, write_fd = os.pipe()
+        try:
+            assert selector._has_pending_input(read_fd, timeout=0.01) is False
+        finally:
+            os.close(read_fd)
+            os.close(write_fd)
+
+    def test_bytes_already_buffered__is_true(self):
+        """An arrow key arrives as one burst, so its continuation is waiting."""
+        read_fd, write_fd = os.pipe()
+        try:
+            os.write(write_fd, b"[A")
+            assert selector._has_pending_input(read_fd, timeout=0.01) is True
+        finally:
+            os.close(read_fd)
+            os.close(write_fd)

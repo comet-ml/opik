@@ -93,11 +93,11 @@ class TestReadArchive:
 
         result = pack._read_archive(_archive(entries), ref="main")
 
-        for files in result.skills.values():
-            for file_path in files:
-                assert ".." not in file_path
-        assert set(result.skills) <= {"opik", "escape"} - {"escape"} or True
-        assert "opik" in result.skills
+        # The traversal member must be dropped entirely, and the legitimate skill
+        # kept. Asserting the whole structure rather than a property of it: the
+        # previous version ended in `or True`, so it passed whatever the parser
+        # returned — including an accepted `../../` entry.
+        assert result.skills == {"opik": {"SKILL.md": b"real"}}
 
 
 class TestContentHash:

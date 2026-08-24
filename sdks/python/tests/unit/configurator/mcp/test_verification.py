@@ -263,3 +263,25 @@ class TestListWorkspaces:
         )
 
         assert client_spy.call_args.args == ("key", None, False)
+
+
+class TestHostedEndpointStatuses:
+    """Only the auth challenge proves a working hosted endpoint.
+
+    Every status except 404 used to report success, so a 500 or a 502 announced
+    "reachable" and the user found out when sign-in failed.
+    """
+
+    @pytest.mark.parametrize("status_code", [400, 500, 502, 503])
+    def test_verify_hosted_endpoint__server_error__fails(
+        self, patch_client, status_code
+    ):
+        patch_client(_FakeClient(_response(status_code)))
+
+        result = verification.verify_hosted_endpoint(
+            mcp_url="https://www.comet.com/opik/api/v1/mcp",
+            check_tls_certificate=True,
+        )
+
+        assert result.succeeded is False
+        assert str(status_code) in result.detail
