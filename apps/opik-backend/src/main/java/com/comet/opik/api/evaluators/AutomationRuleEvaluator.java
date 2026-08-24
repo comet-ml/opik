@@ -82,7 +82,7 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     @NotBlank @Size(max = 150, message = "cannot exceed 150 characters") private final String name;
 
     @JsonView({View.Public.class, View.Write.class})
-    @Schema(description = "Fraction of production (SDK-logged) traces the rule scores, from 0 to 1. Experiment, playground and optimization traces are always scored in full and ignore this value.")
+    @Schema(description = "Fraction of production (SDK-logged) items this rule scores, from 0 to 1. Trace rules ignore this value for experiment, playground and optimization traces and score them in full; span and thread rules only ever evaluate SDK-logged data.")
     @DecimalMin("0") @DecimalMax("1") private final float samplingRate;
 
     @JsonView({View.Public.class, View.Write.class})
