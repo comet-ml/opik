@@ -128,3 +128,51 @@ def test_metric_created__construction_fails__still_reported(recording_worker):
     user_code()
 
     assert "opik_python_sdk__evaluation__metric_created" in recording_worker.names
+
+
+def test_metric_created__subclass_forging_an_opik_module__reported_as_custom(
+    recording_worker,
+):
+    """
+    The payload must never carry a name the user chose. `__module__` is writable, so
+    trusting it would let any subclass have its own class name reported as one of
+    Opik's - including by claiming a module that really exists.
+    """
+    from opik.evaluation.metrics import base_metric
+
+    class ANameTheUserChose(base_metric.BaseMetric):
+        def score(self, *args, **kwargs):
+            return None
+
+    for forged in ("opik.user_metrics", "opik.evaluation.metrics.base_metric"):
+        ANameTheUserChose.__module__ = forged
+        assert not base_metric._is_opik_metric(ANameTheUserChose)
+
+    def user_code():
+        ANameTheUserChose(track=False)
+
+    user_code()
+
+    assert recording_worker.events
+    metric_events = [
+        event for event in recording_worker.events if "metric_created" in event.name
+    ]
+    assert metric_events
+    for event in metric_events:
+        assert event.properties["metric"] == "custom"
+
+
+def test_metric_created__opik_own_metric__reported_by_name(recording_worker):
+    """The other side: a real one still has to be identifiable."""
+    from opik.evaluation.metrics import Equals
+
+    def user_code():
+        Equals()
+
+    user_code()
+
+    metric_events = [
+        event for event in recording_worker.events if "metric_created" in event.name
+    ]
+    assert metric_events
+    assert metric_events[0].properties["metric"] == "Equals"

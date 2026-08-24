@@ -256,8 +256,18 @@ def _start_worker() -> Optional[worker.Worker]:
             _DISABLED = True
             return None
 
-        sender = _SENDER = comet_stats.Sender(url=config_.analytics_url)
+        sender = comet_stats.Sender(url=config_.analytics_url)
 
+        # Last check, and it has to be here rather than only at the top: evaluating
+        # the rules above runs arbitrary user code, and `shutdown` gives up on
+        # `_LOCK` after two seconds (see there), so reporting can have been switched
+        # off for good while this was still deciding. Publishing a worker now would
+        # undo that shutdown and leave a thread and a connection pool behind it.
+        if _DISABLED:
+            sender.close()
+            return None
+
+        _SENDER = sender
         _WORKER = worker.Worker(
             send=sender.send,
             max_queue_size=MAX_QUEUE_SIZE,

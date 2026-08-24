@@ -1,3 +1,4 @@
+import sys
 from typing import Any, List, Optional, Type, Union
 
 import opik
@@ -7,14 +8,24 @@ from ... import analytics
 from ..metrics import score_result
 
 
+def _is_opik_metric(metric_class: Type["BaseMetric"]) -> bool:
+    """
+    True only for a class Opik actually ships. `__module__` alone would not do: a
+    subclass can set it to anything, and a name the user chose would then be
+    reported as one of ours - which is the one thing these payloads must never
+    carry. Looking the class back up in the module it claims closes that.
+    """
+    if not metric_class.__module__.startswith("opik."):
+        return False
+
+    module = sys.modules.get(metric_class.__module__)
+    return getattr(module, metric_class.__name__, None) is metric_class
+
+
 def _track_metric_creation(metric_class: Type["BaseMetric"]) -> None:
     # A user-defined metric class can be named anything, so only the names of
     # Opik's own metrics are reported.
-    name = (
-        metric_class.__name__
-        if metric_class.__module__.startswith("opik.")
-        else "custom"
-    )
+    name = metric_class.__name__ if _is_opik_metric(metric_class) else "custom"
 
     analytics.track_event("evaluation", "metric_created", metric=name)
 

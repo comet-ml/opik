@@ -143,3 +143,57 @@ def test_reporting_allowed__rule_without_a_name__still_decides(monkeypatch):
     for rule in (Boom(), Quiet()):
         monkeypatch.setattr(rules, "_RULES", [rule])
         assert rules.reporting_allowed(config.OpikConfig()) is False
+
+
+def test_start_worker__shutdown_lands_while_rules_run__no_worker_published(
+    monkeypatch,
+):
+    """
+    `shutdown` gives up on `_LOCK` after a couple of seconds, so it can switch
+    reporting off while `_start_worker` is still inside the rules - which are
+    arbitrary user code and may be slow. Publishing a worker after that point undoes
+    the shutdown and leaves a live thread and an open connection pool behind it.
+
+    The race is forced here rather than raced for: the rule flips `_DISABLED` itself,
+    which is exactly the state `_start_worker` would find on the other side of a slow
+    one.
+    """
+    closed = []
+
+    class Sender:
+        def __init__(self, url):
+            self.url = url
+
+        def close(self):
+            closed.append(True)
+
+        def send(self, events):
+            raise AssertionError("must never send after shutdown")
+
+    def rule_that_races_shutdown(config_):
+        api._DISABLED = True
+        return True
+
+    monkeypatch.setattr(api, "_WORKER", None)
+    monkeypatch.setattr(api, "_SENDER", None)
+    monkeypatch.setattr(api, "_DISABLED", False)
+    monkeypatch.setattr(api.comet_stats, "Sender", Sender)
+    monkeypatch.setattr(api.rules, "reporting_allowed", rule_that_races_shutdown)
+    monkeypatch.setattr(
+        api.config,
+        "OpikConfig",
+        lambda **_: type(
+            "C",
+            (),
+            {
+                "analytics_url": "http://collector.invalid",
+                "check_tls_certificate": True,
+            },
+        )(),
+    )
+
+    assert api._start_worker() is None
+    assert api._WORKER is None
+    assert api._SENDER is None
+    # and the pool opened on the way there is released rather than orphaned
+    assert closed == [True]
