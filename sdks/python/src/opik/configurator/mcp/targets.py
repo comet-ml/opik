@@ -17,6 +17,10 @@ class InstallResult:
     target_display_name: str
     succeeded: bool
     detail: str
+    # A few words for a display that already showed the location ("Added",
+    # "Updated"). Falls back to `detail`, which spells the path out in full and is
+    # what a log line or a failure needs.
+    summary: Optional[str] = None
 
 
 @dataclasses.dataclass
@@ -130,6 +134,7 @@ def _install_via_json_file(
         target_display_name=display_name,
         succeeded=True,
         detail=f"{action} '{SERVER_NAME}' in {config_path}",
+        summary=action,
     )
 
 
@@ -167,6 +172,7 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             target_display_name="Claude Code",
             succeeded=True,
             detail=f"Registered '{SERVER_NAME}' via `claude mcp add` (user scope)",
+            summary="Registered",
         )
 
     return InstallResult(
@@ -246,6 +252,7 @@ def _install_codex(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             target_display_name="Codex",
             succeeded=True,
             detail=f"Registered '{SERVER_NAME}' via `codex mcp add`",
+            summary="Registered",
         )
 
     return InstallResult(

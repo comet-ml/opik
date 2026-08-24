@@ -23,6 +23,7 @@ from opik.configurator.mcp import env as mcp_env
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
 from opik.configurator.mcp import verification as mcp_verification
+from opik.configurator.mcp import view as mcp_view
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def setup_mcp_server(
     force_local_server: bool = False,
     host_keys: Optional[List[str]] = None,
     assume_confirmed: bool = False,
+    view: Optional[mcp_view.InstallView] = None,
 ) -> None:
     """Register the Opik MCP server with the user's AI host(s).
 
@@ -59,7 +61,12 @@ def setup_mcp_server(
     detected and nothing is prompted. ``assume_confirmed`` suppresses the target
     confirmation when the caller already showed the user a prompt naming the same
     hosts, so consent is collected once rather than twice.
+
+    ``view`` decides how the flow narrates itself; it defaults to the logger so
+    that ``opik.configure()`` stays library-safe. The CLI passes a ``rich`` view.
     """
+    display = view if view is not None else mcp_view.default_view()
+
     ambiguity = _workspace_ambiguity(
         api_key=api_key,
         workspace=workspace,
@@ -68,7 +75,7 @@ def setup_mcp_server(
         check_tls_certificate=check_tls_certificate,
     )
     if ambiguity is not None:
-        LOGGER.warning(ambiguity)
+        display.problem(ambiguity)
         # ANALYTICS: install skipped, reason="ambiguous_workspace".
         return
 
@@ -79,13 +86,13 @@ def setup_mcp_server(
     if force_local_server:
         hosted_mcp_url = None
     else:
-        hosted_mcp_url = mcp_detection.detect_hosted_mcp_server(
-            base_url=base_url,
-            api_url=api_url,
-            check_tls_certificate=check_tls_certificate,
-        )
+        with display.step("Looking for a hosted Opik MCP server"):
+            hosted_mcp_url = mcp_detection.detect_hosted_mcp_server(
+                base_url=base_url,
+                api_url=api_url,
+                check_tls_certificate=check_tls_certificate,
+            )
     if hosted_mcp_url is not None:
-        LOGGER.info("Found a hosted Opik MCP server; configuring AI host(s) to use it.")
         connection_mode = mcp_spec.McpConnectionMode.REMOTE
     else:
         connection_mode = mcp_spec.McpConnectionMode.LOCAL_STDIO
@@ -101,47 +108,113 @@ def setup_mcp_server(
         self_hosted_comet=self_hosted_comet,
     )
     if server_spec is None:
-        LOGGER.warning(unavailable_reason)
+        display.problem(unavailable_reason or "")
         # ANALYTICS: install skipped, reason="uv_missing".
         return
+
+    candidates = _candidate_targets(host_keys)
+    if len(candidates) == 0:
+        if host_keys:
+            display.problem(
+                f"None of the requested hosts are known. Known hosts: "
+                f"{', '.join(mcp_targets.HOST_KEYS)}."
+            )
+        else:
+            _report_no_host_detected(server_spec, display)
+        # ANALYTICS: install skipped, reason="no_host_detected" / "unknown_host".
+        return
+
+    # Shown before anything is written, and before the confirmation below, so the
+    # user is consenting to a change they can see rather than a yes/no in the dark.
+    display.plan(
+        deployment=_deployment_label(use_local, self_hosted_comet, workspace),
+        transport=_transport_label(server_spec),
+        targets=[
+            mcp_view.PlannedTarget(
+                display_name=target.display_name,
+                location=_target_location(target, server_spec),
+            )
+            for target in candidates
+        ],
+    )
 
     # ANALYTICS: install started. Carries the transport ("http" for the hosted
     # server, "stdio" for uvx), the deployment class, and how many hosts were
     # detected — the denominator every later stage is measured against.
-    selected_targets = _resolve_targets(
-        host_keys=host_keys,
-        assume_confirmed=assume_confirmed,
-        server_spec=server_spec,
-    )
+    selected_targets = _confirm_targets(candidates, host_keys, assume_confirmed)
     if len(selected_targets) == 0:
-        # ANALYTICS: install skipped. `_resolve_targets` already logged which of
-        # "declined" / "no_host_detected" / "unknown_host" applies; that reason is
-        # the single most important number here, since it is the decline rate on
-        # the consent prompt and is currently unobservable.
+        display.skipped(
+            "Skipped MCP server setup. Run `opik mcp configure` anytime to set it up."
+        )
+        # ANALYTICS: install skipped, reason="declined" — the decline rate on the
+        # consent prompt, and the single most important number this flow owes.
         return
 
     if isinstance(server_spec, mcp_spec.StdioServerSpec):
-        _prefetch_opik_mcp()
+        with display.step("Preparing the Opik MCP server"):
+            _prefetch_opik_mcp()
 
     results = [target.install(server_spec) for target in selected_targets]
-    _report_results(results)
+    display.results(
+        [
+            mcp_view.TargetResult(
+                display_name=result.target_display_name,
+                detail=result.detail,
+                succeeded=result.succeeded,
+                summary=result.summary,
+            )
+            for result in results
+        ]
+    )
 
     # One verification per run: it exercises the credentials, which are identical
     # for every host, so running it once and reporting once is enough.
     if any(result.succeeded for result in results):
-        verification = _verify(
-            server_spec=server_spec,
-            api_key=api_key,
-            workspace=workspace,
-            api_url=api_url,
-            check_tls_certificate=check_tls_certificate,
-        )
-        _report_verification(verification)
+        with display.step("Checking the connection"):
+            verification = _verify(
+                server_spec=server_spec,
+                api_key=api_key,
+                workspace=workspace,
+                api_url=api_url,
+                check_tls_certificate=check_tls_certificate,
+            )
+        display.verification(verification.succeeded, verification.detail)
+        if verification.succeeded:
+            display.next_steps(
+                [result.target_display_name for result in results if result.succeeded]
+            )
 
     # ANALYTICS: one install completed/failed event per host in `selected_targets`,
     # labelled with `target.key`, the transport, and the verification outcome.
     # Per-host rather than per-run: a run that writes Cursor and fails Codex is two
     # different facts.
+
+
+def _deployment_label(
+    use_local: bool, self_hosted_comet: bool, workspace: Optional[str]
+) -> str:
+    """A one-line answer to "which Opik am I being connected to?"."""
+    if use_local:
+        return "Local Opik"
+    environment = "Self-hosted Comet" if self_hosted_comet else "Opik Cloud"
+    return f"{environment} · workspace {workspace}" if workspace else environment
+
+
+def _transport_label(server_spec: mcp_spec.McpServerSpec) -> str:
+    if isinstance(server_spec, mcp_spec.RemoteServerSpec):
+        return "Hosted server, browser sign-in on first connect"
+    return "Local server via uvx, credentials in the host config"
+
+
+def _target_location(
+    target: mcp_targets.HostTarget, server_spec: mcp_spec.McpServerSpec
+) -> str:
+    """Where this host's registration will land, in the user's own terms."""
+    if target.key == "claude-code" and shutil.which("claude") is not None:
+        return "via `claude mcp add`"
+    if target.key == "codex":
+        return "via `codex mcp add`"
+    return mcp_view.display_path(target.config_path())
 
 
 def _workspace_ambiguity(
@@ -184,16 +257,16 @@ def _workspace_ambiguity(
     )
 
 
-def _resolve_targets(
+def _candidate_targets(
     host_keys: Optional[List[str]],
-    assume_confirmed: bool,
-    server_spec: mcp_spec.McpServerSpec,
 ) -> List[mcp_targets.HostTarget]:
-    """Decide which hosts to install for.
+    """The hosts this run could install for, before asking the user anything.
 
-    An explicit ``host_keys`` bypasses detection entirely: naming a host is the
-    caller stating a fact, and requiring the host to be installed first would
-    defeat the point in a Dockerfile or a fresh CI image.
+    Split from the confirmation so the plan — including the exact files — can be
+    shown *before* the prompt. An explicit ``host_keys`` bypasses detection
+    entirely: naming a host is the caller stating a fact, and requiring the host
+    to be installed first would defeat the point in a Dockerfile or a fresh CI
+    image.
     """
     if host_keys:
         explicit: List[mcp_targets.HostTarget] = []
@@ -202,44 +275,42 @@ def _resolve_targets(
             if target is None:
                 # Unreachable through the CLI, which validates against HOST_KEYS;
                 # reachable from a direct library call.
-                LOGGER.warning(
-                    "Unknown AI host '%s'. Known hosts: %s",
-                    key,
-                    ", ".join(mcp_targets.HOST_KEYS),
-                )
+                LOGGER.debug("Unknown AI host %r requested", key)
                 continue
             explicit.append(target)
         return explicit
 
-    detected_targets = mcp_targets.detected_targets()
-
-    if len(detected_targets) == 0:
-        _log_manual_instructions(server_spec)
-        return []
-
-    if assume_confirmed:
-        return detected_targets
-
-    selected = _select_targets(detected_targets)
-    if len(selected) == 0:
-        LOGGER.info(
-            "Skipped MCP server setup. Run `opik mcp configure` anytime to set it up."
-        )
-    return selected
+    return mcp_targets.detected_targets()
 
 
-def _log_manual_instructions(server_spec: mcp_spec.McpServerSpec) -> None:
+def _confirm_targets(
+    candidates: List[mcp_targets.HostTarget],
+    host_keys: Optional[List[str]],
+    assume_confirmed: bool,
+) -> List[mcp_targets.HostTarget]:
+    """Narrow the candidates to what the user actually agreed to.
+
+    Naming hosts explicitly, or having already been asked by the caller, is the
+    agreement — so neither re-prompts.
+    """
+    if host_keys or assume_confirmed:
+        return candidates
+    return _select_targets(candidates)
+
+
+def _report_no_host_detected(
+    server_spec: mcp_spec.McpServerSpec, display: mcp_view.InstallView
+) -> None:
     block = mcp_spec.redact_block_for_display(server_spec.to_block())
     manual_config = json.dumps({"mcpServers": {"opik-mcp": block}}, indent=2)
-    LOGGER.info(
-        "No supported AI host (%s) was detected.\n"
-        "To set it up manually, add this to your host's MCP config "
-        '(VS Code uses "servers" instead of "mcpServers"):\n%s\n'
-        "Or name a host directly: `opik mcp configure --host claude-code`.\n"
-        "See %s for per-host instructions.",
-        ", ".join(target.display_name for target in mcp_targets.HOST_TARGETS),
-        manual_config,
-        MCP_DOCS_URL,
+    display.problem(
+        f"No supported AI host was detected "
+        f"({', '.join(target.display_name for target in mcp_targets.HOST_TARGETS)}).\n\n"
+        f"Name one directly:\n"
+        f"    opik mcp configure --host claude-code\n\n"
+        f"Or add this to your host's MCP config by hand "
+        f'(VS Code uses "servers" instead of "mcpServers"):\n{manual_config}\n\n'
+        f"See {MCP_DOCS_URL} for per-host instructions."
     )
 
 
@@ -260,21 +331,6 @@ def _verify(
         workspace=workspace,
         api_url=api_url,
         check_tls_certificate=check_tls_certificate,
-    )
-
-
-def _report_verification(result: mcp_verification.VerificationResult) -> None:
-    if result.succeeded:
-        LOGGER.info("Verified: %s.", result.detail)
-        LOGGER.info(
-            "Restart your AI host to pick up the Opik MCP server, then ask it to "
-            "'list my Opik projects'."
-        )
-        return
-
-    LOGGER.warning(
-        "The Opik MCP server was registered, but verification failed: %s",
-        result.detail,
     )
 
 
@@ -425,11 +481,3 @@ def _select_targets(
             return [detected_targets[number - 1] for number in dict.fromkeys(numbers)]
 
         LOGGER.error("Wrong choice. Please try again.\n")
-
-
-def _report_results(results: List[mcp_targets.InstallResult]) -> None:
-    for result in results:
-        if result.succeeded:
-            LOGGER.info("%s: %s", result.target_display_name, result.detail)
-        else:
-            LOGGER.warning("%s: %s", result.target_display_name, result.detail)

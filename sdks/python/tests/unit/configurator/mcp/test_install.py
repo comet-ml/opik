@@ -1,3 +1,4 @@
+import contextlib
 import pathlib
 import subprocess
 from unittest import mock
@@ -5,6 +6,61 @@ from unittest import mock
 import pytest
 
 from opik.configurator.mcp import install, spec, targets, verification
+from opik.configurator.mcp import view as mcp_view
+
+
+class RecordingView(mcp_view.InstallView):
+    """Captures narration so tests assert on intent, not on log strings."""
+
+    def __init__(self):
+        self.plans = []
+        self.steps = []
+        self.target_results = []
+        self.verifications = []
+        self.next_step_calls = []
+        self.skips = []
+        self.problems = []
+        self.notes = []
+
+    def plan(self, deployment, transport, targets):
+        self.plans.append((deployment, transport, list(targets)))
+
+    @contextlib.contextmanager
+    def step(self, description):
+        self.steps.append(description)
+        yield
+
+    def results(self, results):
+        self.target_results.extend(results)
+
+    def verification(self, succeeded, detail):
+        self.verifications.append((succeeded, detail))
+
+    def next_steps(self, assistants):
+        self.next_step_calls.append(list(assistants))
+
+    def skipped(self, message):
+        self.skips.append(message)
+
+    def problem(self, message):
+        self.problems.append(message)
+
+    def note(self, message):
+        self.notes.append(message)
+
+    @property
+    def said(self) -> str:
+        """Everything shown to the user, for substring assertions."""
+        return " ".join(
+            self.problems
+            + self.skips
+            + self.notes
+            + [d for _, d in self.verifications]
+            + [r.detail for r in self.target_results]
+            + [f"{d} {t}" for d, t, _ in self.plans]
+            + [loc for _, _, ts in self.plans for loc in (t.location for t in ts)]
+        )
+
 
 # Captured before the autouse fixtures below stub them out, so the tests that
 # exercise these functions directly get the real implementation rather than the
@@ -52,6 +108,7 @@ def no_hosted_mcp(monkeypatch):
 
 def _make_args(**overrides):
     args = dict(
+        view=RecordingView(),
         api_key="some-key",
         workspace="ws",
         base_url="https://www.comet.com/",
@@ -105,12 +162,10 @@ def test_setup_mcp_server__no_host__manual_config_redacts_api_key(monkeypatch):
     monkeypatch.setattr(
         targets, "HOST_TARGETS", [_target("cursor", False, mock.Mock())]
     )
-    logger_spy = mock.Mock()
-    monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-    install.setup_mcp_server(**_make_args())
+    install.setup_mcp_server(**(args := _make_args()))
 
-    logged = " ".join(str(call) for call in logger_spy.info.call_args_list)
+    logged = args["view"].said
     assert "some-key" not in logged
     assert "***REDACTED***" in logged
 
@@ -303,13 +358,11 @@ def test_setup_mcp_server__install_failure__is_reported(monkeypatch):
     )
     monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
     monkeypatch.setattr("builtins.input", lambda message: "y")  # confirm the host
-    logger_spy = mock.Mock()
-    monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-    install.setup_mcp_server(**_make_args())
+    install.setup_mcp_server(**(args := _make_args()))
 
     install_spy.assert_called_once()
-    logged = " ".join(str(call) for call in logger_spy.warning.call_args_list)
+    logged = args["view"].said
     assert "could not write config" in logged
 
 
@@ -430,14 +483,11 @@ class TestExplicitHosts:
         monkeypatch.setattr(
             targets, "HOST_TARGETS", [_target("cursor", True, install_spy)]
         )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-        install.setup_mcp_server(**_make_args(), host_keys=["emacs"])
+        install.setup_mcp_server(**(args := _make_args()), host_keys=["emacs"])
 
         install_spy.assert_not_called()
-        logged = " ".join(str(call) for call in logger_spy.warning.call_args_list)
-        assert "Unknown AI host" in logged
+        assert "Known hosts" in args["view"].said
 
 
 class TestAssumeConfirmed:
@@ -492,15 +542,13 @@ class TestVerification:
                 )
             ],
         )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-        install.setup_mcp_server(**_make_args(), assume_confirmed=True)
+        install.setup_mcp_server(**(args := _make_args()), assume_confirmed=True)
 
         verify.assert_called_once()
-        logged = " ".join(str(call) for call in logger_spy.info.call_args_list)
-        assert "Verified" in logged
-        assert "connected to workspace ws" in logged
+        view = args["view"]
+        assert view.verifications == [(True, "connected to workspace ws")]
+        assert view.next_step_calls == [["Cursor"]]
 
     def test_setup_mcp_server__verification_fails__warns_instead_of_claiming_success(
         self, monkeypatch, verify
@@ -522,16 +570,13 @@ class TestVerification:
                 )
             ],
         )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-        install.setup_mcp_server(**_make_args(), assume_confirmed=True)
+        install.setup_mcp_server(**(args := _make_args()), assume_confirmed=True)
 
-        warned = " ".join(str(call) for call in logger_spy.warning.call_args_list)
-        assert "verification failed" in warned
-        # The old "restart your host, it works" line must not appear.
-        info = " ".join(str(call) for call in logger_spy.info.call_args_list)
-        assert "Restart your AI host" not in info
+        view = args["view"]
+        assert view.verifications[0][0] is False
+        # A failed check must never be followed by "restart, it works".
+        assert view.next_step_calls == []
 
     def test_setup_mcp_server__every_host_failed__does_not_verify(
         self, monkeypatch, verify
@@ -661,13 +706,11 @@ class TestWorkspaceAmbiguity:
         monkeypatch.setattr(
             targets, "HOST_TARGETS", [_target("cursor", True, install_spy)]
         )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-        install.setup_mcp_server(**_make_args(), assume_confirmed=True)
+        install.setup_mcp_server(**(args := _make_args()), assume_confirmed=True)
 
         install_spy.assert_not_called()
-        warned = " ".join(str(call) for call in logger_spy.warning.call_args_list)
+        warned = args["view"].said
         assert "pick a workspace first" in warned
 
 
@@ -688,12 +731,10 @@ class TestUvHint:
         monkeypatch.setattr(
             targets, "HOST_TARGETS", [_target("cursor", True, mock.Mock())]
         )
-        logger_spy = mock.Mock()
-        monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-        install.setup_mcp_server(**_make_args())
+        install.setup_mcp_server(**(args := _make_args()))
 
-        warned = " ".join(str(call) for call in logger_spy.warning.call_args_list)
+        warned = args["view"].said
         assert "astral.sh/uv/install" in warned
 
 
@@ -704,10 +745,142 @@ def test_setup_mcp_server__no_host__manual_instructions_mention_the_host_flag(
     monkeypatch.setattr(
         targets, "HOST_TARGETS", [_target("cursor", False, mock.Mock())]
     )
-    logger_spy = mock.Mock()
-    monkeypatch.setattr(install, "LOGGER", logger_spy)
 
-    install.setup_mcp_server(**_make_args())
+    install.setup_mcp_server(**(args := _make_args()))
 
-    logged = " ".join(str(call) for call in logger_spy.info.call_args_list)
+    logged = args["view"].said
     assert "--host" in logged
+
+
+class TestPlanLabels:
+    """The plan block answers "which Opik, over what, into which files?"."""
+
+    def test_deployment_label__cloud_names_the_workspace(self):
+        assert install._deployment_label(False, False, "acme-ai") == (
+            "Opik Cloud · workspace acme-ai"
+        )
+
+    def test_deployment_label__self_hosted_comet(self):
+        assert "Self-hosted Comet" in install._deployment_label(False, True, "acme-ai")
+
+    def test_deployment_label__local_needs_no_workspace(self):
+        assert install._deployment_label(True, False, None) == "Local Opik"
+
+    def test_transport_label__hosted_mentions_browser_sign_in(self):
+        label = install._transport_label(spec.RemoteServerSpec(url="https://x/v1/mcp"))
+        assert "browser sign-in" in label
+
+    def test_transport_label__local_mentions_where_credentials_go(self):
+        label = install._transport_label(
+            spec.StdioServerSpec(command="uvx", args=["opik-mcp"], env={})
+        )
+        assert "uvx" in label and "host config" in label
+
+    def test_target_location__claude_code_with_cli__names_the_command(
+        self, monkeypatch
+    ):
+        """Saying `~/.claude.json` would be wrong when we shell out to the CLI."""
+        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/claude")
+        target = targets.find_target("claude-code")
+
+        location = install._target_location(target, mock.Mock())
+
+        assert location == "via `claude mcp add`"
+
+    def test_target_location__claude_code_without_cli__names_the_file(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(install.shutil, "which", lambda name: None)
+        target = targets.find_target("claude-code")
+
+        assert install._target_location(target, mock.Mock()).endswith(".claude.json")
+
+    def test_target_location__codex__names_the_command(self):
+        """Codex config is TOML; we drive its CLI rather than editing the file."""
+        target = targets.find_target("codex")
+
+        assert install._target_location(target, mock.Mock()) == "via `codex mcp add`"
+
+    def test_target_location__file_hosts__collapse_home(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
+        target = targets.find_target("cursor")
+
+        assert install._target_location(target, mock.Mock()).startswith("~/")
+
+    def test_setup_mcp_server__plan_is_shown_before_anything_is_written(
+        self, monkeypatch
+    ):
+        """Consent needs visibility: the plan must precede the write, not follow it."""
+        order = []
+        monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+
+        def record_install(server_spec):
+            order.append("write")
+            return targets.InstallResult("Cursor", True, "Added", "Added")
+
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("cursor", True, record_install)]
+        )
+        args = _make_args()
+        view = args["view"]
+        original_plan = view.plan
+
+        def record_plan(*a, **k):
+            order.append("plan")
+            return original_plan(*a, **k)
+
+        view.plan = record_plan
+
+        install.setup_mcp_server(**args, assume_confirmed=True)
+
+        assert order == ["plan", "write"]
+
+
+class TestCandidateAndConfirm:
+    def test_candidate_targets__explicit_keys__ignore_detection(self, monkeypatch):
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("codex", False, mock.Mock())]
+        )
+
+        assert [t.key for t in install._candidate_targets(["codex"])] == ["codex"]
+
+    def test_candidate_targets__unknown_key__is_dropped(self, monkeypatch):
+        monkeypatch.setattr(
+            targets, "HOST_TARGETS", [_target("codex", True, mock.Mock())]
+        )
+
+        assert install._candidate_targets(["emacs"]) == []
+
+    def test_candidate_targets__no_keys__uses_detection(self, monkeypatch):
+        monkeypatch.setattr(
+            targets,
+            "HOST_TARGETS",
+            [
+                _target("codex", True, mock.Mock()),
+                _target("cursor", False, mock.Mock()),
+            ],
+        )
+
+        assert [t.key for t in install._candidate_targets(None)] == ["codex"]
+
+    def test_confirm_targets__explicit_keys__do_not_prompt(self, monkeypatch):
+        monkeypatch.setattr(
+            "builtins.input", mock.Mock(side_effect=AssertionError("must not prompt"))
+        )
+        candidates = [_target("codex", True, mock.Mock())]
+
+        assert install._confirm_targets(candidates, ["codex"], False) == candidates
+
+    def test_confirm_targets__assume_confirmed__does_not_prompt(self, monkeypatch):
+        monkeypatch.setattr(
+            "builtins.input", mock.Mock(side_effect=AssertionError("must not prompt"))
+        )
+        candidates = [_target("codex", True, mock.Mock())]
+
+        assert install._confirm_targets(candidates, None, True) == candidates
+
+    def test_confirm_targets__interactive__asks(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda message: "n")
+        candidates = [_target("codex", True, mock.Mock())]
+
+        assert install._confirm_targets(candidates, None, False) == []

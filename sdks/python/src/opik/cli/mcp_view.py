@@ -1,0 +1,144 @@
+"""The ``rich`` rendering of the MCP install, used by ``opik mcp configure``.
+
+Kept in the CLI layer on purpose: ``configurator.mcp.install`` is reachable from
+``opik.configure()``, which is a library call and must not take over someone's
+stdout. See ``configurator.mcp.view`` for the injection point and the
+logger-based default.
+"""
+
+import contextlib
+import pathlib
+from typing import Iterator, List
+
+import rich.console
+from rich import padding, table, text
+
+from opik.configurator.mcp import view as mcp_view
+
+console = rich.console.Console()
+
+
+def _collapse_home(message: str) -> str:
+    """Shorten any absolute home paths inside a message.
+
+    Failure details are assembled with full paths so a log line is unambiguous,
+    but on a narrow terminal one absolute path wraps over three lines and buries
+    the actual instruction.
+    """
+    home = str(pathlib.Path.home())
+    return message.replace(home, "~") if home else message
+
+
+def _join(names: List[str]) -> str:
+    """ "a", "a and b", "a, b and c" — a list a person would read aloud."""
+    if len(names) <= 1:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+_KEY_STYLE = "cyan"
+_FIELDS_INDENT = (0, 0, 0, 4)
+
+
+class RichInstallView(mcp_view.InstallView):
+    def plan(
+        self,
+        deployment: str,
+        transport: str,
+        targets: List[mcp_view.PlannedTarget],
+    ) -> None:
+        console.print()
+        console.print(text.Text("Opik MCP server setup", style="bold"))
+
+        grid = table.Table.grid(padding=(0, 2))
+        grid.add_column(style=_KEY_STYLE, no_wrap=True)
+        grid.add_column(overflow="fold")
+        grid.add_row("Deployment", deployment)
+        grid.add_row("Connection", transport)
+        console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
+
+        console.print()
+        # Consent is only meaningful if the user can see what will change; these
+        # are files owned by other tools.
+        console.print(text.Text("Will update", style="bold"))
+        files = table.Table.grid(padding=(0, 2))
+        files.add_column(style=_KEY_STYLE, no_wrap=True)
+        files.add_column(overflow="fold", style="dim")
+        for target in targets:
+            files.add_row(target.display_name, target.location)
+        console.print(padding.Padding(files, _FIELDS_INDENT, expand=False))
+        console.print()
+
+    @contextlib.contextmanager
+    def step(self, description: str) -> Iterator[None]:
+        # `console.status` degrades to a single printed line when stdout is not a
+        # terminal, so this is safe in CI and when piped to a file.
+        with console.status(f"[dim]{description}...[/dim]", spinner="dots"):
+            yield
+
+    def results(self, results: List[mcp_view.TargetResult]) -> None:
+        # One grid for every row, so the host column lines up. A row per grid
+        # aligns each row against itself and nothing else.
+        grid = table.Table.grid(padding=(0, 2))
+        grid.add_column(no_wrap=True)
+        grid.add_column(style=_KEY_STYLE, no_wrap=True)
+        grid.add_column(overflow="fold")
+        for result in results:
+            if result.succeeded:
+                # The plan block already showed the path; repeating it here just
+                # wraps and pushes the outcome off the line.
+                grid.add_row(
+                    text.Text("✓", style="green"),
+                    result.display_name,
+                    text.Text(result.short, style="dim"),
+                )
+            else:
+                grid.add_row(
+                    text.Text("✗", style="red"),
+                    result.display_name,
+                    text.Text(_collapse_home(result.detail), style="yellow"),
+                )
+        console.print(padding.Padding(grid, (0, 0, 0, 2), expand=False))
+
+    def verification(self, succeeded: bool, detail: str) -> None:
+        # Its own block: it reports on the connection, not on a host, and sharing
+        # the grid above would align two things that are not the same kind.
+        console.print()
+        row = table.Table.grid(padding=(0, 2))
+        row.add_column(no_wrap=True)
+        row.add_column(style=_KEY_STYLE, no_wrap=True)
+        row.add_column(overflow="fold")
+        if succeeded:
+            row.add_row(text.Text("✓", style="green"), "Verified", text.Text(detail))
+        else:
+            row.add_row(
+                text.Text("✗", style="red"),
+                "Not working",
+                text.Text(detail, style="yellow"),
+            )
+        console.print(padding.Padding(row, (0, 0, 0, 2), expand=False))
+
+    def next_steps(self, assistants: List[str]) -> None:
+        names = _join(assistants) or "your AI host"
+        console.print()
+        console.print(
+            text.Text.assemble(
+                ("Restart ", ""),
+                (names, "bold"),
+                (', then ask: "list my Opik projects"', ""),
+            )
+        )
+        console.print()
+
+    def skipped(self, message: str) -> None:
+        console.print()
+        console.print(text.Text(message, style="dim"))
+        console.print()
+
+    def problem(self, message: str) -> None:
+        console.print()
+        console.print(text.Text(_collapse_home(message), style="yellow"))
+        console.print()
+
+    def note(self, message: str) -> None:
+        console.print(padding.Padding(text.Text(message, style="dim"), (0, 0, 0, 2)))

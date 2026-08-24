@@ -1,0 +1,152 @@
+"""How the MCP install narrates itself.
+
+The install flow is shared by two callers with different needs. ``opik.configure()``
+is a library call that must not paint boxes on someone's stdout, so it narrates
+through the logger. ``opik mcp configure`` is a wizard a person is watching, and
+it should look like one — the rest of the command group already renders with
+``rich`` (see ``cli.status_view``), so the installer looking like raw log output
+was the odd one out.
+
+Both are served by injecting a view rather than branching inside the flow:
+:class:`LoggingInstallView` is the default and preserves library behaviour;
+``cli.mcp`` passes :class:`RichInstallView`. Tests inject a recording double,
+which also decouples them from exact log strings.
+
+Presentation only — every decision is made by ``install``.
+"""
+
+import abc
+import contextlib
+import dataclasses
+import logging
+import pathlib
+from typing import Iterator, List, Optional
+
+LOGGER = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass
+class PlannedTarget:
+    """One AI host the install is about to touch, and where."""
+
+    display_name: str
+    location: str
+
+
+@dataclasses.dataclass
+class TargetResult:
+    display_name: str
+    detail: str
+    succeeded: bool
+    # Short form for a display that already showed where the file is.
+    summary: Optional[str] = None
+
+    @property
+    def short(self) -> str:
+        return self.summary or self.detail
+
+
+class InstallView(abc.ABC):
+    """Narration hooks for the MCP install flow."""
+
+    @abc.abstractmethod
+    def plan(
+        self, deployment: str, transport: str, targets: List[PlannedTarget]
+    ) -> None:
+        """Announce what is about to happen, before anything is written."""
+
+    @abc.abstractmethod
+    def step(self, description: str) -> "contextlib.AbstractContextManager[None]":
+        """Wrap a slow step (a probe, a download, a verification)."""
+
+    @abc.abstractmethod
+    def results(self, results: List[TargetResult]) -> None:
+        """Report what was written, per host."""
+
+    @abc.abstractmethod
+    def verification(self, succeeded: bool, detail: str) -> None:
+        """Report whether the registration actually works."""
+
+    @abc.abstractmethod
+    def next_steps(self, assistants: List[str]) -> None:
+        """Tell the user the one thing left to do."""
+
+    @abc.abstractmethod
+    def skipped(self, message: str) -> None:
+        """Nothing was installed, and why."""
+
+    @abc.abstractmethod
+    def problem(self, message: str) -> None:
+        """A blocking failure, with the fix."""
+
+    @abc.abstractmethod
+    def note(self, message: str) -> None:
+        """Something worth knowing that does not change the outcome."""
+
+
+class LoggingInstallView(InstallView):
+    """The library-safe default: everything through the logger, no cursor control."""
+
+    def plan(
+        self, deployment: str, transport: str, targets: List[PlannedTarget]
+    ) -> None:
+        LOGGER.info(
+            "Setting up the Opik MCP server (%s, %s) for: %s",
+            deployment,
+            transport,
+            ", ".join(f"{t.display_name} -> {t.location}" for t in targets),
+        )
+
+    @contextlib.contextmanager
+    def step(self, description: str) -> Iterator[None]:
+        LOGGER.info("%s...", description)
+        yield
+
+    def results(self, results: List[TargetResult]) -> None:
+        for result in results:
+            if result.succeeded:
+                LOGGER.info("%s: %s", result.display_name, result.detail)
+            else:
+                LOGGER.warning("%s: %s", result.display_name, result.detail)
+
+    def verification(self, succeeded: bool, detail: str) -> None:
+        if succeeded:
+            LOGGER.info("Verified: %s.", detail)
+        else:
+            LOGGER.warning(
+                "The Opik MCP server was registered, but verification failed: %s",
+                detail,
+            )
+
+    def next_steps(self, assistants: List[str]) -> None:
+        LOGGER.info(
+            "Restart %s to pick up the Opik MCP server, then ask it to "
+            "'list my Opik projects'.",
+            ", ".join(assistants) if assistants else "your AI host",
+        )
+
+    def skipped(self, message: str) -> None:
+        LOGGER.info(message)
+
+    def problem(self, message: str) -> None:
+        LOGGER.warning(message)
+
+    def note(self, message: str) -> None:
+        LOGGER.info(message)
+
+
+def display_path(path: pathlib.Path) -> str:
+    """Render a path with the user's home directory collapsed to ``~``."""
+    home = str(pathlib.Path.home())
+    value = str(path)
+    return f"~{value[len(home) :]}" if value.startswith(home) else value
+
+
+_DEFAULT_VIEW: Optional[InstallView] = None
+
+
+def default_view() -> InstallView:
+    global _DEFAULT_VIEW
+    if _DEFAULT_VIEW is None:
+        _DEFAULT_VIEW = LoggingInstallView()
+    return _DEFAULT_VIEW

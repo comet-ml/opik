@@ -8,6 +8,7 @@ import click
 import opik.config as opik_config
 import opik.url_helpers as url_helpers
 from opik.cli import configure as configure_cli
+from opik.cli import mcp_view as mcp_rich_view
 from opik.cli import status_view
 from opik.configurator import interactive_helpers
 from opik.configurator import mcp as mcp_installer
@@ -164,6 +165,7 @@ def configure(local_server: bool, hosts: Tuple[str, ...]) -> None:
         **params,
         force_local_server=local_server,
         host_keys=host_keys,
+        view=mcp_rich_view.RichInstallView(),
     )
 
 
