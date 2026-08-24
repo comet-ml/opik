@@ -109,6 +109,7 @@ Because this is a user-level install, it is independent of your current director
 opik skills configure --host codex --host claude-code   # specific assistants
 opik skills configure --host all                        # every detected assistant
 opik skills status                                      # what is installed
+opik skills update                                      # pull the latest pack
 opik skills remove                                      # take it back out
 ```
 
@@ -120,6 +121,16 @@ In a terminal that cannot host an interactive list — a pipe, a CI log — the 
 falls back to a numbered menu automatically. Naming hosts with `--host` skips the
 question entirely.
 </Note>
+
+`opik skills update` rewrites only if the pack actually changed, so it is cheap to
+run on a schedule, and it removes skills the pack has dropped rather than leaving
+the old names for your assistant to keep reading.
+
+<Warning>
+Assistants read their skills at session start. After installing or updating,
+**start a new session** — a running one will not pick them up, and
+`opik skills status` showing `✓ linked` is the check that the files are in place.
+</Warning>
 
 <Note>
 Already using [`npx skills add comet-ml/opik-skills`](https://github.com/comet-ml/opik-skills)? That writes to the same `~/.agents/skills` location, so the two are interchangeable. `opik skills status` reports a pack it did not install as coming from outside the CLI, and `opik skills configure` will replace it.

@@ -1,13 +1,18 @@
 from typing import List
 
 from opik.configurator.skills import roots as skills_roots
-from opik.configurator.skills.install import setup_skills, uninstall_skills
+from opik.configurator.skills.install import (
+    setup_skills,
+    uninstall_skills,
+    update_skills,
+)
 
 __all__ = [
     "detected_host_keys",
     "detected_host_names",
     "setup_skills",
     "uninstall_skills",
+    "update_skills",
 ]
 
 

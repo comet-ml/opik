@@ -246,3 +246,59 @@ class TestStatusCommand:
 
         assert result.exit_code == 0
         assert "outside this CLI" in result.output
+
+
+class TestUpdateCommand:
+    def _result(self, **kwargs):
+        from opik.configurator.skills import install as skills_install
+
+        defaults = dict(changed=True, detail="updated to abcdef123456")
+        defaults.update(kwargs)
+        return skills_install.UpdateResult(**defaults)
+
+    def test_update__changed__reports_the_version_and_the_restart(self):
+        runner = CliRunner()
+        with patch.object(
+            skills_cli.skills_installer, "update_skills", return_value=self._result()
+        ):
+            result = runner.invoke(cli, ["skills", "update"])
+
+        assert result.exit_code == 0
+        assert "updated to abcdef123456" in result.output
+        assert "Restart your AI host" in result.output
+
+    def test_update__lists_added_and_removed_skills(self):
+        runner = CliRunner()
+        with patch.object(
+            skills_cli.skills_installer,
+            "update_skills",
+            return_value=self._result(added=["evaluate"], removed=["instrument"]),
+        ):
+            result = runner.invoke(cli, ["skills", "update"])
+
+        assert "added:   evaluate" in result.output
+        assert "removed: instrument" in result.output
+
+    def test_update__already_current__says_so_and_omits_the_restart(self):
+        runner = CliRunner()
+        with patch.object(
+            skills_cli.skills_installer,
+            "update_skills",
+            return_value=self._result(changed=False, detail="already up to date (abc)"),
+        ):
+            result = runner.invoke(cli, ["skills", "update"])
+
+        assert result.exit_code == 0
+        assert "already up to date" in result.output
+        assert "Restart" not in result.output
+
+    def test_update__message_ends_with_exactly_one_full_stop(self):
+        runner = CliRunner()
+        with patch.object(
+            skills_cli.skills_installer,
+            "update_skills",
+            return_value=self._result(changed=False, detail="nothing here."),
+        ):
+            result = runner.invoke(cli, ["skills", "update"])
+
+        assert ".." not in result.output

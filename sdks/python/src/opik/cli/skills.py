@@ -34,6 +34,11 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     return list(dict.fromkeys(hosts))
 
 
+def _sentence(text: str) -> str:
+    """End with exactly one full stop, whatever the message already carries."""
+    return text if text.endswith(".") else f"{text}."
+
+
 def _ask_which_hosts(detected: List[str]) -> Optional[List[str]]:
     """Which detected assistants to install for.
 
@@ -104,6 +109,28 @@ def configure(hosts: Tuple[str, ...]) -> None:
         raise click.ClickException(
             "The Opik skill pack was not installed — see the messages above."
         )
+
+
+@skills.command(name="update")
+def update() -> None:
+    """Update the installed Opik skill pack to the latest published version.
+
+    Rewrites only if the pack actually changed, so running this on a schedule is
+    cheap. Skills the pack has dropped are removed rather than left behind for
+    your assistant to keep reading.
+    """
+    result = skills_installer.update_skills()
+
+    if not result.changed:
+        click.echo(f"Opik skill pack: {_sentence(result.detail)}")
+        return
+
+    click.echo(f"Opik skill pack {_sentence(result.detail)}")
+    if result.added:
+        click.echo(f"  added:   {', '.join(result.added)}")
+    if result.removed:
+        click.echo(f"  removed: {', '.join(result.removed)}")
+    click.echo("Restart your AI host to pick up the change.")
 
 
 @skills.command(name="remove")

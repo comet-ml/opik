@@ -19,6 +19,7 @@ Analytics note: as with the MCP installer, the reporting seam is being built on 
 separate branch. ``ANALYTICS:`` comments mark the events this flow owes.
 """
 
+import dataclasses
 import logging
 import pathlib
 import shutil
@@ -71,7 +72,10 @@ def setup_skills(host_keys: List[str], ref: str = skills_pack.DEFAULT_REF) -> bo
         return False
 
     skills_manifest.write(
-        names=pack.names, content_hash=pack.content_hash, ref=pack.ref
+        names=pack.names,
+        content_hash=pack.content_hash,
+        ref=pack.ref,
+        hosts=supported,
     )
 
     LOGGER.info(
@@ -166,6 +170,105 @@ def _warn_on_claude_code_plugin_overlap(host_keys: List[str]) -> None:
         "Code now has both. They overlap; remove the plugin's copy with "
         "`/plugin uninstall opik` if you prefer the pack alone."
     )
+
+
+@dataclasses.dataclass
+class UpdateResult:
+    """What ``update_skills`` did, so the caller can report it precisely."""
+
+    changed: bool
+    detail: str
+    added: List[str] = dataclasses.field(default_factory=list)
+    removed: List[str] = dataclasses.field(default_factory=list)
+
+
+def update_skills(ref: str = skills_pack.DEFAULT_REF) -> UpdateResult:
+    """Refresh an existing install, rewriting only if the pack actually changed.
+
+    Compares the downloaded pack against the content hash recorded at install
+    time, which is the only way to answer "is this current?" for a directory of
+    Markdown files. Skills the pack has dropped are removed, so a rename upstream
+    does not leave the old name behind for the assistant to keep reading.
+    """
+    previous = [
+        status.name
+        for status in skills_manifest.collect_status()
+        if status.installed_by_opik
+    ]
+    if not previous:
+        return UpdateResult(
+            changed=False,
+            detail=(
+                "no Opik-installed skills found. Run `opik skills configure` to "
+                "install them."
+            ),
+        )
+
+    try:
+        pack = skills_pack.download(ref=ref)
+    except skills_pack.PackError as error:
+        return UpdateResult(changed=False, detail=str(error))
+
+    if pack.content_hash == skills_manifest.recorded_content_hash():
+        return UpdateResult(
+            changed=False,
+            detail=f"already up to date ({pack.content_hash[:12]})",
+        )
+
+    shared_dir = skills_roots.shared_skills_dir()
+    try:
+        shared_dir.mkdir(parents=True, exist_ok=True)
+        for name, files in pack.skills.items():
+            skills_pack.write_skill(shared_dir, name, files)
+    except OSError as error:
+        return UpdateResult(
+            changed=False, detail=f"could not write {shared_dir}: {error}"
+        )
+
+    removed = sorted(set(previous) - set(pack.names))
+    added = sorted(set(pack.names) - set(previous))
+
+    hosts = skills_manifest.recorded_hosts()
+    if hosts is None:
+        # Manifest predates the `hosts` field: re-link wherever a link already is.
+        hosts = [
+            host_key
+            for host_key in skills_roots.LINKED_HOST_KEYS
+            if _has_any_link(host_key, previous)
+        ]
+
+    for name in removed:
+        _remove_path(shared_dir / name)
+        for host_key in skills_roots.LINKED_HOST_KEYS:
+            link_root = skills_roots.link_dir(host_key)
+            if link_root is not None:
+                _remove_path(link_root / name)
+
+    for host_key in hosts:
+        if skills_roots.reads_shared_dir(host_key):
+            continue
+        _link_for_host(host_key, pack.names, shared_dir)
+
+    skills_manifest.write(
+        names=pack.names,
+        content_hash=pack.content_hash,
+        ref=pack.ref,
+        hosts=hosts,
+    )
+
+    return UpdateResult(
+        changed=True,
+        detail=f"updated to {pack.content_hash[:12]}",
+        added=added,
+        removed=removed,
+    )
+
+
+def _has_any_link(host_key: str, names: List[str]) -> bool:
+    link_root = skills_roots.link_dir(host_key)
+    if link_root is None:
+        return False
+    return any((link_root / name).exists() for name in names)
 
 
 def uninstall_skills(host_keys: Optional[List[str]] = None) -> List[str]:

@@ -40,7 +40,10 @@ def manifest_path() -> pathlib.Path:
 
 
 def write(
-    names: List[str], content_hash: Optional[str] = None, ref: Optional[str] = None
+    names: List[str],
+    content_hash: Optional[str] = None,
+    ref: Optional[str] = None,
+    hosts: Optional[List[str]] = None,
 ) -> None:
     """Record an install. Best-effort: a manifest we cannot write is not fatal."""
     payload = {
@@ -50,6 +53,9 @@ def write(
         "contentHash": content_hash,
         "installedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "skills": sorted(names),
+        # Which assistants were chosen, so `update` re-links the same set instead
+        # of guessing. Absent in manifests written before this field existed.
+        "hosts": sorted(hosts) if hosts is not None else None,
     }
     path = manifest_path()
     try:
@@ -63,6 +69,21 @@ def skills_roots_source() -> str:
     from opik.configurator.skills import pack as skills_pack
 
     return skills_pack.REPOSITORY
+
+
+def recorded_content_hash() -> Optional[str]:
+    payload = read() or {}
+    value = payload.get("contentHash")
+    return str(value) if isinstance(value, str) and value else None
+
+
+def recorded_hosts() -> Optional[List[str]]:
+    """Assistants recorded at install time, or ``None`` if the manifest predates it."""
+    payload = read() or {}
+    hosts = payload.get("hosts")
+    if not isinstance(hosts, list):
+        return None
+    return [str(host) for host in hosts]
 
 
 def read() -> Optional[Dict[str, object]]:
