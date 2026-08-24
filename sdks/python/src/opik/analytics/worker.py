@@ -1,4 +1,3 @@
-import functools
 import logging
 import queue
 import threading
@@ -21,7 +20,6 @@ class Event(NamedTuple):
     properties: Dict[str, PropertyValue]
 
 
-@functools.lru_cache
 def session_properties() -> Dict[str, PropertyValue]:
     """
     Properties describing the process, attached to every event.
@@ -31,6 +29,10 @@ def session_properties() -> Dict[str, PropertyValue]:
     LLM libraries installed alongside Opik). Both read `environment_details`, so the
     two payloads cannot drift apart and the `session_id` on an event matches the one on
     any error report from the same run.
+
+    Both collectors below are themselves cached, so this is a dict merge - and
+    reporting is once-per-event-per-process, so it happens a bounded number of
+    times. Caching it again here would only add a second thing to reset on fork.
     """
     properties: Dict[str, PropertyValue] = {
         "sdk_language": "python",

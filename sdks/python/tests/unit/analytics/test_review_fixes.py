@@ -91,16 +91,17 @@ def test_start_worker__no_destination_configured__no_thread_started(monkeypatch)
 @pytest.fixture
 def fresh_context():
     environment_details.collect_context_once.cache_clear()
-    worker_module.session_properties.cache_clear()
     yield
     environment_details.collect_context_once.cache_clear()
-    worker_module.session_properties.cache_clear()
 
 
 def test_reset_after_fork__session_properties_rebuilt(fresh_context):
     """
     `pid` and `session_id` describe one process. Left cached, a forked child reports
     under its parent's identity and the two cannot be told apart downstream.
+
+    `session_properties` holds no cache of its own; it reads through to
+    `environment_details`, so clearing that is what has to rebuild the identity.
     """
     before = dict(worker_module.session_properties())
 

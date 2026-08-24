@@ -40,13 +40,18 @@ def _to_payload(event: worker.Event) -> Dict[str, Any]:
 
 
 class Sender:
-    def __init__(self, url: str, check_tls_certificate: bool) -> None:
+    def __init__(self, url: str) -> None:
         self._url = url
         self._client = httpx.Client(
             timeout=httpx.Timeout(
                 REQUEST_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS
             ),
-            verify=check_tls_certificate,
+            # Always verified, deliberately not honouring `check_tls_certificate`.
+            # That setting is about reaching the user's own deployment - a
+            # self-hosted Opik behind a self-signed certificate - and this is a
+            # fixed public endpoint that has no such problem. Letting it apply here
+            # would silently weaken a connection the user never pointed at.
+            verify=True,
             headers={"User-Agent": f"{LIBRARY_NAME}/{package_version.VERSION}"},
         )
 

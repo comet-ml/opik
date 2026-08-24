@@ -7,7 +7,7 @@ on:
 
 env:
   # This workflow installs a real Opik and drives the SDK against it, so without
-  # this its runs would land in the usage analytics as if they were a user's.
+  # this, its runs would land in the usage analytics as if they were a user's.
   OPIK_ANALYTICS_ENABLE: false
   OPIK_SENTRY_ENABLE: false
 

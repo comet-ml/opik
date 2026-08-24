@@ -39,6 +39,9 @@ DEFAULT_FLUSH_TIMEOUT_SECONDS = 5.0
 # daemon thread, so anything still in flight dies with the process.
 ATEXIT_FLUSH_TIMEOUT_SECONDS = 2.0
 
+# How long `shutdown` waits for `_LOCK` before giving up on it, see there.
+SHUTDOWN_LOCK_TIMEOUT_SECONDS = 2.0
+
 _EVENT_NAME_PREFIX = "opik_python_sdk"
 
 # Separates the levels of the path. Deliberately doubled: segments are method names, so
@@ -154,16 +157,15 @@ def _reset_after_fork() -> None:
     must not report it again. The lock is replaced because a fork can happen while
     another thread holds it, which would leave it locked forever in the child.
 
-    The session properties are dropped too, so the child picks up its own `pid` and
-    `session_id` rather than reporting under its parent's. `environment_details`
-    clears the cache underneath on its own fork hook, for error reports as well.
+    A child picks up its own `pid` and `session_id` without anything being done here:
+    they come from `environment_details`, which clears its own cache on its own fork
+    hook, for error reports as well.
     """
     global _WORKER, _LOCK, _REPORTED_LOCK
 
     _WORKER = None
     _LOCK = threading.Lock()
     _REPORTED_LOCK = threading.Lock()
-    worker.session_properties.cache_clear()
 
 
 if hasattr(os, "register_at_fork"):
@@ -212,10 +214,7 @@ def _start_worker() -> Optional[worker.Worker]:
             _DISABLED = True
             return None
 
-        sender = comet_stats.Sender(
-            url=config_.analytics_url,
-            check_tls_certificate=config_.check_tls_certificate,
-        )
+        sender = comet_stats.Sender(url=config_.analytics_url)
 
         _WORKER = worker.Worker(
             send=sender.send,
@@ -323,9 +322,19 @@ def shutdown(timeout: Optional[float] = DEFAULT_FLUSH_TIMEOUT_SECONDS) -> None:
     global _WORKER, _DISABLED
 
     try:
-        with _LOCK:
+        # Bounded rather than a plain `with`: this runs from `atexit`, and `_LOCK` is
+        # held while the worker starts - which evaluates rules, and a rule is
+        # arbitrary user code. One that blocks would otherwise hang the interpreter
+        # on the way out. Giving up on the lock still switches reporting off; the
+        # worker is a daemon thread, so anything left dies with the process.
+        acquired = _LOCK.acquire(timeout=SHUTDOWN_LOCK_TIMEOUT_SECONDS)
+        _DISABLED = True
+        if acquired:
             worker_, _WORKER = _WORKER, None
-            _DISABLED = True
+            _LOCK.release()
+        else:
+            LOGGER.debug("Analytics lock busy at shutdown, stopping without it")
+            worker_ = _WORKER
 
         if worker_ is not None:
             worker_.close(timeout)

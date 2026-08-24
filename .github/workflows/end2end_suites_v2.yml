@@ -6,6 +6,10 @@ env:
   ALLURE_ENDPOINT: https://comet.testops.cloud/
   ALLURE_PROJECT_ID: 1
   ALLURE_RESULTS: allure-results
+  # The sdk-driver service runs the SDK outside pytest for the whole suite, so
+  # without this its traffic would land in the usage analytics as a real user's.
+  OPIK_ANALYTICS_ENABLE: false
+  OPIK_SENTRY_ENABLE: false
 
 on:
   workflow_dispatch:

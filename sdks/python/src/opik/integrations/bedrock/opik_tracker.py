@@ -97,6 +97,8 @@ def track_bedrock(
         tracked_invoke_model_stream = stream_wrapper(
             client.invoke_model_with_response_stream
         )
-        client.invoke_model_with_response_stream = tracked_invoke_model_stream  # type: ignore[method-assign]
+        client.invoke_model_with_response_stream = (  # type: ignore[method-assign]
+            tracked_invoke_model_stream
+        )
 
     return client
