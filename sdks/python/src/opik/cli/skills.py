@@ -39,6 +39,21 @@ def _sentence(text: str) -> str:
     return text if text.endswith(".") else f"{text}."
 
 
+def resolve_hosts_interactively() -> Optional[List[str]]:
+    """Detect assistants and ask which to install the pack for.
+
+    Shared with ``opik mcp configure`` for the case where only the pack was
+    selected, so there is no server step whose host choice can be reused.
+    """
+    detected = skills_roots.detected_host_keys()
+    if len(detected) == 0:
+        raise click.ClickException(
+            "No supported AI host was detected. Name one explicitly: "
+            f"`opik skills configure --host {HOST_KEYS[0]}`."
+        )
+    return _ask_which_hosts(detected)
+
+
 def _ask_which_hosts(detected: List[str]) -> Optional[List[str]]:
     """Which detected assistants to install for.
 

@@ -18,6 +18,7 @@ class RecordingView(mcp_view.LoggingInstallView):
     def __init__(self):
         self.choose_calls = []
         self.plans = []
+        self.plan_extras = []
         self.steps = []
         self.target_results = []
         self.verifications = []
@@ -26,8 +27,9 @@ class RecordingView(mcp_view.LoggingInstallView):
         self.problems = []
         self.notes = []
 
-    def plan(self, deployment, transport, targets):
+    def plan(self, deployment, transport, targets, extras=()):
         self.plans.append((deployment, transport, list(targets)))
+        self.plan_extras.append(list(extras))
 
     @contextlib.contextmanager
     def step(self, description):

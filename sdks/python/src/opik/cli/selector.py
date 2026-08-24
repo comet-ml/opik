@@ -20,6 +20,7 @@ from typing import Callable, Iterable, List, Optional, Sequence, Set
 
 import rich.console
 import rich.live
+from rich import console as console_module
 from rich import table, text
 
 console = rich.console.Console()
@@ -108,14 +109,15 @@ def multiselect(
 
 def _render(
     title: str, choices: Sequence[Choice], selected: Set[str], cursor: int
-) -> table.Table:
-    grid = table.Table.grid(padding=(0, 1))
+) -> console_module.Group:
+    # Title and footer are rendered outside the grid: as grid rows their text
+    # sizes the label column, pushing every hint far to the right.
+    grid = table.Table.grid(padding=(0, 2))
     grid.add_column(no_wrap=True)  # cursor
     grid.add_column(no_wrap=True)  # checkbox
     grid.add_column(no_wrap=True)  # label
     grid.add_column(overflow="fold")  # hint
 
-    grid.add_row("", "", text.Text(title, style="bold"), "")
     for index, choice in enumerate(choices):
         is_current = index == cursor
         is_selected = choice.key in selected
@@ -128,13 +130,11 @@ def _render(
             text.Text(choice.label, style="bold" if is_current else ""),
             text.Text(choice.hint, style="dim"),
         )
-    grid.add_row(
-        "",
-        "",
-        text.Text("↑↓ move · space select · a all · enter confirm", style="dim"),
-        "",
+    return console_module.Group(
+        text.Text(title, style="bold"),
+        grid,
+        text.Text("  ↑↓ move · space select · a all · enter confirm", style="dim"),
     )
-    return grid
 
 
 def _key_reader() -> Optional[Callable[[], str]]:

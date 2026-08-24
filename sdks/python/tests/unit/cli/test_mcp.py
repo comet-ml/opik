@@ -3,6 +3,8 @@
 import pathlib
 from unittest.mock import patch
 
+import pytest
+
 from click.testing import CliRunner
 
 from opik.cli import cli
@@ -374,3 +376,188 @@ class TestHostFlag:
         assert "OPIK_API_KEY" in result.output
         configure_spy.assert_not_called()
         setup_spy.assert_not_called()
+
+
+class TestSkillsAsPartOfMcpConfigure:
+    """`opik mcp configure` sets up both by default; the pack is opt-out."""
+
+    def _patches(self, **overrides):
+        base = dict(
+            config=_config(api_key="key"),
+            interactive=True,
+            configured_hosts=["cursor"],
+        )
+        base.update(overrides)
+        return base
+
+    def test_configure__default__installs_the_server_and_the_pack(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.selector, "is_supported", return_value=False),
+            patch.object(
+                mcp_cli.mcp_installer, "setup_mcp_server", return_value=["cursor"]
+            ) as mcp_spy,
+            patch.object(
+                mcp_cli.skills_installer, "setup_skills", return_value=True
+            ) as skills_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", "--host", "cursor"])
+
+        assert result.exit_code == 0
+        mcp_spy.assert_called_once()
+        skills_spy.assert_called_once_with(["cursor"])
+
+    def test_configure__reuses_the_hosts_the_server_was_set_up_for(self):
+        """The assistants question must not be asked twice in one run."""
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.selector, "is_supported", return_value=False),
+            patch.object(
+                mcp_cli.mcp_installer,
+                "setup_mcp_server",
+                return_value=["claude-code", "codex"],
+            ),
+            patch.object(mcp_cli.skills_cli, "resolve_hosts_interactively") as ask_spy,
+            patch.object(
+                mcp_cli.skills_installer, "setup_skills", return_value=True
+            ) as skills_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+
+        assert result.exit_code == 0
+        skills_spy.assert_called_once_with(["claude-code", "codex"])
+        ask_spy.assert_not_called()
+
+    def test_configure__no_skills_flag__installs_only_the_server(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(
+                mcp_cli.mcp_installer, "setup_mcp_server", return_value=["cursor"]
+            ),
+            patch.object(mcp_cli.skills_installer, "setup_skills") as skills_spy,
+        ):
+            result = runner.invoke(
+                cli, ["mcp", "configure", "--host", "cursor", "--no-skills"]
+            )
+
+        assert result.exit_code == 0
+        skills_spy.assert_not_called()
+
+    def test_configure__plan_mentions_the_pack_when_it_is_included(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.selector, "is_supported", return_value=False),
+            patch.object(
+                mcp_cli.mcp_installer, "setup_mcp_server", return_value=["cursor"]
+            ) as mcp_spy,
+            patch.object(mcp_cli.skills_installer, "setup_skills", return_value=True),
+        ):
+            runner.invoke(cli, ["mcp", "configure", "--host", "cursor"])
+
+        assert mcp_spy.call_args.kwargs["plan_extras"] == ["and the Opik skill pack"]
+
+    def test_configure__no_skills__plan_mentions_nothing_extra(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(
+                mcp_cli.mcp_installer, "setup_mcp_server", return_value=["cursor"]
+            ) as mcp_spy,
+        ):
+            runner.invoke(cli, ["mcp", "configure", "--host", "cursor", "--no-skills"])
+
+        assert mcp_spy.call_args.kwargs["plan_extras"] == []
+
+    def test_configure__server_installed_nothing__does_not_install_the_pack_blindly(
+        self,
+    ):
+        """No successful host means no host to install a pack for."""
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.selector, "is_supported", return_value=False),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server", return_value=[]),
+            patch.object(
+                mcp_cli.skills_cli, "resolve_hosts_interactively", return_value=[]
+            ),
+            patch.object(mcp_cli.skills_installer, "setup_skills") as skills_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure"])
+
+        assert result.exit_code == 0
+        skills_spy.assert_not_called()
+
+
+class TestComponentSelector:
+    def test_choose_components__skills_flag_false__server_only(self):
+        assert mcp_cli._choose_components(False) == [mcp_cli.COMPONENT_MCP]
+
+    def test_choose_components__skills_flag_true__both_without_asking(self):
+        assert mcp_cli._choose_components(True) == [
+            mcp_cli.COMPONENT_MCP,
+            mcp_cli.COMPONENT_SKILLS,
+        ]
+
+    def test_choose_components__no_picker_support__defaults_to_both(self):
+        with patch.object(mcp_cli.selector, "is_supported", return_value=False):
+            assert mcp_cli._choose_components(None) == [
+                mcp_cli.COMPONENT_MCP,
+                mcp_cli.COMPONENT_SKILLS,
+            ]
+
+    def test_choose_components__both_are_preselected(self):
+        """ "mcp + skills" must be what Enter accepts."""
+        with (
+            patch.object(mcp_cli.selector, "is_supported", return_value=True),
+            patch.object(
+                mcp_cli.selector, "multiselect", return_value=["mcp"]
+            ) as picker,
+        ):
+            mcp_cli._choose_components(None)
+
+        assert picker.call_args.kwargs["preselected"] == [
+            mcp_cli.COMPONENT_MCP,
+            mcp_cli.COMPONENT_SKILLS,
+        ]
+
+    def test_choose_components__cancelled__aborts(self):
+        with (
+            patch.object(mcp_cli.selector, "is_supported", return_value=True),
+            patch.object(mcp_cli.selector, "multiselect", return_value=None),
+        ):
+            with pytest.raises(Exception, match="Cancelled"):
+                mcp_cli._choose_components(None)

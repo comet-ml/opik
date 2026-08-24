@@ -9,6 +9,9 @@ import opik.config as opik_config
 import opik.url_helpers as url_helpers
 from opik.cli import configure as configure_cli
 from opik.cli import mcp_view as mcp_rich_view
+from opik.cli import selector
+from opik.cli import skills as skills_cli
+from opik.configurator import skills as skills_installer
 from opik.cli import status_view
 from opik.configurator import interactive_helpers
 from opik.configurator import mcp as mcp_installer
@@ -73,6 +76,48 @@ def mcp() -> None:
 
 HOST_ALL = "all"
 
+COMPONENT_MCP = "mcp"
+COMPONENT_SKILLS = "skills"
+
+
+def _choose_components(skills_flag: Optional[bool]) -> List[str]:
+    """What to set up: the server, the skill pack, or both.
+
+    Both by default — they answer two halves of the same problem, and a user who
+    wants tools almost always wants the guidance for using them. Presented as a
+    selector rather than folded into one yes/no so it stays visible that two
+    different things are being installed: the server writes credentials into a
+    config file, the pack writes instructions the assistant then acts on.
+    """
+    if skills_flag is False:
+        return [COMPONENT_MCP]
+    if skills_flag is True:
+        return [COMPONENT_MCP, COMPONENT_SKILLS]
+
+    both = [COMPONENT_MCP, COMPONENT_SKILLS]
+    if not selector.is_supported():
+        return both
+
+    chosen = selector.multiselect(
+        title="What should Opik set up?",
+        choices=[
+            selector.Choice(
+                COMPONENT_MCP,
+                "MCP server",
+                "read traces, log scores, run experiments from chat",
+            ),
+            selector.Choice(
+                COMPONENT_SKILLS,
+                "Skill pack",
+                "teaches your assistant how to instrument code with Opik",
+            ),
+        ],
+        preselected=both,
+    )
+    if chosen is None:
+        raise click.ClickException("Cancelled; nothing was changed.")
+    return chosen
+
 
 def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     """Turn ``--host`` values into the concrete host keys to install for.
@@ -115,7 +160,16 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     "host detected on this machine. Naming a host skips the interactive picker, so "
     "this is the flag to use from a script, a Dockerfile, or a coding agent.",
 )
-def configure(local_server: bool, hosts: Tuple[str, ...]) -> None:
+@click.option(
+    "--skills/--no-skills",
+    "skills_flag",
+    default=None,
+    help="Also install the Opik skill pack for the same assistants. Default: yes. "
+    "When omitted you are asked, with both pre-selected.",
+)
+def configure(
+    local_server: bool, hosts: Tuple[str, ...], skills_flag: Optional[bool]
+) -> None:
     """Register the Opik MCP server with your AI assistant(s).
 
     Reuses your existing Opik configuration (~/.opik.config), so run
@@ -126,6 +180,9 @@ def configure(local_server: bool, hosts: Tuple[str, ...]) -> None:
     the local server.
     """
     host_keys = _resolve_host_keys(hosts)
+    components = _choose_components(skills_flag)
+    if not components:
+        raise click.ClickException("Nothing selected; nothing was changed.")
 
     # A terminal is only needed to *ask* which host to use. With `--host` the
     # caller has already answered, so the command works headless — which is how
@@ -161,12 +218,30 @@ def configure(local_server: bool, hosts: Tuple[str, ...]) -> None:
                 "Opik configuration is still incomplete; aborting MCP install."
             )
 
-    mcp_installer.setup_mcp_server(
-        **params,
-        force_local_server=local_server,
-        host_keys=host_keys,
-        view=mcp_rich_view.RichInstallView(),
-    )
+    wants_skills = COMPONENT_SKILLS in components
+    configured_hosts: List[str] = []
+
+    if COMPONENT_MCP in components:
+        configured_hosts = mcp_installer.setup_mcp_server(
+            **params,
+            force_local_server=local_server,
+            host_keys=host_keys,
+            view=mcp_rich_view.RichInstallView(),
+            plan_extras=["and the Opik skill pack"] if wants_skills else [],
+        )
+
+    if not wants_skills:
+        return
+
+    # Reuse the assistants the server was just set up for, so the same question is
+    # not asked twice. With no server step there is nothing to reuse, so ask.
+    skill_hosts = configured_hosts or host_keys
+    if not skill_hosts:
+        skill_hosts = skills_cli.resolve_hosts_interactively()
+        if skill_hosts is None:
+            raise click.ClickException("Cancelled; the skill pack was not installed.")
+    if skill_hosts:
+        skills_installer.setup_skills(list(skill_hosts))
 
 
 @mcp.command(name="status")

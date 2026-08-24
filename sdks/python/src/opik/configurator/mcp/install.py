@@ -14,7 +14,7 @@ import logging
 import shutil
 import subprocess
 import sys
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import opik.config as opik_config
 from opik.configurator.mcp import detection as mcp_detection
@@ -43,7 +43,8 @@ def setup_mcp_server(
     host_keys: Optional[List[str]] = None,
     assume_confirmed: bool = False,
     view: Optional[mcp_view.InstallView] = None,
-) -> None:
+    plan_extras: Sequence[str] = (),
+) -> List[str]:
     """Register the Opik MCP server with the user's AI host(s).
 
     The decision of *whether* to run this lives in the callers; by the time this
@@ -63,6 +64,13 @@ def setup_mcp_server(
 
     ``view`` decides how the flow narrates itself; it defaults to the logger so
     that ``opik.configure()`` stays library-safe. The CLI passes a ``rich`` view.
+
+    ``plan_extras`` names anything the caller will do to the same hosts afterwards
+    (the skill pack), so it appears in the plan and one confirmation covers the
+    whole change.
+
+    Returns the host keys actually registered, so a caller can act on the same set
+    without asking the user a second time.
     """
     display = view if view is not None else mcp_view.default_view()
 
@@ -76,7 +84,7 @@ def setup_mcp_server(
     if ambiguity is not None:
         display.problem(ambiguity)
         # ANALYTICS: install skipped, reason="ambiguous_workspace".
-        return
+        return []
 
     # Prefer the Opik-hosted MCP server when the deployment runs one; otherwise
     # fall back to the local `uvx opik-mcp` server. The probe — not the
@@ -109,7 +117,7 @@ def setup_mcp_server(
     if server_spec is None:
         display.problem(unavailable_reason or "")
         # ANALYTICS: install skipped, reason="uv_missing".
-        return
+        return []
 
     candidates = _candidate_targets(host_keys)
     if len(candidates) == 0:
@@ -121,7 +129,7 @@ def setup_mcp_server(
         else:
             _report_no_host_detected(server_spec, display)
         # ANALYTICS: install skipped, reason="no_host_detected" / "unknown_host".
-        return
+        return []
 
     # Shown before anything is written, and before the confirmation below, so the
     # user is consenting to a change they can see rather than a yes/no in the dark.
@@ -135,6 +143,7 @@ def setup_mcp_server(
             )
             for target in candidates
         ],
+        extras=plan_extras,
     )
 
     # ANALYTICS: install started. Carries the transport ("http" for the hosted
@@ -149,7 +158,7 @@ def setup_mcp_server(
         )
         # ANALYTICS: install skipped, reason="declined" — the decline rate on the
         # consent prompt, and the single most important number this flow owes.
-        return
+        return []
 
     if isinstance(server_spec, mcp_spec.StdioServerSpec):
         with display.step("Preparing the Opik MCP server"):
@@ -189,6 +198,12 @@ def setup_mcp_server(
     # labelled with `target.key`, the transport, and the verification outcome.
     # Per-host rather than per-run: a run that writes Cursor and fails Codex is two
     # different facts.
+
+    return [
+        target.key
+        for target, result in zip(selected_targets, results)
+        if result.succeeded
+    ]
 
 
 def _deployment_label(

@@ -20,7 +20,7 @@ import contextlib
 import dataclasses
 import logging
 import pathlib
-from typing import Iterator, List, Optional
+from typing import Iterator, List, Optional, Sequence
 
 from opik.configurator import interactive_helpers
 
@@ -62,9 +62,17 @@ class InstallView(abc.ABC):
 
     @abc.abstractmethod
     def plan(
-        self, deployment: str, transport: str, targets: List[PlannedTarget]
+        self,
+        deployment: str,
+        transport: str,
+        targets: List[PlannedTarget],
+        extras: Sequence[str] = (),
     ) -> None:
-        """Announce what is about to happen, before anything is written."""
+        """Announce what is about to happen, before anything is written.
+
+        ``extras`` names anything this run will do besides registering the server
+        — the skill pack, today — so one confirmation covers the whole change.
+        """
 
     @abc.abstractmethod
     def step(self, description: str) -> "contextlib.AbstractContextManager[None]":
@@ -109,13 +117,18 @@ class LoggingInstallView(InstallView):
     """The library-safe default: everything through the logger, no cursor control."""
 
     def plan(
-        self, deployment: str, transport: str, targets: List[PlannedTarget]
+        self,
+        deployment: str,
+        transport: str,
+        targets: List[PlannedTarget],
+        extras: Sequence[str] = (),
     ) -> None:
         LOGGER.info(
-            "Setting up the Opik MCP server (%s, %s) for: %s",
+            "Setting up the Opik MCP server (%s, %s) for: %s%s",
             deployment,
             transport,
             ", ".join(f"{t.display_name} -> {t.location}" for t in targets),
+            f". Also: {', '.join(extras)}" if extras else "",
         )
 
     @contextlib.contextmanager
