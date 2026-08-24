@@ -553,7 +553,13 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                   }
                   id="sampling_rate"
                   label="Sampling rate"
-                  tooltip="Percentage of traces to evaluate"
+                  tooltip={
+                    isTraceScope
+                      ? "Percentage of production (SDK-logged) traces to evaluate. Traces from experiments, the playground and optimization runs ignore this rate."
+                      : `Percentage of production (SDK-logged) ${
+                          isThreadScope ? "threads" : "spans"
+                        } to evaluate. Only SDK-logged data is evaluated.`
+                  }
                   suffix="%"
                 />
               )}

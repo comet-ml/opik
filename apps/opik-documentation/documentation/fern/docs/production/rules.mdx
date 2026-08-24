@@ -35,7 +35,7 @@ To create a new scoring metric in the UI, first navigate to the project you woul
 When creating a new rule, you will be presented with the following options:
 
 1. **Name:** The name of the rule
-2. **Sampling rate:** The percentage of production traces to score. When set to `100%`, all production traces will be scored. This setting applies to production traces only — traces from experiments, the playground and optimization runs are never sampled.
+2. **Sampling rate:** The percentage of production traces to score. When set to `100%`, all production traces will be scored. The rate applies to production (SDK-logged) traces only. Traces from experiments ignore it and are always scored when the rule matches. Traces from the playground or an optimization run ignore it too, but are only evaluated when you explicitly select the rule for that run.
 3. **Model:** The model to use to run the LLM as a Judge metric. For evaluating traces with images, make sure to select a model that supports vision capabilities.
 4. **Prompt:** The LLM as a Judge prompt to use. Opik provides a set of base prompts (Hallucination, Moderation, Answer Relevance) that you can use or you can define your own. Variables in the prompt should be in `{{variable_name}}` format.
 5. **Variable mapping:** This is the mapping of the variables in the prompt to the values from the trace.
