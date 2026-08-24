@@ -68,9 +68,6 @@ class OpikConfigurator:
         # Set when the consent prompt named the detected hosts, so the installer
         # can skip re-confirming the very same list.
         self._mcp_prompt_named_detected_hosts = False
-        # One answer covers the server and the skill pack; cached so the second
-        # step reuses it instead of asking again.
-        self._assistant_consent: Optional[bool] = None
 
         # Handle URL
         #
@@ -174,7 +171,15 @@ class OpikConfigurator:
         if len(detected) == 0:
             return None
 
-        return detected if self._ask_about_assistants() else None
+        # Asked after the server step, so the user answers with its output in
+        # front of them. Recommended, hence the default yes.
+        confirmed = ask_user_for_approval(
+            "\n  Recommended: also install the Opik skill pack for "
+            f"{_readable_list(skills.detected_host_names())}?\n"
+            "  It teaches your assistant how to instrument code with Opik, wire\n"
+            "  up integrations, and run test suites. (Y/n) "
+        )
+        return detected if confirmed else None
 
     def _maybe_setup_mcp_server(self) -> None:
         if not self._should_setup_mcp_server():
@@ -226,25 +231,9 @@ class OpikConfigurator:
             return False
 
         self._mcp_prompt_named_detected_hosts = True
-        return self._ask_about_assistants()
+        return ask_user_for_approval_default_no(self._mcp_prompt())
 
-    def _ask_about_assistants(self) -> bool:
-        """Ask once whether to set Opik up for the assistants we found.
-
-        One question for the server and the skill pack, cached across both steps.
-        Two prompts in a row asked the user to make the same decision twice, and
-        arrived immediately after the configuration log with nothing separating
-        them — a wall of output ending in a bare y/N.
-        """
-        if self._assistant_consent is not None:
-            return self._assistant_consent
-
-        self._assistant_consent = ask_user_for_approval_default_no(
-            self._assistant_prompt()
-        )
-        return self._assistant_consent
-
-    def _assistant_prompt(self) -> str:
+    def _mcp_prompt(self) -> str:
         """The prompt text, framed so it does not read as one more log line.
 
         Plain text with blank lines and an indent rather than anything richer:
@@ -258,13 +247,10 @@ class OpikConfigurator:
             "\n"
             f"  Found {names}.\n"
             "\n"
-            "  Opik can set these up for them:\n"
-            "    · MCP server — read traces, log scores and run experiments\n"
-            "                   from your assistant's chat\n"
-            "    · Skill pack — teaches your assistant how to instrument\n"
-            "                   your code with Opik\n"
+            "  The Opik MCP server lets them read traces, log scores and run\n"
+            "  experiments from chat.\n"
             "\n"
-            "  Set them up? (y/N) "
+            "  Register it with them? (y/N) "
         )
 
     def _configure_cloud(self) -> None:

@@ -2650,44 +2650,24 @@ class TestSkillsHostKeys:
         mock_prompt.assert_not_called()
 
     @patch(
-        "opik.configurator.configure.mcp.detected_host_names", return_value=["Codex"]
+        "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]
     )
     @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
-        return_value=True,
-    )
+    @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     def test_skills_host_keys__prompt_yes__names_the_host_and_installs(
         self, mock_is_interactive, mock_prompt, mock_detected, mock_names
     ):
         configurator = OpikConfigurator(install_skills=None)
         assert configurator._skills_host_keys() == ["codex"]
-        assert "Found Codex." in mock_prompt.call_args.args[0]
 
-    @patch(
-        "opik.configurator.configure.mcp.detected_host_names", return_value=["Codex"]
-    )
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
-        return_value=True,
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_library_path__server_and_pack_share_one_question(
-        self, mock_is_interactive, mock_prompt, mock_keys, mock_names
-    ):
-        """Two prompts in a row asked the same decision twice."""
-        configurator = OpikConfigurator(install_mcp=None, install_skills=None)
-
-        assert configurator._should_setup_mcp_server() is True
-        assert configurator._skills_host_keys() == ["codex"]
-
-        mock_prompt.assert_called_once()
+        prompt = mock_prompt.call_args.args[0]
+        assert "Codex" in prompt
+        # Recommended, so the default answer is yes — hence the (Y/n) helper.
+        assert "Recommended" in prompt
+        assert "(Y/n)" in prompt
 
     @patch(
         "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]
@@ -2695,10 +2675,25 @@ class TestSkillsHostKeys:
     @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
+    @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_library_path__pack_is_a_follow_up_not_a_choice_up_front(
+        self, mock_is_interactive, mock_prompt, mock_keys, mock_names
+    ):
+        """The pack is offered after the server step, with its output in view."""
+        configurator = OpikConfigurator(install_skills=None)
+
+        assert configurator._skills_host_keys() == ["codex"]
+
+        assert mock_prompt.call_args.args[0].lstrip().startswith("Recommended")
+
     @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
-        return_value=False,
+        "opik.configurator.configure.skills.detected_host_names", return_value=["Codex"]
     )
+    @patch(
+        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
+    )
+    @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     def test_skills_host_keys__prompt_no__returns_none(
         self, mock_is_interactive, mock_prompt, mock_detected, mock_names

@@ -40,25 +40,27 @@ Prefer not to use the CLI? You can wire up any host by hand — skip to
     This reuses your existing Opik configuration (`~/.opik.config`). If you
     haven't configured Opik yet, the wizard offers to do it for you first.
 
-    One command sets up both the server and the [skill pack](#the-skill-pack) —
-    the tools and the knowledge of how to use them. Both are pre-selected, so
-    Enter accepts them:
+    When several assistants are found you pick which ones from a list:
 
     ```text
-    What should Opik set up?
-    ❯  ◉  MCP server  read traces, log scores, run experiments from chat
-       ◉  Skill pack  teaches your assistant how to instrument code
-      ↑↓ move · space select · a all · enter confirm
-
-    Which AI assistants should Opik be set up for?
+    Which AI assistants should the Opik MCP server be set up for?
     ❯  ◉  Claude Code
        ◉  Cursor
        ◯  Codex
       ↑↓ move · space select · a all · enter confirm
     ```
 
-    The assistants you pick apply to both, so the question is asked once. Pass
-    `--no-skills` for the server alone.
+    Once the server is registered, the same command offers the
+    [skill pack](#the-skill-pack) for those assistants:
+
+    ```text
+    Recommended: also install the Opik skill pack for Claude Code, Cursor?
+    It teaches your assistant how to instrument code with Opik, wire up
+    integrations, and run test suites. [Y/n]:
+    ```
+
+    Pass `--no-skills` to skip the offer, or `--skills` to accept it without
+    being asked.
 
     `opik configure` also offers to run this for you at the end of its setup.
   </Step>

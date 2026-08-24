@@ -8,7 +8,7 @@ logger-based default.
 
 import contextlib
 import pathlib
-from typing import Iterator, List, Optional, Sequence
+from typing import Iterator, List, Optional
 
 import rich.console
 from rich import padding, table, text
@@ -47,7 +47,6 @@ class RichInstallView(mcp_view.InstallView):
         deployment: str,
         transport: str,
         targets: List[mcp_view.PlannedTarget],
-        extras: Sequence[mcp_view.PlannedTarget] = (),
     ) -> None:
         console.print()
         console.print(text.Text("Opik MCP server setup", style="bold"))
@@ -68,8 +67,6 @@ class RichInstallView(mcp_view.InstallView):
         files.add_column(overflow="fold", style="dim")
         for target in targets:
             files.add_row(target.display_name, target.location)
-        for extra in extras:
-            files.add_row(extra.display_name, extra.location)
         console.print(padding.Padding(files, _FIELDS_INDENT, expand=False))
         console.print()
 

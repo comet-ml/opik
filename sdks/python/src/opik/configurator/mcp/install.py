@@ -14,7 +14,7 @@ import logging
 import shutil
 import subprocess
 import sys
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 
 import opik.config as opik_config
 from opik.configurator.mcp import detection as mcp_detection
@@ -43,7 +43,6 @@ def setup_mcp_server(
     host_keys: Optional[List[str]] = None,
     assume_confirmed: bool = False,
     view: Optional[mcp_view.InstallView] = None,
-    plan_extras: Sequence[mcp_view.PlannedTarget] = (),
     announce_next_steps: bool = True,
 ) -> List[str]:
     """Register the Opik MCP server with the user's AI host(s).
@@ -66,9 +65,6 @@ def setup_mcp_server(
     ``view`` decides how the flow narrates itself; it defaults to the logger so
     that ``opik.configure()`` stays library-safe. The CLI passes a ``rich`` view.
 
-    ``plan_extras`` are extra plan rows for anything the caller will do to the
-    same hosts afterwards (the skill pack), so one confirmation covers the whole
-    change.
 
     Returns the host keys actually registered, so a caller can act on the same set
     without asking the user a second time.
@@ -144,7 +140,6 @@ def setup_mcp_server(
             )
             for target in candidates
         ],
-        extras=plan_extras,
     )
 
     # ANALYTICS: install started. Carries the transport ("http" for the hosted
