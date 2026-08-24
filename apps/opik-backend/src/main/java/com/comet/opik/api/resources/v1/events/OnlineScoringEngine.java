@@ -904,17 +904,23 @@ public class OnlineScoringEngine {
             var value = JsonPath.parse(forcedObject).read(path);
             return value != null ? serializeToJsonString(value) : null;
         } catch (Exception e) {
-            // INFO without the throwable: since a scalar/array section reaches this line by design
-            // (it has no nested path), a WARN with a PathNotFoundException stack trace would fire on
-            // every unresolved variable of every scored trace, and the exception message says nothing
-            // the log line does not. Matches the terminal "couldn't find flat or nested path" line below.
-            log.info("couldn't find path inside json, trying flat structure, path={}, json={}", path, json);
+            // DEBUG, and without the throwable: a scalar/array section reaches this line by design (it
+            // has no nested path), so at production volumes this fires for every unresolved variable of
+            // every scored trace — and when the flat fallback below succeeds there is nothing to report
+            // at all. The PathNotFoundException message says nothing the log line does not.
+            log.debug("couldn't find path inside json, trying flat structure, path={}, nodeType={}",
+                    path, json.getNodeType());
             return Optional.ofNullable(forcedObject)
                     .filter(Map.class::isInstance)
                     .map(object -> ((Map<?, ?>) object).get(path.replace("$.", "")))
                     .map(OnlineScoringEngine::serializeToJsonString)
                     .orElseGet(() -> {
-                        log.info("couldn't find flat or nested path in json, path={}, json={}", path, json);
+                        // The node's type, not its content: this is a trace's input/output/metadata, so
+                        // it carries customer prompts and completions that have no business in the
+                        // application log. The rule's own user-facing log already tells the customer
+                        // which variable failed to resolve.
+                        log.info("couldn't find flat or nested path in json, path={}, nodeType={}",
+                                path, json.getNodeType());
                         return null;
                     });
         }
