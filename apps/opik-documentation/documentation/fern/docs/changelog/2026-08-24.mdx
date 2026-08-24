@@ -1,0 +1,54 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog
+---
+
+## `evaluate_threads` Can Now Judge RAG Agents on Retrieved Context
+
+`evaluate_threads` only accepted `trace_input_transform` and `trace_output_transform`, so a thread was flattened to plain role/content messages with no way to pass along the documents each answer was grounded on — judging relevance or faithfulness for multi-turn RAG agents meant falling back to scoring individual traces instead.
+
+A new `trace_context_transform` argument receives the whole trace object and attaches the extracted context to that trace's message:
+
+```python
+from opik.evaluation import evaluate_threads
+from opik.evaluation.metrics import ConversationalCoherenceMetric
+
+evaluate_threads(
+    project_name="rag_chatbot",
+    filter_string='id = "0197ad2a"',
+    eval_project_name="rag_chatbot_evaluation",
+    metrics=[ConversationalCoherenceMetric()],
+    trace_input_transform=lambda x: x["input"],
+    trace_output_transform=lambda x: x["output"],
+    trace_context_transform=lambda trace: trace.metadata["retrieved_docs"],
+)
+```
+
+Only metrics that declare `uses_message_context = True` see the context, so every other metric's prompts and scores are unaffected. `ConversationalCoherenceMetric` is the first consumer: when context is present it also judges whether each answer is supported by it, returning an additional `conversational_groundedness_score`, while its original score is unchanged.
+
+## Bug Fixes & Improvements
+
+- **Daily briefings report "Not enough credits" instead of failing silently** — A daily report that ran out of LLM credits mid-run used to just say "Briefing failed," with the pod already allocated and the spend already burned. The trigger now checks credits up front, and a briefing that can't run for that reason shows "Not enough credits" with a direct link to add more, alongside Run again.
+
+- **Provider errors keep their real HTTP status instead of turning into a 500** — Traces and online-scoring rules calling out to an LLM provider reported a generic server error whenever the provider's response couldn't be parsed into its usual error shape — a plain-text upstream outage message, or a rate-limit response wrapped by a retry layer. The provider's actual status is now recovered from these cases too, so a caller-side or provider-side failure is no longer reported as an Opik fault.
+
+- **LLM-as-judge scoring retries on empty provider responses and no longer hangs indefinitely** — An empty structured-output response from the judge model previously fell outside the retry policy and cost the item its whole score. These are now retried, and judge calls carry an explicit timeout and retry budget so a stalled provider can no longer block scoring indefinitely.
+
+- **Silent span-conversion failures in the ADK integration are now reported** — When converting an ADK `LlmResponse` or extracting its usage failed, the span was still logged but silently missing output and usage, with nothing surfacing the failure. This is now logged as an error instead of being swallowed.
+
+- **Fixed two production NullPointerExceptions** — Deleting or batch-updating dataset items, and querying span metrics, could 500 when a filter used an operator not supported by its field, instead of returning the same 400 other endpoints already gave. Separately, a judge response with no text (for example from a content filter) could crash scoring for the whole trace instead of reporting that nothing was scored.
+
+- **Prompts no longer leak across projects with the same name** — A backward-compatibility fallback for looking up a prompt by name, when no project was specified, incorrectly matched a same-named prompt from any project in the workspace instead of only project-less legacy prompts, so a client without a `project_name` set could read, and unintentionally version, another project's prompt.
+
+- **Grouped chart series and tag colors are easier to tell apart** — Two adjacent colors in the series palette were close enough to be confused in a thin chart line; one has been replaced with a more distinct color, so any label that resolved to that palette slot now renders more legibly wherever it appears — chart series, tag chips, and feedback scores.
+
+- **Dataset item sorting by JSON fields now handles special characters correctly** — Sorting by `input.*`, `output.*`, or `metadata.*` keys built the underlying query by interpolating the key text directly, unlike `data.*` sorting, which could corrupt results for keys containing quotes or other special characters. JSON sort keys are now passed as bound parameters like everywhere else.
+
+## Performance Improvements
+
+- **Faster traces table on projects with many feedback score columns** — The traces table builds one column per feedback-score name, and every cell — editable or not — was paying the cost of wiring up inline editing. Non-editable score columns now render a lighter read-only cell, cutting a multi-second main-thread block down substantially on projects with hundreds of score columns and rows.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.29...2.2.36)
+
+_Releases_: `2.2.30`, `2.2.31`, `2.2.32`, `2.2.33`, `2.2.34`, `2.2.35`, `2.2.36`
