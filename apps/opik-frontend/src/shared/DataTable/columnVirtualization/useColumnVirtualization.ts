@@ -40,10 +40,7 @@ const useColumnVirtualization = <TData>(
 
   const scrollElement = horizontalScrollContainer ?? scrollContainer;
 
-  const windowable =
-    supported &&
-    table.getHeaderGroups().length === 1 &&
-    table.getState().grouping.length === 0;
+  const windowable = supported && table.getState().grouping.length === 0;
 
   const enabled = windowable && optedIn && Boolean(scrollElement);
 
