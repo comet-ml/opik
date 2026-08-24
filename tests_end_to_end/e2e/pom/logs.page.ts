@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator, type JSHandle } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
@@ -414,6 +414,238 @@ export class LogsPage {
     return test.step('Clear all filters', async () => {
       await this.clearAllFiltersButton.click();
       await this.clearAllFiltersButton.waitFor({ state: 'hidden' });
+    });
+  }
+
+  // --- Virtualized table windows ---
+
+  /**
+   * What a windowing spacer contributes to a header or cell sequence.
+   *
+   * The table replaces the columns either side of the window with a single
+   * `aria-hidden` spacer cell carrying their combined width, and those spacers
+   * are positions in the row like any other — so a sequence that dropped them
+   * could not detect a spacer landing in the wrong place, which is exactly the
+   * failure that shifts every cell under the wrong header.
+   */
+  static readonly COLUMN_SPACER = '__spacer';
+
+  /**
+   * The scroll container the Logs table virtualizes against.
+   *
+   * Resolved as the nearest scrollable ancestor of the table wrapper rather
+   * than by class name: the element carries no `data-testid` (it should — see
+   * `PageBodyScrollContainer.tsx`), and its only other distinguishing mark is a
+   * Tailwind `overflow-auto` class that a restyle would take away. "The thing
+   * the table scrolls inside" is the durable property, and it is the same
+   * lookup the virtualizer itself makes through React context.
+   */
+  private scrollContainerHandle(): Promise<JSHandle<HTMLElement>> {
+    return this.page.evaluateHandle(() => {
+      const wrapper = document.querySelector('[data-table-wrapper]');
+      if (!wrapper) {
+        throw new Error('LogsPage: no [data-table-wrapper] on the page');
+      }
+      let element = wrapper.parentElement;
+      while (element) {
+        const { overflowY } = getComputedStyle(element);
+        if (overflowY === 'auto' || overflowY === 'scroll') return element;
+        element = element.parentElement;
+      }
+      throw new Error('LogsPage: the table wrapper has no scrollable ancestor');
+    });
+  }
+
+  /** How far the table can be scrolled down and right from the origin. */
+  async readTableScrollExtent(): Promise<{ maxTop: number; maxLeft: number }> {
+    return test.step('Read the table scroll extent', async () => {
+      const container = await this.scrollContainerHandle();
+      try {
+        return await container.evaluate((element) => ({
+          maxTop: element.scrollHeight - element.clientHeight,
+          maxLeft: element.scrollWidth - element.clientWidth,
+        }));
+      } finally {
+        await container.dispose();
+      }
+    });
+  }
+
+  /**
+   * Scroll the table and wait for the window it renders to settle.
+   *
+   * Settling is observed, not slept through: two consecutive samples of the
+   * header's column sequence and the rendered row ids have to agree before this
+   * returns. A virtualized re-render is driven by the scroll event, so there is
+   * always state to wait on.
+   */
+  async scrollTableTo(offset: { top?: number; left?: number }): Promise<void> {
+    return test.step(`Scroll the table to top=${offset.top ?? '-'} left=${offset.left ?? '-'}`, async () => {
+      const container = await this.scrollContainerHandle();
+      try {
+        await container.evaluate((element, target) => {
+          if (target.top !== undefined) element.scrollTop = target.top;
+          if (target.left !== undefined) element.scrollLeft = target.left;
+        }, offset);
+      } finally {
+        await container.dispose();
+      }
+
+      let previous: string | null = null;
+      await expect
+        .poll(
+          async () => {
+            const sample = JSON.stringify([
+              await this.readHeaderColumnSequence(),
+              await this.readTraceIdsInOrder(),
+            ]);
+            const settled = sample === previous;
+            previous = sample;
+            return settled;
+          },
+          { intervals: [150, 150, 250, 500, 1000] },
+        )
+        .toBe(true);
+    });
+  }
+
+  /**
+   * The column ids the header renders, left to right, with every spacer marked.
+   *
+   * Read in one round trip: a windowed 60-column table still renders a dozen or
+   * more header cells per sample and the specs sample at several scroll
+   * offsets, so per-cell `getAttribute` calls would dominate the test's runtime.
+   */
+  async readHeaderColumnSequence(): Promise<string[]> {
+    return this.page
+      .locator('thead tr th')
+      .evaluateAll(
+        (cells, spacer) => cells.map((cell) => cell.getAttribute('data-header-id') ?? spacer),
+        LogsPage.COLUMN_SPACER,
+      );
+  }
+
+  /**
+   * Every rendered row's column sequence, in the same encoding as
+   * `readHeaderColumnSequence` — so the two are directly comparable, which is
+   * the whole point: a row whose sequence differs from the header's is a row
+   * whose cells sit under the wrong columns.
+   */
+  async readRenderedRowColumnSequences(): Promise<Array<{ traceId: string; columns: string[] }>> {
+    return this.traceRows.evaluateAll(
+      (rows, spacer) =>
+        rows.map((row) => {
+          const traceId = row.getAttribute('data-row-id') ?? '';
+          return {
+            traceId,
+            columns: Array.from(row.querySelectorAll('td')).map((cell) => {
+              const cellId = cell.getAttribute('data-cell-id');
+              // Cell ids are `<rowId>_<columnId>`; a spacer carries none.
+              return cellId ? cellId.slice(traceId.length + 1) : spacer;
+            }),
+          };
+        }),
+      LogsPage.COLUMN_SPACER,
+    );
+  }
+
+  /**
+   * How many `<col>` entries the table's colgroup declares. The colgroup is
+   * what fixes each rendered column's width, so it has to be sliced by the same
+   * window as the headers and cells — a colgroup of a different length is the
+   * table laid out to a different set of columns than it is showing.
+   */
+  countColgroupColumns(): Promise<number> {
+    return this.page.locator('colgroup col').count();
+  }
+
+  /** The `aria-hidden` spacer cells in the header row — present only while the column window is active. */
+  get headerColumnSpacers(): Locator {
+    return this.page.locator('thead tr th[aria-hidden]');
+  }
+
+  /**
+   * Where the left-pinned `select` column sits, on the header and on every
+   * rendered row, alongside the scroll container's own left edge.
+   *
+   * Position and offset are read from the computed style rather than the
+   * inline one so a stylesheet that overrode either still fails the check, and
+   * the viewport x of each cell is returned so "sticky at 0" can be confirmed
+   * as actually flush with the container rather than merely declared.
+   */
+  async readPinnedSelectColumnGeometry(): Promise<{
+    containerLeft: number;
+    header: { position: string; left: string; viewportLeft: number } | null;
+    rows: Array<{ traceId: string; position: string; left: string; viewportLeft: number }>;
+  }> {
+    return test.step('Read the pinned select column geometry', async () => {
+      const container = await this.scrollContainerHandle();
+      try {
+        return await container.evaluate((element) => {
+          const round = (value: number) => Math.round(value);
+          const describe = (cell: Element) => {
+            const style = getComputedStyle(cell);
+            return {
+              position: style.position,
+              left: style.left,
+              viewportLeft: round(cell.getBoundingClientRect().left),
+            };
+          };
+
+          const headerCell = document.querySelector('thead tr th[data-header-id="select"]');
+
+          return {
+            containerLeft: round(element.getBoundingClientRect().left),
+            header: headerCell ? describe(headerCell) : null,
+            rows: Array.from(document.querySelectorAll('tr[data-row-id]')).flatMap((row) => {
+              const traceId = row.getAttribute('data-row-id') ?? '';
+              const cell = row.querySelector(`[data-cell-id="${traceId}_select"]`);
+              return cell ? [{ traceId, ...describe(cell) }] : [];
+            }),
+          };
+        });
+      } finally {
+        await container.dispose();
+      }
+    });
+  }
+
+  // --- Columns picker ---
+
+  /** The "Columns N/M" trigger for the column picker. */
+  get columnsButton(): Locator {
+    return this.page.getByTestId('columns-button');
+  }
+
+  /** The picker's selected/total counts, read off the trigger's badge. */
+  async readColumnsSelection(): Promise<{ selected: number; total: number }> {
+    return test.step('Read the columns selection counts', async () => {
+      const text = (await this.columnsButton.textContent()) ?? '';
+      const match = text.match(/(\d+)\s*\/\s*(\d+)/);
+      if (!match) {
+        throw new Error(`LogsPage.readColumnsSelection: no "selected/total" badge in "${text}"`);
+      }
+      return { selected: Number(match[1]), total: Number(match[2]) };
+    });
+  }
+
+  /**
+   * Turn every available column on from the Columns picker, then close it.
+   *
+   * The picker's own select-all row is a single checkbox labelled
+   * "N of M selected"; matching it on that shape rather than on a fixed count
+   * keeps the locator valid as the label updates itself after the click.
+   */
+  async selectAllColumns(): Promise<void> {
+    return test.step('Select every column from the Columns picker', async () => {
+      await this.columnsButton.click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+      await menu
+        .getByRole('menuitemcheckbox', { name: /^\d+ of \d+ selected$/ })
+        .click();
+      await this.page.keyboard.press('Escape');
+      await menu.waitFor({ state: 'hidden' });
     });
   }
 

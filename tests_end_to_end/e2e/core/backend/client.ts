@@ -232,6 +232,21 @@ export interface OptimizationRef {
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
+/** Rows per `POST /v1/private/traces/batch` — the endpoint's own documented cap. */
+const TRACE_BATCH_SIZE = 1000;
+
+/** Scores per `PUT /v1/private/traces/feedback-scores` — same cap, same reason. */
+const FEEDBACK_SCORE_BATCH_SIZE = 1000;
+
+/** Split `items` into consecutive slices of at most `size`. */
+function chunked<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 /** One clause of the `sorting` query param the grids serialise. */
 export interface BackendSort {
   field: string;
@@ -812,6 +827,71 @@ export function makeBackendClient(apiKey: string | null = null) {
 
     async deleteTraces(ids: string[]): Promise<void> {
       await opik.api.traces.deleteTraces({ ids });
+    },
+
+    /**
+     * Create many traces in one `POST /v1/private/traces/batch`.
+     *
+     * The bridge creates one trace per call and flushes the Python SDK each
+     * time, which is the right shape for the three-to-five-trace fixtures but
+     * not for the forty-plus a windowed table needs — forty sequential
+     * round-trips is most of a test's budget spent on setup. Same reasoning as
+     * `createTraceWithSource` above: ids are caller-supplied because the write
+     * answers 204 with no body, and these tests assert on exact ids.
+     *
+     * `startTime` is deliberately required rather than defaulted: the seeds
+     * this exists for are ordered, and a shared default would put every trace
+     * on the same instant.
+     */
+    async createTracesBatch(args: {
+      projectName: string;
+      traces: Array<{
+        id: string;
+        name: string;
+        startTime: Date;
+        input?: Record<string, unknown>;
+        output?: Record<string, unknown>;
+      }>;
+    }): Promise<void> {
+      for (const chunk of chunked(args.traces, TRACE_BATCH_SIZE)) {
+        await opik.api.traces.createTraces({
+          traces: chunk.map((t) => ({
+            id: t.id,
+            projectName: args.projectName,
+            name: t.name,
+            startTime: t.startTime,
+            ...(t.input ? { input: t.input } : {}),
+            ...(t.output ? { output: t.output } : {}),
+          })),
+        });
+      }
+    },
+
+    /**
+     * Attach feedback scores to traces in bulk, via
+     * `PUT /v1/private/traces/feedback-scores`.
+     *
+     * Every distinct score *name* in a project becomes a selectable column in
+     * the Logs table, so this is how a fixture widens a table past the point
+     * where column windowing engages. The write is chunked because the backend
+     * caps a single batch, and a fixture that needs sixty columns across forty
+     * rows is well past that cap.
+     */
+    async scoreTracesBatch(args: {
+      projectName: string;
+      scores: Array<{ traceId: string; name: string; value: number }>;
+    }): Promise<void> {
+      for (const chunk of chunked(args.scores, FEEDBACK_SCORE_BATCH_SIZE)) {
+        await opik.api.traces.scoreBatchOfTraces({
+          scores: chunk.map((s) => ({
+            id: s.traceId,
+            projectName: args.projectName,
+            name: s.name,
+            value: s.value,
+            source: 'sdk' as const,
+          })),
+        });
+      }
     },
 
     async pollTraceForFeedbackScore(
