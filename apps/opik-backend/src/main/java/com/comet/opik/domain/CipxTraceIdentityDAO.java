@@ -104,17 +104,16 @@ public class CipxTraceIdentityDAO {
                     .filesDeleted(repository.path("files_deleted").asInt(0))
                     .linesAdded(repository.path("lines_added").asInt(0))
                     .linesDeleted(repository.path("lines_deleted").asInt(0))
-                    // Session-grain subagent link rollup. These are the ONLY place cipx's worst
-                    // attribution failure is visible: a subagent whose dispatch was never observed
-                    // looks exactly like a main-loop turn, so no span carries a
-                    // link_failure_reason and only a missing increment here reveals it.
-                    //
-                    // They are session RUNNING TOTALS re-stamped on every trace upsert of that
-                    // session, so a session with N traces leaves N rows holding N successive
-                    // snapshots. Readers must take max() per session_id, never sum(). See the
-                    // reader constraints on migration 000119 (clamp missed at zero, guard the zero
-                    // denominator, and 0 means zero rather than unknown -- cipx_version is what
-                    // tells a daemon too old to emit these from one that dispatched nothing).
+                    // Session-grain subagent link rollup. These are the ONLY
+                    // place cipx's worst attribution failure is visible: a
+                    // subagent whose dispatch was never observed looks
+                    // exactly like a main-loop turn, so no span carries a
+                    // link_failure_reason and only a missing increment here
+                    // reveals it. They are session RUNNING TOTALS re-stamped
+                    // on every trace upsert of that session, so a session
+                    // with N traces leaves N rows holding N successive
+                    // snapshots. Readers must take max() per session_id,
+                    // never sum().
                     .agentsDispatched(session.path("agents_dispatched").asInt(0))
                     .agentsLinked(session.path("agents_linked").asInt(0))
                     .agentsAmbiguous(session.path("agents_ambiguous").asInt(0))

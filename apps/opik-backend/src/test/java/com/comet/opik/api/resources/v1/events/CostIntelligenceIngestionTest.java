@@ -183,19 +183,14 @@ class CostIntelligenceIngestionTest {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
 
-            // systemToolsCipxMetadata carries no trigger/turn_key/parent_tool_use_id — the shape
-            // every span written before the proxy shipped them has. Ingestion must still land the
-            // row and must leave the attribution columns empty rather than substituting a default:
-            // "" means unknown, and a guessed agent name would book real spend against an agent
-            // that never ran.
-            //
-            // Scope, deliberately: this covers the half that is ours — the DAO supplying "" for a
-            // field the metadata omits. It does NOT cover rows already in the table when 000118 ran;
-            // that "" comes from ClickHouse's ALTER TABLE ADD COLUMN ... DEFAULT '' semantics, which
-            // no change to this codebase can regress (and which liquibase checksums freeze once the
-            // changeset is applied). Exercising it would need a second ClickHouse container migrated
-            // only to 000117, since MigrationUtils.runClickhouseDbMigration applies the whole
-            // changelog at construction with no tag or count to stop at.
+            // systemToolsCipxMetadata carries no
+            // trigger/turn_key/parent_tool_use_id — the shape every span
+            // written before the proxy shipped them has. Ingestion must still
+            // land the row and must leave the attribution columns empty
+            // rather than substituting a default: "" means unknown, and a
+            // guessed agent name would book real spend against an agent that
+            // never ran. Scope, deliberately: this covers the half that is
+            // ours — the DAO supplying "" for a field the metadata omits.
             var span = factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
                     .metadata(systemToolsCipxMetadata("claude-sonnet-4-6", 200))
@@ -256,16 +251,13 @@ class CostIntelligenceIngestionTest {
         void everyPositionalBindLandsInItsOwnColumn() {
             var ws = newWorkspace();
 
-            // CipxSpendDAO binds by position and nothing checks the bind order against the INSERT
-            // tuple at compile time. A mismatch does not fail the insert — it writes each value into
-            // the neighbouring column, which is invisible unless the columns hold values that can be
-            // told apart. So give every column its own recognizable sentinel and assert each one
-            // holds its own: a rotation then surfaces as a value reported under the wrong name.
-            //
-            // Two rows, deliberately: the bind index accumulates across rows while workspace_id is
-            // bound once at index 0 and its repeats dedup. If that dedup assumption is ever wrong
-            // the stride becomes 22 instead of 21 and only the second row is corrupted — which a
-            // single-row insert cannot see.
+            // CipxSpendDAO binds by position and nothing checks the bind
+            // order against the INSERT tuple at compile time. A mismatch does
+            // not fail the insert — it writes each value into the
+            // neighbouring column, which is invisible unless the columns hold
+            // values that can be told apart. Two rows, deliberately: the bind
+            // index accumulates across rows while workspace_id is bound once
+            // at index 0 and its repeats dedup.
             var rowOne = sentinelRow(1);
             var rowTwo = sentinelRow(2);
 
