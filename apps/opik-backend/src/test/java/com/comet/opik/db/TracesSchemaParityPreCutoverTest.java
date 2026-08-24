@@ -269,6 +269,26 @@ class TracesSchemaParityPreCutoverTest {
         TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
+    /**
+     * The one column the type comparison structurally cannot reach — it exists on the shadow and has no counterpart on
+     * {@code traces} — and the one where the <i>default</i> is the whole contract. The cutover backfill deliberately
+     * omits {@code is_deleted} so it takes its default; flip that default to 1 and every row the cutover copies
+     * materialises as a {@code ReplacingMergeTree} tombstone, which is a silent, total data loss at swap time.
+     */
+    @Test
+    @Order(18)
+    @DisplayName("drift is caught: the shadow's is_deleted default flipped to 1")
+    void shadowOnlyColumnDefaultDriftIsCaught() throws Exception {
+        execute("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 1".formatted(DATABASE_NAME, SHADOW));
+
+        assertThatThrownBy(() -> TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("is_deleted");
+
+        execute("ALTER TABLE %s.%s MODIFY COLUMN is_deleted UInt8 DEFAULT 0".formatted(DATABASE_NAME, SHADOW));
+        TracesSchemaParity.assertPreCutoverParity(connection, DATABASE_NAME);
+    }
+
     private boolean tableExists(String table) throws Exception {
         var sql = "SELECT count() FROM system.tables WHERE database = '%s' AND name = '%s'"
                 .formatted(DATABASE_NAME, table);

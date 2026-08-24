@@ -1,5 +1,8 @@
 package com.comet.opik.db;
 
+import lombok.Builder;
+import lombok.NonNull;
+
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -26,15 +29,16 @@ import java.util.stream.Collectors;
  * comparing sets should go through {@link #columnNames()} / {@link #storedColumnNames()} rather than comparing the
  * lists.
  */
+@Builder(toBuilder = true)
 record TableSchema(
-        String table,
-        String engine,
-        String partitionKey,
-        String sortingKey,
-        String primaryKey,
-        List<Column> columns,
-        List<SkipIndex> skipIndices,
-        List<Projection> projections) {
+        @NonNull String table,
+        @NonNull String engine,
+        @NonNull String partitionKey,
+        @NonNull String sortingKey,
+        @NonNull String primaryKey,
+        @NonNull List<Column> columns,
+        @NonNull List<SkipIndex> skipIndices,
+        @NonNull List<Projection> projections) {
 
     /**
      * @param defaultKind {@code DEFAULT}, {@code MATERIALIZED}, {@code ALIAS}, or empty when the column simply has no
@@ -42,28 +46,33 @@ record TableSchema(
      *            named in an {@code INSERT}, so it is what separates a column the cutover backfill must carry from one
      *            the destination recomputes for itself.
      */
-    record Column(String name, String type, String defaultKind, String defaultExpression, String codec) {
+    @Builder(toBuilder = true)
+    record Column(@NonNull String name, @NonNull String type, @NonNull String defaultKind,
+            @NonNull String defaultExpression, @NonNull String codec) {
     }
 
-    record SkipIndex(String name, String typeFull, String expression, long granularity) {
+    @Builder(toBuilder = true)
+    record SkipIndex(@NonNull String name, @NonNull String typeFull, @NonNull String expression, long granularity) {
     }
 
-    record Projection(String name, String query) {
+    @Builder(toBuilder = true)
+    record Projection(@NonNull String name, @NonNull String query) {
     }
 
     private static final Set<String> COMPUTED_DEFAULT_KINDS = Set.of("MATERIALIZED", "ALIAS");
 
     static TableSchema read(Connection connection, String database, String table) throws SQLException {
         var tableRow = readTableRow(connection, database, table);
-        return new TableSchema(
-                table,
-                tableRow.get("engine_full"),
-                tableRow.get("partition_key"),
-                tableRow.get("sorting_key"),
-                tableRow.get("primary_key"),
-                readColumns(connection, database, table),
-                readSkipIndices(connection, database, table),
-                readProjections(connection, database, table));
+        return TableSchema.builder()
+                .table(table)
+                .engine(tableRow.get("engine_full"))
+                .partitionKey(tableRow.get("partition_key"))
+                .sortingKey(tableRow.get("sorting_key"))
+                .primaryKey(tableRow.get("primary_key"))
+                .columns(readColumns(connection, database, table))
+                .skipIndices(readSkipIndices(connection, database, table))
+                .projections(readProjections(connection, database, table))
+                .build();
     }
 
     /** Column names in the server's declaration order. */
@@ -134,12 +143,13 @@ record TableSchema(
         var columns = new ArrayList<Column>();
         try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
             while (resultSet.next()) {
-                columns.add(new Column(
-                        text(resultSet, "name"),
-                        text(resultSet, "type"),
-                        text(resultSet, "default_kind"),
-                        text(resultSet, "default_expression"),
-                        text(resultSet, "compression_codec")));
+                columns.add(Column.builder()
+                        .name(text(resultSet, "name"))
+                        .type(text(resultSet, "type"))
+                        .defaultKind(text(resultSet, "default_kind"))
+                        .defaultExpression(text(resultSet, "default_expression"))
+                        .codec(text(resultSet, "compression_codec"))
+                        .build());
             }
         }
         return List.copyOf(columns);
@@ -154,11 +164,12 @@ record TableSchema(
         var indices = new ArrayList<SkipIndex>();
         try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
             while (resultSet.next()) {
-                indices.add(new SkipIndex(
-                        text(resultSet, "name"),
-                        text(resultSet, "type_full"),
-                        text(resultSet, "expr"),
-                        resultSet.getLong("granularity")));
+                indices.add(SkipIndex.builder()
+                        .name(text(resultSet, "name"))
+                        .typeFull(text(resultSet, "type_full"))
+                        .expression(text(resultSet, "expr"))
+                        .granularity(resultSet.getLong("granularity"))
+                        .build());
             }
         }
         return List.copyOf(indices);
@@ -173,7 +184,10 @@ record TableSchema(
         var projections = new ArrayList<Projection>();
         try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
             while (resultSet.next()) {
-                projections.add(new Projection(text(resultSet, "name"), text(resultSet, "query")));
+                projections.add(Projection.builder()
+                        .name(text(resultSet, "name"))
+                        .query(text(resultSet, "query"))
+                        .build());
             }
         }
         return List.copyOf(projections);
