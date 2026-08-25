@@ -1,4 +1,9 @@
 export { test, expect } from './bystander.fixture';
+export type {
+  OauthProviderSeed,
+  ProviderKeysFixture,
+  ProviderKeyFixtures,
+} from './provider-key.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type {
   BystanderExperimentRef,

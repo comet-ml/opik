@@ -1,4 +1,4 @@
-import { test as baseTest } from './automation-rules.fixture';
+import { test as baseTest } from './provider-key.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 
 export interface BystanderExperimentRef {
@@ -119,4 +119,4 @@ export const test = baseTest.extend<BystanderFixtures>({
   },
 });
 
-export { expect } from './automation-rules.fixture';
+export { expect } from './provider-key.fixture';
