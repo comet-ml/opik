@@ -62,11 +62,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -199,6 +199,13 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .thenReturn(ruleFor(ruleName));
             when(projectService.get(projectId, workspaceId)).thenReturn(project);
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            // The scorer always probes the thread's span size before deciding whether to enrich, so every
+            // scoring test reaches the SpanService and needs a preload cap. Lenient defaults keep tests
+            // that don't care about the enrichment routing terse; the routing tests below re-stub these
+            // with real sizes/caps/spans.
+            lenient().when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
+            lenient().when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(0L));
+            lenient().when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.empty());
         }
 
         @Test
@@ -224,36 +231,11 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
         }
 
         @Test
-        void skipsSpanFetchWhenAgenticToolsDisabled() {
-            // Locks the toggle gate for the Python thread path: when isAgenticToolsEnabled
-            // is false, the scorer must NOT call spanService.getByTraceIds — preserves
-            // today's [{role, content}, ...] wire shape to the Python runner exactly.
-            var message = sampleMessage();
-            var trace = sampleTrace();
-            var project = Project.builder().id(projectId).name("test-project").build();
-            var pythonScore = PythonScoreResult.builder()
-                    .name("test_score")
-                    .value(BigDecimal.valueOf(0.95))
-                    .reason("ok")
-                    .build();
-            stubPythonScoringHappyPath(trace, project);
-            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
-                    .thenReturn(Mono.just(List.of(pythonScore)));
-            // Toggle off — the scorer should not even ask the SpanService.
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
-
-            scorer.score(message).block();
-
-            verifyNoInteractions(spanService);
-        }
-
-        @Test
-        void fetchesSpansAndEnrichesConversationWhenAgenticToolsEnabled() {
-            // Toggle on: scorer fetches every span across the thread and the captured
-            // ChatMessage list sent to the Python evaluator carries the spans nested under
-            // the assistant entry. Locks in the end-to-end enrichment contract — a future
-            // refactor that quietly drops the SpanService fetch or routes through
-            // fromTraceToThread (legacy) would break this test loudly.
+        void fetchesSpansAndEnrichesConversation() {
+            // The scorer fetches every span across the thread and the captured ChatMessage list sent to
+            // the Python evaluator carries the spans nested under the assistant entry. Locks in the
+            // end-to-end enrichment contract — a future refactor that quietly drops the SpanService
+            // fetch or routes through fromTraceToThread (legacy) would break this test loudly.
             var message = sampleMessage();
             var trace = sampleTrace();
             var project = Project.builder().id(projectId).name("test-project").build();
@@ -272,7 +254,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .build();
 
             stubPythonScoringHappyPath(trace, project);
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
             // Cheap size probe (route-before-fetch): under the cap → enrich → fetch spans.
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(1_000L));
@@ -310,7 +291,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .build();
 
             stubPythonScoringHappyPath(trace, project);
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64); // cap = 64 MiB
             // Size probe reports 200 MiB — over the cap → no bulk fetch, unenriched context.
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
@@ -354,7 +334,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .build();
 
             stubPythonScoringHappyPath(trace, project);
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(1); // cap = 1 MiB
             // Aggregate under-counts (500 B, under the cap) → enrich is chosen...
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(500L));
@@ -466,6 +445,11 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .thenReturn(ruleFor(ruleName));
             when(projectService.get(projectId, workspaceId))
                     .thenReturn(Project.builder().id(projectId).name("test-project").build());
+            // The span-size probe runs before the evaluator call, so it has to resolve for the
+            // evaluator's failure to be the one that surfaces.
+            when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
+            when(spanService.getSpansSizeByTraceIds(any())).thenReturn(Mono.just(0L));
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
             when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
                     .thenReturn(Mono.error(error));
 
