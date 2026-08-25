@@ -367,6 +367,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(rows).hasSize(2);
 
                 var slashCommand = rows.getFirst();
+                assertThat(slashCommand.blockIdx()).isEqualTo(0);
                 assertThat(slashCommand.category()).isEqualTo("slash_command");
                 assertThat(slashCommand.lane()).isEqualTo("user_prompts");
                 assertThat(slashCommand.bdLane()).isEqualTo("user_prompts");
@@ -375,7 +376,9 @@ class CostIntelligenceIngestionTest {
 
                 // identity_context whose parent is another category: framing carved out of
                 // that parent — kept, and folded under static_overhead like the other riders.
+                // blockIdx 2, not 1: the dropped row still consumes its raw index.
                 var identityContext = rows.getLast();
+                assertThat(identityContext.blockIdx()).isEqualTo(2);
                 assertThat(identityContext.category()).isEqualTo("identity_context");
                 assertThat(identityContext.lane()).isEqualTo("static_overhead");
                 assertThat(identityContext.bdLane()).isEqualTo("static_overhead");
