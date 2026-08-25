@@ -3,11 +3,16 @@
 -- Run this only after the whole backfill (step 1) is complete and reconciled.
 
 -- Step 0: The SQL below (delta-insert + deletion replay) is the single source driven by ../delta_replay.sh, which reads
--- this file, substitutes the placeholders and runs it — never run this file by hand:
+-- this file, substitutes the placeholders and runs it — never run this file by hand. It handles all five
+-- placeholders below, listed so a new one is never missed here (an unsubstituted ${...} reaches the server as a
+-- literal and the statement fails): ${ANALYTICS_DB_DATABASE_NAME}, ${BACKFILL_START}, ${MAX_INSERT_BLOCK_SIZE},
+-- ${MAX_PARTITIONS_PER_INSERT_BLOCK} and ${MAX_INSERT_THREADS} -- the last of which the driver instead REMOVES
+-- from the SETTINGS clause when --max-insert-threads is omitted, so the server's value is inherited. Invocation:
 --   ../delta_replay.sh --database opik --backfill-start '2025-06-01 12:00:00.000000'
 -- The surrounding config operations (buffer raise/restore) and the go/no-go checkpoint stay with the operator, where
--- situational awareness matters most — those are config/judgement, not SQL. clickhouse-client prints each statement's
--- elapsed time, which is the replay measurement in step 5.
+-- situational awareness matters most — those are config/judgement, not SQL. The driver invokes clickhouse-client with
+-- --time, so it prints each statement's elapsed seconds to stderr (delta-insert first, deletion replay second); the
+-- second value is the replay measurement in step 5. A bare --query prints no timing, hence the flag.
 
 -- Step 1: BACKFILL_START is the timestamp captured BEFORE the backfill began. backfill.sh prints it at startup
 -- ("RECORD backfill_start=..."); if you ran the backfill manually, use the now64(6) you captured before the first
@@ -25,14 +30,35 @@
 -- batch-ingest path, so it is not a reliable "changed since" signal by itself. Every trace write sets EITHER a fresh
 -- server created_at (batch-ingest path) OR a fresh server last_updated_at (create/update merge paths), so the union is
 -- complete. ReplacingMergeTree dedups the re-copied rows against the backfilled ones (newest last_updated_at wins).
--- Uses ${BACKFILL_START}. SETTINGS max_insert_block_size bounds per-block memory as in step 1.
+-- Uses ${BACKFILL_START}. SETTINGS max_insert_block_size bounds per-block memory as in step 1, and
+-- max_partitions_per_insert_block bounds how many partitions one block may span — a CORRECTNESS gate here, not a
+-- tuning knob, and it is NOT optional just because the delta is smaller than the backfill. This INSERT writes into the
+-- same weekly-partitioned shadow, and the last_updated_at arm re-copies UPDATES TO OLD ROWS, so a far-future-id row
+-- touched during the window is pulled in and lands in its own far-future partition. Exceeding the ClickHouse default of
+-- 100 aborts the statement (throw_on_max_partitions_per_insert_block = 1) at the worst possible moment: the final delta
+-- runs immediately before the EXCHANGE. Pass the same value used for the backfill.
 -- BATCHING: the delta covers only writes during the backfill window, not the whole table, so it is normally one
 -- statement. If the backfill ran for days on a busy system and the delta is large, run it as two batched passes to keep
 -- each INSERT bounded (both columns have a minmax skip index, so each pass prunes):
 --   (a) created_at >= backfill_start                                  -- batch by created_at sub-windows
 --   (b) last_updated_at >= backfill_start AND created_at < backfill_start  -- the updates-to-old-rows arm; batch by
 --       last_updated_at sub-windows. (a) ∪ (b) equals the OR below, with no overlap.
+-- Both passes are hand-written: the driver does not implement the split, so its substitution and guards do not
+-- apply to them. Prepare each pass as follows.
+--   1. Copy the SETTINGS block below onto both passes, max_partitions_per_insert_block included. Arm (b) is the
+--      updates-to-old-rows arm, so it carries the far-future ids and is the pass that most needs that bound;
+--      omitting it aborts the statement with TOO_MANY_PARTS immediately before the EXCHANGE.
+--   2. Replace every ${...} with a concrete value. A copied placeholder reaches the server as a literal and the
+--      statement fails.
+--   3. max_insert_threads has no value meaning "inherit": 0 forces no parallel execution rather than deferring to
+--      the server's setting. Either substitute the same thread count on both passes, or delete the whole line
+--      including its trailing comma from both, keeping max_partitions_per_insert_block and log_comment. Deleting
+--      is comma-safe only while the line sits between two others.
+--   4. Confirm no placeholder survives: `grep -n '\${' <your-statements>.sql` must print nothing.
 -- >>> BEGIN delta-insert
+-- max_insert_threads below sizes the INSERT SELECT pipeline, with the same semantics and costs as in 000001:
+-- omitted when --max-insert-threads is unset, an explicit 0 forcing no parallel execution. The delta writes to
+-- the same table through the same insert path, so pass the value used for the backfill.
 INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 (
     id,
     workspace_id,
@@ -86,30 +112,25 @@ FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
 WHERE created_at >= toDateTime64('${BACKFILL_START}', 6)
    OR last_updated_at >= toDateTime64('${BACKFILL_START}', 6)
 SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
+         max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
+         max_insert_threads = ${MAX_INSERT_THREADS},
          log_comment = 'traces_local_v2_cutover:delta_insert';
 -- >>> END delta-insert
 
 -- Step 4: Deletion replay — remove from the destination every row that was deleted on the source since backfill_start
--- AND is still deleted there. Two branches, mirroring the product's two delete paths (TraceService.delete): a delete
--- resolves each trace's owning project and deletes per project; ids it cannot resolve fall back to a workspace-scoped
--- delete (TraceDAO DELETE_BY_ID with no project filter). The bridge records the first with the project and the second
--- with an EMPTY project_id (DeletionEventDAO: "project_id is empty for workspace-scoped source tables"). So:
---   * events WITH a project -> match the FULL key (workspace_id, project_id, id). Exact, prunes on the destination
---     primary key, and correct even when an id is reused across projects (ids are not globally unique).
---   * events WITHOUT a project -> match (workspace_id, id). A faithful mirror of the source's workspace-scoped delete.
+-- AND is still deleted there. Single FULL-KEY branch: since OPIK-7483 every trace delete resolves its owning project(s)
+-- and deletes each under the full (workspace_id, project_id, id) key — there is no project-less delete path, so no
+-- deletion event is ever bridged with an empty project_id for source_table='traces' (a pre-cutover prereq asserts the
+-- bridge holds none — see README "Prerequisites"). So the replay matches the FULL key (workspace_id, project_id, id):
+-- exact, prunes on the destination primary key, and correct even when an id is reused across projects (not globally unique).
 -- RESURRECTION GUARD (the `NOT IN traces` arm): a trace can be deleted and then re-created/updated under the same id
 -- during the window (client-supplied ids; the delete is a mask, a newer insert wins under FINAL). Such an id is bridged
 -- as deleted but is LIVE again on the source, and the backfill/delta already copied its live version. Deleting it by key
--- would drop a row that is live on the source — silent data loss. So each branch deletes only ids that are NOT currently
+-- would drop a row that is live on the source — silent data loss. So the replay deletes only ids that are NOT currently
 -- live on the source (mask-honored). The `id IN (deleted_ids since anchor)` bound keeps the deleted-id set tiny
 -- (retention is off, so these are user-scale deletes); `traces` has no id skip index (000088 indexes only
 -- created_at/last_updated_at — id minmax/bloom indexes exist only on traces_local_v2), so this source lookup is a
--- bounded id-filtered read of that tiny set, not a value-indexed prune of the ~4 TB table.
--- KNOWN RESIDUAL (workspace-scoped arm only): its guard keys on (workspace_id, id), so an id live in ONE project shields
--- the deletion of that id's now-deleted copies in OTHER projects (ids are not globally unique). Requires cross-project id
--- reuse + a workspace-scoped delete + a resurrection in the window — rare. The 000005 FINAL fingerprint flags it as an
--- extra destination row (ok=0) rather than passing silently. OPIK-7483 removes the workspace-scoped delete path at the
--- source (deletes always carry project_id), retiring this arm and the residual.
+-- bounded id-filtered read of that tiny set, not a value-indexed prune of the full `traces` table.
 -- allow_nondeterministic_mutations: a lightweight DELETE with cross-table subqueries is flagged nondeterministic, but
 -- deletion_events_local and traces are replicated and identical on every node and the window predicate is fixed, so the
 -- subqueries resolve to the same set on every replica. Idempotent (never masks a live-on-source id, so re-runs converge).
@@ -117,8 +138,9 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- accepted it. The mutation is otherwise asynchronous, so without this the verify step (and the EXCHANGE) could run
 -- against a replica where the mask is not yet applied — a false mismatch, or worse an incomplete cutover.
 -- Uses ${BACKFILL_START}. Retention is disabled everywhere (see step 6), so this is user-scale volume — a single
--- mutation. If it is ever large (e.g. retention enabled), bound each mutation by a partition predicate and loop the
--- weeks, e.g. AND toMonday(id_at) = toDate('<week>').
+-- mutation. If it is ever large (e.g. retention enabled), bound each mutation by a created_at week (the non-wrapping,
+-- minmax-indexed slice backfill.sh uses) and loop the weeks — NOT toMonday(id_at), which wraps far-future/epoch ids
+-- (OPIK-7456) and no longer matches the successor's honest-Date32 partition expression.
 -- length(...) = 36 guards: toFixedString(x, 36) THROWS on a value longer than 36 bytes, which would abort the whole
 -- replay on a single malformed bridge row. For source_table='traces' the ids are 36-char UUIDs, so this is latent — but
 -- a malformed (non-36-char) deleted_id/project_id can't match a real trace id anyway, so skipping it via the length
@@ -142,31 +164,6 @@ WHERE (
         SELECT
             workspace_id,
             project_id,
-            id
-        FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
-        WHERE id IN (
-            SELECT toFixedString(deleted_id, 36)
-            FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
-            WHERE source_table = 'traces'
-              AND event_time >= toDateTime64('${BACKFILL_START}', 6)
-              AND length(deleted_id) = 36
-        )
-    )
-)
-OR (
-    (workspace_id, id) IN (
-        SELECT
-            workspace_id,
-            toFixedString(deleted_id, 36)
-        FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
-        WHERE source_table = 'traces'
-          AND event_time >= toDateTime64('${BACKFILL_START}', 6)
-          AND project_id = ''
-          AND length(deleted_id) = 36
-    )
-    AND (workspace_id, id) NOT IN (
-        SELECT
-            workspace_id,
             id
         FROM ${ANALYTICS_DB_DATABASE_NAME}.traces
         WHERE id IN (

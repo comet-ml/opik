@@ -521,7 +521,11 @@ class CostServiceTest {
     private static Stream<Arguments> provideMistralModels() {
         return Stream.of(
                 // Upstream LiteLLM row: $6e-08 in / $1.8e-07 out → 0.06 + 0.18 = 0.24
-                Arguments.of("mistral-small-latest", "0.24"),
+                // Pinned to the dated id rather than the `mistral-small-latest` alias: aliases are
+                // re-priced upstream whenever Mistral ships a new generation (Small 4 moved
+                // `mistral-small-latest` to 1.5e-07 / 6e-07), which breaks an exact-cost assertion
+                // on every automated model-prices update.
+                Arguments.of("mistral-small-3-2-2506", "0.24"),
                 // Upstream LiteLLM row: $5e-07 in / $1.5e-06 out → 0.5 + 1.5 = 2.00
                 Arguments.of("mistral-large-3", "2.00"),
                 // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
@@ -793,6 +797,67 @@ class CostServiceTest {
                 Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
 
         assertThat(cost).isEqualByComparingTo("0.00108");
+    }
+
+    /**
+     * Covers registering {@code nebius} as a canonical provider so that the 30 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "nebius"} (the {@code nebius/<org>/<model>} catalog: deepseek,
+     * qwen, llama and more) are no longer silently dropped at load time. No Nebius model
+     * publishes cache rates today, so all Nebius requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesNebiusModels() {
+        // nebius/deepseek-ai/DeepSeek-R1: input 8e-7, output 2.4e-6
+        // 1000 * 8e-7 + 200 * 2.4e-6 = 0.0008 + 0.00048 = 0.00128
+        BigDecimal cost = CostService.calculateCost("nebius/deepseek-ai/DeepSeek-R1", "nebius",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00128");
+    }
+
+    /**
+     * Covers both branches of registering {@code snowflake} as a canonical provider so that the
+     * 21 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "snowflake"} (Snowflake Cortex-hosted claude, deepseek and llama
+     * models) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>Snowflake model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Snowflake model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI}; Snowflake's cost entry in
+     *       LiteLLM exposes OpenAI-shape {@code cache_read_input_token_cost}, so cached tokens
+     *       arrive flattened under {@code prompt_tokens_details.cached_tokens} like the other
+     *       OpenAI-compatible providers.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideSnowflakeProviderCases")
+    void calculateCostHandlesSnowflakeModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "snowflake", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideSnowflakeProviderCases() {
+        // snowflake/deepseek-r1: input 1.35e-6, output 5.4e-6 (no cache rates) -> textGenerationCost
+        // 1000 * 1.35e-6 + 200 * 5.4e-6 = 0.00135 + 0.00108 = 0.00243
+        // snowflake/claude-3-5-sonnet: input 3e-6, output 1.5e-5, cache_read 3e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 3e-7 = 0.0021 + 0.003 + 0.00009 = 0.00519
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "snowflake/deepseek-r1",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00243"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "snowflake/claude-3-5-sonnet",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00519"));
     }
 
     /**

@@ -17,6 +17,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
 import uniq from "lodash/uniq";
 import keyBy from "lodash/keyBy";
 import compact from "lodash/compact";
@@ -25,6 +26,7 @@ import {
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
 
 import useTracesOrSpansExist from "@/hooks/useTracesOrSpansExist";
@@ -41,7 +43,6 @@ import {
   COLUMN_GUARDRAIL_STATISTIC_ID,
   COLUMN_GUARDRAILS_ID,
   COLUMN_ID_ID,
-  COLUMN_CUSTOM_ID,
   COLUMN_METADATA_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -54,29 +55,19 @@ import {
   ENVIRONMENT_UNTAGGED_VALUE,
   generateEnvironmentFilter,
 } from "@/lib/filters";
-import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
 import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
 import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
+import { ChipDefinition } from "@/shared/filter-chips/types";
+import { STRING_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import {
-  ChipDefinition,
-  ChipOptionsResult,
-  chipOptions,
-  chipOptionsValue,
-} from "@/shared/filter-chips/types";
-import {
-  TAGS_OPERATORS,
-  FEEDBACK_SCORE_OPERATORS,
-  DICTIONARY_OPERATORS,
-  STRING_OPERATORS,
-  LIST_OPERATORS,
-} from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
-import { useTagsOptions } from "@/v2/pages-shared/TagsAutocomplete/useTagsOptions";
-import { usePathsOptions } from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/usePathsOptions";
-import { useErrorTypeOptions } from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/useErrorTypeOptions";
+  TRACE_DEFAULT_PINNED_CHIPS,
+  buildSharedDynamicChips,
+  buildTraceChipDefinitions,
+} from "@/v2/pages-shared/traces/traceChipDefinitions";
 import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
@@ -85,7 +76,10 @@ import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
-import { generateSelectColumDef } from "@/shared/DataTable/utils";
+import {
+  generateSelectColumDef,
+  getVirtualizationConfig,
+} from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
@@ -118,7 +112,9 @@ import {
   buildSpanDurationTarget,
   buildSpanErrorTarget,
 } from "@/v2/pages/LogsPage/TracesSpansTab/explainTargets";
-import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
+import FeedbackScoreCell, {
+  resolveFeedbackScoreCell,
+} from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -129,6 +125,7 @@ import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/Thre
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -145,7 +142,6 @@ import {
   DetailsActionSectionValue,
 } from "@/v2/pages-shared/traces/DetailsActionSection";
 import { getSpanTypeOptions } from "@/v2/pages-shared/traces/spanTypeFilter";
-import { GuardrailResult } from "@/types/guardrails";
 import SpanTypeCell from "@/shared/DataTableCells/SpanTypeCell";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
@@ -379,139 +375,6 @@ const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
 const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
 const ROW_HEIGHT_KEY_SUFFIX = "row-height";
 
-const TRACE_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
-  {
-    id: "start_time",
-    field: "start_time",
-    label: "Start time",
-    kind: "time",
-    columnType: COLUMN_TYPE.time,
-  },
-  {
-    id: "end_time",
-    field: "end_time",
-    label: "End time",
-    kind: "time",
-    columnType: COLUMN_TYPE.time,
-  },
-  {
-    id: "duration",
-    field: "duration",
-    label: "Duration",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.duration,
-    format: "duration",
-  },
-  {
-    id: "total_estimated_cost",
-    field: "total_estimated_cost",
-    label: "Cost",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.cost,
-    format: "currency",
-  },
-  {
-    id: "usage_total_tokens",
-    field: "usage.total_tokens",
-    label: "Tokens",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.number,
-    format: "integer",
-  },
-  {
-    id: "usage_prompt_tokens",
-    field: "usage.prompt_tokens",
-    label: "Input tokens",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.number,
-    format: "integer",
-  },
-  {
-    id: "usage_completion_tokens",
-    field: "usage.completion_tokens",
-    label: "Output tokens",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.number,
-    format: "integer",
-  },
-  {
-    id: "llm_span_count",
-    field: "llm_span_count",
-    label: "LLM calls count",
-    kind: "numeric",
-    columnType: COLUMN_TYPE.number,
-    format: "integer",
-  },
-  {
-    id: "input",
-    field: "input",
-    label: "Input",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.string,
-    operators: STRING_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Search input" },
-  },
-  {
-    id: "output",
-    field: "output",
-    label: "Output",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.string,
-    operators: STRING_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Search output" },
-  },
-  {
-    id: "name",
-    field: "name",
-    label: "Trace name",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.string,
-    operators: STRING_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Search name" },
-  },
-  {
-    id: "with_errors",
-    field: "error_info",
-    label: "With errors",
-    kind: "boolean",
-    onOperator: "is_not_empty",
-    columnType: COLUMN_TYPE.errors,
-  },
-  {
-    id: "id",
-    field: "id",
-    label: "Trace ID",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.string,
-    operators: STRING_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Enter trace ID" },
-  },
-  {
-    id: "thread_id",
-    field: "thread_id",
-    label: "Thread ID",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.string,
-    operators: STRING_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Enter thread ID" },
-  },
-  {
-    id: "annotation_queue_ids",
-    field: "annotation_queue_ids",
-    label: "Annotation queue ID",
-    kind: "query-builder",
-    columnType: COLUMN_TYPE.list,
-    operators: LIST_OPERATORS,
-    defaultOperator: "contains",
-    value: { placeholder: "Enter annotation queue ID" },
-  },
-];
-
 const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
   {
     id: "start_time",
@@ -637,31 +500,6 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
   },
 ];
 
-const TRACE_CHIP_ORDER: string[] = [
-  "start_time",
-  "end_time",
-  "duration",
-  "total_estimated_cost",
-  "usage_total_tokens",
-  "usage_prompt_tokens",
-  "usage_completion_tokens",
-  "llm_span_count",
-  "input",
-  "output",
-  "name",
-  "with_errors",
-  "error_type",
-  "tags",
-  "id",
-  "thread_id",
-  "annotation_queue_ids",
-  "feedback_scores",
-  "span_feedback_scores",
-  "guardrails",
-  "metadata",
-  "custom",
-];
-
 const SPAN_CHIP_ORDER: string[] = [
   "start_time",
   "end_time",
@@ -686,135 +524,7 @@ const SPAN_CHIP_ORDER: string[] = [
   "custom",
 ];
 
-const TRACE_DEFAULT_PINNED_CHIPS = ["with_errors", "tags", "metadata"];
 const SPAN_DEFAULT_PINNED_CHIPS = ["type", "tags", "with_errors", "metadata"];
-
-const buildSharedDynamicChips = ({
-  projectId,
-  type,
-  scoreOptions,
-  feedbackScoresLabel,
-  isGuardrailsEnabled,
-}: {
-  projectId: string;
-  type: TRACE_DATA_TYPE;
-  scoreOptions: ChipOptionsResult;
-  feedbackScoresLabel: string;
-  isGuardrailsEnabled: boolean;
-}): Record<string, ChipDefinition> => {
-  const entityType: "spans" | "traces" =
-    type === TRACE_DATA_TYPE.spans ? "spans" : "traces";
-  const chips: Record<string, ChipDefinition> = {
-    tags: {
-      id: "tags",
-      field: "tags",
-      label: "Tags",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.list,
-      operators: TAGS_OPERATORS,
-      defaultOperator: "contains",
-      value: {
-        placeholder: "Type a tag…",
-        options: chipOptions(useTagsOptions, {
-          projectId,
-          entityType,
-          logsSource: LOGS_SOURCE.sdk,
-        }),
-      },
-      addLabel: "Add tag",
-    },
-    error_type: {
-      id: "error_type",
-      field: "error_type",
-      label: "Error type",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.string,
-      operators: ["contains", "=", "not_contains", "starts_with", "ends_with"],
-      defaultOperator: "contains",
-      value: {
-        placeholder: "Select error type",
-        options: chipOptions(useErrorTypeOptions, {
-          projectId,
-          type,
-          logsSource: LOGS_SOURCE.sdk,
-        }),
-      },
-    },
-    feedback_scores: {
-      id: "feedback_scores",
-      field: COLUMN_FEEDBACK_SCORES_ID,
-      label: feedbackScoresLabel,
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.numberDictionary,
-      operators: FEEDBACK_SCORE_OPERATORS,
-      defaultOperator: ">=",
-      key: {
-        placeholder: "Select score",
-        options: chipOptionsValue(scoreOptions),
-      },
-      value: { type: "numeric", decimals: 2, placeholder: "0" },
-    },
-    metadata: {
-      id: "metadata",
-      field: COLUMN_METADATA_ID,
-      label: "Metadata",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.dictionary,
-      operators: DICTIONARY_OPERATORS,
-      defaultOperator: "contains",
-      key: {
-        placeholder: "key",
-        options: chipOptions(usePathsOptions, {
-          projectId,
-          type,
-          rootKeys: ["metadata"],
-          excludeRoot: true,
-          logsSource: LOGS_SOURCE.sdk,
-        }),
-      },
-      value: { placeholder: "value" },
-    },
-    custom: {
-      id: "custom",
-      field: COLUMN_CUSTOM_ID,
-      label: "Custom filter",
-      kind: "query-builder",
-      columnType: COLUMN_TYPE.dictionary,
-      operators: DICTIONARY_OPERATORS,
-      defaultOperator: "contains",
-      key: {
-        placeholder: "key",
-        options: chipOptions(usePathsOptions, {
-          projectId,
-          type,
-          rootKeys: ["input", "output"],
-          excludeRoot: false,
-          logsSource: LOGS_SOURCE.sdk,
-        }),
-        validate: (k) =>
-          CUSTOM_FILTER_VALIDATION_REGEXP.test(k)
-            ? undefined
-            : 'Key must begin with "input" or "output" (e.g. "input.message")',
-      },
-      value: { placeholder: "value" },
-    },
-  };
-  if (isGuardrailsEnabled) {
-    chips.guardrails = {
-      id: "guardrails",
-      field: "guardrails",
-      label: "Guardrails",
-      kind: "single-select",
-      options: [
-        { value: GuardrailResult.FAILED, label: "Failed" },
-        { value: GuardrailResult.PASSED, label: "Passed" },
-      ],
-      columnType: COLUMN_TYPE.category,
-      operator: "=",
-    };
-  }
-  return chips;
-};
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
@@ -822,6 +532,7 @@ type TracesSpansTabProps = {
   projectName: string;
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
+  dateRangeConfig: ProjectDateRangeConfig;
 };
 
 export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
@@ -830,6 +541,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   onLogsTypeChange,
   projectId,
   projectName,
+  dateRangeConfig,
 }) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
@@ -843,6 +555,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage({
     excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+    ...dateRangeConfig,
   });
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,
@@ -990,36 +703,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     isSpanFeedbackScoresPending,
   ]);
 
-  const traceChipDefinitions = useMemo<ChipDefinition[]>(() => {
-    const dynamicChips: Record<string, ChipDefinition> = {
-      ...buildSharedDynamicChips({
+  const traceChipDefinitions = useMemo<ChipDefinition[]>(
+    () =>
+      buildTraceChipDefinitions({
         projectId,
-        type: TRACE_DATA_TYPE.traces,
-        scoreOptions: traceScoreOptions,
-        feedbackScoresLabel: "Trace feedback scores",
+        traceScoreOptions,
+        spanScoreOptions,
         isGuardrailsEnabled,
+        logsSource: LOGS_SOURCE.sdk,
       }),
-      span_feedback_scores: {
-        id: "span_feedback_scores",
-        field: COLUMN_SPAN_FEEDBACK_SCORES_ID,
-        label: "Span feedback scores",
-        kind: "query-builder",
-        columnType: COLUMN_TYPE.numberDictionary,
-        operators: FEEDBACK_SCORE_OPERATORS,
-        defaultOperator: ">=",
-        key: {
-          placeholder: "Select span score",
-          options: chipOptionsValue(spanScoreOptions),
-        },
-        value: { type: "numeric", decimals: 2, placeholder: "0" },
-      },
-    };
-    const byId: Record<string, ChipDefinition> = {
-      ...keyBy(TRACE_CHIP_DEFINITIONS_STATIC, "id"),
-      ...dynamicChips,
-    };
-    return compact(TRACE_CHIP_ORDER.map((id) => byId[id]));
-  }, [isGuardrailsEnabled, projectId, traceScoreOptions, spanScoreOptions]);
+    [isGuardrailsEnabled, projectId, traceScoreOptions, spanScoreOptions],
+  );
 
   const spanChipDefinitions = useMemo<ChipDefinition[]>(() => {
     const dynamicChips: Record<string, ChipDefinition> = {
@@ -1038,6 +732,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         scoreOptions: spanScoreOptions,
         feedbackScoresLabel: "Feedback scores",
         isGuardrailsEnabled,
+        logsSource: LOGS_SOURCE.sdk,
       }),
     };
     const byId: Record<string, ChipDefinition> = {
@@ -1238,7 +933,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [setSearch, clearAllChips, setEnvironment, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
-    () => data?.content ?? [],
+    () => uniqBy(data?.content ?? [], "id"),
     [data?.content],
   );
 
@@ -1346,7 +1041,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           label,
           type: columnType,
           header: FeedbackScoreHeader as never,
-          cell: FeedbackScoreCell as never,
+          cell: resolveFeedbackScoreCell(label) as never,
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
@@ -1463,7 +1158,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       onCommentsReply: (row?: Trace | Span) => {
         handleRowClick(row, DetailsActionSection.Comments);
       },
-      enableUserFeedbackEditing: true,
     }),
     [handleRowClick],
   );
@@ -1650,6 +1344,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataColumnsData,
     metadataColumnsOrder,
   ]);
+
+  const virtualization = useMemo(
+    () => getVirtualizationConfig(columns.length, rows.length || (size ?? 0)),
+    [columns.length, rows.length, size],
+  );
 
   const columnsToExport = useMemo(() => {
     return columns
@@ -1920,6 +1619,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             />
           }
           TableWrapper={PageBodyStickyTableWrapper}
+          TableBody={DataTableVirtualBody}
+          columnVirtualization={virtualization}
+          rowVirtualization={virtualization}
           stickyHeader
           meta={meta}
           showLoadingOverlay={isPlaceholderData && isFetching}

@@ -11,14 +11,6 @@ DEBUG_MODE=${DEBUG_MODE:-false}
 GUARDRAILS_OPIK_FLAG=""
 ORIGINAL_COMMAND="$0 $@"
 
-# Local dev defaults to version_2 (matches the bundled config.yml and
-# docker-compose defaults) so a fresh worktree's empty backend doesn't trip
-# the "Workspace upgrade required" pairing screen. Exported here so the
-# JAR-mode backend (start_backend) inherits the same value as docker-compose.
-# Override by exporting TOGGLE_FORCE_WORKSPACE_VERSION=disabled (or
-# version_1) before invoking the script.
-export TOGGLE_FORCE_WORKSPACE_VERSION="${TOGGLE_FORCE_WORKSPACE_VERSION:-version_2}"
-
 # Ollie / Agent Insights read-only freeform SQL is off by default for local dev (the feature is driven by the Ollie
 # agent, which isn't available locally). Set TOGGLE_OLLIE_ENABLED=true before invoking to opt in: start_backend
 # then provisions the restricted read-only ClickHouse user/profile/policies and the JVM connects with the feature on.
@@ -848,7 +840,10 @@ stop_cost_api_local() {
     if [ -f "$COST_API_PID_FILE" ]; then
         local cost_api_pid
         cost_api_pid=$(cat "$COST_API_PID_FILE")
-        if kill -0 "$cost_api_pid" 2>/dev/null; then
+        # A negative value would make `kill` signal a whole process group, so anything
+        # that is not a plain decimal PID is treated as no process at all.
+        case "$cost_api_pid" in ''|*[!0-9]*) cost_api_pid="" ;; esac
+        if [ -n "$cost_api_pid" ] && kill -0 "$cost_api_pid" 2>/dev/null; then
             log_info "Stopping cost-api (PID: $cost_api_pid)..."
             # `uv run` spawns the uvicorn worker as a child; snapshot the
             # descendant tree before killing the parent so we can chase it down.
@@ -872,6 +867,40 @@ stop_cost_api_local() {
 
     rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
     log_success "cost-api stopped"
+}
+
+# Bounce only cost-api, leaving the rest of the stack running. Goes through the same
+# start path as a full run, so its env, ports and auth mode can't drift from what
+# dev-runner would otherwise set. Combine with the modifier flags as usual, e.g.
+# `--platform-enabled --cost-api-restart`.
+cost_api_managed_alive() {
+    [ -f "$COST_API_PID_FILE" ] || return 1
+    local pid
+    pid=$(cat "$COST_API_PID_FILE")
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$pid" 2>/dev/null
+}
+
+restart_cost_api_only() {
+    if ! cost_api_enabled; then
+        log_error "cost-api is not configured: AI_COST_BACKEND_PATH is empty and no sibling ai-cost-backend checkout was found"
+        return 1
+    fi
+
+    log_info "=== Restarting cost-api (leaving the rest of the stack up) ==="
+
+    # Liveness, not just the file: with a PID file left over from a dead process and
+    # something healthy on the port, stop_cost_api_local would clean up the file
+    # without killing anything and start_cost_api_local would adopt that instance --
+    # reporting a restart that never happened.
+    if cost_api_healthy && ! cost_api_managed_alive; then
+        log_error "cost-api on port ${AI_COST_BACKEND_PORT} was not started by this dev-runner, so it cannot be stopped here"
+        log_error "Stop it where you started it, then re-run this command"
+        return 1
+    fi
+
+    stop_cost_api_local
+    start_cost_api_local
 }
 
 display_cost_api_process_status() {
@@ -1610,6 +1639,8 @@ show_usage() {
     echo "  --stop          - Stop Docker infrastructure, and BE and FE processes"
     echo "  --restart       - Stop, build, and start Docker infrastructure, and BE and FE processes (DEFAULT IF NO OPTIONS PROVIDED)"
     echo "  --quick-restart - Quick restart: stop BE/FE, rebuild BE only, start BE/FE (keeps infrastructure running)"
+    echo "  --cost-api-restart - Opik-team only: restart just cost-api (ai-cost-backend), leaving"
+    echo "                     everything else running. Combine with --platform-enabled to keep auth on."
     echo "  --verify        - Verify status of Docker infrastructure, and BE and FE processes"
     echo ""
     echo "BE-Only Mode (BE as process, FE in Docker):"
@@ -1835,6 +1866,9 @@ case "${1:-}" in
         ;;
     "--quick-restart")
         quick_restart_services
+        ;;
+    "--cost-api-restart")
+        restart_cost_api_only || exit 1
         ;;
     "--verify")
         verify_services

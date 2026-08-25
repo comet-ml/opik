@@ -5,8 +5,8 @@ import { type AnyRoute } from "@tanstack/react-router";
 import WorkspacePreloader from "@/shared/WorkspacePreloader/WorkspacePreloader";
 import { GoogleColabCardCoreProps } from "@/types/shared";
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
-import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
+import { BillingLinkProps } from "@/plugins/comet/BillingLink";
 import { BridgeSurface, ExplainButtonProps } from "@/types/assistant-sidebar";
 import {
   type PluginManifest,
@@ -17,7 +17,6 @@ import {
 type PluginStore = {
   UserMenu: React.ComponentType | null;
   InviteUsersForm: React.ComponentType | null;
-  GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
   PermissionsProvider: React.ComponentType<{
     children: React.ReactNode;
@@ -28,7 +27,6 @@ type PluginStore = {
     onChangeHeight: (height: number) => void;
   }> | null;
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
-  SidebarInviteDevButton: React.ComponentType<SidebarInviteDevButtonProps> | null;
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
@@ -41,7 +39,7 @@ type PluginStore = {
   AssistantPrewarmer: React.ComponentType | null;
   AssistantDebugInfo: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
-  BillingLink: React.ComponentType | null;
+  BillingLink: React.ComponentType<BillingLinkProps> | null;
   sendOnboardingEmail: ((email: string) => Promise<void>) | null;
   init: unknown;
   collectRoutes: (parents: PluginRouteParents) => AnyRoute[];
@@ -53,14 +51,12 @@ type PluginStore = {
 const PLUGIN_NAMES = [
   "UserMenu",
   "InviteUsersForm",
-  "GetStartedPage",
   "GoogleColabCard",
   "WorkspacePreloader",
   "PermissionsProvider",
   "LayoutProvider",
   "RetentionBanner",
   "InviteDevButton",
-  "SidebarInviteDevButton",
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
@@ -100,14 +96,12 @@ const ACTIVE_MANIFESTS: PluginManifest[] = Object.values(manifestModules)
 const usePluginsStore = create<PluginStore>((set) => ({
   UserMenu: null,
   InviteUsersForm: null,
-  GetStartedPage: null,
   GoogleColabCard: null,
   WorkspacePreloader: null,
   PermissionsProvider: null,
   LayoutProvider: null,
   RetentionBanner: null,
   InviteDevButton: null,
-  SidebarInviteDevButton: null,
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,

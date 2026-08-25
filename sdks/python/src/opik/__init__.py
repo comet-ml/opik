@@ -1,4 +1,4 @@
-from . import _logging, environment, error_tracking, package_version
+from . import _logging, analytics, environment, error_tracking, package_version
 from .api_objects.annotation_queue import (
     TracesAnnotationQueue,
     ThreadsAnnotationQueue,
@@ -36,6 +36,7 @@ from .message_processing.data_loss import (
     FlushResult,
 )
 from .evaluation import (
+    ErrorTolerance,
     evaluate,
     evaluate_experiment,
     evaluate_on_dict_items,
@@ -65,10 +66,12 @@ _logging.setup()
 __version__ = package_version.VERSION
 __all__ = [
     "__version__",
+    "analytics",
     "TracesAnnotationQueue",
     "ThreadsAnnotationQueue",
     "Attachment",
     "Environment",
+    "ErrorTolerance",
     "evaluate",
     "evaluate_prompt",
     "evaluate_experiment",

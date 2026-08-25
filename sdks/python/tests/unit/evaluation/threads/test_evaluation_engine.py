@@ -324,9 +324,54 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         mocked_opik_client.__internal_api__span__.assert_called()
 
         # Verify metrics were called with the right parameters
-        conversation_list = mock_conversation.model_dump()["discussion"]
+        conversation_list = mock_conversation.model_dump(exclude_none=True)[
+            "discussion"
+        ]
         mock_metric1.score.assert_called_once_with(conversation_list)
         mock_metric2.score.assert_called_once_with(conversation_list)
+
+    @patch("opik.decorator.base_track_decorator.opik_client")
+    @patch("opik.evaluation.threads.evaluation_engine.helpers.load_conversation_thread")
+    def test_evaluate_thread__conversation_with_context__context_reaches_the_metrics(
+        self, load_conversation_thread, decorator_opik_client
+    ):
+        """The context is attached to the agent message and handed to every metric."""
+        mocked_opik_client = mock.MagicMock(spec=opik_client.Opik)
+        decorator_opik_client.get_global_client.return_value = mocked_opik_client
+
+        mock_conversation = conversation_thread.ConversationThread()
+        mock_conversation.add_user_message("Hello")
+        mock_conversation.add_assistant_message("Hi there", context=["some document"])
+        load_conversation_thread.return_value = mock_conversation
+
+        metric = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
+        metric.name = "some_metric"
+        metric.score.return_value = score_result.ScoreResult(
+            name="some_metric", value=1.0
+        )
+
+        self.engine.evaluate_thread(
+            thread=TraceThread(id="thread_1"),
+            eval_project_name="eval_project",
+            metrics=[metric],
+            trace_input_transform=lambda x: "",
+            trace_output_transform=lambda x: "",
+            trace_context_transform=lambda trace: ["some document"],
+            max_traces_per_thread=10,
+        )
+
+        metric.score.assert_called_once_with(
+            [
+                {"role": "user", "content": "Hello"},
+                {
+                    "role": "assistant",
+                    "content": "Hi there",
+                    "context": ["some document"],
+                },
+            ]
+        )
 
     @patch("opik.decorator.base_track_decorator.opik_client")
     @patch("opik.evaluation.threads.evaluation_engine.helpers.load_conversation_thread")

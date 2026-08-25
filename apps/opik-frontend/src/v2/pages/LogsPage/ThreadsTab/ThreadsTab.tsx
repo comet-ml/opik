@@ -23,6 +23,7 @@ import {
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 
 import {
   COLUMN_COMMENTS_ID,
@@ -77,7 +78,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
-import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
+import { resolveFeedbackScoreCell } from "@/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
@@ -383,6 +384,7 @@ type ThreadsTabProps = {
   projectName: string;
   logsType: LOGS_TYPE;
   onLogsTypeChange: (type: LOGS_TYPE) => void;
+  dateRangeConfig: ProjectDateRangeConfig;
 };
 
 export const ThreadsTab: React.FC<ThreadsTabProps> = ({
@@ -390,6 +392,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   projectName,
   logsType,
   onLogsTypeChange,
+  dateRangeConfig,
 }) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
@@ -403,6 +406,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage({
     excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+    ...dateRangeConfig,
   });
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
@@ -657,7 +661,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           label,
           type: columnType,
           header: FeedbackScoreHeader as never,
-          cell: FeedbackScoreCell as never,
+          cell: resolveFeedbackScoreCell(label) as never,
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
@@ -735,7 +739,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     () => ({
       projectId,
       projectName,
-      enableUserFeedbackEditing: true,
     }),
     [projectId, projectName],
   );

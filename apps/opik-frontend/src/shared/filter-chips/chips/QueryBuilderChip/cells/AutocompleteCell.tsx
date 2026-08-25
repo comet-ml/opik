@@ -22,6 +22,7 @@ interface AutocompleteCellProps {
   autoFocus?: boolean;
   grow?: boolean;
   hasError?: boolean;
+  testId?: string;
 }
 
 const filterItems = (items: string[], query: string): string[] => {
@@ -57,6 +58,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
   autoFocus = false,
   grow = false,
   hasError = false,
+  testId,
 }) => {
   const [draft, setDraft] = useState(value);
   const [focused, setFocused] = useState(false);
@@ -136,6 +138,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
             <input
               type="text"
               data-filter-cell
+              data-testid={testId}
               placeholder={placeholder}
               className={cn(
                 cellInput,

@@ -288,6 +288,20 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
+  # Self-check: the changelog re-baseline script's guards decide whether an
+  # operator recovery is refused or silently bricks a database, so exercise them
+  # (stubbed java/curl — no JVM, no ClickHouse) whenever the script changes.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: rebaseline-script-tests
+        name: 🧪 rebaseline script tests
+        entry: apps/opik-backend/test_rebaseline_db_changelog.sh
+        language: system
+        files: ^apps/opik-backend/(rebaseline_db_changelog|test_rebaseline_db_changelog)\.sh$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
   # Frontend (apps/opik-frontend) — eslint --fix on changed files; whole-project
   # typecheck (tsc can't be per-file: path aliases + cross-file inference).
   # language: system → uses the repo's own node_modules; files-gated to src.
@@ -378,4 +392,27 @@ repos:
         # workflow / composite action to this leg by path. Covers both workflows
         # and composite `action.yml`/`action.yaml` files (zizmor audits both).
         files: (^\.github/workflows/.+\.(yml|yaml)$)|((^|/)action\.(yml|yaml)$)
+
+  # ---------------------------------------------------------------------------
+  # Java backend — semgrep, running this repo's own rules from .semgrep/ (no
+  # upstream rule packs; broader SAST adoption is OPIK-6678). The `semgrep` hook
+  # is language: python, so pre-commit provisions it in an isolated env and
+  # contributors need no local semgrep install.
+  #
+  # `--severity ERROR` gates on the blocking tier only. The rule file also carries
+  # a WARNING-severity rule covering the wider format-slot surface; it is reported
+  # when semgrep is run without this flag, but never fails a commit or a CI leg,
+  # so pre-existing code is surfaced as tech debt rather than blocking work.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/semgrep/pre-commit
+    rev: v1.172.0
+    hooks:
+      - id: semgrep
+        name: 🛡️ semgrep — java backend sql
+        # Explicit files: regex, same reason as hadolint above — the CI matrix
+        # builder routes on paths, not on the hook's own file selection.
+        # Production sources only: string formatting in a test fixture is building
+        # a fixture, not accepting user input.
+        files: ^apps/opik-backend/src/main/java/.*\.java$
+        args: ['--config', '.semgrep', '--error', '--severity', 'ERROR', '--disable-version-check', '--quiet', '--skip-unknown-extensions']
 ...

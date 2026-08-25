@@ -7,8 +7,8 @@ If you are looking for setup instructions and contribution workflows, start with
 - Local development setup: https://www.comet.com/docs/opik/contributing/guides/local-development
 
 You can also read and edit those docs directly in this repository:
-- `apps/opik-documentation/documentation/fern/docs/contributing/overview.mdx`
-- `apps/opik-documentation/documentation/fern/docs/contributing/local-development.mdx`
+- `apps/opik-documentation/documentation/fern/docs-v2/contributing/overview.mdx`
+- `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/local-development.mdx`
 
 Please review the CLA before contributing:
 - https://github.com/comet-ml/opik/blob/main/CLA.md
@@ -22,22 +22,22 @@ Please review the CLA before contributing:
 ## Component-specific guides
 - Backend:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/backend
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/backend.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/backend.mdx`
 - Frontend:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/frontend
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/frontend.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/frontend.mdx`
 - Python SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/python-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/python-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/python-sdk.mdx`
 - TypeScript SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/typescript-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/typescript-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/typescript-sdk.mdx`
 - Documentation:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/documentation
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/documentation.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/documentation.mdx`
 - Agent Optimizer SDK:
   - Docs: https://www.comet.com/docs/opik/contributing/guides/agent-optimizer-sdk
-  - Source: `apps/opik-documentation/documentation/fern/docs/contributing/agent-optimizer-sdk.mdx`
+  - Source: `apps/opik-documentation/documentation/fern/docs-v2/contributing/guides/agent-optimizer-sdk.mdx`
 
 ## Fast path
 1. Open or confirm a tracked issue first (`Fixes #...` or `Resolves #...`).
@@ -60,6 +60,9 @@ Workflows are also scanned for **security** issues with [zizmor](https://github.
 
 ## Dockerfiles
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
+
+## SQL query construction (Java backend)
+Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
 
 ## Java imports (backend)
 Types are imported at the top of the file and referenced by their simple name — not written out fully qualified inline. Write `Locale.ROOT` with `import java.util.Locale;`, not `java.util.Locale.ROOT`. This applies to any external package (`java.*`, `jakarta.*`, `io.dropwizard.*`, `lombok.*`, third-party), not just the JDK.

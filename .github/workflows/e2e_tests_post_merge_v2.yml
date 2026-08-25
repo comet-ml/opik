@@ -42,6 +42,7 @@ env:
   ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
 
   OPIK_SENTRY_ENABLE: false
+  OPIK_ANALYTICS_ENABLE: false
 
 permissions:
   contents: read
@@ -96,7 +97,7 @@ jobs:
           cache-dependency-path: tests_end_to_end/e2e/package-lock.json
 
       - name: "🐍 Setup uv & Python"
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: '3.12'
 
@@ -159,6 +160,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ALLURE_LAUNCH_NAME: "Opik v2 Post-Merge ${{ github.event.inputs.tier || 't1' }} - ${{ github.run_id }}"
           TIER: ${{ github.event.inputs.tier || 't1' }}
+          # The dockerized backend reaches the host-run mock token service via the docker0 host IP
+          MOCK_AUTH_URL_FOR_BACKEND: http://172.17.0.1:9878
         run: |
           echo "========================================"
           echo "🧪 Running v2 tier: $TIER"
