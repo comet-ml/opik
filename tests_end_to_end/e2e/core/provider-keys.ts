@@ -86,12 +86,24 @@ export async function deleteProviderKeyByName(providerName: string): Promise<voi
   }
 }
 
+/** Carries the HTTP status so callers can classify a failure instead of parsing prose. */
+export class AuthConfigCheckError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(`auth-config check returned ${status}: ${body}`);
+    this.name = 'AuthConfigCheckError';
+  }
+}
+
 /**
  * Server-side connection check: the BACKEND performs the token fetch. Passing a provider id
  * tests the stored recipe (resolving __SECRET__ sentinels); passing an auth_config tests
  * submitted values without needing a stored provider at all.
- * Throws on a non-2xx — notably 400, which the endpoint returns when the token fetch itself
- * failed (unreachable URL, rejected credentials, malformed reply).
+ * Throws AuthConfigCheckError on a non-2xx. Note 400 is overloaded — the endpoint returns it
+ * for every way the fetch itself can fail (unreachable URL, refused destination, rejected
+ * credentials, malformed reply), so the status alone does not identify the cause.
  */
 export async function checkProviderAuthConfig(
   target: string | ProviderAuthConfig,
@@ -104,7 +116,7 @@ export async function checkProviderAuthConfig(
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`auth-config check returned ${response.status}: ${await response.text()}`);
+    throw new AuthConfigCheckError(response.status, await response.text());
   }
   return (await response.json()) as { lifetime_seconds: number };
 }

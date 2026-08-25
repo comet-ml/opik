@@ -11,7 +11,7 @@
  *    MOCK_AUTH_URL_FOR_BACKEND=http://host.docker.internal:9878 (and make sure the backend
  *    runs with LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed, as the compose file ships).
  */
-import { checkProviderAuthConfig } from './provider-keys';
+import { AuthConfigCheckError, checkProviderAuthConfig } from './provider-keys';
 
 export const MOCK_AUTH_PORT = parseInt(process.env.MOCK_AUTH_PORT ?? '9878', 10);
 
@@ -48,6 +48,16 @@ export async function mockAuthRevokeAll(): Promise<void> {
   if (!response.ok) throw new Error(`mock-auth /revoke returned ${response.status}`);
 }
 
+const AUTH_CONFIG_TEST_PATH = '/auth-config/test';
+
+/**
+ * Backend wordings for "the destination was never successfully contacted"
+ * (AuthTokenProvider): an IOException on send, and a refusal by the SSRF destination guard.
+ * Deliberately narrow — "token fetch failed with status" (rejected credentials) and the
+ * non-JSON/missing-field replies share the 400 but indicate a broken mock, not a topology gap.
+ */
+const UNREACHABLE_PATTERNS = [/could not reach/i, /destination/i];
+
 /**
  * Whether the OPIK BACKEND can fetch a token from the mock service — not whether THIS process
  * can reach it. The two differ whenever the backend runs in docker-compose while the mock runs
@@ -56,7 +66,11 @@ export async function mockAuthRevokeAll(): Promise<void> {
  * backend's own test-connection endpoint (which performs the fetch server-side) turns that into
  * a skip that names the cause.
  *
- * Resolves to null when the backend CAN reach it, else the reason to skip with.
+ * Only two outcomes are a skip: the deployment lacks the endpoint, or the backend cannot reach
+ * the destination. Everything else — auth, permissions, rejected credentials, a malformed
+ * reply — is a real problem this suite must not hide behind a green run, so it propagates and
+ * fails the setup. Resolves to null when the backend CAN reach the mock.
+ *
  * Cached: the answer is a property of the deployment, and every spec in the area asks.
  */
 let mockAuthGate: Promise<string | null> | undefined;
@@ -77,17 +91,26 @@ export function mockAuthSkipReason(): Promise<string | null> {
       });
       return null;
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      // 404 = deployment predates the endpoint (OPIK-7940), so token auth isn't there to test.
-      if (detail.includes('404')) {
-        return `deployment has no /auth-config/test endpoint, so dynamic token auth is unavailable (${detail})`;
+      if (!(err instanceof AuthConfigCheckError)) throw err;
+
+      // No endpoint: the deployment predates dynamic token auth (OPIK-7940), so there is
+      // nothing here to test.
+      if (err.status === 404) {
+        return `deployment has no ${AUTH_CONFIG_TEST_PATH} endpoint, so dynamic token auth is unavailable`;
       }
-      return (
-        `the Opik backend cannot fetch a token from ${mockTokenUrlForBackend} (${detail}). ` +
-        'If the backend runs in docker-compose, set MOCK_AUTH_URL_FOR_BACKEND to a host-reachable ' +
-        'address (CI uses http://172.17.0.1:9878) and run the backend with ' +
-        'LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed.'
-      );
+
+      // 400 covers every fetch failure, so match the two the backend words distinctly: an
+      // unreachable destination, and one refused by the SSRF guard. Rejected credentials or a
+      // malformed reply share the status but mean the mock itself is broken — never skip those.
+      if (err.status === 400 && UNREACHABLE_PATTERNS.some((re) => re.test(err.body))) {
+        return (
+          `the Opik backend cannot fetch a token from ${mockTokenUrlForBackend}: ${err.body} ` +
+          '— if the backend runs in docker-compose, set MOCK_AUTH_URL_FOR_BACKEND to a ' +
+          'host-reachable address (CI uses http://172.17.0.1:9878).'
+        );
+      }
+
+      throw err;
     }
   })();
   return mockAuthGate;
