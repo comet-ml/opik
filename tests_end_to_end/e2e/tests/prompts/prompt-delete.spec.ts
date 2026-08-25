@@ -14,7 +14,15 @@ test.describe('Prompt library — delete', { tag: ['@t2-cuj', '@area:prompts'] }
   test(
     'Deleting a prompt removes only that prompt, and it stays deleted',
     { tag: ['@cap:prompts.delete-prompt'] },
-    async ({ textPrompt, project, sdkClient, registerPromptCleanup, testNamespace, page }) => {
+    async ({
+      textPrompt,
+      project,
+      sdkClient,
+      backendClient,
+      registerPromptCleanup,
+      testNamespace,
+      page,
+    }) => {
       const prompts = new PromptsPage(page);
       const siblingName = `${testNamespace}-prompt-bystander`;
 
@@ -49,6 +57,13 @@ test.describe('Prompt library — delete', { tag: ['@t2-cuj', '@area:prompts'] }
         await prompts.waitForReady();
         await expect(prompts.promptRow(textPrompt.name)).toHaveCount(0);
         await expect(prompts.promptRow(siblingName)).toBeVisible();
+      });
+
+      await test.step('Server-side: the target is gone, the bystander remains', async () => {
+        // The UI list is a project-scoped projection, so an absent row would
+        // also be consistent with the prompt surviving outside that view.
+        expect(await backendClient.promptExistsByName(textPrompt.name)).toBe(false);
+        expect(await backendClient.promptExistsByName(siblingName)).toBe(true);
       });
     },
   );

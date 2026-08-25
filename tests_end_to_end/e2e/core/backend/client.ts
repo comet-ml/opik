@@ -446,6 +446,16 @@ export function makeBackendClient(apiKey: string | null = null) {
       }
     },
 
+    /**
+     * By name, not id: the Python SDK's create_prompt returns the prompt
+     * VERSION id, so a caller holding that id would get a 404 for a prompt
+     * that is very much alive.
+     */
+    async promptExistsByName(name: string): Promise<boolean> {
+      const page = await opik.api.prompts.getPrompts({ name, size: 50 });
+      return (page.content ?? []).some((p) => p.name === name);
+    },
+
     async deletePrompt(id: string): Promise<void> {
       try {
         await opik.api.prompts.deletePrompt(id);
@@ -723,6 +733,21 @@ export function makeBackendClient(apiKey: string | null = null) {
           (item.feedback_scores ?? []).map((s) => [s.name, Number(s.value)]),
         ),
       }));
+    },
+
+    /**
+     * By id, unlike findExperimentByName — `findExperiments({ name })` is not
+     * scoped to a project, so a same-named experiment elsewhere would answer
+     * for this one.
+     */
+    async experimentExists(id: string): Promise<boolean> {
+      try {
+        await opik.api.experiments.getExperimentById(id);
+        return true;
+      } catch (err) {
+        if (isNotFoundError(err)) return false;
+        throw err;
+      }
     },
 
     async findExperimentByName(name: string): Promise<ExperimentRefDetail | null> {

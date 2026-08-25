@@ -56,10 +56,10 @@ test.describe('Experiments — delete', { tag: ['@t2-cuj', '@area:experiments'] 
         });
 
         await test.step('Server-side: the target is gone, the bystander remains', async () => {
-          // The list is paginated and name-filtered, so an absent row alone
-          // does not prove deletion.
-          expect(await backendClient.findExperimentByName(experiment.experimentName)).toBeNull();
-          expect(await backendClient.findExperimentByName(siblingName)).not.toBeNull();
+          // By id: the list is paginated and name-filtered, and a name lookup
+          // is not project-scoped, so neither proves this row was the one hit.
+          expect(await backendClient.experimentExists(experiment.experimentId)).toBe(false);
+          expect(await backendClient.experimentExists(sibling.experiment_id)).toBe(true);
         });
       } finally {
         // Experiment before dataset: it holds the reference.
