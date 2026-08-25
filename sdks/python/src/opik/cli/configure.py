@@ -32,6 +32,10 @@ def _setup_assistants(
     if install_mcp is False and install_skills is False:
         return
     if install_mcp is None and install_skills is None and automatic_approvals:
+        # `-y` alone is not a request to edit another tool's config, so this is a
+        # skip — and it is the one an agent is most likely to hit, because `-y` is
+        # what the previous error told it to add.
+        _announce_assistant_skip()
         return
 
     skills_flag = install_skills
@@ -50,6 +54,29 @@ def _setup_assistants(
         setup_params,
         skills_flag=skills_flag,
         assume_confirmed=install_mcp is True,
+    )
+
+
+def _announce_assistant_skip() -> None:
+    """Say that the assistant step was skipped, and how to include it.
+
+    Staying silent here reported "configuration completed successfully" to a
+    caller that had also asked for the MCP server — and a coding agent has no way
+    to notice the difference between "configured Opik" and "configured Opik and
+    your client". Only shown without a terminal: a person who typed `-y` chose
+    this, an agent that was told to add `-y` did not.
+    """
+    if interactive_helpers.is_interactive():
+        return
+    console = install_view.console
+    console.print(
+        "  Skipped AI client setup: nothing named it, so nothing was written to "
+        "your AI client's config.",
+        style="yellow",
+    )
+    console.print(
+        "  To include it:  opik configure -y --install-mcp --install-skills",
+        style="dim",
     )
 
 
@@ -72,8 +99,7 @@ def _confirm_assistant_step() -> bool:
         return False
 
     if not interactive_helpers.is_interactive():
-        # No terminal to ask in. `--install-mcp` is how a script opts in, and it
-        # skips this path entirely by setting `install_mcp` to True.
+        _announce_assistant_skip()
         return False
 
     console = install_view.console
@@ -233,9 +259,19 @@ def configure(
     install_mcp: Optional[bool],
     install_skills: Optional[bool],
 ) -> None:
-    """
-    Create a configuration file for the Opik Python SDK, if a configuration file already exists, it will be overwritten.
-    This is also available as a function in the Python SDK.
+    """Create a configuration file for the Opik Python SDK.
+
+    Overwrites an existing configuration file. Also available as a function in the
+    Python SDK.
+
+    Without a terminal — a coding agent, a script — pass `-y` to accept the
+    defaults, and name the assistant steps you want:
+
+        opik configure -y --install-mcp --install-skills
+
+    `-y` on its own configures Opik and nothing else: registering the MCP server
+    edits your AI client's own config, so it happens only when asked for.
+    Deployment is taken from OPIK_URL_OVERRIDE / OPIK_API_KEY, or use --use_local.
     """
     # Running `opik configure` with no subcommand performs the configuration
     # itself; `opik configure status` (and any future subcommand) is dispatched

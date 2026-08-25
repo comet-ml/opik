@@ -289,3 +289,45 @@ def test_configure_no_terminal_with_yes__proceeds():
 
     assert result.exit_code == 0
     spy.assert_called_once()
+
+
+class TestAgentDiscoverability:
+    """An agent has to *find* the right invocation, not just be capable of it.
+
+    Every dead end on this path was a silent one: `-y` succeeded, printed
+    "configuration completed successfully", and wrote nothing to the AI client —
+    so an agent asked for both reported done having delivered half.
+    """
+
+    def test_yes_alone__announces_that_the_assistant_step_was_skipped(self, capsys):
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=False
+            ),
+            mock.patch.object(configure_cli.assistants, "setup") as setup,
+        ):
+            configure_cli._setup_assistants({}, None, None, True)
+
+        out = capsys.readouterr().out
+        setup.assert_not_called()
+        assert "Skipped AI client setup" in out
+        assert "--install-mcp" in out, "must name the flag that includes it"
+
+    def test_with_a_terminal__stays_quiet(self, capsys):
+        """A person who typed `-y` chose this; only an agent needs telling."""
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(configure_cli.assistants, "setup"),
+        ):
+            configure_cli._setup_assistants({}, None, None, True)
+
+        assert "Skipped AI client setup" not in capsys.readouterr().out
+
+    def test_help_states_the_non_interactive_recipe(self):
+        """Agents read --help before guessing."""
+        result = CliRunner().invoke(cli, ["configure", "--help"])
+
+        assert "--install-mcp" in result.output
+        assert "-y" in result.output

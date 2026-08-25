@@ -129,6 +129,11 @@ def configure(
     Reuses your existing Opik configuration (~/.opik.config), so run
     `opik configure` first if you have not configured Opik yet.
 
+    Without a terminal — a coding agent, a script — name the client, which is what
+    makes the request explicit:
+
+        opik mcp configure --ai-client cursor --skills
+
     By default this uses the Comet-hosted MCP server when your deployment offers
     one, falling back to a local server otherwise. Pass `--local-server` to force
     the local server.
