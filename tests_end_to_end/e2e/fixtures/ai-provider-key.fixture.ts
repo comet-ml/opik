@@ -101,39 +101,45 @@ export const test = baseTest.extend<AiProviderKeyFixtures>({
       );
     }
 
-    // Prove the precondition rather than assuming it. Every assertion downstream
-    // is about a STORED secret; if the recipe had not landed with client_secret
-    // flagged secret, the UI checks would still pass against a provider that
-    // simply has nothing to hide, and the spec would read as coverage forever.
-    const stored = await backendClient.getProviderKey(created.id);
-    const storedSecret = stored?.value.authConfig?.credentials.find(
-      (credential) => credential.key === 'client_secret',
-    );
-    if (!storedSecret?.secret) {
-      throw new Error(
-        `[tokenAuthProvider fixture] provider ${created.id} did not store client_secret as a ` +
-          `secret credential: ${JSON.stringify(stored?.value.authConfig)}`,
+    // try/finally from the moment the provider exists: the precondition check
+    // below throws on a bad setup, and provider keys are swept by nothing, so a
+    // throw outside this block would orphan the key for good — and the next
+    // retry reuses the same deterministic name and collides with it.
+    try {
+      // Prove the precondition rather than assuming it. Every assertion downstream
+      // is about a STORED secret; if the recipe had not landed with client_secret
+      // flagged secret, the UI checks would still pass against a provider that
+      // simply has nothing to hide, and the spec would read as coverage forever.
+      const stored = await backendClient.getProviderKey(created.id);
+      const storedSecret = stored?.value.authConfig?.credentials.find(
+        (credential) => credential.key === 'client_secret',
       );
-    }
+      if (!storedSecret?.secret) {
+        throw new Error(
+          `[tokenAuthProvider fixture] provider ${created.id} did not store client_secret as a ` +
+            `secret credential: ${JSON.stringify(stored?.value.authConfig)}`,
+        );
+      }
 
-    const ref: TokenAuthProviderRef = {
-      id: created.id,
-      providerName,
-      tokenUrl,
-      clientId,
-      clientSecret,
-    };
-    await testInfo.attach('opik.tokenAuthProvider', {
-      // The plaintext secret is a fixture-generated string with no value outside
-      // this run, but there is no reason to write it into a report artifact.
-      body: JSON.stringify({ ...ref, clientSecret: '<redacted>' }, null, 2),
-      contentType: 'application/json',
-    });
+      const ref: TokenAuthProviderRef = {
+        id: created.id,
+        providerName,
+        tokenUrl,
+        clientId,
+        clientSecret,
+      };
+      await testInfo.attach('opik.tokenAuthProvider', {
+        // The plaintext secret is a fixture-generated string with no value outside
+        // this run, but there is no reason to write it into a report artifact.
+        body: JSON.stringify({ ...ref, clientSecret: '<redacted>' }, null, 2),
+        contentType: 'application/json',
+      });
 
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      await deleteQuietly(backendClient, created.id, 'tokenAuthProvider');
+      await use(ref);
+    } finally {
+      if (!shouldLeaveArtifacts(testInfo)) {
+        await deleteQuietly(backendClient, created.id, 'tokenAuthProvider');
+      }
     }
   },
 
@@ -154,28 +160,31 @@ export const test = baseTest.extend<AiProviderKeyFixtures>({
       );
     }
 
-    // Same discriminator argument as above, inverted: the mode-switch tests are
-    // about a provider that starts with a static key and NO recipe. A provider
-    // that already carried one would make "the switch cleared the other side"
-    // unfalsifiable.
-    const stored = await backendClient.getProviderKey(created.id);
-    if (stored?.value.authConfig !== null) {
-      throw new Error(
-        `[staticKeyProvider fixture] provider ${created.id} was created with an auth_config: ` +
-          `${JSON.stringify(stored?.value.authConfig)}`,
-      );
-    }
+    // Same try/finally reasoning as tokenAuthProvider above.
+    try {
+      // Same discriminator argument as above, inverted: the mode-switch tests are
+      // about a provider that starts with a static key and NO recipe. A provider
+      // that already carried one would make "the switch cleared the other side"
+      // unfalsifiable.
+      const stored = await backendClient.getProviderKey(created.id);
+      if (stored?.value.authConfig !== null) {
+        throw new Error(
+          `[staticKeyProvider fixture] provider ${created.id} was created with an auth_config: ` +
+            `${JSON.stringify(stored?.value.authConfig)}`,
+        );
+      }
 
-    const ref: StaticKeyProviderRef = { id: created.id, providerName, apiKey };
-    await testInfo.attach('opik.staticKeyProvider', {
-      body: JSON.stringify({ ...ref, apiKey: '<redacted>' }, null, 2),
-      contentType: 'application/json',
-    });
+      const ref: StaticKeyProviderRef = { id: created.id, providerName, apiKey };
+      await testInfo.attach('opik.staticKeyProvider', {
+        body: JSON.stringify({ ...ref, apiKey: '<redacted>' }, null, 2),
+        contentType: 'application/json',
+      });
 
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      await deleteQuietly(backendClient, created.id, 'staticKeyProvider');
+      await use(ref);
+    } finally {
+      if (!shouldLeaveArtifacts(testInfo)) {
+        await deleteQuietly(backendClient, created.id, 'staticKeyProvider');
+      }
     }
   },
 });

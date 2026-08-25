@@ -160,15 +160,29 @@ export class AiProviderDialog {
    */
   async saveAndCaptureUpdate(): Promise<{ status: number; body: ProviderUpdatePayload }> {
     return test.step('save the dialog and capture the update request', async () => {
+      // The list refetch is armed BEFORE the click. `onSettled` fires
+      // `invalidateQueries` without awaiting it, so the dialog can close while
+      // the provider list is still stale — and a dialog reopened on stale cache
+      // initializes `defaultValues` once and stays wrong, which no web-first
+      // assertion can retry away. Awaiting the refetch is what makes a
+      // subsequent reopen read the mode that was just saved.
+      const refetched = this.page.waitForResponse(
+        (res) =>
+          res.request().method() === 'GET' &&
+          new URL(res.url()).pathname.endsWith('/v1/private/llm-provider-key') &&
+          res.status() === 200,
+      );
       const [response] = await Promise.all([
         this.page.waitForResponse(
           (res) =>
             res.request().method() === 'PATCH' &&
-            res.url().includes(`/llm-provider-key/${this.providerId}`),
+            new URL(res.url()).pathname ===
+              `/v1/private/llm-provider-key/${this.providerId}`,
         ),
         this.root.getByRole('button', { name: 'Update configuration', exact: true }).click(),
       ]);
       await this.root.waitFor({ state: 'hidden' });
+      await refetched;
       return {
         status: response.status(),
         body: (response.request().postDataJSON() ?? {}) as ProviderUpdatePayload,
