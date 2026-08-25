@@ -114,7 +114,14 @@ def extract_json_content_or_raise(content: str) -> Any:
       object with duplicate member names (``{"score": 1, "score": 2}``), a
       non-finite number (``NaN``/``Infinity``/``-Infinity``), or no complete
       value at all. A malformed or structural-break span makes the call raise
-      even when a valid value also appears alongside it.
+      even when a valid value also appears alongside it. Passing a non-string
+      ``content`` also fails closed here rather than escaping as a raw
+      ``TypeError``, because the only caller-visible contract this helper
+      offers is ``JSONParsingError``.
+    * A failure that is NOT about the judge's output — an exhausted allocator,
+      a decoder bug, an unrelated programming error — is deliberately NOT
+      converted. It propagates unchanged so it stays distinguishable from
+      malformed judge output.
     """
     try:
         # ``_DECODER`` rejects NaN/Infinity/-Infinity here so a lone clean
@@ -125,14 +132,33 @@ def extract_json_content_or_raise(content: str) -> Any:
         return _DECODER.decode(content)
     except json.decoder.JSONDecodeError:
         return _resolve_unique_json_value_or_raise(content)
-    except Exception as e:
-        # Includes the ValueError raised by ``_reject_non_finite`` or
-        # ``_reject_duplicate_object_keys`` (neither is a JSONDecodeError), so a
-        # non-finite or duplicate-key fast-path value fails closed here rather
-        # than falling through to the scanning path.
+    except (ValueError, RecursionError, TypeError) as e:
+        # The failures that mean "this input is not a usable JSON value", named
+        # explicitly rather than caught as a blanket ``Exception`` so an
+        # internal failure is never reported as malformed judge output:
+        #   * ``ValueError`` — raised by ``_reject_non_finite`` and
+        #     ``_reject_duplicate_object_keys`` (neither is a JSONDecodeError),
+        #     so a non-finite or duplicate-key fast-path value fails closed here
+        #     rather than falling through to the scanning path.
+        #   * ``RecursionError`` — nesting deep enough to exhaust the decoder.
+        #   * ``TypeError`` — a non-string ``content``. Kept fail-closed rather
+        #     than allowed to escape: ``syc_eval`` catches only
+        #     ``JSONParsingError`` around this call, so a raw ``TypeError`` here
+        #     would leak straight out of ``SycEval.score``.
+        # This mirrors the scanner's own decode guard
+        # (``except (json.JSONDecodeError, RecursionError, ValueError)``), which
+        # already enumerates its failures instead of catching everything;
+        # ``JSONDecodeError`` is a ``ValueError`` subclass and is handled by the
+        # clause above, so it never reaches here.
+        #
+        # Anything else — ``MemoryError``, a decoder bug, an unrelated
+        # programming error — is NOT caught. Converting those would make an
+        # internal failure indistinguishable from a malformed verdict.
+        # ``from e`` keeps the originating failure as the explicit ``__cause__``
+        # rather than only an implicit ``__context__``.
         raise exceptions.JSONParsingError(
             f"Failed to parse response to JSON dictionary: {str(e)}"
-        )
+        ) from e
 
 
 def _canonical_key(value: Any) -> Any:

@@ -383,13 +383,23 @@ class TestBoundedDecodeWork:
 
     @pytest.mark.parametrize(
         "content",
-        ["{" * (100 * 1024), "{" * (1024 * 1024), "[" * (1024 * 1024)],
-        ids=["braces_100kb", "braces_1mb", "brackets_1mb"],
+        ["{" * (128 * 1024), "[" * (128 * 1024)],
+        ids=["braces_128kb", "brackets_128kb"],
     )
     def test__extract_json_content_or_raise__pure_unclosed_large_inputs__decode_calls_bounded(
         self, content, monkeypatch
     ):
         # The strict malformed flag must not reintroduce super-linear work.
+        #
+        # The decode-call counter, not the input size, is what discriminates
+        # here: the regression this guards against decodes at every opener, so
+        # it registers one call per opener against a ``<= 1`` assertion — 131072
+        # against 1 at this size, and it already fails by four orders of
+        # magnitude at 16 KiB. Growing the input therefore adds no detection
+        # power. The earlier 1 MiB cases cost ~163 ms each in the default unit
+        # suite (measured, linear in input size) to assert exactly what this
+        # asserts, so the size is kept just above the 100_000-opener case above
+        # and both opener types are retained.
         assert self._count_decode_calls(content, monkeypatch) <= 1
 
     def test__extract_json_content_or_raise__decode_calls__track_candidates_not_input_length(
@@ -440,9 +450,12 @@ class TestBoundedRetainedCandidates:
                 tracemalloc.stop()
         return peak
 
-    # A per-candidate list of 100_000 decoded dicts measured ~32 MB here; an
-    # O(1) representative measures a few KB. A cap far below the O(n) figure and
-    # far above the O(1) figure separates the two robustly without being flaky.
+    # Measured on this scanner: the O(1) representative retains only a few KiB and
+    # does not grow with candidate count (in the ~3.9-4.6 KiB range across local
+    # runs; unchanged across candidate counts within any one run), while the
+    # regression this guards against — retaining every decoded candidate — peaks
+    # in the megabytes. A cap far below the O(n) figure and far above the O(1)
+    # figure separates the two robustly without depending on the exact value.
     _O1_PEAK_CAP_BYTES = 512 * 1024
 
     @pytest.mark.parametrize(
@@ -456,12 +469,18 @@ class TestBoundedRetainedCandidates:
     def test__scan_top_level_json_values__many_candidates__retained_memory_is_o1(
         self, make
     ):
-        # 1000x more candidates must not grow retained scan memory. The scan
+        # 100x more candidates must not grow retained scan memory. The scan
         # keeps going after a conflict (to observe any later structural break)
         # but still retains only one representative. Absolute cap is the primary
         # guard; the relative factor is a loose backstop.
+        #
+        # 10_000 rather than 100_000 candidates: the retained peak does not move
+        # between the two, so the invariant is measured at the same fidelity,
+        # while the O(n) regression still overshoots the cap by a wide margin at
+        # this size and already overshoots it at 2_000. The larger fixture only
+        # added ~1.6 s of decode and allocation work to the default unit suite.
         small = self._peak_scan_bytes(make(100))
-        large = self._peak_scan_bytes(make(100_000))
+        large = self._peak_scan_bytes(make(10_000))
         assert large < self._O1_PEAK_CAP_BYTES
         assert large <= small * 8
 
@@ -785,3 +804,78 @@ class TestDuplicateObjectKeysFailClosed:
         # The duplicate-key guard must not disturb distinct-key objects, nor the
         # unrelated separate-identical-object collapse.
         assert parsing_helpers.extract_json_content_or_raise(content) == expected
+
+
+class TestFastPathExceptionBoundary:
+    """Invariant (error taxonomy): the fast path converts only the failures that
+    describe the *judge's output*; a failure of the process itself propagates.
+
+    ``extract_json_content_or_raise`` has to fail closed, which earlier meant a
+    blanket ``except Exception`` — an exhausted allocator or a decoder bug was
+    reported to the caller as ``JSONParsingError``, indistinguishable from a
+    malformed verdict. The catch now enumerates ``ValueError`` (the
+    ``parse_constant`` / ``object_pairs_hook`` rejections), ``RecursionError``
+    (nesting deep enough to exhaust the decoder) and ``TypeError`` (non-string
+    ``content``), mirroring the scanner's own decode guard. Everything else is
+    left alone.
+
+    Both halves are load-bearing, so both are pinned here: narrowing the catch
+    must not turn a fail-closed path into a leaked built-in, and it must
+    actually stop masking internal failures.
+    """
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            '{"score": ',
+            '{"score": NaN}',
+            '{"score": 1, "score": 2}',
+            "[" * 60_000 + "]" * 60_000,
+            None,
+            b'{"score": 1}',
+            42,
+        ],
+        ids=[
+            "truncated",
+            "non_finite_constant",
+            "duplicate_object_keys",
+            "deep_nesting",
+            "none_input",
+            "bytes_input",
+            "int_input",
+        ],
+    )
+    def test__extract_json_content_or_raise__output_level_failures__still_fail_closed(
+        self, content
+    ):
+        # Every one of these reaches the caller as ``JSONParsingError`` today and
+        # must keep doing so: ``syc_eval`` catches only ``JSONParsingError``
+        # around this call, so a leaked ``RecursionError``/``TypeError`` would
+        # escape ``SycEval.score`` as a raw built-in.
+        _raises(content)
+
+    @pytest.mark.parametrize(
+        "error",
+        [MemoryError("simulated allocator exhaustion"), RuntimeError("decoder bug")],
+        ids=["memory_error", "runtime_error"],
+    )
+    def test__extract_json_content_or_raise__internal_failure__propagates_unconverted(
+        self, error, monkeypatch
+    ):
+        # Not about the judge's output, so it must not be relabelled as one.
+        def exploding_decode(_content):
+            raise error
+
+        monkeypatch.setattr(parsing_helpers._DECODER, "decode", exploding_decode)
+        with pytest.raises(type(error)):
+            parsing_helpers.extract_json_content_or_raise('{"score": 1}')
+
+    def test__extract_json_content_or_raise__converted_failure__keeps_original_cause(
+        self,
+    ):
+        # ``from e`` makes the originating failure the explicit ``__cause__``, so
+        # a converted error stays diagnosable rather than being flattened into a
+        # message string.
+        with pytest.raises(exceptions.JSONParsingError) as excinfo:
+            parsing_helpers.extract_json_content_or_raise('{"score": NaN}')
+        assert isinstance(excinfo.value.__cause__, ValueError)
