@@ -318,17 +318,22 @@ class TestAgentDiscoverability:
         assert "Skipped AI client setup" in out
         assert "--install-mcp" in out, "must name the flag that includes it"
 
-    def test_with_a_terminal__stays_quiet(self, capsys):
-        """A person who typed `-y` chose this; only an agent needs telling."""
+    def test_with_a_terminal__also_says_so(self, capsys):
+        """`-y` reads as yes-to-everything, so a person is surprised too.
+
+        They chose "stop asking me questions", not "skip my editor" — the same
+        gap an agent hits, so the line is worth showing in both modes.
+        """
         with (
             mock.patch.object(
                 configure_cli.interactive_helpers, "is_interactive", return_value=True
             ),
-            mock.patch.object(configure_cli.assistants, "setup"),
+            mock.patch.object(configure_cli.assistants, "setup") as setup,
         ):
             configure_cli._setup_assistants({}, None, None, True)
 
-        assert "Skipped AI client setup" not in capsys.readouterr().out
+        setup.assert_not_called()
+        assert "Skipped AI client setup" in capsys.readouterr().out
 
     def test_help_states_the_non_interactive_recipe(self):
         """Agents read --help before guessing."""

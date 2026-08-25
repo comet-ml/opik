@@ -60,14 +60,14 @@ def _setup_assistants(
 def _announce_assistant_skip() -> None:
     """Say that the assistant step was skipped, and how to include it.
 
-    Staying silent here reported "configuration completed successfully" to a
-    caller that had also asked for the MCP server — and a coding agent has no way
-    to notice the difference between "configured Opik" and "configured Opik and
-    your client". Only shown without a terminal: a person who typed `-y` chose
-    this, an agent that was told to add `-y` did not.
+    Staying silent reported "configuration completed successfully" to a caller
+    that had also asked for the MCP server, with no way to notice the difference
+    between "configured Opik" and "configured Opik and your client".
+
+    Shown with a terminal too. `-y` reads as yes-to-everything, so someone who
+    typed it chose "stop asking me questions", not "skip my editor" — the same
+    surprise an agent hits, and worth the one line either way.
     """
-    if interactive_helpers.is_interactive():
-        return
     console = install_view.console
     console.print(
         "  Skipped AI client setup: nothing named it, so nothing was written to "
