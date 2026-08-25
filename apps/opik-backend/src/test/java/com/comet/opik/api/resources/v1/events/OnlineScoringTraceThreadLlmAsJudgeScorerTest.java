@@ -75,7 +75,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -191,33 +190,28 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     class RoutingGateTests {
 
         // Threads don't have an experimentId-driven branch (no test-suite-assertion equivalent),
-        // so the truth table is toggle × tokens-vs-threshold × provider-supports-tools × hasAttachments.
+        // so the truth table is tokens-vs-threshold × provider-supports-tools × hasAttachments.
         // Rows mirror the trace-side gate's design for symmetry.
-        @org.junit.jupiter.params.ParameterizedTest(name = "toggle={0}, tokens={1}, threshold={2}, provider={3}, hasAttachments={4} → expected useTools={5}")
+        @org.junit.jupiter.params.ParameterizedTest(name = "tokens={0}, threshold={1}, provider={2}, hasAttachments={3} → expected useTools={4}")
         @org.junit.jupiter.params.provider.CsvSource({
-                // size-based path — all three preconditions must hold
-                "true,  60000, 50000, OPEN_AI, false, true",
-                "true,  50000, 50000, OPEN_AI, false, true",
+                // size-based path — both preconditions must hold
+                "60000, 50000, OPEN_AI, false, true",
+                "50000, 50000, OPEN_AI, false, true",
                 // below threshold → inline
-                "true,  49999, 50000, OPEN_AI, false, false",
-                // toggle off → inline even on huge contexts
-                "false, 60000, 50000, OPEN_AI, false, false",
+                "49999, 50000, OPEN_AI, false, false",
                 // provider doesn't support tool calling → inline + warn
-                "true,  60000, 50000, OLLAMA,  false, false",
+                "60000, 50000, OLLAMA,  false, false",
                 // no preconditions met
-                "false, 0,     50000, OPEN_AI, false, false",
-                // attachment-driven path (OPIK-6555): toggle on + attachments + below size threshold → tools
-                "true,  0,     50000, OPEN_AI, true,  true",
-                // attachments but toggle off → inline (whole agentic feature is gated by the toggle)
-                "false, 0,     50000, OPEN_AI, true,  false",
+                "0,     50000, OPEN_AI, false, false",
+                // attachment-driven path (OPIK-6555): attachments + below size threshold → tools
+                "0,     50000, OPEN_AI, true,  true",
                 // attachments but provider can't do tools → inline + warn
-                "true,  0,     50000, OLLAMA,  true,  false",
+                "0,     50000, OLLAMA,  true,  false",
         })
         void gateMatchesTruthTable(
-                boolean toggleEnabled, int estimatedTokens, int thresholdTokens,
+                int estimatedTokens, int thresholdTokens,
                 com.comet.opik.api.LlmProvider provider, boolean hasAttachments, boolean expectedUseTools) {
             String modelName = "gpt-test";
-            Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
             Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
                     .thenReturn(thresholdTokens);
             Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
@@ -230,12 +224,11 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
         @org.junit.jupiter.api.Test
         void multimodalTemplateForcesInlineFallbackEvenWhenAllOtherPreconditionsHold() {
-            // Every other gate is satisfied (toggle on, over threshold, provider supports tools)
-            // but the template carries a non-string-content message. The agentic-tools render
-            // path can't substitute into multimodal templates, so we must downgrade to inline
-            // rather than letting renderThreadMessagesWithReplacement throw downstream.
+            // Every other gate is satisfied (over threshold, provider supports tools) but the template
+            // carries a non-string-content message. The agentic-tools render path can't substitute into
+            // multimodal templates, so we must downgrade to inline rather than letting
+            // renderThreadMessagesWithReplacement throw downstream.
             String modelName = "gpt-test";
-            Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
                     .thenReturn(50_000);
             Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName))
@@ -546,6 +539,15 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
                     .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            // The scorer always probes span size and attachments before routing, so every scoring test
+            // reaches both services. These lenient defaults describe a small, attachment-free thread —
+            // i.e. the inline path; the routing tests below re-stub them with real sizes/attachments.
+            Mockito.lenient().when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.just(0L));
+            Mockito.lenient().when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.empty());
+            Mockito.lenient()
+                    .when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
+                    .thenReturn(Mono.just(false));
         }
 
         @Test
@@ -577,7 +579,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             var project = Project.builder().id(projectId).name("test-project").build();
             var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
             stubThreadScoringHappyPath(trace, project, rule, code);
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(10_000_000L));
             when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
                     .thenReturn(Mono.just(false));
@@ -604,7 +605,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                     .startTime(Instant.now()).traceId(trace.id()).projectId(projectId)
                     .build();
             stubThreadScoringHappyPath(trace, project, rule, code);
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(10L));
             when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
                     .thenReturn(Mono.just(false));
@@ -629,7 +629,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             var project = Project.builder().id(projectId).name("test-project").build();
             var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
             stubThreadScoringHappyPath(trace, project, rule, code);
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(10L));
             when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
                     .thenReturn(Mono.just(true));
@@ -640,27 +639,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             verify(spanService).getSpansSizeByTraceIds(Set.of(trace.id()));
             verify(spanService, never()).getByTraceIds(any());
             verify(feedbackScoreService).scoreBatchOfThreads(any());
-        }
-
-        @Test
-        void skipsSpanFetchWhenAgenticToolsDisabled() {
-            // Locks in the toggle gate: when isAgenticToolsEnabled=false, the scorer must NOT
-            // call spanService.getByTraceIds — that's how thread-scope evaluations preserve
-            // today's wire shape exactly (the enriched serializer omits the `spans` field on
-            // an empty list, falling back to [{role, content}, ...]).
-            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
-            var message = sampleMessage().toBuilder().code(code).build();
-            var trace = sampleTrace();
-            var project = Project.builder().id(projectId).name("test-project").build();
-            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
-            stubThreadScoringHappyPath(trace, project, rule, code);
-            // Toggle off — the scorer should not even ask the SpanService (no size probe, no fetch).
-            Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
-
-            scorer.score(message).block();
-
-            verifyNoInteractions(spanService);
-            verifyNoInteractions(attachmentService);
         }
 
         @Test

@@ -317,18 +317,11 @@ export const parseChatTemplateToLLMMessages = (
  * {@link RESERVED_SPAN_LLM_JUDGE_VARIABLES} ({@code span}) on span scope. The
  * Python-metric editors keep the default, because the Python scorer backend only
  * injects `spans`.
- *
- * <p>The auto-fill is gated by {@code agenticToolsEnabled} (FT
- * {@code agentic_tools_enabled}). When the feature is off, reserved names behave
- * like any other variable — no sentinel is filled in, leaving the user free to map
- * to a real path. Mirrors the BE: `shouldFetchSpans` and the `{{spans}}` /
- * `{{trace}}` substitution are also gated by the same toggle.
  */
 export const resolveTraceEvaluatorVariableDefault = (
   variableName: string,
   currentMapping: string | undefined,
   scope: EVALUATORS_RULE_SCOPE,
-  agenticToolsEnabled: boolean,
   reservedVariables: Readonly<
     Record<string, string>
   > = RESERVED_TRACE_EVALUATOR_VARIABLES,
@@ -341,9 +334,8 @@ export const resolveTraceEvaluatorVariableDefault = (
     return currentMapping;
   }
   if (
-    agenticToolsEnabled &&
-    (scope === EVALUATORS_RULE_SCOPE.trace ||
-      scope === EVALUATORS_RULE_SCOPE.span)
+    scope === EVALUATORS_RULE_SCOPE.trace ||
+    scope === EVALUATORS_RULE_SCOPE.span
   ) {
     return reservedVariables[variableName] ?? "";
   }
