@@ -86,12 +86,22 @@ export async function deleteProviderKeyByName(providerName: string): Promise<voi
   }
 }
 
-/** Server-side connection check; resolves __SECRET__ sentinels via provider_id. */
-export async function checkProviderAuthConfig(providerId: string): Promise<{ lifetime_seconds: number }> {
+/**
+ * Server-side connection check: the BACKEND performs the token fetch. Passing a provider id
+ * tests the stored recipe (resolving __SECRET__ sentinels); passing an auth_config tests
+ * submitted values without needing a stored provider at all.
+ * Throws on a non-2xx — notably 400, which the endpoint returns when the token fetch itself
+ * failed (unreachable URL, rejected credentials, malformed reply).
+ */
+export async function checkProviderAuthConfig(
+  target: string | ProviderAuthConfig,
+): Promise<{ lifetime_seconds: number }> {
+  const body =
+    typeof target === 'string' ? { provider_id: target } : { auth_config: target };
   const response = await fetch(endpoint('/auth-config/test'), {
     method: 'POST',
     headers: restHeaders(),
-    body: JSON.stringify({ provider_id: providerId }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     throw new Error(`auth-config check returned ${response.status}: ${await response.text()}`);
