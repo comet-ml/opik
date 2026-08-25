@@ -12,11 +12,21 @@ Verified per assistant:
   ``$CODEX_HOME/skills`` is its deprecated predecessor.
 - **opencode** loads global skills from ``~/.config/opencode/skills``,
   ``~/.claude/skills`` and ``~/.agents/skills`` (opencode skills documentation).
-- **Cursor** and **VS Code Copilot** read the shared ``~/.agents/skills``.
+- **Cursor** loads global skills from ``~/.agents/skills`` *and* ``~/.cursor/skills``
+  (and, for compatibility, ``~/.claude/skills`` and ``~/.codex/skills``) — Cursor
+  skills documentation.
+- **VS Code Copilot** reads ``~/.agents/skills`` or ``~/.copilot/skills`` for
+  personal skills that follow you across workspaces — VS Code Agent Skills docs.
 - **Claude Code** is the exception: it reads ``~/.claude/skills`` and not the
   shared directory, so it needs a link.
 
-So one write plus one link covers every host Opik supports.
+So one write plus one link covers every client Opik supports.
+
+Note that ``~/.agents/skills`` is the *shared* option, not the only one: several
+clients also read a vendor-specific global directory, and ``npx skills`` picks
+those instead. Both work; writing the shared path once is what lets a single
+write cover four of the five. ``.agents/skills`` without the ``~`` is a
+*project*-scoped location for most clients, which Opik does not write.
 """
 
 import pathlib

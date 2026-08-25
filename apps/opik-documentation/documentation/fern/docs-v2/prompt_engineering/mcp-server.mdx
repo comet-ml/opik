@@ -132,10 +132,31 @@ opik configure status
 ```
 
 <Note>
-The skill pack installed alongside the server is refreshed with
-`opik skills update`, which rewrites only if it actually changed. Assistants read
-their skills at session start, so start a new session afterwards.
+To refresh the skill pack, re-run `opik mcp configure` — it rewrites the pack
+from the latest published version. Assistants read their skills at session start,
+so start a new session afterwards.
 </Note>
+
+### Clients the CLI doesn't cover
+
+`opik mcp configure` handles Claude Code, Cursor, VS Code Copilot, Codex and
+opencode. For any other client, install the skill pack with the community
+[`skills`](https://github.com/vercel-labs/skills) CLI, which knows the skill
+directories for 76+ agents:
+
+```bash
+npx skills add comet-ml/opik-skills
+```
+
+It needs Node.js, and it can install per-project rather than for your whole user
+account — neither of which the Opik CLI does. Opik installs the pack only as part
+of `opik configure` and `opik mcp configure`, so you never have to reach for a
+separate command in the normal flow; `npx skills` covers everything outside it.
+
+The two write to different places: Opik writes the shared `~/.agents/skills`
+(plus a link for Claude Code), while `npx skills` writes each client's own
+directory and defaults to project scope inside a project. To remove a pack Opik
+installed, delete it from `~/.agents/skills`.
 
 ## Start using it
 
