@@ -104,7 +104,9 @@ async function provisionMember(
       throw err;
     }
   } catch (err) {
-    await deleteCometUser(credentials.username).catch(() => undefined);
+    await deleteCometUser(credentials.username).catch((cleanupErr) =>
+      console.warn(`[provisionMember] rollback: failed to delete "${credentials.username}":`, cleanupErr),
+    );
     throw err;
   }
 }
@@ -174,7 +176,9 @@ export const test = base.extend<{ trackLeaveFailures: void }, WorkspaceRoleFixtu
         const fulfilled = results.filter((r): r is PromiseFulfilledResult<WorkspaceRoleMember> => r.status === 'fulfilled');
         for (const r of fulfilled) {
           await r.value.context.close().catch(() => undefined);
-          await deleteCometUser(r.value.username).catch(() => undefined);
+          await deleteCometUser(r.value.username).catch((cleanupErr) =>
+            console.warn(`[workspaceRoleMembers] rollback: failed to delete "${r.value.username}":`, cleanupErr),
+          );
         }
         await adminContext.close().catch(() => undefined);
         throw new Error(

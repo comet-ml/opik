@@ -58,9 +58,12 @@ export async function logTraceAndVerify(
       .soft(succeeded, `${member.role}: expected direct REST trace creation to ${expectPersisted ? 'succeed' : 'be denied'}`)
       .toBe(expectPersisted);
 
+    // `search` matches substrings across many fields (name, input, output,
+    // metadata, tags, ...), not just an exact name — filter before deleting
+    // so a coincidental match elsewhere never gets swept up in cleanup.
     const found = await pollTracesByName(admin, projectId, restTraceName, expectPersisted);
     for (const t of found) {
-      if (t.id) createdTraceIds.push(t.id);
+      if (t.id && t.name === restTraceName) createdTraceIds.push(t.id);
     }
   });
 
@@ -79,7 +82,7 @@ export async function logTraceAndVerify(
       .toBe(expectPersisted);
 
     for (const t of found) {
-      if (t.id) createdTraceIds.push(t.id);
+      if (t.id && t.name === sdkTraceName) createdTraceIds.push(t.id);
     }
   });
 
