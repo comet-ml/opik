@@ -26,12 +26,15 @@ const ROLE_NAME: Record<WorkspaceRoleId, string> = {
  * to the page, not the row.
  */
 export class ConfigurationMembersPage {
-  constructor(private readonly page: Page) {}
+  constructor(
+    private readonly page: Page,
+    private readonly workspaceName: string,
+  ) {}
 
   async goto(): Promise<void> {
     return test.step('Open Configuration → Members', async () => {
       const env = loadEnvConfig();
-      await this.page.goto(`${env.baseUrl}/${env.workspace}/configuration?tab=members`);
+      await this.page.goto(`${env.baseUrl}/${this.workspaceName}/configuration?tab=members`);
       await this.page.getByRole('tab', { name: 'Members', selected: true }).waitFor({ state: 'visible' });
     });
   }

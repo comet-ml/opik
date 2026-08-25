@@ -40,6 +40,13 @@ export interface WorkspaceRoleMember {
 export interface WorkspaceRoleTestContext {
   organizationId: string;
   workspaceId: string;
+  workspaceName: string;
+  /**
+   * The org-admin's own minted opik-backend API key, scoped to workspaceName.
+   * Named distinctly from EnvConfig.adminApiKey (the superuser delete-user
+   * key) — the two are unrelated credentials that happen to both be "admin".
+   */
+  adminOpikApiKey: string;
   adminContext: BrowserContext;
   adminPage: Page;
   manage: WorkspaceRoleMember;
@@ -50,13 +57,15 @@ export interface WorkspaceRoleTestContext {
 
 /**
  * Whether this env has everything needed to drive these tests: an org-admin
- * session (adminEmail/adminPassword) and the superuser admin API
- * (adminApiKey/adminBaseUrl) for guaranteed cleanup. All four are required —
+ * session (adminEmail/adminPassword) targeting its own workspace
+ * (adminWorkspace — never the baseline suite's `workspace`, so the two
+ * credential sets never have to share an org) and the superuser admin API
+ * (adminApiKey/adminBaseUrl) for guaranteed cleanup. All five are required —
  * partial config still hard-skips, since a run that can create users but not
  * delete them would leak disposable accounts into a real environment.
  */
 export function hasWorkspaceRoleTestCredentials(env: EnvConfig): boolean {
-  return Boolean(env.adminEmail && env.adminPassword && env.adminApiKey && env.adminBaseUrl);
+  return Boolean(env.adminEmail && env.adminPassword && env.adminApiKey && env.adminBaseUrl && env.adminWorkspace);
 }
 
 const ROLE_PREFIX: Record<WorkspaceRoleId, string> = {
@@ -100,14 +109,15 @@ export const test = base.extend<{}, WorkspaceRoleFixtures>({
       );
       base.skip(
         !hasWorkspaceRoleTestCredentials(envConfig),
-        'ADMIN_API_KEY/ADMIN_BASE_URL/USER_EMAIL/PASSWORD not fully configured for this env — ' +
-          'skipping rather than creating disposable users we could not guarantee cleaning up',
+        'ADMIN_API_KEY/ADMIN_BASE_URL/USER_EMAIL/PASSWORD/WORKSPACE_ROLES_ADMIN_WORKSPACE not fully ' +
+          'configured for this env — skipping rather than creating disposable users we could not guarantee cleaning up',
       );
 
       const adminContext = await browser.newContext();
       const adminPage = await adminContext.newPage();
-      await loginCometUser(adminContext.request, envConfig.adminEmail!, envConfig.adminPassword!);
-      const { organizationId, workspaceId } = await getWorkspaceIds(adminContext.request, envConfig.workspace);
+      const adminOpikApiKey = await loginCometUser(adminContext.request, envConfig.adminEmail!, envConfig.adminPassword!);
+      const workspaceName = envConfig.adminWorkspace!;
+      const { organizationId, workspaceId } = await getWorkspaceIds(adminContext.request, workspaceName);
 
       const [manage, write, annotate, read] = await Promise.all([
         provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.MANAGE),
@@ -116,7 +126,18 @@ export const test = base.extend<{}, WorkspaceRoleFixtures>({
         provisionMember(browser, adminContext, workspaceId, WORKSPACE_ROLE_ID.READ),
       ]);
 
-      await use({ organizationId, workspaceId, adminContext, adminPage, manage, write, annotate, read });
+      await use({
+        organizationId,
+        workspaceId,
+        workspaceName,
+        adminOpikApiKey,
+        adminContext,
+        adminPage,
+        manage,
+        write,
+        annotate,
+        read,
+      });
 
       const members = [manage, write, annotate, read];
       for (const member of members) {

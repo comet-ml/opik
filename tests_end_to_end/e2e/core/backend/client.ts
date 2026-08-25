@@ -305,11 +305,11 @@ export interface MetricSeries {
   points: Array<{ time: string; value: number | null }>;
 }
 
-export function makeBackendClient(apiKey: string | null = null) {
+export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
   const env = loadEnvConfig();
   const opik = new Opik({
     apiKey: apiKey ?? env.apiKey ?? undefined,
-    workspaceName: env.workspace,
+    workspaceName: workspaceName ?? env.workspace,
     apiUrl: env.apiBaseUrl,
   });
 

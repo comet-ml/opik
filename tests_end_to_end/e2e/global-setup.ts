@@ -195,6 +195,28 @@ async function authenticateAndPersist(env: EnvConfig): Promise<void> {
     }
     // Propagate to workers via env so backend client + bridge see it.
     process.env.OPIK_API_KEY = mintedKey;
+
+    // OPIK_TEST_USER_EMAIL/PASSWORD and OPIK_WORKSPACE are two independently
+    // supplied config values with no structural link between them — nothing
+    // stops someone from pointing them at accounts that don't share a
+    // workspace. Left unchecked, that mismatch doesn't fail here: it shows up
+    // later as unrelated-looking 401s (welcome-wizard dismiss, orphan sweep)
+    // that are easy to miss, and then as confusing failures deep inside
+    // whichever test first navigates into env.workspace. Failing fast here
+    // with the actual cause is much cheaper to debug.
+    const workspacesRes = await context.request.get(`${rootBase}/api/workspaces`);
+    if (workspacesRes.ok()) {
+      const workspaces = (await workspacesRes.json()) as Array<{ workspaceName: string }>;
+      const isMember = workspaces.some((w) => w.workspaceName === env.workspace);
+      if (!isMember) {
+        throw new Error(
+          `global-setup: OPIK_TEST_USER_EMAIL ("${env.userEmail}") is not a member of ` +
+            `OPIK_WORKSPACE ("${env.workspace}") — it can only see: ${workspaces.map((w) => w.workspaceName).join(', ')}. ` +
+            'OPIK_TEST_USER_EMAIL/PASSWORD and OPIK_WORKSPACE must refer to the same workspace.',
+        );
+      }
+    }
+
     await context.storageState({ path: AUTH_STATE_FILE });
     console.log(`[global-setup] auth state saved to ${path.relative(E2E_DIR, AUTH_STATE_FILE)}`);
   } finally {

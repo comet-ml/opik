@@ -2,6 +2,7 @@ import {
   test as workspaceRoleTest,
   expect,
   type WorkspaceRoleMember,
+  type WorkspaceRoleTestContext,
 } from '@e2e/fixtures/workspace-role-member.fixture';
 import { ConfigurationMembersPage } from '@e2e/pom/configuration-members.page';
 import { ConfigurationPage } from '@e2e/pom/configuration.page';
@@ -22,6 +23,7 @@ import {
   promptActions,
   adminOpikClient,
   logTraceAndVerify,
+  type AdminCtx,
   type CrudActions,
 } from '@e2e/pom/workspace-role-checks';
 
@@ -32,10 +34,16 @@ interface SeededResources {
   promptId: string;
 }
 
+/** Every worker-scoped resource here belongs to the admin's own org/workspace — never the baseline suite's. */
+function adminCtx(ctx: WorkspaceRoleTestContext): AdminCtx {
+  return { workspaceName: ctx.workspaceName, adminApiKey: ctx.adminOpikApiKey };
+}
+
 const test = workspaceRoleTest.extend<{}, { projectId: string; seededResources: SeededResources }>({
   projectId: [
-    async ({}, use) => {
-      const backend = makeBackendClient();
+    async ({ workspaceRoleMembers }, use) => {
+      const ctx = adminCtx(workspaceRoleMembers);
+      const backend = makeBackendClient(ctx.adminApiKey, ctx.workspaceName);
       const name = `e2e-workspace-roles-${Date.now()}`;
       await backend.createProject(name);
       const [created] = await backend.listProjectsWithPrefix(name);
@@ -49,8 +57,8 @@ const test = workspaceRoleTest.extend<{}, { projectId: string; seededResources: 
   ],
 
   seededResources: [
-    async ({ projectId }, use) => {
-      const admin = adminOpikClient();
+    async ({ workspaceRoleMembers, projectId }, use) => {
+      const admin = adminOpikClient(workspaceRoleMembers.adminOpikApiKey, workspaceRoleMembers.workspaceName);
       const dashboard = await admin.api.dashboards.createDashboard({
         name: `e2e-seed-dashboard-${Date.now()}`,
         config: {},
@@ -85,12 +93,12 @@ const test = workspaceRoleTest.extend<{}, { projectId: string; seededResources: 
   ],
 });
 
-function resourceChecks(member: WorkspaceRoleMember, projectId: string, seeded: SeededResources) {
+function resourceChecks(member: WorkspaceRoleMember, ctx: AdminCtx, projectId: string, seeded: SeededResources) {
   return [
-    { label: 'Dashboards', actions: dashboardActions(member), seededId: seeded.dashboardId },
-    { label: 'Datasets', actions: datasetActions(member), seededId: seeded.datasetId },
-    { label: 'Annotation queues', actions: annotationQueueActions(member, projectId), seededId: seeded.queueId },
-    { label: 'Prompt library', actions: promptActions(member), seededId: seeded.promptId },
+    { label: 'Dashboards', actions: dashboardActions(member, ctx), seededId: seeded.dashboardId },
+    { label: 'Datasets', actions: datasetActions(member, ctx), seededId: seeded.datasetId },
+    { label: 'Annotation queues', actions: annotationQueueActions(member, ctx, projectId), seededId: seeded.queueId },
+    { label: 'Prompt library', actions: promptActions(member, ctx), seededId: seeded.promptId },
   ] satisfies Array<{ label: string; actions: CrudActions; seededId: string }>;
 }
 
@@ -113,8 +121,8 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
   test.describe.configure({ mode: 'serial' });
 
   test('Role assignment & guardrails', async ({ workspaceRoleMembers }) => {
-    const { adminPage, adminContext, organizationId, manage, write, annotate, read } = workspaceRoleMembers;
-    const membersPage = new ConfigurationMembersPage(adminPage);
+    const { adminPage, adminContext, organizationId, workspaceName, manage, write, annotate, read } = workspaceRoleMembers;
+    const membersPage = new ConfigurationMembersPage(adminPage, workspaceName);
     const members: WorkspaceRoleMember[] = [manage, write, annotate, read];
 
     await membersPage.goto();
@@ -148,46 +156,47 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
 
   test('MANAGE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
     testInfo.setTimeout(testInfo.timeout + 60_000);
-    const { manage: member, adminContext, organizationId } = workspaceRoleMembers;
+    const { manage: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
+    const ctx = adminCtx(workspaceRoleMembers);
     const env = loadEnvConfig();
 
     await test.step('Projects: create control visible', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/projects`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/projects`);
       await expect.soft(member.page.getByRole('button', { name: 'Create project' })).toBeVisible();
     });
 
-    await logTraceAndVerify(member, projectId, true);
+    await logTraceAndVerify(member, ctx, projectId, true);
 
     for (const check of SCREEN_ACCESS_CHECKS) {
-      await checkScreenAccess(member, projectId, check, true);
+      await checkScreenAccess(member, workspaceName, projectId, check, true);
     }
 
     for (const check of CREATE_CONTROL_CHECKS) {
-      await checkCreateControlVisibility(member, projectId, check, true);
+      await checkCreateControlVisibility(member, workspaceName, projectId, check, true);
     }
 
-    for (const rc of resourceChecks(member, projectId, seededResources)) {
+    for (const rc of resourceChecks(member, ctx, projectId, seededResources)) {
       await checkResourceCrudSucceeds(rc.label, member, rc.actions);
     }
 
     await test.step('Optimization: studio use visible', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/optimizations`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/projects/${projectId}/optimizations`);
       await expect.soft(member.page.getByRole('button', { name: /Use the Optimization studio/ })).toBeVisible();
     });
 
     await test.step('Workspace settings: configure control visible', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/configuration?tab=workspace-preferences`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/configuration?tab=workspace-preferences`);
       await expect.soft(member.page.getByRole('button', { name: 'Edit' }).first()).toBeVisible();
     });
 
     await test.step('AI providers: update control visible', async () => {
       const configPage = new ConfigurationPage(member.page);
-      await configPage.gotoAiProviders();
+      await configPage.gotoAiProviders(workspaceName);
       await expect.soft(member.page.getByRole('button', { name: 'Add configuration', exact: true }).first()).toBeVisible();
     });
 
     await test.step('Invite users: Members tab accessible', async () => {
-      const membersPage = new ConfigurationMembersPage(member.page);
+      const membersPage = new ConfigurationMembersPage(member.page, workspaceName);
       await membersPage.goto();
       expect.soft(await membersPage.isTabVisible(), 'MANAGE should see the Members tab (isWorkspaceOwner)').toBe(true);
     });
@@ -202,49 +211,50 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
         'alert_update',
         'agent_playground_use',
       ]) {
-        expect.soft(getPermissionValue(permissions, env.workspace, name), `MANAGE should hold "${name}"`).toBe(true);
+        expect.soft(getPermissionValue(permissions, workspaceName, name), `MANAGE should hold "${name}"`).toBe(true);
       }
     });
   });
 
   test('WRITE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
     testInfo.setTimeout(testInfo.timeout + 60_000);
-    const { write: member, adminContext, organizationId } = workspaceRoleMembers;
+    const { write: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
+    const ctx = adminCtx(workspaceRoleMembers);
     const env = loadEnvConfig();
 
     await test.step('Projects: create control visible', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/projects`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/projects`);
       await expect.soft(member.page.getByRole('button', { name: 'Create project' })).toBeVisible();
     });
 
-    await logTraceAndVerify(member, projectId, true);
+    await logTraceAndVerify(member, ctx, projectId, true);
 
     for (const check of SCREEN_ACCESS_CHECKS) {
-      await checkScreenAccess(member, projectId, check, true);
+      await checkScreenAccess(member, workspaceName, projectId, check, true);
     }
 
     for (const check of CREATE_CONTROL_CHECKS) {
-      await checkCreateControlVisibility(member, projectId, check, true);
+      await checkCreateControlVisibility(member, workspaceName, projectId, check, true);
     }
 
-    for (const rc of resourceChecks(member, projectId, seededResources)) {
+    for (const rc of resourceChecks(member, ctx, projectId, seededResources)) {
       await checkResourceCrudSucceeds(rc.label, member, rc.actions);
     }
 
     await test.step('Workspace settings: configure control absent', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/configuration?tab=workspace-preferences`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/configuration?tab=workspace-preferences`);
       await expect.soft(member.page.getByRole('button', { name: 'Edit' }).first()).toBeHidden();
     });
 
     await test.step('AI providers: update control visible', async () => {
       const configPage = new ConfigurationPage(member.page);
-      await configPage.gotoAiProviders();
+      await configPage.gotoAiProviders(workspaceName);
       await expect.soft(member.page.getByRole('button', { name: 'Add configuration', exact: true }).first()).toBeVisible();
     });
 
     await test.step('Invite users: Members tab NOT accessible despite canInviteMembers=true', async () => {
-      const membersPage = new ConfigurationMembersPage(member.page);
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/configuration?tab=workspace-preferences`);
+      const membersPage = new ConfigurationMembersPage(member.page, workspaceName);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/configuration?tab=workspace-preferences`);
       expect
         .soft(await membersPage.isTabVisible(), 'WRITE should NOT see the Members tab (isWorkspaceOwner requires MANAGE)')
         .toBe(false);
@@ -253,49 +263,50 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
     await test.step('Permission cross-check', async () => {
       const permissions = await getUserPermissions(adminContext.request, organizationId, member.username);
       expect
-        .soft(getPermissionValue(permissions, env.workspace, 'workspace_settings_configure'), 'WRITE should NOT hold workspace_settings_configure')
+        .soft(getPermissionValue(permissions, workspaceName, 'workspace_settings_configure'), 'WRITE should NOT hold workspace_settings_configure')
         .toBe(false);
       for (const name of ['online_evaluation_rule_update', 'alert_update', 'prompt_delete', 'invite_users_to_workspace', 'agent_playground_use']) {
-        expect.soft(getPermissionValue(permissions, env.workspace, name), `WRITE should hold "${name}"`).toBe(true);
+        expect.soft(getPermissionValue(permissions, workspaceName, name), `WRITE should hold "${name}"`).toBe(true);
       }
     });
   });
 
   test('ANNOTATE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
     testInfo.setTimeout(testInfo.timeout + 60_000);
-    const { annotate: member, adminContext, organizationId } = workspaceRoleMembers;
+    const { annotate: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
+    const ctx = adminCtx(workspaceRoleMembers);
     const env = loadEnvConfig();
 
     await test.step('Projects: create control absent', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/projects`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/projects`);
       await expect.soft(member.page.getByRole('button', { name: 'Create project' })).toBeHidden();
     });
 
-    await logTraceAndVerify(member, projectId, false);
+    await logTraceAndVerify(member, ctx, projectId, false);
 
     for (const check of SCREEN_ACCESS_CHECKS) {
-      await checkScreenAccess(member, projectId, check, false);
+      await checkScreenAccess(member, workspaceName, projectId, check, false);
     }
 
     for (const check of CREATE_CONTROL_CHECKS) {
-      await checkCreateControlVisibility(member, projectId, check, false);
+      await checkCreateControlVisibility(member, workspaceName, projectId, check, false);
     }
 
-    for (const rc of resourceChecks(member, projectId, seededResources)) {
+    for (const rc of resourceChecks(member, ctx, projectId, seededResources)) {
       await checkResourceCreateDenied(rc.label, member, rc.actions.create);
       await checkResourceEditDeleteDenied(rc.label, member, rc.seededId, rc.actions);
     }
 
     await test.step('Annotation queues: page accessible (no route guard)', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/annotation-queues`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/projects/${projectId}/annotation-queues`);
       await expect.soft(member.page.getByRole('heading', { name: 'Access denied' })).toBeHidden();
     });
 
     await test.step('Workspace settings, AI providers, invite users absent', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/configuration?tab=workspace-preferences`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/configuration?tab=workspace-preferences`);
       await expect.soft(member.page.getByRole('button', { name: 'Edit' }).first()).toBeHidden();
 
-      const membersPage = new ConfigurationMembersPage(member.page);
+      const membersPage = new ConfigurationMembersPage(member.page, workspaceName);
       expect.soft(await membersPage.isTabVisible(), 'ANNOTATE should NOT see the Members tab').toBe(false);
     });
 
@@ -312,65 +323,66 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
         'agent_playground_use',
         'optimization_run_view',
       ]) {
-        expect.soft(getPermissionValue(permissions, env.workspace, name), `ANNOTATE should NOT hold "${name}"`).toBe(false);
+        expect.soft(getPermissionValue(permissions, workspaceName, name), `ANNOTATE should NOT hold "${name}"`).toBe(false);
       }
       for (const name of ['trace_span_thread_annotate', 'annotation_queue_view', 'annotation_queue_annotate']) {
-        expect.soft(getPermissionValue(permissions, env.workspace, name), `ANNOTATE should hold "${name}"`).toBe(true);
+        expect.soft(getPermissionValue(permissions, workspaceName, name), `ANNOTATE should hold "${name}"`).toBe(true);
       }
     });
   });
 
   test('READ', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
     testInfo.setTimeout(testInfo.timeout + 60_000);
-    const { read: member, adminContext, organizationId } = workspaceRoleMembers;
+    const { read: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
+    const ctx = adminCtx(workspaceRoleMembers);
     const env = loadEnvConfig();
 
     await test.step('Projects: create control absent', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/projects`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/projects`);
       await expect.soft(member.page.getByRole('button', { name: 'Create project' })).toBeHidden();
     });
 
-    await logTraceAndVerify(member, projectId, false);
+    await logTraceAndVerify(member, ctx, projectId, false);
 
     for (const check of SCREEN_ACCESS_CHECKS) {
       // READ holds the view permission for every screen except Playground and
       // Agent playground (the latter fails the compound canViewAgentPlayground
       // check despite READ holding the raw AGENT_PLAYGROUND_USE permission).
       const expectedAccessible = !['Playground', 'Agent playground'].includes(check.name);
-      await checkScreenAccess(member, projectId, check, expectedAccessible);
+      await checkScreenAccess(member, workspaceName, projectId, check, expectedAccessible);
     }
 
     for (const check of CREATE_CONTROL_CHECKS) {
-      await checkCreateControlVisibility(member, projectId, check, false);
+      await checkCreateControlVisibility(member, workspaceName, projectId, check, false);
     }
 
-    for (const rc of resourceChecks(member, projectId, seededResources)) {
+    for (const rc of resourceChecks(member, ctx, projectId, seededResources)) {
       await checkResourceCreateDenied(rc.label, member, rc.actions.create);
       await checkResourceEditDeleteDenied(rc.label, member, rc.seededId, rc.actions);
     }
 
     await test.step('Annotation queues: page accessible (no route guard)', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/annotation-queues`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/projects/${projectId}/annotation-queues`);
       await expect.soft(member.page.getByRole('heading', { name: 'Access denied' })).toBeHidden();
     });
 
     await test.step('Optimization: studio use absent', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/optimizations`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/projects/${projectId}/optimizations`);
       await expect.soft(member.page.getByRole('button', { name: /Use the Optimization studio/ })).toBeHidden();
     });
 
     await test.step('Workspace settings, AI providers, invite users absent', async () => {
-      await member.page.goto(`${env.baseUrl}/${env.workspace}/configuration?tab=workspace-preferences`);
+      await member.page.goto(`${env.baseUrl}/${workspaceName}/configuration?tab=workspace-preferences`);
       await expect.soft(member.page.getByRole('button', { name: 'Edit' }).first()).toBeHidden();
 
-      const membersPage = new ConfigurationMembersPage(member.page);
+      const membersPage = new ConfigurationMembersPage(member.page, workspaceName);
       expect.soft(await membersPage.isTabVisible(), 'READ should NOT see the Members tab').toBe(false);
     });
 
     await test.step('Permission cross-check', async () => {
       const permissions = await getUserPermissions(adminContext.request, organizationId, member.username);
       expect
-        .soft(getPermissionValue(permissions, env.workspace, 'trace_span_thread_annotate'), 'READ should NOT hold trace_span_thread_annotate')
+        .soft(getPermissionValue(permissions, workspaceName, 'trace_span_thread_annotate'), 'READ should NOT hold trace_span_thread_annotate')
         .toBe(false);
       for (const name of [
         'dashboard_view',
@@ -383,7 +395,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
         'optimization_run_view',
         'annotation_queue_annotate',
       ]) {
-        expect.soft(getPermissionValue(permissions, env.workspace, name), `READ should hold "${name}"`).toBe(true);
+        expect.soft(getPermissionValue(permissions, workspaceName, name), `READ should hold "${name}"`).toBe(true);
       }
     });
   });

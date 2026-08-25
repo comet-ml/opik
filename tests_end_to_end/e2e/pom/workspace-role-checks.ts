@@ -23,13 +23,14 @@ export const SCREEN_ACCESS_CHECKS: ScreenAccessCheck[] = [
 
 export async function checkScreenAccess(
   member: WorkspaceRoleMember,
+  workspaceName: string,
   projectId: string,
   check: ScreenAccessCheck,
   expectedAccessible: boolean,
 ): Promise<void> {
   return test.step(`${check.name}: ${expectedAccessible ? 'accessible' : 'blocked'}`, async () => {
     const env = loadEnvConfig();
-    await member.page.goto(`${env.baseUrl}/${env.workspace}${check.path(projectId)}`);
+    await member.page.goto(`${env.baseUrl}/${workspaceName}${check.path(projectId)}`);
     const deniedHeading = member.page.getByRole('heading', { name: 'Access denied' });
     if (expectedAccessible) {
       await expect.soft(deniedHeading).toBeHidden();
@@ -39,14 +40,14 @@ export async function checkScreenAccess(
   });
 }
 
-export function subjectOpikClient(member: WorkspaceRoleMember): Opik {
+export function subjectOpikClient(member: WorkspaceRoleMember, workspaceName: string): Opik {
   const env = loadEnvConfig();
-  return new Opik({ apiKey: member.apiKey, workspaceName: env.workspace, apiUrl: env.apiBaseUrl });
+  return new Opik({ apiKey: member.apiKey, workspaceName, apiUrl: env.apiBaseUrl });
 }
 
-export function adminOpikClient(): Opik {
+export function adminOpikClient(adminApiKey: string, workspaceName: string): Opik {
   const env = loadEnvConfig();
-  return new Opik({ apiKey: env.apiKey ?? undefined, workspaceName: env.workspace, apiUrl: env.apiBaseUrl });
+  return new Opik({ apiKey: adminApiKey, workspaceName, apiUrl: env.apiBaseUrl });
 }
 
 export interface CrudActions {
@@ -129,13 +130,14 @@ export const CREATE_CONTROL_CHECKS: CreateControlCheck[] = [
 
 export async function checkCreateControlVisibility(
   member: WorkspaceRoleMember,
+  workspaceName: string,
   projectId: string,
   check: CreateControlCheck,
   expectedVisible: boolean,
 ): Promise<void> {
   return test.step(`${check.name}: create control ${expectedVisible ? 'visible' : 'absent'}`, async () => {
     const env = loadEnvConfig();
-    await member.page.goto(`${env.baseUrl}/${env.workspace}${check.path(projectId)}`);
+    await member.page.goto(`${env.baseUrl}/${workspaceName}${check.path(projectId)}`);
     const button = member.page.getByRole('button', { name: check.buttonName });
     if (expectedVisible) {
       await expect.soft(button.first()).toBeVisible();
@@ -145,8 +147,14 @@ export async function checkCreateControlVisibility(
   });
 }
 
-export function dashboardActions(member: WorkspaceRoleMember): CrudActions {
-  const sdk = subjectOpikClient(member);
+/** Shared by every resource-action factory: which workspace to operate in and the admin identity for `adminRemove` fallback cleanup. */
+export interface AdminCtx {
+  workspaceName: string;
+  adminApiKey: string;
+}
+
+export function dashboardActions(member: WorkspaceRoleMember, ctx: AdminCtx): CrudActions {
+  const sdk = subjectOpikClient(member, ctx.workspaceName);
   return {
     create: async () => {
       const dashboard = await sdk.api.dashboards.createDashboard({
@@ -159,12 +167,12 @@ export function dashboardActions(member: WorkspaceRoleMember): CrudActions {
     update: (id) =>
       sdk.api.dashboards.updateDashboard(id, { body: { name: `e2e-${member.role}-dashboard-updated-${Date.now()}` } }),
     remove: (id) => sdk.api.dashboards.deleteDashboard(id),
-    adminRemove: (id) => adminOpikClient().api.dashboards.deleteDashboard(id),
+    adminRemove: (id) => adminOpikClient(ctx.adminApiKey, ctx.workspaceName).api.dashboards.deleteDashboard(id),
   };
 }
 
-export function datasetActions(member: WorkspaceRoleMember): CrudActions {
-  const sdk = subjectOpikClient(member);
+export function datasetActions(member: WorkspaceRoleMember, ctx: AdminCtx): CrudActions {
+  const sdk = subjectOpikClient(member, ctx.workspaceName);
   return {
     create: async () => {
       const id = uuid7();
@@ -173,12 +181,12 @@ export function datasetActions(member: WorkspaceRoleMember): CrudActions {
     },
     update: (id) => sdk.api.datasets.updateDataset(id, { name: `e2e-${member.role}-dataset-updated-${Date.now()}` }),
     remove: (id) => sdk.api.datasets.deleteDataset(id),
-    adminRemove: (id) => adminOpikClient().api.datasets.deleteDataset(id),
+    adminRemove: (id) => adminOpikClient(ctx.adminApiKey, ctx.workspaceName).api.datasets.deleteDataset(id),
   };
 }
 
-export function annotationQueueActions(member: WorkspaceRoleMember, projectId: string): CrudActions {
-  const sdk = subjectOpikClient(member);
+export function annotationQueueActions(member: WorkspaceRoleMember, ctx: AdminCtx, projectId: string): CrudActions {
+  const sdk = subjectOpikClient(member, ctx.workspaceName);
   return {
     create: async () => {
       const id = uuid7();
@@ -192,12 +200,13 @@ export function annotationQueueActions(member: WorkspaceRoleMember, projectId: s
     },
     update: (id) => sdk.api.annotationQueues.updateAnnotationQueue(id, { name: `e2e-${member.role}-queue-updated-${Date.now()}` }),
     remove: (id) => sdk.api.annotationQueues.deleteAnnotationQueueBatch({ ids: [id] }),
-    adminRemove: (id) => adminOpikClient().api.annotationQueues.deleteAnnotationQueueBatch({ ids: [id] }),
+    adminRemove: (id) =>
+      adminOpikClient(ctx.adminApiKey, ctx.workspaceName).api.annotationQueues.deleteAnnotationQueueBatch({ ids: [id] }),
   };
 }
 
-export function promptActions(member: WorkspaceRoleMember): CrudActions {
-  const sdk = subjectOpikClient(member);
+export function promptActions(member: WorkspaceRoleMember, ctx: AdminCtx): CrudActions {
+  const sdk = subjectOpikClient(member, ctx.workspaceName);
   return {
     create: async () => {
       const id = uuid7();
@@ -206,27 +215,28 @@ export function promptActions(member: WorkspaceRoleMember): CrudActions {
     },
     update: (id) => sdk.api.prompts.updatePrompt(id, { name: `e2e-${member.role}-prompt-updated-${Date.now()}` }),
     remove: (id) => sdk.api.prompts.deletePrompt(id),
-    adminRemove: (id) => adminOpikClient().api.prompts.deletePrompt(id),
+    adminRemove: (id) => adminOpikClient(ctx.adminApiKey, ctx.workspaceName).api.prompts.deletePrompt(id),
   };
 }
 
 export async function logTraceAndVerify(
   member: WorkspaceRoleMember,
+  ctx: AdminCtx,
   projectId: string,
   expectPersisted: boolean,
 ): Promise<void> {
   const restTraceName = `e2e-permcheck-rest-${member.role}-${Date.now()}`;
   const sdkTraceName = `e2e-permcheck-sdk-${member.role}-${Date.now()}`;
-  const project = await makeBackendClient().getProject(projectId);
+  const project = await makeBackendClient(ctx.adminApiKey, ctx.workspaceName).getProject(projectId);
   if (!project) {
     throw new Error(`logTraceAndVerify: project "${projectId}" not found`);
   }
 
-  const admin = adminOpikClient();
+  const admin = adminOpikClient(ctx.adminApiKey, ctx.workspaceName);
   const createdTraceIds: string[] = [];
 
   await test.step(`Traces: log via direct REST — ${expectPersisted ? 'succeeds' : 'denied (403)'}`, async () => {
-    const sdk = subjectOpikClient(member);
+    const sdk = subjectOpikClient(member, ctx.workspaceName);
     let succeeded = true;
     try {
       await sdk.api.traces.createTrace({ name: restTraceName, projectName: project.name, startTime: new Date() });
@@ -244,7 +254,7 @@ export async function logTraceAndVerify(
   });
 
   await test.step(`Traces: log via SDK batch queue — ${expectPersisted ? 'succeeds' : 'denied'}`, async () => {
-    const sdk = subjectOpikClient(member);
+    const sdk = subjectOpikClient(member, ctx.workspaceName);
     sdk.trace({ name: sdkTraceName, projectName: project.name });
     await sdk.flush();
 
@@ -263,6 +273,6 @@ export async function logTraceAndVerify(
   });
 
   if (createdTraceIds.length > 0) {
-    await makeBackendClient().deleteTraces(createdTraceIds).catch(() => undefined);
+    await makeBackendClient(ctx.adminApiKey, ctx.workspaceName).deleteTraces(createdTraceIds).catch(() => undefined);
   }
 }

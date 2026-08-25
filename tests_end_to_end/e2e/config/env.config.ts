@@ -12,15 +12,18 @@ export interface EnvConfig {
   apiKey: string | null;
 
   // Org-admin credentials for workspace-role permission tests (Configuration →
-  // Members, assigning Manage/Write/Annotate/Read). Distinct from
-  // userEmail/userPassword above, which is a *non-admin* workspace member.
-  // adminApiKey is the superuser admin-API-key used for disposable-user
-  // cleanup only, against adminBaseUrl; unrelated to adminEmail/adminPassword's
-  // org-admin session.
+  // Members, assigning Manage/Write/Annotate/Read). Deliberately isolated from
+  // userEmail/userPassword/workspace above: those belong to the baseline
+  // session's own org, this is a separate org's admin — the two must never be
+  // required to share an org/workspace, so the workspace-role fixture targets
+  // adminWorkspace, never `workspace`. adminApiKey is the superuser admin-API-
+  // key used for disposable-user cleanup only, against adminBaseUrl; unrelated
+  // to adminEmail/adminPassword's org-admin session.
   adminEmail: string | null;
   adminPassword: string | null;
   adminApiKey: string | null;
   adminBaseUrl: string | null;
+  adminWorkspace: string | null;
 
   features: {
     ollie: boolean;
@@ -100,6 +103,12 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   const adminPassword = env.PASSWORD ?? null;
   const adminApiKey = env.ADMIN_API_KEY ?? null;
   const adminBaseUrl = env.ADMIN_BASE_URL ?? null;
+  // The workspace-role admin's own org/workspace — deliberately a separate
+  // var from OPIK_WORKSPACE so the two credential sets never have to share an
+  // org. Not defaulted to `workspace`: an unset value should hard-skip the
+  // workspace-role suite (see hasWorkspaceRoleTestCredentials), not silently
+  // fall back to the baseline org.
+  const adminWorkspace = env.WORKSPACE_ROLES_ADMIN_WORKSPACE ?? null;
 
   // For cloud/self-hosted we always need a way to mint a browser session,
   // because the UI sits behind an auth wall. Two paths:
@@ -151,6 +160,7 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     adminPassword,
     adminApiKey,
     adminBaseUrl,
+    adminWorkspace,
     features: {
       ollie: boolFromEnv(env.OLLIE_ENABLED, defaults.ollie),
       opikConnect: boolFromEnv(env.OPIK_CONNECT_ENABLED, defaults.opikConnect),
