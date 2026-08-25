@@ -77,6 +77,9 @@ public class OpikConfiguration extends JobConfiguration {
     private LlmProviderClientConfig llmProviderClient = new LlmProviderClientConfig();
 
     @Valid @NotNull @JsonProperty
+    private LlmProviderTokenAuthConfig llmProviderTokenAuth = new LlmProviderTokenAuthConfig();
+
+    @Valid @NotNull @JsonProperty
     private CacheConfiguration cacheManager = new CacheConfiguration();
 
     @Valid @NotNull @JsonProperty
