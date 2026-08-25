@@ -3,13 +3,14 @@ import { DashboardsPage } from '@e2e/pom/dashboards.page';
 import type { DashboardRef } from '@e2e/core/backend';
 
 /**
- * OPIK-8047 — the Dashboards list filters by the Description column.
+ * The Dashboards list filtered by the Description column.
  *
- * `DashboardField` carried no `DESCRIPTION` constant, so `FiltersFactory`
+ * `DashboardField` once carried no `DESCRIPTION` constant, so `FiltersFactory`
  * rejected the whole `filters` query param and the endpoint answered 400 for
- * every operator the column offers. The table renders a failed list request as
- * "No matching results", so the bug presented as an empty table rather than an
- * error — which is why the assertion below is on the *rows*, not on a status.
+ * every operator the column offers (OPIK-8047). The table renders a failed list
+ * request as "No matching results", so the regression presents as an empty
+ * table rather than an error — which is why the assertions below are on the
+ * *rows*, not on a status.
  *
  * The seed deliberately includes a dashboard whose description does not carry
  * the marker: asserting only that the two matches appear would also pass
@@ -17,7 +18,7 @@ import type { DashboardRef } from '@e2e/core/backend';
  */
 test.describe(
   'Dashboards list filtering',
-  { tag: ['@release-gate', '@release-gate:2.2.41', '@area:dashboards'] },
+  { tag: ['@t1-smoke', '@area:dashboards'] },
   () => {
     const created: DashboardRef[] = [];
 
