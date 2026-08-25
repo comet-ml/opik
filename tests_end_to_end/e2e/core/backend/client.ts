@@ -50,6 +50,13 @@ export interface RawApiResult {
   status: number;
   /** The backend's `message` field, or the raw body when it isn't JSON. */
   message: string;
+  /**
+   * The `Location` header, when the endpoint answers 201 with one. Creation
+   * endpoints in this API return no body, so this is the only place the new
+   * entity's id appears. Optional because the callers that only assert a
+   * status code build this shape themselves and have no header to report.
+   */
+  location?: string | null;
 }
 
 /** One row of the dataset's Version history tab. */
@@ -128,6 +135,55 @@ export interface AutomationRuleRef {
    */
   samplingRate: number;
 }
+
+/**
+ * A rule read back through the raw REST view rather than the pinned SDK.
+ *
+ * The SDK bundled with this suite (opik 2.0.40) has no `triggerScope` on any
+ * evaluator shape, so `listAutomationRulesForProject` structurally cannot
+ * report it. A rule whose whole point is which trace sources it fires on has
+ * to be read where the field exists.
+ */
+export interface AutomationRuleDetail {
+  id: string;
+  name: string;
+  enabled: boolean;
+  samplingRate: number;
+  /** `production` | `experiment` | `both`. Defaults to `production` server-side. */
+  triggerScope: string;
+  /** The rule's own trace filters, in the wire shape the backend stores. */
+  filters: AutomationRuleFilter[];
+}
+
+/**
+ * One condition on a rule's `filters` list — the same `TraceFilter` shape the
+ * Traces view sends, which is what `TraceFilterEvaluationService` evaluates
+ * in-memory before a production trace is scored.
+ */
+export interface AutomationRuleFilter {
+  field: string;
+  operator: string;
+  value: string;
+  /** Sub-path selector, for the `*_json`/`metadata`/`feedback_scores` fields. */
+  key?: string;
+}
+
+/** One line of a rule's user-facing log stream. */
+export interface AutomationRuleLogRef {
+  level: string;
+  message: string;
+}
+
+/**
+ * A trace `input`/`output`/`metadata` payload as the REST API accepts it.
+ *
+ * The endpoint stores a bare `JsonNode`, so a scalar, an array and an object
+ * are all legal. The pinned SDK's `JsonListStringWrite` narrows this to object
+ * / array-of-objects / string, so the number and scalar-array cases have to be
+ * widened here, the same way `rawFetch` exists for calls the pinned SDK can't
+ * express.
+ */
+export type TraceJsonSection = Record<string, unknown> | unknown[] | string | number;
 
 export interface AnnotationQueueReviewerRef {
   username: string;
@@ -330,7 +386,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
     }
-    return { status: res.status, message, json };
+    return { status: res.status, message, json, location: res.headers.get('location') };
   };
 
   /**
@@ -844,6 +900,127 @@ export function makeBackendClient(apiKey: string | null = null) {
       }));
     },
 
+    /**
+     * Create an online-evaluation rule and return its id.
+     *
+     * Goes through `rawFetch` rather than the pinned SDK for three reasons the
+     * specs depend on:
+     *   - `triggerScope` does not exist on any SDK evaluator shape (see
+     *     `AutomationRuleDetail`), and a rule that must fire on experiment /
+     *     playground traces cannot be built without it.
+     *   - neither does `filters`, and a rule whose filters are the subject of
+     *     the test cannot be built without those either.
+     *   - creation answers 201 with an empty body, so the id only exists in the
+     *     `Location` header, which the SDK's `void` return discards.
+     *
+     * The id is parsed from `Location` rather than recovered by listing the
+     * project's rules by name: a name lookup would silently pick up a rule left
+     * behind by an earlier run under the same namespace.
+     */
+    async createAutomationRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      /** Python source for the metric class. */
+      metric: string;
+      /** `score()` parameter name -> extraction path (e.g. `output.answer`). */
+      arguments: Record<string, string>;
+      triggerScope?: 'production' | 'experiment' | 'both';
+      enabled?: boolean;
+      filters?: AutomationRuleFilter[];
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'user_defined_metric_python',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+            ...(args.filters ? { filters: args.filters } : {}),
+            code: { metric: args.metric, arguments: args.arguments },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createAutomationRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createAutomationRule: 201 for '${args.name}' carried no usable Location header ` +
+            `(got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * One rule by id, including the `triggerScope` and `filters` the pinned SDK
+     * cannot see.
+     */
+    async getAutomationRule(ruleId: string): Promise<AutomationRuleDetail> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getAutomationRule: ${ruleId} answered ${status}: ${message}`);
+      }
+      const rule = json as {
+        id?: string;
+        name?: string;
+        enabled?: boolean;
+        sampling_rate?: number;
+        trigger_scope?: string;
+        filters?: AutomationRuleFilter[];
+      };
+      // Same reasoning as `requireSamplingRate`: defaulting an absent rate or
+      // scope would present as the server's default, which is exactly the value
+      // these specs are trying to prove was NOT silently applied.
+      if (typeof rule.sampling_rate !== 'number' || Number.isNaN(rule.sampling_rate)) {
+        throw new Error(`getAutomationRule: ${ruleId} returned no sampling_rate`);
+      }
+      if (typeof rule.trigger_scope !== 'string') {
+        throw new Error(`getAutomationRule: ${ruleId} returned no trigger_scope`);
+      }
+      return {
+        id: String(rule.id ?? ruleId),
+        name: String(rule.name ?? ''),
+        enabled: rule.enabled ?? true,
+        samplingRate: rule.sampling_rate,
+        triggerScope: rule.trigger_scope,
+        filters: rule.filters ?? [],
+      };
+    },
+
+    /**
+     * A rule's user-facing log stream — the lines `/automation-logs` renders.
+     *
+     * This is the only place the engine says why it did or did not score a
+     * trace: a skipped trace produces a log line and no feedback score, so an
+     * absence assertion has nothing else to anchor on.
+     */
+    async getAutomationRuleLogs(
+      ruleId: string,
+      opts: { size?: number } = {},
+    ): Promise<AutomationRuleLogRef[]> {
+      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
+        size: opts.size ?? 1000,
+      });
+      return (page.content ?? []).map((item) => ({
+        level: String(item.level ?? ''),
+        message: String(item.message ?? ''),
+      }));
+    },
+
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
       try {
         await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({
@@ -984,21 +1161,36 @@ export function makeBackendClient(apiKey: string | null = null) {
       projectName: string;
       name: string;
       source: 'sdk' | 'experiment' | 'playground' | 'optimization';
-      input?: Record<string, unknown>;
-      output?: Record<string, unknown>;
+      input?: TraceJsonSection;
+      output?: TraceJsonSection;
       metadata?: Record<string, unknown>;
       startTime?: Date;
+      /**
+       * Set this to make the trace eligible for online scoring.
+       * `OnlineScoringSampler.onTracesCreated` drops every trace with a null
+       * `end_time` as a partial write, so a trace seeded without one is never
+       * scored — and a scoring spec built on it would assert nothing.
+       */
+      endTime?: Date;
     }): Promise<string> {
-      await opik.api.traces.createTrace({
-        id: args.id,
-        projectName: args.projectName,
-        name: args.name,
-        source: args.source,
-        startTime: args.startTime ?? new Date(),
-        ...(args.input ? { input: args.input } : {}),
-        ...(args.output ? { output: args.output } : {}),
-        ...(args.metadata ? { metadata: args.metadata } : {}),
+      const { status, message } = await rawFetch('POST', '/v1/private/traces', {
+        body: {
+          id: args.id,
+          project_name: args.projectName,
+          name: args.name,
+          source: args.source,
+          start_time: (args.startTime ?? new Date()).toISOString(),
+          ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
+          ...(args.input === undefined ? {} : { input: args.input }),
+          ...(args.output === undefined ? {} : { output: args.output }),
+          ...(args.metadata ? { metadata: args.metadata } : {}),
+        },
       });
+      if (status !== 201) {
+        throw new Error(
+          `createTraceWithSource: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
       return args.id;
     },
 
