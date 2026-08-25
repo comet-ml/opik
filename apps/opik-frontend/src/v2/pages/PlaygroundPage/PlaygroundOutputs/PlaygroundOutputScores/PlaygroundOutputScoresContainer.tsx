@@ -4,10 +4,16 @@ import useTraceById from "@/api/traces/useTraceById";
 import useRulesList from "@/api/automations/useRulesList";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { getScoreNamesFromRule } from "@/lib/rules";
+import { EVAL_TRIGGER_SCOPE, EvaluatorsRule } from "@/types/automations";
 import PlaygroundOutputScores, { ScoreData } from "./PlaygroundOutputScores";
 
 const REFETCH_INTERVAL = 5000;
 const MAX_REFETCH_TIME = 300000;
+
+const scoreNamesOf = (rules: EvaluatorsRule[]) =>
+  [...new Set(rules.flatMap((rule) => getScoreNamesFromRule(rule)))].sort(
+    (a, b) => a.localeCompare(b),
+  );
 
 interface PlaygroundOutputScoresContainerProps {
   traceId: string | null;
@@ -27,8 +33,6 @@ const PlaygroundOutputScoresContainer: React.FC<
     pollingStartTimeRef.current = traceId ? Date.now() : null;
   }, [traceId]);
 
-  const hasSelectedRules = (selectedRuleIds?.length ?? 0) > 0;
-
   const { data: rulesData } = useRulesList(
     {
       workspaceName,
@@ -37,28 +41,45 @@ const PlaygroundOutputScoresContainer: React.FC<
       size: 100,
     },
     {
-      enabled: !!activeProjectId && hasSelectedRules,
+      enabled: !!activeProjectId,
     },
   );
 
   const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
-  // Only the selected rules are known to run up front, so only they get a pending tag. Rules that
-  // target experiments also score the trace, and those scores are rendered once they arrive.
-  const selectedRules = useMemo(() => {
-    if (!selectedRuleIds?.length) return [];
-    return rules.filter((r) => selectedRuleIds.includes(r.id));
-  }, [rules, selectedRuleIds]);
+  const selectedRuleIdsSet = useMemo(
+    () => new Set(selectedRuleIds ?? []),
+    [selectedRuleIds],
+  );
 
-  const expectedMetricNames = useMemo(() => {
-    const allNames = selectedRules.flatMap((rule) =>
-      getScoreNamesFromRule(rule),
-    );
-    return [...new Set(allNames)].sort((a, b) => a.localeCompare(b));
-  }, [selectedRules]);
+  // Only the selected rules are known to run up front, so only they get a pending tag.
+  const selectedRules = useMemo(
+    () => rules.filter((rule) => selectedRuleIdsSet.has(rule.id)),
+    [rules, selectedRuleIdsSet],
+  );
 
-  const expectedScoreNamesRef = useRef<Set<string>>(new Set());
-  expectedScoreNamesRef.current = new Set(expectedMetricNames);
+  // A dataset run is logged as an experiment trace, so every enabled rule targeting experiments
+  // scores it too. Those scores arrive without being announced, so polling has to wait for them
+  // as well or the cell stops refetching before they land.
+  const scoringRules = useMemo(
+    () =>
+      rules.filter(
+        (rule) =>
+          selectedRuleIdsSet.has(rule.id) ||
+          (rule.enabled !== false &&
+            (rule.trigger_scope === EVAL_TRIGGER_SCOPE.experiment ||
+              rule.trigger_scope === EVAL_TRIGGER_SCOPE.both)),
+      ),
+    [rules, selectedRuleIdsSet],
+  );
+
+  const expectedMetricNames = useMemo(
+    () => scoreNamesOf(selectedRules),
+    [selectedRules],
+  );
+
+  const awaitedScoreNamesRef = useRef<Set<string>>(new Set());
+  awaitedScoreNamesRef.current = new Set(scoreNamesOf(scoringRules));
 
   const { data: trace } = useTraceById(
     { traceId: traceId! },
@@ -70,15 +91,15 @@ const PlaygroundOutputScoresContainer: React.FC<
         if (elapsed > MAX_REFETCH_TIME) return false;
 
         const receivedScores = query.state.data?.feedback_scores ?? [];
-        const expectedNames = expectedScoreNamesRef.current;
+        const awaitedNames = awaitedScoreNamesRef.current;
 
-        if (expectedNames.size > 0) {
+        if (awaitedNames.size > 0) {
           const receivedNames = new Set(receivedScores.map((s) => s.name));
-          if ([...expectedNames].every((name) => receivedNames.has(name))) {
+          if ([...awaitedNames].every((name) => receivedNames.has(name))) {
             return false;
           }
         }
-        // Note: We don't stop polling just because scores exist when expectedNames
+        // Note: We don't stop polling just because scores exist when awaitedNames
         // is empty. This prevents a race condition where pre-existing scores or
         // scores from Python rules (whose names can't be extracted statically)
         // would stop polling before all rules finish loading or executing.
