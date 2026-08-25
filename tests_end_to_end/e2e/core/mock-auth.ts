@@ -11,6 +11,7 @@
  *    MOCK_AUTH_URL_FOR_BACKEND=http://host.docker.internal:9878 (and make sure the backend
  *    runs with LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD=relaxed, as the compose file ships).
  */
+import { loadEnvConfig } from '../config/env.config';
 import { AuthConfigCheckError, checkProviderAuthConfig } from './provider-keys';
 
 export const MOCK_AUTH_PORT = parseInt(process.env.MOCK_AUTH_PORT ?? '9878', 10);
@@ -66,10 +67,12 @@ const UNREACHABLE_PATTERNS = [/could not reach/i, /destination/i];
  * backend's own test-connection endpoint (which performs the fetch server-side) turns that into
  * a skip that names the cause.
  *
- * Only two outcomes are a skip: the deployment lacks the endpoint, or the backend cannot reach
- * the destination. Everything else — auth, permissions, rejected credentials, a malformed
- * reply — is a real problem this suite must not hide behind a green run, so it propagates and
- * fails the setup. Resolves to null when the backend CAN reach the mock.
+ * Skips a remote deployment outright: the mock is bound to the test runner, so only an `oss`
+ * (local) backend can ever reach it. Beyond that, two probe outcomes are a skip — the
+ * deployment lacks the endpoint, or the backend cannot reach the destination. Everything
+ * else — auth, permissions, rejected credentials, a malformed reply — is a real problem this
+ * suite must not hide behind a green run, so it propagates and fails the setup. Resolves to
+ * null when the backend CAN reach the mock.
  *
  * Cached: the answer is a property of the deployment, and every spec in the area asks.
  */
@@ -77,6 +80,14 @@ let mockAuthGate: Promise<string | null> | undefined;
 
 export function mockAuthSkipReason(): Promise<string | null> {
   mockAuthGate ??= (async () => {
+    // The mock runs on the test runner, so only a backend on that same host can reach it.
+    // A remote deployment never can — that is a property of the topology, not a
+    // misconfiguration to diagnose, so say so instead of probing an endpoint that cannot pass.
+    const { deployment } = loadEnvConfig();
+    if (deployment !== 'oss') {
+      return `dynamic token auth needs a backend that can reach the host-run mock token service; the ${deployment} deployment cannot`;
+    }
+
     try {
       // A bare auth_config needs no stored provider: the backend runs the token fetch and
       // answers 200 with the lifetime when the URL is reachable.
