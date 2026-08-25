@@ -169,4 +169,6 @@ When the work is done, remind the dev to restore: `cp ~/.opik.config.bak ~/.opik
 | "`page.locator('tbody tr:nth-child(3)')` is fine" | Flagging the missing testid — brittle structural selectors are the top source of flake; add a `data-testid`. |
 | "I'll create the dataset through the UI so the page has data" | SDK/bridge seeding — UI-create is what the test exercises, not how you set up. |
 | "`@cap:traces.bulk-delete-traces` describes what my test does" | Checking the taxonomy — `@area:`/`@cap:` values are a fixed vocabulary in `taxonomy.yaml`, not free text. CI's `tag-lint` rejects invented names, and the capability you want is usually already reserved there. |
+| "I'll clean up in a `try`/`finally` at the end of the test" | Fixture teardown — it already runs on pass, fail and timeout, and keeps cleanup out of the assertions (where it also escapes `test.step()` and never reaches the trace). Add a fixture, or a register-callback one when the id only appears mid-test. |
+| "Adding a fixture would touch files outside my ticket" | Nothing — `fixtures/` and `core/backend/client.ts` are where seeding and teardown belong. Reuse first, but adding one is normal, not scope creep. |
 | "The spec passes, so I'm done" | `tag_lint.py`, the feature-directory run, and `tsc` — a green single spec hides tag errors and sibling breakage from a shared POM. |
