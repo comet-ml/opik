@@ -4,11 +4,22 @@ import useTraceById from "@/api/traces/useTraceById";
 import useRulesList from "@/api/automations/useRulesList";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { getScoreNamesFromRule } from "@/lib/rules";
-import { EVAL_TRIGGER_SCOPE, EvaluatorsRule } from "@/types/automations";
+import {
+  EVAL_TRIGGER_SCOPE,
+  EVALUATORS_RULE_TYPE,
+  EvaluatorsRule,
+} from "@/types/automations";
 import PlaygroundOutputScores, { ScoreData } from "./PlaygroundOutputScores";
 
 const REFETCH_INTERVAL = 5000;
 const MAX_REFETCH_TIME = 300000;
+
+// Thread and span rules write their scores elsewhere, so their names would never arrive on the
+// trace and would keep the cell polling to the timeout.
+const TRACE_RULE_TYPES: string[] = [
+  EVALUATORS_RULE_TYPE.llm_judge,
+  EVALUATORS_RULE_TYPE.python_code,
+];
 
 const scoreNamesOf = (rules: EvaluatorsRule[]) =>
   [...new Set(rules.flatMap((rule) => getScoreNamesFromRule(rule)))].sort(
@@ -65,10 +76,11 @@ const PlaygroundOutputScoresContainer: React.FC<
     () =>
       rules.filter(
         (rule) =>
-          selectedRuleIdsSet.has(rule.id) ||
-          (rule.enabled !== false &&
-            (rule.trigger_scope === EVAL_TRIGGER_SCOPE.experiment ||
-              rule.trigger_scope === EVAL_TRIGGER_SCOPE.both)),
+          TRACE_RULE_TYPES.includes(rule.type) &&
+          (selectedRuleIdsSet.has(rule.id) ||
+            (rule.enabled !== false &&
+              (rule.trigger_scope === EVAL_TRIGGER_SCOPE.experiment ||
+                rule.trigger_scope === EVAL_TRIGGER_SCOPE.both))),
       ),
     [rules, selectedRuleIdsSet],
   );
@@ -78,8 +90,13 @@ const PlaygroundOutputScoresContainer: React.FC<
     [selectedRules],
   );
 
-  const awaitedScoreNamesRef = useRef<Set<string>>(new Set());
-  awaitedScoreNamesRef.current = new Set(scoreNamesOf(scoringRules));
+  const awaitedScoreNames = useMemo(
+    () => new Set(scoreNamesOf(scoringRules)),
+    [scoringRules],
+  );
+
+  const awaitedScoreNamesRef = useRef(awaitedScoreNames);
+  awaitedScoreNamesRef.current = awaitedScoreNames;
 
   const { data: trace } = useTraceById(
     { traceId: traceId! },
