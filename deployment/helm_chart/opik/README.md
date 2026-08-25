@@ -495,7 +495,6 @@ Call opik api on http://localhost:5173/api
 | databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.tracesDistributedWrapEnabled | bool | `false` |  |
-| databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled | bool | `false` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | global.argocd | bool | `false` |  |
