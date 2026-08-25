@@ -246,7 +246,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             stubPythonScoringHappyPath(trace, project);
             when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
                     .thenReturn(Mono.error(new IllegalStateException("clickhouse unavailable")));
-            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+            ArgumentCaptor<List<ChatMessage>> contextCaptor = ArgumentCaptor.forClass(List.class);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), contextCaptor.capture()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
 
             scorer.score(message).block();
@@ -254,6 +255,12 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             // No bulk fetch follows a failed aggregate — without a size we can't bound the heap cost.
             verify(spanService, never()).getByTraceIds(any());
             verify(feedbackScoreService).scoreBatchOfThreads(any());
+            // Assert the PAYLOAD, not just that something scored: the runner must receive the legacy
+            // {role, content} shape, so a regression that supplies spans here would otherwise pass.
+            var captured = contextCaptor.getValue();
+            assertThat(captured).hasSize(2);
+            assertThat(captured.get(0).spans()).isNull();
+            assertThat(captured.get(1).spans()).isNull();
         }
 
         @Test

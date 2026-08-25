@@ -282,12 +282,16 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                     var hasAttachments = tuple.getT3();
 
                     // Estimate the inline prompt size (trace bodies + span content) to route. spanBytes
-                    // comes from the cheap aggregate; the service adds the in-heap trace bodies. An
-                    // unavailable aggregate estimates 0, so routing falls to the attachment trigger alone.
+                    // comes from the cheap aggregate; the service adds the in-heap trace bodies.
+                    //
+                    // When the aggregate is unavailable, still estimate from the trace bodies with
+                    // spanBytes 0 rather than assuming 0 tokens: the bodies are already in heap, so they
+                    // cost nothing to measure, and a thread whose bodies alone clear the threshold must
+                    // still route to tools. Assuming 0 would send exactly those full inline and overflow
+                    // the context window. The estimate is a lower bound in this case, never an over-count.
                     var sizingUnavailable = spanBytes == SPAN_SIZE_UNAVAILABLE;
-                    var estimatedTokens = sizingUnavailable
-                            ? 0
-                            : agenticScoringService.estimateThreadContextTokens(traces, spanBytes);
+                    var estimatedTokens = agenticScoringService.estimateThreadContextTokens(
+                            traces, sizingUnavailable ? 0L : spanBytes);
                     // Fetch spans only for the inline/enriched path: under the routing threshold and no
                     // attachments (attachments force the tools path). Such a thread is small by
                     // construction, so the fetch is bounded; the streaming byte-cap stays a backstop. The

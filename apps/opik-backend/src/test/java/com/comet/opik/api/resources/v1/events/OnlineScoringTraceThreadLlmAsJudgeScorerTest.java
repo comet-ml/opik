@@ -642,7 +642,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         }
 
         @Test
-        void stillScoresWhenSpanSizeAggregateFails() {
+        void stillScoresInlineWhenSpanSizeAggregateFails() {
             // Sizing is advisory: a failed aggregate must not abort the evaluation, because
             // BaseRedisSubscriber would retry maxRetries times and then acknowledge the message,
             // permanently dropping the thread. Degrade to the unenriched inline route and still persist.
@@ -660,6 +660,50 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             // No bulk fetch follows a failed aggregate — without a size we can't bound the heap cost.
             verify(spanService, never()).getByTraceIds(any());
             verify(feedbackScoreService).scoreBatchOfThreads(any());
+            // Assert the ROUTE, not just that something scored: both routes return the stubbed response
+            // and persist, so without this the test passes even if the fallback took the tools path.
+            // No tool was ever executed => the inline branch ran.
+            Mockito.verifyNoInteractions(toolRegistry);
+            // And the rendered context carries no spans (unenriched).
+            var requests = ArgumentCaptor.forClass(ChatRequest.class);
+            verify(aiProxyService).scoreTrace(requests.capture(), any(), any());
+            var prompt = requests.getValue().messages().stream().map(Object::toString)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            org.assertj.core.api.Assertions.assertThat(prompt).doesNotContain("\"spans\"");
+        }
+
+        @Test
+        void traceBodiesAloneStillRouteToToolsWhenAggregateUnavailable() {
+            // Regression lock for the sizing fallback: estimating a flat 0 tokens when the aggregate fails
+            // would send a thread whose trace bodies alone clear the threshold full inline and overflow
+            // the context window. The bodies are already in heap, so they stay measurable with
+            // spanBytes 0 — which is what the fallback passes.
+            //
+            // Asserted end-to-end on the outgoing prompt rather than on the gate: the two routes differ
+            // observably in what they send (tools get a skeleton, inline gets the full bodies), so a
+            // regression back to a flat 0 fails here. A gate-only assertion would not catch it.
+            var body = "x".repeat(400_000);
+            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace().toBuilder()
+                    .input(JsonUtils.getJsonNodeFromString("{\"q\":\"" + body + "\"}"))
+                    .build();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            stubThreadScoringHappyPath(trace, project, rule, code);
+            Mockito.when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.error(new IllegalStateException("clickhouse unavailable")));
+            Mockito.when(llmProviderFactory.getLlmProvider("gpt-4o"))
+                    .thenReturn(com.comet.opik.api.LlmProvider.OPEN_AI);
+
+            scorer.score(message).block();
+
+            var requests = ArgumentCaptor.forClass(ChatRequest.class);
+            verify(aiProxyService, Mockito.atLeastOnce()).scoreTrace(requests.capture(), any(), any());
+            var prompt = requests.getAllValues().get(0).messages().stream().map(Object::toString)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            // The tools route sends a skeleton; inlining the oversized body is the bug being locked out.
+            org.assertj.core.api.Assertions.assertThat(prompt).doesNotContain(body);
         }
 
         @Test
