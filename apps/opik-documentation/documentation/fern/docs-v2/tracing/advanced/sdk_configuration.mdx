@@ -84,11 +84,12 @@ opik configure --install-mcp --install-skills
 coding agent asked to "set Opik up" runs it:
 
 ```bash
-opik configure -y --install-mcp --install-skills
+opik configure --install-mcp --install-skills
 ```
 
-`-y` answers the configuration questions; `--install-mcp` / `--install-skills`
-are the request to write into your AI client's configuration. A run that names
+Without a terminal the configuration defaults are assumed, so no `-y` is
+needed; `--install-mcp` / `--install-skills` are the request to write into your
+AI client's configuration. A run that names
 neither and has no terminal does nothing — so CI and Docker builds stay
 untouched unless you ask.
 </Note>

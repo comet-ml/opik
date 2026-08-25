@@ -75,7 +75,7 @@ def _announce_assistant_skip() -> None:
         style="yellow",
     )
     console.print(
-        "  To include it:  opik configure -y --install-mcp --install-skills",
+        "  To include it:  opik configure --install-mcp --install-skills",
         style="dim",
     )
 
@@ -264,12 +264,12 @@ def configure(
     Overwrites an existing configuration file. Also available as a function in the
     Python SDK.
 
-    Without a terminal — a coding agent, a script — pass `-y` to accept the
-    defaults, and name the assistant steps you want:
+    Without a terminal — a coding agent, a script — the defaults are assumed, so
+    one command does everything:
 
-        opik configure -y --install-mcp --install-skills
+        opik configure --install-mcp --install-skills
 
-    `-y` on its own configures Opik and nothing else: registering the MCP server
+    On its own it configures Opik and nothing else: registering the MCP server
     edits your AI client's own config, so it happens only when asked for.
     Deployment is taken from OPIK_URL_OVERRIDE / OPIK_API_KEY, or use --use_local.
     """
@@ -279,21 +279,14 @@ def configure(
     if ctx.invoked_subcommand is not None:
         return
 
-    # The flow asks several things beyond the deployment type — whether to use a
-    # detected local instance, which project name to keep — and each one aborts on
-    # a closed stdin. `-y` answers all of them, so say that once here instead of
-    # letting the run die on whichever prompt happens to come first with a bare
-    # "Aborted!", which tells a coding agent nothing it can act on.
-    if not yes and not interactive_helpers.is_interactive():
-        raise click.ClickException(
-            "`opik configure` asks a few questions and there is no terminal to "
-            "answer them in. Add `-y` to accept the defaults:\n\n"
-            "    opik configure -y --install-mcp\n"
-        )
-
+    # ... and instead assume it. With no terminal there is nobody to ask, and every
+    # question here has a sane default: use the local instance we found, keep the
+    # project name we derived. Demanding `-y` to say "yes, the defaults" was a step
+    # that existed only to be discovered — and the error teaching it was the step
+    # an agent was most likely to stop at.
     run_interactive_configure(
         use_local=use_local,
-        automatic_approvals=yes,
+        automatic_approvals=yes or not interactive_helpers.is_interactive(),
         install_mcp=install_mcp,
         install_skills=install_skills,
     )

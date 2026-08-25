@@ -261,8 +261,13 @@ class TestCodingAgentFlow:
         assert calls == []
 
 
-def test_configure_no_terminal_without_yes__names_the_flag_to_add():
-    """A bare `Aborted!` is a dead end for a coding agent; this is not."""
+def test_configure_no_terminal__assumes_the_defaults_instead_of_demanding_yes():
+    """No terminal means nobody to ask, and every question has a sane default.
+
+    Requiring `-y` to say "yes, the defaults" was a step that existed only to be
+    discovered, and the error teaching it was where an agent was most likely to
+    stop.
+    """
     runner = CliRunner()
     with (
         mock.patch.object(
@@ -272,23 +277,23 @@ def test_configure_no_terminal_without_yes__names_the_flag_to_add():
     ):
         result = runner.invoke(cli, ["configure"])
 
-    assert result.exit_code != 0
-    assert "-y" in result.output
-    spy.assert_not_called()
+    assert result.exit_code == 0
+    assert spy.call_args.kwargs["automatic_approvals"] is True
 
 
-def test_configure_no_terminal_with_yes__proceeds():
+def test_configure_with_a_terminal__keeps_its_questions():
+    """A person in a shell keeps their prompts; only the no-tty case assumes."""
     runner = CliRunner()
     with (
         mock.patch.object(
-            configure_cli.interactive_helpers, "is_interactive", return_value=False
+            configure_cli.interactive_helpers, "is_interactive", return_value=True
         ),
         mock.patch.object(configure_cli, "run_interactive_configure") as spy,
     ):
-        result = runner.invoke(cli, ["configure", "-y"])
+        result = runner.invoke(cli, ["configure"])
 
     assert result.exit_code == 0
-    spy.assert_called_once()
+    assert spy.call_args.kwargs["automatic_approvals"] is False
 
 
 class TestAgentDiscoverability:
