@@ -186,7 +186,7 @@ test.describe('Online Evaluation — non-object mapped sections', { tag: ['@t2-c
       }
     });
 
-    await test.step('Every shape was scored, including the four non-object sections', async () => {
+    await test.step('Every shape was scored, including the five non-object sections', async () => {
       const scored = await Promise.all(
         traces.map(async (t) => {
           const score = await backendClient.pollTraceForFeedbackScore(t.id, ruleName, {

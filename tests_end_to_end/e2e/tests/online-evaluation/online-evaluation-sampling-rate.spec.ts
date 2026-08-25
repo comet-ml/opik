@@ -75,11 +75,17 @@ class AlwaysScores(base_metric.BaseMetric):
         return score_result.ScoreResult(value=1.0, name=self.name)`;
 }
 
-/** Trace sources that bypass the sampling rate, and how each becomes scorable. */
+/**
+ * Trace sources that bypass the sampling rate, and how each becomes scorable.
+ *
+ * `evaluator` also bypasses it (`Source.isLoggingSource` is true only for `sdk`
+ * and null), but is deliberately absent: an evaluator-source trace is a score's
+ * own trace, so scoring it is what the product avoids rather than something to
+ * assert here.
+ */
 const BYPASS_SOURCES = [
   // An experiment trace needs no rule selection — the sampler treats SDK and
   // experiment sources as implicitly eligible for every rule in the project.
-  { source: 'experiment' as const, needsRuleSelection: false },
   { source: 'experiment' as const, needsRuleSelection: false },
   // Playground and optimization traces are only scorable when they name the
   // rule in `metadata.selected_rule_ids` (OnlineScoringSampler.sampleAndScore).
@@ -436,7 +442,7 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     );
 
     const logMessages = await test.step(
-      'Wait until the rule has ruled on all four SDK traces',
+      `Wait until the rule has ruled on all ${SDK_TRACE_COUNT} SDK traces`,
       async () => {
         // The absence assertion below is only sound once the engine has
         // finished with each SDK trace, and a skipped trace produces no score
