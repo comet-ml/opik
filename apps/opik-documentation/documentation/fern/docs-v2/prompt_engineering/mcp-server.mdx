@@ -79,8 +79,7 @@ job rather than editing those files unattended. For an image or a script, use
     before trying the prompts in [Start using it](#start-using-it).
 
     <Note>
-    If your client isn't detected, name it with `--ai-client claude-code` (and see
-    `opik mcp configure --help`) or use [Manual setup](#manual-setup).
+    If your client isn't detected, see [Manual setup](#manual-setup).
     </Note>
   </Step>
 </Steps>
@@ -136,27 +135,6 @@ To refresh the skill pack, re-run `opik mcp configure` — it rewrites the pack
 from the latest published version. Assistants read their skills at session start,
 so start a new session afterwards.
 </Note>
-
-### Clients the CLI doesn't cover
-
-`opik mcp configure` handles Claude Code, Cursor, VS Code Copilot, Codex and
-opencode. For any other client, install the skill pack with the community
-[`skills`](https://github.com/vercel-labs/skills) CLI, which knows the skill
-directories for 76+ agents:
-
-```bash
-npx skills add comet-ml/opik-skills
-```
-
-It needs Node.js, and it can install per-project rather than for your whole user
-account — neither of which the Opik CLI does. Opik installs the pack only as part
-of `opik configure` and `opik mcp configure`, so you never have to reach for a
-separate command in the normal flow; `npx skills` covers everything outside it.
-
-The two write to different places: Opik writes the shared `~/.agents/skills`
-(plus a link for Claude Code), while `npx skills` writes each client's own
-directory and defaults to project scope inside a project. To remove a pack Opik
-installed, delete it from `~/.agents/skills`.
 
 ## Start using it
 
@@ -246,6 +224,14 @@ them confidently. Run `opik configure`, pick a workspace, and re-run.
 
 Prefer to wire it up yourself, or your client wasn't detected? Configure any client
 by hand below.
+
+For the **skill pack** on a client the CLI doesn't cover, the community
+[`skills`](https://github.com/vercel-labs/skills) CLI knows the skill directories
+for 76+ agents (needs Node.js):
+
+```bash
+npx skills add comet-ml/opik-skills
+```
 
 <Note>
 There are two servers you can add by hand. [`opik mcp configure`](#quick-setup-with-the-opik-cli)
