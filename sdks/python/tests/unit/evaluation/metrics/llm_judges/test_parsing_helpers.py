@@ -896,7 +896,10 @@ class TestDuplicateMemberNameIsRedactedFromErrors:
     separate, pre-existing concern.
     """
 
-    _SECRET = "sk-live-51H8fakeSECRETvalue0000deadbeefcafef00d"
+    # Deliberately NOT provider-credential-shaped: the parser treats this as an
+    # arbitrary JSON member name, so a realistic key prefix would add no
+    # assertion power while looking like a hardcoded credential to a scanner.
+    _SENSITIVE_MEMBER_NAME = "SENSITIVE_TEST_MEMBER_NAME_MUST_NOT_APPEAR_IN_LOGS"
 
     @pytest.mark.parametrize(
         "make_content",
@@ -907,34 +910,41 @@ class TestDuplicateMemberNameIsRedactedFromErrors:
         ],
         ids=["fast_path", "scanning_path", "nested"],
     )
-    def test__extract_json_content_or_raise__secret_bearing_member_name__not_in_exception(
+    def test__extract_json_content_or_raise__sensitive_member_name__not_in_exception(
         self, make_content
     ):
         with pytest.raises(exceptions.JSONParsingError) as excinfo:
-            parsing_helpers.extract_json_content_or_raise(make_content(self._SECRET))
+            parsing_helpers.extract_json_content_or_raise(
+                make_content(self._SENSITIVE_MEMBER_NAME)
+            )
 
         message = str(excinfo.value)
-        assert self._SECRET not in message
+        assert self._SENSITIVE_MEMBER_NAME not in message
         # Not even a fragment of the member name may survive.
         assert not any(
-            self._SECRET[i : i + 8] in message for i in range(len(self._SECRET) - 7)
+            self._SENSITIVE_MEMBER_NAME[i : i + 8] in message
+            for i in range(len(self._SENSITIVE_MEMBER_NAME) - 7)
         )
 
-    def test__consumer_error_log__secret_bearing_member_name__not_in_log_record(
+    def test__consumer_error_log__sensitive_member_name__not_in_log_record(
         self, caplog
     ):
         # End of this path: the helper's message is what a metric parser writes
         # to the caller's log at ERROR.
-        content = '{"%s": 1, "%s": 2}' % (self._SECRET, self._SECRET)
+        content = '{"%s": 1, "%s": 2}' % (
+            self._SENSITIVE_MEMBER_NAME,
+            self._SENSITIVE_MEMBER_NAME,
+        )
         with caplog.at_level(logging.ERROR):
             with pytest.raises(exceptions.MetricComputationError):
                 hallucination_parser.parse_model_output(content, "m")
 
         assert caplog.records, "expected the consumer to log the failure"
         logged = caplog.text
-        assert self._SECRET not in logged
+        assert self._SENSITIVE_MEMBER_NAME not in logged
         assert not any(
-            self._SECRET[i : i + 8] in logged for i in range(len(self._SECRET) - 7)
+            self._SENSITIVE_MEMBER_NAME[i : i + 8] in logged
+            for i in range(len(self._SENSITIVE_MEMBER_NAME) - 7)
         )
 
     def test__extract_json_content_or_raise__duplicate_member_name__condition_still_named(

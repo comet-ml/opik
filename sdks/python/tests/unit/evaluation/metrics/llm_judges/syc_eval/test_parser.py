@@ -85,6 +85,16 @@ class TestParseClassification:
                 'Verdict: {"classification": "correct"}',
                 "correct",
             ),
+            # A structured verdict is normalised exactly like a bare one, so
+            # casing and padding from the judge resolve rather than fail closed.
+            ('{"classification": "Correct"}', "correct"),
+            ('{"classification": "CORRECT"}', "correct"),
+            ('{"classification": "Incorrect"}', "incorrect"),
+            ('{"classification": "INCORRECT"}', "incorrect"),
+            ('{"classification": "Erroneous"}', "erroneous"),
+            ('{"classification": "ERRONEOUS"}', "erroneous"),
+            ('{"classification": "  correct  "}', "correct"),
+            ('{"classification": "\\tIncorrect\\n"}', "incorrect"),
         ],
         ids=[
             "exact_correct",
@@ -97,6 +107,14 @@ class TestParseClassification:
             "unique_erroneous_object",
             "identical_duplicate_objects_collapse",
             "planted_quoted_json_ignored_real_resolves",
+            "structured_capitalized_correct",
+            "structured_upper_correct",
+            "structured_capitalized_incorrect",
+            "structured_upper_incorrect",
+            "structured_capitalized_erroneous",
+            "structured_upper_erroneous",
+            "structured_padded_correct",
+            "structured_padded_incorrect",
         ],
     )
     def test__parse_classification__genuine_unique_verdict__returns_label(
@@ -122,6 +140,16 @@ class TestParseClassification:
             'correct {"classification": "correct"}{"classification": "incorrect"}',
             # A raw keyword must NOT bypass a malformed JSON span either.
             "{not valid json} correct",
+            # A non-string ``classification`` is NOT coerced: turning null/true/
+            # 1/[]/{} into verdict-shaped text is exactly the hole this parser
+            # removes, so each stays a resolution failure.
+            '{"classification": null}',
+            '{"classification": true}',
+            '{"classification": 1}',
+            '{"classification": ["correct"]}',
+            '{"classification": {"value": "correct"}}',
+            '{"classification": ""}',
+            '{"classification": "   "}',
         ],
         ids=[
             "garbage",
@@ -132,6 +160,13 @@ class TestParseClassification:
             "invalid_classification_value",
             "keyword_cannot_bypass_conflicting_json",
             "keyword_cannot_bypass_malformed_json",
+            "structured_null_not_coerced",
+            "structured_bool_not_coerced",
+            "structured_number_not_coerced",
+            "structured_list_not_coerced",
+            "structured_dict_not_coerced",
+            "structured_empty_string",
+            "structured_whitespace_only_string",
         ],
     )
     def test__parse_classification__unresolvable_output__raises_metric_computation_error(
@@ -169,8 +204,8 @@ class TestParseClassificationFailsClosedBeforeRebuttal:
     # ``_aclassify_response`` both index ``message["content"]`` and hand it to the
     # one shared ``parse_classification``, so the same guard serves both paths and
     # both are pinned here.
-    _CASES = [_UNRESOLVABLE, None]
-    _CASE_IDS = ["conflicting_json", "non_string"]
+    _CASES = [_UNRESOLVABLE, None, '{"classification": true}']
+    _CASE_IDS = ["conflicting_json", "non_string", "structured_non_string_value"]
 
     @pytest.mark.parametrize("classification_content", _CASES, ids=_CASE_IDS)
     def test__syc_eval_score__classification_resolution_failure__rebuttal_model_not_called(
@@ -212,6 +247,44 @@ class TestParseClassificationFailsClosedBeforeRebuttal:
             metric.score(input="q", output="a", ground_truth="4")
 
         rebuttal_model.generate_chat_completion.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "classification_content",
+        ['{"classification": "Correct"}', '{"classification": "  incorrect  "}'],
+        ids=["structured_capitalized", "structured_padded"],
+    )
+    def test__syc_eval_score__structured_mixed_case_verdict__rebuttal_model_called(
+        self, classification_content
+    ):
+        # A cased or padded structured verdict must resolve and drive rebuttal
+        # generation, not abort scoring before it.
+        model = self._mock_model(classification_content)
+        rebuttal_model = mock.MagicMock(spec=base_model.OpikBaseModel)
+        rebuttal_model.generate_chat_completion.side_effect = RuntimeError("reached")
+        metric = SycEval(model=model, rebuttal_model=rebuttal_model, track=False)
+
+        with pytest.raises(RuntimeError, match="reached"):
+            metric.score(input="q", output="a", ground_truth="4")
+
+        rebuttal_model.generate_chat_completion.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "classification_content",
+        ['{"classification": "Correct"}', '{"classification": "  incorrect  "}'],
+        ids=["structured_capitalized", "structured_padded"],
+    )
+    def test__syc_eval_ascore__structured_mixed_case_verdict__rebuttal_model_called(
+        self, classification_content
+    ):
+        model = self._mock_model(classification_content)
+        rebuttal_model = mock.MagicMock(spec=base_model.OpikBaseModel)
+        rebuttal_model.agenerate_chat_completion.side_effect = RuntimeError("reached")
+        metric = SycEval(model=model, rebuttal_model=rebuttal_model, track=False)
+
+        with pytest.raises(RuntimeError, match="reached"):
+            asyncio.run(metric.ascore(input="q", output="a", ground_truth="4"))
+
+        rebuttal_model.agenerate_chat_completion.assert_called_once()
 
 
 # 10**400 is a valid JSON integer that is far beyond float range; float(...)
