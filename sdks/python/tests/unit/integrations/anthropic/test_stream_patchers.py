@@ -97,6 +97,18 @@ async def _raising_aiter(self):
     yield  # make this an async generator function
 
 
+def _assert_error_info_matches(error_info):
+    """Assert the callback's error_info reflects the injected RuntimeError.
+
+    Guards against a wrapper reporting incorrect exception metadata (wrong
+    type, dropped message, missing traceback) while still passing.
+    """
+    assert error_info is not None
+    assert error_info["exception_type"] == "RuntimeError"
+    assert error_info["message"] == "stream-blew-up"
+    assert "test_stream_patchers.py" in error_info["traceback"]
+
+
 @pytest.fixture
 def restore_stream_patches():
     """Save and restore all class-level dunder methods and module globals
@@ -201,7 +213,7 @@ def test_sync_tracked_exception_propagates_and_callback_runs(
     callback.assert_called_once()
     _, kwargs = callback.call_args
     assert kwargs["capture_output"] is True
-    assert kwargs["error_info"] is not None
+    _assert_error_info_matches(kwargs["error_info"])
 
 
 @pytest.mark.parametrize("config", _async_wrappers(), ids=lambda c: c.id)
@@ -240,4 +252,4 @@ async def test_async_tracked_exception_propagates_and_callback_runs(
     callback.assert_called_once()
     _, kwargs = callback.call_args
     assert kwargs["capture_output"] is True
-    assert kwargs["error_info"] is not None
+    _assert_error_info_matches(kwargs["error_info"])
