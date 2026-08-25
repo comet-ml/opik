@@ -165,10 +165,18 @@ class TestParseClassificationFailsClosedBeforeRebuttal:
         }
         return model
 
+    # ``None`` covers the non-string case: ``_classify_response`` and
+    # ``_aclassify_response`` both index ``message["content"]`` and hand it to the
+    # one shared ``parse_classification``, so the same guard serves both paths and
+    # both are pinned here.
+    _CASES = [_UNRESOLVABLE, None]
+    _CASE_IDS = ["conflicting_json", "non_string"]
+
+    @pytest.mark.parametrize("classification_content", _CASES, ids=_CASE_IDS)
     def test__syc_eval_score__classification_resolution_failure__rebuttal_model_not_called(
-        self,
+        self, classification_content
     ):
-        model = self._mock_model(self._UNRESOLVABLE)
+        model = self._mock_model(classification_content)
         rebuttal_model = mock.MagicMock(spec=base_model.OpikBaseModel)
         metric = SycEval(model=model, rebuttal_model=rebuttal_model, track=False)
 
@@ -177,10 +185,11 @@ class TestParseClassificationFailsClosedBeforeRebuttal:
 
         rebuttal_model.generate_chat_completion.assert_not_called()
 
+    @pytest.mark.parametrize("classification_content", _CASES, ids=_CASE_IDS)
     def test__syc_eval_ascore__classification_resolution_failure__rebuttal_model_not_called(
-        self,
+        self, classification_content
     ):
-        model = self._mock_model(self._UNRESOLVABLE)
+        model = self._mock_model(classification_content)
         rebuttal_model = mock.MagicMock(spec=base_model.OpikBaseModel)
         metric = SycEval(model=model, rebuttal_model=rebuttal_model, track=False)
 
@@ -267,13 +276,21 @@ class TestParseModelOutputFailsClosed:
         self, content
     ):
         # The failure must surface as the domain exception, never as a raw
-        # TypeError (non-dict indexed) or the resolver's JSONParsingError.
+        # TypeError (non-dict indexed) or the resolver's JSONParsingError — and
+        # it must actually fail. The earlier form only guarded the exception
+        # TYPE, so a regression that silently ACCEPTED an unresolvable output
+        # returned normally and the test still passed.
         try:
-            parser.parse_model_output(content=content, name="m")
+            result = parser.parse_model_output(content=content, name="m")
         except exceptions.MetricComputationError:
             pass
         except (TypeError, exceptions.JSONParsingError, OverflowError) as e:
             pytest.fail(f"leaked raw {type(e).__name__} instead of failing closed")
+        else:
+            pytest.fail(
+                "unresolvable output was accepted instead of failing closed: "
+                f"returned {result!r}"
+            )
 
     def test__parse_model_output__valid_unique_dict__returns_score_result(self):
         result = parser.parse_model_output(content=_VALID_EVAL_OUTPUT, name="m")
@@ -348,3 +365,40 @@ class TestSycEvalParseModelOutputFailsClosedAtCaller:
         result = metric.score(input="q", output="a", ground_truth="4")
         assert result.value == 1.0
         assert result.metadata["initial_classification"] == "correct"
+
+
+class TestSycEvalParseClassificationRejectsNonStringOutput:
+    """Invariant: a non-string judge response is a resolution failure, not a
+    verdict and not a raw built-in.
+
+    Before issue #7848 ``parse_classification`` wrapped its whole body in a
+    blanket ``except Exception`` that returned ``"erroneous"``. That was removed
+    so a resolution failure can no longer masquerade as a real verdict, which
+    left the leading ``.strip()`` unguarded: a non-string response surfaced as a
+    raw ``AttributeError``/``TypeError`` out of ``SycEval.score``/``ascore``
+    instead of the documented ``MetricComputationError``.
+    """
+
+    @pytest.mark.parametrize(
+        "content",
+        [None, 42, b"correct", ["correct"], {"classification": "correct"}],
+        ids=["none", "int", "bytes", "list", "dict"],
+    )
+    def test__parse_classification__non_string_output__raises_metric_computation_error(
+        self, content
+    ):
+        with pytest.raises(exceptions.MetricComputationError):
+            parser.parse_classification(content)
+
+    @pytest.mark.parametrize(
+        "content, expected",
+        [
+            ("correct", "correct"),
+            ("  Incorrect  ", "incorrect"),
+            ('{"classification": "erroneous"}', "erroneous"),
+        ],
+        ids=["bare_label", "padded_label", "structured_label"],
+    )
+    def test__parse_classification__string_output__unaffected(self, content, expected):
+        # The guard must not disturb any resolving string input.
+        assert parser.parse_classification(content) == expected

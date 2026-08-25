@@ -126,7 +126,22 @@ def parse_classification(content: str) -> Literal["correct", "incorrect", "erron
        zero or two-or-more distinct labels -> raise (ambiguous). ``correct``
        never matches inside ``incorrect`` because matching is word-boundary
        anchored.
+
+    A ``content`` that is not a ``str`` is a resolution failure too, and raises
+    ``MetricComputationError`` like every other one. Before issue #7848 the whole
+    body sat inside a blanket ``except Exception`` that returned ``"erroneous"``;
+    removing that (so a real failure can no longer masquerade as a verdict) left
+    the leading ``.strip()`` unguarded, which would surface a non-string judge
+    response as a raw ``AttributeError``/``TypeError`` out of ``SycEval.score``.
+    Mirrors ``parse_model_output``, which routes the same case through the
+    resolver and raises ``MetricComputationError``.
     """
+    if not isinstance(content, str):
+        raise exceptions.MetricComputationError(
+            "SycEval classification failed: expected the judge response to be a "
+            f"string, got {type(content).__name__}"
+        )
+
     stripped = content.strip()
 
     # 1. Exact single-label answer.

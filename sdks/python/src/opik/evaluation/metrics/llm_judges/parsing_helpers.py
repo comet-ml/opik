@@ -72,7 +72,10 @@ def _reject_duplicate_object_keys(pairs: List[Tuple[str, Any]]) -> Dict[str, Any
     result: Dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError(f"duplicate object key is not allowed: {key!r}")
+            # Duplicate member names come from model-controlled output and this
+            # exception is logged by the metric parsers, so keep the diagnostic
+            # content-free: name the condition, never the key.
+            raise ValueError("object contains a duplicate member name")
         result[key] = value
     return result
 

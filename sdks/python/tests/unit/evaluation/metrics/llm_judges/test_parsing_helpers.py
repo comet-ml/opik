@@ -17,12 +17,16 @@ parametrized so the class docstring documents the invariant once.
 import copy
 import gc
 import json
+import logging
 import tracemalloc
 
 import pytest
 
 from opik import exceptions
 from opik.evaluation.metrics.llm_judges import parsing_helpers
+from opik.evaluation.metrics.llm_judges.hallucination import (
+    parser as hallucination_parser,
+)
 
 
 def _raises(content):
@@ -879,3 +883,64 @@ class TestFastPathExceptionBoundary:
         with pytest.raises(exceptions.JSONParsingError) as excinfo:
             parsing_helpers.extract_json_content_or_raise('{"score": NaN}')
         assert isinstance(excinfo.value.__cause__, ValueError)
+
+
+class TestDuplicateMemberNameIsRedactedFromErrors:
+    """Invariant: the duplicate-member-name rejection names the condition, never
+    the member name.
+
+    That name is judge output, and this exception reaches the caller's ERROR logs
+    through ``JSONParsingError``, so an excerpt or prefix would still put
+    model-controlled bytes there. This covers only that one path — other
+    judge-controlled values interpolated elsewhere in the metric parsers are a
+    separate, pre-existing concern.
+    """
+
+    _SECRET = "sk-live-51H8fakeSECRETvalue0000deadbeefcafef00d"
+
+    @pytest.mark.parametrize(
+        "make_content",
+        [
+            lambda k: '{"%s": 1, "%s": 2}' % (k, k),
+            lambda k: 'the judge said {"%s": 1, "%s": 2} and stopped' % (k, k),
+            lambda k: '{"outer": {"%s": 1, "%s": 2}}' % (k, k),
+        ],
+        ids=["fast_path", "scanning_path", "nested"],
+    )
+    def test__extract_json_content_or_raise__secret_bearing_member_name__not_in_exception(
+        self, make_content
+    ):
+        with pytest.raises(exceptions.JSONParsingError) as excinfo:
+            parsing_helpers.extract_json_content_or_raise(make_content(self._SECRET))
+
+        message = str(excinfo.value)
+        assert self._SECRET not in message
+        # Not even a fragment of the member name may survive.
+        assert not any(
+            self._SECRET[i : i + 8] in message for i in range(len(self._SECRET) - 7)
+        )
+
+    def test__consumer_error_log__secret_bearing_member_name__not_in_log_record(
+        self, caplog
+    ):
+        # End of this path: the helper's message is what a metric parser writes
+        # to the caller's log at ERROR.
+        content = '{"%s": 1, "%s": 2}' % (self._SECRET, self._SECRET)
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(exceptions.MetricComputationError):
+                hallucination_parser.parse_model_output(content, "m")
+
+        assert caplog.records, "expected the consumer to log the failure"
+        logged = caplog.text
+        assert self._SECRET not in logged
+        assert not any(
+            self._SECRET[i : i + 8] in logged for i in range(len(self._SECRET) - 7)
+        )
+
+    def test__extract_json_content_or_raise__duplicate_member_name__condition_still_named(
+        self,
+    ):
+        # Redaction must not cost the diagnosis.
+        with pytest.raises(exceptions.JSONParsingError) as excinfo:
+            parsing_helpers.extract_json_content_or_raise('{"score": 1, "score": 2}')
+        assert "duplicate member name" in str(excinfo.value)
