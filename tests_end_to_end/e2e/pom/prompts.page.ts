@@ -81,11 +81,8 @@ export class PromptsPage {
   }
 
   /**
-   * Deletes via the row's actions menu and confirms. Unlike the other list
-   * pages, the confirm heading interpolates the prompt name ("Delete <name>")
-   * while the confirm button is the fixed string "Delete prompt" — so the
-   * dialog is scoped by the interpolated heading and the button by its own
-   * stable name.
+   * Unlike the sibling pages, the confirm heading interpolates the prompt
+   * name ("Delete <name>") while the button stays a fixed "Delete prompt".
    */
   async deletePromptByName(name: string): Promise<void> {
     return test.step(`delete prompt "${name}" via row actions`, async () => {

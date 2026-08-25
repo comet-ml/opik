@@ -2,24 +2,13 @@ import { test, expect } from '../../fixtures/prompt.fixture';
 import { PromptsPage } from '@e2e/pom/prompts.page';
 
 /**
- * Deleting a prompt is destructive and permanent — it removes every associated
- * commit, not just the current version. Prompts are the highest-traffic
- * Development surface in the estate, and delete is the one CRUD action nobody
- * asserted until now.
+ * Deleting a prompt removes every associated commit, not just the current
+ * version. There is no success toast, so the reload is what distinguishes a
+ * real delete from a cache eviction; the bystander bounds the blast radius.
  *
- * A second prompt is seeded purely as a bystander: asserting only that the
- * target vanished would pass just as happily if the delete wiped the whole
- * library, so the bystander is what pins the blast radius to one row. Its
- * cleanup is registered through `registerPromptCleanup` the moment it exists,
- * so a failure part-way through this test cannot strand it in the workspace.
- *
- * Deliberately NOT asserted: what the prompt's detail route renders afterwards.
- * The route currently hangs on loading skeletons for a deleted id (the page
- * never reads the query's error state), which is a bug rather than intended
- * behaviour — pinning it here would turn the fix into a test failure. This spec
- * asserts the durable fact instead: the prompt leaves the library and stays
- * gone. Reloading is what separates a real delete from a cache eviction, since
- * the UI shows no success toast to confirm either way.
+ * Deliberately not asserted: what the detail route renders for a deleted id.
+ * It currently hangs on loading skeletons because the page never reads the
+ * query's error state — a bug, so pinning it here would make the fix fail.
  */
 test.describe('Prompt library — delete', { tag: ['@t2-cuj', '@area:prompts'] }, () => {
   test(
@@ -35,8 +24,7 @@ test.describe('Prompt library — delete', { tag: ['@t2-cuj', '@area:prompts'] }
           prompt: 'Bystander prompt: {{question}}',
           project_name: project.name,
         });
-        // Registered immediately, not after the assertions — the fixture's
-        // teardown runs even when a step below fails.
+        // Registered before the assertions so teardown survives a failure.
         registerPromptCleanup(sibling.id, sibling.name);
       });
 

@@ -68,14 +68,9 @@ export class TestSuitesPage {
   }
 
   /**
-   * Deletes via the row's actions menu and confirms. The confirm dialog's
-   * heading and its confirm button share the accessible name "Delete test
-   * suite", so the dialog is scoped by heading first and the button resolved
-   * by role within it.
-   *
-   * Test suites share storage with datasets, so this issues
-   * `DELETE /v1/private/datasets/{id}` — the same call the fixture teardown
-   * makes. The delete is a hard DELETE with no tombstone row.
+   * The dialog heading and its confirm button share the name "Delete test
+   * suite", so scope by heading first, then resolve the button inside.
+   * Hits `DELETE /v1/private/datasets/{id}` — suites share the datasets table.
    */
   async deleteTestSuiteByName(name: string): Promise<void> {
     return test.step(`delete test suite "${name}" via row actions`, async () => {

@@ -2,30 +2,18 @@ import { test, expect } from '@e2e/fixtures';
 import { TestSuitesPage } from '@e2e/pom/test-suites.page';
 
 /**
- * Deleting a test suite is destructive and permanent, and it is the last
- * uncovered functional capability in this area.
+ * Test suites live on the datasets table, under UNIQUE (workspace_id, name).
+ * That makes reusing the name after the delete the only check that separates:
  *
- * The recreate step is the part worth having. Test suites share the datasets
- * table, which carries a UNIQUE (workspace_id, name) constraint — so reusing
- * the name after a delete is the one action that can distinguish the three
- * outcomes a passing "row disappeared" check cannot:
+ *   - a real hard delete           → create returns a NEW id
+ *   - a resurrected row            → create returns the OLD id
+ *   - a delete that never happened → create fails with 409
  *
- *   - a real hard delete  → create succeeds with a NEW id (asserted here)
- *   - a resurrected row   → create succeeds but returns the OLD id
- *   - a delete that never happened → create fails with 409 and the suite keeps
- *     its original id
+ * The bystander covers the other axis: the recreate check says nothing about
+ * suites under other names, so a delete that took them all would still pass.
  *
- * Asserting the new id differs from the old is therefore a genuine claim about
- * delete semantics, not a restatement of the previous step.
- *
- * A bystander suite covers the other axis: the recreate check constrains what
- * happened to *this* name, and says nothing about the rest of the project, so
- * a delete that took every suite with it would still pass. The bystander pins
- * the blast radius to one row.
- *
- * Both the bystander and the recreated suite are cleaned up in a `finally`:
- * the `testSuite` fixture tears down by the ORIGINAL id, which this test has
- * already deleted, so anything else created here owns an id no fixture knows.
+ * Cleanup runs from a `finally` because the fixture tears down by the original
+ * id, which this test deletes — anything created here owns an id it won't know.
  */
 test.describe('Test suites — delete', { tag: ['@t2-cuj', '@area:test-suites'] }, () => {
   test(
@@ -34,8 +22,7 @@ test.describe('Test suites — delete', { tag: ['@t2-cuj', '@area:test-suites'] 
     async ({ testSuite, project, sdkClient, backendClient, page, testNamespace }) => {
       const suites = new TestSuitesPage(page);
       const siblingName = `${testNamespace}-suite-bystander`;
-      // Ids of suites this test owns, recorded the moment each is created so the
-      // cleanup below covers them even if a later assertion throws.
+      // Recorded at creation so the `finally` covers them if an assertion throws.
       const ownedSuiteIds: string[] = [];
 
       try {
@@ -80,8 +67,6 @@ test.describe('Test suites — delete', { tag: ['@t2-cuj', '@area:test-suites'] 
               description: 'recreated after delete',
               items: [{ data: { question: 'first question' } }],
             });
-            // Recorded before the assertion, so a failing comparison still
-            // leaves a cleanable id behind.
             ownedSuiteIds.push(recreated.id);
             expect(recreated.id).not.toBe(testSuite.id);
             return recreated.id;
@@ -100,8 +85,6 @@ test.describe('Test suites — delete', { tag: ['@t2-cuj', '@area:test-suites'] 
         });
       } finally {
         for (const id of ownedSuiteIds) {
-          // Test suites live on the datasets table, so this is the same call the
-          // fixture teardown makes.
           await backendClient.deleteDataset(id).catch(() => {});
         }
       }

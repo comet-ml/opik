@@ -57,15 +57,8 @@ export class ExperimentsPage {
   }
 
   /**
-   * Deletes via the row's actions menu and confirms. The confirm dialog's
-   * heading and its confirm button share the accessible name "Delete
-   * experiment", so the dialog is scoped by heading first and the button is
-   * then resolved by role within it (ConfirmDialog is a generic shared
-   * component with no data-testid of its own).
-   *
-   * Both the row-actions and the bulk-selection paths issue the same
-   * `POST /v1/private/experiments/delete` with an ids array — there is no
-   * single-id DELETE endpoint for experiments.
+   * The dialog heading and its confirm button share the name "Delete
+   * experiment", so scope by heading first, then resolve the button inside.
    */
   async deleteExperimentById(experimentId: string): Promise<void> {
     return test.step(`delete experiment ${experimentId} via row actions`, async () => {
@@ -79,8 +72,8 @@ export class ExperimentsPage {
       await confirm.getByRole('button', { name: 'Delete experiment' }).click();
 
       await confirm.waitFor({ state: 'hidden' });
-      // The list refetches rather than updating optimistically, and renders a
-      // placeholder from cache while it does — so wait for the row itself to go.
+      // Refetch, not optimistic update, and a cached placeholder renders
+      // meanwhile — so wait on the row, not the table.
       await row.waitFor({ state: 'detached' });
     });
   }
