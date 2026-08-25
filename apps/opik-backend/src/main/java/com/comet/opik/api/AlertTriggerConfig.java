@@ -5,8 +5,10 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
+import org.apache.commons.lang3.StringUtils;
 
 import java.time.Instant;
 import java.util.Map;
@@ -25,7 +27,7 @@ public record AlertTriggerConfig(
                 Alert.View.Write.class}) @NotNull AlertTriggerConfigType type,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) Map<String, String> configValue,
+                Alert.View.Write.class}) @Schema(description = "Trigger configuration map. Threshold configs accept both 'window' and 'window_in_seconds'; 'window' takes precedence when both are provided. A blank 'window' falls back to 'window_in_seconds'.") Map<String, String> configValue,
 
         @JsonView({Alert.View.Public.class,
                 Alert.View.Write.class}) @Schema(description = "Groups configs within a trigger: same group_index means AND between configs, different group_index means OR between groups. Null means a legacy/singleton group of one config. Always null for scope:project configs.") Integer groupIndex,
@@ -50,11 +52,24 @@ public record AlertTriggerConfig(
     // Comma-separated GuardrailType names (e.g. "PII,TOPIC"); empty/absent means all types.
     public static final String GUARDRAIL_TYPES_CONFIG_KEY = "guardrail_types";
 
-    public static String resolveWindow(Map<String, String> configValue) {
+    @Nullable public static String resolveWindow(@Nullable Map<String, String> configValue) {
         if (configValue == null) {
             return null;
         }
-        String window = configValue.get(WINDOW_CONFIG_KEY);
-        return window != null ? window : configValue.get(WINDOW_IN_SECONDS_CONFIG_KEY);
+        String window = StringUtils.trimToNull(configValue.get(WINDOW_CONFIG_KEY));
+        if (window != null) {
+            return window;
+        }
+        return StringUtils.trimToNull(configValue.get(WINDOW_IN_SECONDS_CONFIG_KEY));
+    }
+
+    public static String requireWindow(@Nullable Map<String, String> configValue, AlertTriggerConfigType type) {
+        String window = resolveWindow(configValue);
+        if (window == null) {
+            throw new IllegalArgumentException(
+                    "Missing config value for key '%s' or '%s' in trigger of type '%s'"
+                            .formatted(WINDOW_CONFIG_KEY, WINDOW_IN_SECONDS_CONFIG_KEY, type));
+        }
+        return window;
     }
 }

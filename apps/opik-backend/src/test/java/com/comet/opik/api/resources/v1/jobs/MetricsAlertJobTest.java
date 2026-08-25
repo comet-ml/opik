@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
@@ -30,6 +31,7 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,6 +41,7 @@ import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.WINDOW_IN_SECONDS_CONFIG_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -231,13 +234,48 @@ class MetricsAlertJobTest {
         assertThat(payload.get("conditions").get(1).get("threshold").asText()).isEqualTo("0.6000");
     }
 
-    @ParameterizedTest
-    @MethodSource("windowConfigKeys")
-    void firesTraceErrorsWhenWindowProvidedUnderCanonicalOrDocumentedAlias(String windowKey) {
-        Alert alert = alertWithErrorThreshold(windowKey, "2", "300");
+    @ParameterizedTest(name = "{0} with {2}")
+    @MethodSource("windowAliasMatrix")
+    void firesWhenWindowProvidedUnderCanonicalOrDocumentedAlias(
+            AlertEventType eventType, AlertTriggerConfigType configType, String windowKey) {
+        Alert alert = alertWithThreshold(eventType, configType, thresholdConfig(eventType, windowKey, "300"));
+        stubMetricAboveThreshold(eventType);
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
 
-        when(projectMetricsDAO.getTotalTraceErrors(anyList(), any(Instant.class), any(Instant.class)))
-                .thenReturn(Mono.just(new BigDecimal("3")));
+        job.doJob(null);
+
+        ArgumentCaptor<List<String>> payloadCaptor = listCaptor();
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(eventType), anyList(),
+                payloadCaptor.capture(), anyList());
+
+        JsonNode payload = JsonUtils.readValue(payloadCaptor.getValue().getFirst(), JsonNode.class);
+        assertThat(payload.get("window_seconds").asLong()).isEqualTo(300L);
+        assertThat(payload.get("metric_value").asText()).isEqualTo("3");
+        assertThat(payload.get("threshold").asText()).isEqualTo("2");
+    }
+
+    static Stream<Arguments> windowAliasMatrix() {
+        return Stream.of(WINDOW_CONFIG_KEY, WINDOW_IN_SECONDS_CONFIG_KEY)
+                .flatMap(windowKey -> Stream.of(
+                        Arguments.of(AlertEventType.TRACE_ERRORS, AlertTriggerConfigType.THRESHOLD_ERRORS, windowKey),
+                        Arguments.of(AlertEventType.TRACE_COST, AlertTriggerConfigType.THRESHOLD_COST, windowKey),
+                        Arguments.of(AlertEventType.TRACE_LATENCY, AlertTriggerConfigType.THRESHOLD_LATENCY, windowKey),
+                        Arguments.of(AlertEventType.TRACE_FEEDBACK_SCORE,
+                                AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE, windowKey),
+                        Arguments.of(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
+                                AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE, windowKey)));
+    }
+
+    @Test
+    void prefersCanonicalWindowWhenBothWindowKeysPresent() {
+        Map<String, String> configValue = thresholdConfig(AlertEventType.TRACE_ERRORS, WINDOW_CONFIG_KEY, "300");
+        configValue.put(WINDOW_IN_SECONDS_CONFIG_KEY, "999");
+        Alert alert = alertWithThreshold(AlertEventType.TRACE_ERRORS, AlertTriggerConfigType.THRESHOLD_ERRORS,
+                configValue);
+
+        stubMetricAboveThreshold(AlertEventType.TRACE_ERRORS);
         when(alertService.findAllByWorkspaceAndEventTypes(null,
                 MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
 
@@ -250,12 +288,28 @@ class MetricsAlertJobTest {
 
         JsonNode payload = JsonUtils.readValue(payloadCaptor.getValue().getFirst(), JsonNode.class);
         assertThat(payload.get("window_seconds").asLong()).isEqualTo(300L);
-        assertThat(payload.get("metric_value").asText()).isEqualTo("3");
-        assertThat(payload.get("threshold").asText()).isEqualTo("2");
     }
 
-    static Stream<String> windowConfigKeys() {
-        return Stream.of(WINDOW_CONFIG_KEY, "window_in_seconds");
+    @Test
+    void fallsBackToAliasWhenCanonicalWindowIsBlank() {
+        Map<String, String> configValue = thresholdConfig(AlertEventType.TRACE_ERRORS, WINDOW_CONFIG_KEY, "   ");
+        configValue.put(WINDOW_IN_SECONDS_CONFIG_KEY, "300");
+        Alert alert = alertWithThreshold(AlertEventType.TRACE_ERRORS, AlertTriggerConfigType.THRESHOLD_ERRORS,
+                configValue);
+
+        stubMetricAboveThreshold(AlertEventType.TRACE_ERRORS);
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        ArgumentCaptor<List<String>> payloadCaptor = listCaptor();
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_ERRORS), anyList(),
+                payloadCaptor.capture(), anyList());
+
+        JsonNode payload = JsonUtils.readValue(payloadCaptor.getValue().getFirst(), JsonNode.class);
+        assertThat(payload.get("window_seconds").asLong()).isEqualTo(300L);
     }
 
     @Test
@@ -303,16 +357,47 @@ class MetricsAlertJobTest {
                 .build();
     }
 
-    private static Alert alertWithErrorThreshold(String windowKey, String threshold, String window) {
+    private void stubMetricAboveThreshold(AlertEventType eventType) {
+        switch (eventType) {
+            case TRACE_COST -> when(projectMetricsDAO.getTotalCost(anyList(), any(Instant.class), any(Instant.class)))
+                    .thenReturn(Mono.just(new BigDecimal("3")));
+            case TRACE_LATENCY ->
+                when(projectMetricsDAO.getAverageDuration(anyList(), any(Instant.class), any(Instant.class)))
+                        .thenReturn(Mono.just(new BigDecimal("3000")));
+            case TRACE_ERRORS ->
+                when(projectMetricsDAO.getTotalTraceErrors(anyList(), any(Instant.class), any(Instant.class)))
+                        .thenReturn(Mono.just(new BigDecimal("3")));
+            case TRACE_FEEDBACK_SCORE -> when(projectMetricsDAO.getAverageFeedbackScore(
+                    anyList(), any(Instant.class), any(Instant.class), eq(EntityType.TRACE), eq(FEEDBACK_NAME)))
+                    .thenReturn(Mono.just(new BigDecimal("3")));
+            case TRACE_THREAD_FEEDBACK_SCORE -> when(projectMetricsDAO.getAverageFeedbackScore(
+                    anyList(), any(Instant.class), any(Instant.class), eq(EntityType.THREAD), eq(FEEDBACK_NAME)))
+                    .thenReturn(Mono.just(new BigDecimal("3")));
+            default -> throw new IllegalArgumentException("Unsupported event type: " + eventType);
+        }
+    }
+
+    private static Map<String, String> thresholdConfig(AlertEventType eventType, String windowKey, String window) {
+        Map<String, String> configValue = new HashMap<>();
+        configValue.put(THRESHOLD_CONFIG_KEY, "2");
+        configValue.put(windowKey, window);
+        if (eventType == AlertEventType.TRACE_FEEDBACK_SCORE
+                || eventType == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
+            configValue.put(NAME_CONFIG_KEY, FEEDBACK_NAME);
+            configValue.put(OPERATOR_CONFIG_KEY, ">");
+        }
+        return configValue;
+    }
+
+    private static Alert alertWithThreshold(AlertEventType eventType, AlertTriggerConfigType configType,
+            Map<String, String> configValue) {
         AlertTrigger trigger = AlertTrigger.builder()
                 .id(UUID.randomUUID())
-                .eventType(AlertEventType.TRACE_ERRORS)
+                .eventType(eventType)
                 .triggerConfigs(List.of(AlertTriggerConfig.builder()
                         .id(UUID.randomUUID())
-                        .type(AlertTriggerConfigType.THRESHOLD_ERRORS)
-                        .configValue(Map.of(
-                                THRESHOLD_CONFIG_KEY, threshold,
-                                windowKey, window))
+                        .type(configType)
+                        .configValue(configValue)
                         .build()))
                 .build();
 
