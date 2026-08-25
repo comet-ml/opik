@@ -368,8 +368,9 @@ areas:
     spec_dir: dashboards
     specs:
       - dashboards/workspace-span-metrics.spec.ts
+      - _release-gate/opik-8047.spec.ts
     capabilities:
-      list-dashboards:      { covered: false }
+      list-dashboards:      { covered: true,  tier: release-gate, note: "release-gate opik-8047: the list filtered by the Description column; the other operators and columns are uncovered" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
       open-dashboard:       { covered: false }
       edit-dashboard:       { covered: false }

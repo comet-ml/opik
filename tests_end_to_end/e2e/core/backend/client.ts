@@ -22,6 +22,12 @@ export interface ProjectRef {
   name: string;
 }
 
+export interface DashboardRef {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -302,7 +308,7 @@ export function makeBackendClient(apiKey: string | null = null) {
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -374,6 +380,48 @@ export function makeBackendClient(apiKey: string | null = null) {
   };
 
   return {
+    /**
+     * Seeds a dashboard through the private REST API.
+     *
+     * The pinned SDK exposes no dashboards surface, so this goes through
+     * `rawFetch` like the other dashboard-metric calls below. `config` carries
+     * the minimum shape the create endpoint validates — the gate that uses this
+     * filters on `description` and never renders a widget.
+     */
+    async createDashboard(args: {
+      name: string;
+      description: string;
+    }): Promise<DashboardRef> {
+      const { status, message, json } = await rawFetch('POST', '/v1/private/dashboards', {
+        body: {
+          name: args.name,
+          description: args.description,
+          type: 'multi_project',
+          scope: 'workspace',
+          config: {
+            version: 1,
+            layout: { type: 'grid', columns: 24, rowHeight: 10 },
+            widgets: [],
+          },
+        },
+      });
+      if (status !== 201 && status !== 200) {
+        throw new Error(`createDashboard(${args.name}) failed: ${status} ${message}`);
+      }
+      const id = (json as { id?: unknown } | null)?.id;
+      if (typeof id !== 'string') {
+        throw new Error(`createDashboard(${args.name}) returned no id: ${message}`);
+      }
+      return { id, name: args.name, description: args.description };
+    },
+
+    async deleteDashboard(id: string): Promise<void> {
+      const { status, message } = await rawFetch('DELETE', `/v1/private/dashboards/${id}`);
+      if (status !== 204 && status !== 200 && status !== 404) {
+        throw new Error(`deleteDashboard(${id}) failed: ${status} ${message}`);
+      }
+    },
+
     async createProject(name: string, description?: string): Promise<void> {
       await opik.api.projects.createProject({
         name,
