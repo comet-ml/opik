@@ -109,7 +109,7 @@ export const test = base.extend<{}, WorkspaceRoleFixtures>({
       );
       base.skip(
         !hasWorkspaceRoleTestCredentials(envConfig),
-        'ADMIN_API_KEY/ADMIN_BASE_URL/USER_EMAIL/PASSWORD/WORKSPACE_ROLES_ADMIN_WORKSPACE not fully ' +
+        'ADMIN_API_KEY/ADMIN_BASE_URL/OPIK_PERM_USER_EMAIL/OPIK_PERM_USER_PASSWORD/WORKSPACE_ROLES_WORKSPACE not fully ' +
           'configured for this env — skipping rather than creating disposable users we could not guarantee cleaning up',
       );
 

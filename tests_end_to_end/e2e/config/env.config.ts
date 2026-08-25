@@ -92,15 +92,16 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
 
   const apiKey = env.OPIK_API_KEY ?? null;
 
-  // Same secrets comet-automation-tests' config.admin_api_key / org-admin
-  // login already use — kept as their existing names rather than introducing
-  // OPIK_-prefixed duplicates. adminBaseUrl has no established default (it's
-  // a distinct internal admin host in comet-automation-tests' env config, not
+  // Org-admin session for the workspace-role permission suite — dedicated
+  // OPIK_PERM_-prefixed vars (own account, own org) rather than reusing
+  // comet-automation-tests' generic USER_EMAIL/PASSWORD, so it's unambiguous
+  // this identity belongs to the permission tests specifically. adminBaseUrl
+  // has no established default (it's a distinct internal admin host, not
   // necessarily rootBase) — leave null until wired for real in CI; consumers
   // must treat a missing adminBaseUrl/adminApiKey as "cleanup unavailable",
   // not throw.
-  const adminEmail = env.USER_EMAIL ?? null;
-  const adminPassword = env.PASSWORD ?? null;
+  const adminEmail = env.OPIK_PERM_USER_EMAIL ?? null;
+  const adminPassword = env.OPIK_PERM_USER_PASSWORD ?? null;
   const adminApiKey = env.ADMIN_API_KEY ?? null;
   const adminBaseUrl = env.ADMIN_BASE_URL ?? null;
   // The workspace-role admin's own org/workspace — deliberately a separate
@@ -108,7 +109,7 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   // org. Not defaulted to `workspace`: an unset value should hard-skip the
   // workspace-role suite (see hasWorkspaceRoleTestCredentials), not silently
   // fall back to the baseline org.
-  const adminWorkspace = env.WORKSPACE_ROLES_ADMIN_WORKSPACE ?? null;
+  const adminWorkspace = env.WORKSPACE_ROLES_WORKSPACE ?? null;
 
   // For cloud/self-hosted we always need a way to mint a browser session,
   // because the UI sits behind an auth wall. Two paths:

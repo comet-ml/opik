@@ -1,105 +1,65 @@
 import {
-  test as workspaceRoleTest,
+  test,
   expect,
-  type WorkspaceRoleMember,
-  type WorkspaceRoleTestContext,
-} from '@e2e/fixtures/workspace-role-member.fixture';
+  adminCtx,
+  type SeededResources,
+} from '@e2e/fixtures/workspace-role-resources.fixture';
+import type { WorkspaceRoleMember } from '@e2e/fixtures/workspace-role-member.fixture';
 import { ConfigurationMembersPage } from '@e2e/pom/configuration-members.page';
 import { ConfigurationPage } from '@e2e/pom/configuration.page';
 import { getUserPermissions, getPermissionValue, WORKSPACE_ROLE_ID, type WorkspaceRoleId } from '@e2e/core/comet/client';
-import { makeBackendClient, uuid7 } from '@e2e/core/backend';
 import { loadEnvConfig } from '@e2e/config/env.config';
 import {
   SCREEN_ACCESS_CHECKS,
   CREATE_CONTROL_CHECKS,
   checkScreenAccess,
   checkCreateControlVisibility,
+  checkRowDeleteActionVisibility,
+} from '@e2e/pom/workspace-role-screen-checks';
+import {
   checkResourceCrudSucceeds,
   checkResourceCreateDenied,
   checkResourceEditDeleteDenied,
+  checkResourceDeleteDenied,
+  checkCreateDeleteSucceeds,
+  checkCreateSucceeds,
+  type CrudActions,
+} from '@e2e/pom/workspace-role-crud-checks';
+import {
   dashboardActions,
   datasetActions,
   annotationQueueActions,
   promptActions,
-  adminOpikClient,
-  logTraceAndVerify,
-  type AdminCtx,
-  type CrudActions,
-} from '@e2e/pom/workspace-role-checks';
-
-interface SeededResources {
-  dashboardId: string;
-  datasetId: string;
-  queueId: string;
-  promptId: string;
-}
-
-/** Every worker-scoped resource here belongs to the admin's own org/workspace — never the baseline suite's. */
-function adminCtx(ctx: WorkspaceRoleTestContext): AdminCtx {
-  return { workspaceName: ctx.workspaceName, adminApiKey: ctx.adminOpikApiKey };
-}
-
-const test = workspaceRoleTest.extend<{}, { projectId: string; seededResources: SeededResources }>({
-  projectId: [
-    async ({ workspaceRoleMembers }, use) => {
-      const ctx = adminCtx(workspaceRoleMembers);
-      const backend = makeBackendClient(ctx.adminApiKey, ctx.workspaceName);
-      const name = `e2e-workspace-roles-${Date.now()}`;
-      await backend.createProject(name);
-      const [created] = await backend.listProjectsWithPrefix(name);
-      if (!created) {
-        throw new Error(`Failed to resolve id for created anchor project "${name}"`);
-      }
-      await use(created.id);
-      await backend.deleteProject(created.id);
-    },
-    { scope: 'worker' },
-  ],
-
-  seededResources: [
-    async ({ workspaceRoleMembers, projectId }, use) => {
-      const admin = adminOpikClient(workspaceRoleMembers.adminOpikApiKey, workspaceRoleMembers.workspaceName);
-      const dashboard = await admin.api.dashboards.createDashboard({
-        name: `e2e-seed-dashboard-${Date.now()}`,
-        config: {},
-      });
-      if (!dashboard.id) {
-        throw new Error('createDashboard did not return an id');
-      }
-
-      const datasetId = uuid7();
-      await admin.api.datasets.createDataset({ id: datasetId, name: `e2e-seed-dataset-${Date.now()}` });
-
-      const queueId = uuid7();
-      await admin.api.annotationQueues.createAnnotationQueue({
-        id: queueId,
-        projectId,
-        name: `e2e-seed-queue-${Date.now()}`,
-        scope: 'trace',
-      });
-
-      const promptId = uuid7();
-      await admin.api.prompts.createPrompt({ id: promptId, name: `e2e-seed-prompt-${Date.now()}` });
-
-      const resources: SeededResources = { dashboardId: dashboard.id, datasetId, queueId, promptId };
-      await use(resources);
-
-      await admin.api.dashboards.deleteDashboard(resources.dashboardId).catch(() => undefined);
-      await admin.api.datasets.deleteDataset(resources.datasetId).catch(() => undefined);
-      await admin.api.annotationQueues.deleteAnnotationQueueBatch({ ids: [resources.queueId] }).catch(() => undefined);
-      await admin.api.prompts.deletePrompt(resources.promptId).catch(() => undefined);
-    },
-    { scope: 'worker' },
-  ],
-});
+  projectActions,
+  experimentActions,
+  evalRuleActions,
+  alertActions,
+} from '@e2e/pom/workspace-role-resource-actions';
+import { logTraceAndVerify, checkTraceAnnotate, checkTraceDelete, checkTraceAnnotateButtonVisibility } from '@e2e/pom/workspace-role-trace-checks';
+import { checkOptimizationDelete } from '@e2e/pom/workspace-role-optimization-checks';
+import type { AdminCtx } from '@e2e/pom/workspace-role-shared';
 
 function resourceChecks(member: WorkspaceRoleMember, ctx: AdminCtx, projectId: string, seeded: SeededResources) {
   return [
-    { label: 'Dashboards', actions: dashboardActions(member, ctx), seededId: seeded.dashboardId },
-    { label: 'Datasets', actions: datasetActions(member, ctx), seededId: seeded.datasetId },
-    { label: 'Annotation queues', actions: annotationQueueActions(member, ctx, projectId), seededId: seeded.queueId },
-    { label: 'Prompt library', actions: promptActions(member, ctx), seededId: seeded.promptId },
-  ] satisfies Array<{ label: string; actions: CrudActions; seededId: string }>;
+    { label: 'Dashboards', actions: dashboardActions(member, ctx), seededId: seeded.dashboardId, skipDeleteCheck: false },
+    { label: 'Datasets', actions: datasetActions(member, ctx), seededId: seeded.datasetId, skipDeleteCheck: false },
+    {
+      label: 'Annotation queues',
+      actions: annotationQueueActions(member, ctx, projectId),
+      seededId: seeded.queueId,
+      skipDeleteCheck: false,
+    },
+    { label: 'Prompt library', actions: promptActions(member, ctx), seededId: seeded.promptId, skipDeleteCheck: false },
+    // OPIK-8091: delete-batch isn't permission-checked for these two — see
+    // checkResourceEditDeleteDenied's skipDeleteCheck doc comment.
+    {
+      label: 'Online evaluation rules',
+      actions: evalRuleActions(member, ctx, projectId),
+      seededId: seeded.evalRuleId,
+      skipDeleteCheck: true,
+    },
+    { label: 'Alerts', actions: alertActions(member, ctx), seededId: seeded.alertId, skipDeleteCheck: true },
+  ] satisfies Array<{ label: string; actions: CrudActions; seededId: string; skipDeleteCheck: boolean }>;
 }
 
 /**
@@ -155,7 +115,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
   });
 
   test('MANAGE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
-    testInfo.setTimeout(testInfo.timeout + 60_000);
+    testInfo.setTimeout(testInfo.timeout + 90_000);
     const { manage: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
     const ctx = adminCtx(workspaceRoleMembers);
     const env = loadEnvConfig();
@@ -165,7 +125,23 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
       await expect.soft(member.page.getByRole('button', { name: 'Create project' })).toBeVisible();
     });
 
+    await checkCreateDeleteSucceeds('Projects', member, projectActions(member, ctx));
+    await checkRowDeleteActionVisibility(
+      member,
+      workspaceName,
+      'Projects',
+      '/projects',
+      seededResources.projectName,
+      seededResources.projectName,
+      true,
+    );
+
+    await checkCreateSucceeds('Experiments', member, experimentActions(member, ctx, seededResources.datasetName));
+
     await logTraceAndVerify(member, ctx, projectId, true);
+    await checkTraceAnnotate(member, ctx, seededResources.traceId, true);
+    await checkTraceAnnotateButtonVisibility(member, workspaceName, projectId, seededResources.traceId, true);
+    await checkTraceDelete(member, ctx, seededResources.projectName, true);
 
     for (const check of SCREEN_ACCESS_CHECKS) {
       await checkScreenAccess(member, workspaceName, projectId, check, true);
@@ -183,6 +159,17 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
       await member.page.goto(`${env.baseUrl}/${workspaceName}/projects/${projectId}/optimizations`);
       await expect.soft(member.page.getByRole('button', { name: /Use the Optimization studio/ })).toBeVisible();
     });
+
+    await checkOptimizationDelete(member, ctx, seededResources.datasetName, projectId, true);
+    await checkRowDeleteActionVisibility(
+      member,
+      workspaceName,
+      'Optimization runs',
+      `/projects/${projectId}/optimizations`,
+      null,
+      /e2e-seed-optimization/,
+      true,
+    );
 
     await test.step('Workspace settings: configure control visible', async () => {
       await member.page.goto(`${env.baseUrl}/${workspaceName}/configuration?tab=workspace-preferences`);
@@ -217,7 +204,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
   });
 
   test('WRITE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
-    testInfo.setTimeout(testInfo.timeout + 60_000);
+    testInfo.setTimeout(testInfo.timeout + 90_000);
     const { write: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
     const ctx = adminCtx(workspaceRoleMembers);
     const env = loadEnvConfig();
@@ -227,7 +214,23 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
       await expect.soft(member.page.getByRole('button', { name: 'Create project' })).toBeVisible();
     });
 
+    await checkCreateDeleteSucceeds('Projects', member, projectActions(member, ctx));
+    await checkRowDeleteActionVisibility(
+      member,
+      workspaceName,
+      'Projects',
+      '/projects',
+      seededResources.projectName,
+      seededResources.projectName,
+      true,
+    );
+
+    await checkCreateSucceeds('Experiments', member, experimentActions(member, ctx, seededResources.datasetName));
+
     await logTraceAndVerify(member, ctx, projectId, true);
+    await checkTraceAnnotate(member, ctx, seededResources.traceId, true);
+    await checkTraceAnnotateButtonVisibility(member, workspaceName, projectId, seededResources.traceId, true);
+    await checkTraceDelete(member, ctx, seededResources.projectName, true);
 
     for (const check of SCREEN_ACCESS_CHECKS) {
       await checkScreenAccess(member, workspaceName, projectId, check, true);
@@ -240,6 +243,17 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
     for (const rc of resourceChecks(member, ctx, projectId, seededResources)) {
       await checkResourceCrudSucceeds(rc.label, member, rc.actions);
     }
+
+    await checkOptimizationDelete(member, ctx, seededResources.datasetName, projectId, true);
+    await checkRowDeleteActionVisibility(
+      member,
+      workspaceName,
+      'Optimization runs',
+      `/projects/${projectId}/optimizations`,
+      null,
+      /e2e-seed-optimization/,
+      true,
+    );
 
     await test.step('Workspace settings: configure control absent', async () => {
       await member.page.goto(`${env.baseUrl}/${workspaceName}/configuration?tab=workspace-preferences`);
@@ -272,7 +286,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
   });
 
   test('ANNOTATE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
-    testInfo.setTimeout(testInfo.timeout + 60_000);
+    testInfo.setTimeout(testInfo.timeout + 90_000);
     const { annotate: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
     const ctx = adminCtx(workspaceRoleMembers);
     const env = loadEnvConfig();
@@ -282,7 +296,24 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
       await expect.soft(member.page.getByRole('button', { name: 'Create project' })).toBeHidden();
     });
 
+    await checkResourceCreateDenied('Projects', member, () => projectActions(member, ctx).create());
+    await checkResourceDeleteDenied('Projects', member, seededResources.projectId, (id) => projectActions(member, ctx).remove(id));
+    await checkRowDeleteActionVisibility(
+      member,
+      workspaceName,
+      'Projects',
+      '/projects',
+      seededResources.projectName,
+      seededResources.projectName,
+      false,
+    );
+
+    await checkResourceCreateDenied('Experiments', member, () => experimentActions(member, ctx, seededResources.datasetName).create());
+
     await logTraceAndVerify(member, ctx, projectId, false);
+    await checkTraceAnnotate(member, ctx, seededResources.traceId, true);
+    await checkTraceAnnotateButtonVisibility(member, workspaceName, projectId, seededResources.traceId, true);
+    await checkTraceDelete(member, ctx, seededResources.projectName, false);
 
     for (const check of SCREEN_ACCESS_CHECKS) {
       await checkScreenAccess(member, workspaceName, projectId, check, false);
@@ -294,8 +325,12 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
 
     for (const rc of resourceChecks(member, ctx, projectId, seededResources)) {
       await checkResourceCreateDenied(rc.label, member, rc.actions.create);
-      await checkResourceEditDeleteDenied(rc.label, member, rc.seededId, rc.actions);
+      await checkResourceEditDeleteDenied(rc.label, member, rc.seededId, rc.actions, rc.skipDeleteCheck);
     }
+
+    await checkOptimizationDelete(member, ctx, seededResources.datasetName, projectId, false);
+    // Optimization runs is entirely access-denied for ANNOTATE (SCREEN_ACCESS_CHECKS
+    // above already covers this) — no row-delete-visibility check makes sense here.
 
     await test.step('Annotation queues: page accessible (no route guard)', async () => {
       await member.page.goto(`${env.baseUrl}/${workspaceName}/projects/${projectId}/annotation-queues`);
@@ -332,7 +367,7 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
   });
 
   test('READ', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
-    testInfo.setTimeout(testInfo.timeout + 60_000);
+    testInfo.setTimeout(testInfo.timeout + 90_000);
     const { read: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
     const ctx = adminCtx(workspaceRoleMembers);
     const env = loadEnvConfig();
@@ -342,7 +377,24 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
       await expect.soft(member.page.getByRole('button', { name: 'Create project' })).toBeHidden();
     });
 
+    await checkResourceCreateDenied('Projects', member, () => projectActions(member, ctx).create());
+    await checkResourceDeleteDenied('Projects', member, seededResources.projectId, (id) => projectActions(member, ctx).remove(id));
+    await checkRowDeleteActionVisibility(
+      member,
+      workspaceName,
+      'Projects',
+      '/projects',
+      seededResources.projectName,
+      seededResources.projectName,
+      false,
+    );
+
+    await checkResourceCreateDenied('Experiments', member, () => experimentActions(member, ctx, seededResources.datasetName).create());
+
     await logTraceAndVerify(member, ctx, projectId, false);
+    await checkTraceAnnotate(member, ctx, seededResources.traceId, false);
+    await checkTraceAnnotateButtonVisibility(member, workspaceName, projectId, seededResources.traceId, false);
+    await checkTraceDelete(member, ctx, seededResources.projectName, false);
 
     for (const check of SCREEN_ACCESS_CHECKS) {
       // READ holds the view permission for every screen except Playground and
@@ -358,8 +410,19 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
 
     for (const rc of resourceChecks(member, ctx, projectId, seededResources)) {
       await checkResourceCreateDenied(rc.label, member, rc.actions.create);
-      await checkResourceEditDeleteDenied(rc.label, member, rc.seededId, rc.actions);
+      await checkResourceEditDeleteDenied(rc.label, member, rc.seededId, rc.actions, rc.skipDeleteCheck);
     }
+
+    await checkOptimizationDelete(member, ctx, seededResources.datasetName, projectId, false);
+    await checkRowDeleteActionVisibility(
+      member,
+      workspaceName,
+      'Optimization runs',
+      `/projects/${projectId}/optimizations`,
+      null,
+      /e2e-seed-optimization/,
+      false,
+    );
 
     await test.step('Annotation queues: page accessible (no route guard)', async () => {
       await member.page.goto(`${env.baseUrl}/${workspaceName}/projects/${projectId}/annotation-queues`);
