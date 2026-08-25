@@ -379,9 +379,18 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     # before cutover_start rather than telling the operator 'last-sealed'. That token drops the current calendar week,
     # which is the same week only while the verify runs promptly; a run in a later week would include the window's own
     # week and report its discarded writes as a fidelity failure. Same anchor math verify.sh uses on this table.
+    #
+    # Capped at verify.sh's own last populated week (its LAST_WEEK, from max(created_at)), because verify.sh rejects a
+    # --to-week beyond that. Without the cap an environment idle for a week or more before the cutover yields a bound
+    # above it and the printed command would exit instead of comparing anything. The cap is safe: it only binds when the
+    # window's week is already past the last populated one, in which case that week is out of range anyway.
+    #
     # Non-fatal: the rollback itself has already succeeded here, so a blip computing an advisory number must not abort
     # the script and swallow the NEXT steps below.
-    bound_week="$(ch "SELECT dateDiff('week', toMonday(min(created_at)), toMonday(toDateTime64('$CUTOVER_START', 6))) - 1 FROM traces" 2>/dev/null || true)"
+    bound_week="$(ch "SELECT least(
+                          dateDiff('week', toMonday(min(created_at)), toMonday(toDateTime64('$CUTOVER_START', 6))) - 1,
+                          dateDiff('week', toMonday(min(created_at)), toMonday(max(created_at)))
+                      ) FROM traces" 2>/dev/null || true)"
     echo "Verify with the POST-ROLLBACK table pair — the verify.sh defaults no longer apply (traces_local_v2 is gone), and"
     echo "the cutover window's week legitimately mismatches by the post-cutover writes this rollback discarded, so stop"
     echo "before it. That week is fixed by cutover_start, so the bound does not drift if you verify later:"

@@ -96,8 +96,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    > DEFAULT, which is exactly the epoch/NaN sentinel. So a stale-`false` instance keeps **writing correctly** and emits
    > no ingestion error — but it **reads back** an absent `end_time` as `1970-01-01` instead of `null`, and filters/sorts
    > on absent values use the wrong semantics. Unlike `tracesDistributedWrapEnabled` (fail-loud, see the wrap
-   > prerequisite), a missed or partial rollout here shows up only as wrong data. Verify it positively: write an
-   > in-progress trace (no `end_time`) through the API on each instance and assert it reads back `end_time = null`.
+   > prerequisite), a missed or partial rollout here shows up only as wrong data. Verify it positively, per instance —
+   > and note the check is **not the same on both sides of the swap**. *Before* the EXCHANGE the live table is still
+   > Nullable, so an in-progress trace reads back `null` whether the flag is on or off; what discriminates there is what
+   > got **written** — the epoch/NaN sentinel means the flag is live, a stored `NULL` means it is not. *After* the
+   > EXCHANGE the read-back becomes the discriminator: an absent `end_time` must return `null`, not `1970-01-01`. Do
+   > both, or a stale instance passes the only check you ran.
 8. **Confirm Data Retention is disabled** (`RETENTION_ENABLED=false`, the default). If it is ever enabled, see the
    retention note above first.
 9. **Sufficient free disk** — the backfill writes a full second physical copy of `traces`, so node free space must clear
@@ -1124,9 +1128,12 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    the first window diverges it in a *sealed* week, which no weekly bound excludes. Triage it the same way — look the
    differing ids up in the shadow without a week filter, and treat `last_updated_at >= cutover_start` as benign.
 
-   Note the flags from (4) do not change what `verify.sh` compares: it normalizes both sentinel and `NULL` absent-values
-   to the same fingerprint, so it passes either way. It cannot catch a missed flag flip — only a positive read-back check
-   can (write an in-progress trace, assert `end_time` is null), which is why (4) is a step and not a caveat here.
+   Note the flags from (4) do not change what `verify.sh` compares: it normalizes both sentinel and `NULL`
+   absent-values to the same fingerprint, so it passes either way. It cannot catch a missed flag flip — only a positive
+   probe can, which is why (4) is a step and not a caveat here. Run that probe **after** the retry's `EXCHANGE`, on every
+   instance: write an in-progress trace and assert `end_time` reads back `null` rather than `1970-01-01`. Before the
+   swap the restored original is still Nullable and answers `null` regardless, so a pre-EXCHANGE read-back would pass
+   with a stale-`false` instance and leave exactly the silent wrong-reads state the flag exists to prevent.
 
    ```bash
    # N = the offset rollback.sh printed; old=traces, new=traces_local_v2 (the defaults)
@@ -1383,7 +1390,9 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
       `is_done` on **all** replicas (`exchange_and_wrap.sh` gates on this; do not `--force` past it in production).
 - [ ] **`traceColumnsNonNullable = true` rolled out to every backend instance before the EXCHANGE** — confirmed live on
       the whole fleet by a **positive** check, not by the absence of ingestion errors: write an in-progress trace (no
-      `end_time`) through the API and assert it reads back `end_time = null`. A stale-`false` instance still writes
+      `end_time`) through the API and assert the epoch/NaN **sentinel** was stored — then repeat it as a read-back
+      (`end_time = null`, not `1970-01-01`) **after** the EXCHANGE, because until the swap the still-Nullable table
+      answers `null` either way and the read-back proves nothing. A stale-`false` instance still writes
       correctly (`input_format_null_as_default` converts the `null` bind to the sentinel) and logs nothing — it just
       serves wrong absent-value reads/filters/sorts. Revert plan to `false` ready for rollback, **plus** the pre-swap
       sentinel/`duration` repair (see "Rolling back the `traceColumnsNonNullable` flip").
