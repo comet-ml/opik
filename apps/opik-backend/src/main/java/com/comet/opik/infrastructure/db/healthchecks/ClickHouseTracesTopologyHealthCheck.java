@@ -30,7 +30,9 @@ import static com.comet.opik.infrastructure.db.DatabaseAnalyticsModule.CLICKHOUS
  * <p>One {@code system.tables} lookup covers both tables and both directions:
  * <ul>
  *     <li>flag on → {@code traces} must be {@code Distributed} <b>and</b> {@code traces_local} must exist;</li>
- *     <li>flag off → {@code traces} must be a {@code (Replicated)MergeTree}, i.e. not {@code Distributed}.</li>
+ *     <li>flag off → {@code traces} must be an engine of the {@code MergeTree} family — the suffix match
+ *     accepts {@code MergeTree}, {@code ReplicatedMergeTree} and ClickHouse Cloud's {@code SharedMergeTree}
+ *     variants alike — i.e. anything that takes mutations directly, and not {@code Distributed}.</li>
  * </ul>
  *
  * <p>The flag stays the source of truth: a mismatch is reported, never repaired, and nothing here influences routing.
@@ -77,10 +79,20 @@ public class ClickHouseTracesTopologyHealthCheck extends AbstractClickHouseHealt
     private static final String MISSING_TRACES_TEMPLATE = ("%s=%%b, but table '%s' does not exist in the analytics "
             + "database. Trace reads and writes cannot work at all; check that the analytics migrations ran.")
             .formatted(FLAG, TRACES_TABLE);
+    /**
+     * Deliberately does not name an error code. This branch fires whenever the flag is on and {@code traces} is not
+     * {@code Distributed}, and the consequence depends on whether {@code traces_local} happens to exist: absent, deletes
+     * fail loudly with {@code UNKNOWN_TABLE (60)}; present but stale — the state a rollback leaves, having promoted the
+     * original {@code traces} back while the old shard lingers — the delete <b>succeeds against the wrong table</b> and
+     * the live rows are never touched. Naming only the loud outcome would understate the quiet one, which is worse.
+     */
     private static final String NOT_WRAPPED_TEMPLATE = ("%s=true routes trace mutations at '%s', but '%s' is a %%s, "
-            + "not %s: the Distributed wrap has not been applied. Apply it (exchange_and_wrap.sh --wrap-only) or set "
-            + "the flag back to false — otherwise trace deletes fail with UNKNOWN_TABLE (60).")
-            .formatted(FLAG, TRACES_LOCAL_TABLE, TRACES_TABLE, DISTRIBUTED_ENGINE);
+            + "not %s: the Distributed wrap has not been applied (or has been rolled back). Apply it "
+            + "(exchange_and_wrap.sh --wrap-only) or set the flag back to false — otherwise trace deletes either fail "
+            + "with UNKNOWN_TABLE (60) when '%s' is absent, or silently delete from a stale '%s' while the live rows in "
+            + "'%s' are left untouched.")
+            .formatted(FLAG, TRACES_LOCAL_TABLE, TRACES_TABLE, DISTRIBUTED_ENGINE, TRACES_LOCAL_TABLE,
+                    TRACES_LOCAL_TABLE, TRACES_TABLE);
     private static final String MISSING_TRACES_LOCAL = ("%s=true routes trace mutations at '%s' and '%s' is %s as "
             + "expected, but table '%s' does not exist. Trace deletes fail with UNKNOWN_TABLE (60); the Distributed "
             + "wrap points at a shard table that is absent from this node.")

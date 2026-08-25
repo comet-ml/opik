@@ -99,7 +99,7 @@ The backend refuses readiness and the `clickhouse-traces-topology` health check 
 
 | Setting | Required `traces` engine |
 | --- | --- |
-| `false` (the default) | `MergeTree` or `ReplicatedMergeTree` |
+| `false` (the default) | `MergeTree`, `ReplicatedMergeTree` or `SharedMergeTree` |
 | `true` | `Distributed`, with a `traces_local` table present |
 
 A default self-hosted or open-source install has the setting `false` and a `ReplicatedMergeTree` `traces` table, so this check passes and there is nothing to do. It only fails if the setting was turned on, or if the table was converted to a `Distributed` wrapper without turning it on.
@@ -117,7 +117,7 @@ WHERE database = 'opik' AND name IN ('traces', 'traces_local');
 
 Then set the flag to match:
 
-- `traces` is a `MergeTree` / `ReplicatedMergeTree` → set `databaseAnalyticsDataModel.tracesDistributedWrapEnabled: false` (Helm) or `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED=false` (Docker Compose or plain environment), then restart the backend.
+- `traces` is a `MergeTree`, `ReplicatedMergeTree` or `SharedMergeTree` → set `databaseAnalyticsDataModel.tracesDistributedWrapEnabled: false` (Helm) or `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED=false` (Docker Compose or plain environment), then restart the backend.
 - `traces` is `Distributed` and `traces_local` exists → set the same key to `true` and restart.
 
 The check re-evaluates on every probe, so readiness returns on its own once the two sides agree — no further action beyond the restart that picks up the new setting.

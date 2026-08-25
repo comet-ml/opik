@@ -239,12 +239,17 @@ health:
       critical: true
       type: ready
     # Fail-fast assertion that databaseAnalyticsDataModel.tracesDistributedWrapEnabled matches the actual `traces`
-    # topology: flag on -> `traces` is Distributed and `traces_local` exists; flag off -> `traces` is a
-    # (Replicated)MergeTree. Not toggle-gated on purpose — flag off over a MergeTree `traces` is the default
+    # topology: flag on -> `traces` is Distributed and `traces_local` exists; flag off -> `traces` is any engine of the
+    # MergeTree family that takes mutations directly - the check matches on the `MergeTree` suffix, so MergeTree,
+    # ReplicatedMergeTree and ClickHouse Cloud's SharedMergeTree variants all satisfy it. Not toggle-gated on
+    # purpose — flag off over a MergeTree `traces` is the default
     # everywhere, so only a genuine misconfiguration trips it, and either mismatch direction breaks trace deletes
     # (code 36/48 one way, 60 the other) with no symptom until the first delete. Critical so such an install is pulled
     # from rotation instead of serving traffic it cannot mutate; re-evaluated continuously, so it clears itself once
-    # the operator brings flag and topology back in step.
+    # the operator brings flag and topology back in step. Note that `critical: true` also gates /is-alive/ping, which
+    # ignores `type` (IsAliveResource filters on isCritical alone) - so a mismatch reports the server as down to SDKs,
+    # exactly as the `clickhouse`, `db`, `redis` and `mysql` ready checks above already do. That is intended here: the
+    # install is misconfigured and needs an operator, and buffering beats accepting traffic it cannot fully serve.
     - name: clickhouse-traces-topology
       critical: true
       type: ready

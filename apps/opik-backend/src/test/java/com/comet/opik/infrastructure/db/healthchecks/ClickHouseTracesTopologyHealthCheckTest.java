@@ -88,10 +88,14 @@ class ClickHouseTracesTopologyHealthCheckTest {
     void check__whenWrapEnabledButTracesIsNotWrapped__thenUnhealthyNamingTheObservedEngine() {
         var actualResult = check(true, Map.of("traces", "ReplicatedMergeTree", "traces_local", "ReplicatedMergeTree"));
 
+        // Note the fixture: `traces_local` exists here, which is exactly why the message must not promise
+        // UNKNOWN_TABLE. In this state the routed delete succeeds against the stale shard and the live rows in
+        // `traces` are never touched — quieter than the error, and worse.
         assertUnhealthy(actualResult, "%s=true routes trace mutations at 'traces_local', but 'traces' is a "
-                .formatted(FLAG) + "ReplicatedMergeTree, not Distributed: the Distributed wrap has not been applied. "
-                + "Apply it (exchange_and_wrap.sh --wrap-only) or set the flag back to false — otherwise trace deletes "
-                + "fail with UNKNOWN_TABLE (60).");
+                .formatted(FLAG) + "ReplicatedMergeTree, not Distributed: the Distributed wrap has not been applied "
+                + "(or has been rolled back). Apply it (exchange_and_wrap.sh --wrap-only) or set the flag back to "
+                + "false — otherwise trace deletes either fail with UNKNOWN_TABLE (60) when 'traces_local' is absent, "
+                + "or silently delete from a stale 'traces_local' while the live rows in 'traces' are left untouched.");
     }
 
     /**
