@@ -7,6 +7,7 @@ import pydantic
 import tenacity
 
 if TYPE_CHECKING:
+    import httpx
     from litellm.types.utils import ModelResponse
 
 import opik.semantic_version as semantic_version
@@ -17,6 +18,22 @@ from . import warning_filters, response_parser, util
 from opik import exceptions
 
 LOGGER = logging.getLogger(__name__)
+
+# LiteLLM defaults to a 6000s timeout and retries internally, which multiplies
+# against the tenacity retries here and in the LLM-judge metric. Connect is
+# tighter than read: reaching a provider is fast or hopeless, generating isn't.
+DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
+DEFAULT_READ_TIMEOUT_SECONDS = 60.0
+DEFAULT_NUM_RETRIES = 0
+
+
+def _default_timeout() -> "httpx.Timeout":
+    import httpx
+
+    return httpx.Timeout(
+        DEFAULT_READ_TIMEOUT_SECONDS,
+        connect=DEFAULT_CONNECT_TIMEOUT_SECONDS,
+    )
 
 
 def _log_warning(message: str, *args: Any) -> None:
@@ -378,6 +395,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         # we need to pop messages first, and after we will check the rest params
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
+        all_kwargs.setdefault("timeout", _default_timeout())
+        all_kwargs.setdefault("num_retries", DEFAULT_NUM_RETRIES)
         # Conflicts that can only be diagnosed on the merged dict
         # (constructor + per-call sources) run here — see the method's
         # docstring for the Anthropic reasoning_effort/temperature case.
@@ -469,6 +488,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
+        all_kwargs.setdefault("timeout", _default_timeout())
+        all_kwargs.setdefault("num_retries", DEFAULT_NUM_RETRIES)
         # See sync `generate_provider_response` for why the merged
         # dict needs its own conflict-resolution pass.
         all_kwargs = self._resolve_provider_conflicts(all_kwargs)

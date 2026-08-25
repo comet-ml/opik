@@ -11,14 +11,6 @@ DEBUG_MODE=${DEBUG_MODE:-false}
 GUARDRAILS_OPIK_FLAG=""
 ORIGINAL_COMMAND="$0 $@"
 
-# Local dev defaults to version_2 (matches the bundled config.yml and
-# docker-compose defaults) so a fresh worktree's empty backend doesn't trip
-# the "Workspace upgrade required" pairing screen. Exported here so the
-# JAR-mode backend (start_backend) inherits the same value as docker-compose.
-# Override by exporting TOGGLE_FORCE_WORKSPACE_VERSION=disabled (or
-# version_1) before invoking the script.
-export TOGGLE_FORCE_WORKSPACE_VERSION="${TOGGLE_FORCE_WORKSPACE_VERSION:-version_2}"
-
 # Ollie / Agent Insights read-only freeform SQL is off by default for local dev (the feature is driven by the Ollie
 # agent, which isn't available locally). Set TOGGLE_OLLIE_ENABLED=true before invoking to opt in: start_backend
 # then provisions the restricted read-only ClickHouse user/profile/policies and the JVM connects with the feature on.

@@ -22,7 +22,6 @@
 #
 #   tier    exactly one of @t1-smoke | @t2-cuj | @t3-nightly     -> drives coverage %
 #   suites  zero or more of @t1-stsaas | @provider-sanity        -> drives WHERE it runs
-#           | @release-gate | @release-gate:<version>
 #   area    exactly one @area:<area>                             -> from `areas:` keys below
 #   caps    one or more @cap:<area>.<capability>                 -> from `capabilities:` keys
 #
@@ -141,7 +140,6 @@ rules:
   # both numerator and denominator, and exempt from the area/cap tag lint.
   exempt_dirs:
     - _seed          # sdk-clients.spec.ts — harness self-test
-    - _release-gate  # ephemeral, version-stamped gate specs
   # Capabilities flagged `cloud_only: true` are excluded from the self-hosted
   # coverage view but counted in the cloud view. They depend on the out-of-tree
   # `comet` frontend plugin (PluginsStore) and cannot run self-hosted.
@@ -267,6 +265,8 @@ areas:
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       agent-graph-tab:        { covered: false }
       attachments-media:      { covered: false }
+      set-guardrail:          { covered: false, note: "SetGuardrailDialog — GUARDRAILS_ENABLED flag" }
+      guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
       delete-traces:          { covered: true,  tier: t2-cuj }
       delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
@@ -316,14 +316,16 @@ areas:
     spec_dir: trace-explore
     specs:
       - trace-explore/thread-logging-smoke.spec.ts
+      - trace-explore/thread-id-prefilter.spec.ts
+      - trace-explore/thread-evaluation.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
       open-thread-panel:       { covered: true,  tier: t1-smoke }
       turn-order-io:           { covered: true,  tier: t1-smoke }
-      thread-feedback-score:   { covered: false }
+      thread-feedback-score:   { covered: true,  tier: t2-cuj }
       thread-actions-panel:    { covered: false }
-      thread-level-metrics:    { covered: false, note: "conversational metrics" }
+      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics" }
 
     visual:
       logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }
@@ -361,17 +363,19 @@ areas:
     label: Dashboards
     nav_group: Observability
     routes: ["/$workspaceName/dashboards", "/dashboards/$dashboardId", "/projects/$projectId/dashboards"]
+    spec_dir: dashboards
     specs:
+      - dashboards/workspace-span-metrics.spec.ts
     capabilities:
       list-dashboards:      { covered: false }
-      create-dashboard:     { covered: false }
+      create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
       open-dashboard:       { covered: false }
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
-      add-widget:           { covered: false }
+      add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
       configure-widget:     { covered: false }
-      widget-filters:       { covered: false }
-      metric-date-range:    { covered: false }
+      widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
+      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
 
   # ===================== DEVELOPMENT =====================
 
@@ -386,6 +390,7 @@ areas:
     spec_dir: prompts
     specs:
       - prompts/prompt-library-smoke.spec.ts
+      - prompts/prompt-delete.spec.ts
     capabilities:
       list-prompts:            { covered: true,  tier: t1-smoke }
       create-text-prompt-ui:   { covered: true,  tier: t1-smoke }
@@ -396,7 +401,7 @@ areas:
       version-history:         { covered: true,  tier: t1-smoke }
       compare-versions:        { covered: false }
       experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
-      delete-prompt:           { covered: false }
+      delete-prompt:           { covered: true,  tier: t2-cuj }
 
     visual:
       prompt-library-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E07" }
@@ -462,6 +467,7 @@ areas:
     spec_dir: optimization-studio
     specs:
       - optimization-studio/optimization-studio.spec.ts
+      - optimization-studio/optimization-trial-logs.spec.ts
     capabilities:
       new-run-form-validation:  { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       launch-gepa-run:          { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
@@ -470,7 +476,7 @@ areas:
       studio-logs-download:     { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       list-optimization-runs:   { covered: false }
       trials-table:             { covered: false }
-      trial-detail:             { covered: false }
+      trial-detail:             { covered: true,  tier: t2-cuj }
       best-trial-prompt:        { covered: false }
       kpi-cards:                { covered: false }
       compare-runs:             { covered: false }
@@ -492,6 +498,7 @@ areas:
     specs:
       - datasets/dataset-crud-smoke.spec.ts
       - datasets/dataset-items.spec.ts
+      - datasets/dataset-items-filter-scope.spec.ts
       - datasets/dataset-version-counters.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
@@ -501,6 +508,8 @@ areas:
       add-item-ui:            { covered: true,  tier: t1-smoke }
       edit-item-versions:     { covered: true,  tier: t2-cuj }
       bulk-delete-items:      { covered: true,  tier: t3-nightly }
+      filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
+      filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
       sdk-round-trip:         { covered: true,  tier: t1-smoke }
       version-history-view:   { covered: true,  tier: t2-cuj }
@@ -526,6 +535,7 @@ areas:
     spec_dir: test-suites
     specs:
       - test-suites/test-suites-smoke.spec.ts
+      - test-suites/test-suite-delete.spec.ts
     capabilities:
       list-suites:           { covered: true,  tier: t1-smoke }
       create-suite-ui:       { covered: true,  tier: t1-smoke }
@@ -535,7 +545,7 @@ areas:
       run-suite-playground:  { covered: true,  tier: t1-smoke }
       pass-rate-display:     { covered: true,  tier: t1-smoke }
       global-assertions:     { covered: true,  tier: t1-smoke }
-      delete-suite:          { covered: false }
+      delete-suite:          { covered: true,  tier: t2-cuj }
 
     visual:
       test-suites-page:  { covered: true,  state: default, spec: "visual-comparison.spec.ts 05" }
@@ -550,6 +560,9 @@ areas:
     specs:
       - experiments/experiments-smoke.spec.ts
       - experiments/experiments-compare.spec.ts
+      - experiments/experiment-logs-date-window.spec.ts
+      - experiments/compare-json-key-sorting.spec.ts
+      - experiments/experiment-delete.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
@@ -559,8 +572,9 @@ areas:
       compare-row-detail:      { covered: true,  tier: t2-cuj }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
+      logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
       export-comparison:       { covered: false }
-      delete-experiment:       { covered: false }
+      delete-experiment:       { covered: true,  tier: t2-cuj }
 
     visual:
       experiments-page:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 06" }
@@ -588,6 +602,7 @@ areas:
     tag_aliases: [annotation-queue]
     specs:
       - annotation-queues/annotation-queue-scoring.spec.ts
+      - annotation-queues/annotation-queue-delete.spec.ts
     capabilities:
       score-queue-item:        { covered: true,  tier: t2-cuj }
       score-with-reason:       { covered: true,  tier: t2-cuj }
@@ -596,7 +611,10 @@ areas:
       list-queues:             { covered: false }
       create-queue:            { covered: false }
       edit-queue:              { covered: false }
-      delete-queue:            { covered: false }
+      # Second case in this spec is a test.fail() known failure for OPIK-7903
+      # (deleted-queue URL loads forever instead of showing a not-found state).
+      # Fixing that bug turns the run red until the annotation is removed.
+      delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
       queue-configuration-tab: { covered: false }
       add-traces-to-queue:     { covered: false }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
@@ -617,20 +635,29 @@ areas:
     specs:
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-delete-rule.spec.ts
+      - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
+      - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-non-object-sections.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
-      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0" }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections, and the 400-class classification of a metric that exits 0 without a result line" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
       list-rules:              { covered: false }
       rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
       rule-filters:            { covered: false }
-      sampling-rate:           { covered: false }
+      sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }
-      enable-disable-rule:     { covered: false }
+      enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
+      # Deliberately still false. online-evaluation-python-metric-errors.spec.ts
+      # asserts a rule's log stream through GET /automations/evaluators/{id}/logs,
+      # but this key names the /$workspaceName/automation-logs PAGE, which no spec
+      # opens. Flipping it on the strength of an API read would mark a UI nobody
+      # tested as tested for good.
       automation-logs:         { covered: false }
 
     visual:
@@ -701,11 +728,12 @@ areas:
     routes: ["/$workspaceName/projects", "/projects/$projectId/home"]
     spec_dir: projects
     specs:
+      - projects/project-delete.spec.ts
       - projects/projects-list-stats.spec.ts
     capabilities:
       list-projects:         { covered: true,  tier: t2-cuj }
       create-project:        { covered: false }
-      delete-project:        { covered: false }
+      delete-project:        { covered: true,  tier: t2-cuj, note: "asserts the project and its traces are gone; deliberately silent on orphaned project-scoped datasets/experiments pending a product decision" }
       project-selector:      { covered: false }
       pin-unpin-project:     { covered: false }
       project-home:          { covered: false }
@@ -720,8 +748,9 @@ areas:
     label: Configuration
     nav_group: Workspace
     routes: ["/$workspaceName/configuration"]
-    specs: []
-    # A configuration.page.ts POM exists with no spec using it — half-built surface.
+    specs:
+      - ai-providers/token-auth-dialog.spec.ts
+      - ai-providers/token-auth-refetch.spec.ts
     # Split per-tab: the page has 5 distinct tabs (CONFIGURATION_TABS), each with
     # its own CRUD surface, so one capability per tab was too coarse. Capabilities
     # below are read off the tab components on origin/main.
@@ -739,9 +768,10 @@ areas:
       environment-delete:       { covered: false }
       # -- AI providers tab --
       ai-provider-list:         { covered: false }
-      ai-provider-add:          { covered: false, note: "exercised indirectly by playground provider setup (configuration.page.ts), never asserted here" }
-      ai-provider-edit:         { covered: false }
-      ai-provider-delete:       { covered: false }
+      ai-provider-add:          { covered: true,  tier: t1-smoke }
+      ai-provider-edit:         { covered: true,  tier: t1-smoke }
+      ai-provider-delete:       { covered: false, note: "exercised as spec teardown (token-auth-dialog.spec.ts), never asserted" }
+      ai-provider-token-refetch: { covered: true,  tier: t1-smoke, note: "OAuth2 token auth (OPIK-7940): gateway-revoked bearer is refetched and the request retried transparently" }
       # -- Workspace preferences tab --
       pref-thread-timeout:      { covered: false, note: "EditThreadTimeoutDialog" }
       pref-truncation-toggle:   { covered: false, note: "EditTruncationToggleDialog" }

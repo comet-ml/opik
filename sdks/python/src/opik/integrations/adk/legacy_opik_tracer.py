@@ -26,6 +26,7 @@ from .patchers import (
     llm_response_wrapper,
 )
 from .graph import mermaid_graph_builder
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class LegacyOpikTracer:
         project_name: Optional[str] = None,
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
     ):
+        analytics.track_event("integration", "adk")
         LOGGER.warning(
             "Legacy OpikTracer for google-adk < 1.3.0 is being used. We recommend upgrading to the recent version to automatically get the best experience from Opik integration."
         )
@@ -288,9 +290,12 @@ class LegacyOpikTracer:
                 if usage_data is not None:
                     model = usage_data.model
                     usage = usage_data.opik_usage
-            except Exception as e:
-                LOGGER.debug(
-                    f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
+            except Exception:
+                # Not debug: this is silent data loss. The span is still logged, but
+                # without output or usage, and nothing else reports that.
+                LOGGER.error(
+                    "Error converting LlmResponse to dict or extracting usage data, "
+                    "the LLM span will be logged without output and usage",
                     exc_info=True,
                 )
 

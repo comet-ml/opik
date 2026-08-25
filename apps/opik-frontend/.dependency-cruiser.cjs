@@ -23,50 +23,36 @@ module.exports = {
       severity: "error",
       comment: "Base UI must not import from shared or version-specific code",
       from: { path: "^src/ui/" },
-      to: { path: "^src/(shared|v1/pages-shared|v1/pages|v2/pages-shared|v2/pages)/" },
+      to: { path: "^src/(shared|v2/pages-shared|v2/pages)/" },
     },
     {
       name: "no-shared-importing-pages",
       severity: "error",
       comment: "Shared must not import from version-specific code",
       from: { path: "^src/shared/" },
-      to: { path: "^src/(v1|v2)/(pages-shared|pages)/" },
+      to: { path: "^src/v2/(pages-shared|pages)/" },
     },
     {
       name: "no-pages-shared-importing-pages",
       severity: "error",
       comment: "Pages-shared must not import from specific pages",
-      from: { path: "^src/(v1|v2)/pages-shared/" },
-      to: { path: "^src/(v1|v2)/pages/" },
+      from: { path: "^src/v2/pages-shared/" },
+      to: { path: "^src/v2/pages/" },
     },
     {
       name: "no-cross-page-imports",
       severity: "error",
       comment: "Pages should not import from other pages directly",
-      from: { path: "^src/(v1|v2)/pages/([^/]+)/" },
+      from: { path: "^src/v2/pages/([^/]+)/" },
       to: {
-        path: "^src/(v1|v2)/pages/([^/]+)/",
-        pathNot: "^src/$1/pages/$2/",
+        path: "^src/v2/pages/([^/]+)/",
+        pathNot: "^src/v2/pages/$1/",
       },
-    },
-    {
-      name: "no-v1-importing-v2",
-      severity: "error",
-      comment: "v1 code must not import from v2",
-      from: { path: "^src/v1/" },
-      to: { path: "^src/v2/" },
-    },
-    {
-      name: "no-v2-importing-v1",
-      severity: "error",
-      comment: "v2 code must not import from v1",
-      from: { path: "^src/v2/" },
-      to: { path: "^src/v1/" },
     },
     {
       name: "no-importing-old-components",
       severity: "error",
-      comment: "components/ is gone — use ui/, shared/, v1/, or v2/",
+      comment: "components/ is gone — use ui/, shared/, or v2/",
       from: {},
       to: { path: "^src/components/" },
     },
@@ -82,21 +68,21 @@ module.exports = {
         "API layer must not import UI/component code (exception: use-toast.ts)",
       from: { path: "^src/api/" },
       to: {
-        path: "^src/(ui|shared|v1|v2)/",
+        path: "^src/(ui|shared|v2)/",
         pathNot: ["^src/ui/use-toast\\.ts$"],
       },
     },
 
     // ═══════════════════════════════════════════════════════════════
     // STORE RULES
-    // Exception: PluginsStore can import plugin-related v1
+    // Exception: PluginsStore can import plugin component types
     // ═══════════════════════════════════════════════════════════════
     {
       name: "no-store-importing-components",
       severity: "error",
       comment: "Stores must not import UI/component code (exception: PluginsStore)",
       from: { path: "^src/store/", pathNot: "^src/store/PluginsStore\\.ts$" },
-      to: { path: "^src/(ui|shared|v1|v2)/" },
+      to: { path: "^src/(ui|shared|v2)/" },
     },
 
     // ═══════════════════════════════════════════════════════════════
@@ -110,12 +96,9 @@ module.exports = {
         "Hooks must not import UI/component code (exception: app-level providers, useNavigationBlocker)",
       from: { path: "^src/hooks/" },
       to: {
-        path: "^src/(ui|shared|v1|v2)/",
+        path: "^src/(ui|shared|v2)/",
         pathNot: [
           "^src/ui/use-toast\\.ts$",
-          "^src/v1/theme-provider\\.tsx$",
-          "^src/v1/feature-toggles-provider\\.tsx$",
-          "^src/v1/server-sync-provider\\.tsx$",
           "^src/shared/ConfirmDialog/",
           "^src/ui/dialog\\.tsx$",
           "^src/ui/button\\.tsx$",
@@ -132,7 +115,7 @@ module.exports = {
       comment: "Types folder should only contain type definitions",
       from: { path: "^src/types/" },
       to: {
-        path: "^src/(ui|shared|v1|v2|api|store|hooks)/",
+        path: "^src/(ui|shared|v2|api|store|hooks)/",
       },
     },
     {
@@ -141,7 +124,7 @@ module.exports = {
       comment: "Constants should not import runtime code",
       from: { path: "^src/constants/" },
       to: {
-        path: "^src/(ui|shared|v1|v2|api|store|hooks)/",
+        path: "^src/(ui|shared|v2|api|store|hooks)/",
         pathNot: [
           "\\.py$",
           "integration-logs\\.ts$",
@@ -203,7 +186,6 @@ module.exports = {
           "\\.test\\.(ts|tsx)$", // test files
           "\\.spec\\.(ts|tsx)$",
           "__mocks__",
-          "e2e/",
         ],
       },
       to: {},
@@ -251,7 +233,6 @@ module.exports = {
         "\\.spec\\.(ts|tsx)$",
         "__tests__",
         "__mocks__",
-        "e2e/",
         "\\.d\\.ts$",
       ],
     },
@@ -290,11 +271,11 @@ module.exports = {
               attributes: { fillcolor: "#ccccff" },
             },
             {
-              criteria: { source: "^src/(v1|v2)/pages-shared/" },
+              criteria: { source: "^src/v2/pages-shared/" },
               attributes: { fillcolor: "#ffffcc" },
             },
             {
-              criteria: { source: "^src/(v1|v2)/pages/" },
+              criteria: { source: "^src/v2/pages/" },
               attributes: { fillcolor: "#ffccff" },
             },
             {

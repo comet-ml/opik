@@ -269,6 +269,20 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
+  # Self-check: the changelog re-baseline script's guards decide whether an
+  # operator recovery is refused or silently bricks a database, so exercise them
+  # (stubbed java/curl — no JVM, no ClickHouse) whenever the script changes.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: rebaseline-script-tests
+        name: 🧪 rebaseline script tests
+        entry: apps/opik-backend/test_rebaseline_db_changelog.sh
+        language: system
+        files: ^apps/opik-backend/(rebaseline_db_changelog|test_rebaseline_db_changelog)\.sh$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
   # Frontend (apps/opik-frontend) — eslint --fix on changed files; whole-project
   # typecheck (tsc can't be per-file: path aliases + cross-file inference).
   # language: system → uses the repo's own node_modules; files-gated to src.

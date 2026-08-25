@@ -521,7 +521,11 @@ class CostServiceTest {
     private static Stream<Arguments> provideMistralModels() {
         return Stream.of(
                 // Upstream LiteLLM row: $6e-08 in / $1.8e-07 out → 0.06 + 0.18 = 0.24
-                Arguments.of("mistral-small-latest", "0.24"),
+                // Pinned to the dated id rather than the `mistral-small-latest` alias: aliases are
+                // re-priced upstream whenever Mistral ships a new generation (Small 4 moved
+                // `mistral-small-latest` to 1.5e-07 / 6e-07), which breaks an exact-cost assertion
+                // on every automated model-prices update.
+                Arguments.of("mistral-small-3-2-2506", "0.24"),
                 // Upstream LiteLLM row: $5e-07 in / $1.5e-06 out → 0.5 + 1.5 = 2.00
                 Arguments.of("mistral-large-3", "2.00"),
                 // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20

@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -27,9 +28,9 @@ public record ProjectMetricRequest(
         @NonNull TimeInterval interval,
         @NonNull Instant intervalStart,
         Instant intervalEnd,
-        List<SpanFilter> spanFilters,
-        List<TraceFilter> traceFilters,
-        List<TraceThreadFilter> threadFilters,
+        List<@NotNull @Valid SpanFilter> spanFilters,
+        List<@NotNull @Valid TraceFilter> traceFilters,
+        List<@NotNull @Valid TraceThreadFilter> threadFilters,
         @Valid BreakdownConfig breakdown,
         @JsonIgnore UUID uuidFromTime,
         @JsonIgnore UUID uuidToTime) {

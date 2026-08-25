@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.google.cloud.vertexai.Transport;
+import com.google.cloud.vertexai.VertexAI;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import org.junit.jupiter.api.AfterAll;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -99,6 +101,10 @@ class VertexAIClientGeneratorTest {
      */
     @BeforeAll
     void generateServiceAccountKey() throws Exception {
+        serviceAccountJson = serviceAccountJson(PROJECT_ID);
+    }
+
+    private String serviceAccountJson(String projectId) throws Exception {
         var keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048);
         var privateKey = keyPairGenerator.generateKeyPair().getPrivate();
@@ -107,7 +113,7 @@ class VertexAIClientGeneratorTest {
                 + Base64.getEncoder().encodeToString(privateKey.getEncoded())
                 + "\\n-----END PRIVATE KEY-----\\n";
 
-        serviceAccountJson = """
+        return """
                 {
                   "type": "service_account",
                   "project_id": "%s",
@@ -117,7 +123,7 @@ class VertexAIClientGeneratorTest {
                   "client_id": "1234567890",
                   "token_uri": "https://%s%s"
                 }
-                """.formatted(PROJECT_ID, pem, PROJECT_ID, wireMockHost(), TOKEN_PATH);
+                """.formatted(projectId, pem, projectId, wireMockHost(), TOKEN_PATH);
     }
 
     @AfterAll
@@ -161,14 +167,19 @@ class VertexAIClientGeneratorTest {
     }
 
     private void completeVia(String configuredLocation) {
-        var generator = new VertexAIClientGenerator(clientConfig());
+        completeVia(new VertexAIClientGenerator(clientConfig()), configuredLocation);
+    }
+
+    private void completeVia(VertexAIClientGenerator generator, String configuredLocation) {
         var request = ChatCompletionRequest.builder().model(MODEL).build();
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey(serviceAccountJson)
                 .configuration(configuredLocation == null ? Map.of() : Map.of("location", configuredLocation))
                 .build();
 
-        generator.generate(config, request).chat(UserMessage.from("hello"));
+        try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
+            client.chat(UserMessage.from("hello"));
+        }
     }
 
     private void assertCalledWithLocation(String expectedLocation) {
@@ -239,7 +250,59 @@ class VertexAIClientGeneratorTest {
                     .configuration(location == null ? Map.of() : Map.of("location", location))
                     .build();
 
-            return VertexAITestClients.apiEndpointOf(generator.generate(config, request));
+            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
+                return VertexAITestClients.apiEndpointOf(client);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Client ownership")
+    class ClientOwnership {
+
+        // Force the lazy prediction client into existence so its shutdown is observable.
+        @Test
+        @DisplayName("closing the returned client shuts down the VertexAI it owns")
+        void closingTheReturnedClientShutsDownTheVertexAI() throws Exception {
+            var generator = new VertexAIClientGenerator(clientConfig());
+            var request = ChatCompletionRequest.builder().model(MODEL).build();
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
+                VertexAI vertexAI = VertexAITestClients.vertexAiOf(client);
+
+                var predictionClient = vertexAI.getPredictionServiceClient();
+                assertThat(predictionClient.isShutdown()).isFalse();
+
+                client.close();
+
+                assertThat(predictionClient.isShutdown()).isTrue();
+            }
+        }
+
+        @Test
+        @DisplayName("closing the returned streaming client shuts down the VertexAI it owns")
+        void closingTheReturnedStreamingClientShutsDownTheVertexAI() throws Exception {
+            var generator = new VertexAIClientGenerator(clientConfig());
+            var request = ChatCompletionRequest.builder().model(MODEL).build();
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            try (var client = generator.newVertexAIStreamingClient(config, request)) {
+                VertexAI vertexAI = client.vertexAI();
+
+                var predictionClient = vertexAI.getPredictionServiceClient();
+                assertThat(predictionClient.isShutdown()).isFalse();
+
+                client.close();
+
+                assertThat(predictionClient.isShutdown()).isTrue();
+            }
         }
     }
 }

@@ -1,8 +1,15 @@
 import type { Page, Locator } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
+
+/** Escape a literal so it can be embedded in a RegExp. Trial labels are plain
+ *  today ("Baseline", "Trial #3"), but a POM helper that takes arbitrary text
+ *  should not change meaning if that text ever grows a metacharacter. */
+const escapeForRegExp = (literal: string): string =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export interface StudioRunConfig {
   /** Name of a dataset already associated with the project (shown in the picker). */
@@ -240,6 +247,62 @@ export class OptimizationStudioPage {
         this.trialsTable().getByText('Best', { exact: true }).first(),
       ).toBeVisible();
     });
+  }
+
+  /**
+   * Open a trial row by the label its "Trial" column renders — "Baseline" for
+   * the run's step-0 candidate, "Trial #N" for the numbered ones. Addressed by
+   * label rather than row index because the table's sort order is a product
+   * decision this POM should not encode.
+   *
+   * Returns the trial side panel's locator so callers can scope to it.
+   */
+  async openTrialByLabel(label: string): Promise<Locator> {
+    return test.step(`Open trial "${label}"`, async () => {
+      // Match the Trial cell EXACTLY, and identify that cell by COLUMN rather
+      // than by position. Two failure modes to avoid:
+      //   * a substring match over the row's text makes "Trial #1" also select
+      //     "Trial #10", and collides with the label appearing in another cell;
+      //   * a positional match (`td:first-child`) inspects the wrong cell once a
+      //     user reorders columns — the Trial column is offered in the column
+      //     selector and is not pinned, so it does move.
+      // `DataTable` stamps each cell `data-cell-id="<rowId>_<columnId>"`, and the
+      // Trial column's id is `COLUMN_NAME_ID` ("name"), so a `_name` suffix
+      // match follows the column wherever it sits. `TrialNumberCell` renders the
+      // label as that cell's full text, so the anchored match is exact.
+      const row = this.trialsTable()
+        .locator('tbody tr[data-row-id]')
+        .filter({
+          has: this.page.locator('td[data-cell-id$="_name"]').filter({
+            hasText: new RegExp(`^\\s*${escapeForRegExp(label)}\\s*$`),
+          }),
+        });
+      await expect(row, `exactly one trial row labelled "${label}"`).toHaveCount(1);
+      await row.click();
+      const panel = this.trialSidebar();
+      await expect(panel, `trial side panel for "${label}"`).toBeVisible();
+      return panel;
+    });
+  }
+
+  /**
+   * Click "Logs" in the open trial side panel and hand back the shared logs
+   * overlay. It is a clickable `Tag`, not a button, so it is addressed by text
+   * within the panel rather than by role.
+   */
+  async openTrialLogs(): Promise<TraceLogsSidebarPage> {
+    return test.step('Open the trial\'s Logs overlay', async () => {
+      await this.trialSidebar().getByText('Logs', { exact: true }).first().click();
+      const overlay = new TraceLogsSidebarPage(this.page);
+      await overlay.waitForReady();
+      return overlay;
+    });
+  }
+
+  /** The trial side panel. `ResizableSidePanel` renders its `panelId` as a
+   *  data-testid, which is the one purpose-built hook on it. */
+  private trialSidebar(): Locator {
+    return this.page.locator('[data-testid="optimization-trial-sidebar"]');
   }
 
   /**

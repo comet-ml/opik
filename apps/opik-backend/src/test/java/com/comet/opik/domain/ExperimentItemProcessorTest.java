@@ -124,7 +124,7 @@ class ExperimentItemProcessorTest {
         when(traceService.create(any(Trace.class))).thenReturn(Mono.just(UUID.randomUUID()));
         when(spanService.create(any(Span.class))).thenReturn(Mono.just(UUID.randomUUID()));
         when(experimentItemService.create(any())).thenReturn(Mono.empty());
-        when(mustacheParser.renderUnescaped(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mustacheParser.render(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     private ExperimentItemToProcess buildMessage(
@@ -171,7 +171,7 @@ class ExperimentItemProcessorTest {
     class TemplateRendering {
 
         @Test
-        void processCallsRenderUnescapedWithTemplateAndContext() {
+        void processCallsRenderWithTemplateAndContext() {
             var prompt = buildPrompt("gpt-4", "user", "Hello {{name}}, how is {{city}}?");
             var datasetItem = buildDatasetItem(UUID.randomUUID(),
                     Map.of("name", new TextNode("Alice"), "city", new TextNode("London")));
@@ -179,7 +179,7 @@ class ExperimentItemProcessorTest {
             var datasetId = UUID.randomUUID();
 
             stubCommonMocks();
-            when(mustacheParser.renderUnescaped(eq("Hello {{name}}, how is {{city}}?"), any()))
+            when(mustacheParser.render(eq("Hello {{name}}, how is {{city}}?"), any()))
                     .thenReturn("Hello Alice, how is London?");
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("Hi Alice!"));
@@ -189,7 +189,7 @@ class ExperimentItemProcessorTest {
 
             @SuppressWarnings("unchecked")
             var contextCaptor = ArgumentCaptor.forClass(Map.class);
-            verify(mustacheParser).renderUnescaped(eq("Hello {{name}}, how is {{city}}?"), contextCaptor.capture());
+            verify(mustacheParser).render(eq("Hello {{name}}, how is {{city}}?"), contextCaptor.capture());
 
             var context = contextCaptor.getValue();
             assertThat(context).containsEntry("name", "Alice");
@@ -205,7 +205,7 @@ class ExperimentItemProcessorTest {
             var datasetId = UUID.randomUUID();
 
             stubCommonMocks();
-            when(mustacheParser.renderUnescaped(eq("{{content}}"), any()))
+            when(mustacheParser.render(eq("{{content}}"), any()))
                     .thenReturn("<b>bold</b> & 'quoted'");
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
@@ -384,7 +384,7 @@ class ExperimentItemProcessorTest {
             when(traceService.create(any(Trace.class))).thenReturn(Mono.just(traceId));
             when(spanService.create(any(Span.class))).thenReturn(Mono.just(spanId));
             when(experimentItemService.create(any())).thenReturn(Mono.empty());
-            when(mustacheParser.renderUnescaped(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+            when(mustacheParser.render(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
@@ -421,7 +421,7 @@ class ExperimentItemProcessorTest {
             when(traceService.create(any(Trace.class))).thenReturn(Mono.just(traceId));
             when(spanService.create(any(Span.class))).thenReturn(Mono.just(spanId));
             when(experimentItemService.create(any())).thenReturn(Mono.empty());
-            when(mustacheParser.renderUnescaped(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+            when(mustacheParser.render(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
             when(chatCompletionService.create(any(ChatCompletionRequest.class), eq(WORKSPACE_ID)))
                     .thenReturn(buildLlmResponse("response"));
 
