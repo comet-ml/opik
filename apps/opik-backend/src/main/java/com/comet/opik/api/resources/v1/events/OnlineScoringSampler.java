@@ -127,11 +127,19 @@ public class OnlineScoringSampler {
     private boolean skip(String workspaceId, String workspaceName, AutomationRuleEvaluator<?, ?> evaluator, Trace trace,
             String decision, String message, Object... args) {
         recordDecision(workspaceId, workspaceName, evaluator, decision, 1);
+        logForUser(workspaceId, evaluator, trace, message, args);
+        return false;
+    }
+
+    /**
+     * Emits one line on the rule's user-facing log stream for the given trace.
+     */
+    private void logForUser(String workspaceId, AutomationRuleEvaluator<?, ?> evaluator, Trace trace,
+            String message, Object... args) {
         // Important to set the workspaceId for logging purposes
         try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
             userFacingLogger.info(message, args);
         }
-        return false;
     }
 
     /**
@@ -352,6 +360,15 @@ public class OnlineScoringSampler {
             return skip(workspaceId, workspaceName, evaluator, trace, DECISION_SKIPPED_FILTER,
                     "The traceId '{}' was skipped for rule: '{}' as it does not match the configured filters",
                     trace.id(), evaluator.getName());
+        }
+
+        // The sampling rate thins a production stream, so it applies to SDK traces only.
+        if (!Source.isLoggingSource(trace.source())) {
+            logForUser(workspaceId, evaluator, trace,
+                    "The traceId '{}' is not subject to the sampling rate '{}' for rule: '{}',"
+                            + " as the rate applies to production traces only",
+                    trace.id(), evaluator.getSamplingRate(), evaluator.getName());
+            return true;
         }
 
         if (secureRandom.nextFloat() >= evaluator.getSamplingRate()) {
