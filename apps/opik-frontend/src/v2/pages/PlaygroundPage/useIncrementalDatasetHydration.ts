@@ -3,13 +3,11 @@ import { DatasetItem } from "@/types/datasets";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { containsTruncatedMedia } from "@/lib/media";
 
-export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
-  hydratedItems: DatasetItem[];
-  isHydrating: boolean;
-} {
+export function useIncrementalDatasetHydration(
+  datasetItems: DatasetItem[],
+): DatasetItem[] {
   const hydrateDatasetItemData = useHydrateDatasetItemData();
   const [hydratedItems, setHydratedItems] = useState<DatasetItem[]>([]);
-  const [isHydrating, setIsHydrating] = useState(false);
 
   useEffect(() => {
     // Scoped to this effect run rather than a shared ref. React runs the previous
@@ -23,7 +21,6 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
 
     if (datasetItems.length === 0) {
       setHydratedItems([]);
-      setIsHydrating(false);
       return;
     }
 
@@ -46,11 +43,8 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
     );
 
     if (indexesToHydrate.length === 0) {
-      setIsHydrating(false);
       return;
     }
-
-    setIsHydrating(true);
 
     const hydrateItems = async () => {
       for (const index of indexesToHydrate) {
@@ -66,8 +60,6 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
           ),
         );
       }
-
-      setIsHydrating(false);
     };
 
     hydrateItems();
@@ -77,5 +69,5 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
     };
   }, [datasetItems, hydrateDatasetItemData]);
 
-  return { hydratedItems, isHydrating };
+  return hydratedItems;
 }
