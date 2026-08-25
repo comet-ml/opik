@@ -78,7 +78,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
-import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
+import { resolveFeedbackScoreCell } from "@/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
@@ -661,7 +661,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           label,
           type: columnType,
           header: FeedbackScoreHeader as never,
-          cell: FeedbackScoreCell as never,
+          cell: resolveFeedbackScoreCell(label) as never,
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
@@ -739,7 +739,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     () => ({
       projectId,
       projectName,
-      enableUserFeedbackEditing: true,
     }),
     [projectId, projectName],
   );

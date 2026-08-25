@@ -31,7 +31,7 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsOutputCell from "@/v2/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
-import CompareExperimentsFeedbackScoreCell from "@/v2/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
+import { resolveCompareExperimentsFeedbackScoreCell } from "@/v2/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
 import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
@@ -366,7 +366,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           label,
           type: columnType,
           header: FeedbackScoreHeader as never,
-          cell: CompareExperimentsFeedbackScoreCell as never,
+          cell: resolveCompareExperimentsFeedbackScoreCell(label) as never,
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
           statisticDataFormater: formatScoreDisplay,
           supportsPercentiles: true,
@@ -617,7 +617,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         setExpandedCommentSections([String(idx)]);
       },
       columnsStatistic,
-      enableUserFeedbackEditing: true,
     }),
     [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
@@ -724,6 +723,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
+        columnVirtualization={{ enabled: true }}
         stickyHeader
         meta={meta}
         showSkeleton={isTableLoading}

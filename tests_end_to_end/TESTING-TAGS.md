@@ -68,8 +68,11 @@ opt-out of the ladder (`playground-providers.spec.ts` does this).
 
 ### area and cap — coverage
 
-`@area:` must match the spec's directory name. `@cap:` must be
-`<area>.<capability>` and both halves must exist in `coverage/taxonomy.yaml`.
+`@area:` is the area whose capabilities the spec asserts — read it from
+`coverage/taxonomy.yaml`, **not** from the spec's directory name (see
+"Where a spec lives" below). `@cap:` must be `<area>.<capability>` and both halves
+must exist in that file. Only the `@cap:`-matches-`@area:` rule is enforced by
+`tag_lint.py`.
 
 ```ts
 // tests/datasets/dataset-items.spec.ts
@@ -134,7 +137,22 @@ test('Editing an item field commits as a new version and round-trips to the SDK'
 test('click edit then save then check')
 ```
 
-**Directory = area.** `tests/<area>/` and `@area:<area>` must match. Enforced.
+## Where a spec lives
+
+**`@area:` is not derivable from the directory.** Read the area's `spec_dir` in
+`coverage/taxonomy.yaml` — a directory is named after the product surface, and one
+directory can hold more than one area. Both real cases today:
+
+| Directory | Areas it holds | Why |
+|---|---|---|
+| `trace-explore/` | `@area:traces`, `@area:threads` | both areas declare `spec_dir: trace-explore`; the UI calls the surface "Logs" |
+| `prompts/` | `@area:prompts`, `@area:playground` | four prompt→playground journey specs, grouped by the flow they exercise rather than by area |
+
+So two different `@area:` values in one directory is expected, not a mistake, and
+a cross-area journey spec lives with the flow it tests.
+
+When adding a spec: put it where its flow's neighbours are, tag the area whose
+capabilities it asserts, and add it to that area's `specs:` list.
 
 ---
 

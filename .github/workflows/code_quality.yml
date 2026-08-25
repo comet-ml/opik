@@ -240,7 +240,7 @@ jobs:
 
       - name: Download timing fragments
         if: needs.detect.outputs.has_legs == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/fragments
           pattern: timing-*

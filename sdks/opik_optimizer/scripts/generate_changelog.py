@@ -383,7 +383,7 @@ def main() -> None:
     print("\n" + "=" * 60)
     print("To update the changelog, copy the relevant entries to:")
     print(
-        "  apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx"
+        "  apps/opik-documentation/documentation/fern/docs-v2/development/optimization-runs/changelog.mdx"
     )
 
 

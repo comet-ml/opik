@@ -70,28 +70,18 @@ public class SortingQueryBuilder {
     }
 
     public boolean hasDynamicKeys(@NonNull List<SortingField> sorting) {
-        return hasDynamicKeys(sorting, null);
-    }
-
-    public boolean hasDynamicKeys(@NonNull List<SortingField> sorting, Map<String, String> fieldMapping) {
-        // Only fields with bindKeyParam need dynamic binding.
-        // Fields in the fieldMapping use literal SQL expressions (e.g. JSONExtractRaw), so no bind param exists.
+        // A dynamic field is bound whenever it carries a bindKeyParam. This covers JSON fields
+        // (output/input/metadata), whose key is bound via JSONExtractRaw(col, :param), as well as
+        // map-style fields such as data[:param] and experiment_scores_agg[:param].
         return sorting.stream()
                 .filter(SortingField::isDynamic)
-                .filter(field -> field.bindKeyParam() != null)
-                .anyMatch(field -> fieldMapping == null || !fieldMapping.containsKey(field.field()));
+                .anyMatch(field -> field.bindKeyParam() != null);
     }
 
-    public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting) {
-        return bindDynamicKeys(statement, sorting, null);
-    }
-
-    public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting,
-            Map<String, String> fieldMapping) {
+    public Statement bindDynamicKeys(Statement statement, @NonNull List<SortingField> sorting) {
         sorting.stream()
                 .filter(SortingField::isDynamic)
                 .filter(sortingField -> sortingField.bindKeyParam() != null)
-                .filter(sortingField -> fieldMapping == null || !fieldMapping.containsKey(sortingField.field()))
                 .forEach(sortingField -> {
                     try {
                         statement.bind(sortingField.bindKey(), sortingField.dynamicKey());

@@ -251,11 +251,20 @@ public interface PromptDAO {
             @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id" +
-            " <if(project_id)> AND project_id = :project_id <endif>")
+            " <if(project_id)> AND project_id = :project_id <endif>" +
+            " ORDER BY id LIMIT 1")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId,
             @Define("project_id") @Bind("project_id") UUID projectId);
+
+    @SqlQuery("""
+            SELECT * FROM prompts
+            WHERE name = :name AND workspace_id = :workspace_id AND project_id IS NULL
+            ORDER BY id
+            LIMIT 1
+            """)
+    Prompt findByNameWithoutProject(@Bind("name") String name, @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy, "
             +
