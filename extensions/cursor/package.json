@@ -4,7 +4,7 @@
   "description": "Export your chat history from Cursor to Opik.",
   "repository": "https://github.com/comet-ml/opik",
   "publisher": "opik",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "preview": false,
   "engines": {
     "vscode": "^1.90.0"
@@ -66,6 +66,16 @@
         }
       },
       {
+        "title": "Usage Tracking",
+        "properties": {
+          "opik.usageEnrichment.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Fetch token counts and cost from Cursor and attach them to the logged spans. Uses your existing Cursor sign-in; no extra credentials are needed. Turn this off to log conversations without usage."
+          }
+        }
+      },
+      {
         "title": "Advanced",
         "properties": {
           "opik.enableDebugLogs": {
@@ -88,7 +98,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "verify-usage": "node scripts/verify-usage.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
