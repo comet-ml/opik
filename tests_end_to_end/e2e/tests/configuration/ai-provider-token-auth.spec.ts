@@ -255,7 +255,7 @@ test.describe(
             'token mode hides the API key field entirely — the two cannot be set together',
           ).toHaveCount(0);
 
-          await dialog.fillOauth2Recipe({
+          await dialog.fillOAuth2Recipe({
             tokenUrl: uiTokenUrl,
             clientId: uiClientId,
             clientSecret: uiClientSecret,

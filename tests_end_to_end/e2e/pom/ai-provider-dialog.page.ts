@@ -2,13 +2,22 @@ import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 
 /**
- * The update request the dialog PATCHes, in wire shape.
+ * The subset of the update request the token-auth tests assert on, in wire shape.
  *
  * Snake_case on purpose: this is the JSON body as `useProviderKeysUpdateMutation`
  * builds it, not a camelCase view of it, and the field names are half of what
  * the token-auth tests assert. `api_key: ''` (clear the static key) and
  * `auth_config: {}` (clear the recipe) are both meaningful values, so every
  * field stays optional rather than defaulted.
+ *
+ * DELIBERATELY PARTIAL. The real PATCH also carries `base_url`, `configuration`,
+ * `headers`, and the rest of the auth recipe (`token_field`, `expires_field`,
+ * `fallback_ttl_seconds`). They are omitted because this interface is an
+ * assertion surface, not a wire contract: naming a field here implies a test
+ * reads it, and modelling the whole body would invite the reverse reading — that
+ * anything absent from the assertions is nonetheless covered. Preservation of
+ * the untouched fields is asserted where it is actually observable, against the
+ * backend read-back, rather than against what the dialog happened to send.
  */
 export interface ProviderUpdatePayload {
   api_key?: string;
@@ -20,7 +29,7 @@ export interface ProviderUpdatePayload {
 }
 
 /** The credentials a fresh OAuth2 recipe is filled with, in the order the form creates them. */
-export interface Oauth2RecipeSeed {
+export interface OAuth2RecipeSeed {
   tokenUrl: string;
   clientId: string;
   clientSecret: string;
@@ -37,6 +46,28 @@ export interface Oauth2RecipeSeed {
  * (`stored, write-only` is the placeholder the FE uses to say "a secret is
  * held here and cannot be read back"), not structural paths.
  */
+/**
+ * Does this URL address the provider-keys route — the collection, or one
+ * provider when `providerId` is given?
+ *
+ * Matched on the pathname's trailing segments rather than on the whole path:
+ * the frontend prefixes every call with `BASE_API_URL`, which is `/api` by
+ * default but is overridable via `VITE_BASE_API_URL`, so a full-path equality
+ * check silently matches nothing and both waits below time out on a request
+ * that actually succeeded. The collection URL also carries a trailing slash
+ * (`PROVIDER_KEYS_REST_ENDPOINT`) while the per-provider one does not, so the
+ * segments are compared after dropping empties instead of by string suffix.
+ *
+ * Still exact where it matters: the id must be the whole final segment, so a
+ * sibling provider whose id merely contains this one cannot satisfy the wait.
+ */
+function isProviderKeyRoute(url: string, providerId?: string): boolean {
+  const segments = new URL(url).pathname.split('/').filter(Boolean);
+  const expected = ['v1', 'private', 'llm-provider-key', ...(providerId ? [providerId] : [])];
+  if (segments.length < expected.length) return false;
+  return expected.every((part, i) => segments[segments.length - expected.length + i] === part);
+}
+
 export class AiProviderDialog {
   readonly root: Locator;
 
@@ -129,7 +160,7 @@ export class AiProviderDialog {
    * the form seeds) fails loudly here instead of quietly writing the client id
    * into the secret field and testing the wrong thing.
    */
-  async fillOauth2Recipe(seed: Oauth2RecipeSeed): Promise<void> {
+  async fillOAuth2Recipe(seed: OAuth2RecipeSeed): Promise<void> {
     return test.step('fill the OAuth2 token recipe', async () => {
       await this.tokenUrlInput.fill(seed.tokenUrl);
 
@@ -169,15 +200,14 @@ export class AiProviderDialog {
       const refetched = this.page.waitForResponse(
         (res) =>
           res.request().method() === 'GET' &&
-          new URL(res.url()).pathname.endsWith('/v1/private/llm-provider-key') &&
+          isProviderKeyRoute(res.url()) &&
           res.status() === 200,
       );
       const [response] = await Promise.all([
         this.page.waitForResponse(
           (res) =>
             res.request().method() === 'PATCH' &&
-            new URL(res.url()).pathname ===
-              `/v1/private/llm-provider-key/${this.providerId}`,
+            isProviderKeyRoute(res.url(), this.providerId),
         ),
         this.root.getByRole('button', { name: 'Update configuration', exact: true }).click(),
       ]);
