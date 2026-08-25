@@ -77,10 +77,10 @@ const AWAY_ROLE: Record<WorkspaceRoleId, WorkspaceRoleId> = {
   [WORKSPACE_ROLE_ID.READ]: WORKSPACE_ROLE_ID.MANAGE,
 };
 
-test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-roles'] }, () => {
+test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@area:workspace-roles'] }, () => {
   test.describe.configure({ mode: 'serial' });
 
-  test('Role assignment & guardrails', async ({ workspaceRoleMembers }) => {
+  test('Role assignment & guardrails', { tag: ['@cap:workspace-roles.role-assign-via-ui'] }, async ({ workspaceRoleMembers }) => {
     const { adminPage, adminContext, organizationId, workspaceName, manage, write, annotate, read } = workspaceRoleMembers;
     const membersPage = new ConfigurationMembersPage(adminPage, workspaceName);
     const members: WorkspaceRoleMember[] = [manage, write, annotate, read];
@@ -114,7 +114,9 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
     }
   });
 
-  test('MANAGE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
+  test('MANAGE', {
+    tag: ['@cap:workspace-roles.manage-role-full-access', '@cap:workspace-roles.permission-api-cross-check'],
+  }, async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
     testInfo.setTimeout(testInfo.timeout + 90_000);
     const { manage: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
     const ctx = adminCtx(workspaceRoleMembers);
@@ -203,7 +205,9 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
     });
   });
 
-  test('WRITE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
+  test('WRITE', {
+    tag: ['@cap:workspace-roles.write-role-resource-crud', '@cap:workspace-roles.permission-api-cross-check'],
+  }, async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
     testInfo.setTimeout(testInfo.timeout + 90_000);
     const { write: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
     const ctx = adminCtx(workspaceRoleMembers);
@@ -285,7 +289,9 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
     });
   });
 
-  test('ANNOTATE', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
+  test('ANNOTATE', {
+    tag: ['@cap:workspace-roles.annotate-role-restricted', '@cap:workspace-roles.permission-api-cross-check'],
+  }, async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
     testInfo.setTimeout(testInfo.timeout + 90_000);
     const { annotate: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
     const ctx = adminCtx(workspaceRoleMembers);
@@ -366,7 +372,9 @@ test.describe('Workspace role permissions', { tag: ['@t3-nightly', '@workspace-r
     });
   });
 
-  test('READ', async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
+  test('READ', {
+    tag: ['@cap:workspace-roles.read-role-view-only', '@cap:workspace-roles.permission-api-cross-check'],
+  }, async ({ workspaceRoleMembers, projectId, seededResources }, testInfo) => {
     testInfo.setTimeout(testInfo.timeout + 90_000);
     const { read: member, adminContext, organizationId, workspaceName } = workspaceRoleMembers;
     const ctx = adminCtx(workspaceRoleMembers);
