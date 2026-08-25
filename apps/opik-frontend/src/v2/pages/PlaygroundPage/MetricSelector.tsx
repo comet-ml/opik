@@ -61,10 +61,10 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [selectedRuleIds],
   );
 
-  const selectedRules = useMemo(() => {
-    if (!selectedRuleIds) return rules;
-    return rules.filter((rule) => selectedRuleIdsSet.has(rule.id));
-  }, [rules, selectedRuleIds, selectedRuleIdsSet]);
+  const selectedRules = useMemo(
+    () => rules.filter((rule) => selectedRuleIdsSet.has(rule.id)),
+    [rules, selectedRuleIdsSet],
+  );
 
   const selectedCount = selectedRules.length;
   const isAllSelected = rules.length > 0 && selectedCount === rules.length;
@@ -81,20 +81,19 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const handleSelect = useCallback(
     (ruleId: string) => {
-      onSelectionChange(
-        toggleMetricSelection(
-          selectedRuleIds,
-          ruleId,
-          rules.map((r) => r.id),
-        ),
-      );
+      onSelectionChange(toggleMetricSelection(selectedRuleIds, ruleId));
     },
-    [selectedRuleIds, rules, onSelectionChange],
+    [selectedRuleIds, onSelectionChange],
   );
 
   const handleSelectAll = useCallback(() => {
-    onSelectionChange(toggleAllMetrics(isAllSelected));
-  }, [onSelectionChange, isAllSelected]);
+    onSelectionChange(
+      toggleAllMetrics(
+        isAllSelected,
+        rules.map((r) => r.id),
+      ),
+    );
+  }, [onSelectionChange, isAllSelected, rules]);
 
   const openChangeHandler = useCallback(
     (newOpen: boolean) => {
@@ -105,11 +104,8 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   );
 
   const isSelected = useCallback(
-    (ruleId: string) => {
-      if (isAllSelected) return true;
-      return selectedRuleIdsSet.has(ruleId);
-    },
-    [isAllSelected, selectedRuleIdsSet],
+    (ruleId: string) => selectedRuleIdsSet.has(ruleId),
+    [selectedRuleIdsSet],
   );
 
   const openCreateDialog = useCallback(() => {
