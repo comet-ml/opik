@@ -70,21 +70,34 @@ def _capability_for(
     The exact match on ``model_name_prefix`` wins; falls back to the longest
     matching prefix, so versioned ids like ``"gpt-5-nano-2025-08-07"``
     still resolve. Unknown models get ``DEFAULT_CAPABILITY``.
+
+    A provider-qualified name (``"anthropic/claude-sonnet-4-6"``) is matched on
+    its bare id. Model adapters keep the qualified form on ``model_name`` for
+    tracing and pricing, so it is the qualified string that arrives here; without
+    stripping, every qualified name silently lands on ``DEFAULT_CAPABILITY`` and
+    both the token budget and ``agentic_in_auto`` change.
     """
     table = (
         capabilities
         if capabilities is not None
         else capabilities_registry.MODEL_CAPABILITIES
     )
+    candidates = [model_name]
+    if "/" in model_name:
+        candidates.append(model_name.rsplit("/", 1)[1])
+
     best: Optional[capabilities_registry.ModelCapability] = None
     best_len = -1
-    for cap in table:
-        prefix = cap.model_name_prefix
-        if model_name == prefix:
-            return cap
-        if model_name.startswith(prefix) and len(prefix) > best_len:
-            best = cap
-            best_len = len(prefix)
+    for candidate in candidates:
+        for cap in table:
+            prefix = cap.model_name_prefix
+            if candidate == prefix:
+                return cap
+            if candidate.startswith(prefix) and len(prefix) > best_len:
+                best = cap
+                best_len = len(prefix)
+        if best is not None:
+            break
     return best if best is not None else capabilities_registry.DEFAULT_CAPABILITY
 
 

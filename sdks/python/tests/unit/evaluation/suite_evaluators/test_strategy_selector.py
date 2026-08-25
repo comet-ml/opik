@@ -114,6 +114,49 @@ class TestCapabilityLookup:
         cap = strategy_selector._capability_for("totally-unknown-model")
         assert cap is model_capabilities.DEFAULT_CAPABILITY
 
+    def test_provider_qualified_name__resolves_same_as_bare(self):
+        # `AnthropicChatModel` defaults to a provider-qualified name and
+        # `base_model` stores it verbatim, so the qualified form is what
+        # reaches the capability lookup. It has to resolve to the same
+        # entry as the bare id, otherwise the judge silently drops to
+        # DEFAULT_CAPABILITY.
+        bare = strategy_selector._capability_for("claude-sonnet-4-6")
+        qualified = strategy_selector._capability_for("anthropic/claude-sonnet-4-6")
+        assert qualified is bare
+        assert qualified is not model_capabilities.DEFAULT_CAPABILITY
+
+    def test_provider_qualified_name__preserves_agentic_flag(self):
+        # The fall-through changes more than the token budget: it also
+        # flips `agentic_in_auto`, which changes strategy selection under
+        # `auto` rather than just how rich the overview is.
+        cap = strategy_selector._capability_for("anthropic/claude-sonnet-4-6")
+        assert cap.agentic_in_auto is True
+
+    def test_unknown_provider_prefix__still_falls_back(self):
+        cap = strategy_selector._capability_for("someprovider/totally-unknown-model")
+        assert cap is model_capabilities.DEFAULT_CAPABILITY
+
+    def test_fifth_generation_models__are_registered(self):
+        for model_name in ("claude-opus-5", "claude-sonnet-5"):
+            cap = strategy_selector._capability_for(model_name)
+            assert cap is not model_capabilities.DEFAULT_CAPABILITY, model_name
+
+
+class TestBudgetTokens:
+    def test_qualified_name__matches_bare_budget(self):
+        assert strategy_selector.compute_budget_tokens(
+            "anthropic/claude-sonnet-4-6"
+        ) == strategy_selector.compute_budget_tokens("claude-sonnet-4-6")
+
+    def test_qualified_name__is_not_the_default_budget(self):
+        default_budget = (
+            int(model_capabilities.DEFAULT_CAPABILITY.context_window * 0.5) - 1500
+        )
+        assert (
+            strategy_selector.compute_budget_tokens("anthropic/claude-sonnet-4-6")
+            != default_budget
+        )
+
 
 class TestLLMJudgeIntegration:
     @pytest.mark.skip("skipped until we have default scoring_tool_strategy='auto'")

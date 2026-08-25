@@ -59,6 +59,8 @@ MODEL_CAPABILITIES: List[ModelCapability] = [
     ModelCapability("gpt-4o-mini", context_window=128_000, agentic_in_auto=True),
     ModelCapability("claude-opus-4-7", context_window=1_000_000, agentic_in_auto=True),
     ModelCapability("claude-opus-4-6", context_window=1_000_000, agentic_in_auto=True),
+    ModelCapability("claude-opus-5", context_window=1_000_000, agentic_in_auto=True),
+    ModelCapability("claude-sonnet-5", context_window=1_000_000, agentic_in_auto=True),
     ModelCapability(
         "claude-sonnet-4-6", context_window=1_000_000, agentic_in_auto=True
     ),
