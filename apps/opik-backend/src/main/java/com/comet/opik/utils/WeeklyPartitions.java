@@ -91,7 +91,8 @@ public class WeeklyPartitions {
     /**
      * The wrap of legacy {@code traces.id_at}, a 32-bit {@code DateTime}: it holds
      * {@code epochSecond % 2^32}, so anything past {@code 2106-02-07 06:28:15} reappears somewhere in
-     * {@code [1970-01-01, 2106-02-07]}. Modulo, not saturation — verified against ClickHouse 26.3 across a spread of
+     * {@code [1970-01-01, 2106-02-07]}. Also the threshold itself — below it the modulo is the identity, which is why
+     * only an id past this point contributes a second value. Modulo, not saturation — verified against ClickHouse 26.3 across a spread of
      * ordinary and far-future ids, every row satisfying
      * {@code toUnixTimestamp(id_at) = intDiv(unix_ts_ms, 1000) % 4294967296}, and pinned by
      * {@code TracesLegacyTablePruningMutationTest}, which deletes a far-future row from the real legacy table — so a
@@ -132,7 +133,11 @@ public class WeeklyPartitions {
             // and cannot move a value into an earlier day, so it never changes the week.
             long epochSecond = epochMilli / 1_000L;
             partitions.add(weeklyPartitionOf(epochSecond)); // DateTime64(0, 'UTC') — the partitioned successor
-            partitions.add(weeklyPartitionOf(epochSecond % ID_AT_LEGACY_MODULUS)); // DateTime('UTC') — legacy traces
+            // Only past the 32-bit range do the two columns disagree; below it the modulo is the identity, so the
+            // branch is the invariant stated as code rather than an optimisation: an ordinary id CANNOT widen the set.
+            if (epochSecond >= ID_AT_LEGACY_MODULUS) {
+                partitions.add(weeklyPartitionOf(epochSecond % ID_AT_LEGACY_MODULUS)); // DateTime('UTC') — legacy
+            }
         }
 
         // Set.copyOf, not the working HashSet: what escapes here decides which partitions a DELETE mutation touches, so

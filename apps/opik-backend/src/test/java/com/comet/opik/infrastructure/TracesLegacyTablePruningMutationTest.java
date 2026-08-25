@@ -17,7 +17,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
-import com.comet.opik.utils.WeeklyPartitions;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -226,7 +225,7 @@ class TracesLegacyTablePruningMutationTest {
         var projectId = projectIdOf(createTrace());
 
         // Only the far-future row is raw, because ingestion rejects it by design (24h window). A recent id would prove
-        // nothing here: the legacy id_at is accurate for one, so even a honest-week-only predicate would match it.
+        // nothing here: the legacy id_at is accurate for one, so even an honest-week-only predicate would match it.
         insertRawTrace(projectId, FAR_FUTURE_ID);
         assertThat(liveRowCount(projectId, FAR_FUTURE_ID)).as("the far-future row is seeded").isEqualTo("1");
 
@@ -246,9 +245,6 @@ class TracesLegacyTablePruningMutationTest {
         assertThat(boundPartitionsOf(sql))
                 .as("both representations of the same id: the honest week and the one the 32-bit column wraps it to")
                 .containsExactlyInAnyOrder(HONEST_WEEK, LEGACY_WEEK);
-        assertThat(WeeklyPartitions.of(List.of(FAR_FUTURE_ID)))
-                .as("and the derivation this suite pins is the one the DAO used")
-                .contains(Set.of(HONEST_WEEK, LEGACY_WEEK));
     }
 
     @Test

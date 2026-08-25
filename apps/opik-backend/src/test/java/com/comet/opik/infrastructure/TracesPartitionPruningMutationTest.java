@@ -449,17 +449,6 @@ class TracesPartitionPruningMutationTest {
     }
 
     /**
-     * The partitions a single id resolves to — a set, not a value, because an id past 2106 names its legacy week
-     * alongside the honest one. Derived through {@code WeeklyPartitions} on purpose: this suite is about the predicate
-     * reaching ClickHouse, and the derivation's own expected values are pinned against real ClickHouse output in
-     * {@code WeeklyPartitionsTest}, so restating them here would only duplicate that. Where the expectation needs to be
-     * readable on its own — the era batch — the partitions are stated as literals instead.
-     */
-    private static Set<Long> partitionsOf(UUID id) {
-        return WeeklyPartitions.of(List.of(id)).orElseThrow();
-    }
-
-    /**
      * The partition values actually bound into the emitted {@code IN} clause, so a test can assert the set is exact
      * rather than merely inclusive. The driver substitutes bound values into the query text client-side, which is why
      * they are readable here at all; the two assertions below are what make a change in that behaviour say so plainly
@@ -808,10 +797,15 @@ class TracesPartitionPruningMutationTest {
                 .contains(bystander.id());
         var sql = lastTraceDeleteSql(target.id());
         assertThat(sql).as("the mutation carries the partition predicate").contains(PARTITION_PREDICATE);
+        // Asserted as the SIZE, not as a value read back from WeeklyPartitions: the DAO derives its set from the same
+        // method, so an expectation taken from it would move with any regression and pass regardless. The value itself
+        // is already pinned two independent ways - the row above had to go away, which it only does if the predicate
+        // named the partition ClickHouse filed it under, and deleteClearsEveryEraAndBindsExactlyThosePartitions states
+        // its expectations as literals. What is left to say here is the property those cannot: an id the endpoint just
+        // minted is inside the 32-bit range, where the two id_at types agree, so it must widen the set to nothing.
         assertThat(boundPartitionsOf(sql))
-                .as("bounded to exactly the target's own partition, nothing wider — one value, since a trace the"
-                        + " endpoint just created is inside the 32-bit range where both id_at types agree")
-                .containsExactlyInAnyOrderElementsOf(partitionsOf(target.id()));
+                .as("bounded to one partition, not two: a recent id_at is a week both id_at types agree on")
+                .hasSize(1);
     }
 
     @Test

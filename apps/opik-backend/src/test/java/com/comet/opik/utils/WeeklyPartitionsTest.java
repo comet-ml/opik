@@ -46,37 +46,21 @@ class WeeklyPartitionsTest {
     private static Stream<Arguments> matchesThePartitionsClickHouseComputed() {
         return Stream.of(
                 // The ordinary case: id_at 2026-08-19 (a Wednesday) -> Monday 2026-08-17. Inside the 32-bit DateTime
-                // range, so both column types store the same instant and the id contributes a single value — which is
-                // every id real traffic produces.
+                // range, so both column types store the same instant and the id contributes a SINGLE value. That is
+                // every id real traffic produces, and it is why naming both representations costs nothing: the set a
+                // normal delete binds is exactly the set it bound before the legacy one was added.
                 arguments("ordinary id", UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"), Set.of(20260817L)),
                 // Long before Opik existed but well after the Unix epoch, and well inside Date32's 1900 floor: an id
                 // this old prunes like any other, and likewise fits both column types. id_at 1996-02-09 -> 1996-02-05.
                 arguments("id from 1996", UUID.fromString("00bfd451-fa93-7c10-9923-88a219a974c8"), Set.of(19960205L)),
                 // Far-future ids are supported, not excluded, and are the only ones that contribute two values: past
-                // 2106 the two column types disagree, so the batch has to name both weeks or be wrong on one schema.
-                // DateTime64 stores 2200-01-01 -> Monday 2199-12-30; the legacy 32-bit DateTime wraps the same id to
-                // 2063-11-25 -> Monday 2063-11-19. 4.1% of rows on prod-test look like this.
+                // 2106 the two column types disagree, so the batch has to name both weeks or be wrong on one schema -
+                // which is what removed the cutover flag. DateTime64 stores 2200-01-01 -> Monday 2199-12-30; the legacy
+                // 32-bit DateTime wraps the same id to 2063-11-25 -> Monday 2063-11-19. A set carrying only one of the
+                // two is a delete that reports success and removes nothing on the other schema. 4.1% of rows on
+                // prod-test look like this.
                 arguments("far-future id", UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2"),
                         Set.of(21991230L, 20631119L)));
-    }
-
-    @Test
-    @DisplayName("an in-range id contributes one value, because both column types store it identically")
-    void inRangeIdContributesOneValue() {
-        // The point of the pair is that it costs nothing on ordinary traffic: the union only widens for ids past 2106,
-        // so the set a normal delete binds is exactly the set it bound before the legacy representation was added.
-        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("01a01a75-76de-785e-ae84-8870ed5e6db3"))))
-                .contains(Set.of(20260817L));
-    }
-
-    @Test
-    @DisplayName("a far-future id names its legacy week too, so the same delete works before and after the cutover")
-    void farFutureIdNamesBothRepresentations() {
-        // This is what removes the cutover flag. Legacy `traces` declares id_at as a 32-bit DateTime, which holds
-        // epochSecond % 2^32, so it files this row under 2063 while the partitioned successor files it under 2200.
-        // A set carrying only one of the two is a delete that reports success and removes nothing on the other schema.
-        assertThat(WeeklyPartitions.of(List.of(UUID.fromString("0699eb8a-59dd-7215-8000-03b8d2a8d5e2"))))
-                .contains(Set.of(21991230L, 20631119L));
     }
 
     @Test
