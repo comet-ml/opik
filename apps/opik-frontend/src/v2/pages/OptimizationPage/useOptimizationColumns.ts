@@ -109,7 +109,12 @@ export const useOptimizationColumns = ({
       },
       {
         id: "runtime_cost",
-        label: "Opt. cost",
+        // Per-trial cost of a single evaluated case, which is what runtimeCost
+        // holds — the same figure the Overview card labels "Runtime cost". It
+        // was labelled "Opt. cost" here, the name the runs list uses for a whole
+        // run's total spend, so one header stood for a per-case rate on this
+        // page and a lifetime total one screen away (OPIK-8060).
+        label: "Runtime cost",
         type: COLUMN_TYPE.cost,
         size: 130,
         accessorFn: (row) => row.runtimeCost,
