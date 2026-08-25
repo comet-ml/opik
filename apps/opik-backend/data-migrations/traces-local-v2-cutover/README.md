@@ -73,14 +73,17 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 6. **Cutover buffer knob ready** — `databaseAnalytics.asyncInsertBusyTimeoutMaxMs` (env
    `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS`), unset by default so the buffer inherits the
    `async_insert_busy_timeout_max_ms=250` carried by `queryParameters`. Raise it to ~10000 for the cutover, then unset it
-   again. The ceiling is a backend per-query setting applied on the backend's own ClickHouse client, so the migration
-   scripts' direct `clickhouse-client` session **cannot read or verify it**. It is therefore **operator-asserted**:
-   `exchange_and_wrap.sh` refuses the EXCHANGE without `--confirm-buffer-raised` (a fail-fast acknowledgment gate — it
-   forces the operator to confirm the step, though it cannot prove the value took effect). Confirm it actually took
-   effect on the prod-clone/staging load test (the Go/No-Go "Async-insert ceiling confirmed" item) before production.
-   **Also confirm client/SDK insert timeouts
-   exceed the widened buffer** (~10s) — with `wait_for_async_insert=1` a raised ceiling blocks each insert until it
-   flushes, so a shorter client timeout would surface as ingestion errors during the window.
+   again. **Where it is set, the exact value, the rollout and the revert step are in
+   ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it)** — it is a temporary env var on the
+   deployment's own backend config, not a chart value (OPIK-7686). Have that config change written and reviewed *before*
+   the window, so applying it is a merge, not an edit. The ceiling is a backend per-query setting applied on the backend's own
+   ClickHouse client, so the migration scripts' direct `clickhouse-client` session **cannot read or verify it**. It is
+   therefore **operator-asserted**: `exchange_and_wrap.sh` refuses the EXCHANGE without `--confirm-buffer-raised` (a
+   fail-fast acknowledgment gate — it forces the operator to confirm the step, though it cannot prove the value took
+   effect). Confirm it actually took effect on the prod-clone/staging load test (the Go/No-Go "Async-insert ceiling
+   confirmed" item) before production. **Also confirm client/SDK insert timeouts exceed the widened buffer** (~10s) —
+   with `wait_for_async_insert=1` a raised ceiling blocks each insert until it flushes, so a shorter client timeout would
+   surface as ingestion errors during the window.
 7. **Schema-state flag wired, with a rollout plan** — `databaseAnalyticsDataModel.traceColumnsNonNullable` (env
    `ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE`, default `false`). The successor's `end_time`/`ttft` are
    **non-nullable sentinel** columns, so the app must represent an absent value as the epoch/NaN sentinel — not `null` —
@@ -158,7 +161,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    It executes the reference statement in
    [`000001_backfill_traces_local_v2.sql`](scripts/db-app-analytics/000001_backfill_traces_local_v2.sql) — the script
    reads that file and substitutes the window bounds, so the two never drift.
-2. **Raise the buffer ceiling** (config, see below), then **[`scripts/delta_replay.sh`](scripts/delta_replay.sh)**
+2. **Raise the buffer ceiling** (config — see
+   ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it) for the key, the value and the
+   restart wait), then **[`scripts/delta_replay.sh`](scripts/delta_replay.sh)**
    (reference SQL [`000002_delta_and_deletion_replay.sql`](scripts/db-app-analytics/000002_delta_and_deletion_replay.sql))
    — delta-insert (anchored at `backfill_start`), then **deletion replay**. The replay runs with
    `lightweight_deletes_sync = 2`, so it returns only once the delete mutation has applied on **every** replica.
@@ -263,6 +268,100 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 delta one). This is normal — `ReplacingMergeTree` collapses them on merge / under `FINAL` / `LIMIT 1 BY id`, highest
 `last_updated_at` winning. Do not "fix" it.
 
+### Where the buffer bump lives (and how to revert it)
+
+**Decision (OPIK-7686): a temporary env var on the deployed backend's own configuration — not a chart value.** The three
+`ANALYTICS_DB_ASYNC_INSERT_*` knobs are deliberately absent from the chart's `values.yaml` (OPIK-6880, #7675).
+Rationale:
+
+- **No chart change is needed.** `component.backend.env` is a free-form map rendered straight into the backend
+  ConfigMap, so a deployment-level entry is already sufficient.
+- **Removal is a clean one-step rollback.** Unset means "leave `queryParameters` alone" (`DatabaseAnalyticsFactory`), so
+  *deleting* the key restores whatever `queryParameters` carries — `async_insert_busy_timeout_max_ms=250` on the shipped
+  `config.yml` default. There is no "set it back to 250" edit, and therefore no pinned value that can later drift from
+  that default. For a time-boxed window that reversibility is the property worth optimising for.
+  > **If your deployment overrides `ANALYTICS_DB_QUERY_PARAMETERS`, `250` is not your baseline.** Deleting the key
+  > restores *that* chain's `async_insert_busy_timeout_max_ms` — or, if the chain omits it, the ClickHouse server value.
+  > Read your effective `queryParameters` before the window and record the number you are reverting to.
+- **The value is deployment- and window-specific** — one environment, for the length of the cutover. Keeping it in that
+  deployment's own config leaves it version-controlled and auditable without turning a temporary state into a permanent
+  chart default that every install inherits.
+- **A chart value would save no work**: you edit the deployment config either way.
+
+> For the record, the reason first given on #7675 for excluding these — that rendering them would send empty strings
+> where the backend expects an integer, so it "would not be inert" — was **wrong**. `config.yml` ships
+> `${ANALYTICS_DB_ASYNC_INSERT_*:-}` as the default for all three, so the empty case is the normal path in every
+> environment today: an empty substitution leaves a bare YAML scalar that parses to `null` on the boxed field behind it
+> (`Integer` for the two busy-timeout knobs, `Long` for `asyncInsertMaxDataSize`), and the `@Min(1)` each of them carries
+> does not fire on null. Exposing them in the chart with empty defaults *would* be safe. The decision above rests on
+> reversibility and scope, not on safety.
+
+> **Never bump it by editing `ANALYTICS_DB_QUERY_PARAMETERS`.** That means re-pasting the entire tuning string
+> (`compress`, `failover`, `async_insert`, `wait_for_async_insert`, the skip-index and shard settings, …), which risks
+> silently dropping one of the others and drifting from the `config.yml` default. The dedicated
+> `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS` override exists precisely so the cutover states only the one value it
+> is changing.
+
+**What to set.** One key on the backend. The two delivery forms are not interchangeable — under Helm it is a YAML entry
+in the values map, so `KEY=VALUE` shell syntax there renders nothing:
+
+```yaml
+# Helm — under component.backend.env (quote the value; the ConfigMap takes strings)
+component:
+  backend:
+    env:
+      ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS: "10000"
+```
+
+```bash
+# docker-compose — a backend environment variable (the compose file already forwards it)
+ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS=10000
+```
+
+Only the ceiling changes: leave `…_MIN_MS` and `…_MAX_DATA_SIZE` unset, so the floor stays at the
+`async_insert_busy_timeout_min_ms=100` carried by `queryParameters`, and widening the ceiling alone is what parks the
+inserts.
+
+**How to revert: delete the key** — do not set `250` (see the caveat above on what your baseline actually is). The revert
+is owed on **every** exit path, not just the happy one: after a successful EXCHANGE it is sequence step 5, and after a
+**rollback** it is equally required. `rollback.sh` is SQL-only and does not touch backend config, so no stage removes the
+override for you — a rolled-back deployment left with the widened ceiling keeps parking every insert for up to ~10s.
+Treat the revert (and its restart) as part of finishing either outcome.
+
+**It takes effect only on a backend restart — so confirm the restart finished before continuing.** The backend receives
+this through the container environment (`envFrom.configMapRef` under Helm), which Kubernetes injects at container start
+only: editing the ConfigMap does not reach a running pod. **How that restart is triggered is deployment-specific** — the
+chart ships no automation for it, so some deployments run a ConfigMap watcher that rolls the workload on its own while
+others need an explicit `kubectl rollout restart deployment/opik-backend`. Know which one yours is *before* the window.
+Either way the operator's obligation is identical, because the ceiling has to be live on **every** instance before step
+2 — so verify rather than assume:
+
+```bash
+kubectl rollout status deployment/opik-backend -n <namespace>
+kubectl get cm opik-backend -n <namespace> \
+    -o jsonpath='{.data.ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS}{"\n"}'
+# and confirm no surviving pod predates the roll:
+kubectl get pods -n <namespace> -l component=opik-backend \
+    -o custom-columns=NAME:.metadata.name,START:.status.startTime
+```
+
+These names are what the chart renders by default — Deployment and ConfigMap `opik-backend`, label
+`component=opik-backend`. They are derived from `opik.name`, so a `nameOverride` (or a parent chart supplying one) moves
+all three; substitute your release's actual names.
+
+Three consequences to plan for:
+
+- **One restart, not two, before the tail.** `traceColumnsNonNullable = true` (prereq 7) is another entry in the same
+  backend config and the same ConfigMap — and step 1 of "The final cutover window" asks for both. Land them **together**
+  so the fleet restarts once.
+- **Keep the chosen ceiling below the pod's termination grace period.** The revert is delivered by a *second* restart, and
+  at that moment pods are holding inserts parked for up to the widened ceiling. The chart does not set
+  `terminationGracePeriodSeconds`, so it is the Kubernetes default **30s** — comfortably above a ~10000ms ceiling, but a
+  much larger ceiling would let `SIGKILL` land on parked inserts. Check the two numbers against each other before
+  choosing a value.
+- **The restart itself costs ingestion capacity** (rolling-update `maxUnavailable`, plus any PodDisruptionBudget), so do
+  it while there is slack — not between the final delta and the EXCHANGE.
+
 ### The final cutover window (the zero-loss invariant)
 
 The buffer widening (prereq 6) is what makes the flip lossless, but the guarantee rests on a timing invariant worth
@@ -273,7 +372,9 @@ still land in the *old* `traces` in the gap between the last delta read and the 
 run. The binding constraint is therefore **not** "replay < buffer window"; it is that the **gap between the final delta
 and the `EXCHANGE` completing must stay within the buffer hold**. So run the tail as tightly as possible:
 
-1. Widen the buffer, and **roll out `traceColumnsNonNullable = true` to every backend instance** (see below).
+1. Widen the buffer, and **roll out `traceColumnsNonNullable = true` to every backend instance** (see below). Both are
+   entries in the same backend config and the same ConfigMap, so land them **together** and let the single restart carry
+   both — see ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it).
 2. Do the QA verify on an **earlier** pass (it can take minutes on a large table — do not let it be the last thing
    before the swap).
 3. Run a **final** `delta_replay.sh` as the last write-facing step.
@@ -321,6 +422,30 @@ the `traceColumnsNonNullable` flip").
   rollback path must repair them.
 
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
+
+**The `tracesWeeklyPartitionPruningEnabled` flip (optional, and why it goes last).** `databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled`
+(env `ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED`, default `false`) lets a trace `DELETE` bind itself to
+the weekly partitions its own ids resolve to (OPIK-6901), instead of being planned against every part of the table — on
+prod-test, 12 ids rewrote 3,928 parts / 5.40 TiB without it. It asserts a **schema** fact: that `traces` (or
+`traces_local`) is the successor, with `id_at` as `DateTime64(0,'UTC')` under the weekly `PARTITION BY`.
+
+> **It enables the *pruning*, not the partitioning — the name is deliberate.** Setting it does not create, activate or
+> migrate anything; the partitioned schema arrives with the `EXCHANGE` above and nowhere else. So it is never a step that
+> *makes* the cutover progress, and setting it early does not bring the partitioning forward — it only starts emitting a
+> predicate against whatever table is live, which is the failure below.
+
+It is a third flag precisely because **neither of the two above marks the `EXCHANGE`**, which is when the partitioning
+appears: `traceColumnsNonNullable` must lead it (above), and `tracesDistributedWrapEnabled` flips at the wrap, which may
+be deferred long after it (`--skip-wrap` … `--wrap-only`). So gate on this one, not on either of those.
+
+Unlike its siblings it is **safe to lag and unsafe to lead**: `false` is the previous unbounded delete, always correct
+and merely slower, so turn it on at leisure **after** the `EXCHANGE` is confirmed. Turning it on early — while `traces` is
+still the original — is the failure mode worth avoiding: the original has **no `PARTITION BY` at all** (nothing to prune)
+and declares `id_at` as a 32-bit `DateTime` that overflows past 2106, so a far-future id (the litellm ~2201 rows) is
+stored under a wrapped recent timestamp that the derived partition cannot match, and the delete reports success having
+matched **zero rows**. For the same reason, a stage B/C **rollback must revert it to `false` — and roll-restart every
+instance — before promoting the original**, ahead of the swap rather than after it. Like its siblings it comes from a
+startup snapshot of `OpikConfiguration`, so the config change alone changes nothing until each instance restarts.
 
 ## Batching and throttling
 
@@ -728,7 +853,8 @@ server's major version, either way:
   `CLICKHOUSE_HOST`; for a ClickHouse on the host's own loopback, add `--network=host` via `CLICKHOUSE_CLIENT_DOCKER_OPTS`.
 
 **The only manual actions are not SQL:** (1) raising/restoring the async-insert buffer ceiling
-(`databaseAnalytics.asyncInsertBusyTimeoutMaxMs`) around steps 2–3; (2) flipping
+(`databaseAnalytics.asyncInsertBusyTimeoutMaxMs`) around steps 2–3 — see
+["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it); (2) flipping
 `databaseAnalyticsDataModel.traceColumnsNonNullable` to `true` in lockstep with the EXCHANGE (and back on rollback) —
 see "The final cutover window"; and (3) the go/no-go judgement between steps. All three are *backend config* / judgement changes (env + rolling
 restart, or a config push) that these DB-facing scripts cannot and should not make. They are deliberately operator-owned;
@@ -831,6 +957,11 @@ statements, so a failure *between* them needs a restart path:
 **Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
 complete until they land.
+
+> **If `tracesWeeklyPartitionPruningEnabled` was turned on, revert it *before* the stage runs, not after.** It asserts the
+> live table is the partitioned successor, and the restored original is not one, so a stale `true` makes trace deletes
+> match zero rows while reporting success — see "The `tracesWeeklyPartitionPruningEnabled` flip". It is the one flag whose
+> revert has to lead the swap; the two steps below follow it.
 
 1. **Revert `traceColumnsNonNullable` to `false` AND roll-restart every backend instance.** The flag is read from a
    **startup snapshot** of `OpikConfiguration` (bound via `toInstance`), so a config change does **not** take effect until
@@ -1079,6 +1210,12 @@ cheap (stage A); the bridge stays enabled so nothing is lost on a retry.
 - [ ] **Async-insert ceiling confirmed** — raising `asyncInsertBusyTimeoutMaxMs` demonstrably widens the adaptive buffer
       under load, not just the cap. `exchange_and_wrap.sh` enforces the acknowledgment via `--confirm-buffer-raised`, but
       that is an assertion only — this checklist item is the actual "it took effect under load" verification.
+- [ ] **The buffer-bump and revert changes are pre-written and reviewed** — the config entry raising
+      `ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS` (with `traceColumnsNonNullable = true` alongside it) and the revert
+      that *deletes* the key, both prepared before the window so each is a merge rather than an edit under pressure.
+      Confirm the chosen ceiling is below `terminationGracePeriodSeconds`, and that you know how a backend restart is
+      triggered on the target deployment and that it fits the schedule — see
+      ["Where the buffer bump lives"](#where-the-buffer-bump-lives-and-how-to-revert-it).
 - [ ] **Data Retention confirmed disabled** for the cutover window (`RETENTION_ENABLED=false`). Retention deletes bypass
       the deletion bridge, so a sweep in the window would leak/resurrect across the swap; `exchange_and_wrap.sh` and
       `rollback.sh` (stages B/C) enforce `--confirm-retention-paused`, but that is an assertion — this item is the real

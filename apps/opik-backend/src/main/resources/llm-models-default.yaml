@@ -564,6 +564,8 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v4-flash-0731"
     label: "deepseek/deepseek-v4-flash-0731"
+  - id: "deepseek/deepseek-v4-flash-vision-exp"
+    label: "deepseek/deepseek-v4-flash-vision-exp"
   - id: "deepseek/deepseek-v4-flash:free"
     label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
@@ -811,6 +813,9 @@ openrouter:
     structuredOutput: true
   - id: "meta/muse-spark-1.2"
     label: "meta/muse-spark-1.2"
+    structuredOutput: true
+  - id: "meta/muse-spark-1.2-contributor"
+    label: "meta/muse-spark-1.2-contributor"
     structuredOutput: true
   - id: "microsoft/mai-ds-r1"
     label: "microsoft/mai-ds-r1"
@@ -1533,6 +1538,8 @@ openrouter:
     label: "sao10k/l3.1-euryale-70b"
   - id: "sao10k/l3.3-euryale-70b"
     label: "sao10k/l3.3-euryale-70b"
+  - id: "stealth/ox-alpha"
+    label: "stealth/ox-alpha"
   - id: "stepfun-ai/step3"
     label: "stepfun-ai/step3"
   - id: "stepfun/step-3.5-flash"
@@ -1545,6 +1552,12 @@ openrouter:
     label: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"
     label: "tencent/hunyuan-a13b-instruct"
+  - id: "tencent/hy-mt2-1.8b"
+    label: "tencent/hy-mt2-1.8b"
+  - id: "tencent/hy-mt2-30b-a3b"
+    label: "tencent/hy-mt2-30b-a3b"
+  - id: "tencent/hy-mt2-7b"
+    label: "tencent/hy-mt2-7b"
   - id: "tencent/hy3"
     label: "tencent/hy3"
   - id: "tencent/hy3-preview"
@@ -1567,8 +1580,12 @@ openrouter:
     label: "thinkingmachines/inkling"
   - id: "thinkingmachines/inkling-small"
     label: "thinkingmachines/inkling-small"
+  - id: "thinkingmachines/inkling-small:free"
+    label: "thinkingmachines/inkling-small:free"
   - id: "thinkingmachines/inkling:batch"
     label: "thinkingmachines/inkling:batch"
+  - id: "thinkingmachines/inkling:free"
+    label: "thinkingmachines/inkling:free"
   - id: "thudm/glm-4.1v-9b-thinking"
     label: "thudm/glm-4.1v-9b-thinking"
     reasoning: true

@@ -22,7 +22,7 @@ Cost Intelligence closes that loop. It shows you where the money went, prices wh
 The loop below works at any scale, but you don't have to run it fleet-wide on day one. The lowest-risk way in is staged:
 
 1. **Observe first.** Roll out to a pilot group and collect data only — no policies yet. You learn where the money goes before anything changes.
-2. **Apply to the pilot.** Review the recommendations priced from the pilot's own traffic and apply the ones you approve, to that group only.
+2. **Apply to the pilot.** Review the recommendations priced from the pilot's own traffic and apply the ones you approve. Policies only reach machines where Cost Intelligence is installed, so while only the pilot is rolled out, the changes land on the pilot's machines alone.
 3. **Widen.** Expand observability and the approved policies to the whole organization.
 4. **Tune per user.** Use [user policies](/cost-intelligence/roll-out-cost-policies) to handle the heaviest spenders and the teams that genuinely need different settings.
 
@@ -88,7 +88,7 @@ A recommendation that cuts spend by making the agent worse is not a saving, so e
 
 **Against benchmarks.** We evaluate agent performance on open and private benchmarks — TerminalBench among them — before and after each change, so a method that degrades what the agent can do never becomes a recommendation.
 
-**Against real sessions.** We maintain a body of tens of thousands of real, labeled coding-agent sessions that are replayable inside Opik. Every method is tuned against it offline, in large experiments, and monitored online with LLM-as-a-judge evaluation of real outcomes. As agents and usage patterns evolve, the same loop keeps the recommendations current.
+**Against real sessions.** We maintain a body of tens of thousands of real, labeled coding-agent sessions — drawn from our own internal usage and from customers who explicitly opt in — that are replayable inside Opik. Every method is tuned against it offline, in large experiments, and monitored online with LLM-as-a-judge evaluation of real outcomes. As agents and usage patterns evolve, the same loop keeps the recommendations current.
 
 ## Next steps
 

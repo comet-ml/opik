@@ -31,16 +31,22 @@ const useProviderKeysCreateMutation = () => {
           configuration: providerKey.configuration,
         }),
         ...(providerKey?.headers && { headers: providerKey.headers }),
+        ...(providerKey.auth_config !== undefined && {
+          auth_config: providerKey.auth_config,
+        }),
       });
 
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "errors", "0"],
-        error.message,
-      );
+      // the backend 400s in two shapes: bean validation -> {errors: [...]},
+      // service BadRequestException -> {message: "..."} (Dropwizard ErrorMessage)
+      const errors = get(error, ["response", "data", "errors"]);
+      const message =
+        get(error, ["response", "data", "message"]) ??
+        (Array.isArray(errors) && errors.length > 0
+          ? errors.join("; ")
+          : error.message);
 
       toast({
         title: "Error",

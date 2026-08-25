@@ -365,17 +365,19 @@ areas:
     label: Dashboards
     nav_group: Observability
     routes: ["/$workspaceName/dashboards", "/dashboards/$dashboardId", "/projects/$projectId/dashboards"]
+    spec_dir: dashboards
     specs:
+      - dashboards/workspace-span-metrics.spec.ts
     capabilities:
       list-dashboards:      { covered: false }
-      create-dashboard:     { covered: false }
+      create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
       open-dashboard:       { covered: false }
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
-      add-widget:           { covered: false }
+      add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
       configure-widget:     { covered: false }
-      widget-filters:       { covered: false }
-      metric-date-range:    { covered: false }
+      widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
+      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
 
   # ===================== DEVELOPMENT =====================
 
@@ -497,6 +499,7 @@ areas:
     specs:
       - datasets/dataset-crud-smoke.spec.ts
       - datasets/dataset-items.spec.ts
+      - datasets/dataset-items-filter-scope.spec.ts
       - datasets/dataset-version-counters.spec.ts
     capabilities:
       list-datasets:          { covered: true,  tier: t1-smoke }
@@ -506,6 +509,8 @@ areas:
       add-item-ui:            { covered: true,  tier: t1-smoke }
       edit-item-versions:     { covered: true,  tier: t2-cuj }
       bulk-delete-items:      { covered: true,  tier: t3-nightly }
+      filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
+      filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
       sdk-round-trip:         { covered: true,  tier: t1-smoke }
       version-history-view:   { covered: true,  tier: t2-cuj }
@@ -556,6 +561,7 @@ areas:
       - experiments/experiments-smoke.spec.ts
       - experiments/experiments-compare.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
+      - experiments/compare-json-key-sorting.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
       per-item-scores:         { covered: true,  tier: t1-smoke }
@@ -629,6 +635,7 @@ areas:
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
+      - online-evaluation/online-evaluation-sampling-rate.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -638,7 +645,7 @@ areas:
       list-rules:              { covered: false }
       rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
       rule-filters:            { covered: false }
-      sampling-rate:           { covered: false }
+      sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch; binomial band 15-85%" }
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }

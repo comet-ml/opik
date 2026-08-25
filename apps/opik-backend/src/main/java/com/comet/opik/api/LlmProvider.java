@@ -41,4 +41,13 @@ public enum LlmProvider {
     public boolean supportsProviderName() {
         return this == CUSTOM_LLM || this == BEDROCK || this == OLLAMA;
     }
+
+    /**
+     * Providers whose requests route through {@code CustomLlmClientGenerator} — the only client
+     * that injects a dynamically fetched bearer, so the only ones where an {@code auth_config}
+     * takes effect.
+     */
+    public boolean supportsDynamicTokenAuth() {
+        return this == CUSTOM_LLM || this == BEDROCK || this == OLLAMA;
+    }
 }

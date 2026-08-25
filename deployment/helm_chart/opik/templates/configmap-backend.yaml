@@ -50,6 +50,7 @@ data:
         "ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED" $dm.spanDeletionEventsCaptureEnabled
         "ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE" $dm.deletionEventsInsertBatchSize
         "ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED" $dm.tracesDistributedWrapEnabled
+        "ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED" $dm.tracesWeeklyPartitionPruningEnabled
         "PARTITION_METRICS_ENABLED" $pm.enabled
         "PARTITION_METRICS_INTERVAL" $pm.interval
         "PARTITION_METRICS_LWD_TABLES" $pm.lwdTables

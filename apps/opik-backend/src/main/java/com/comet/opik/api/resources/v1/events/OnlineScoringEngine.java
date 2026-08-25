@@ -16,15 +16,15 @@ import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.comet.opik.utils.ValidationUtils;
+import com.comet.opik.utils.VariablePathUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import com.google.api.gax.rpc.InvalidArgumentException;
 import com.google.common.annotations.VisibleForTesting;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.PathNotFoundException;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ImageContent;
@@ -885,29 +885,78 @@ public class OnlineScoringEngine {
             }
         }
 
-        Map<String, Object> forcedObject;
+        // Rules are validated on write (@SupportedVariablePaths), but ones stored before that existed
+        // still arrive here, so the grammar is enforced at the point of use too. Recursive descent and
+        // filter predicates walk the whole section, and scoring shares a scheduler across workspaces, so
+        // the cost of one rule's expression is not confined to that rule.
+        var unsupported = VariablePathUtils.findUnsupportedConstructInJsonPath(path);
+        if (unsupported.isPresent()) {
+            log.warn("unsupported construct '{}' in json path, dropping variable, path={}, nodeType={}",
+                    unsupported.get(), path, json.getNodeType());
+            return null;
+        }
+
+        Object jsonValue;
         try {
             // JsonPath didn't work with JsonNode, even explicitly using
-            // JacksonJsonProvider, so we convert to a Map
-            forcedObject = OBJECT_MAPPER.convertValue(json, new TypeReference<>() {
-            });
-        } catch (InvalidArgumentException e) {
+            // JacksonJsonProvider, so we convert to a plain Object: a Map for an object node, a List for
+            // an array node, and the scalar itself for anything else. Converting straight to
+            // Map<String, Object> instead threw MismatchedInputException (wrapped in
+            // IllegalArgumentException) whenever the section was NOT an object — e.g. a trace whose
+            // output is the bare string "how can I help?" — and that escaped prepareLlmRequest and failed
+            // the whole evaluation before the LLM was ever called.
+            jsonValue = OBJECT_MAPPER.convertValue(json, Object.class);
+        } catch (IllegalArgumentException e) {
             log.warn("failed to parse json, json={}", json, e);
             return null;
         }
 
         try {
-            var value = JsonPath.parse(forcedObject).read(path);
+            // JsonPath.read throws PathNotFoundException on a non-container (a scalar section has no
+            // nested path to walk), which lands on the fallback below rather than propagating.
+            var value = JsonPath.parse(jsonValue).read(path);
             return value != null ? serializeToJsonString(value) : null;
+        } catch (PathNotFoundException e) {
+            // DEBUG, and without the throwable: a scalar/array section reaches this line by design (it
+            // has no nested path), so at production volumes this fires for every unresolved variable of
+            // every scored trace — and when the flat fallback below succeeds there is nothing to report
+            // at all. The PathNotFoundException message says nothing the log line does not.
+            log.debug("couldn't find path inside json, trying flat structure, path={}, nodeType={}",
+                    path, json.getNodeType());
+            return flatFallback(jsonValue, path, json);
         } catch (Exception e) {
-            log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
-            return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
-                    .map(OnlineScoringEngine::serializeToJsonString)
-                    .orElseGet(() -> {
-                        log.info("couldn't find flat or nested path in json, path={}, json={}", path, json);
-                        return null;
-                    });
+            // Anything else means the path itself didn't parse — JsonPath raises InvalidPathException for
+            // a malformed expression, and the path is user-supplied ({@code toVariableMapping} builds it
+            // from the rule's variable mapping), so a typo lands here. That is a config error rather than
+            // an expected shape, and only the parser's message says where the expression broke, so keep
+            // it. Message without the stack trace: a bad mapping fires on every trace the rule scores.
+            log.warn("invalid json path, trying flat structure, path={}, nodeType={}, error={}",
+                    path, json.getNodeType(), e.getMessage());
+            return flatFallback(jsonValue, path, json);
         }
+    }
+
+    /**
+     * Last resort when the JsonPath lookup didn't resolve: treat the path's tail as a literal property
+     * name, which is how a mapping like {@code output.flat.key} finds a property actually called
+     * "flat.key". Only meaningful for an object section — a scalar or a list has no properties.
+     */
+    private static String flatFallback(Object jsonValue, String path, JsonNode json) {
+        return Optional.ofNullable(jsonValue)
+                .filter(Map.class::isInstance)
+                // Strip only the leading "$." — replace() would rewrite a key that itself
+                // contains "$." (a mapping of "output.a$.b" looked up "ab") and miss it.
+                .map(object -> ((Map<?, ?>) object).get(StringUtils.removeStart(path, "$.")))
+                .map(OnlineScoringEngine::serializeToJsonString)
+                .orElseGet(() -> {
+                    // The node's type, not its content: this is a trace's input/output/metadata, so it
+                    // carries customer prompts and completions that have no business in the application
+                    // log. The rule's own user-facing log already tells the customer which variable
+                    // failed to resolve.
+                    log.info("couldn't find flat or nested path in json, path={}, nodeType={}",
+                            path, json.getNodeType());
+                    return null;
+                });
     }
 
     /**

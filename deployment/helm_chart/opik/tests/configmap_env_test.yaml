@@ -74,6 +74,9 @@ tests:
           path: data.ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED
           value: "false"
       - equal:
+          path: data.ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED
+          value: "false"
+      - equal:
           path: data.PARTITION_METRICS_ENABLED
           value: "false"
       - equal:

@@ -33,6 +33,25 @@ export interface DatasetItemRef {
   data: Record<string, unknown>;
 }
 
+/**
+ * A dataset item read back with its tags. Separate from `DatasetItemRef`
+ * because a filter-scoped batch update is asserted on exactly which rows did
+ * and did not gain a tag, so `tags` must be present on every row rather than
+ * dropped by the mapper.
+ */
+export interface DatasetItemWithTagsRef {
+  id: string;
+  data: Record<string, unknown>;
+  tags: string[];
+}
+
+/** A raw REST answer, kept as status + message so a negative path can assert both. */
+export interface RawApiResult {
+  status: number;
+  /** The backend's `message` field, or the raw body when it isn't JSON. */
+  message: string;
+}
+
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   versionName: string;
@@ -102,6 +121,12 @@ export interface AutomationRuleRef {
   name: string;
   projectIds: string[];
   enabled: boolean;
+  /**
+   * Fraction in [0, 1] — the backend's own units. The dialog shows a
+   * percentage (50), the API stores a fraction (0.5); assertions must use the
+   * fraction.
+   */
+  samplingRate: number;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -207,6 +232,36 @@ export interface OptimizationRef {
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
+/** One clause of the `sorting` query param the grids serialise. */
+export interface BackendSort {
+  field: string;
+  direction: 'ASC' | 'DESC';
+}
+
+/**
+ * The filter shape the SDK's dataset-item mutations accept, derived from the
+ * method signature rather than hand-written.
+ *
+ * `BackendFilter.operator` is a plain `string` (the estate's filters cover more
+ * endpoints than this one), while the SDK narrows it to a union, so a direct
+ * assignment does not type-check. Casting through this alias keeps the *field
+ * names* checked — a typo'd `feild`, or the `type` key the SDK does not accept,
+ * still fails the build — which a bare `as never` would silently swallow.
+ */
+type SdkDatasetItemFilters = NonNullable<
+  Parameters<Opik['api']['datasets']['deleteDatasetItems']>[0]
+>['filters'];
+
+/** The dashboard widget metric types these tests exercise. */
+export type WorkspaceMetricType = 'SPAN_TOKEN_USAGE';
+export type MetricInterval = 'HOURLY' | 'DAILY' | 'WEEKLY';
+
+/** One `{name, data:[{time,value}]}` series of a workspace-metrics answer. */
+export interface MetricSeries {
+  name: string;
+  points: Array<{ time: string; value: number | null }>;
+}
+
 export function makeBackendClient(apiKey: string | null = null) {
   const env = loadEnvConfig();
   const opik = new Opik({
@@ -234,6 +289,65 @@ export function makeBackendClient(apiKey: string | null = null) {
       if (isNotFoundError(err)) return null;
       throw err;
     }
+  };
+
+  /**
+   * A REST call that returns the status and body instead of throwing.
+   *
+   * The typed client raises on any non-2xx and does not surface the response
+   * body, but for the filter-validation paths the status *and* the message are
+   * the contract under test: an operator the backend cannot serve must answer
+   * 400 naming the field and operator, and a malformed filter list must answer
+   * 422 — never 500. Same raw-fetch shape as `getProjectStats` below, which
+   * exists for the same reason (the pinned SDK can't express the call).
+   */
+  const rawFetch = async (
+    method: 'GET' | 'POST' | 'PATCH',
+    path: string,
+    opts: { query?: URLSearchParams; body?: unknown } = {},
+  ): Promise<RawApiResult & { json: unknown }> => {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Comet-Workspace': env.workspace,
+    };
+    const key = apiKey ?? env.apiKey;
+    if (key) headers['Authorization'] = key;
+
+    const query = opts.query ? `?${opts.query}` : '';
+    const res = await fetch(`${env.apiBaseUrl}${path}${query}`, {
+      method,
+      headers,
+      ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
+    });
+    const text = await res.text();
+    let json: unknown = null;
+    let message = text;
+    try {
+      json = JSON.parse(text);
+      const m = (json as { message?: unknown } | null)?.message;
+      if (typeof m === 'string') message = m;
+    } catch {
+      // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
+    }
+    return { status: res.status, message, json };
+  };
+
+  /**
+   * The generated REST type marks `samplingRate` optional. Defaulting a missing
+   * value to 1 would present as "100% of traces", which is indistinguishable
+   * from a correctly-configured full-rate rule — so a sampling assertion built
+   * on that default could pass while the field was never returned at all.
+   * Fail loudly instead.
+   */
+  const requireSamplingRate = (rate: number | undefined, ruleName: string): number => {
+    if (typeof rate !== 'number' || Number.isNaN(rate)) {
+      throw new Error(
+        `listAutomationRulesForProject: rule '${ruleName}' returned no samplingRate — ` +
+          `cannot assert on sampling behaviour.`,
+      );
+    }
+    return rate;
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -386,6 +500,173 @@ export function makeBackendClient(apiKey: string | null = null) {
         ids.push(...content.map((item) => String(item.id)));
         if (content.length < pageSize) return ids;
       }
+    },
+
+    /**
+     * Dataset items under `filters`, with their tags — `GET /v1/private/datasets/
+     * {id}/items`. This is the read the filter-scoped mutations preview: whatever
+     * this returns is exactly the set a delete or batch-update with the same
+     * filter is entitled to touch.
+     */
+    async listDatasetItemsFiltered(args: {
+      datasetId: string;
+      filters?: BackendFilter[];
+    }): Promise<DatasetItemWithTagsRef[]> {
+      const page = await opik.api.datasets.getDatasetItems(args.datasetId, {
+        size: 1000,
+        page: 1,
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+      });
+      return (page.content ?? []).map((item) => ({
+        id: String(item.id),
+        data: (item.data ?? {}) as Record<string, unknown>,
+        tags: (item as { tags?: string[] }).tags ?? [],
+      }));
+    },
+
+    /**
+     * Tag every dataset item matching `filters` — `PATCH /v1/private/datasets/
+     * items/batch`. Scope is decided server-side by the filter, which is the
+     * whole point: the caller never names the ids.
+     */
+    async batchUpdateDatasetItemsByFilter(args: {
+      datasetId: string;
+      filters: BackendFilter[];
+      tags: string[];
+    }): Promise<void> {
+      await opik.api.datasets.batchUpdateDatasetItems({
+        datasetId: args.datasetId,
+        filters: args.filters as SdkDatasetItemFilters,
+        update: { tagsToAdd: args.tags },
+      });
+    },
+
+    /**
+     * Delete every dataset item matching `filters` — `POST /v1/private/datasets/
+     * items/delete`. Non-reversible and filter-scoped, so a test using it must
+     * assert the surviving set exactly, not just that something was removed.
+     *
+     * **Ungrouped on purpose, and therefore not the UI's exact request.** No
+     * `batch_group_id` is sent, so the backend mutates the latest dataset
+     * version rather than creating a new one. The UI's select-all delete *does*
+     * send one (`DatasetItemsActionsPanel` calls `generateBatchGroupId()` when
+     * every row is selected), which commits the delete as its own version.
+     *
+     * The distinction is deliberate: what the filter-scoped endpoints needed
+     * covering is *which rows a filter selects* — the destructive part, where an
+     * over-matching filter silently deletes data. Version-commit semantics are a
+     * separate contract, already asserted by `dataset-items.spec.ts` and
+     * `dataset-version-counters.spec.ts` for the id-scoped paths. A caller that
+     * wants the grouped behaviour must pass `batchGroupId` and assert the new
+     * version; this helper does not, so do not read it as the user-facing path.
+     */
+    async deleteDatasetItemsByFilter(args: {
+      datasetId: string;
+      filters: BackendFilter[];
+    }): Promise<void> {
+      await opik.api.datasets.deleteDatasetItems({
+        datasetId: args.datasetId,
+        filters: args.filters as SdkDatasetItemFilters,
+      });
+    },
+
+    /**
+     * The status and message a filter-scoped dataset-item mutation answers with,
+     * without throwing — for the negative paths, where the contract is that a
+     * filter the backend cannot serve is rejected at validation (400/422) rather
+     * than blowing up in the query builder (500).
+     *
+     * `filters` is `unknown` on purpose: some of these cases send a filter list
+     * that is deliberately malformed (a null element), which no typed filter
+     * shape can express.
+     */
+    async datasetItemMutationStatus(args: {
+      operation: 'delete' | 'batch-update';
+      datasetId: string;
+      filters: unknown;
+    }): Promise<RawApiResult> {
+      const { status, message } =
+        args.operation === 'delete'
+          ? await rawFetch('POST', '/v1/private/datasets/items/delete', {
+              body: { dataset_id: args.datasetId, filters: args.filters },
+            })
+          : await rawFetch('PATCH', '/v1/private/datasets/items/batch', {
+              body: {
+                dataset_id: args.datasetId,
+                filters: args.filters,
+                update: { tags_to_add: ['should-never-be-applied'] },
+              },
+            });
+      return { status, message };
+    },
+
+    /**
+     * Dataset-item ids in the order the experiment-comparison grid asks for them
+     * — `GET /v1/private/datasets/{id}/items/experiments/items?sorting=`.
+     *
+     * Ids only, and in order: this read exists to assert *which* rows come back
+     * and in *what* order, never their content. The `sorting` field travels
+     * verbatim, so `output.<key>` exercises the dynamic-key binding directly.
+     */
+    async listCompareItemIds(args: {
+      datasetId: string;
+      experimentIds: string[];
+      sorting?: BackendSort[];
+      size?: number;
+    }): Promise<string[]> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        size: args.size ?? 200,
+        page: 1,
+        truncate: true,
+        ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
+      });
+      return (page.content ?? []).map((item) => String(item.id));
+    },
+
+    /**
+     * `POST /v1/private/workspaces/metrics/spans` — the aggregation a dashboard
+     * Time series widget plots when it is scoped to "All projects in the
+     * workspace". Raw fetch because the pinned SDK has no binding for it, and
+     * because the widget's own payload (including a 400) is what's under test.
+     *
+     * `projectIds` is deliberately absent from the body when empty: that is how
+     * the front end asks for the whole workspace, and a specific project would
+     * route the widget to `/projects/{id}/metrics` instead — a different
+     * endpoint entirely.
+     */
+    async workspaceSpanMetric(args: {
+      metricType: WorkspaceMetricType;
+      interval: MetricInterval;
+      intervalStart: Date;
+      intervalEnd: Date;
+      /** Sent verbatim: these tests assert on the exact payload the UI emits. */
+      filters?: unknown[];
+    }): Promise<RawApiResult & { series: MetricSeries[] }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        '/v1/private/workspaces/metrics/spans',
+        {
+          body: {
+            metric_type: args.metricType,
+            interval: args.interval,
+            interval_start: args.intervalStart.toISOString(),
+            interval_end: args.intervalEnd.toISOString(),
+            ...(args.filters?.length ? { filters: args.filters } : {}),
+          },
+        },
+      );
+      const results =
+        (json as { results?: Array<{ name?: string; data?: Array<{ time?: string; value?: number | null }> }> } | null)
+          ?.results ?? [];
+      const series = results.map((r) => ({
+        name: String(r.name ?? ''),
+        points: (r.data ?? []).map((p) => ({
+          time: String(p.time ?? ''),
+          value: p.value ?? null,
+        })),
+      }));
+      return { status, message, series };
     },
 
     /**
@@ -559,6 +840,7 @@ export function makeBackendClient(apiKey: string | null = null) {
         name: r.name,
         projectIds: (r.projects ?? []).map((p) => String(p.projectId)),
         enabled: r.enabled ?? true,
+        samplingRate: requireSamplingRate(r.samplingRate, r.name),
       }));
     },
 
@@ -704,6 +986,7 @@ export function makeBackendClient(apiKey: string | null = null) {
       source: 'sdk' | 'experiment' | 'playground' | 'optimization';
       input?: Record<string, unknown>;
       output?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
       startTime?: Date;
     }): Promise<string> {
       await opik.api.traces.createTrace({
@@ -714,6 +997,7 @@ export function makeBackendClient(apiKey: string | null = null) {
         startTime: args.startTime ?? new Date(),
         ...(args.input ? { input: args.input } : {}),
         ...(args.output ? { output: args.output } : {}),
+        ...(args.metadata ? { metadata: args.metadata } : {}),
       });
       return args.id;
     },

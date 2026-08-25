@@ -7032,7 +7032,11 @@ paths:
       tags:
       - Prompts
       summary: Retrieve prompt version
-      description: Retrieve prompt version
+      description: "Retrieve prompt version. When project_name is supplied the lookup\
+        \ is scoped to that project: a prompt belonging to a different project is\
+        \ never matched, and an unknown project name returns 404. Legacy prompts with\
+        \ no project are still resolved as a deprecated fallback, signalled by the\
+        \ X-Opik-Deprecation response header."
       operationId: retrievePromptVersion
       requestBody:
         content:
@@ -7042,6 +7046,14 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            X-Opik-Deprecation:
+              description: "Present only when the prompt was resolved through the\
+                \ deprecated workspace-wide fallback, i.e. it has no project. Absent\
+                \ for project-scoped prompts."
+              style: simple
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -20517,7 +20529,11 @@ components:
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          description: "If provided, scopes the search to the specified project"
+          description: "If provided, scopes the search to the specified project; prompts\
+            \ belonging to other projects are never matched, and an unknown project\
+            \ name returns 404. Legacy prompts that are not scoped to any project\
+            \ are still matched as a deprecated fallback, signalled by the X-Opik-Deprecation\
+            \ response header."
     PromptVersionIdsRequest_Detail:
       required:
       - ids
