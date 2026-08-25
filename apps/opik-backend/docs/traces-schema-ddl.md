@@ -107,15 +107,15 @@ copy its **shape** into `src/main/resources/liquibase/db-app-analytics/migration
 --comment: Pre-cutover branch — traces is the live MergeTree and traces_local_v2 is the shadow; apply to both
 --preconditions onFail:MARK_RAN onError:HALT
 --precondition-sql-check expectedResult:0 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces           ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2  ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces          ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
 
 --changeset opik:000123_add_foo_to_traces_post_cutover
 --comment: Post-cutover branch — traces is the Distributed wrapper over traces_local
 --preconditions onFail:MARK_RAN onError:HALT
 --precondition-sql-check expectedResult:1 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local     ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces           ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local    ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces          ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
 ```
 
 Four details are load-bearing:
@@ -126,6 +126,10 @@ Four details are load-bearing:
   against the wrong topology. (`liquibase-clickhouse` 0.7.2 honours this; the gates assert it, so a version bump that
   broke it would fail CI rather than production.)
 * **`onError:HALT`.** If the precondition itself cannot be evaluated, stop — do not guess a topology.
+* **`ON CLUSTER '{cluster}'` on every statement.** Without it the DDL reaches only the node Liquibase connected to,
+  leaving the other replicas short while the changeset is recorded as applied. It compounds here: the guard is
+  evaluated from a *local* `system.tables` read (see the known limitation below), so a cluster left divergent by
+  non-cluster DDL can have one node record `MARK_RAN` for a topology the others are not in.
 * **`IF [NOT] EXISTS` everywhere.** Makes a re-run, a partially-applied branch, or an install arriving from either side
   idempotent.
 

@@ -5,6 +5,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -46,8 +47,14 @@ class TracesMigrationPreconditionLint {
      * treatment as the others.
      */
     private static final Pattern TRACES_MUTATION = Pattern.compile("(?im)^\\s*"
-            + "(?:(?:ALTER|OPTIMIZE)\\s+TABLE|DELETE\\s+FROM)\\s+"
-            + "(?:\\$\\{ANALYTICS_DB_DATABASE_NAME}\\.)?(traces|traces_local|traces_local_v2)\\b");
+            // Every statement kind that changes a trace table, including the structural ones a migration should not be
+            // doing in the mixed-fleet window but must not be able to smuggle past this lint if it tries.
+            + "(?:(?:ALTER|OPTIMIZE|DROP|TRUNCATE|RENAME|ATTACH|DETACH)\\s+TABLE|DELETE\\s+FROM|EXCHANGE\\s+TABLES)"
+            + "\\s+"
+            // Any database qualifier, quoted or not: `analytics.traces`, `${...}`.`traces`, "traces". Matching only the
+            // ${ANALYTICS_DB_DATABASE_NAME} prefix let a qualified or quoted mutation through undetected.
+            + "(?:[`\"]?[A-Za-z0-9_$.{}]+[`\"]?\\.)?"
+            + "[`\"]?(traces|traces_local|traces_local_v2)[`\"]?(?![A-Za-z0-9_])");
 
     /**
      * The changeset header, used to split a file. Group 1 is {@code author:id}; any trailing Liquibase attributes
@@ -72,7 +79,11 @@ class TracesMigrationPreconditionLint {
      * ({@code 0} — no {@code traces_local}) from the post-cutover one ({@code 1}).
      */
     private static final Pattern TOPOLOGY_CHECK = Pattern.compile(
-            "(?im)^\\s*--\\s*precondition-sql-check\\s+expectedResult:(\\d+)\\b.*\\btraces_local\\b.*$");
+            "(?im)^\\s*--\\s*precondition-sql-check\\s+expectedResult:(\\d+)\\b"
+                    // The check must actually interrogate the topology. Requiring only a number and the word `traces_local`
+                    // anywhere on the line accepted `SELECT 0 -- traces_local`, which guards nothing: it is a constant.
+                    + ".*\\bsystem\\.tables\\b"
+                    + ".*\\bname\\s*=\\s*'traces_local'.*$");
 
     private static final Set<String> REQUIRED_BRANCHES = Set.of("0", "1");
 
@@ -87,6 +98,7 @@ class TracesMigrationPreconditionLint {
     static List<String> problems(String fileName, String sql) {
         var problems = new ArrayList<String>();
         var guardedBranches = new LinkedHashSet<String>();
+        var branchCounts = new LinkedHashMap<String, Integer>();
         boolean mutatesTraceTable = false;
 
         var changeSets = changeSets(sql);
@@ -110,6 +122,7 @@ class TracesMigrationPreconditionLint {
                     && check.find();
             if (guarded) {
                 guardedBranches.add(check.group(1));
+                branchCounts.merge(check.group(1), 1, Integer::sum);
             } else {
                 problems.add(("%s: changeset '%s' mutates a trace table without a complete topology guard — it needs "
                         + "`--preconditions onFail:MARK_RAN onError:HALT` and a `--precondition-sql-check "
@@ -122,6 +135,22 @@ class TracesMigrationPreconditionLint {
             problems.add(("%s: a trace-table migration must ship BOTH complementary branches (expectedResult:0 for "
                     + "pre-cutover and expectedResult:1 for post-cutover); found only %s, so one topology would be "
                     + "recorded MARK_RAN and never receive the change").formatted(fileName, guardedBranches));
+        }
+
+        // Branches must come in pairs. Counting rather than set-testing catches the file that guards two mutations to
+        // the same topology and one to the other: the SET is still {0, 1}, so it looks complementary, while one
+        // topology in fact receives a change the other never does.
+        //
+        // This is a structural check and stops there on purpose. Whether two branches express the *same* change is a
+        // question about the DDL, not about its shape, and answering it is what the container-based parity gates do —
+        // they apply the migration to each topology and compare the resulting schemas. A regex lint that tried would
+        // either approximate it or block legitimate migrations.
+        if (mutatesTraceTable && problems.isEmpty()
+                && !branchCounts.getOrDefault("0", 0).equals(branchCounts.getOrDefault("1", 0))) {
+            problems.add(("%s: the guarded branches must pair up — found %s pre-cutover (expectedResult:0) and %s "
+                    + "post-cutover (expectedResult:1) mutating changesets, so at least one change reaches only one "
+                    + "topology").formatted(fileName, branchCounts.getOrDefault("0", 0),
+                            branchCounts.getOrDefault("1", 0)));
         }
 
         return problems;

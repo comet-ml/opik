@@ -3,6 +3,9 @@ package com.comet.opik.db;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,6 +13,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
@@ -155,21 +159,6 @@ class TracesMigrationPreconditionLintTest {
             assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql)).isEmpty();
         }
 
-        @Test
-        @DisplayName("rejects an unguarded mutation")
-        void rejectsAnUnguardedMutation() {
-            var sql = """
-                    --liquibase formatted sql
-                    --changeset opik:000200_add_foo
-                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-                    """;
-
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
-                    .singleElement(STRING)
-                    .contains("000200_add_foo")
-                    .contains("without a complete topology guard");
-        }
-
         /**
          * The finding a file-level search cannot make: the guard is present in the file, but on a different changeset
          * than the one doing the mutating, so the mutation itself runs unconditionally on both topologies.
@@ -248,22 +237,106 @@ class TracesMigrationPreconditionLintTest {
         }
 
         /**
-         * A shadow mutation looks single-topology and is not: the cutover renames {@code traces_local_v2} away, so an
-         * unguarded shadow ALTER added after the splice point runs against a table that exists on no cut-over install
-         * and fails the migration outright.
+         * Every shape of unguarded trace mutation the classifier must recognise, in one place rather than one test per
+         * statement kind.
+         * <p>
+         * The qualified and quoted forms are regressions: the classifier previously matched only a bare name optionally
+         * prefixed by {@code ${ANALYTICS_DB_DATABASE_NAME}.}, so {@code analytics.traces} and {@code `traces`} were not
+         * seen as mutations at all and the migration passed the lint untouched. The structural kinds
+         * ({@code RENAME}, {@code DROP}, {@code EXCHANGE}) are there because a migration should not be doing them during
+         * the mixed-fleet window — but if one tries, the lint must not be the thing that lets it through.
          */
-        @Test
-        @DisplayName("rejects an unguarded shadow-only migration")
-        void rejectsAnUnguardedShadowOnlyMigration() {
+        static Stream<Arguments> unguardedMutations() {
+            return Stream.of(
+                    Arguments.of("bare traces",
+                            "ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS foo String DEFAULT '';"),
+                    Arguments.of("the shard",
+                            "ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ADD INDEX IF NOT EXISTS idx_foo name TYPE set(0) GRANULARITY 1;"),
+                    Arguments.of("the shadow",
+                            "ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 MODIFY COLUMN name String CODEC(ZSTD(3));"),
+                    Arguments.of("unqualified", "ALTER TABLE traces ADD COLUMN IF NOT EXISTS foo String DEFAULT '';"),
+                    Arguments.of("another database qualifier",
+                            "ALTER TABLE analytics.traces ADD COLUMN IF NOT EXISTS foo String DEFAULT '';"),
+                    Arguments.of("backtick-quoted",
+                            "ALTER TABLE `traces` ADD COLUMN IF NOT EXISTS foo String DEFAULT '';"),
+                    Arguments.of("quoted and qualified",
+                            "ALTER TABLE `analytics`.`traces_local` ADD COLUMN IF NOT EXISTS foo String DEFAULT '';"),
+                    Arguments.of("a delete",
+                            "DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.traces WHERE workspace_id = 'x';"),
+                    Arguments.of("a rename",
+                            "RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces_old;"),
+                    Arguments.of("a drop", "DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local;"),
+                    Arguments.of("an exchange",
+                            "EXCHANGE TABLES ${ANALYTICS_DB_DATABASE_NAME}.traces AND ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2;"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("unguardedMutations")
+        @DisplayName("rejects an unguarded trace mutation in any form")
+        void rejectsUnguardedMutations(String description, String statement) {
             var sql = """
                     --liquibase formatted sql
-                    --changeset opik:000200_tune_shadow
-                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' MODIFY COLUMN name String CODEC(ZSTD(3));
-                    """;
+                    --changeset opik:000200_unguarded
+                    """ + statement + "\n";
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_tune_shadow.sql", sql))
+            assertThat(TracesMigrationPreconditionLint.problems("000200_unguarded.sql", sql))
+                    .as("%s must be recognised as a trace mutation and rejected", description)
                     .singleElement(STRING)
                     .contains("without a complete topology guard");
+        }
+
+        /**
+         * The guard must actually interrogate the topology. Requiring only an expected result and the word
+         * {@code traces_local} somewhere on the line accepted a constant — {@code SELECT 0 -- traces_local} — which
+         * evaluates the same on both topologies and so guards nothing at all.
+         */
+        @Test
+        @DisplayName("rejects a guard whose sqlCheck does not query system.tables")
+        void rejectsAGuardThatDoesNotQueryTheTopology() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_add_foo_pre_cutover
+                    --preconditions onFail:MARK_RAN onError:HALT
+                    --precondition-sql-check expectedResult:0 SELECT 0 -- traces_local
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """;
+
+            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+                    .singleElement(STRING)
+                    .contains("without a complete topology guard");
+        }
+
+        /**
+         * Two changes guarded to the same topology and one to the other: the branch <i>set</i> is still {@code {0, 1}},
+         * so a set-based check reads it as complementary, while the pre-cutover topology in fact receives a change the
+         * post-cutover one never does.
+         */
+        @Test
+        @DisplayName("rejects branches that do not pair up")
+        void rejectsUnpairedBranches() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_add_foo_pre_cutover
+                    """ + GUARD_PRE
+                    + """
+                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+
+                            --changeset opik:000200_add_bar_pre_cutover
+                            """
+                    + GUARD_PRE
+                    + """
+                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS bar String DEFAULT '';
+
+                            --changeset opik:000200_add_foo_post_cutover
+                            """
+                    + GUARD_POST
+                    + """
+                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                            """;
+
+            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+                    .singleElement(STRING)
+                    .contains("must pair up");
         }
 
         /**
@@ -333,18 +406,5 @@ class TracesMigrationPreconditionLintTest {
             assertThat(TracesMigrationPreconditionLint.problems("000200_seed_summary.sql", sql)).isEmpty();
         }
 
-        @Test
-        @DisplayName("rejects an unguarded shard mutation post-cutover")
-        void rejectsAnUnguardedShardMutation() {
-            var sql = """
-                    --liquibase formatted sql
-                    --changeset opik:000200_index_shard
-                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' ADD INDEX IF NOT EXISTS idx_foo name TYPE set(0) GRANULARITY 1;
-                    """;
-
-            assertThat(TracesMigrationPreconditionLint.problems("000200_index_shard.sql", sql))
-                    .singleElement(STRING)
-                    .contains("without a complete topology guard");
-        }
     }
 }
