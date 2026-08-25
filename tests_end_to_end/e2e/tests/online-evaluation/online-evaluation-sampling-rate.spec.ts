@@ -442,34 +442,48 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
     );
 
     const logMessages = await test.step(
-      `Wait until the rule has ruled on all ${SDK_TRACE_COUNT} SDK traces`,
+      `Wait until the rule has ruled on all ${SDK_TRACE_COUNT + bypassCount} traces`,
       async () => {
         // The absence assertion below is only sound once the engine has
         // finished with each SDK trace, and a skipped trace produces no score
         // to wait on. The rule's own log stream is the only signal that says
-        // "this trace was seen and deliberately dropped", so anchor on it: one
-        // skip line per SDK trace id.
+        // "this trace was seen and deliberately dropped", so anchor on it.
+        //
+        // Wait for the bypass lines too, not just the skips. The two are
+        // written on different branches of `shouldSampleTrace` and reach
+        // ClickHouse through a logback AsyncAppender that batches on a flush
+        // interval, so their arrival is independent: polling only for skips can
+        // return a snapshot whose bypass lines are still queued, and the exact
+        // `toHaveLength(bypassCount)` assertion below would then fail on a run
+        // where the engine did everything right. Requiring one line of each
+        // kind per trace id makes the snapshot complete by construction.
         let messages: string[] = [];
+        const seen = (traceId: string, marker: string) =>
+          messages.some((m) => m.includes(traceId) && m.includes(marker));
         await expect
           .poll(
             async () => {
               const logs = await backendClient.getAutomationRuleLogs(ruleId);
               messages = logs.map((l) => `${l.level} ${l.message}`);
-              return sdkTraces.sdk.filter((t) =>
-                messages.some(
-                  (m) => m.includes(t.id) && m.includes('per the sampling rate'),
-                ),
+              const skips = sdkTraces.sdk.filter((t) =>
+                seen(t.id, 'per the sampling rate'),
               ).length;
+              const bypasses = sdkTraces.bypass.filter((t) =>
+                seen(t.id, 'the rate applies to production traces only'),
+              ).length;
+              return skips + bypasses;
             },
             {
               timeout: 180_000,
               intervals: [2_000, 5_000],
               message:
-                'the rule must log a sampling skip for every SDK trace — without it, ' +
-                '"no score" cannot be distinguished from "not processed yet"',
+                'the rule must log a decision for every trace — a sampling skip for each ' +
+                'SDK trace, a rate-exempt line for each non-SDK one. Without both, ' +
+                '"no score" cannot be distinguished from "not processed yet", and the ' +
+                'exact per-kind counts below race the log appender\'s flush.',
             },
           )
-          .toBe(SDK_TRACE_COUNT);
+          .toBe(SDK_TRACE_COUNT + bypassCount);
         return messages;
       },
     );
