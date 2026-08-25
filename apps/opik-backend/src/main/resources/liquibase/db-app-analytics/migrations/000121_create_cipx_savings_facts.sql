@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.cipx_savings_facts ON C
     causal_link       LowCardinality(String),
 
     alloc             Float64,
-    usd               Float64,
+    usd               Decimal(38, 12),
 
     last_updated_at   DateTime64(6, 'UTC') DEFAULT now64(6)
 )
