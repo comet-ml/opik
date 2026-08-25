@@ -815,6 +815,35 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().agentsAmbiguous()).as("boolean agents_ambiguous records 0").isEqualTo(0L);
             });
         }
+
+        @Test
+        @DisplayName("a fractional counter records 0 rather than truncating to a plausible count")
+        void fractionalAgentCountersRecordZero() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            // The one malformed shape that IS a JSON number, so it reaches further than the others:
+            // these are dispatch counts, and a count is never fractional. Truncating 1.5 to 1 is the
+            // quietest form of the failure the whole helper exists to prevent — unlike text or a
+            // boolean, the result looks exactly like a count the producer meant to send.
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, "1.5", "2.9", "3000000000.5"))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).as("the row still lands — one bad metric must not lose the identity").isPresent();
+                assertThat(row.get().agentsDispatched()).as("agents_dispatched 1.5 records 0, not 1").isEqualTo(0L);
+                assertThat(row.get().agentsLinked()).as("agents_linked 2.9 records 0, not 2").isEqualTo(0L);
+                assertThat(row.get().agentsAmbiguous())
+                        .as("agents_ambiguous 3000000000.5 records 0, not 3000000000")
+                        .isEqualTo(0L);
+            });
+        }
     }
 
     private WorkspaceContext newWorkspace() {

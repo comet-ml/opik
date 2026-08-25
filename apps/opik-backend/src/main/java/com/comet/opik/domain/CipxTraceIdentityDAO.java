@@ -127,37 +127,33 @@ public class CipxTraceIdentityDAO {
                     .build();
         }
 
-        // UInt32 columns, and ClickHouse wraps an out-of-range literal mod 2^32 rather than
-        // rejecting it, so every way of getting this wrong is silent: asInt() makes 4294967295 a
-        // negative count in Java that only round-trips by accident, and anything past 2^32 wraps
-        // into a small plausible-looking one. Read the full range and clamp what is outside it.
-        // A UInt32 metric off the wire. Absent reads as 0 — that is the documented
-        // meaning, and a daemon that dispatched nothing is a real zero.
+        // A UInt32 metric off the wire. Missing or null reads as 0 — that is the documented
+        // meaning, and a daemon that dispatched nothing is a real zero. An integral value in
+        // [0, 2^32) passes through untouched. Anything else PRESENT records 0 and warns.
         //
-        // Anything PRESENT that cannot be one of these counters is 0 plus a warning,
-        // never a clamp. ClickHouse takes a UInt32 modulo 2^32 without complaint
-        // (measured: -1 stores as 4294967295, 9999999999 as 1410065407), so the old
-        // narrowing corrupted silently — but saturating at the ceiling instead is the
-        // same failure wearing a different hat: 4294967295 is a legitimate value, so a
-        // garbage payload would arrive indistinguishable from a real count, and these
-        // feed an SLO whose entire purpose is telling "we failed" from "we correctly
-        // refused". Zero degrades toward "nothing to report"; the ceiling invents the
-        // largest possible claim.
-        //
-        // The clamp is unnecessary as well as harmful: a value in [2^31, 2^32) is a
-        // legitimate UInt32 that asLong carries exactly, so the only inputs a clamp
-        // ever touched were already malformed.
+        // Zero for those, never a saturating clamp. ClickHouse takes a UInt32 modulo 2^32
+        // without complaint (measured: -1 stores as 4294967295, 9999999999 as 1410065407), so
+        // the asInt() narrowing this replaced corrupted silently — but the ceiling is that
+        // same failure wearing a different hat: 4294967295 is a legitimate count, so clamping
+        // to it makes a garbage payload indistinguishable from a real one, and these counters
+        // feed an SLO whose whole purpose is telling "we failed" from "we correctly refused".
+        // Zero degrades toward "nothing to report"; the ceiling invents the largest possible
+        // claim. A clamp would also be redundant: asLong carries all of [2^31, 2^32) exactly,
+        // so the only inputs it ever touched were already malformed.
         private static long asUInt32(JsonNode value, String field) {
             if (value.isMissingNode() || value.isNull()) {
                 return 0L;
             }
-            if (!value.canConvertToLong()) {
-                log.warn("cipx session metric '{}' is not a number ({}); recording 0", field, value.getNodeType());
+            // Fractional is malformed too, and routed with the text: asLong() would truncate 1.5
+            // to a perfectly plausible 1. canConvertToLong also rejects a bignum past long.
+            if (!value.isIntegralNumber() || !value.canConvertToLong()) {
+                log.warn("cipx metric '{}' is not a usable whole number ({}); recording 0", field,
+                        value.getNodeType());
                 return 0L;
             }
             long raw = value.asLong();
             if (raw < 0L || raw > 0xFFFF_FFFFL) {
-                log.warn("cipx session metric '{}' is outside UInt32 ({}); recording 0", field, raw);
+                log.warn("cipx metric '{}' is outside UInt32 ({}); recording 0", field, raw);
                 return 0L;
             }
             return raw;
