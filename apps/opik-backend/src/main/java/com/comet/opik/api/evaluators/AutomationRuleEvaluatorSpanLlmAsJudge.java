@@ -1,6 +1,7 @@
 package com.comet.opik.api.evaluators;
 
 import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.validation.SupportedVariablePaths;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -38,7 +39,9 @@ public final class AutomationRuleEvaluatorSpanLlmAsJudge
             @JsonView({
                     View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeMessage> messages,
-            @JsonView({View.Public.class, View.Write.class}) @NotNull Map<String, String> variables,
+            @JsonView({
+                    View.Public.class,
+                    View.Write.class}) @NotNull @SupportedVariablePaths Map<String, String> variables,
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema) {
     }
 

@@ -98,6 +98,8 @@ def build_algorithm_result(
         "selected_candidate_opik_score": best_score,
         "adapter_metric_used": True,
         "adapter_metric_call_count": optimizer._adapter_metric_calls,
+        "reflection_call_count": optimizer._reflection_call_count,
+        "max_reflection_calls": optimizer._max_reflection_calls,
         "dataset_item_ids": [item.get("id") for item in train_items],
     }
     if best_matches_seed:

@@ -3,7 +3,7 @@
 name: SDK E2E Libraries Integration Tests
 permissions:
   contents: read
-  packages: write
+  packages: read
 run-name: "SDK E2E Libraries Integration Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
@@ -37,6 +37,7 @@ concurrency:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: True  # unlike other workflows, here we need it for tests
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
   OPIK_URL_OVERRIDE: http://localhost:8080
@@ -66,6 +67,13 @@ jobs:
   build-opik:
     needs: [has_needed_secrets]
     if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
+    # The reusable build workflow pushes images to GHCR; pass down the
+    # packages: write grant here rather than at the workflow level (a called
+    # workflow's permissions can only be maintained or reduced from the
+    # caller's, never elevated).
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build_e2e_docker.yaml
 
   run_e2e_lib_integration:
@@ -81,7 +89,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Login to GHCR
         uses: docker/login-action@v4
@@ -100,7 +108,7 @@ jobs:
           docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Install uv and set the Python version ${{ matrix.python_version }}
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: ${{ matrix.python_version }}
 

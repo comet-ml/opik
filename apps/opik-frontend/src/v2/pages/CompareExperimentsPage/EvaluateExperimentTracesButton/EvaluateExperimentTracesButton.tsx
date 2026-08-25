@@ -47,6 +47,7 @@ const Inner: React.FC<{ experiment: Experiment; projectId: string }> = ({
         disabled={isFetching}
         label="Evaluate"
         onClick={handleClick}
+        buttonSize="2xs"
       />
     </>
   );

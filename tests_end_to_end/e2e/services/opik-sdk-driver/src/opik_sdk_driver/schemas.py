@@ -85,6 +85,13 @@ class NestedTraceCreate(BaseModel):
     # and end_time unset, which the UI renders as Duration "NA" — the same shape
     # as the SDK's own not-yet-ended traces.
     duration_seconds: float | None = None
+    # Ages the whole trace by this many days: it gets a client-supplied UUIDv7
+    # id stamped at that instant, and its timestamps move back with it. Time
+    # windows on the read paths (notably GET /v1/private/projects/stats) are
+    # applied to the timestamp embedded in the id, not to start_time, so this
+    # is what places a trace deterministically inside or outside a rolling
+    # window. None keeps the SDK's own behaviour: a server-fresh id stamped now.
+    age_days: float | None = None
 
 
 class NestedTraceResponse(BaseModel):
@@ -124,6 +131,26 @@ class DatasetCreate(BaseModel):
 class DatasetResponse(BaseModel):
     id: str
     name: str
+
+
+class DatasetInsertItemsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    items: list[dict[str, Any]]
+    # Worker threads Dataset.insert uses to upload this call's batches. 1 (the
+    # SDK default) uploads them sequentially; >1 uploads them in parallel, and
+    # both paths must land in ONE dataset version with identical counters.
+    # Parallel upload needs a backend >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
+    # (2.2.8); against an older one the SDK silently falls back to sequential.
+    num_threads: int = 1
+    workspace: str | None = None
+
+
+class DatasetInsertItemsResponse(BaseModel):
+    dataset_id: str
+    inserted: int
 
 
 class ExperimentItemSeed(BaseModel):
@@ -303,3 +330,47 @@ class AnnotationQueueCreate(BaseModel):
 class AnnotationQueueResponse(BaseModel):
     id: str
     name: str
+
+
+class ThreadsEvaluateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # Always distinct from project_name in the specs that drive this: the whole
+    # point of the flow is that the evaluation_task trace lands in a SEPARATE
+    # project from the conversation it scored.
+    eval_project_name: str
+    thread_id: str
+    # Keys the transforms read off each trace's input/output dict. The SDK takes
+    # callables; the wire cannot carry one, so the route builds the two lambdas
+    # from these and the shape stays the caller's choice.
+    trace_input_key: str
+    trace_output_key: str
+    # When set, evaluate_threads is called with a trace_context_transform that
+    # reads this key off trace.metadata. When None the argument is omitted
+    # entirely, which is the pre-existing caller shape.
+    context_metadata_key: str | None = None
+    metric_name: str
+    # Fixed score the metric returns. Deterministic on purpose: this flow must
+    # be assertable without a provider key or an LLM verdict.
+    score_value: float
+    score_reason: str
+    workspace: str | None = None
+
+
+class ThreadsEvaluateScore(BaseModel):
+    name: str
+    value: float
+    reason: str | None = None
+
+
+class ThreadsEvaluateResponse(BaseModel):
+    thread_id: str
+    eval_project_name: str
+    scores: list[ThreadsEvaluateScore]
+    # The conversation EXACTLY as the metric's score() received it, as raw
+    # dicts. Deliberately not a typed model: the fact under test is whether the
+    # `context` KEY is present at all, and any pydantic model with an optional
+    # `context` field would serialize an absent key as `"context": null` and
+    # destroy the distinction the caller is asserting on.
+    conversation: list[dict[str, Any]]

@@ -149,7 +149,6 @@ from .types import (
     AutomationRuleEvaluator_UserDefinedMetricPython,
     AvgValueStatPublic,
     BatchDelete,
-    BatchDeleteByProject,
     BiInformation,
     BiInformationResponse,
     BlueprintPageHistory,
@@ -677,8 +676,6 @@ from .types import (
     WorkspaceSpansCount,
     WorkspaceTraceCount,
     WorkspaceUserPermissions,
-    WorkspaceVersion,
-    WorkspaceVersionOpikVersion,
 )
 from .errors import (
     BadGatewayError,
@@ -945,7 +942,6 @@ __all__ = [
     "BadGatewayError",
     "BadRequestError",
     "BatchDelete",
-    "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
     "BlueprintPageHistory",
@@ -1525,8 +1521,6 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
-    "WorkspaceVersion",
-    "WorkspaceVersionOpikVersion",
     "agent_configs",
     "agent_insights",
     "agent_insights_jobs",

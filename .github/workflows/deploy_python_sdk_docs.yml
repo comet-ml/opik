@@ -36,12 +36,12 @@ jobs:
         run: aws sts get-caller-identity
 
       - name: checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           show-progress: false
       
       - name: Setup uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Build Python SDK docs
         run: |
@@ -67,7 +67,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false

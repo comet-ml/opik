@@ -81,7 +81,7 @@ const OpenRouterModelConfigs = ({
         <SliderInputControl
           value={configs.frequencyPenalty}
           onChange={(v) => onChange({ frequencyPenalty: v })}
-          id="topK"
+          id="frequencyPenalty"
           min={-2}
           max={2}
           step={0.01}

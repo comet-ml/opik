@@ -8,10 +8,10 @@ from ..core.request_options import RequestOptions
 from ..types.breakdown_config import BreakdownConfig
 from ..types.result import Result
 from ..types.span_filter import SpanFilter
+from ..types.token_usage_names import TokenUsageNames
 from ..types.workspace_configuration import WorkspaceConfiguration
 from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
-from ..types.workspace_version import WorkspaceVersion
 from .raw_client import AsyncRawWorkspacesClient, RawWorkspacesClient
 from .types.workspace_span_metric_request_interval import WorkspaceSpanMetricRequestInterval
 from .types.workspace_span_metric_request_metric_type import WorkspaceSpanMetricRequestMetricType
@@ -326,39 +326,36 @@ class WorkspacesClient:
         )
         return _response.data
 
-    def get_workspace_version(self, *, request_options: typing.Optional[RequestOptions] = None) -> WorkspaceVersion:
+    def get_workspace_token_usage_names(
+        self,
+        *,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TokenUsageNames:
         """
-        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
-        or Opik V2 (project-first) navigation. The backend is the single authority for this
-        determination, clients must never derive the version themselves.
-
-        Determination logic (priority order):
-        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
-        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        3) Auth one-way V2 gate (authenticated mode only)
-        4) Version 1 entity check (entities without project_id)
-        5) Fallback on failure
-
-        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
-        Called by the frontend on workspace load.
+        Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
 
         Parameters
         ----------
+        project_ids : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        WorkspaceVersion
-            Workspace version
+        TokenUsageNames
+            Token Usage names resource
 
         Examples
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.workspaces.get_workspace_version()
+        client.workspaces.get_workspace_token_usage_names()
         """
-        _response = self._raw_client.get_workspace_version(request_options=request_options)
+        _response = self._raw_client.get_workspace_token_usage_names(
+            project_ids=project_ids, request_options=request_options
+        )
         return _response.data
 
     def metrics_summary(
@@ -735,33 +732,26 @@ class AsyncWorkspacesClient:
         )
         return _response.data
 
-    async def get_workspace_version(
-        self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> WorkspaceVersion:
+    async def get_workspace_token_usage_names(
+        self,
+        *,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TokenUsageNames:
         """
-        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
-        or Opik V2 (project-first) navigation. The backend is the single authority for this
-        determination, clients must never derive the version themselves.
-
-        Determination logic (priority order):
-        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
-        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        3) Auth one-way V2 gate (authenticated mode only)
-        4) Version 1 entity check (entities without project_id)
-        5) Fallback on failure
-
-        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
-        Called by the frontend on workspace load.
+        Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
 
         Parameters
         ----------
+        project_ids : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        WorkspaceVersion
-            Workspace version
+        TokenUsageNames
+            Token Usage names resource
 
         Examples
         --------
@@ -769,10 +759,12 @@ class AsyncWorkspacesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.workspaces.get_workspace_version()
+            await client.workspaces.get_workspace_token_usage_names()
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_workspace_version(request_options=request_options)
+        _response = await self._raw_client.get_workspace_token_usage_names(
+            project_ids=project_ids, request_options=request_options
+        )
         return _response.data
 
     async def metrics_summary(

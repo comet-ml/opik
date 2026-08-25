@@ -30,8 +30,10 @@ RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 TO ${ANALYTICS_DB_DAT
 -- HARD PREREQUISITE: a Distributed table supports SELECT and INSERT but NOT mutations — a lightweight DELETE returns
 -- "DELETE query is not supported" (code 36) and ALTER ... DELETE returns "Distributed doesn't support mutations"
 -- (code 48). So the product's delete-by-id AND retention deletes both break the moment this wrap is applied. Do NOT run
--- the wrap until those DAO paths target `traces_local` (see README "The Distributed wrap"). The EXCHANGE above is the
--- data cutover and leaves `traces` a MergeTree where deletes still work; the wrap is a separate, gated step.
+-- the wrap until the DAO is retargeted: set backend config databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true
+-- (OPIK-7455) in lockstep with the wrap so TraceDAO mutations run against `traces_local` (see the README's
+-- "HARD PREREQUISITE for the wrap" note). The EXCHANGE above is the data cutover and leaves `traces` a MergeTree where
+-- deletes still work; the wrap is a separate, gated step.
 --
 -- GAPLESS per node: build the Distributed wrapper under a temp name FIRST (its 'traces_local' target need not exist
 -- yet — Distributed resolves it lazily), then a SINGLE atomic multi-target RENAME rotates the data to `traces_local`

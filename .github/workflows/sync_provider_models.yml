@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -32,7 +32,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Install dependencies
         run: uv pip install --system requests
@@ -96,10 +96,12 @@ jobs:
 
       - name: Commit files
         if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
-          git config --local user.name "Github Actions (${{ github.actor }})"
+          git config --local user.name "GitHub Actions (${ACTOR})"
           git add apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/
           git add apps/opik-frontend/src/types/providers.ts
           git add apps/opik-frontend/src/constants/providerModels.ts
@@ -108,7 +110,7 @@ jobs:
 
       - name: Configure AWS credentials
         if: steps.sync.outputs.exit_code == '0'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_OPIK_CDN_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_OPIK_CDN_SECRET }}

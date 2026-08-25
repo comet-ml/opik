@@ -6,6 +6,7 @@ from .converse import converse_decorator
 
 from .invoke_model import invoke_model_decorator
 from .invoke_model import chunks_aggregator as invoke_model_chunks_aggregator
+from ... import analytics
 
 
 if TYPE_CHECKING:
@@ -34,6 +35,7 @@ def track_bedrock(
     Returns:
         The modified bedrock client with Opik tracking enabled.
     """
+    analytics.track_event("integration", "bedrock")
 
     decorator_for_converse = converse_decorator.BedrockConverseDecorator()
     decorator_for_invoke_agent = invoke_agent_decorator.BedrockInvokeAgentDecorator()
@@ -58,7 +60,7 @@ def track_bedrock(
             project_name=project_name,
         )
         tracked_converse = wrapper(client.converse)
-        client.converse = tracked_converse
+        client.converse = tracked_converse  # type: ignore[method-assign]
 
     if hasattr(client, "converse_stream") and not hasattr(
         client.converse_stream, "opik_tracked"
@@ -70,7 +72,7 @@ def track_bedrock(
             generations_aggregator=converse_chunks_aggregator.aggregate_converse_stream_chunks,
         )
         tracked_converse_stream = stream_wrapper(client.converse_stream)
-        client.converse_stream = tracked_converse_stream
+        client.converse_stream = tracked_converse_stream  # type: ignore[method-assign]
 
     if hasattr(client, "invoke_model") and not hasattr(
         client.invoke_model, "opik_tracked"
@@ -81,7 +83,7 @@ def track_bedrock(
             project_name=project_name,
         )
         tracked_invoke_model = wrapper(client.invoke_model)
-        client.invoke_model = tracked_invoke_model
+        client.invoke_model = tracked_invoke_model  # type: ignore[method-assign]
 
     if hasattr(client, "invoke_model_with_response_stream") and not hasattr(
         client.invoke_model_with_response_stream, "opik_tracked"
@@ -95,6 +97,8 @@ def track_bedrock(
         tracked_invoke_model_stream = stream_wrapper(
             client.invoke_model_with_response_stream
         )
-        client.invoke_model_with_response_stream = tracked_invoke_model_stream
+        client.invoke_model_with_response_stream = (  # type: ignore[method-assign]
+            tracked_invoke_model_stream
+        )
 
     return client

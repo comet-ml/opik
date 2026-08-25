@@ -147,7 +147,14 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().thinkingType()).isEqualTo("adaptive");
                 assertThat(row.get().maxTokens()).isEqualTo(64000L);
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
+                // speed: selects the rate table, so it must survive ingestion
+                assertThat(row.get().speed()).isEqualTo("fast");
             });
+
+            // Carried on every block row too.
+            var blocks = getCipxBlocks(cipxSpan.id(), ws.workspaceId());
+            assertThat(blocks).isNotEmpty();
+            assertThat(blocks).allSatisfy(block -> assertThat(block.speed()).isEqualTo("fast"));
 
             // The non-cipx span shared the same create event, so once the cipx row is present the
             // listener has already decided this one: it must not have produced a row.
@@ -338,6 +345,45 @@ class CostIntelligenceIngestionTest {
                 assertThat(envInfo.bdLane()).isEqualTo("static_overhead");
                 assertThat(envInfo.label()).isEqualTo("env_info");
                 assertThat(envInfo.isDefinition()).isEqualTo(1);
+            });
+        }
+
+        @Test
+        @DisplayName("slash_command lands in user_prompts keyed by command name; identity_context framing lands in static_overhead")
+        void slashCommandAndIdentityContextLanes() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(slashCommandCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                // raw idx 1 (identity_context/identity_context) is dropped at ingestion;
+                // the two remaining blocks must not fall to 'unattributed' (OPIK-8065).
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(2);
+
+                var slashCommand = rows.getFirst();
+                assertThat(slashCommand.blockIdx()).isEqualTo(0);
+                assertThat(slashCommand.category()).isEqualTo("slash_command");
+                assertThat(slashCommand.lane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.bdLane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.label()).isEqualTo("commit-helper");
+                assertThat(slashCommand.isDefinition()).isEqualTo(0);
+
+                // identity_context whose parent is another category: framing carved out of
+                // that parent — kept, and folded under static_overhead like the other riders.
+                // blockIdx 2, not 1: the dropped row still consumes its raw index.
+                var identityContext = rows.getLast();
+                assertThat(identityContext.blockIdx()).isEqualTo(2);
+                assertThat(identityContext.category()).isEqualTo("identity_context");
+                assertThat(identityContext.lane()).isEqualTo("static_overhead");
+                assertThat(identityContext.bdLane()).isEqualTo("static_overhead");
+                assertThat(identityContext.label()).isEqualTo("identity_context");
+                assertThat(identityContext.isDefinition()).isEqualTo(0);
             });
         }
 
@@ -533,7 +579,8 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast"
                               }
                             },
                             "blocks": [
@@ -597,7 +644,8 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast"
                               }
                             },
                             "blocks": [
@@ -605,6 +653,31 @@ class CostIntelligenceIngestionTest {
                               {"category":"system_tools_deferred","side":"input","cache_status":"read","parent_category":"context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"system_prompt","side":"input","cache_status":"read","parent_category":"context","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"env_info","side":"input","cache_status":"read","parent_category":"context","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
+    private static JsonNode slashCommandCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              }
+                            },
+                            "blocks": [
+                              {"category":"slash_command","side":"input","cache_status":"read","parent_category":"user_prompts","chars":150,"tool_name":"","tool_server":"","tool_use_id":"","resource":"commit-helper","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"user_prompts","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
                             ]
                           }
                         }
@@ -657,7 +730,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management
+                    effort, thinking_type, max_tokens, context_management, speed
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -679,7 +752,8 @@ class CostIntelligenceIngestionTest {
                             row.get("effort", String.class),
                             row.get("thinking_type", String.class),
                             row.get("max_tokens", Long.class),
-                            row.get("context_management", String.class)))));
+                            row.get("context_management", String.class),
+                            row.get("speed", String.class)))));
         }).blockOptional();
     }
 
@@ -691,6 +765,7 @@ class CostIntelligenceIngestionTest {
                     toInt32(is_definition) AS is_definition,
                     alloc,
                     model,
+                    speed,
                     side, cache_status, parent_category, chars,
                     tool_name, tool_server, tool_use_id, resource, kind, subcategory,
                     content_sha256,
@@ -715,6 +790,7 @@ class CostIntelligenceIngestionTest {
                             row.get("is_definition", Integer.class),
                             row.get("alloc", Double.class),
                             row.get("model", String.class),
+                            row.get("speed", String.class),
                             row.get("side", String.class),
                             row.get("cache_status", String.class),
                             row.get("parent_category", String.class),
@@ -802,11 +878,12 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement) {
+            String thinkingType, Long maxTokens, String contextManagement, String speed) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
-            String bdLane, String label, Integer isDefinition, Double alloc, String model, String side,
+            String bdLane, String label, Integer isDefinition, Double alloc, String model, String speed,
+            String side,
             String cacheStatus, String parentCategory, Long chars, String toolName, String toolServer,
             String toolUseId, String resource, String kind, String subcategory, String contentSha256, Long startMs) {
     }

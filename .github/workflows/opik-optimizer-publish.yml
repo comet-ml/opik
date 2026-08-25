@@ -19,7 +19,7 @@ jobs:
           HF_HUB_DISABLE_TELEMETRY: "1"
         steps:
         - name: Checkout
-          uses: actions/checkout@v6
+          uses: actions/checkout@v7
 
         - name: Set up Python 3.9
           uses: actions/setup-python@v7
@@ -33,7 +33,7 @@ jobs:
                 python3 -m build --sdist --wheel --outdir dist/ .
 
         - name: Publish package distributions to PyPI
-          uses: pypa/gh-action-pypi-publish@v1.14.1
+          uses: pypa/gh-action-pypi-publish@v1.14.2
           with:
             packages-dir: sdks/opik_optimizer/dist
             # Symmetric to OPIK-6624's npm publish 403-skip: replays / races where

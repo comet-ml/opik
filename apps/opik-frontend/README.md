@@ -18,12 +18,7 @@ src/
 ├── ui/               # Base UI components (shadcn/ui + Radix)
 ├── shared/           # Shared business components (no API calls)
 │
-├── v1/               # Opik 1 — feature-organized navigation
-│   ├── layout/       # App shell, sidebar, header
-│   ├── pages/        # Route-level page components
-│   └── pages-shared/ # Components shared across v1 pages
-│
-├── v2/               # Opik 2 — project-first navigation
+├── v2/               # Opik 2 — project-first navigation (the only UI)
 │   ├── layout/       # App shell, sidebar, header
 │   ├── pages/        # Route-level page components
 │   └── pages-shared/ # Components shared across v2 pages
@@ -34,9 +29,7 @@ src/
 
 ### Import rules
 - `ui → shared` (one-way only)
-- `ui → shared → v1/pages-shared → v1/pages` (one-way only)
 - `ui → shared → v2/pages-shared → v2/pages` (one-way only)
-- v1/ CANNOT import from v2/; v2/ CANNOT import from v1/
 - Validate with: `npm run deps:validate`
 
 ## Environment Variables

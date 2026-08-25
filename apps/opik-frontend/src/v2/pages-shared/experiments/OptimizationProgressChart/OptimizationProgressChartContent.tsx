@@ -17,11 +17,11 @@ import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig"
 import { AggregatedCandidate } from "@/types/optimizations";
 import ChartTooltip from "./ChartTooltip";
 import {
-  TRIAL_STATUS_COLORS,
-  TRIAL_STATUS_LABELS,
-  TRIAL_STATUS_ORDER,
   CandidateDataPoint,
+  TrialLegendItem,
+  buildTrialLegendItems,
   buildTrendLineEdges,
+  buildStepTickLabels,
   getUniqueSteps,
   findNearestDot,
 } from "./optimizationChartUtils";
@@ -89,20 +89,10 @@ const OptimizationProgressChartContent: React.FC<
   // Test-suite runs distinguish every status (only those actually present);
   // dataset runs collapse to a fixed Passed/Discarded pair (matching the dot
   // colours from getTrialDotColor).
-  const legendItems = useMemo<{ color: string; label: string }[]>(() => {
-    if (isTestSuite) {
-      return TRIAL_STATUS_ORDER.filter((s) =>
-        chartData.some((d) => d.status === s),
-      ).map((s) => ({
-        color: TRIAL_STATUS_COLORS[s],
-        label: TRIAL_STATUS_LABELS[s],
-      }));
-    }
-    return [
-      { color: TRIAL_STATUS_COLORS.passed, label: "Passed trial" },
-      { color: TRIAL_STATUS_COLORS.pruned, label: "Discarded trial" },
-    ];
-  }, [isTestSuite, chartData]);
+  const legendItems = useMemo<TrialLegendItem[]>(
+    () => buildTrialLegendItems(chartData, isTestSuite),
+    [isTestSuite, chartData],
+  );
 
   const positionedData = useMemo(() => {
     return chartData.map((d) => ({
@@ -115,6 +105,14 @@ const OptimizationProgressChartContent: React.FC<
     if (!isInProgress || steps.length === 0 || !inProgressInfo) return null;
     return inProgressInfo.stepIndex;
   }, [isInProgress, steps, inProgressInfo]);
+
+  // Ticks are positioned by step but labelled by trial number — the one
+  // numbering the whole run view identifies dots by (OPIK-7589). See
+  // buildStepTickLabels for the full rationale.
+  const tickLabels = useMemo(
+    () => buildStepTickLabels(chartData, ghostStep),
+    [chartData, ghostStep],
+  );
 
   const { overlapOffsets, ghostXOffset } = useMemo(() => {
     const groups = new Map<string, string[]>();
@@ -329,9 +327,7 @@ const OptimizationProgressChartContent: React.FC<
                 ? [...steps, ghostStep]
                 : steps
             }
-            tickFormatter={(value) =>
-              value === 0 ? "Baseline" : `Step ${value}`
-            }
+            tickFormatter={(value) => tickLabels.get(value) ?? ""}
             domain={xDomain}
             padding={X_AXIS_PADDING}
           />

@@ -14,6 +14,7 @@ export const OllieReport: core.serialization.ObjectSchema<serializers.OllieRepor
         content: core.serialization.string().optional(),
         recommendedActions: core.serialization.property("recommended_actions", JsonNode.optional()),
         status: OllieReportStatus.optional(),
+        failureReason: core.serialization.property("failure_reason", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     });
@@ -26,6 +27,7 @@ export declare namespace OllieReport {
         content?: string | null;
         recommended_actions?: JsonNode.Raw | null;
         status?: OllieReportStatus.Raw | null;
+        failure_reason?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;
     }

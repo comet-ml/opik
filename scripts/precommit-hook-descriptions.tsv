@@ -27,9 +27,11 @@ lizard	Cyclomatic-complexity gate
 vulture	Find dead code
 helm-docs	Regenerate Helm chart README
 actionlint	Lint GitHub Actions workflows
+zizmor	Security-scan GitHub Actions workflows
 hadolint	Lint Dockerfiles
 spotless	Format Java code
 eslint	Lint + autofix JS/TS
 typecheck	Whole-project tsc type check
 non-public FE plugins	Block non-public FE plugins
 wrapper smoke tests	Self-test the wrapper scripts
+rebaseline script tests	Self-test the changelog re-baseline script

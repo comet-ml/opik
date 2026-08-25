@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.utils;
 
-import com.comet.opik.api.OpikVersion;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -30,19 +29,11 @@ public class AuthTestUtils {
 
     public static String newWorkspaceAuthResponse(
             String user, String workspaceId, String workspaceName, List<Quota> quotas) {
-        return newWorkspaceAuthResponse(user, workspaceId, workspaceName, quotas, null);
-    }
-
-    public static String newWorkspaceAuthResponse(
-            String user, String workspaceId, String workspaceName, List<Quota> quotas, OpikVersion opikVersion) {
         var response = new LinkedHashMap<String, Object>();
         response.put("user", user);
         response.put("workspaceId", workspaceId);
         response.put("workspaceName", workspaceName);
         response.put("quotas", quotas);
-        if (opikVersion != null) {
-            response.put("opikVersion", opikVersion.getValue());
-        }
         return JsonUtils.writeValueAsString(response);
     }
 
@@ -54,19 +45,13 @@ public class AuthTestUtils {
     public static void mockTargetWorkspace(
             WireMockServer server, String apiKey, String workspaceName, String workspaceId, String user,
             List<Quota> quotas) {
-        mockTargetWorkspace(server, apiKey, workspaceName, workspaceId, user, quotas, null);
-    }
-
-    public static void mockTargetWorkspace(
-            WireMockServer server, String apiKey, String workspaceName, String workspaceId, String user,
-            List<Quota> quotas, OpikVersion opikVersion) {
         server.stubFor(
                 post(urlPathEqualTo("/opik/auth"))
                         .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
                         .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
                         .withRequestBody(matchingJsonPath("$.path", matching("/v1/private/.*")))
                         .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(user, workspaceId, workspaceName,
-                                quotas, opikVersion))));
+                                quotas))));
     }
 
     public static void mockGetWorkspaceIdByName(

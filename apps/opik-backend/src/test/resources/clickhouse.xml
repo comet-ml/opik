@@ -26,6 +26,7 @@
     <remote_servers>
         <cluster>
         <shard>
+            <internal_replication>true</internal_replication>
             <replica>
             <host>clickhouse</host>
             <port>9000</port>
