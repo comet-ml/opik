@@ -1112,18 +1112,25 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    corruption in the reused shadow is caught exactly as in the first cutover — so do not skip it on the grounds that the
    data "was already verified once".
 
-   **Bound it to the sealed weeks, and expect the current week to differ.** The reused shadow is a *superset* of the
-   restored original by exactly the revived writes from (3), so an unbounded run reports them and looks like a fidelity
-   failure on a perfectly good retry. This is the same shape, and the same `--to-week last-sealed` remedy, as the post-rollback
-   compare above — including the direction: the **new-table** side is the superset here. A mismatch in a *sealed* week is
-   the real signal.
+   **Bound it before the first cutover's window, and expect that week to differ.** The reused shadow is a *superset* of
+   the restored original by exactly the revived writes from (3) — and those sit in the week the **original**
+   `cutover_start` fell in, so an unbounded run reports them and looks like a fidelity failure on a perfectly good
+   retry. Same shape and direction as the post-rollback compare above (the **new-table** side is the superset), so reuse
+   the offset `rollback.sh` printed then: the last week wholly before that `cutover_start`. It also covers the live
+   current week, which the restored original keeps writing to while the delta catches up.
+
+   `--to-week last-sealed` is the wrong token here — it tracks the calendar, so a retry run in any later week stops
+   excluding the window's own week. And the same caveat carries over: a write that touched a pre-existing trace during
+   the first window diverges it in a *sealed* week, which no weekly bound excludes. Triage it the same way — look the
+   differing ids up in the shadow without a week filter, and treat `last_updated_at >= cutover_start` as benign.
 
    Note the flags from (4) do not change what `verify.sh` compares: it normalizes both sentinel and `NULL` absent-values
    to the same fingerprint, so it passes either way. It cannot catch a missed flag flip — only a positive read-back check
    can (write an in-progress trace, assert `end_time` is null), which is why (4) is a step and not a caveat here.
 
    ```bash
-   ./scripts/verify.sh --database opik --to-week last-sealed   # old=traces, new=traces_local_v2 (the defaults)
+   # N = the offset rollback.sh printed; old=traces, new=traces_local_v2 (the defaults)
+   ./scripts/verify.sh --database opik --to-week <N>
    ```
 
 If any of that does not hold, take the supported path: `finalize.sh` to recycle the backup into a clean shadow, then a
@@ -1232,14 +1239,33 @@ exists (the successor is parked as `traces_post_rollback_backup`), so a bare `ve
 parked successor:
 
 ```bash
-./scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week last-sealed
+# rollback.sh prints this command with the bound already computed — prefer that over deriving the offset by hand.
+./scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week <N>
 ```
 
-Expect the **sealed historical weeks to match** and the **current week to mismatch**, by exactly the post-cutover writes
-the rollback discarded (the parked successor holds them; the restored original never did) — so bound the run with
-`--to-week last-sealed`, exactly as for the post-EXCHANGE compare. A mismatch in a *sealed* week would be
-the real signal. Note the divergence is the **opposite** direction from the post-EXCHANGE case: here the *new-table* side
-is the superset.
+Expect the **cutover window's own week to mismatch**, by exactly the post-cutover writes the rollback discarded (the
+parked successor holds them; the restored original never did) — so stop before it. Note the divergence is the
+**opposite** direction from the post-EXCHANGE case: here the *new-table* side is the superset.
+
+**Bound this one by `cutover_start`, not by the calendar.** `--to-week last-sealed` drops the current calendar week,
+which is the window's week only while the verify runs promptly; run it in a later week and the window's week counts as
+sealed, so its discarded writes read as a fidelity failure. `rollback.sh` prints the offset of the last week wholly
+before `cutover_start`, which does not drift — use it.
+
+**And a mismatch inside the bound is not automatically corruption.** Any write that touches a **pre-existing** trace
+after `cutover_start` diverges it in a *sealed* week, which no weekly bound can exclude — the divergence sits where the
+row was born, not where the write happened. Two mechanisms, opposite in shape:
+
+- the **trace-update endpoint** keeps the row's original `created_at`, so the successor holds a newer version in that
+  row's own week — the key differs **on both sides**;
+- **batch ingestion** re-stamps `created_at` to now, so the successor's latest version moves to a later week — the key
+  goes **missing from the successor** in its original week (`--drill-down` prints `\N` for that side).
+
+Both are the discarded-write class, not a fidelity defect. Triage with `--drill-down`, then look each differing id up in
+the parked successor **without** a week filter: `last_updated_at >= cutover_start` means benign. A key that is absent
+from the successor *entirely* is the real signal — that is a copy gap, and it is the one shape worth stopping for. How
+often this bites tracks how much pre-existing data the workload rewrites; for many it is none, which is why the weekly
+bound is still worth passing.
 
 > **The pre-EXCHANGE compare is the gate; the post-EXCHANGE compare has a caveat.** `traces_pre_cutover_backup` is a
 > **frozen** snapshot as of `cutover_start`, but live `traces` keeps taking writes the instant the buffer drains — so
@@ -1247,8 +1273,11 @@ is the superset.
 > exactly the post-cutover writes). That is expected, not a leak. To use the post-EXCHANGE compare as a real check,
 > either run it **immediately after the swap before writes resume**, or bound it to the **sealed historical weeks** with
 > `--to-week N` (a **0-based week offset** from the anchor Monday, not a date — e.g. `--to-week 3` to stop before the
-> current partial week), where a mismatch *would* be a genuine problem. A leak shows up as rows present in the
-> backup but absent from `traces`; post-cutover writes are the harmless opposite direction.
+> current partial week), where a mismatch is worth investigating — with one exception in the same class as the
+> post-cutover writes: a write touching a **pre-existing** trace after `cutover_start` diverges it in that row's own
+> week, sealed or not (see "Verifying after a rollback" for the two shapes and the triage). Check
+> `last_updated_at >= cutover_start` on the differing ids before calling it a defect. A leak shows up as rows present in
+> the backup but absent from `traces` *and* absent from it entirely; post-cutover writes are the harmless direction.
 
 **Feasibility at scale.** A full pass reads every partition (heavy but bounded per week — run off-peak). When that is
 infeasible, sample and still get high confidence:

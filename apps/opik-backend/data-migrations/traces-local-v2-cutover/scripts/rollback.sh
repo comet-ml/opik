@@ -375,9 +375,32 @@ esac
 
 if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "Now in the canonical state: traces = original data (live), traces_post_rollback_backup = successor data (parked)."
+    # The divergence is bounded by the CUTOVER WINDOW, not by the calendar, so compute the offset of the last week wholly
+    # before cutover_start rather than telling the operator 'last-sealed'. That token drops the current calendar week,
+    # which is the same week only while the verify runs promptly; a run in a later week would include the window's own
+    # week and report its discarded writes as a fidelity failure. Same anchor math verify.sh uses on this table.
+    # Non-fatal: the rollback itself has already succeeded here, so a blip computing an advisory number must not abort
+    # the script and swallow the NEXT steps below.
+    bound_week="$(ch "SELECT dateDiff('week', toMonday(min(created_at)), toMonday(toDateTime64('$CUTOVER_START', 6))) - 1 FROM traces" 2>/dev/null || true)"
     echo "Verify with the POST-ROLLBACK table pair — the verify.sh defaults no longer apply (traces_local_v2 is gone), and"
-    echo "the CURRENT week legitimately mismatches by the post-cutover writes this rollback discarded, so bound it:"
-    echo "  ./verify.sh --database $DATABASE --old-table traces --new-table traces_post_rollback_backup --to-week last-sealed"
+    echo "the cutover window's week legitimately mismatches by the post-cutover writes this rollback discarded, so stop"
+    echo "before it. That week is fixed by cutover_start, so the bound does not drift if you verify later:"
+    if [[ "$bound_week" =~ ^-?[0-9]+$ ]] && (( bound_week >= 0 )); then
+        echo "  ./verify.sh --database $DATABASE --old-table traces --new-table traces_post_rollback_backup --to-week $bound_week"
+    elif [[ "$bound_week" =~ ^-?[0-9]+$ ]]; then
+        echo "  (none: every row in 'traces' predates no earlier week than the cutover window's own, so there is nothing"
+        echo "   to compare below it. Skip the bounded compare.)"
+    else
+        echo "  ./verify.sh --database $DATABASE --old-table traces --new-table traces_post_rollback_backup --to-week <N>"
+        echo "  where N could not be computed just now: it is the whole weeks between toMonday(min(created_at)) on"
+        echo "  'traces' and cutover_start's Monday, minus 1."
+    fi
+    echo "A mismatch inside that bound is NOT automatically corruption. Any write touching a PRE-EXISTING trace after"
+    echo "cutover_start diverges it in a sealed week, which no weekly bound excludes: the update endpoint keeps the row's"
+    echo "created_at (so the key differs on both sides), while batch ingestion re-stamps it (so the key goes missing from"
+    echo "the successor in its original week). Triage with --drill-down, then look each differing id up in the successor"
+    echo "WITHOUT a week filter: last_updated_at >= cutover_start means benign. Absent from the successor entirely is the"
+    echo "real signal — that one is a copy gap."
     echo "Then run finalize.sh once healthy — it recycles the backup into an empty traces_local_v2 (restoring the"
     echo "pre-cutover shadow), the one irreversible step."
     echo
