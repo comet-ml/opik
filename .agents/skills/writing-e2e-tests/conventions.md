@@ -137,5 +137,3 @@ python3 tests_end_to_end/coverage/tag_lint.py --taxonomy tests_end_to_end/covera
 ```
 
 Expect `0 problem(s)`. Full grammar: `tests_end_to_end/TESTING-TAGS.md`.
-
-**Exception — release-gate specs.** Dev-authored release-gate tests are the one case that does *not* follow the rules above: they live at `tests/_release-gate/<lead-ticket>.spec.ts` (not `tests/<feature>/`) and carry `@release-gate` + `@release-gate:<version>` instead of a tier tag, so they stay out of the curated `@t1-smoke`/`@t2-cuj`/`@t3-nightly` suites. They are governed by `.agents/skills/explore-feature/release-gate-contract.md`, not this file. If you're following these conventions, treat a spec under `_release-gate/` as intentional, not a violation.
