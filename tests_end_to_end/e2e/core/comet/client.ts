@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 import { loadEnvConfig } from '../../config/env.config';
 
@@ -41,7 +42,7 @@ export function cometRootBaseUrl(): string {
 }
 
 function randomSuffix(): string {
-  return Math.random().toString(36).slice(2, 9);
+  return BigInt(`0x${randomBytes(8).toString('hex')}`).toString(36).slice(0, 7);
 }
 
 /**
