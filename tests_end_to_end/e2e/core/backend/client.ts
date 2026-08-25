@@ -308,7 +308,7 @@ export function makeBackendClient(apiKey: string | null = null) {
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -381,44 +381,36 @@ export function makeBackendClient(apiKey: string | null = null) {
 
   return {
     /**
-     * Seeds a dashboard through the private REST API.
+     * Seeds a dashboard through the SDK's dashboards client.
      *
-     * The pinned SDK exposes no dashboards surface, so this goes through
-     * `rawFetch` like the other dashboard-metric calls below. `config` carries
-     * the minimum shape the create endpoint validates — the gate that uses this
-     * filters on `description` and never renders a widget.
+     * `config` carries the minimum shape the create operation validates — the
+     * specs using this filter the list and never render a widget.
      */
     async createDashboard(args: {
       name: string;
       description: string;
     }): Promise<DashboardRef> {
-      const { status, message, json } = await rawFetch('POST', '/v1/private/dashboards', {
-        body: {
-          name: args.name,
-          description: args.description,
-          type: 'multi_project',
-          scope: 'workspace',
-          config: {
-            version: 1,
-            layout: { type: 'grid', columns: 24, rowHeight: 10 },
-            widgets: [],
-          },
+      const created = await opik.api.dashboards.createDashboard({
+        name: args.name,
+        description: args.description,
+        config: {
+          version: 1,
+          layout: { type: 'grid', columns: 24, rowHeight: 10 },
+          widgets: [],
         },
       });
-      if (status !== 201 && status !== 200) {
-        throw new Error(`createDashboard(${args.name}) failed: ${status} ${message}`);
-      }
-      const id = (json as { id?: unknown } | null)?.id;
+      const id = (created as { id?: unknown } | null)?.id;
       if (typeof id !== 'string') {
-        throw new Error(`createDashboard(${args.name}) returned no id: ${message}`);
+        throw new Error(`createDashboard(${args.name}) returned no id`);
       }
       return { id, name: args.name, description: args.description };
     },
 
     async deleteDashboard(id: string): Promise<void> {
-      const { status, message } = await rawFetch('DELETE', `/v1/private/dashboards/${id}`);
-      if (status !== 204 && status !== 200 && status !== 404) {
-        throw new Error(`deleteDashboard(${id}) failed: ${status} ${message}`);
+      try {
+        await opik.api.dashboards.deleteDashboard(id);
+      } catch (err) {
+        if (!isNotFoundError(err)) throw err;
       }
     },
 

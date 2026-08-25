@@ -19,6 +19,10 @@ const DataTableLoadingError: React.FC<DataTableLoadingErrorProps> = ({
           supported, or the request failed.
         </p>
         {onRetry && (
+          // Called through a wrapper, not passed as `onClick={onRetry}`: every
+          // call site hands this React Query's `refetch`, which takes
+          // `RefetchOptions` — passing it directly forwards the click event
+          // into that slot.
           <Button
             variant="outline"
             size="sm"

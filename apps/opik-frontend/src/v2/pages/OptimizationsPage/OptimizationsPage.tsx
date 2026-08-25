@@ -215,10 +215,15 @@ const OptimizationsPage: React.FunctionComponent = () => {
     pollWhileInProgress: true,
   });
 
-  const { isEmpty, isPending: isExistencePending } = useOptimizationsExistence({
-    workspaceName,
-    projectId: activeProjectId ?? undefined,
-  });
+  const { isEmpty: isExistenceEmpty, isPending: isExistencePending } =
+    useOptimizationsExistence({
+      workspaceName,
+      projectId: activeProjectId ?? undefined,
+    });
+
+  // A zero-count existence probe can succeed while the list request itself
+  // fails; showing onboarding then hides the failure behind "no runs yet".
+  const isEmpty = isExistenceEmpty && !isError;
 
   // The objective-score column used to be a mutually-exclusive pair ("Pass rate"
   // for test-suite runs, "Accuracy" for dataset runs), and this list dropped

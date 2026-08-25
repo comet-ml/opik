@@ -39,20 +39,17 @@ test.describe(
         const marker = `${testNamespace}-desc`;
 
         await test.step('Seed two matching dashboards and one that must not match', async () => {
-          created.push(
-            await backendClient.createDashboard({
-              name: `${testNamespace}-match-1`,
-              description: `contains ${marker} in the description`,
-            }),
-            await backendClient.createDashboard({
-              name: `${testNamespace}-match-2`,
-              description: `also contains ${marker} here`,
-            }),
-            await backendClient.createDashboard({
-              name: `${testNamespace}-other`,
-              description: 'unrelated description text',
-            }),
-          );
+          // Push each one as soon as it exists: collecting them into a single
+          // `push(...)` call would lose the earlier ids if a later create threw,
+          // leaving `afterAll` unable to delete the partial seed.
+          const seeds = [
+            { name: `${testNamespace}-match-1`, description: `contains ${marker} in the description` },
+            { name: `${testNamespace}-match-2`, description: `also contains ${marker} here` },
+            { name: `${testNamespace}-other`, description: 'unrelated description text' },
+          ];
+          for (const seed of seeds) {
+            created.push(await backendClient.createDashboard(seed));
+          }
         });
 
         const dashboards = new DashboardsPage(page);
