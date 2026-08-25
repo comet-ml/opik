@@ -194,9 +194,14 @@ const AuthConfigSection: React.FC<AuthConfigSectionProps> = ({
               ]);
 
               return (
-                <div key={row.id} className="flex items-start gap-2">
+                <div
+                  key={row.id}
+                  data-testid="auth-credential-row"
+                  className="flex items-start gap-2"
+                >
                   <div className="flex-1">
                     <Input
+                      data-testid="auth-credential-key"
                       placeholder="Field name"
                       value={form.watch(`authCredentials.${index}.key`)}
                       onChange={(e) =>
@@ -213,6 +218,7 @@ const AuthConfigSection: React.FC<AuthConfigSectionProps> = ({
                   <div className="flex-1">
                     {isSecret ? (
                       <EyeInput
+                        data-testid="auth-credential-value"
                         revealable={!isStoredSecret}
                         placeholder={
                           isStoredSecret ? "stored, write-only" : "Value"
@@ -230,6 +236,7 @@ const AuthConfigSection: React.FC<AuthConfigSectionProps> = ({
                       />
                     ) : (
                       <Input
+                        data-testid="auth-credential-value"
                         placeholder="Value"
                         value={value}
                         onChange={(e) =>
@@ -252,6 +259,7 @@ const AuthConfigSection: React.FC<AuthConfigSectionProps> = ({
                   >
                     <Button
                       type="button"
+                      data-testid="auth-credential-lock"
                       variant="ghost"
                       size="icon"
                       disabled={isSaved && isSecret}
