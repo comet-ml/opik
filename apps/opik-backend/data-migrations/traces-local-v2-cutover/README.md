@@ -423,29 +423,27 @@ the `traceColumnsNonNullable` flip").
 
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
-**The `tracesWeeklyPartitionPruningEnabled` flip (optional, and why it goes last).** `databaseAnalyticsDataModel.tracesWeeklyPartitionPruningEnabled`
-(env `ANALYTICS_DB_DATA_MODEL_TRACES_WEEKLY_PARTITION_PRUNING_ENABLED`, default `false`) lets a trace `DELETE` bind itself to
-the weekly partitions its own ids resolve to (OPIK-6901), instead of being planned against every part of the table — on
-prod-test, 12 ids rewrote 3,928 parts / 5.40 TiB without it. It asserts a **schema** fact: that `traces` (or
-`traces_local`) is the successor, with `id_at` as `DateTime64(0,'UTC')` under the weekly `PARTITION BY`.
+**Trace-delete partition pruning needs no flip at all (OPIK-6901).** A trace `DELETE` binds itself to the weekly
+partitions its own ids resolve to instead of being planned against every part of the table — on prod-test, 12 ids
+rewrote 3,928 parts / 5.40 TiB before this. There is **no flag, no ordering constraint, and nothing to revert on
+rollback**: the predicate is emitted unconditionally, and one rendered statement is correct against the original and
+against the successor alike.
 
-> **It enables the *pruning*, not the partitioning — the name is deliberate.** Setting it does not create, activate or
-> migrate anything; the partitioned schema arrives with the `EXCHANGE` above and nowhere else. So it is never a step that
-> *makes* the cutover progress, and setting it early does not bring the partitioning forward — it only starts emitting a
-> predicate against whatever table is live, which is the failure below.
+That works because the derivation (`WeeklyPartitions`) names, for each id, the week it partitions into under **each**
+`id_at` type a mutation can meet — the successor's `DateTime64(0,'UTC')` and the original's 32-bit `DateTime`, which
+holds `epochSecond % 2^32`. Below 2106 the two coincide and the set is one value per week, which is all real traffic;
+only a far-future id (the litellm ~2201 rows) contributes a second, and widening an `IN` set can only select an extra
+partition — the `(project_id, id)` predicate it is ANDed with still decides which rows go. Against a 220-partition
+table the pruning is identical either way (3/220 parts with or without the extra value).
 
-It is a third flag precisely because **neither of the two above marks the `EXCHANGE`**, which is when the partitioning
-appears: `traceColumnsNonNullable` must lead it (above), and `tracesDistributedWrapEnabled` flips at the wrap, which may
-be deferred long after it (`--skip-wrap` … `--wrap-only`). So gate on this one, not on either of those.
+This is what an earlier revision gated on a `tracesWeeklyPartitionPruningEnabled` flag, which asserted the `EXCHANGE`
+had already happened and had to be reverted **before** a stage B/C rollback promoted the original. That flag is gone,
+along with its footgun: a stale `true` used to make trace deletes on the original match **zero rows while reporting
+success**, because a set carrying only the honest week cannot match a row the 32-bit column filed under a wrapped
+timestamp. Both weeks are now in the set, so neither direction of the swap needs an operator step.
 
-Unlike its siblings it is **safe to lag and unsafe to lead**: `false` is the previous unbounded delete, always correct
-and merely slower, so turn it on at leisure **after** the `EXCHANGE` is confirmed. Turning it on early — while `traces` is
-still the original — is the failure mode worth avoiding: the original has **no `PARTITION BY` at all** (nothing to prune)
-and declares `id_at` as a 32-bit `DateTime` that overflows past 2106, so a far-future id (the litellm ~2201 rows) is
-stored under a wrapped recent timestamp that the derived partition cannot match, and the delete reports success having
-matched **zero rows**. For the same reason, a stage B/C **rollback must revert it to `false` — and roll-restart every
-instance — before promoting the original**, ahead of the swap rather than after it. Like its siblings it comes from a
-startup snapshot of `OpikConfiguration`, so the config change alone changes nothing until each instance restarts.
+Coverage sits in `TracesPartitionPruningMutationTest` (the successor) and `TracesLegacyTablePruningMutationTest` (the
+original), which delete the same far-future row shape with the same rendered predicate against each schema.
 
 ## Batching and throttling
 
@@ -957,11 +955,6 @@ statements, so a failure *between* them needs a restart path:
 **Rolling back the `traceColumnsNonNullable` flip.** After a stage B or C rollback, `traces` is the Nullable original
 again, so the flip has to be undone in two steps — `rollback.sh` prints both when the stage finishes. The rollback is not
 complete until they land.
-
-> **If `tracesWeeklyPartitionPruningEnabled` was turned on, revert it *before* the stage runs, not after.** It asserts the
-> live table is the partitioned successor, and the restored original is not one, so a stale `true` makes trace deletes
-> match zero rows while reporting success — see "The `tracesWeeklyPartitionPruningEnabled` flip". It is the one flag whose
-> revert has to lead the swap; the two steps below follow it.
 
 1. **Revert `traceColumnsNonNullable` to `false` AND roll-restart every backend instance.** The flag is read from a
    **startup snapshot** of `OpikConfiguration` (bound via `toInstance`), so a config change does **not** take effect until
