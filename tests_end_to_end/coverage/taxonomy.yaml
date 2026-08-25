@@ -22,7 +22,6 @@
 #
 #   tier    exactly one of @t1-smoke | @t2-cuj | @t3-nightly     -> drives coverage %
 #   suites  zero or more of @t1-stsaas | @provider-sanity        -> drives WHERE it runs
-#           | @release-gate | @release-gate:<version>
 #   area    exactly one @area:<area>                             -> from `areas:` keys below
 #   caps    one or more @cap:<area>.<capability>                 -> from `capabilities:` keys
 #
@@ -141,7 +140,6 @@ rules:
   # both numerator and denominator, and exempt from the area/cap tag lint.
   exempt_dirs:
     - _seed          # sdk-clients.spec.ts — harness self-test
-    - _release-gate  # ephemeral, version-stamped gate specs
   # Capabilities flagged `cloud_only: true` are excluded from the self-hosted
   # coverage view but counted in the cloud view. They depend on the out-of-tree
   # `comet` frontend plugin (PluginsStore) and cannot run self-hosted.
