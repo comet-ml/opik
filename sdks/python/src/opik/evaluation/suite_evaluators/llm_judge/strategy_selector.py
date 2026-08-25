@@ -91,6 +91,11 @@ def _capability_for(
     for candidate in candidates:
         for cap in table:
             prefix = cap.model_name_prefix
+            # An empty prefix matches everything via startswith, so a
+            # caller-supplied catch-all entry would shadow the real match.
+            # Skip it here and let DEFAULT_CAPABILITY be the final fallback.
+            if not prefix:
+                continue
             if candidate == prefix:
                 return cap
             if candidate.startswith(prefix) and len(prefix) > best_len:

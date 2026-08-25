@@ -141,6 +141,46 @@ class TestCapabilityLookup:
             cap = strategy_selector._capability_for(model_name)
             assert cap is not model_capabilities.DEFAULT_CAPABILITY, model_name
 
+    def test_fifth_generation_models__have_expected_capabilities(self):
+        # Asserting only "not DEFAULT_CAPABILITY" would pass on a wrong
+        # prefix match, so pin the values.
+        for model_name in ("claude-opus-5", "claude-sonnet-5"):
+            cap = strategy_selector._capability_for(model_name)
+            assert cap.model_name_prefix == model_name, model_name
+            assert cap.context_window == 1_000_000, model_name
+
+    def test_sampling_rejecting_models__stay_out_of_agentic_auto(self):
+        # `agentic/loop.py` sends temperature=0 on every turn. Anthropic
+        # returns 400 for a non-default temperature from Opus 4.7 onward,
+        # so routing these models into the agentic loop under `auto` would
+        # fail the first request instead of scoring.
+        for model_name in ("claude-opus-5", "claude-sonnet-5"):
+            cap = strategy_selector._capability_for(model_name)
+            assert cap.agentic_in_auto is False, model_name
+
+    def test_sampling_accepting_models__keep_agentic_auto(self):
+        for model_name in ("claude-sonnet-4-6", "claude-opus-4-6", "gpt-4o"):
+            cap = strategy_selector._capability_for(model_name)
+            assert cap.agentic_in_auto is True, model_name
+
+    def test_custom_table_with_empty_prefix__prefers_real_match(self):
+        # An empty prefix matches every name via startswith. Without
+        # deferring it, a caller-supplied table containing a catch-all
+        # entry would shadow the real match for a qualified name.
+        table = [
+            model_capabilities.ModelCapability(
+                "", context_window=16_000, agentic_in_auto=False
+            ),
+            model_capabilities.ModelCapability(
+                "claude-sonnet-4-6", context_window=1_000_000, agentic_in_auto=True
+            ),
+        ]
+        cap = strategy_selector._capability_for(
+            "anthropic/claude-sonnet-4-6", capabilities=table
+        )
+        assert cap.model_name_prefix == "claude-sonnet-4-6"
+        assert cap.context_window == 1_000_000
+
 
 class TestBudgetTokens:
     def test_qualified_name__matches_bare_budget(self):
