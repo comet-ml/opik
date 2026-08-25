@@ -27,12 +27,7 @@ const PlaygroundOutputScoresContainer: React.FC<
     pollingStartTimeRef.current = traceId ? Date.now() : null;
   }, [traceId]);
 
-  const shouldShowMetrics =
-    selectedRuleIds === null ||
-    (Array.isArray(selectedRuleIds) && selectedRuleIds.length > 0);
-
-  const hasRulesSelected =
-    selectedRuleIds == null || selectedRuleIds.length > 0;
+  const hasSelectedRules = (selectedRuleIds?.length ?? 0) > 0;
 
   const { data: rulesData } = useRulesList(
     {
@@ -42,17 +37,18 @@ const PlaygroundOutputScoresContainer: React.FC<
       size: 100,
     },
     {
-      enabled: !!activeProjectId && shouldShowMetrics && hasRulesSelected,
+      enabled: !!activeProjectId && hasSelectedRules,
     },
   );
 
   const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
+  // Only the selected rules are known to run up front, so only they get a pending tag. Rules that
+  // target experiments also score the trace, and those scores are rendered once they arrive.
   const selectedRules = useMemo(() => {
-    if (!shouldShowMetrics || !hasRulesSelected || !rules.length) return [];
-    if (selectedRuleIds == null) return rules;
+    if (!selectedRuleIds?.length) return [];
     return rules.filter((r) => selectedRuleIds.includes(r.id));
-  }, [shouldShowMetrics, hasRulesSelected, rules, selectedRuleIds]);
+  }, [rules, selectedRuleIds]);
 
   const expectedMetricNames = useMemo(() => {
     const allNames = selectedRules.flatMap((rule) =>
@@ -67,7 +63,7 @@ const PlaygroundOutputScoresContainer: React.FC<
   const { data: trace } = useTraceById(
     { traceId: traceId! },
     {
-      enabled: !!traceId && hasRulesSelected,
+      enabled: !!traceId,
       refetchInterval: (query) => {
         const elapsed =
           Date.now() - (pollingStartTimeRef.current || Date.now());
@@ -117,11 +113,6 @@ const PlaygroundOutputScoresContainer: React.FC<
     const combined = new Set([...expectedMetricNames, ...actualScoreNames]);
     return [...combined].sort((a, b) => a.localeCompare(b));
   }, [expectedMetricNames, metricScores]);
-
-  // Don't show metrics if there's no output yet or no rules selected
-  if (!shouldShowMetrics) {
-    return null;
-  }
 
   return (
     <PlaygroundOutputScores
