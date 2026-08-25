@@ -131,7 +131,8 @@ def test_truncate_span_kwargs__oversized__truncated_in_place(capture_log):
 
     assert kwargs["output"]["opik_truncated"] is True
     assert kwargs["input"] == {"prompt": "small"}
-    assert "span-id" in capture_log.text
+    # names the field too, so logging the wrong one cannot pass
+    assert "span-id" in capture_log.text and "output" in capture_log.text
 
 
 def test_truncate_span_kwargs__within_limit__untouched():

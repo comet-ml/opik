@@ -228,7 +228,7 @@ jobs:
       # Same action + inputs as update_helm_readme.yaml, keeping CI and the
       # local pre-commit hook in agreement.
       - name: Regenerate Helm chart README
-        uses: losisin/helm-docs-github-action@v1
+        uses: losisin/helm-docs-github-action@v2
         with:
           chart-search-root: deployment/helm_chart/opik
           git-push: false

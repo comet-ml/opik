@@ -154,7 +154,7 @@ jobs:
         working-directory: sdks/typescript
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Cache pre-commit environments
         uses: actions/cache@v6
@@ -240,7 +240,7 @@ jobs:
 
       - name: Download timing fragments
         if: needs.detect.outputs.has_legs == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/fragments
           pattern: timing-*
