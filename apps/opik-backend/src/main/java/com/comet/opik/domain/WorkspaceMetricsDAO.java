@@ -47,6 +47,8 @@ import java.util.UUID;
 
 import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.SpanMetricsQueries.SPAN_FILTERED_PREFIX;
+import static com.comet.opik.domain.SpanMetricsQueries.TOKEN_USAGE_NAMES;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -243,9 +245,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     // projects: WorkspaceMetricsService resolves the "all projects" request into every project id up front, so the
     // predicate is always a bounded `project_id IN :project_ids` list that prunes on the spans primary key
     // (workspace_id, project_id, ...) — never an unconstrained workspace-wide scan.
-    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries
-            .spanFilteredPrefix("project_id IN :project_ids");
-
     // Span filtering is reused from ProjectMetricsDAO's SPAN_FILTERED_PREFIX (above), but the output is shaped in the
     // workspace-native style like GET_COSTS_DAILY: each row is a finished series {project_id, name, data}, where data is
     // a groupArray(tuple(bucket, value)). No breakdown => one series per usage key; with a provider/model breakdown =>
@@ -304,11 +303,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             GROUP BY group_name
             SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
-
-    // Distinct span token-usage key names across an explicit project set, all-time. Shares SpanMetricsQueries with
-    // ProjectMetricsDAO's per-project query; only the project predicate differs (a bounded project_id IN (...) list).
-    private static final String GET_WORKSPACE_TOKEN_USAGE_NAMES = SpanMetricsQueries
-            .tokenUsageNames("project_id IN :project_ids");
 
     private static final String WORKSPACE_METRIC_QUERY_NAME_PREFIX = "WorkspaceMetrics_";
 
@@ -384,7 +378,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIds),
                 "projectIds must be resolved before querying workspace token usage names");
         return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var stTemplate = getSTWithLogComment(GET_WORKSPACE_TOKEN_USAGE_NAMES,
+            var stTemplate = getSTWithLogComment(TOKEN_USAGE_NAMES,
                     WORKSPACE_METRIC_QUERY_NAME_PREFIX + "tokenUsageNames", workspaceId, userName, projectIds.size());
 
             var statement = connection.createStatement(stTemplate.render())
