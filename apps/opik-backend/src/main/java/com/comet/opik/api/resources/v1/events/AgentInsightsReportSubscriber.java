@@ -1,9 +1,11 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.domain.AgentInsightsJobService;
 import com.comet.opik.domain.AgentInsightsMetrics;
 import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsReportMessage;
+import com.comet.opik.domain.AgentInsightsTriggerException;
 import com.comet.opik.infrastructure.AgentInsightsReportConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import jakarta.inject.Inject;
@@ -97,16 +99,18 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                     // reportId is carried on the message as the idempotency key if downstream dedup is added.
                     log.error("Failed to trigger Agent Insights report, dropping reportId='{}', project='{}'",
                             message.reportId(), message.projectId(), throwable);
-                    // Ollie never ran, so it can't report this itself: record "did not start" so the UI stops.
-                    markDidNotStart(message, throwable);
+                    // Ollie never ran, so it can't report this itself: record the reason so the UI stops.
+                    markRunFailed(message, throwable);
                     return Mono.empty();
                 });
     }
 
-    private void markDidNotStart(AgentInsightsReportMessage message, Throwable throwable) {
+    private void markRunFailed(AgentInsightsReportMessage message, Throwable throwable) {
+        String reason = throwable instanceof AgentInsightsTriggerException triggerFailure
+                ? triggerFailure.getReason()
+                : AgentInsightsJob.FailureReason.DID_NOT_START;
         try {
-            jobService.markRunFailed(message.workspaceId(), message.projectId(), "did_not_start",
-                    throwable.getMessage());
+            jobService.markRunFailed(message.workspaceId(), message.projectId(), reason, throwable.getMessage());
         } catch (Exception e) {
             log.warn("Failed to record run failure for reportId='{}', project='{}'",
                     message.reportId(), message.projectId(), e);

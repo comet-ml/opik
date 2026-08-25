@@ -567,6 +567,29 @@ describe("explainStore", () => {
     expect(entry.text).toBe("real");
   });
 
+  it("tells a user who ran out of credits to add credits, not to retry", () => {
+    // The console reports credit exhaustion as `out_of_credits`. Without copy for it the popover fell back
+    // to the generic "unavailable" path and told the user to try again shortly, which can never work.
+    const emit = vi.fn();
+    reset(emit);
+    useExplainStore.getState().explain(target("e1"));
+    const { explainId } = Object.values(useExplainStore.getState().entries)[0];
+
+    // A raw message distinct from the host copy, so this proves the code resolved rather than
+    // the message merely falling through.
+    handleConsoleEvent("explain:error", {
+      explainId,
+      code: "out_of_credits",
+      message: "upstream said 402",
+    });
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("error");
+    expect(entry.error).toBe(
+      "You're out of LLM credits. Add credits and try again.",
+    );
+  });
+
   it("does not resolve a prototype-key error code to a Function (renders a safe string)", () => {
     // `code` is free-form off the bridge; a bare ERROR_COPY[code] lookup would
     // return Object.prototype.constructor (a Function) for code:"constructor",
