@@ -230,8 +230,11 @@ assert_pre_wrap_topology() {
         exit 1
     fi
     if [[ -z "$(traces_engine traces_pre_cutover_backup)" ]]; then
-        echo "ERROR: --wrap-only: 'traces_pre_cutover_backup' (the parked original) does not exist — stage C rollback would" >&2
-        echo "       have nothing to restore, making the wrap one-way. Refusing. (Did finalize.sh already drop the backup?)" >&2
+        echo "ERROR: --wrap-only: 'traces_pre_cutover_backup' (the parked original) does not exist, so there is no path back" >&2
+        echo "       to the pre-cutover table if the wrap exposes a problem in the successor. Refusing by default." >&2
+        echo "       (Did finalize.sh already drop the backup?) Note this is NOT about the wrap being irreversible — the" >&2
+        echo "       wrap itself is reversible without the backup via 'rollback.sh --unwrap-only'; what is missing is stage" >&2
+        echo "       B/C. If you intend to wrap a finalized estate, treat lifting this guard as its own reviewed change." >&2
         exit 1
     fi
 }

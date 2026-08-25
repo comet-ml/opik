@@ -7,6 +7,11 @@
 #   --stage A   backfill/delta ran but the EXCHANGE did not — discard the shadow (live `traces` is untouched).
 #   --stage B   the EXCHANGE ran but not the wrap — swap the tables back, then reverse-replay.
 #   --stage C   the wrap ran — drop the wrapper, promote the parked original, then reverse-replay.
+# Or --unwrap-only: reverse ONLY the Distributed wrap, keeping the cutover. Use it when the wrap misbehaves but the
+# partitioned successor is fine — it lands in the post-EXCHANGE, pre-wrap state (where `--skip-wrap` stops), so no write
+# is abandoned, no reverse-replay is needed, and no sentinel repair follows. Unlike stages B/C it does not need the
+# parked original, so it is the only wrap recovery left once finalize.sh has dropped it. It undoes SHARDING only: if the
+# successor itself is suspect, use stage B/C instead. See 000004_rollback_unwrap.sql.
 # Or --reverse-replay-only: re-apply just the reverse deletion replay against the current live `traces`. Use it when a
 # stage B/C run's promote succeeded but its reverse-replay was interrupted — the promote leaves `traces` in the restored
 # canonical shape, so re-running the stage is (correctly) rejected by the topology guard, which would otherwise strand
@@ -25,7 +30,7 @@
 #
 # SAFETY: the stages are mutually exclusive and each lives in its OWN file, so no single file mixes a TRUNCATE with an
 # EXCHANGE/DROP — running any file does exactly one stage. Before running, this asserts the live `traces` topology matches
-# the requested stage and aborts otherwise, so a wrong-stage run cannot destroy data. No data-bearing table is dropped.
+# the requested stage (or mode) and aborts otherwise, so a wrong-stage run cannot destroy data. No data-bearing table is dropped.
 # Stages B/C end with traces = original data live and the successor parked as traces_post_rollback_backup (a retained
 # backup that finalize.sh later recycles into an empty traces_local_v2); stage A discards the empty traces_local_v2
 # shadow and leaves traces untouched.
@@ -46,6 +51,13 @@
 #                             ONLY when no connection flag is given, so supplying --port alone silently reverts the host
 #                             to localhost. User/password still come from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD (keeping
 #                             the password out of argv).
+#   --unwrap-only             reverse ONLY the Distributed wrap (no promote, no reverse-replay). Requires
+#                             --confirm-maintenance. Mutually exclusive with --stage and --reverse-replay-only.
+#   --confirm-maintenance     REQUIRED with --unwrap-only. The un-wrap is gapless per node (atomic rotate), but renaming
+#                             the live `traces` has a brief cross-node ON CLUSTER propagation skew, and it runs against
+#                             live, unbuffered ingestion. Asserts the async-insert buffer is raised (or ingestion
+#                             quiesced / a maintenance window is in effect) — the same gate exchange_and_wrap.sh
+#                             requires for the deferred --wrap-only that this reverses.
 
 set -euo pipefail
 
@@ -60,6 +72,8 @@ CUTOVER_START=""
 CONFIRM_RETENTION_PAUSED=0
 ACCEPT_WRITE_LOSS=0
 REVERSE_REPLAY_ONLY=0
+UNWRAP_ONLY=0
+CONFIRM_MAINTENANCE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -69,6 +83,8 @@ while [[ $# -gt 0 ]]; do
         --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
         --accept-post-cutover-write-loss) ACCEPT_WRITE_LOSS=1; shift ;;
         --reverse-replay-only) REVERSE_REPLAY_ONLY=1; shift ;;
+        --unwrap-only) UNWRAP_ONLY=1; shift ;;
+        --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -81,14 +97,38 @@ done
 [[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 [[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
-# Exactly one of --stage / --reverse-replay-only.
-if [[ "$REVERSE_REPLAY_ONLY" == "1" ]]; then
-    [[ -z "$STAGE" ]] || { echo "ERROR: --reverse-replay-only cannot be combined with --stage." >&2; exit 2; }
+# Exactly one mode: --stage A|B|C, --reverse-replay-only, or --unwrap-only.
+if (( REVERSE_REPLAY_ONLY + UNWRAP_ONLY > 1 )); then
+    echo "ERROR: --reverse-replay-only and --unwrap-only are mutually exclusive." >&2; exit 2
+fi
+if [[ "$REVERSE_REPLAY_ONLY" == "1" || "$UNWRAP_ONLY" == "1" ]]; then
+    [[ -z "$STAGE" ]] || { echo "ERROR: --stage cannot be combined with --reverse-replay-only / --unwrap-only." >&2; exit 2; }
 else
     case "$STAGE" in
         A|B|C) ;;
-        *) echo "ERROR: --stage must be A, B or C (or pass --reverse-replay-only)" >&2; exit 2 ;;
+        *) echo "ERROR: --stage must be A, B or C (or pass --reverse-replay-only / --unwrap-only)" >&2; exit 2 ;;
     esac
+fi
+# Reject the promote/replay flags under --unwrap-only rather than ignoring them. Each asserts a precondition for
+# something the un-wrap does not do, so accepting one would quietly confirm a wrong mental model of the operation —
+# most damagingly that post-cutover deletes get replayed (they need no replay: nothing is promoted).
+if [[ "$UNWRAP_ONLY" == "1" ]]; then
+    if [[ -n "$CUTOVER_START" || "$ACCEPT_WRITE_LOSS" == "1" || "$CONFIRM_RETENTION_PAUSED" == "1" ]]; then
+        echo "ERROR: --unwrap-only takes none of --cutover-start / --accept-post-cutover-write-loss /" >&2
+        echo "       --confirm-retention-paused. It promotes nothing and replays nothing: the successor stays live, so no" >&2
+        echo "       write is abandoned and no bridged delete needs re-applying. If you meant to restore the ORIGINAL" >&2
+        echo "       table, that is --stage C (and it needs all three)." >&2
+        exit 2
+    fi
+    if [[ "$CONFIRM_MAINTENANCE" != "1" ]]; then
+        echo "ERROR: --unwrap-only requires --confirm-maintenance. It renames the live 'traces': gapless per node, but with" >&2
+        echo "       a brief cross-node ON CLUSTER skew during which a lagging replica still resolves the wrapper's" >&2
+        echo "       'traces_local' target, which the already-renamed replicas no longer have — so a query routed there can" >&2
+        echo "       fail with UNKNOWN_TABLE. That hits READS as well as writes, so the async-insert buffer alone does not" >&2
+        echo "       cover it: quiesce traffic or take a maintenance window (the mirror of the window exchange_and_wrap.sh" >&2
+        echo "       gates for the --wrap-only this reverses), then re-run with the flag." >&2
+        exit 2
+    fi
 fi
 # The reverse-replay runs for stages B/C and for --reverse-replay-only, and — like the forward replay — only re-applies
 # bridged deletes. Retention deletes (deleteForRetention*) bypass the bridge, so a retention sweep during the rollback
@@ -187,6 +227,65 @@ run_file() {
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
     clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database "$DATABASE" --multiquery --query "$sql"
 }
+
+# Un-wrap mode: reverse the Distributed wrap and stop, leaving the partitioned successor live (see
+# 000004_rollback_unwrap.sql). Guarded on the post-wrap shape. Deliberately does NOT require traces_pre_cutover_backup —
+# that is what makes it the only wrap recovery still available after finalize.sh has dropped the backup.
+if [[ "$UNWRAP_ONLY" == "1" ]]; then
+    unwrap_engine="$(traces_engine traces)"
+    [[ -n "$unwrap_engine" ]] || { echo "ERROR: no 'traces' table found in database '$DATABASE'." >&2; exit 1; }
+    [[ "$unwrap_engine" == "Distributed" ]] || {
+        echo "ERROR: --unwrap-only expects the post-wrap state (traces = Distributed), but traces is engine='$unwrap_engine'." >&2
+        echo "       The wrap is not applied, so there is nothing to un-wrap. To roll the CUTOVER back, use --stage B (or" >&2
+        echo "       --stage A if the EXCHANGE never ran)." >&2
+        exit 1
+    }
+    [[ -n "$(traces_engine traces_local)" ]] || {
+        echo "ERROR: --unwrap-only: 'traces_local' (the successor shard the wrapper fronts) not found. The topology is not a" >&2
+        echo "       clean post-wrap state, and promoting a missing table would leave 'traces' absent. Resolve by hand." >&2
+        exit 1
+    }
+    # 'traces_local' must be the SUCCESSOR, not the original parked under that name by some earlier manual step. Promoting
+    # the original here would silently revert the schema with none of the flag reverts or sentinel repair stage B/C carry.
+    [[ "$(traces_endtime_type traces_local)" != Nullable* ]] || {
+        echo "ERROR: --unwrap-only: 'traces_local' has Nullable end_time, i.e. it holds the ORIGINAL schema, not the" >&2
+        echo "       successor. Promoting it would revert the schema without the flag reverts and sentinel repair that a" >&2
+        echo "       real rollback performs. Refusing — resolve the topology by hand." >&2
+        exit 1
+    }
+    # RENAME cannot overwrite an existing name, so a leftover 'traces_dist_old' (from an earlier stage C or un-wrap whose
+    # RENAME landed but whose DROP did not, followed by a re-wrap) would fail the rotate below with a bare
+    # "table already exists". Report it here instead: it is data-less, so the fix is simply to drop it.
+    [[ -z "$(traces_engine traces_dist_old)" ]] || {
+        echo "ERROR: --unwrap-only: '$DATABASE.traces_dist_old' already exists, so the atomic rotate below cannot claim that" >&2
+        echo "       name. It is the data-less ex-wrapper left by an earlier stage C / un-wrap whose DROP did not complete." >&2
+        echo "       Drop it and re-run:" >&2
+        echo "         clickhouse-client ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --database $DATABASE --query \"DROP TABLE IF EXISTS $DATABASE.traces_dist_old ON CLUSTER '{cluster}' SYNC\"" >&2
+        exit 1
+    }
+    echo "NOTE: reversing the Distributed wrap only. The partitioned successor stays live, so nothing is promoted and no" >&2
+    echo "      deletes are replayed; this lands in the post-EXCHANGE, pre-wrap state." >&2
+    run_file 000004_rollback_unwrap.sql
+    echo "Un-wrap done: the Distributed wrapper is gone and 'traces' is the partitioned successor again."
+    echo
+    echo "NEXT, in this order:"
+    echo "  1. Set databaseAnalyticsDataModel.tracesDistributedWrapEnabled=false and roll-restart every backend instance."
+    echo "     Do it in THIS order (DDL first, flag second), which is the inverse of the forward wrap and keeps the failure"
+    echo "     on the same side: until the restart completes, trace DELETES target the now-absent 'traces_local' and fail"
+    echo "     with Code 60 UNKNOWN_TABLE. Reverting the flag first instead would point them at a 'traces' that is still"
+    echo "     Distributed, which rejects mutations (Code 36) AND exposes the cross-node skew unbuffered. Either window is"
+    echo "     delete-path-only — reads and inserts never consult the flag — so keep it short and fail loud."
+    echo "  2. Leave databaseAnalyticsDataModel.traceColumnsNonNullable=true: the live table keeps the successor's sentinel"
+    echo "     schema. Leave tracesWeeklyPartitionPruningEnabled as it is — it asserts the live table is the partitioned"
+    echo "     successor, which is still true. No sentinel/duration repair is needed (that is a stage B/C concern)."
+    echo "  3. The partition metrics relabel back: the opik.clickhouse.partition.* gauges move from table=\"traces_local\""
+    echo "     to table=\"traces\", so restore any dashboards/alerts that were adjusted at wrap time."
+    echo
+    echo "To re-apply the wrap later, once the cause is understood:"
+    echo "  ./exchange_and_wrap.sh --database $DATABASE --wrap-only --confirm-maintenance --confirm-daos-retargeted"
+    echo "  (flip tracesDistributedWrapEnabled back to true first, per the runbook's toggle/wrap ordering note)."
+    exit 0
+fi
 
 # Recovery mode: re-apply only the reverse-replay against the current live `traces`, for a stage B/C run whose promote
 # succeeded but whose reverse-replay was interrupted. It is idempotent, so re-running just re-masks any deletes it missed.
