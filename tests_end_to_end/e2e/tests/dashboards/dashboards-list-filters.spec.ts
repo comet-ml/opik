@@ -18,7 +18,7 @@ import type { DashboardRef } from '@e2e/core/backend';
  */
 test.describe(
   'Dashboards list filtering',
-  { tag: ['@t1-smoke', '@area:dashboards'] },
+  { tag: ['@t2-cuj', '@area:dashboards'] },
   () => {
     const created: DashboardRef[] = [];
 

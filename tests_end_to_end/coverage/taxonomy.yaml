@@ -370,7 +370,7 @@ areas:
       - dashboards/workspace-span-metrics.spec.ts
       - dashboards/dashboards-list-filters.spec.ts
     capabilities:
-      list-dashboards:      { covered: true,  tier: t1-smoke, note: "the list filtered by the Description column; the other operators and columns are uncovered" }
+      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list filtered by the Description column; the other operators and columns are uncovered" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
       open-dashboard:       { covered: false }
       edit-dashboard:       { covered: false }
