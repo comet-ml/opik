@@ -87,7 +87,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v9.0.0
+          uses: astral-sh/setup-uv@v10.0.1
 
         - name: Run latest Opik server
           env:
@@ -177,7 +177,7 @@ jobs:
             python-version: "3.12"
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v9.0.0
+          uses: astral-sh/setup-uv@v10.0.1
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v6

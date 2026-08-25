@@ -67,7 +67,7 @@ jobs:
           cache-dependency-path: tests_end_to_end/e2e/package-lock.json
 
       - name: Setup uv & Python
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: '3.12'
 
