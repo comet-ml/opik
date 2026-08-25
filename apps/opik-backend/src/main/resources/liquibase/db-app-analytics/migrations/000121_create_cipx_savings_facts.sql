@@ -9,10 +9,6 @@
 -- quantity, tier and causal_link are key columns because their values are never summed
 -- together: a measured saving and an imputed one reach the client as separate amounts.
 -- Reads collapse versions with FINAL or argMax, since a repaired day is re-inserted.
---
--- No production data yet, so the table is recreated rather than preserved.
-DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.cipx_savings_facts ON CLUSTER '{cluster}' SYNC;
-
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.cipx_savings_facts ON CLUSTER '{cluster}'
 (
     workspace_id      String,
