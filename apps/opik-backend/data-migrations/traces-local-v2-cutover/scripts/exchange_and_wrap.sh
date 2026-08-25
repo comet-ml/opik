@@ -49,9 +49,11 @@
 #                     behind replica would swap in an incomplete table. Use only if settlement is confirmed out of band.
 #   --confirm-maintenance  REQUIRED with --wrap-only. The wrap is gapless per node (atomic rotate), but a brief cross-node
 #                     ON CLUSTER propagation skew remains, during which a Distributed query can hit a not-yet-created
-#                     `traces_local` on a lagging node. Unlike the same-run --with-wrap path (still buffered from the
-#                     EXCHANGE), --wrap-only runs later against live, unbuffered ingestion. This flag asserts the
-#                     async-insert buffer is re-raised (or ingestion quiesced / a maintenance window is in effect).
+#                     `traces_local` on a lagging node and fail. That is a READ exposure as much as a write one, so
+#                     re-raising the async-insert buffer does NOT by itself discharge this flag — the buffer parks
+#                     writes and does nothing for reads. Unlike the same-run --with-wrap path (still buffered from the
+#                     EXCHANGE), --wrap-only runs later against live traffic. Assert that traffic is quiesced or a
+#                     maintenance window is in effect. Mirrored by rollback.sh --unwrap-only, which reverses this.
 #   --confirm-daos-retargeted  REQUIRED whenever the wrap is applied (--with-wrap or --wrap-only). Asserts the trace
 #                     delete/mutation DAOs already target `traces_local`: set backend config
 #                     databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true (OPIK-7455) in lockstep with the wrap.
@@ -123,8 +125,10 @@ fi
 # (fail fast, before touching ClickHouse) unless the operator asserts the buffer is re-raised / ingestion quiesced / a
 # maintenance window is in effect.
 if [[ "$WRAP_ONLY" == "1" && "$CONFIRM_MAINTENANCE" != "1" ]]; then
-    echo "ERROR: --wrap-only requires --confirm-maintenance. Re-raise asyncInsertBusyTimeoutMaxMs (or quiesce ingestion /" >&2
-    echo "       take a maintenance window) first — the wrap has a brief cross-node window — then re-run with it." >&2
+    echo "ERROR: --wrap-only requires --confirm-maintenance. The wrap has a brief cross-node ON CLUSTER window in which a" >&2
+    echo "       Distributed query can reach a node where 'traces_local' does not exist yet and fail — a READ exposure as" >&2
+    echo "       much as a write one, so re-raising asyncInsertBusyTimeoutMaxMs is not sufficient on its own (it parks" >&2
+    echo "       writes and does nothing for reads). Quiesce traffic or take a maintenance window, then re-run with it." >&2
     exit 2
 fi
 # HARD PREREQUISITE (OPIK-7455): a Distributed table rejects mutations, so once the wrap is applied the product's

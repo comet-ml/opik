@@ -54,10 +54,11 @@
 #   --unwrap-only             reverse ONLY the Distributed wrap (no promote, no reverse-replay). Requires
 #                             --confirm-maintenance. Mutually exclusive with --stage and --reverse-replay-only.
 #   --confirm-maintenance     REQUIRED with --unwrap-only. The un-wrap is gapless per node (atomic rotate), but renaming
-#                             the live `traces` has a brief cross-node ON CLUSTER propagation skew, and it runs against
-#                             live, unbuffered ingestion. Asserts the async-insert buffer is raised (or ingestion
-#                             quiesced / a maintenance window is in effect) — the same gate exchange_and_wrap.sh
-#                             requires for the deferred --wrap-only that this reverses.
+#                             the live `traces` has a brief cross-node ON CLUSTER propagation skew during which a query
+#                             routed at a lagging replica's wrapper can fail with UNKNOWN_TABLE. That hits READS, not
+#                             only writes, so raising the async-insert buffer does NOT discharge this flag: it asserts
+#                             traffic is quiesced or a maintenance window is in effect. Same gate, and the same
+#                             read exposure, as the --wrap-only in exchange_and_wrap.sh that this reverses.
 
 set -euo pipefail
 
@@ -247,7 +248,17 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
     }
     # 'traces_local' must be the SUCCESSOR, not the original parked under that name by some earlier manual step. Promoting
     # the original here would silently revert the schema with none of the flag reverts or sentinel repair stage B/C carry.
-    [[ "$(traces_endtime_type traces_local)" != Nullable* ]] || {
+    # Require the column to EXIST and be non-Nullable, in that order: traces_endtime_type returns an empty string for a
+    # missing column, and "" is not Nullable*, so a bare non-Nullable test would wave through a table that has no
+    # end_time at all — i.e. not the successor either.
+    unwrap_local_end_time="$(traces_endtime_type traces_local)"
+    [[ -n "$unwrap_local_end_time" ]] || {
+        echo "ERROR: --unwrap-only: 'traces_local' has no 'end_time' column, so it is not the successor this wrapper is" >&2
+        echo "       meant to front. Promoting it would make an unrelated table the live 'traces'. Refusing — resolve the" >&2
+        echo "       topology by hand." >&2
+        exit 1
+    }
+    [[ "$unwrap_local_end_time" != Nullable* ]] || {
         echo "ERROR: --unwrap-only: 'traces_local' has Nullable end_time, i.e. it holds the ORIGINAL schema, not the" >&2
         echo "       successor. Promoting it would revert the schema without the flag reverts and sentinel repair that a" >&2
         echo "       real rollback performs. Refusing — resolve the topology by hand." >&2
@@ -278,12 +289,26 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
     echo "  2. Leave databaseAnalyticsDataModel.traceColumnsNonNullable=true: the live table keeps the successor's sentinel"
     echo "     schema. Leave tracesWeeklyPartitionPruningEnabled as it is — it asserts the live table is the partitioned"
     echo "     successor, which is still true. No sentinel/duration repair is needed (that is a stage B/C concern)."
-    echo "  3. The partition metrics relabel back: the opik.clickhouse.partition.* gauges move from table=\"traces_local\""
-    echo "     to table=\"traces\", so restore any dashboards/alerts that were adjusted at wrap time."
+    echo "  3. The partition metrics relabel back: the opik.clickhouse.partition.* parts gauges move from"
+    echo "     table=\"traces_local\" to table=\"traces\", so restore any dashboards/alerts adjusted at wrap time. AND if the"
+    echo "     wrap-time option to point PARTITION_METRICS_LWD_TABLES at 'traces_local' was taken, revert it to 'traces'"
+    echo "     now: that table is gone, so the LWD scan would fail (Code 60) and opik.clickhouse.partition.lwd_rows would"
+    echo "     go silently empty while the other gauges come back. Default is 'traces,spans' — untouched installs are fine."
     echo
     echo "To re-apply the wrap later, once the cause is understood:"
-    echo "  ./exchange_and_wrap.sh --database $DATABASE --wrap-only --confirm-maintenance --confirm-daos-retargeted"
-    echo "  (flip tracesDistributedWrapEnabled back to true first, per the runbook's toggle/wrap ordering note)."
+    if [[ -n "$(traces_engine traces_pre_cutover_backup)" ]]; then
+        echo "  ./exchange_and_wrap.sh --database $DATABASE --wrap-only --confirm-maintenance --confirm-daos-retargeted"
+        echo "  (flip tracesDistributedWrapEnabled back to true first, per the runbook's toggle/wrap ordering note)."
+    else
+        # Deliberately not printed as a runnable command: --wrap-only refuses without the parked original, and this is
+        # exactly the post-finalize estate un-wrap exists to serve — so telling the operator to run it would send them
+        # into a guaranteed refusal.
+        echo "  NOT AVAILABLE as-is: 'traces_pre_cutover_backup' is gone (finalize.sh ran), and exchange_and_wrap.sh"
+        echo "  --wrap-only refuses without it — by design, since re-wrapping an estate that has no route back to the"
+        echo "  pre-cutover table should be a deliberate, separately reviewed decision, not a default. The un-wrap above"
+        echo "  is unaffected and remains repeatable. To re-wrap here, get that guard lifted first (see the runbook's"
+        echo "  \"Un-wrap\" section); do NOT work around it by hand."
+    fi
     exit 0
 fi
 

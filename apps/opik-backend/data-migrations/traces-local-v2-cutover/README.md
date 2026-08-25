@@ -970,7 +970,11 @@ Two properties are worth being explicit about:
   finalize drops. Since the documented order is wrap → soak → finalize, *post-wrap and post-finalize is the expected
   steady state*, and `--unwrap-only` is what covers a wrap fault discovered there.
 - **It makes the wrap a switch rather than a one-way door** — `exchange_and_wrap.sh --wrap-only` applies it,
-  `rollback.sh --unwrap-only` removes it, repeatably.
+  `rollback.sh --unwrap-only` removes it, repeatably. **With one asymmetry, while the parked original is gone:**
+  `--wrap-only` refuses when `traces_pre_cutover_backup` is absent, so on a **finalized** estate the un-wrap still works
+  and is still repeatable, but *re-applying* the wrap needs that guard lifted first — a deliberate, separately reviewed
+  decision, since it means wrapping an estate with no route back to the pre-cutover table. `rollback.sh` prints this
+  instead of a command when it detects the case, rather than handing over an invocation that is certain to be refused.
 
 **Do the DDL first, then the flag** — the inverse of the forward ordering, and for the same reason. Un-wrapping first
 leaves trace deletes pointed at the now-absent `traces_local` (`Code 60 UNKNOWN_TABLE`) until the roll-restart lands;
@@ -988,6 +992,13 @@ async-insert buffer alone does not cover it: quiesce traffic or take a maintenan
 `traceColumnsNonNullable` stays `true` and `tracesWeeklyPartitionPruningEnabled` stays as it was: the live table is still
 the partitioned, sentinel-schema successor, which is precisely what both flags assert. Only stage B/C revert them,
 because only they restore the unpartitioned original.
+
+**Monitoring reverses with it.** The `opik.clickhouse.partition.*` parts gauges relabel back from `table="traces_local"`
+to `table="traces"`, so restore anything adjusted at wrap time. And if the wrap-time option to point
+`PARTITION_METRICS_LWD_TABLES` at `traces_local` was taken (see "Monitoring consequence of the flip"), **revert it to
+`traces`** — that table no longer exists after the un-wrap, so the LWD scan fails with `Code 60` and
+`opik.clickhouse.partition.lwd_rows` goes silently empty while every other gauge returns. Installs left at the default
+(`traces,spans`) need nothing.
 
 **Scope limit.** This undoes sharding only. A fidelity defect in the successor, a partition-count or merge-load
 regression, or a query regression from the new layout are all *cutover* problems — `--unwrap-only` changes none of them.
@@ -1083,7 +1094,20 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    rollback was finalized. Resolve that by hand rather than forcing it.
 3. **The post-cutover writes the rollback discarded come back as live rows** once the retry's `EXCHANGE` lands. That is
    usually the point, but state it explicitly to whoever authorised the rollback.
-4. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor (the shadow still holds
+
+   One exception, so nobody counts on the general form: an id that was **deleted and then re-created** after
+   `cutover_start` does *not* come back. The rollback's reverse replay masked it on the restored original
+   (deliberately guard-less), so on the retry the forward replay's resurrection guard sees it as not-live on the source
+   and masks it on the shadow too. The delete is honoured; the re-creation is lost with the other discarded writes. Rare
+   by construction, and not worth changing the replay for — the guard is right for the primary cutover path.
+4. **Re-apply the `EXCHANGE`-window flags before the retry's `EXCHANGE`, exactly as for the first one.** The rollback told
+   you to set `traceColumnsNonNullable` back to `false`, so it *is* false now; the retry puts the sentinel-schema
+   successor back under `traces`, which needs it `true` and needs every backend instance restarted to pick it up (it
+   comes from a startup snapshot). Skipping this is silent, not loud: absent `end_time` reads back as `1970-01-01` while
+   writes keep succeeding. Raise the async-insert buffer for the window too. `tracesWeeklyPartitionPruningEnabled` is
+   separate — safe to lag, unsafe to lead — so leave it `false` and turn it on after the `EXCHANGE` is confirmed, per
+   "The `tracesWeeklyPartitionPruningEnabled` flip".
+5. Resume the normal sequence: `delta_replay.sh` with the **original** `backfill_start` anchor (the shadow still holds
    every row copied before it), then `verify.sh` before the `EXCHANGE`. That gate is what makes reuse safe — staleness or
    corruption in the reused shadow is caught exactly as in the first cutover — so do not skip it on the grounds that the
    data "was already verified once".
@@ -1093,6 +1117,10 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    failure on a perfectly good retry. This is the same shape, and the same `--to-week N` remedy, as the post-rollback
    compare above — including the direction: the **new-table** side is the superset here. A mismatch in a *sealed* week is
    the real signal.
+
+   Note the flags from (4) do not change what `verify.sh` compares: it normalizes both sentinel and `NULL` absent-values
+   to the same fingerprint, so it passes either way. It cannot catch a missed flag flip — only a positive read-back check
+   can (write an in-progress trace, assert `end_time` is null), which is why (4) is a step and not a caveat here.
 
    ```bash
    ./scripts/verify.sh --database opik --to-week <last sealed week>   # old=traces, new=traces_local_v2 (the defaults)

@@ -947,6 +947,11 @@ class TracesLocalV2CutoverTest {
      * <p>The finalized estate is simulated by renaming the parked original aside rather than dropping it: absence of the
      * name is the whole of what the guards read, and keeping the rows lets {@code @BeforeEach} restore the suite's
      * baseline afterwards (a real DROP would strip the only copy of the original schema for every later test).
+     *
+     * <p><b>The re-wrap here is the wrap SQL, not the driver</b> ({@link #wrapInDistributed()}), so "re-appliable" is a
+     * statement about the DDL, not about {@code exchange_and_wrap.sh --wrap-only} — which deliberately refuses while the
+     * parked original is missing, i.e. in exactly the finalized state this test simulates. That asymmetry is documented
+     * in the runbook and printed by {@code rollback.sh}; asserting it belongs to the driver scope this suite excludes.
      */
     @Test
     void unwrapNeedsNoParkedOriginalAndTheWrapCanBeReapplied() {
