@@ -755,18 +755,19 @@ class CostIntelligenceIngestionTest {
         }
 
         @Test
-        @DisplayName("agent counters above Integer.MAX_VALUE land unnarrowed, past UInt32 they clamp")
-        void agentCountersAboveIntMaxLandUnnarrowed() {
+        @DisplayName("a UInt32 counter survives its whole range; anything unusable records 0, not a ceiling")
+        void agentCountersKeepTheFullUInt32RangeAndRefuseToInventOne() {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
             String userUuid = UUID.randomUUID().toString();
             String email = "dev-" + UUID.randomUUID() + "@acme.com";
 
-            // The counters are UInt32 columns and ClickHouse wraps an out-of-range literal mod 2^32
-            // instead of rejecting it, so a narrowing read corrupts them in silence. The values
-            // straddle the two boundaries rather than describe a plausible session: 2^32-1 is the
-            // column ceiling (asInt() would carry it as -1), 3e9 is past int, and 9999999999 is
-            // past the column and has to clamp instead of wrapping to 1410065407.
+            // 2^32-1 is the column ceiling and a LEGITIMATE value — asInt() carried it as -1, which
+            // is the narrowing this guards. 3e9 is past Integer.MAX_VALUE and equally legitimate.
+            // 9999999999 is past the column, so it cannot be a real count: it records 0 rather than
+            // saturating, because the ceiling is a value a real session can report and a garbage
+            // payload must not be able to impersonate one. ClickHouse would take either quietly —
+            // it wraps mod 2^32 rather than rejecting — so nothing downstream would flag it.
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, "4294967295", "3000000000",
@@ -777,12 +778,41 @@ class CostIntelligenceIngestionTest {
             await().atMost(30, SECONDS).untilAsserted(() -> {
                 var row = getCipxIdentity(trace.id(), ws.workspaceId());
                 assertThat(row).as("identity row for a trace whose counters exceed Integer.MAX_VALUE").isPresent();
-                assertThat(row.get().agentsDispatched()).as("agents_dispatched at the UInt32 ceiling")
+                assertThat(row.get().agentsDispatched()).as("agents_dispatched at the UInt32 ceiling, unnarrowed")
                         .isEqualTo(4294967295L);
-                assertThat(row.get().agentsLinked()).as("agents_linked above Integer.MAX_VALUE")
+                assertThat(row.get().agentsLinked()).as("agents_linked above Integer.MAX_VALUE, unnarrowed")
                         .isEqualTo(3000000000L);
-                assertThat(row.get().agentsAmbiguous()).as("agents_ambiguous clamped to the UInt32 ceiling")
-                        .isEqualTo(4294967295L);
+                assertThat(row.get().agentsAmbiguous())
+                        .as("agents_ambiguous past the UInt32 ceiling records 0, not the ceiling")
+                        .isEqualTo(0L);
+            });
+        }
+
+        @Test
+        @DisplayName("a malformed counter records 0 rather than a number that reads as real")
+        void malformedAgentCountersRecordZero() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            // A producer bug, a version skew, a hand-edited envelope: the field is PRESENT but is not
+            // a count. Nothing here may be laundered into a plausible number — a negative would wrap
+            // to a huge UInt32 and text would parse to 0 either way, so the read has to decide rather
+            // than let the column decide for it.
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(traceCipxMetadataWithAgentCounters(userUuid, email, "\"not-a-number\"", "-5", "true"))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).as("the row still lands — one bad metric must not lose the identity").isPresent();
+                assertThat(row.get().agentsDispatched()).as("textual agents_dispatched records 0").isEqualTo(0L);
+                assertThat(row.get().agentsLinked()).as("negative agents_linked records 0, not 4294967291")
+                        .isEqualTo(0L);
+                assertThat(row.get().agentsAmbiguous()).as("boolean agents_ambiguous records 0").isEqualTo(0L);
             });
         }
     }

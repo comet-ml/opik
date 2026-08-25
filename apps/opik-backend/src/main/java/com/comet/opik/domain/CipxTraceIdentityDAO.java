@@ -104,11 +104,11 @@ public class CipxTraceIdentityDAO {
                     .headShaStart(repository.path("head_sha").asText(""))
                     .headShaEnd(repository.path("head_sha_end").asText(""))
                     .dirty(repository.path("dirty").asBoolean(false))
-                    .commitsInTrace(asUInt32(repository.path("commits_in_trace")))
-                    .filesAdded(asUInt32(repository.path("files_added")))
-                    .filesDeleted(asUInt32(repository.path("files_deleted")))
-                    .linesAdded(asUInt32(repository.path("lines_added")))
-                    .linesDeleted(asUInt32(repository.path("lines_deleted")))
+                    .commitsInTrace(asUInt32(repository.path("commits_in_trace"), "commits_in_trace"))
+                    .filesAdded(asUInt32(repository.path("files_added"), "files_added"))
+                    .filesDeleted(asUInt32(repository.path("files_deleted"), "files_deleted"))
+                    .linesAdded(asUInt32(repository.path("lines_added"), "lines_added"))
+                    .linesDeleted(asUInt32(repository.path("lines_deleted"), "lines_deleted"))
                     // Session-grain subagent link rollup. These counters are
                     // the only place cipx's worst attribution failure is
                     // visible: a subagent whose dispatch was never observed
@@ -119,9 +119,9 @@ public class CipxTraceIdentityDAO {
                     // with N traces leaves N rows holding N successive
                     // snapshots. Readers must take max() per session_id,
                     // never sum().
-                    .agentsDispatched(asUInt32(session.path("agents_dispatched")))
-                    .agentsLinked(asUInt32(session.path("agents_linked")))
-                    .agentsAmbiguous(asUInt32(session.path("agents_ambiguous")))
+                    .agentsDispatched(asUInt32(session.path("agents_dispatched"), "agents_dispatched"))
+                    .agentsLinked(asUInt32(session.path("agents_linked"), "agents_linked"))
+                    .agentsAmbiguous(asUInt32(session.path("agents_ambiguous"), "agents_ambiguous"))
                     .cipxVersion(session.path("cipx_version").asText(""))
                     .lastUpdatedAt(lastUpdatedAt)
                     .build();
@@ -131,8 +131,36 @@ public class CipxTraceIdentityDAO {
         // rejecting it, so every way of getting this wrong is silent: asInt() makes 4294967295 a
         // negative count in Java that only round-trips by accident, and anything past 2^32 wraps
         // into a small plausible-looking one. Read the full range and clamp what is outside it.
-        private static long asUInt32(JsonNode value) {
-            return Math.clamp(value.asLong(0), 0L, 0xFFFF_FFFFL);
+        // A UInt32 metric off the wire. Absent reads as 0 — that is the documented
+        // meaning, and a daemon that dispatched nothing is a real zero.
+        //
+        // Anything PRESENT that cannot be one of these counters is 0 plus a warning,
+        // never a clamp. ClickHouse takes a UInt32 modulo 2^32 without complaint
+        // (measured: -1 stores as 4294967295, 9999999999 as 1410065407), so the old
+        // narrowing corrupted silently — but saturating at the ceiling instead is the
+        // same failure wearing a different hat: 4294967295 is a legitimate value, so a
+        // garbage payload would arrive indistinguishable from a real count, and these
+        // feed an SLO whose entire purpose is telling "we failed" from "we correctly
+        // refused". Zero degrades toward "nothing to report"; the ceiling invents the
+        // largest possible claim.
+        //
+        // The clamp is unnecessary as well as harmful: a value in [2^31, 2^32) is a
+        // legitimate UInt32 that asLong carries exactly, so the only inputs a clamp
+        // ever touched were already malformed.
+        private static long asUInt32(JsonNode value, String field) {
+            if (value.isMissingNode() || value.isNull()) {
+                return 0L;
+            }
+            if (!value.canConvertToLong()) {
+                log.warn("cipx session metric '{}' is not a number ({}); recording 0", field, value.getNodeType());
+                return 0L;
+            }
+            long raw = value.asLong();
+            if (raw < 0L || raw > 0xFFFF_FFFFL) {
+                log.warn("cipx session metric '{}' is outside UInt32 ({}); recording 0", field, raw);
+                return 0L;
+            }
+            return raw;
         }
     }
 
