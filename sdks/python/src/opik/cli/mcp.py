@@ -7,6 +7,7 @@ import click
 
 import opik.config as opik_config
 import opik.url_helpers as url_helpers
+from opik import analytics
 from opik.cli import configure as configure_cli
 from opik.cli import assistants
 from opik.cli import status_view
@@ -138,6 +139,17 @@ def configure(
     one, falling back to a local server otherwise. Pass `--local-server` to force
     the local server.
     """
+    # Same reason as `opik configure`: the click frame is what makes this visible.
+    analytics.track_event(
+        "configuration",
+        "mcp_configure",
+        # Whether a client was named rather than picked: the agent-driven path.
+        named_client=bool(hosts),
+        client_count=len(hosts),
+        skills=str(skills_flag),
+        local_server=local_server,
+    )
+
     host_keys = _resolve_host_keys(hosts)
     # Without a terminal we cannot ask which client to write to, so one has to be
     # named. That is also what separates a coding agent running this for the user
@@ -175,11 +187,23 @@ def configure(
                 "Opik configuration is still incomplete; aborting MCP install."
             )
 
-    assistants.setup(
+    outcome = assistants.setup(
         setup_params=params,
         force_local_server=local_server,
         host_keys=host_keys,
         skills_flag=skills_flag,
+    )
+
+    # A sibling of the entry event, not a nested one: reporting is suppressed
+    # inside an already-reporting stack, but two calls from this same frame both
+    # survive. Entry says what was asked for, this says what happened — the pair
+    # is what makes a drop-off visible.
+    analytics.track_event(
+        "configuration",
+        "mcp_configure",
+        "result",
+        clients=outcome.clients,
+        skills=outcome.skills,
     )
 
 

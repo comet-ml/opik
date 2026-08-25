@@ -9,6 +9,7 @@ from unittest import mock
 from click.testing import CliRunner
 
 from opik.cli import cli
+from opik.cli import assistants
 from opik.cli import configure as configure_cli
 
 
@@ -381,3 +382,41 @@ class TestCometCloudHostMatch:
 
     def test_garbage_url__does_not_raise(self):
         assert configure_cli._is_comet_cloud_host("not a url at all") is False
+
+
+class TestAssistantOutcomeReachesTheCaller:
+    """The assistant step's result has to travel back up to the click command.
+
+    The configurator takes the step as a callback and discards its return value,
+    so the outcome comes back through a recorder. Nothing else notices when that
+    wiring breaks — the flow still works, the analytics just quietly report that
+    nothing was installed.
+    """
+
+    def test_outcome_from_the_step__is_returned(self):
+        installed = assistants.Outcome(clients=2, skills=True)
+
+        with (
+            mock.patch.object(
+                configure_cli, "_setup_assistants", return_value=installed
+            ),
+            mock.patch.object(configure_cli.opik_configure, "OpikConfigurator") as ctor,
+        ):
+            # The configurator calls the step it was handed, the way the real one does.
+            ctor.side_effect = lambda **kwargs: mock.Mock(
+                configure=lambda: kwargs["assistant_setup"]({}, True, True, False)
+            )
+
+            assert configure_cli.run_interactive_configure(use_local=True) == installed
+
+    def test_step_never_ran__reports_nothing_done(self):
+        """A configurator that never calls the step must not look like a success."""
+        with mock.patch.object(
+            configure_cli.opik_configure, "OpikConfigurator"
+        ) as ctor:
+            ctor.return_value = mock.Mock(configure=lambda: None)
+
+            outcome = configure_cli.run_interactive_configure(use_local=True)
+
+        assert outcome == assistants.NOTHING_DONE
+        assert outcome.clients == 0

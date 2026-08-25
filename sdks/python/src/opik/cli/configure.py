@@ -8,6 +8,7 @@ from typing import Any, Mapping, Optional
 import click
 
 import opik.config as opik_config
+from opik import analytics
 from opik.cli import assistants
 from opik.cli import install_view
 from opik.cli import status_view
@@ -23,34 +24,33 @@ def _setup_assistants(
     install_mcp: Optional[bool],
     install_skills: Optional[bool],
     automatic_approvals: bool,
-) -> None:
+) -> assistants.Outcome:
     """The CLI's assistant step: selectors and formatted output.
 
     `-y` deliberately does not reach into another tool's configuration, and an
     explicit `--no-install-mcp` with `--no-install-skills` means neither.
     """
     if install_mcp is False and install_skills is False:
-        return
+        return assistants.NOTHING_DONE
     if install_mcp is None and install_skills is None and automatic_approvals:
         # `-y` alone is not a request to edit another tool's config, so this is a
         # skip — and it is the one an agent is most likely to hit, because `-y` is
         # what the previous error told it to add.
         _announce_assistant_skip()
-        return
+        return assistants.NOTHING_DONE
 
     skills_flag = install_skills
     if install_mcp is False:
         # Server declined outright: only the pack is on the table.
         if skills_flag is False:
-            return
-        assistants.setup(setup_params, skills_flag=True, host_keys=None)
-        return
+            return assistants.NOTHING_DONE
+        return assistants.setup(setup_params, skills_flag=True, host_keys=None)
 
     # An explicit `--install-mcp` is the request; only an unflagged run needs to ask.
     if install_mcp is None and not _confirm_assistant_step():
-        return
+        return assistants.NOTHING_DONE
 
-    assistants.setup(
+    return assistants.setup(
         setup_params,
         skills_flag=skills_flag,
         assume_confirmed=install_mcp is True,
@@ -172,12 +172,22 @@ def run_interactive_configure(
     automatic_approvals: bool = False,
     install_mcp: Optional[bool] = None,
     install_skills: Optional[bool] = None,
-) -> None:
+) -> assistants.Outcome:
     """Programmatic entry to the interactive ``opik configure`` flow.
 
     Reused by ``opik connect`` / ``opik endpoint`` so they can auto-launch
     configuration when no ~/.opik.config is present.
+
+    Returns what the assistant step did, so the command that owns the analytics
+    event can report it. The configurator takes the step as a callback and
+    discards its return value, hence the recorder rather than a plain return.
     """
+    recorded = assistants.NOTHING_DONE
+
+    def record(*args: Any) -> None:
+        nonlocal recorded
+        recorded = _setup_assistants(*args)
+
     if use_local:
         # The configurator class rather than the `configure()` helper: the skills
         # flag and the renderer are CLI-internal wiring, not part of the public
@@ -188,9 +198,9 @@ def run_interactive_configure(
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
-            assistant_setup=_setup_assistants,
+            assistant_setup=record,
         ).configure()
-        return
+        return recorded
 
     deployment_type_choice = _deployment_type()
 
@@ -203,7 +213,7 @@ def run_interactive_configure(
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
-            assistant_setup=_setup_assistants,
+            assistant_setup=record,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
         configurator = opik_configure.OpikConfigurator(
@@ -213,7 +223,7 @@ def run_interactive_configure(
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
-            assistant_setup=_setup_assistants,
+            assistant_setup=record,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
         configurator = opik_configure.OpikConfigurator(
@@ -223,12 +233,14 @@ def run_interactive_configure(
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
-            assistant_setup=_setup_assistants,
+            assistant_setup=record,
         )
     else:
         raise click.ClickException("Unknown deployment type was selected. Exiting.")
 
     configurator.configure()
+
+    return recorded
 
 
 @click.group(
@@ -291,16 +303,43 @@ def configure(
     if ctx.invoked_subcommand is not None:
         return
 
-    # ... and instead assume it. With no terminal there is nobody to ask, and every
-    # question here has a sane default: use the local instance we found, keep the
-    # project name we derived. Demanding `-y` to say "yes, the defaults" was a step
-    # that existed only to be discovered — and the error teaching it was the step
-    # an agent was most likely to stop at.
-    run_interactive_configure(
+    # Reported from the click command, not from the configurator underneath it:
+    # analytics treats a configurator call made from `opik.cli` as Opik calling
+    # itself and drops it, which is right for `Opik.get_dataset` and wrong here.
+    # Click is the caller at this frame, so the event survives — and because the
+    # outermost reporter suppresses nested ones, this is also the only place the
+    # flow can report from.
+    analytics.track_event(
+        "configuration",
+        "configure",
+        interactive=interactive_helpers.is_interactive(),
+        # The tri-states as passed, so "asked and said yes" is separable from
+        # "never asked" — the flag is also how an agent drives this.
+        install_mcp=str(install_mcp),
+        install_skills=str(install_skills),
+    )
+
+    # With no terminal there is nobody to ask, and every question here has a sane
+    # default: use the local instance we found, keep the project name we derived.
+    # Demanding `-y` to say "yes, the defaults" was a step that existed only to be
+    # discovered — and the error teaching it was the step an agent was most likely
+    # to stop at.
+    outcome = run_interactive_configure(
         use_local=use_local,
         automatic_approvals=yes or not interactive_helpers.is_interactive(),
         install_mcp=install_mcp,
         install_skills=install_skills,
+    )
+
+    # Sibling of the entry event above, reported from this same frame. Entry says
+    # what was asked for, this says what was actually written — the gap between
+    # the two is the drop-off worth watching.
+    analytics.track_event(
+        "configuration",
+        "configure",
+        "result",
+        clients=outcome.clients,
+        skills=outcome.skills,
     )
 
 

@@ -14,7 +14,7 @@ Kept in the CLI layer because it renders: ``configurator`` is reachable from
 """
 
 import logging
-from typing import Any, List, Mapping, Optional
+from typing import Any, List, Mapping, NamedTuple, Optional
 
 import click
 
@@ -33,13 +33,28 @@ SKILL_PACK_PITCH = (
 )
 
 
+class Outcome(NamedTuple):
+    """What the step actually did, for the caller to report.
+
+    Returned rather than reported from here: analytics drops an event whose
+    immediate caller is a different ``opik`` module, so only the click command at
+    the top of the stack can report. This carries the result up to it.
+    """
+
+    clients: int
+    skills: bool
+
+
+NOTHING_DONE = Outcome(clients=0, skills=False)
+
+
 def setup(
     setup_params: Mapping[str, Any],
     force_local_server: bool = False,
     host_keys: Optional[List[str]] = None,
     skills_flag: Optional[bool] = None,
     assume_confirmed: bool = False,
-) -> None:
+) -> Outcome:
     """Register the MCP server, then offer the skill pack for the same assistants.
 
     ``setup_params`` is the connection block ``configurator.mcp`` needs — api key,
@@ -61,18 +76,22 @@ def setup(
     if not configured_hosts:
         # Nothing was registered, so there is no assistant to add a pack to and
         # the installer has already explained why.
-        return
+        return NOTHING_DONE
 
     view = install_view.RichInstallView()
     components = ["MCP server"]
+    skills_installed = False
 
     if _wants_skill_pack(skills_flag, view):
         with view.step("Fetching the Opik skill pack"):
             result = skills_installer.setup_skills(configured_hosts)
         if install_view.render_skill_pack(result, view):
             components.append("skill pack")
+            skills_installed = True
 
     view.done(components, skills_roots.display_names(configured_hosts))
+
+    return Outcome(clients=len(configured_hosts), skills=skills_installed)
 
 
 def _wants_skill_pack(skills_flag: Optional[bool], view: mcp_view.InstallView) -> bool:
