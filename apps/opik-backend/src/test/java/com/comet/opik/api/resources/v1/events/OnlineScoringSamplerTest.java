@@ -132,15 +132,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            var expectedMessage = TraceToScoreUserDefinedMetricPython.builder()
-                    .trace(trace)
-                    .ruleId(evaluator.getId())
-                    .ruleName(evaluator.getName())
-                    .code(evaluator.getCode())
-                    .workspaceId(workspaceId)
-                    .userName(userName)
-                    .build();
-            verify(onlineScorePublisher).enqueueMessage(List.of(expectedMessage),
+            verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
                     AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
         }
 
@@ -475,6 +467,87 @@ class OnlineScoringSamplerTest {
                     List.of(toLlmMessage(evaluator, trace1), toLlmMessage(evaluator, trace2)),
                     AutomationRuleEvaluatorType.LLM_AS_JUDGE);
         }
+
+        @Test
+        void scoresExperimentTracesWhenSamplingRateIsZero() {
+            var trace = createTrace(Source.EXPERIMENT);
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        }
+
+        @Test
+        void scoresExperimentTracesButSkipsProductionTracesWhenSamplingRateIsZero() {
+            var sdkTrace = createTrace(Source.SDK);
+            var experimentTrace = createTrace(Source.EXPERIMENT);
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler
+                    .onTracesCreated(new TracesCreated(List.of(sdkTrace, experimentTrace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, experimentTrace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = Source.class, mode = EnumSource.Mode.EXCLUDE, names = {"SDK", "EXPERIMENT"})
+        void scoresSelectedRuleTracesWhenSamplingRateIsZero(Source source) {
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of());
+            var trace = createTrace(source).toBuilder()
+                    .metadata(metadataWithRuleIds(evaluator.getId()))
+                    .build();
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toLlmMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+        }
+
+        @Test
+        void scoresExperimentTracesWhenSamplingRateIsZeroForPythonEvaluator() {
+            when(serviceTogglesConfig.isPythonEvaluatorEnabled()).thenReturn(true);
+            var trace = createTrace(Source.EXPERIMENT);
+            var evaluator = createPythonEvaluator(0.0f);
+            whenFindAllPythonEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(toPythonMessage(evaluator, trace)),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+        }
+
+        @Test
+        void stillHonoursFiltersOnExperimentTracesWhenSamplingIsBypassed() {
+            var trace = createTrace(Source.EXPERIMENT).toBuilder().name("no-match").build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value("expected-name")
+                    .build();
+            var evaluator = createLlmEvaluator(true, 0.0f, List.of(filter));
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        @Test
+        void stillHonoursDisabledRuleOnExperimentTracesWhenSamplingIsBypassed() {
+            var trace = createTrace(Source.EXPERIMENT);
+            var evaluator = createLlmEvaluator(false, 0.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
     }
 
     @Nested
@@ -729,6 +802,18 @@ class OnlineScoringSamplerTest {
                 .userName(userName)
                 .scoreNameMapping(Map.of())
                 .promptType(PromptType.MUSTACHE)
+                .build();
+    }
+
+    private TraceToScoreUserDefinedMetricPython toPythonMessage(
+            AutomationRuleEvaluatorUserDefinedMetricPython evaluator, Trace trace) {
+        return TraceToScoreUserDefinedMetricPython.builder()
+                .trace(trace)
+                .ruleId(evaluator.getId())
+                .ruleName(evaluator.getName())
+                .code(evaluator.getCode())
+                .workspaceId(workspaceId)
+                .userName(userName)
                 .build();
     }
 

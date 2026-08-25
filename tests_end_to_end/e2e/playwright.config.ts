@@ -6,9 +6,8 @@ const env = loadEnvConfig();
 
 // Storage state minted by global-setup at .auth/user.json. For cloud/self-
 // hosted deployments it carries the auth cookies + storage from the login
-// round-trip; for OSS it's a minimal file holding the localStorage entries
-// (e.g. opik-version-override=v2) the suite needs the FE to read before any
-// API call. Never checked in.
+// round-trip; for OSS it's an empty state file, written so context creation has
+// something to read. Never checked in.
 const storageState = path.resolve(__dirname, '.auth/user.json');
 
 export default defineConfig({
@@ -62,6 +61,19 @@ export default defineConfig({
         OPIK_URL_OVERRIDE: env.apiBaseUrl,
         OPIK_WORKSPACE: env.workspace,
       },
+    },
+    {
+      // Mock OAuth2 token service + bearer-validating LLM gateway for the
+      // dynamic token auth specs (OPIK-7940). Hermetic: no external keys.
+      // In CI the backend runs inside docker-compose, so the mock binds 0.0.0.0 and the
+      // backend reaches it through the host (MOCK_AUTH_URL_FOR_BACKEND, set by the workflow).
+      command: `uv run --no-project python mock_token_auth_service.py --port ${process.env.MOCK_AUTH_PORT ?? '9878'} --host ${process.env.CI ? '0.0.0.0' : '127.0.0.1'}`,
+      cwd: 'services/mock-token-auth',
+      url: `http://localhost:${process.env.MOCK_AUTH_PORT ?? '9878'}/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 15_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
     },
   ],
 });

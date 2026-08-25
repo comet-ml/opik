@@ -14,6 +14,11 @@ export interface CreateRuleDialogPythonEqualsFields {
   name: string;
   /** The literal string the trace's output must equal to score 1.0. */
   referenceValue: string;
+  /**
+   * Sampling rate as the PERCENTAGE shown in the dialog (0-100), not the
+   * fraction the API stores. Omit to leave the control at its 100% default.
+   */
+  samplingRatePercent?: number;
 }
 
 /**
@@ -130,6 +135,74 @@ export class OnlineEvaluationPage {
    */
   ruleStatusCell(name: string, status: 'Enabled' | 'Disabled'): Locator {
     return this.ruleRow(name).getByRole('cell', { name: status, exact: true });
+  }
+
+  /**
+   * The Sampling rate cell for a rule row, rendered by OnlineEvaluationPage's
+   * `sampling_rate` column as a formatted percentage ("50%", "100%") — note the
+   * list shows a PERCENTAGE while the API stores a fraction.
+   */
+  ruleSamplingRateCell(name: string, displayValue: string): Locator {
+    return this.ruleRow(name).getByRole('cell', { name: displayValue, exact: true });
+  }
+
+  /**
+   * The "Filtering & Sampling" accordion inside the add/edit dialog. It renders
+   * COLLAPSED by default, and its content is unmounted while collapsed, so the
+   * sampling-rate control does not exist until this is expanded.
+   */
+  get filteringSamplingTrigger(): Locator {
+    return this.dialog.getByTestId('add-edit-rule-dialog-filtering-sampling-trigger');
+  }
+
+  /**
+   * The sampling-rate number input (the percentage box next to the slider).
+   * SliderInputControl derives this testid from its `id` prop.
+   */
+  get samplingRateInput(): Locator {
+    return this.dialog.getByTestId('sampling_rate-input');
+  }
+
+  /**
+   * Expand the Filtering & Sampling accordion, if it is not already open.
+   * Idempotent: switching the rule TYPE re-renders the dialog body but leaves
+   * the accordion open, so callers can invoke this without tracking state.
+   */
+  async expandFilteringAndSampling(): Promise<void> {
+    return test.step('expand the Filtering & Sampling accordion', async () => {
+      const trigger = this.filteringSamplingTrigger;
+      await trigger.waitFor({ state: 'visible' });
+      if ((await trigger.getAttribute('aria-expanded')) !== 'true') {
+        await trigger.click();
+      }
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await this.samplingRateInput.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Set the sampling rate to a PERCENTAGE (0-100), as the dialog displays it.
+   *
+   * SliderInputControl writes the form value in `onBlur`
+   * (`validateAndHandleChange`), not in `onChange`, so the blur is made
+   * explicit here rather than left to whatever the next interaction happens to
+   * be. A real user's click on Create blurs the field first, so this mirrors
+   * the genuine gesture — it is not working around a product bug.
+   *
+   * Do not "verify" the value by reading the slider's `aria-valuenow`: the
+   * slider mirrors the component's local state, so it reports the typed number
+   * before the form value has been written. The trustworthy check is the
+   * persisted rate on the created rule — asserted in the test.
+   */
+  async setSamplingRatePercent(percent: number): Promise<void> {
+    return test.step(`set sampling rate to ${percent}%`, async () => {
+      await this.expandFilteringAndSampling();
+      const input = this.samplingRateInput;
+      await input.fill(String(percent));
+      // Commit to the form explicitly, rather than relying on a later click.
+      await input.blur();
+      await expect(input).toHaveValue(String(percent));
+    });
   }
 
   /** The "Enable rule" switch inside the add/edit dialog. */
@@ -253,6 +326,13 @@ export class OnlineEvaluationPage {
     // single `output` variable-mapping row. Wait for the variable-mapping
     // input to settle to the new shape, then override its path.
     await this.setVariableMapping('output', 'output.output');
+
+    // Set the rate last: the sampling control lives in a collapsed accordion
+    // below the code editor, and switching TYPE / re-parsing the snippet
+    // re-renders the body above it.
+    if (fields.samplingRatePercent !== undefined) {
+      await this.setSamplingRatePercent(fields.samplingRatePercent);
+    }
 
     await d.getByTestId('add-edit-rule-dialog-submit').click();
     await d.waitFor({ state: 'hidden' });

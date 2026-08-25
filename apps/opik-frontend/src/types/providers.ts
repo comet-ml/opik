@@ -235,6 +235,7 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_V3_2_SPECIALE = "deepseek/deepseek-v3.2-speciale",
   DEEPSEEK_DEEPSEEK_V4_FLASH = "deepseek/deepseek-v4-flash",
   DEEPSEEK_DEEPSEEK_V4_FLASH_0731 = "deepseek/deepseek-v4-flash-0731",
+  DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP = "deepseek/deepseek-v4-flash-vision-exp",
   DEEPSEEK_DEEPSEEK_V4_FLASH_FREE = "deepseek/deepseek-v4-flash:free",
   DEEPSEEK_DEEPSEEK_V4_PRO = "deepseek/deepseek-v4-pro",
   DEEPSEEK_DEEPSEEK_V4_PRO_0813 = "deepseek/deepseek-v4-pro-0813",
@@ -349,6 +350,7 @@ export enum PROVIDER_MODEL_TYPE {
   META_MUSE_GLIMMER_30B = "meta/muse-glimmer-30b",
   META_MUSE_SPARK_1_1 = "meta/muse-spark-1.1",
   META_MUSE_SPARK_1_2 = "meta/muse-spark-1.2",
+  META_MUSE_SPARK_1_2_CONTRIBUTOR = "meta/muse-spark-1.2-contributor",
   MICROSOFT_MAI_DS_R1 = "microsoft/mai-ds-r1",
   MICROSOFT_MAI_DS_R1_FREE = "microsoft/mai-ds-r1:free",
   MICROSOFT_PHI_3_MEDIUM_128K_INSTRUCT = "microsoft/phi-3-medium-128k-instruct",
@@ -681,12 +683,16 @@ export enum PROVIDER_MODEL_TYPE {
   SAO10K_L3_1_70B_HANAMI_X1 = "sao10k/l3.1-70b-hanami-x1",
   SAO10K_L3_1_EURYALE_70B = "sao10k/l3.1-euryale-70b",
   SAO10K_L3_3_EURYALE_70B = "sao10k/l3.3-euryale-70b",
+  STEALTH_OX_ALPHA = "stealth/ox-alpha",
   STEPFUN_AI_STEP3 = "stepfun-ai/step3",
   STEPFUN_STEP_3_5_FLASH = "stepfun/step-3.5-flash",
   STEPFUN_STEP_3_5_FLASH_FREE = "stepfun/step-3.5-flash:free",
   STEPFUN_STEP_3_7_FLASH = "stepfun/step-3.7-flash",
   SWITCHPOINT_ROUTER = "switchpoint/router",
   TENCENT_HUNYUAN_A13B_INSTRUCT = "tencent/hunyuan-a13b-instruct",
+  TENCENT_HY_MT2_1_8B = "tencent/hy-mt2-1.8b",
+  TENCENT_HY_MT2_30B_A3B = "tencent/hy-mt2-30b-a3b",
+  TENCENT_HY_MT2_7B = "tencent/hy-mt2-7b",
   TENCENT_HY3 = "tencent/hy3",
   TENCENT_HY3_PREVIEW = "tencent/hy3-preview",
   TENCENT_HY3_PREVIEW_FREE = "tencent/hy3-preview:free",
@@ -698,7 +704,9 @@ export enum PROVIDER_MODEL_TYPE {
   THEDRUMMER_UNSLOPNEMO_12B = "thedrummer/unslopnemo-12b",
   THINKINGMACHINES_INKLING = "thinkingmachines/inkling",
   THINKINGMACHINES_INKLING_SMALL = "thinkingmachines/inkling-small",
+  THINKINGMACHINES_INKLING_SMALL_FREE = "thinkingmachines/inkling-small:free",
   THINKINGMACHINES_INKLING_BATCH = "thinkingmachines/inkling:batch",
+  THINKINGMACHINES_INKLING_FREE = "thinkingmachines/inkling:free",
   THUDM_GLM_4_1V_9B_THINKING = "thudm/glm-4.1v-9b-thinking",
   TNGTECH_DEEPSEEK_R1T_CHIMERA = "tngtech/deepseek-r1t-chimera",
   TNGTECH_DEEPSEEK_R1T_CHIMERA_FREE = "tngtech/deepseek-r1t-chimera:free",
@@ -746,6 +754,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_2 = "z-ai/glm-5.2",
   Z_AI_GLM_5_2_BATCH = "z-ai/glm-5.2:batch",
   Z_AI_GLM_5_2_FREE = "z-ai/glm-5.2:free",
+  Z_AI_GLM_5_3 = "z-ai/glm-5.3",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
   ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
@@ -758,6 +767,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_LATEST = "~openai/gpt-latest",
   OPENAI_GPT_MINI_LATEST = "~openai/gpt-mini-latest",
   X_AI_GROK_LATEST = "~x-ai/grok-latest",
+  Z_AI_GLM_LATEST = "~z-ai/glm-latest",
 
   //   <----- gemini
   AQA = "aqa",
@@ -852,6 +862,34 @@ export interface ProviderKeyConfiguration {
   openai_pipeline_mode?: OpenAiPipelineMode;
 }
 
+/** Read-back sentinel for secret credential values: the backend never returns a stored secret,
+ * it returns this marker instead. Submitting it back means "keep the stored value". */
+export const AUTH_SECRET_SENTINEL = "__SECRET__";
+
+export const AUTH_SEND_AS_VALUES = ["form", "json", "basic"] as const;
+export type AuthSendAs = (typeof AUTH_SEND_AS_VALUES)[number];
+
+export interface ProviderAuthCredential {
+  key: string;
+  value: string;
+  /** Secret values are encrypted at rest and read back masked; once true it cannot be unset. */
+  secret: boolean;
+}
+
+/** Dynamic token auth recipe (OPIK-7940): how to fetch a short-lived bearer before LLM calls.
+ * Presence on a provider means token mode; an empty object on update clears it (back to static). */
+export interface ProviderAuthConfig {
+  token_url: string;
+  send_as?: AuthSendAs;
+  credentials: ProviderAuthCredential[];
+  /** Field holding the token in the reply; dot-path for nested replies (e.g. "result.jwt"). */
+  token_field?: string;
+  /** Field holding the lifetime in seconds in the reply; dot-path supported. */
+  expires_field?: string;
+  /** Lifetime assumed when the reply doesn't state one; 0 means such tokens are not cached. */
+  fallback_ttl_seconds?: number;
+}
+
 export interface BaseProviderKey {
   id: string;
   created_at: string;
@@ -859,6 +897,7 @@ export interface BaseProviderKey {
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;
+  auth_config?: ProviderAuthConfig;
   read_only: boolean;
 }
 
@@ -886,7 +925,7 @@ export type ProviderObject =
   | OllamaProviderObject;
 
 export type PartialProviderKeyUpdate = Partial<
-  Omit<BaseProviderKey, "provider">
+  Omit<BaseProviderKey, "provider" | "auth_config">
 > & {
   id?: string;
   provider?: PROVIDER_TYPE;
@@ -894,6 +933,8 @@ export type PartialProviderKeyUpdate = Partial<
   base_url?: string;
   provider_name?: string;
   headers?: Record<string, string>;
+  /** Full recipe to set, or an empty object to clear (switch back to static key). */
+  auth_config?: ProviderAuthConfig | Record<string, never>;
 };
 
 export type ReasoningEffort =

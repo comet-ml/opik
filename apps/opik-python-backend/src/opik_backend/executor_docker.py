@@ -474,14 +474,21 @@ class DockerExecutor(CodeExecutorBase):
                 # Parse result and track outcome
                 parsed_result = self.parse_execution_result(exec_result)
 
-                # Determine outcome status based on result
-                if exec_result.exit_code == 0:
+                # Determine outcome status from the parsed result, not from the exit code alone: a
+                # metric can exit 0 and still fail to produce a usable result line, which
+                # parse_execution_result reports as a 4xx. Keying telemetry on the exit code
+                # counted those as successes while the caller was handed an error.
+                result_code = parsed_result.get("code") if isinstance(parsed_result, dict) else None
+                if exec_result.exit_code == 0 and result_code is None:
                     outcome_status = "success"
                 else:
                     outcome_status = "invalid_code"
-                    span.set_status(Status(StatusCode.ERROR, f"Execution failed with exit_code={exec_result.exit_code}"))
+                    span.set_status(Status(StatusCode.ERROR,
+                            f"Execution failed with exit_code={exec_result.exit_code}, result_code={result_code}"))
                     span.set_attribute("error.type", "invalid_code")
                     span.set_attribute("error.exit_code", exec_result.exit_code)
+                    if result_code is not None:
+                        span.set_attribute("error.result_code", result_code)
 
                 self._record_execution_outcome(outcome_status, payload_type)
                 return parsed_result

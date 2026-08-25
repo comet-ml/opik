@@ -86,6 +86,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -3949,6 +3950,26 @@ class FindSpansResourceTest {
                 assertThat(actualError).isEqualTo(expectedError);
             }
 
+        }
+
+        @Test
+        void whenSearchFilterElementIsNull__thenReturn422() {
+            // Bean validation has to reject a null element: validateFilter dereferences filter.field()
+            // and the endpoint would answer 500 rather than its documented 4xx.
+            var projectName = generator.generate().toString();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/search")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(SpanSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(Collections.singletonList(null))
+                            .build()))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
         }
 
         @ParameterizedTest

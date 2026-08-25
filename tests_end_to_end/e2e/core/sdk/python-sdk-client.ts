@@ -174,6 +174,38 @@ export interface PythonSdkClient {
     feedback_definition_names?: string[];
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
+  /**
+   * Run `opik.evaluation.evaluate_threads` over one seeded thread with a
+   * deterministic fixed-score metric.
+   *
+   * `context_metadata_key` is three-valued in effect: omitted/undefined means
+   * the SDK is called WITHOUT `trace_context_transform` at all (the caller
+   * shape that predates it), a string means it is called with a transform
+   * reading that key off `trace.metadata`.
+   */
+  evaluateThreads(args: {
+    project_name: string;
+    eval_project_name: string;
+    thread_id: string;
+    trace_input_key: string;
+    trace_output_key: string;
+    metric_name: string;
+    score_value: number;
+    score_reason: string;
+    context_metadata_key?: string;
+    workspace?: string;
+  }): Promise<{
+    thread_id: string;
+    eval_project_name: string;
+    scores: Array<{ name: string; value: number; reason: string | null }>;
+    /**
+     * The conversation the metric received, verbatim. Messages are
+     * `Record<string, unknown>` rather than a shaped type on purpose: whether
+     * the `context` key is PRESENT is the fact callers assert on, and an
+     * optional typed field would erase the difference between absent and null.
+     */
+    conversation: Array<Record<string, unknown>>;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -366,6 +398,18 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     },
     async createAnnotationQueue(args) {
       return request<{ id: string; name: string }>('POST', '/annotation-queues', args);
+    },
+    async evaluateThreads(args) {
+      // The route blocks until the seeded thread has been aggregated (thread
+      // rollup is eventually consistent) and only then runs the evaluation, so
+      // its budget has to cover both. Aborting at the default 30s would turn a
+      // slow rollup into a red test.
+      return request<{
+        thread_id: string;
+        eval_project_name: string;
+        scores: Array<{ name: string; value: number; reason: string | null }>;
+        conversation: Array<Record<string, unknown>>;
+      }>('POST', '/threads/evaluate', args, { timeoutMs: 150_000 });
     },
   };
 }

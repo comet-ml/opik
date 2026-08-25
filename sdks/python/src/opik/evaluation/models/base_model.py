@@ -214,6 +214,11 @@ def get_provider_response(
     """
     try:
         yield model_provider.generate_provider_response(messages, **kwargs)
+    except exceptions.BaseLLMError as e:
+        # Re-wrapping would erase the subclass callers retry on, but the
+        # diagnostic still belongs in the log.
+        LOGGER.error("Failed to call LLM provider, reason: %s", e)
+        raise
     except Exception as e:
         LOGGER.error("Failed to call LLM provider, reason: %s", e)
         raise exceptions.BaseLLMError(str(e))
@@ -251,6 +256,9 @@ async def aget_provider_response(
             messages=messages, **kwargs
         )
         yield response
+    except exceptions.BaseLLMError as e:
+        LOGGER.error("Failed to call LLM provider asynchronously, reason: %s", e)
+        raise
     except Exception as e:
         LOGGER.error("Failed to call LLM provider asynchronously, reason: %s", e)
         raise exceptions.BaseLLMError(str(e))
