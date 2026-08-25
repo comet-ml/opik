@@ -11,83 +11,69 @@ import { TestSuitesPage } from '@e2e/pom/test-suites.page';
  *
  * The bystander covers the other axis: the recreate check says nothing about
  * suites under other names, so a delete that took them all would still pass.
- *
- * Cleanup runs from a `finally` because the fixture tears down by the original
- * id, which this test deletes — anything created here owns an id it won't know.
  */
 test.describe('Test suites — delete', { tag: ['@t2-cuj', '@area:test-suites'] }, () => {
   test(
     'Deleting a test suite removes only it, and frees the name for a genuinely new suite',
     { tag: ['@cap:test-suites.delete-suite'] },
-    async ({ testSuite, project, sdkClient, backendClient, page, testNamespace }) => {
+    async ({
+      testSuite,
+      bystanderTestSuite,
+      project,
+      sdkClient,
+      backendClient,
+      registerDatasetCleanup,
+      page,
+    }) => {
       const suites = new TestSuitesPage(page);
-      const siblingName = `${testNamespace}-suite-bystander`;
-      // Recorded at creation so the `finally` covers them if an assertion throws.
-      const ownedSuiteIds: string[] = [];
 
-      try {
-        await test.step('Seed a second suite as a bystander', async () => {
-          const sibling = await sdkClient.python.createTestSuite({
-            name: siblingName,
+      await test.step('Both suites are listed', async () => {
+        await suites.goto(project.id);
+        await suites.waitForReady();
+        await expect(suites.testSuiteRow(testSuite.name)).toBeVisible();
+        await expect(suites.testSuiteRow(bystanderTestSuite.name)).toBeVisible();
+      });
+
+      await test.step('Delete the target via the row actions menu', async () => {
+        await suites.deleteTestSuiteByName(testSuite.name);
+      });
+
+      await test.step('The target is gone and the bystander is untouched', async () => {
+        await expect(suites.testSuiteRow(testSuite.name)).toHaveCount(0);
+        await expect(suites.testSuiteRow(bystanderTestSuite.name)).toBeVisible();
+        expect(await backendClient.findTestSuiteByName(testSuite.name, project.name)).toBeNull();
+        expect(
+          await backendClient.findTestSuiteByName(bystanderTestSuite.name, project.name),
+        ).not.toBeNull();
+      });
+
+      const recreatedId = await test.step(
+        'A new suite with the same name gets a new id, not the old one',
+        async () => {
+          const recreated = await sdkClient.python.createTestSuite({
+            name: testSuite.name,
             project_name: project.name,
-            description: 'bystander — must survive the delete',
-            items: [{ data: { question: 'bystander question' } }],
+            description: 'recreated after delete',
+            items: [{ data: { question: 'first question' } }],
           });
-          ownedSuiteIds.push(sibling.id);
-        });
+          // The `testSuite` fixture tears down by the id this test just
+          // deleted, so the recreated suite needs an owner of its own.
+          registerDatasetCleanup(recreated.id, recreated.name);
+          expect(recreated.id).not.toBe(testSuite.id);
+          return recreated.id;
+        },
+      );
 
-        await test.step('Both suites are listed', async () => {
-          await suites.goto(project.id);
-          await suites.waitForReady();
-          await expect(suites.testSuiteRow(testSuite.name)).toBeVisible();
-          await expect(suites.testSuiteRow(siblingName)).toBeVisible();
-        });
-
-        await test.step('Delete the target via the row actions menu', async () => {
-          await suites.deleteTestSuiteByName(testSuite.name);
-        });
-
-        await test.step('The target is gone and the bystander is untouched', async () => {
-          await expect(suites.testSuiteRow(testSuite.name)).toHaveCount(0);
-          await expect(suites.testSuiteRow(siblingName)).toBeVisible();
-          expect(
-            await backendClient.findTestSuiteByName(testSuite.name, project.name),
-          ).toBeNull();
-          expect(
-            await backendClient.findTestSuiteByName(siblingName, project.name),
-          ).not.toBeNull();
-        });
-
-        const recreatedId = await test.step(
-          'A new suite with the same name gets a new id, not the old one',
-          async () => {
-            const recreated = await sdkClient.python.createTestSuite({
-              name: testSuite.name,
-              project_name: project.name,
-              description: 'recreated after delete',
-              items: [{ data: { question: 'first question' } }],
-            });
-            ownedSuiteIds.push(recreated.id);
-            expect(recreated.id).not.toBe(testSuite.id);
-            return recreated.id;
-          },
+      await test.step('The recreated suite is the one the list now shows', async () => {
+        await page.reload();
+        await suites.waitForReady();
+        await expect(suites.testSuiteRow(testSuite.name)).toBeVisible();
+        await expect(suites.testSuiteRow(testSuite.name)).toHaveAttribute(
+          'data-row-id',
+          recreatedId,
         );
-
-        await test.step('The recreated suite is the one the list now shows', async () => {
-          await page.reload();
-          await suites.waitForReady();
-          await expect(suites.testSuiteRow(testSuite.name)).toBeVisible();
-          await expect(suites.testSuiteRow(testSuite.name)).toHaveAttribute(
-            'data-row-id',
-            recreatedId,
-          );
-          await expect(suites.testSuiteRow(siblingName)).toBeVisible();
-        });
-      } finally {
-        for (const id of ownedSuiteIds) {
-          await backendClient.deleteDataset(id).catch(() => {});
-        }
-      }
+        await expect(suites.testSuiteRow(bystanderTestSuite.name)).toBeVisible();
+      });
     },
   );
 });

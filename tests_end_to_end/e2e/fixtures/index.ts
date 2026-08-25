@@ -1,5 +1,10 @@
-export { test, expect } from './automation-rules.fixture';
+export { test, expect } from './bystander.fixture';
 export type { ProjectFixtures } from './project.fixture';
+export type {
+  BystanderExperimentRef,
+  BystanderTestSuiteRef,
+  BystanderFixtures,
+} from './bystander.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
   ArtifactSource,
