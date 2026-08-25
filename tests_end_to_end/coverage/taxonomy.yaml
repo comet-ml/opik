@@ -636,6 +636,8 @@ areas:
       - online-evaluation/online-evaluation-delete-rule.spec.ts
       - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-thread-span-context.spec.ts
+      - online-evaluation/online-evaluation-automation-logs.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -643,14 +645,23 @@ areas:
       python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
       list-rules:              { covered: false }
-      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
+      # Thread scope only. A thread-scope python rule's score() is asserted to
+      # receive each assistant turn's spans as a nested tree (parent llm span,
+      # tool child at depth 1), API-side and on the thread panel. Span scope is
+      # still uncovered by this key: the span-scope rules in
+      # online-evaluation-automation-logs.spec.ts assert routing diagnostics,
+      # not that a span-scope rule scores its span.
+      rule-scope-thread-span:  { covered: true,  tier: t2-cuj, note: "thread scope: nested span tree in the python metric's context; span scope still uncovered" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch; binomial band 15-85%" }
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
-      automation-logs:         { covered: false }
+      # The /$workspaceName/automation-logs PAGE, not just the log API behind
+      # it: online-evaluation-automation-logs.spec.ts opens the page and asserts
+      # the rendered rows, their Level cell and their Trace Id marker column.
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "agentic-tools routing diagnostics rendered on the page: non-tool-calling fallback at trace and span scope, and the size-threshold switch vs a small-trace control" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }

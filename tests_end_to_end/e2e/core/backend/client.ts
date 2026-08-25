@@ -50,6 +50,13 @@ export interface RawApiResult {
   status: number;
   /** The backend's `message` field, or the raw body when it isn't JSON. */
   message: string;
+  /**
+   * The `Location` header, when the endpoint answers 201 with one. Creation
+   * endpoints in this API return no body, so this is the only place the new
+   * entity's id appears. Optional because the callers that only assert a
+   * status code build this shape themselves and have no header to report.
+   */
+  location?: string | null;
 }
 
 /** One row of the dataset's Version history tab. */
@@ -127,6 +134,19 @@ export interface AutomationRuleRef {
    * fraction.
    */
   samplingRate: number;
+}
+
+/** A span, reduced to what a spec needs to address it: its id and its name. */
+export interface SpanRef {
+  id: string;
+  name: string;
+}
+
+/** One line of a rule's user-facing log stream, as the automation-logs page renders it. */
+export interface AutomationRuleLogRef {
+  /** `INFO` / `WARN` / `ERROR` — the page's Level column. */
+  level: string;
+  message: string;
 }
 
 export interface AnnotationQueueReviewerRef {
@@ -302,7 +322,7 @@ export function makeBackendClient(apiKey: string | null = null) {
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -330,7 +350,7 @@ export function makeBackendClient(apiKey: string | null = null) {
     } catch {
       // Not JSON (an empty 204 body, or an HTML error page) — keep the raw text.
     }
-    return { status: res.status, message, json };
+    return { status: res.status, message, json, location: res.headers.get('location') };
   };
 
   /**
@@ -348,6 +368,35 @@ export function makeBackendClient(apiKey: string | null = null) {
       );
     }
     return rate;
+  };
+
+  /**
+   * Shared 201-and-`Location` check for the rule-creation calls below.
+   *
+   * Both failure modes are fatal to the caller in the same way — without an id
+   * there is no rule to seed against, read logs from, or tear down — so they
+   * throw here rather than returning a sentinel a spec could carry silently
+   * into an assertion.
+   */
+  const requireCreatedRuleId = (
+    status: number,
+    message: string,
+    location: string | null | undefined,
+    ruleName: string,
+  ): string => {
+    if (status !== 201) {
+      throw new Error(
+        `createAutomationRule: expected 201 for '${ruleName}', got ${status}: ${message}`,
+      );
+    }
+    const id = location?.split('/').filter(Boolean).pop();
+    if (!id) {
+      throw new Error(
+        `createAutomationRule: 201 for '${ruleName}' carried no usable Location header ` +
+          `(got '${location}') — cannot address the rule.`,
+      );
+    }
+    return id;
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -844,6 +893,126 @@ export function makeBackendClient(apiKey: string | null = null) {
       }));
     },
 
+    /**
+     * Create a thread-scope Python-metric rule and return its id.
+     *
+     * Goes through `rawFetch` rather than the pinned SDK: creation answers 201
+     * with an empty body, so the id only exists in the `Location` header, which
+     * the SDK's `void` return discards. The id is parsed from the header rather
+     * than recovered by listing the project's rules by name, because a name
+     * lookup would silently pick up a rule left behind by an earlier run under
+     * the same namespace.
+     *
+     * The thread flavour takes no `arguments` map: the evaluator hands the whole
+     * rendered conversation to `score()` as a single positional argument (see
+     * `TraceThreadUserDefinedMetricPythonCode.CONTEXT_ARG_NAME`).
+     */
+    async createThreadPythonRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      /** Python source for the metric class. */
+      metric: string;
+      enabled?: boolean;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'trace_thread_user_defined_metric_python',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            code: { metric: args.metric },
+          },
+        },
+      );
+      return requireCreatedRuleId(status, message, location, args.name);
+    },
+
+    /**
+     * Create an LLM-as-judge rule at trace or span scope and return its id.
+     *
+     * `scope` picks the evaluator type, and with it which scorer processes the
+     * rule — the two emit different routing diagnostics, so a spec asserting on
+     * those has to be able to choose. Same `rawFetch`/`Location` reasoning as
+     * `createThreadPythonRule` above.
+     *
+     * `variables` is passed through verbatim: the reserved sentinels
+     * (`trace`/`spans`/`span`) map a name to itself rather than to a path into
+     * the entity, and building the map here would hide that distinction from
+     * the spec that depends on it.
+     */
+    async createLlmJudgeRule(args: {
+      projectId: string;
+      name: string;
+      scope: 'trace' | 'span';
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      /** Provider is resolved from this name's prefix, so it decides tool-calling support. */
+      model: string;
+      /** Mustache prompt; the `{{...}}` names must all appear in `variables`. */
+      prompt: string;
+      /** `{{variable}}` -> extraction path, or the reserved name mapped to itself. */
+      variables: Record<string, string>;
+      /** Name of the single score the judge is asked to return. */
+      scoreName: string;
+      enabled?: boolean;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: args.scope === 'span' ? 'span_llm_as_judge' : 'llm_as_judge',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            code: {
+              model: { name: args.model, temperature: 0.0 },
+              messages: [{ role: 'USER', content: args.prompt }],
+              variables: args.variables,
+              schema: [
+                {
+                  name: args.scoreName,
+                  type: 'INTEGER',
+                  description: 'e2e fixture score',
+                },
+              ],
+            },
+          },
+        },
+      );
+      return requireCreatedRuleId(status, message, location, args.name);
+    },
+
+    /**
+     * A rule's user-facing log stream — the lines `/$workspace/automation-logs`
+     * renders.
+     *
+     * This is the only place the engine says why it did or did not score a
+     * trace: a routing decision produces a log line and nothing else, so a spec
+     * about routing has nothing else to anchor on.
+     */
+    async getAutomationRuleLogs(
+      ruleId: string,
+      opts: { size?: number } = {},
+    ): Promise<AutomationRuleLogRef[]> {
+      const page = await opik.api.automationRuleEvaluators.getEvaluatorLogsById(ruleId, {
+        size: opts.size ?? 1000,
+      });
+      return (page.content ?? []).map((item) => ({
+        level: String(item.level ?? ''),
+        message: String(item.message ?? ''),
+      }));
+    },
+
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
       try {
         await opik.api.automationRuleEvaluators.deleteAutomationRuleEvaluatorBatch({
@@ -853,6 +1022,25 @@ export function makeBackendClient(apiKey: string | null = null) {
       } catch (err) {
         if (isNotFoundError(err)) return;
         throw err;
+      }
+    },
+
+    /**
+     * Close a thread — `PUT /v1/private/traces/threads/close`.
+     *
+     * Thread-scope rules fire when a thread goes inactive, and this is the only
+     * way to make that happen on demand; waiting for the workspace's inactivity
+     * timeout would put a multi-minute sleep in every thread-scoring spec.
+     */
+    async closeThread(args: { projectName: string; threadId: string }): Promise<void> {
+      const { status, message } = await rawFetch('PUT', '/v1/private/traces/threads/close', {
+        body: { project_name: args.projectName, thread_id: args.threadId },
+      });
+      if (status !== 204) {
+        throw new Error(
+          `closeThread: '${args.threadId}' answered ${status}: ${message} — the thread ` +
+            `never went inactive, so no thread-scope rule can have run against it.`,
+        );
       }
     },
 
@@ -968,6 +1156,25 @@ export function makeBackendClient(apiKey: string | null = null) {
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });
       return (page.content ?? []).map((t) => String(t.id));
+    },
+
+    /**
+     * A trace's spans, id and name only — `GET /v1/private/spans`.
+     *
+     * The SDK bridge's nested-trace seed reports how many spans it wrote but not
+     * their ids, and a span-scope rule names the span it judged by id in its
+     * logs. Resolving the id here is what lets a spec tie such a line to the
+     * span it seeded rather than to whatever else the rule has processed.
+     */
+    async listSpans(args: { projectId: string; traceId: string }): Promise<SpanRef[]> {
+      const page = await opik.api.spans.getSpansByProject({
+        projectId: args.projectId,
+        traceId: args.traceId,
+        size: 200,
+        page: 1,
+        truncate: true,
+      });
+      return (page.content ?? []).map((s) => ({ id: String(s.id), name: s.name ?? '' }));
     },
 
     /**

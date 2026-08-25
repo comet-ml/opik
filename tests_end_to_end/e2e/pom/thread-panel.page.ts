@@ -101,6 +101,19 @@ export class ThreadPanelPage {
   }
 
   /**
+   * The Reason cell for a named score, for assertions on what a metric reported
+   * rather than only what it scored. Same column layout as
+   * `readFeedbackScoreValue` below: Key | Score | Reason | <actions>.
+   *
+   * Returned as a locator, not read to a string, so callers get Playwright's
+   * auto-retry — the reason arrives with the score but the cell renders a beat
+   * later than the row itself.
+   */
+  feedbackScoreReasonCell(scoreName: string): Locator {
+    return this.feedbackScoreRow(scoreName).getByRole('cell').nth(2);
+  }
+
+  /**
    * Read the number in the Score column for a named score. Requires the tab to
    * be open. Throws — rather than returning a sentinel — if the cell is not a
    * number, so a renamed column fails loudly instead of comparing as NaN.
