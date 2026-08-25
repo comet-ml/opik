@@ -56,6 +56,7 @@ import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/Data
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
@@ -566,7 +567,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
     useThreadList(
       {
         projectId,
@@ -1000,13 +1001,17 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           rowHeight={height as ROW_HEIGHT}
           columnPinning={DEFAULT_COLUMN_PINNING}
           noData={
-            <DataTableNoMatchingData
-              onClearFilters={
-                search || threadChipFilters.length > 0
-                  ? handleClearFilters
-                  : undefined
-              }
-            />
+            isError ? (
+              <DataTableLoadingError onRetry={refetch} />
+            ) : (
+              <DataTableNoMatchingData
+                onClearFilters={
+                  search || threadChipFilters.length > 0
+                    ? handleClearFilters
+                    : undefined
+                }
+              />
+            )
           }
           TableWrapper={PageBodyStickyTableWrapper}
           stickyHeader

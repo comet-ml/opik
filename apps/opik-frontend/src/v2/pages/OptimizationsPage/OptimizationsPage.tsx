@@ -11,6 +11,7 @@ import {
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { COLUMN_DATASET_ID, COLUMN_TYPE } from "@/types/shared";
 import { Filter } from "@/types/filters";
@@ -200,6 +201,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
     isPending,
     isPlaceholderData,
     isFetching,
+    isError,
     refetch,
     pageSize,
   } = useOptimizationsView({
@@ -358,13 +360,17 @@ const OptimizationsPage: React.FunctionComponent = () => {
                 setRowSelection,
               }}
               noData={
-                <DataTableNoMatchingData
-                  onClearFilters={
-                    search || filters.length > 0
-                      ? handleClearFilters
-                      : undefined
-                  }
-                />
+                isError ? (
+                  <DataTableLoadingError onRetry={refetch} />
+                ) : (
+                  <DataTableNoMatchingData
+                    onClearFilters={
+                      search || filters.length > 0
+                        ? handleClearFilters
+                        : undefined
+                    }
+                  />
+                )
               }
               showSkeleton={isTableLoading}
               showLoadingOverlay={

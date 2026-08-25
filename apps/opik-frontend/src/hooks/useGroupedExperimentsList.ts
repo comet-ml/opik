@@ -105,6 +105,7 @@ type UseGroupedExperimentsListResponse = {
   isPending: boolean;
   isPlaceholderData: boolean;
   isFetching: boolean;
+  isError: boolean;
   refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
 
@@ -380,6 +381,7 @@ export default function useGroupedExperimentsList(
     isPending: isGroupsPending,
     isPlaceholderData: isGroupsPlaceholderData,
     isFetching: isGroupsFetching,
+    isError: isGroupsError,
     refetch: refetchGroups,
   } = useExperimentsGroups(
     {
@@ -454,7 +456,7 @@ export default function useGroupedExperimentsList(
     },
   );
 
-  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
     useExperimentsList(
       {
         workspaceName: params.workspaceName,
@@ -756,6 +758,7 @@ export default function useGroupedExperimentsList(
     isPending: hasGroups ? groupedIsPending : isPending,
     isPlaceholderData: hasGroups ? groupedIsPlaceholderData : isPlaceholderData,
     isFetching: hasGroups ? groupedIsFetching : isFetching,
+    isError: hasGroups ? isGroupsError : isError,
     refetch: hasGroups ? groupedRefetch : refetch,
   };
 }

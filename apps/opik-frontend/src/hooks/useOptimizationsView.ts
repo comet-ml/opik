@@ -59,7 +59,7 @@ export const useOptimizationsView = ({
   );
   const hasActiveRuns = (activeData?.total ?? 0) > 0;
 
-  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
     useOptimizationsList(
       {
         workspaceName,
@@ -102,6 +102,7 @@ export const useOptimizationsView = ({
     isPending,
     isPlaceholderData,
     isFetching,
+    isError,
     pageSize: DEFAULT_PAGE_SIZE,
     refetch,
   };

@@ -15,6 +15,7 @@ import { formatNumericData } from "@/lib/utils";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
@@ -324,7 +325,7 @@ const ProjectsPage: React.FunctionComponent = () => {
     },
   );
 
-  const { data, isPending, isPlaceholderData, isFetching } =
+  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
     useProjectWithStatisticsList(
       {
         workspaceName,
@@ -494,7 +495,9 @@ const ProjectsPage: React.FunctionComponent = () => {
         getRowId={getRowId}
         columnPinning={canDeleteProjects ? DEFAULT_COLUMN_PINNING : undefined}
         noData={
-          noData ? (
+          isError ? (
+            <DataTableLoadingError onRetry={refetch} />
+          ) : noData ? (
             <DataTableNoData title={noDataText}>
               {canCreateProjects && (
                 <Button variant="link" onClick={handleNewProjectClick}>

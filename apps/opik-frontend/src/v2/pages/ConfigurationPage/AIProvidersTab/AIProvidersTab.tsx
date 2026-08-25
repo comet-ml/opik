@@ -9,6 +9,7 @@ import ManageAIProviderDialog from "@/v2/pages-shared/llm/ManageAIProviderDialog
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { PROVIDERS, LEGACY_CUSTOM_PROVIDER_NAME } from "@/constants/providers";
 import AIProviderCell from "@/v2/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
@@ -67,7 +68,7 @@ const AIProvidersTab = () => {
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
-  const { data, isPending } = useProviderKeys(
+  const { data, isPending, isError, refetch } = useProviderKeys(
     {
       workspaceName,
     },
@@ -149,7 +150,9 @@ const AIProvidersTab = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         showSkeleton={isTableLoading}
         noData={
-          search === "" ? (
+          isError ? (
+            <DataTableLoadingError onRetry={refetch} />
+          ) : search === "" ? (
             <DataTableEmptyContent
               title="No AI providers yet"
               description="Configure AI providers to use the playground and online scoring."

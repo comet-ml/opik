@@ -11,6 +11,7 @@ import EnvironmentsActionsPanel from "@/v2/pages/ConfigurationPage/EnvironmentsT
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import EnvironmentNameCell from "@/v2/pages/ConfigurationPage/EnvironmentsTab/EnvironmentNameCell";
 import emptyEnvironmentsLightImage from "/images/empty-environments-light.svg";
@@ -104,7 +105,7 @@ const EnvironmentsTab: React.FunctionComponent = () => {
     permissions: { canConfigureWorkspaceSettings },
   } = usePermissions();
 
-  const { data, isPending, isPlaceholderData, isFetching } =
+  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
     useEnvironmentsList({
       placeholderData: keepPreviousData,
       refetchInterval: 30000,
@@ -239,7 +240,9 @@ const EnvironmentsTab: React.FunctionComponent = () => {
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          showCreate ? (
+          isError ? (
+            <DataTableLoadingError onRetry={refetch} />
+          ) : showCreate ? (
             <DataTableEmptyContent
               lightImageUrl={emptyEnvironmentsLightImage}
               darkImageUrl={emptyEnvironmentsDarkImage}

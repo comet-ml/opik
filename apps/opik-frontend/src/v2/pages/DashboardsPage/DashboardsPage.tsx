@@ -17,6 +17,7 @@ import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
 import emptyTestSuitesDarkUrl from "/images/empty-test-suites-dark.svg";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import TagCell from "@/shared/DataTableCells/TagCell";
@@ -233,19 +234,20 @@ const DashboardsPage: React.FunctionComponent = () => {
     queryParamConfig: JsonParam,
   });
 
-  const { data, isPending, isPlaceholderData, isFetching } = useDashboardsList(
-    {
-      workspaceName,
-      sorting: sortedColumns,
-      search: search!,
-      filters,
-      page: page!,
-      size: size!,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
+    useDashboardsList(
+      {
+        workspaceName,
+        sorting: sortedColumns,
+        search: search!,
+        filters,
+        page: page!,
+        size: size!,
+      },
+      {
+        placeholderData: keepPreviousData,
+      },
+    );
 
   const dashboards = useMemo(() => data?.content ?? [], [data?.content]);
   const sortableBy: string[] = useMemo(
@@ -349,7 +351,8 @@ const DashboardsPage: React.FunctionComponent = () => {
 
   const isTableLoading =
     isPending || (isPlaceholderData && dashboards.length === 0);
-  const isEmpty = !isTableLoading && noData && dashboards.length === 0;
+  const isEmpty =
+    !isTableLoading && !isError && noData && dashboards.length === 0;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -424,7 +427,13 @@ const DashboardsPage: React.FunctionComponent = () => {
             }}
             getRowId={getRowId}
             columnPinning={DEFAULT_COLUMN_PINNING}
-            noData={<DataTableNoMatchingData />}
+            noData={
+              isError ? (
+                <DataTableLoadingError onRetry={refetch} />
+              ) : (
+                <DataTableNoMatchingData />
+              )
+            }
             showSkeleton={isTableLoading}
             showLoadingOverlay={
               !isTableLoading && isPlaceholderData && isFetching

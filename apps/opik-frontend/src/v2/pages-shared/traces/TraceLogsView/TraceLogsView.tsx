@@ -84,6 +84,7 @@ import TableScrollContainer from "@/shared/DataTable/TableScrollContainer";
 import ScrollTableWrapper from "@/shared/DataTable/ScrollTableWrapper";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import DataTableLoadingError from "@/shared/DataTableNoData/DataTableLoadingError";
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
 import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -629,7 +630,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     return exclude;
   }, [selectedColumns]);
 
-  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, isError, refetch } =
     useTracesList(
       {
         projectId,
@@ -1136,11 +1137,17 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
         noData={
-          <DataTableNoMatchingData
-            onClearFilters={
-              search || chipFilters.length > 0 ? handleClearFilters : undefined
-            }
-          />
+          isError ? (
+            <DataTableLoadingError onRetry={refetch} />
+          ) : (
+            <DataTableNoMatchingData
+              onClearFilters={
+                search || chipFilters.length > 0
+                  ? handleClearFilters
+                  : undefined
+              }
+            />
+          )
         }
         showLoadingOverlay={isPlaceholderData && isFetching}
         TableBody={DataTableVirtualBody}
