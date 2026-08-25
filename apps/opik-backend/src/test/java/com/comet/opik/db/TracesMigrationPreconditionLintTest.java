@@ -101,8 +101,11 @@ class TracesMigrationPreconditionLintTest {
                             + "update this lint rather than dropping it", MIGRATIONS)
                     .isDirectory();
 
-            try (var files = Files.list(MIGRATIONS)) {
+            // Recursive on purpose: Liquibase's `includeAll path="migrations/"` descends into subdirectories, so a
+            // non-recursive listing would apply nested migrations in production while never linting them.
+            try (var files = Files.walk(MIGRATIONS)) {
                 var ordered = files
+                        .filter(Files::isRegularFile)
                         .filter(path -> path.getFileName().toString().endsWith(".sql"))
                         .sorted(Comparator.comparing(path -> path.getFileName().toString()))
                         .toList();
@@ -337,6 +340,48 @@ class TracesMigrationPreconditionLintTest {
             assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("must pair up");
+        }
+
+        /**
+         * A block-commented mutation is not a mutation. Rejecting one would be a false positive — the kind that teaches
+         * people the lint is noise and to work around it.
+         */
+        @Test
+        @DisplayName("ignores a block-commented mutation")
+        void ignoresABlockCommentedMutation() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_add_foo_to_spans
+                    /* Superseded, kept for context:
+                       ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                     */
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """;
+
+            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo_to_spans.sql", sql)).isEmpty();
+        }
+
+        /**
+         * A header Liquibase would not accept means the statements below it fold into the previous changeset, where
+         * they inherit a guard written for something else. The lint must not accept that arrangement quietly.
+         */
+        @Test
+        @DisplayName("rejects a malformed changeset header that would fold its statements into the previous changeset")
+        void rejectsAMalformedChangesetHeader() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_add_foo_pre_cutover
+                    """ + GUARD_PRE
+                    + """
+                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+
+                            --changeset
+                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS bar String DEFAULT '';
+                            """;
+
+            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+                    .singleElement(STRING)
+                    .contains("does not name an author:id");
         }
 
         /**

@@ -197,6 +197,13 @@ not, and no later migration will add it. Land trace schema changes before the cu
 Each gate also carries negative tests that inject the drift a careless migration produces, so no assertion can quietly
 stop firing.
 
+**What CI does not check.** All of the above compares *schema* — names, types, and the select/expression definitions
+built on them. None of it moves a row, so none of it can tell you a conversion is lossless. In particular, adding a
+column to `BASELINE_TYPE_DIFFERENCES` exempts it from type parity and nothing then validates that the cutover's
+conversion preserves its values. That is deliberate — value fidelity is `TracesLocalV2CutoverTest`'s job, and the
+full-volume rehearsal the QA gate's — but it means an allowlist entry is a **decision, not a formality**: it asserts
+that you have checked the conversion is safe or that the loss is intended. Say which, in the entry's reason.
+
 Common failures:
 
 * *"read-facing column parity"* — you altered one table and not the other. Add the missing `ALTER`.

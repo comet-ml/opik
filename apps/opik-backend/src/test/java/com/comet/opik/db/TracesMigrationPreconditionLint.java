@@ -87,6 +87,16 @@ class TracesMigrationPreconditionLint {
 
     private static final Set<String> REQUIRED_BRANCHES = Set.of("0", "1");
 
+    /** A {@code /* ... *}{@code /} block, non-greedy and spanning lines. */
+    private static final Pattern BLOCK_COMMENT = Pattern.compile("(?s)/\\*.*?\\*/");
+
+    /**
+     * A line that looks like a changeset header but does not parse as one. Liquibase would not treat it as a changeset,
+     * so everything below it belongs to the <i>previous</i> changeset — and would inherit its guard. Rather than let a
+     * mutation smuggle itself in that way, an unparseable header is reported.
+     */
+    private static final Pattern MALFORMED_CHANGESET = Pattern.compile("(?im)^\\s*--\\s*changeset\\s*$");
+
     @Builder(toBuilder = true)
     private record ChangeSet(@NonNull String name, @NonNull String body) {
     }
@@ -103,15 +113,22 @@ class TracesMigrationPreconditionLint {
 
         var changeSets = changeSets(sql);
 
+        if (MALFORMED_CHANGESET.matcher(sql).find()) {
+            return List
+                    .of(("%s: contains a `--changeset` line that does not name an author:id, so Liquibase would fold "
+                            + "the statements under it into the previous changeset — where they would inherit a guard that was "
+                            + "never written for them").formatted(fileName));
+        }
+
         // "Parsed nothing" must never read as "nothing wrong". If the file mutates a trace table but no changeset
         // header was recognised, the checks below would all be skipped and the migration would pass unexamined.
-        if (changeSets.isEmpty() && TRACES_MUTATION.matcher(stripLineComments(sql)).find()) {
+        if (changeSets.isEmpty() && TRACES_MUTATION.matcher(stripComments(sql)).find()) {
             return List.of(("%s: mutates a trace table but no `--changeset` header could be parsed, so it cannot be "
                     + "checked — fix the header rather than leaving the migration unguarded").formatted(fileName));
         }
 
         for (var changeSet : changeSets) {
-            if (!TRACES_MUTATION.matcher(stripLineComments(changeSet.body())).find()) {
+            if (!TRACES_MUTATION.matcher(stripComments(changeSet.body())).find()) {
                 continue;
             }
             mutatesTraceTable = true;
@@ -181,6 +198,16 @@ class TracesMigrationPreconditionLint {
                     .build());
         }
         return changeSets;
+    }
+
+    /**
+     * Removes both comment forms before looking for mutations: {@code --} to end of line, and {@code /* ... *}{@code /}
+     * blocks. Line comments alone left a block-commented mutation looking real, which rejects a perfectly valid
+     * migration — a false positive, and the kind that teaches people to distrust the lint. Precondition directives are
+     * matched against the raw text instead, since they <i>are</i> line comments.
+     */
+    private static String stripComments(String sql) {
+        return stripLineComments(BLOCK_COMMENT.matcher(sql).replaceAll(" "));
     }
 
     private static String stripLineComments(String sql) {
