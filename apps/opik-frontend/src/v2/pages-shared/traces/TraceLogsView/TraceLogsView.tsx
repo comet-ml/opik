@@ -707,7 +707,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   );
 
   const showEmptyState =
-    !isTableLoading && noData && rows.length === 0 && page === 1;
+    !isTableLoading && !isError && noData && rows.length === 0 && page === 1;
 
   const metadataPaths = useMemo(() => {
     const allPaths = rows.reduce<string[]>((acc, row) => {
