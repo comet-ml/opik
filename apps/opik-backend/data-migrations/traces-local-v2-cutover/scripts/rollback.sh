@@ -377,7 +377,7 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "Now in the canonical state: traces = original data (live), traces_post_rollback_backup = successor data (parked)."
     echo "Verify with the POST-ROLLBACK table pair — the verify.sh defaults no longer apply (traces_local_v2 is gone), and"
     echo "the CURRENT week legitimately mismatches by the post-cutover writes this rollback discarded, so bound it:"
-    echo "  ./verify.sh --database $DATABASE --old-table traces --new-table traces_post_rollback_backup --to-week <last sealed week>"
+    echo "  ./verify.sh --database $DATABASE --old-table traces --new-table traces_post_rollback_backup --to-week last-sealed"
     echo "Then run finalize.sh once healthy — it recycles the backup into an empty traces_local_v2 (restoring the"
     echo "pre-cutover shadow), the one irreversible step."
     echo

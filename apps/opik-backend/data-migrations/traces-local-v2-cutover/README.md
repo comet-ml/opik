@@ -1114,7 +1114,7 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
 
    **Bound it to the sealed weeks, and expect the current week to differ.** The reused shadow is a *superset* of the
    restored original by exactly the revived writes from (3), so an unbounded run reports them and looks like a fidelity
-   failure on a perfectly good retry. This is the same shape, and the same `--to-week N` remedy, as the post-rollback
+   failure on a perfectly good retry. This is the same shape, and the same `--to-week last-sealed` remedy, as the post-rollback
    compare above — including the direction: the **new-table** side is the superset here. A mismatch in a *sealed* week is
    the real signal.
 
@@ -1123,7 +1123,7 @@ it revives writes the rollback chose to discard. Run it only with the guards bel
    can (write an in-progress trace, assert `end_time` is null), which is why (4) is a step and not a caveat here.
 
    ```bash
-   ./scripts/verify.sh --database opik --to-week <last sealed week>   # old=traces, new=traces_local_v2 (the defaults)
+   ./scripts/verify.sh --database opik --to-week last-sealed   # old=traces, new=traces_local_v2 (the defaults)
    ```
 
 If any of that does not hold, take the supported path: `finalize.sh` to recycle the backup into a clean shadow, then a
@@ -1232,12 +1232,12 @@ exists (the successor is parked as `traces_post_rollback_backup`), so a bare `ve
 parked successor:
 
 ```bash
-./scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week N
+./scripts/verify.sh --database opik --old-table traces --new-table traces_post_rollback_backup --to-week last-sealed
 ```
 
 Expect the **sealed historical weeks to match** and the **current week to mismatch**, by exactly the post-cutover writes
 the rollback discarded (the parked successor holds them; the restored original never did) — so bound the run with
-`--to-week N` at the last sealed week, exactly as for the post-EXCHANGE compare. A mismatch in a *sealed* week would be
+`--to-week last-sealed`, exactly as for the post-EXCHANGE compare. A mismatch in a *sealed* week would be
 the real signal. Note the divergence is the **opposite** direction from the post-EXCHANGE case: here the *new-table* side
 is the superset.
 

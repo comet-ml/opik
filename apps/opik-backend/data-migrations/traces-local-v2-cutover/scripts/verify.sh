@@ -34,11 +34,14 @@
 #                       bare run dies with "Unknown table ... traces_local_v2". The old-schema side is the restored original
 #                       (`traces`) and the new-schema side is the parked successor: pass
 #                       `--old-table traces --new-table traces_post_rollback_backup`, and expect the CURRENT week to
-#                       legitimately mismatch by the post-cutover writes the rollback discarded — bound it with --to-week N
-#                       (see README "Verifying after a rollback").
+#                       legitimately mismatch by the post-cutover writes the rollback discarded — bound it with
+#                       `--to-week last-sealed` (see README "Verifying after a rollback").
 #   --sample-mod N      compare a deterministic 1/N id sample (same ids on both sides). Default 1 (every row).
-#   --from-week N       start at week offset N (0-based from the anchor Monday). Default 0.
-#   --to-week M         stop after week offset M (inclusive). Default: last week with data.
+#   --from-week N       start at week offset N (0-based from the anchor Monday). Default 0. An OFFSET, not a date.
+#   --to-week M         stop after week offset M (inclusive), or 'last-sealed' to stop before the newest week — the only
+#                       one still taking writes, and what a post-rollback compare wants. Default: last week with data.
+#                       Also an OFFSET (counted from the created_at anchor, so far-future ids never inflate it): a
+#                       YYYYMMDD partition name is rejected rather than walked as ~20M empty windows.
 #   --weeks-stride S    compare every S-th week (S>1 samples partitions for a quick pass). Default 1.
 #   --drill-down        on a mismatched week, also print up to 100 keys that differ or exist on one side only.
 
@@ -85,7 +88,8 @@ done
 [[ "$SAMPLE_MOD" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --sample-mod must be a positive integer." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }
 [[ "$WEEKS_STRIDE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --weeks-stride must be a positive integer." >&2; exit 2; }
-[[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
+[[ -z "$TO_WEEK" || "$TO_WEEK" == last-sealed || "$TO_WEEK" =~ ^[0-9]+$ ]] \
+    || { echo "ERROR: --to-week must be a non-negative integer or 'last-sealed'." >&2; exit 2; }
 [[ -f "$VERIFY_SQL" ]] || { echo "ERROR: cannot find verify SQL at $VERIFY_SQL" >&2; exit 2; }
 
 ch() {
@@ -147,6 +151,28 @@ ANCHOR="$(ch "SELECT toString(toMonday(min(created_at))) FROM $OLD_TABLE")"
 HORIZON="$(ch "SELECT toString(addWeeks(toMonday(max(created_at)), 1)) FROM $OLD_TABLE")"
 LAST_WEEK="$(ch "SELECT dateDiff('week', toDate('$ANCHOR'), toDate('$HORIZON')) - 1")"
 [[ -n "$TO_WEEK" ]] || TO_WEEK="$LAST_WEEK"
+# 'last-sealed' drops the newest week, the only one still taking writes. That is what a post-rollback compare wants: the
+# current week legitimately differs by the writes the rollback discarded, while a sealed week must match exactly.
+# Bound --to-week by the data rather than by a constant: every week past the last one with data is empty by construction,
+# so a larger value only ever walks empty windows. That makes this the natural place to catch the realistic mix-up — a
+# weekly PARTITION name (same weeks, different naming), which passes the integer test and otherwise walks millions of
+# empty windows with no error and no result. Note the anchor comes from created_at above, so far-future id_at values
+# never inflate a legitimate offset however far ahead they sit; only what the caller typed can be out of range.
+if [[ "$TO_WEEK" =~ ^[0-9]+$ ]] && (( TO_WEEK > LAST_WEEK )); then
+    echo "ERROR: --to-week $TO_WEEK is past the last week with data (offset $LAST_WEEK). These bounds are 0-based week" >&2
+    echo "       OFFSETS from the anchor Monday ($ANCHOR), not dates — if that was a YYYYMMDD partition name, pass an" >&2
+    echo "       offset instead, or 'last-sealed' for the last complete week, or omit the bound to cover every week." >&2
+    exit 2
+fi
+if [[ "$TO_WEEK" == last-sealed ]]; then
+    TO_WEEK=$((LAST_WEEK - 1))
+    (( TO_WEEK >= FROM_WEEK )) || {
+        echo "ERROR: --to-week last-sealed resolved to week $TO_WEEK, which is before --from-week $FROM_WEEK: all of" >&2
+        echo "       '$OLD_TABLE' sits in the newest (unsealed) week, so there is no sealed week to compare. Verify" >&2
+        echo "       once a week has closed, or pass an explicit --to-week to include the current one." >&2
+        exit 2
+    }
+fi
 
 log "Verify: $OLD_TABLE vs $NEW_TABLE | weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE | sample 1/$SAMPLE_MOD"
 
@@ -194,6 +220,13 @@ done
 # Fidelity mismatch is the hard failure (exit 1).
 if [[ "$mismatches" != "0" ]]; then
     log "FAILED: $mismatches of $checked windows mismatched." >&2
+    exit 1
+fi
+if [[ "$checked" == "0" ]]; then
+    # An empty range compared nothing, so "all windows match" would be vacuously true — the one answer a fidelity gate
+    # must never give. Fail instead: reaching here means the bounds excluded every week, not that the data agrees.
+    log "FAILED: no window was compared — weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE selects nothing." >&2
+    log "        Nothing was verified, so this is NOT a pass. Widen the range (--from-week/--to-week)." >&2
     exit 1
 fi
 if [[ "$artifacts" != "0" ]]; then
