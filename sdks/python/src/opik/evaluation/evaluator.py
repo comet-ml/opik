@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import (
+    Literal,
     Any,
     Callable,
     Dict,
@@ -48,7 +49,7 @@ from .types import (
     LLMTask,
     ScoringKeyMappingType,
 )
-from .. import url_helpers, exceptions
+from .. import analytics, url_helpers, exceptions
 from ..api_objects.dataset.test_suite import suite_result_constructor
 
 if TYPE_CHECKING:
@@ -280,6 +281,7 @@ def evaluate(
             They are excluded from the aggregated statistics and are never sent to
             the backend, so the score cell stays empty rather than showing a zero.
     """
+    analytics.track_event("evaluation", "evaluate")
     error_tolerance = ErrorTolerance(error_tolerance)
 
     if isinstance(dataset, test_suite_module.TestSuite):
@@ -583,6 +585,7 @@ def run_tests(
         ... )
         >>> print(f"Pass rate: {result.pass_rate:.0%}")
     """
+    analytics.track_event("evaluation", "run_tests")
     suite_dataset: Union[dataset.Dataset, dataset.DatasetVersion]
     if isinstance(test_suite, test_suite_module.TestSuiteVersion):
         suite_dataset = test_suite.__internal_api__dataset_version__
@@ -872,6 +875,7 @@ def evaluate_experiment(
 
         project_name: The name of the project to which the experiment belongs. If not provided, the default project will be used.
     """
+    analytics.track_event("evaluation", "evaluate_experiment")
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
     )
@@ -1125,6 +1129,7 @@ def evaluate_prompt(
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
+    analytics.track_event("evaluation", "evaluate_prompt")
     if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
         dataset = dataset.__internal_api__dataset__
@@ -1308,7 +1313,7 @@ def evaluate_optimization_trial(
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
-    experiment_type: Optional[str] = None,
+    experiment_type: Optional[Literal["regular", "trial", "mini-batch"]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -1403,6 +1408,7 @@ def evaluate_optimization_trial(
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
+    analytics.track_event("evaluation", "evaluate_optimization_trial")
     if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
         dataset = dataset.__internal_api__dataset__
@@ -1571,6 +1577,7 @@ def evaluate_resume(
             checkpoint, or re-supply the original ``dataset_item_ids`` via a
             fresh ``evaluate()`` call.
     """
+    analytics.track_event("evaluation", "evaluate_resume")
     experiment_scoring_functions = experiment_scoring_functions or []
 
     client = opik_client.get_global_client()
@@ -1753,6 +1760,7 @@ def evaluate_on_dict_items(
         print(f"Mean equals score: {aggregated['equals_metric'].mean}")
         ```
     """
+    analytics.track_event("evaluation", "evaluate_on_dict_items")
     # Wrap scoring functions if any
     scoring_metrics = _wrap_scoring_functions(
         scoring_functions=scoring_functions,

@@ -1,14 +1,18 @@
+"""
+Details about the run that both Sentry error reports and Segment usage analytics
+attach to what they send, so the two describe the same session identically.
+"""
+
 import importlib.metadata
 import logging
 import functools
+import os
 import random
 import string
 import importlib
 from typing import Any, Dict
 
-import opik
-
-from .. import environment
+from . import environment, package_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +32,19 @@ def collect_context_once() -> Dict[str, Any]:
     return result
 
 
+def _reset_after_fork() -> None:
+    """
+    `pid` and `session_id` describe one process, and the cache holding them survives
+    `fork()`. Without this a child keeps reporting its parent's values, so its error
+    reports and its usage events are indistinguishable from the parent's.
+    """
+    collect_context_once.cache_clear()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_after_fork)
+
+
 @functools.lru_cache
 def collect_tags_once() -> Dict[str, Any]:
     """
@@ -39,7 +56,7 @@ def collect_tags_once() -> Dict[str, Any]:
     result = {
         "os_type": environment.get_os_type(),
         "python_version": environment.get_python_version(),
-        "release": opik.__version__,
+        "release": package_version.VERSION,
         "jupyter": environment.in_jupyter(),
         "colab": environment.in_colab(),
         "aws_lambda": environment.in_aws_lambda(),

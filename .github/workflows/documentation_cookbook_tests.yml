@@ -35,6 +35,7 @@ jobs:
     env:
       NOTEBOOK_TO_TEST: ${{ matrix.notebooks }}
       OPIK_SENTRY_ENABLE: False
+      OPIK_ANALYTICS_ENABLE: False
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
