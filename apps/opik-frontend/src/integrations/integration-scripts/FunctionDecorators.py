@@ -25,6 +25,8 @@ def generate_response(input_text, context):
     response = client.chat.completions.create(
         model="gpt-3.5-turbo", messages=[{"role": "user", "content": full_prompt}]
     )
+    if not getattr(response, "choices", None) or response.choices[0].message is None:
+        return None
     return response.choices[0].message.content
 
 
