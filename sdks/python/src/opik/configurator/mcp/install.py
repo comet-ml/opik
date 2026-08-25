@@ -72,15 +72,21 @@ def setup_mcp_server(
     """
     display = view if view is not None else mcp_view.default_view()
 
-    # The backstop for every caller, library included. Writing into a config file
-    # another tool owns is only done in a session someone is present for; flags
-    # and `host_keys` choose *which* assistant, never *whether* without a user.
-    if not interactive_helpers.is_interactive():
+    # The backstop for every caller, library included: without a terminal we can
+    # only proceed on an explicit request, and `host_keys` is what one looks like.
+    # That is what lets a coding agent run this on the user's behalf while a CI
+    # job that named nothing still does nothing.
+    if (
+        not interactive_helpers.is_interactive()
+        and not host_keys
+        and not assume_confirmed
+    ):
         display.skipped(
-            "Skipping MCP server setup: no interactive terminal. Run "
-            "`opik mcp configure` from a shell to set it up."
+            "Skipping MCP server setup: no interactive terminal and no client "
+            "named. Pass `--ai-client <client>` to set it up unattended, or run "
+            "`opik mcp configure` from a shell."
         )
-        # ANALYTICS: install skipped, reason="non_interactive".
+        # ANALYTICS: install skipped, reason="non_interactive_no_client".
         return []
 
     ambiguity = _workspace_ambiguity(

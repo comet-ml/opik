@@ -917,11 +917,12 @@ class TestCandidateAndConfirm:
 
 
 class TestTerminalRequired:
-    """The installer refuses outside an interactive session, whatever the flags.
+    """Outside a session, an explicit request is what authorises the write.
 
-    Registering the server edits configuration files owned by other tools. That
-    is not done to a machine nobody is sitting at, so neither `--install-mcp` nor
-    `--host` gets past the gate: they choose *which* assistant, not *whether*.
+    Registering the server edits configuration files owned by other tools, so an
+    unflagged run does nothing. But a coding agent asked to set Opik up has no tty
+    and a live instruction, and naming a client — or passing `--install-mcp`, which
+    arrives as `assume_confirmed` — is how it says so.
     """
 
     def test_setup_mcp_server__no_terminal__installs_nothing(self, monkeypatch):
@@ -954,10 +955,8 @@ class TestTerminalRequired:
         install_spy.assert_not_called()
         assert view.skips, "the user is told why nothing happened"
 
-    def test_setup_mcp_server__no_terminal_with_host__still_installs_nothing(
-        self, monkeypatch
-    ):
-        """`--host` names an assistant; it is not a substitute for a session."""
+    def test_setup_mcp_server__no_terminal_with_client__installs(self, monkeypatch):
+        """The agent path: no tty, but a named client says what was asked for."""
         monkeypatch.setattr(
             install.interactive_helpers, "is_interactive", lambda: False
         )
@@ -980,8 +979,8 @@ class TestTerminalRequired:
             view=RecordingView(),
         )
 
-        assert result == []
-        install_spy.assert_not_called()
+        assert result == ["cursor"]
+        install_spy.assert_called_once()
 
     def test_confirm_targets__terminal__still_asks(self, monkeypatch):
         monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: True)

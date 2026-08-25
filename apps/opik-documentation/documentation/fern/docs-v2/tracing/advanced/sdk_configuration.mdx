@@ -79,12 +79,19 @@ how to instrument code, run test suites, and use `opik connect`.
 opik configure --install-mcp --install-skills
 ```
 
-<Warning>
-**Both steps only run in an interactive terminal.** They write into configuration
-files owned by your AI client, so they are skipped in CI, a Docker build, or a
-cron job — the flags above express a preference, not permission to write
-unattended. There is no headless way to register the server; run it from a shell.
-</Warning>
+<Note>
+**These flags are what make the step work without a terminal**, which is how a
+coding agent asked to "set Opik up" runs it:
+
+```bash
+opik configure -y --install-mcp --install-skills
+```
+
+`-y` answers the configuration questions; `--install-mcp` / `--install-skills`
+are the request to write into your AI client's configuration. A run that names
+neither and has no terminal does nothing — so CI and Docker builds stay
+untouched unless you ask.
+</Note>
 
 <Note>
 `--yes` on its own deliberately registers neither the MCP server nor the skill

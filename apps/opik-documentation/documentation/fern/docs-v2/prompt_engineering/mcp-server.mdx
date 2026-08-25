@@ -46,10 +46,17 @@ Prefer not to use the CLI? You can wire up any client by hand — skip to
 </Tip>
 
 <Note>
-Setup runs **only in an interactive terminal**. It writes into your AI
-client's own configuration, so it is skipped in CI, a Docker build, or a cron
-job rather than editing those files unattended. For an image or a script, use
-[Manual setup](#manual-setup) to write the config block yourself.
+**Asking your coding agent to do this works.** Setup writes into your AI client's
+own configuration, so it never happens on a run that did not ask for it — but
+naming what you want is asking, and that works without a terminal:
+
+```bash
+opik configure -y --install-mcp --install-skills   # Opik + MCP + skill pack
+opik mcp configure --ai-client cursor              # just the server, one client
+```
+
+A run that names nothing and has no terminal — a CI job, a Docker build — writes
+nothing, which is the behaviour you want there.
 </Note>
 
 <Steps>

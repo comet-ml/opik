@@ -25,7 +25,6 @@ import pathlib
 import shutil
 from typing import Dict, List, Optional, Tuple
 
-from opik.configurator import interactive_helpers
 from opik.configurator.skills import manifest as skills_manifest
 from opik.configurator.skills import pack as skills_pack
 from opik.configurator.skills import roots as skills_roots
@@ -61,19 +60,6 @@ def setup_skills(
     fail the surrounding configure run. Every outcome is described by the returned
     :class:`InstallResult`.
     """
-    # Same rule as the MCP installer: the pack is instruction files the assistant
-    # acts on with its own permissions, so it is only written in a session the
-    # user is present for. Naming hosts chooses which, not whether.
-    if not interactive_helpers.is_interactive():
-        # ANALYTICS: skills install skipped, reason="non_interactive".
-        return InstallResult(
-            succeeded=False,
-            error=(
-                "the Opik skill pack is only installed from an interactive "
-                "terminal; run `opik mcp configure` from a shell"
-            ),
-        )
-
     supported = [key for key in host_keys if key in skills_roots.SUPPORTED_HOST_KEYS]
     if len(supported) == 0:
         # ANALYTICS: skills install skipped, reason="no_supported_host".

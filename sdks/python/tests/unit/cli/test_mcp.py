@@ -97,7 +97,7 @@ class TestInstallCommand:
             result = runner.invoke(cli, ["mcp", "configure"])
 
         assert result.exit_code != 0
-        assert "interactive terminal" in result.output
+        assert "--ai-client" in result.output, "the error must name the remedy"
         setup_spy.assert_not_called()
 
     def test_install__no_config_user_declines__errors(self):
@@ -338,11 +338,10 @@ class TestHostFlag:
         ):
             result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "codex"])
 
-        assert result.exit_code != 0
-        assert "interactive terminal" in result.output
-        setup_spy.assert_not_called()
+        assert result.exit_code == 0
+        setup_spy.assert_called_once()
 
-    def test_configure__non_interactive_without_host__refuses(self):
+    def test_configure__non_interactive_without_client__refuses_with_a_remedy(self):
         runner = CliRunner()
         with (
             patch.object(
@@ -353,7 +352,7 @@ class TestHostFlag:
             result = runner.invoke(cli, ["mcp", "configure"])
 
         assert result.exit_code != 0
-        assert "interactive terminal" in result.output
+        assert "--ai-client" in result.output, "the error must name the remedy"
         setup_spy.assert_not_called()
 
     def test_configure__non_interactive_host_but_unconfigured__refuses(self):
@@ -374,9 +373,9 @@ class TestHostFlag:
             result = runner.invoke(cli, ["mcp", "configure", "--ai-client", "codex"])
 
         assert result.exit_code != 0
-        # The terminal gate fires before Opik's own configuration is considered,
-        # so this is the message even with credentials missing.
-        assert "interactive terminal" in result.output
+        # A named client gets past the terminal gate, so the next thing missing is
+        # Opik's own configuration — and that message names its own remedy.
+        assert "OPIK_API_KEY" in result.output, "the error must name the remedy"
         configure_spy.assert_not_called()
         setup_spy.assert_not_called()
 

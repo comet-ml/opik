@@ -2478,25 +2478,24 @@ class TestShouldSetupMcpServer:
         assert configurator._should_setup_mcp_server() is False
 
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_should_setup_mcp_server__non_interactive_explicit_flag__returns_false(
+    def test_should_setup_mcp_server__non_interactive_explicit_flag__returns_true(
         self, mock_is_interactive
     ):
-        """The flag chooses *whether* the user wants it, not whether we may.
+        """The flag is the request, and it is all an agent has to make one with.
 
-        Registering the server edits another tool's config file, so it never
-        happens outside a session someone is present for — a CI runner, a Docker
-        build, a cron job all skip regardless of the flag.
+        A coding agent told to set Opik up has no tty but a live instruction; a CI
+        job has no tty and no instruction. The flag is what separates them.
         """
         configurator = OpikConfigurator(install_mcp=True)
-        assert configurator._should_setup_mcp_server() is False
+        assert configurator._should_setup_mcp_server() is True
 
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_should_setup_mcp_server__non_interactive_flag_with_yes__returns_false(
+    def test_should_setup_mcp_server__non_interactive_flag_with_yes__returns_true(
         self, mock_is_interactive
     ):
-        """No terminal skips regardless of the flag, with or without `-y`."""
+        """`-y` does not veto an explicit flag; it just is not one by itself."""
         configurator = OpikConfigurator(install_mcp=True, automatic_approvals=True)
-        assert configurator._should_setup_mcp_server() is False
+        assert configurator._should_setup_mcp_server() is True
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     def test_should_setup_mcp_server__install_mcp_true__returns_true(
@@ -2592,22 +2591,22 @@ class TestSkillsHostKeys:
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__non_interactive_explicit_flag__returns_none(
+    def test_skills_host_keys__non_interactive_explicit_flag__installs(
         self, mock_is_interactive, mock_detected
     ):
-        """Same absolute terminal requirement as the server step."""
+        """Same rule as the server step: the flag carries the request."""
         configurator = OpikConfigurator(install_skills=True)
-        assert configurator._skills_host_keys() is None
+        assert configurator._skills_host_keys() == ["codex"]
 
     @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__flag_with_yes__returns_none(
+    def test_skills_host_keys__flag_with_yes__installs(
         self, mock_is_interactive, mock_detected
     ):
         configurator = OpikConfigurator(install_skills=True, automatic_approvals=True)
-        assert configurator._skills_host_keys() is None
+        assert configurator._skills_host_keys() == ["codex"]
 
     @patch("opik.configurator.configure.skills.detected_host_keys", return_value=[])
     @patch("opik.configurator.configure.is_interactive", return_value=False)
@@ -2708,9 +2707,9 @@ class TestSkillsHostKeys:
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
     )
     @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_maybe_setup_skills__flag_without_terminal__installs_nothing(
+    def test_maybe_setup_skills__flag_without_terminal__installs_for_detected(
         self, mock_is_interactive, mock_detected, mock_setup
     ):
         configurator = OpikConfigurator(install_skills=True)
         configurator._maybe_setup_skills()
-        mock_setup.assert_not_called()
+        mock_setup.assert_called_once_with(["codex"])

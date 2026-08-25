@@ -38,6 +38,7 @@ def setup(
     force_local_server: bool = False,
     host_keys: Optional[List[str]] = None,
     skills_flag: Optional[bool] = None,
+    assume_confirmed: bool = False,
 ) -> None:
     """Register the MCP server, then offer the skill pack for the same assistants.
 
@@ -48,6 +49,9 @@ def setup(
         **dict(setup_params),
         force_local_server=force_local_server,
         host_keys=host_keys,
+        # `--install-mcp` names no client, so the flag itself is the consent that
+        # lets this run without a terminal, and it covers whatever is detected.
+        assume_confirmed=assume_confirmed,
         view=install_view.RichInstallView(),
         # The closing "restart your assistant" line is printed once, at the end of
         # the whole step, rather than by each half.

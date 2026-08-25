@@ -111,8 +111,8 @@ def _resolve_host_keys(hosts: Tuple[str, ...]) -> Optional[List[str]]:
     multiple=True,
     type=click.Choice(mcp_targets.HOST_KEYS + [HOST_ALL], case_sensitive=False),
     help="AI client to register the server with. Repeatable, or pass `all` for "
-    "every one detected on this machine. Naming a client skips the picker; it does "
-    "not skip the terminal requirement.",
+    "every one detected on this machine. Naming a client is what lets this run "
+    "without a terminal — a coding agent or a script should pass it.",
 )
 @click.option(
     "--skills/--no-skills",
@@ -134,14 +134,16 @@ def configure(
     the local server.
     """
     host_keys = _resolve_host_keys(hosts)
-    # Registering the server edits another tool's configuration files, so it only
-    # happens in a session a user is actually present for. `--ai-client` says *which*
-    # client, not *whether* — it does not stand in for a terminal.
-    if not interactive_helpers.is_interactive():
+    # Without a terminal we cannot ask which client to write to, so one has to be
+    # named. That is also what separates a coding agent running this for the user
+    # from a CI job that was never asked to: the agent can pass the flag.
+    if host_keys is None and not interactive_helpers.is_interactive():
         raise click.ClickException(
-            "`opik mcp configure` only runs in an interactive terminal: it writes "
-            "into your AI client's own configuration, which should not happen "
-            "unattended in CI, a Docker build, or a cron job. Run it from a shell."
+            "`opik mcp configure` needs either a terminal or an explicit client, "
+            "because it writes into that client's own configuration. Name one to "
+            "run unattended:\n\n"
+            f"    opik mcp configure --ai-client {mcp_targets.HOST_KEYS[0]}\n\n"
+            f"Valid values: {', '.join(mcp_targets.HOST_KEYS)}, all."
         )
 
     params = _resolve_setup_params(opik_config.OpikConfig())

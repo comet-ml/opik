@@ -42,23 +42,26 @@ def mcp_decision(
 ) -> Decision:
     """Whether to register the MCP server, ask first, or leave it alone.
 
+    The question is whether the user *asked*, not whether we happen to have a
+    terminal. Those come apart for the case this exists to serve: a coding agent
+    running `opik configure` on the user's behalf has no tty, but the request was
+    made seconds ago in chat. A CI runner has no tty either — the difference is
+    that nobody named a flag.
+
     - ``install_mcp is False``: skip.
-    - **No terminal: skip, whatever the flags say.** Registering a server edits
-      configuration files owned by other tools, and that is not something to do
-      to a machine nobody is sitting at — a CI runner, a Docker build, a cron
-      job. A flag expresses a preference, not a licence to write outside a
-      session the user is present for.
-    - ``install_mcp is True`` in a session: proceed without asking.
-    - ``automatic_approvals`` (``-y``): skip. A blanket yes-to-everything should
-      not reach into another tool's config.
+    - ``install_mcp is True``: proceed, terminal or not. Naming the flag *is* the
+      request, and it is the only way an agent or a script can express one.
+    - No terminal and no flag: skip. Nothing said to do this, and we cannot ask.
+    - ``automatic_approvals`` (``-y``) alone: skip. A blanket yes-to-everything is
+      not a request to reach into another tool's config.
     - Nothing detected: skip. There is nothing worth asking about.
     """
     if install_mcp is False:
         return Decision.SKIP
-    if not interactive:
-        return Decision.SKIP
     if install_mcp is True:
         return Decision.PROCEED
+    if not interactive:
+        return Decision.SKIP
     if automatic_approvals or len(detected) == 0:
         return Decision.SKIP
     return Decision.ASK
@@ -93,18 +96,18 @@ def skills_decision(
 ) -> Decision:
     """Whether to install the skill pack, ask first, or leave it alone.
 
-    Mirrors :func:`mcp_decision` deliberately, including the absolute terminal
-    requirement — the two steps carry the same consent shape, and the skill pack
-    is if anything the more invasive of the two: the MCP step writes credentials
-    into a file the user already trusts with them, while this writes instruction
-    files the assistant then acts on with its own permissions.
+    Mirrors :func:`mcp_decision` deliberately — the two steps carry the same
+    consent shape, and the skill pack is if anything the more invasive of the two:
+    the MCP step writes credentials into a file the user already trusts with them,
+    while this writes instruction files the assistant then acts on with its own
+    permissions. So it needs the same explicit `--install-skills` to run unattended.
     """
     if install_skills is False:
         return Decision.SKIP
-    if not interactive:
-        return Decision.SKIP
     if install_skills is True:
         return Decision.PROCEED if detected else Decision.SKIP
+    if not interactive:
+        return Decision.SKIP
     if automatic_approvals or len(detected) == 0:
         return Decision.SKIP
     return Decision.ASK

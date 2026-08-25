@@ -1,6 +1,9 @@
 """Tests for the ``opik configure`` command group."""
 
 import pathlib
+
+import click
+import pytest
 from unittest import mock
 
 from click.testing import CliRunner
@@ -46,7 +49,14 @@ def test_configure_status__not_configured__points_to_configure():
 
 def test_configure_no_subcommand__runs_configurator():
     runner = CliRunner()
-    with mock.patch.object(configure_cli, "run_interactive_configure") as spy:
+    # CliRunner detaches stdin, and the command now refuses without `-y` there,
+    # so this asserts the dispatch rather than the new no-terminal guard.
+    with (
+        mock.patch.object(
+            configure_cli.interactive_helpers, "is_interactive", return_value=True
+        ),
+        mock.patch.object(configure_cli, "run_interactive_configure") as spy,
+    ):
         result = runner.invoke(cli, ["configure", "--use-local"])
 
     assert result.exit_code == 0
@@ -146,3 +156,136 @@ class TestAssistantConfirmation:
         self._run(detected=("Claude Code", "Cursor", "Codex"))
 
         assert "Claude Code, Cursor and Codex" in capsys.readouterr().out
+
+
+class TestCodingAgentFlow:
+    """`opik configure` driven by a coding agent asked to "set Opik up".
+
+    The agent has no tty — `is_interactive()` is False in its shell, exactly as in
+    CI — so the whole flow used to abort on the deployment-type prompt, which
+    `-y` does not answer. What separates the two callers is that the agent can
+    name flags and CI names none.
+    """
+
+    @staticmethod
+    def _deployment(env, interactive=False):
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers,
+                "is_interactive",
+                return_value=interactive,
+            ),
+            mock.patch.dict(configure_cli.os.environ, env, clear=True),
+        ):
+            return configure_cli._deployment_type()
+
+    def test_api_key_only__is_cloud(self):
+        result = self._deployment({"OPIK_API_KEY": "k"})
+
+        assert result is configure_cli.interactive_helpers.DeploymentType.CLOUD
+
+    def test_localhost_url__is_local(self):
+        result = self._deployment({"OPIK_URL_OVERRIDE": "http://localhost:5173/api"})
+
+        assert result is configure_cli.interactive_helpers.DeploymentType.LOCAL
+
+    def test_comet_url__is_cloud(self):
+        result = self._deployment(
+            {"OPIK_URL_OVERRIDE": "https://www.comet.com/opik/api", "OPIK_API_KEY": "k"}
+        )
+
+        assert result is configure_cli.interactive_helpers.DeploymentType.CLOUD
+
+    def test_self_hosted_comet_path__is_self_hosted(self):
+        result = self._deployment(
+            {"OPIK_URL_OVERRIDE": "https://opik.acme.internal/opik/api"}
+        )
+
+        assert result is configure_cli.interactive_helpers.DeploymentType.SELF_HOSTED
+
+    def test_nothing_set__errors_naming_what_to_provide(self):
+        """A dead end for an agent unless the message says how to fix it."""
+        with pytest.raises(click.ClickException) as excinfo:
+            self._deployment({})
+
+        message = str(excinfo.value)
+        assert "OPIK_API_KEY" in message
+        assert "--use_local" in message
+
+    def test_with_a_terminal__still_asks(self):
+        """The interactive path is untouched; inference is the no-tty fallback."""
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli.interactive_helpers, "ask_user_for_deployment_type"
+            ) as ask,
+        ):
+            configure_cli._deployment_type()
+
+        ask.assert_called_once()
+
+    def test_install_mcp_flag__is_the_consent_that_reaches_the_installer(self):
+        """`opik configure --install-mcp` names no client, so the flag must carry it."""
+        calls = []
+        with mock.patch.object(
+            configure_cli.assistants,
+            "setup",
+            side_effect=lambda *a, **k: calls.append(k),
+        ):
+            configure_cli._setup_assistants({}, True, None, True)
+
+        assert calls and calls[0]["assume_confirmed"] is True
+
+    def test_no_flag_and_no_terminal__does_not_reach_the_installer(self):
+        """The CI case: nothing was asked for, so nothing is written."""
+        calls = []
+        with (
+            mock.patch.object(
+                configure_cli.mcp_installer,
+                "detected_host_names",
+                return_value=["Cursor"],
+            ),
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=False
+            ),
+            mock.patch.object(
+                configure_cli.assistants,
+                "setup",
+                side_effect=lambda *a, **k: calls.append(k),
+            ),
+        ):
+            configure_cli._setup_assistants({}, None, None, False)
+
+        assert calls == []
+
+
+def test_configure_no_terminal_without_yes__names_the_flag_to_add():
+    """A bare `Aborted!` is a dead end for a coding agent; this is not."""
+    runner = CliRunner()
+    with (
+        mock.patch.object(
+            configure_cli.interactive_helpers, "is_interactive", return_value=False
+        ),
+        mock.patch.object(configure_cli, "run_interactive_configure") as spy,
+    ):
+        result = runner.invoke(cli, ["configure"])
+
+    assert result.exit_code != 0
+    assert "-y" in result.output
+    spy.assert_not_called()
+
+
+def test_configure_no_terminal_with_yes__proceeds():
+    runner = CliRunner()
+    with (
+        mock.patch.object(
+            configure_cli.interactive_helpers, "is_interactive", return_value=False
+        ),
+        mock.patch.object(configure_cli, "run_interactive_configure") as spy,
+    ):
+        result = runner.invoke(cli, ["configure", "-y"])
+
+    assert result.exit_code == 0
+    spy.assert_called_once()

@@ -6,16 +6,6 @@ import pytest
 from opik.configurator.skills import install, manifest, pack
 
 
-@pytest.fixture(autouse=True)
-def interactive(monkeypatch):
-    """These cover installer mechanics, not consent.
-
-    ``setup_skills`` refuses outside an interactive session, which is asserted in
-    its own test below; every other case here needs to get past that gate.
-    """
-    monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: True)
-
-
 @pytest.fixture
 def fake_home(monkeypatch, tmp_path):
     monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))

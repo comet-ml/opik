@@ -1,11 +1,13 @@
 """Configure command for Opik CLI."""
 
 import logging
+import os
 from typing import Any, Mapping, Optional
 
 import click
 
 import opik.config as opik_config
+import opik.url_helpers as url_helpers
 from opik.cli import assistants
 from opik.cli import install_view
 from opik.cli import status_view
@@ -40,10 +42,15 @@ def _setup_assistants(
         assistants.setup(setup_params, skills_flag=True, host_keys=None)
         return
 
+    # An explicit `--install-mcp` is the request; only an unflagged run needs to ask.
     if install_mcp is None and not _confirm_assistant_step():
         return
 
-    assistants.setup(setup_params, skills_flag=skills_flag)
+    assistants.setup(
+        setup_params,
+        skills_flag=skills_flag,
+        assume_confirmed=install_mcp is True,
+    )
 
 
 def _confirm_assistant_step() -> bool:
@@ -84,6 +91,44 @@ def _confirm_assistant_step() -> bool:
     return click.confirm("", default=False)
 
 
+def _deployment_type() -> interactive_helpers.DeploymentType:
+    """Which Opik deployment to configure — asked, or inferred without a terminal.
+
+    The picker was the first thing `opik configure` did, and it used `input()`, so
+    the whole command aborted for any caller without a tty — a coding agent asked
+    to "set up Opik" included, which is the case this exists for. `-y` did not help,
+    because there is no sensible default deployment to say yes to.
+
+    Unattended, the environment already answers the question: `OPIK_URL_OVERRIDE`
+    says where Opik is, and its shape says what kind. Only when nothing is set is
+    there really nothing to go on, and then the error names what to provide rather
+    than reporting an abort.
+    """
+    if interactive_helpers.is_interactive():
+        return interactive_helpers.ask_user_for_deployment_type()
+
+    url = os.environ.get("OPIK_URL_OVERRIDE", "").strip()
+    if url:
+        if url_helpers.get_base_url(url).rstrip("/").endswith("comet.com"):
+            return interactive_helpers.DeploymentType.CLOUD
+        if "/opik/api" in url:
+            # The Comet platform's path shape, on someone else's host.
+            return interactive_helpers.DeploymentType.SELF_HOSTED
+        return interactive_helpers.DeploymentType.LOCAL
+
+    if os.environ.get("OPIK_API_KEY", "").strip():
+        # A key with no URL only makes sense for Opik Cloud.
+        return interactive_helpers.DeploymentType.CLOUD
+
+    raise click.ClickException(
+        "`opik configure` cannot tell which Opik deployment to use, and there is "
+        "no terminal to ask in. Set one of these and re-run:\n\n"
+        "    OPIK_API_KEY=<key>                     # Opik Cloud\n"
+        "    OPIK_URL_OVERRIDE=<url> OPIK_API_KEY=<key>   # self-hosted\n"
+        "    opik configure --use_local -y          # local Opik\n"
+    )
+
+
 def run_interactive_configure(
     use_local: bool = False,
     automatic_approvals: bool = False,
@@ -109,7 +154,7 @@ def run_interactive_configure(
         ).configure()
         return
 
-    deployment_type_choice = interactive_helpers.ask_user_for_deployment_type()
+    deployment_type_choice = _deployment_type()
 
     if deployment_type_choice == interactive_helpers.DeploymentType.CLOUD:
         configurator = opik_configure.OpikConfigurator(
@@ -197,6 +242,18 @@ def configure(
     # by Click instead.
     if ctx.invoked_subcommand is not None:
         return
+
+    # The flow asks several things beyond the deployment type — whether to use a
+    # detected local instance, which project name to keep — and each one aborts on
+    # a closed stdin. `-y` answers all of them, so say that once here instead of
+    # letting the run die on whichever prompt happens to come first with a bare
+    # "Aborted!", which tells a coding agent nothing it can act on.
+    if not yes and not interactive_helpers.is_interactive():
+        raise click.ClickException(
+            "`opik configure` asks a few questions and there is no terminal to "
+            "answer them in. Add `-y` to accept the defaults:\n\n"
+            "    opik configure -y --install-mcp\n"
+        )
 
     run_interactive_configure(
         use_local=use_local,

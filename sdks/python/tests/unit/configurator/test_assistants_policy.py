@@ -41,8 +41,8 @@ class TestMcpDecision:
         "install_mcp, auto, interactive, detected, expected",
         [
             (False, False, True, DETECTED, SKIP),  # explicit no
-            (True, False, False, DETECTED, SKIP),  # no terminal beats the flag
-            (True, True, False, DETECTED, SKIP),  # ditto, with -y
+            (True, False, False, DETECTED, PROCEED),  # the flag is the request
+            (True, True, False, DETECTED, PROCEED),  # ditto, with -y
             (True, False, True, DETECTED, PROCEED),  # the flag, in a session
             (None, False, False, DETECTED, SKIP),  # nobody to ask
             (None, True, True, DETECTED, SKIP),  # -y must not touch other tools
@@ -67,7 +67,7 @@ class TestSkillsDecision:
         "install_skills, auto, interactive, detected, expected",
         [
             (False, False, True, DETECTED, SKIP),
-            (True, False, False, DETECTED, SKIP),  # no terminal beats the flag
+            (True, False, False, DETECTED, PROCEED),  # the flag is the request
             (True, False, True, DETECTED, PROCEED),  # the flag, in a session
             (True, False, True, [], SKIP),  # flag, but nowhere to put it
             (None, False, False, DETECTED, SKIP),
@@ -114,15 +114,16 @@ class TestPrompts:
         assert "Claude Code" not in assistants.SKILLS_PROMPT
 
 
-class TestTerminalRequirementIsAbsolute:
-    """No flag buys a write into another tool's config without a session.
+class TestUnflaggedRunsNeverWrite:
+    """Without a terminal, only an explicit flag authorises a write.
 
-    `install_mcp=True` used to proceed with no terminal, which meant a CI job or
-    a Docker build could edit `~/.cursor/mcp.json`. It cannot now.
+    This is the line between the two callers that both lack a tty: a coding agent
+    asked to set Opik up can pass `--install-mcp`, and a CI job that was never
+    asked passes nothing. So the flag decides, not the terminal.
     """
 
-    @pytest.mark.parametrize("flag", [True, False, None])
-    def test_mcp__never_proceeds_without_a_terminal(self, flag):
+    @pytest.mark.parametrize("flag", [False, None])
+    def test_mcp__no_flag_and_no_terminal__skips(self, flag):
         assert (
             assistants.mcp_decision(
                 install_mcp=flag,
@@ -133,8 +134,8 @@ class TestTerminalRequirementIsAbsolute:
             is SKIP
         )
 
-    @pytest.mark.parametrize("flag", [True, False, None])
-    def test_skills__never_proceeds_without_a_terminal(self, flag):
+    @pytest.mark.parametrize("flag", [False, None])
+    def test_skills__no_flag_and_no_terminal__skips(self, flag):
         assert (
             assistants.skills_decision(
                 install_skills=flag,
@@ -144,3 +145,15 @@ class TestTerminalRequirementIsAbsolute:
             )
             is SKIP
         )
+
+    @pytest.mark.parametrize("step", ["mcp", "skills"])
+    def test_explicit_flag_without_a_terminal__proceeds(self, step):
+        """The coding-agent case: no tty, but the user did ask."""
+        common = dict(automatic_approvals=False, interactive=False, detected=DETECTED)
+        decision = (
+            assistants.mcp_decision(install_mcp=True, **common)
+            if step == "mcp"
+            else assistants.skills_decision(install_skills=True, **common)
+        )
+
+        assert decision is PROCEED
