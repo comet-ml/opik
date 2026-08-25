@@ -1,38 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
 import { uuid7, type TraceJsonSection } from '@e2e/core/backend';
-
-/**
- * A metric whose mapped variables are both optional.
- *
- * When a rule maps a sub-path into a section that is not an object, the
- * variable resolves to null and `OnlineScoringEngine.toReplacements` DROPS it,
- * so `score()` is called with a subset of its declared arguments. Defaulting
- * both is therefore not defensive padding — it is the documented post-fix
- * contract, and a signature without defaults would turn every non-object case
- * into a TypeError that looks exactly like the regression under test.
- *
- * The value is a constant: this spec asserts that an evaluation HAPPENED for
- * every input shape, never what it concluded.
- */
-function buildOptionalArgsMetric(scoreName: string): string {
-  return `from typing import Any
-from opik.evaluation.metrics import base_metric, score_result
-
-SCORE_NAME = ${JSON.stringify(scoreName)}
-
-class OptionalArgsMetric(base_metric.BaseMetric):
-    def __init__(self, name: str = SCORE_NAME):
-        self.name = name
-
-    def score(
-        self,
-        out_nested: Any = None,
-        q_nested: Any = None,
-        **ignored_kwargs: Any,
-    ) -> score_result.ScoreResult:
-        return score_result.ScoreResult(value=1.0, name=self.name)`;
-}
+import { buildConstantScoreMetric } from '@e2e/core/metrics';
 
 interface SectionShape {
   /** Used in the trace name and in every failure message. */
@@ -136,7 +105,10 @@ test.describe('Online Evaluation — non-object mapped sections', { tag: ['@t2-c
         projectId: project.id,
         name: ruleName,
         samplingRate: 1,
-        metric: buildOptionalArgsMetric(ruleName),
+        // Both mapped variables are declared optional: a sub-path into a
+        // non-object section resolves to null and `toReplacements` drops it, so
+        // `score()` is called with a subset of its arguments.
+        metric: buildConstantScoreMetric(ruleName, ['out_nested', 'q_nested']),
         arguments: { out_nested: 'output.answer', q_nested: 'input.q' },
       });
     });

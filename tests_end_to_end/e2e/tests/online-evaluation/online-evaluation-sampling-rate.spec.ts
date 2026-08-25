@@ -2,6 +2,7 @@ import { test, expect } from '@e2e/fixtures';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 import { LogsPage } from '@e2e/pom/logs.page';
 import { uuid7 } from '@e2e/core/backend';
+import { buildConstantScoreMetric } from '@e2e/core/metrics';
 
 const REFERENCE_OUTPUT = 'seed output';
 
@@ -46,34 +47,6 @@ const PARTIAL_RATE_MIN_FRACTION = 0.15;
 const PARTIAL_RATE_MAX_FRACTION = 0.85;
 const PARTIAL_RATE_MIN_SCORED = Math.floor(PARTIAL_RATE_MIN_FRACTION * BATCH_SIZE);
 const PARTIAL_RATE_MAX_SCORED = Math.ceil(PARTIAL_RATE_MAX_FRACTION * BATCH_SIZE);
-
-/**
- * A Python metric that scores every trace it is handed, whatever the trace says.
- *
- * The bypass test below is about WHICH traces reach the evaluator, never about
- * what the metric concludes, so the value is a constant: a 0.0 would then mean
- * "the metric ran on something unexpected", not "sampling skipped this trace".
- *
- * `output` is defaulted so a trace whose mapped section fails to resolve still
- * calls `score()` rather than raising a TypeError that would read as a scoring
- * failure. The same constraints as `buildPythonEqualsMetric` in
- * `online-evaluation.page.ts` apply: no extra BaseMetric imports (the python
- * evaluator picks the first BaseMetric subclass alphabetically), and the
- * ScoreResult name — not the rule name — is what lands on the trace.
- */
-function buildAlwaysScoresMetric(scoreName: string): string {
-  return `from typing import Any
-from opik.evaluation.metrics import base_metric, score_result
-
-SCORE_NAME = ${JSON.stringify(scoreName)}
-
-class AlwaysScores(base_metric.BaseMetric):
-    def __init__(self, name: str = SCORE_NAME):
-        self.name = name
-
-    def score(self, output: Any = None, **ignored_kwargs: Any) -> score_result.ScoreResult:
-        return score_result.ScoreResult(value=1.0, name=self.name)`;
-}
 
 /**
  * Trace sources that bypass the sampling rate, and how each becomes scorable.
@@ -357,7 +330,7 @@ test.describe('Online Evaluation — sampling rate', { tag: ['@t2-cuj', '@area:o
         name: ruleName,
         samplingRate: 0,
         triggerScope: 'both',
-        metric: buildAlwaysScoresMetric(ruleName),
+        metric: buildConstantScoreMetric(ruleName),
         arguments: { output: 'output.output' },
       });
     });

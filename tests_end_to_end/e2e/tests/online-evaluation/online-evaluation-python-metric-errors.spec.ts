@@ -1,72 +1,10 @@
 import { test, expect } from '@e2e/fixtures';
 import type { AutomationRuleLogRef } from '@e2e/core/backend';
-
-/**
- * A metric that exits 0 without ever printing its result line.
- *
- * `os._exit` is deliberate: it terminates the interpreter immediately, so the
- * runner's own "print the ScoreResult" step never happens and the process still
- * reports success. That is the exact shape the python evaluator used to
- * mis-handle — `parse_execution_result` indexed the empty output list, and the
- * IndexError surfaced as an opaque 500 that the backend then RETRIED. It is now
- * classified as a client-side 400 naming the cause.
- *
- * A metric that merely raised would not reproduce this: a non-zero exit code
- * takes a different branch entirely.
- */
-function buildSilentMetric(scoreName: string): string {
-  return `import os
-from typing import Any
-from opik.evaluation.metrics import base_metric, score_result
-
-SCORE_NAME = ${JSON.stringify(scoreName)}
-
-class SilentMetric(base_metric.BaseMetric):
-    def __init__(self, name: str = SCORE_NAME):
-        self.name = name
-
-    def score(self, output: Any = None, **ignored_kwargs: Any) -> score_result.ScoreResult:
-        os._exit(0)`;
-}
-
-/**
- * A metric that exits 0 having printed something that is not the result JSON.
- *
- * The sibling branch of the same fix: exit code 0 whose LAST line does not
- * parse as JSON. `flush=True` matters — `os._exit` skips interpreter shutdown,
- * so an unflushed stdout buffer would be discarded and this metric would
- * degenerate into the silent one above, testing the same branch twice.
- */
-function buildUnparseableMetric(scoreName: string): string {
-  return `import os
-from typing import Any
-from opik.evaluation.metrics import base_metric, score_result
-
-SCORE_NAME = ${JSON.stringify(scoreName)}
-
-class UnparseableMetric(base_metric.BaseMetric):
-    def __init__(self, name: str = SCORE_NAME):
-        self.name = name
-
-    def score(self, output: Any = None, **ignored_kwargs: Any) -> score_result.ScoreResult:
-        print("this line is not a score result", flush=True)
-        os._exit(0)`;
-}
-
-/** The control: a well-behaved metric, proving the pipeline works at all. */
-function buildControlMetric(scoreName: string): string {
-  return `from typing import Any
-from opik.evaluation.metrics import base_metric, score_result
-
-SCORE_NAME = ${JSON.stringify(scoreName)}
-
-class ControlMetric(base_metric.BaseMetric):
-    def __init__(self, name: str = SCORE_NAME):
-        self.name = name
-
-    def score(self, output: Any = None, **ignored_kwargs: Any) -> score_result.ScoreResult:
-        return score_result.ScoreResult(value=1.0, name=self.name)`;
-}
+import {
+  buildConstantScoreMetric,
+  buildSilentMetric,
+  buildUnparseableMetric,
+} from '@e2e/core/metrics';
 
 /**
  * The 500-era wording. The whole point of the fix is that a metric which
@@ -110,7 +48,7 @@ test.describe('Online Evaluation — python metric failure classification', { ta
           arguments: { output: 'output.output' },
         });
       return {
-        control: await create(controlRuleName, buildControlMetric(controlRuleName)),
+        control: await create(controlRuleName, buildConstantScoreMetric(controlRuleName)),
         silent: await create(silentRuleName, buildSilentMetric(silentRuleName)),
         unparseable: await create(
           unparseableRuleName,
