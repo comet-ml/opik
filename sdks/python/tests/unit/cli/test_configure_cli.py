@@ -341,3 +341,43 @@ class TestAgentDiscoverability:
 
         assert "--install-mcp" in result.output
         assert "-y" in result.output
+
+
+class TestCometCloudHostMatch:
+    """Deployment inference must match the host, not a substring of the URL.
+
+    CodeQL flagged the first version (`py/incomplete-url-substring-sanitization`,
+    high): `endswith("comet.com")` also accepts `evil-comet.com`, so a self-hosted
+    URL could be classified as Opik Cloud and configured against the wrong
+    deployment.
+    """
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://www.comet.com/opik/api",
+            "https://comet.com/opik/api",
+            "https://staging.comet.com/opik/api",
+            "HTTPS://WWW.COMET.COM/opik/api",
+        ],
+    )
+    def test_real_comet_hosts__match(self, url):
+        assert configure_cli._is_comet_cloud_host(url) is True
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil-comet.com/opik/api",  # suffix without a label boundary
+            "https://notcomet.com/api",
+            "https://comet.com.evil.net/api",  # comet.com as a left-hand label
+            "https://attacker.com/?redirect=comet.com",  # only in the query
+            "https://attacker.com/comet.com/api",  # only in the path
+            "http://localhost:5173/api",
+            "https://opik.acme.internal/opik/api",
+        ],
+    )
+    def test_lookalikes_and_others__do_not_match(self, url):
+        assert configure_cli._is_comet_cloud_host(url) is False
+
+    def test_garbage_url__does_not_raise(self):
+        assert configure_cli._is_comet_cloud_host("not a url at all") is False

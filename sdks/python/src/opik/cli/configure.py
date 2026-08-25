@@ -2,12 +2,12 @@
 
 import logging
 import os
+import urllib.parse
 from typing import Any, Mapping, Optional
 
 import click
 
 import opik.config as opik_config
-import opik.url_helpers as url_helpers
 from opik.cli import assistants
 from opik.cli import install_view
 from opik.cli import status_view
@@ -117,6 +117,18 @@ def _confirm_assistant_step() -> bool:
     return click.confirm("", default=False)
 
 
+def _is_comet_cloud_host(url: str) -> bool:
+    """Whether ``url`` points at Comet-hosted Opik.
+
+    Matches the parsed hostname, not a substring of the URL: `endswith("comet.com")`
+    also accepts `evil-comet.com`, and `"comet.com" in url` accepts anything with
+    it in a path or query. A suffix match needs the dot to be a real label
+    boundary, which is what makes `notcomet.com` fail and `www.comet.com` pass.
+    """
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    return host == "comet.com" or host.endswith(".comet.com")
+
+
 def _deployment_type() -> interactive_helpers.DeploymentType:
     """Which Opik deployment to configure — asked, or inferred without a terminal.
 
@@ -135,7 +147,7 @@ def _deployment_type() -> interactive_helpers.DeploymentType:
 
     url = os.environ.get("OPIK_URL_OVERRIDE", "").strip()
     if url:
-        if url_helpers.get_base_url(url).rstrip("/").endswith("comet.com"):
+        if _is_comet_cloud_host(url):
             return interactive_helpers.DeploymentType.CLOUD
         if "/opik/api" in url:
             # The Comet platform's path shape, on someone else's host.
