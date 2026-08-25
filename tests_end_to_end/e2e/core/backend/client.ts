@@ -451,14 +451,23 @@ export function makeBackendClient(apiKey: string | null = null) {
      * create_prompt returns the prompt VERSION id instead, which 404s against
      * both — so resolve by name rather than trusting the id it handed back.
      */
-    async findPromptIdByName(name: string): Promise<string | null> {
-      const page = await opik.api.prompts.getPrompts({ name, size: 50 });
+    async findPromptIdByName(name: string, projectId?: string): Promise<string | null> {
+      // `name` is a partial-match search, so re-check it exactly.
+      const page = await opik.api.prompts.getPrompts({
+        name,
+        size: 50,
+        ...(projectId ? { projectId } : {}),
+      });
       const match = (page.content ?? []).find((p) => p.name === name);
       return match?.id ? String(match.id) : null;
     },
 
-    async promptExistsByName(name: string): Promise<boolean> {
-      const page = await opik.api.prompts.getPrompts({ name, size: 50 });
+    async promptExistsByName(name: string, projectId?: string): Promise<boolean> {
+      const page = await opik.api.prompts.getPrompts({
+        name,
+        size: 50,
+        ...(projectId ? { projectId } : {}),
+      });
       return (page.content ?? []).some((p) => p.name === name);
     },
 

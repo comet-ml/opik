@@ -35,7 +35,7 @@ test.describe('Prompt library — delete', { tag: ['@t2-cuj', '@area:prompts'] }
         // Resolve the id by name rather than using the one create returned:
         // the SDK hands back the prompt VERSION id, which DELETE answers 404
         // for, so registering it would silently leak the prompt.
-        const siblingId = await backendClient.findPromptIdByName(siblingName);
+        const siblingId = await backendClient.findPromptIdByName(siblingName, project.id);
         expect(siblingId, 'bystander prompt id resolves by name').not.toBeNull();
         registerPromptCleanup(siblingId as string, siblingName);
       });
@@ -66,8 +66,8 @@ test.describe('Prompt library — delete', { tag: ['@t2-cuj', '@area:prompts'] }
       await test.step('Server-side: the target is gone, the bystander remains', async () => {
         // The UI list is a project-scoped projection, so an absent row would
         // also be consistent with the prompt surviving outside that view.
-        expect(await backendClient.promptExistsByName(textPrompt.name)).toBe(false);
-        expect(await backendClient.promptExistsByName(siblingName)).toBe(true);
+        expect(await backendClient.promptExistsByName(textPrompt.name, project.id)).toBe(false);
+        expect(await backendClient.promptExistsByName(siblingName, project.id)).toBe(true);
       });
     },
   );
