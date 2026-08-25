@@ -181,6 +181,37 @@ class TestCapabilityLookup:
         assert cap.model_name_prefix == "claude-sonnet-4-6"
         assert cap.context_window == 1_000_000
 
+    def test_custom_table_empty_prefix__serves_unmatched_models(self):
+        # A caller-supplied catch-all is a deliberate configuration, not
+        # noise. It must lose to any specific match but still win over
+        # DEFAULT_CAPABILITY, otherwise the caller's configured limits are
+        # silently discarded for every unmatched model.
+        catch_all = model_capabilities.ModelCapability(
+            "", context_window=250_000, agentic_in_auto=True
+        )
+        table = [
+            catch_all,
+            model_capabilities.ModelCapability(
+                "claude-sonnet-4-6", context_window=1_000_000, agentic_in_auto=True
+            ),
+        ]
+        cap = strategy_selector._capability_for(
+            "some-unlisted-model", capabilities=table
+        )
+        assert cap is catch_all
+        assert cap is not model_capabilities.DEFAULT_CAPABILITY
+
+    def test_custom_table_without_catch_all__still_uses_default(self):
+        table = [
+            model_capabilities.ModelCapability(
+                "claude-sonnet-4-6", context_window=1_000_000, agentic_in_auto=True
+            ),
+        ]
+        cap = strategy_selector._capability_for(
+            "some-unlisted-model", capabilities=table
+        )
+        assert cap is model_capabilities.DEFAULT_CAPABILITY
+
 
 class TestBudgetTokens:
     def test_qualified_name__matches_bare_budget(self):

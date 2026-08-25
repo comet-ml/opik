@@ -88,13 +88,16 @@ def _capability_for(
 
     best: Optional[capabilities_registry.ModelCapability] = None
     best_len = -1
+    catch_all: Optional[capabilities_registry.ModelCapability] = None
     for candidate in candidates:
         for cap in table:
             prefix = cap.model_name_prefix
-            # An empty prefix matches everything via startswith, so a
-            # caller-supplied catch-all entry would shadow the real match.
-            # Skip it here and let DEFAULT_CAPABILITY be the final fallback.
             if not prefix:
+                # An empty prefix matches everything via startswith, so it
+                # cannot compete on prefix length without shadowing real
+                # matches. It is still a deliberate caller configuration,
+                # so it is held aside and used ahead of DEFAULT_CAPABILITY.
+                catch_all = catch_all or cap
                 continue
             if candidate == prefix:
                 return cap
@@ -103,7 +106,11 @@ def _capability_for(
                 best_len = len(prefix)
         if best is not None:
             break
-    return best if best is not None else capabilities_registry.DEFAULT_CAPABILITY
+    if best is not None:
+        return best
+    if catch_all is not None:
+        return catch_all
+    return capabilities_registry.DEFAULT_CAPABILITY
 
 
 def compute_budget_tokens(
